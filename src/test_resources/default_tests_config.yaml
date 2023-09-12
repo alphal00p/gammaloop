@@ -1,0 +1,23 @@
+General:
+  debug: 0
+Integrand:
+  type: unit_volume
+  n_3d_momenta: 11
+Integrator:
+  n_bins: 64
+  min_samples_for_update: 1000
+  n_start: 100000
+  n_increase: 10000
+  n_max: 10000000000
+  integrated_phase: real
+  learning_rate: 1.5
+  train_on_avg: false
+  show_max_wgt_info: true
+Kinematics:
+  e_cm: 60.0
+Parameterization:
+  b: 1.0
+  mapping: linear
+  mode: spherical # choices are cartesian, spherical, hyperspherical and hyperspherical_flat
+Selectors: []
+Observables: []

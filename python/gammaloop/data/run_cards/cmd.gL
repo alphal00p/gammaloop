@@ -1,0 +1,2 @@
+import_model scalars
+export_model ./scalars_model.yaml

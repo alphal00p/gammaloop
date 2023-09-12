@@ -1,0 +1,35 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "gammaloop"
+version = "0.0.1"
+description = "Gammaloop computes differential cross-sections using Local Unitarity"
+readme = "README.md"
+license = { file = "LICENSE.md" }
+keywords = ["physics", "collider", "cross-section", "perturbative", "loop"]
+authors = [
+  { email = "valentin.hirschi@gmail.com" },
+  { name = "Valentin Hirschi" },
+]
+dependencies = ["PyYAML==6.0.1"]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Rust",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.urls]
+homepage = "https://alphaloop.ch"
+repository = "https://github.com/alphal00p/gammaloop"
+
+[tool.maturin]
+features = ["python_api"]
+python-source = "python"
+module-name = "gammaloop._gammaloop"
+
+[project.scripts]
+gammaloop_rust_cli = "gammaloop._gammaloop:rust_cli"
+gammaloop = "gammaloop:cli"

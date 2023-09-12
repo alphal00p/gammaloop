@@ -1,0 +1,72 @@
+[package]
+name = "gammalooprs"
+version = "0.0.1"
+edition = "2021"
+authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
+categories = ["science"]
+description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
+keywords = ["loop", "cross-section", "perturbative", "physics"]
+license-file = "License.md"
+readme = "README.md"
+repository = "https://github.com/alphal00p/gammaloop"
+
+
+[profile.dev-optim]
+inherits = "dev"
+opt-level = 2
+
+[dependencies]
+symbolica = { path = "/Users/vjhirsch/HEP_programs/symbolica" }
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "*"
+clap = "2.34"
+color-eyre = { version = "^0.3", default-features = false }
+eyre = "^0.4"
+f128 = { git = "https://github.com/benruijl/f128" }
+lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = "hyperdual", features = [
+    "serde_support",
+    "hyperdual_support",
+    "f128_support",
+] }
+num = "0.3"
+num-traits = "0.2"
+hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
+rand = "0.8"
+rayon = "1.5"
+tabled = "0.7"
+enum_dispatch = "*"
+git-version = "0.3"
+colored = "*"
+yaml-rust = "0.4"
+libc = "0.2.0"
+statrs = "0.16.0"
+smallvec = "1.7"
+itertools = "0.8"
+smartstring = { version = "*", features = ["serde"] }
+ahash = "*"
+vectorize = "0.2.0"
+log = "*"
+env_logger = "*"
+pyo3-log = "*"
+
+[dependencies.pyo3]
+features = ["extension-module", "multiple-pymethods"]
+optional = true
+version = "0.19"
+
+[build-dependencies]
+pyo3-build-config = "*"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "_gammaloop"
+required-features = ["python_api"]
+
+[[bin]]
+name = "cli"
+required-features = ["binary"]
+
+[features]
+default = ["python_api"]
+python_api = ["pyo3"]
+binary = []
