@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 run_rust_tests () {
     cargo test --release --features=binary --no-default-features -- --test-threads=1
     # Run the tests using specific categories and showing live println()'s

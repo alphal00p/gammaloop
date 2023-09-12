@@ -13,7 +13,7 @@ authors = [
   { email = "valentin.hirschi@gmail.com" },
   { name = "Valentin Hirschi" },
 ]
-dependencies = ["PyYAML==6.0.1"]
+dependencies = ["PyYAML>=6.0.1", "symbolica>=0.1.0"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",

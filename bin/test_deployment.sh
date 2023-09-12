@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 TMPDIR="/tmp"
+if [ "$1" == "clean" ]
+    then
+        echo "Cleaning project"
+        cargo clean
+        ./bin/build_dependencies.sh clean
+fi
+./bin/build_dependencies.sh
 rm -rf $TMPDIR/test_gammaloop_deployment
 mkdir $TMPDIR/test_gammaloop_deployment
 mkdir $TMPDIR/test_gammaloop_deployment/wheel

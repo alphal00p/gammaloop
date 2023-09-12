@@ -17,6 +17,8 @@ pip install gammaloop
 ```
 git clone https://github.com/alphal00p/gammaloop.git
 cd gammaloop
+python -m pip install -r ./python/gammaloop/requirements.txt
+./bin/build_dependencies.sh
 ./bin/compile_bin.sh --release
 ./bin/compile_lib.sh --release
 ```
@@ -47,7 +49,7 @@ Simply run:
 
 `GammaLoop` can be used as a python command line interface (`gammaloop`) for scattering process code generation or also directly as a binary (`gammaloop_rust_cli`) for steering the Monte-Carlo integration. Both programs are installed as scripts in the `bin` directly when installing `GammaLoop` using `pip` or when installing it from sources.
 
-### > Generating scattering process code with `./gammaloop`
+### > Generating scattering process code with ./gammaloop
 
 Place your list of commands in a file named e.g. `cmd.gL`, for instance:
 ```
@@ -69,7 +71,7 @@ to get an overview of available commands and:
 to get help on any specific command.
 You can find example of command files in the `<MODULE_PATH>/data/run_cards/` directory.
 
-### > Steering Monte-Carlo integration with `./gammaloop_rust_cli`
+### > Steering Monte-Carlo integration with ./gammaloop_rust_cli
 
 Steering a Monte-Carlo integration with `gammaloop_rust_cli` can be done by running:
 ```
