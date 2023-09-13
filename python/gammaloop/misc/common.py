@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import symbolica
 from enum import Enum
 from gammaloop.misc.utils import setup_logging
 
@@ -23,7 +24,9 @@ except ImportError:
 
 def register_symbolica() -> bool:
     global GL_IS_SYMBOLICA_REGISTERED
-    if GL_IS_SYMBOLICA_REGISTERED is not None:
+    # Check if is_licensed exist for backward compatibility. Later on, it can be removed.
+    if GL_IS_SYMBOLICA_REGISTERED is not None or (hasattr(symbolica,'is_licensed') and symbolica.is_licensed()):
+        GL_IS_SYMBOLICA_REGISTERED = True
         return GL_IS_SYMBOLICA_REGISTERED
 
     if 'SYMBOLICA_LICENSE' not in os.environ:

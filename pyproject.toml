@@ -29,6 +29,7 @@ repository = "https://github.com/alphal00p/gammaloop"
 features = ["python_api"]
 python-source = "python"
 module-name = "gammaloop._gammaloop"
+sdist-include = ["LICENSE.md", "README.md"]
 
 [project.scripts]
 gammaloop_rust_cli = "gammaloop._gammaloop:rust_cli"

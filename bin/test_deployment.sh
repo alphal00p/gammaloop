@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 TMPDIR="/tmp"
+echo "Testing python wheel pip deployment in "$TMPDIR"/test_gammaloop_deployment..."
+echo "The gammaloop module will be installed by pip in "$TMPDIR"/test_gammaloop_deployment/venv"
 if [ "$1" == "clean" ]
     then
         echo "Cleaning project"

@@ -25,6 +25,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# logos
+logos/
+
 # C compiled objects
 *.o
 

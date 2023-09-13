@@ -16,7 +16,10 @@ inherits = "dev"
 opt-level = 2
 
 [dependencies]
-symbolica = { path = "/Users/vjhirsch/HEP_programs/symbolica" }
+# You may need bleeding edge changes
+symbolica = { git = "https://github.com/alphal00p/symbolica" }
+#symbolica = "*"
+#symbolica = { path = "YOUR_LOCAL_SYMBOLICA_BRANCH" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 clap = "2.34"

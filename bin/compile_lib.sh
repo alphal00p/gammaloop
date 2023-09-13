@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+echo "Building pyo3 library..."
 cargo build $@ --lib --features="python_api";
 rm -f ./python/gammaloop/_gammaloop.so;
 if [ "$(uname)" == "Darwin" ]; then
