@@ -1,8 +1,9 @@
 use crate::utils;
 use ahash::RandomState;
 use color_eyre::{Help, Report};
-use eyre::Context;
+use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
+use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
@@ -71,6 +72,7 @@ impl SerializableVertexRule {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct VertexRule {
     pub name: SmartString<LazyCompact>,
     pub particles: Vec<Arc<Particle>>,
@@ -150,10 +152,11 @@ impl SerializableCoupling {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Coupling {
-    name: SmartString<LazyCompact>,
-    expression: Atom,
-    orders: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub name: SmartString<LazyCompact>,
+    pub expression: Atom,
+    pub orders: HashMap<SmartString<LazyCompact>, usize, RandomState>,
 }
 
 impl Coupling {
@@ -179,7 +182,7 @@ pub struct SerializableParticle {
     pdg_code: isize,
     name: SmartString<LazyCompact>,
     antiname: SmartString<LazyCompact>,
-    spin: usize,
+    spin: isize,
     color: isize,
     mass: SmartString<LazyCompact>,
     width: SmartString<LazyCompact>,
@@ -188,7 +191,7 @@ pub struct SerializableParticle {
     charge: f64,
     ghost_number: isize,
     lepton_number: isize,
-    y: isize,
+    y_charge: isize,
 }
 
 impl SerializableParticle {
@@ -206,25 +209,26 @@ impl SerializableParticle {
             charge: particle.charge.clone(),
             ghost_number: particle.ghost_number.clone(),
             lepton_number: particle.lepton_number.clone(),
-            y: particle.y.clone(),
+            y_charge: particle.y_charge.clone(),
         }
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Particle {
-    pdg_code: isize,
-    name: SmartString<LazyCompact>,
-    antiname: SmartString<LazyCompact>,
-    spin: usize,
-    color: isize,
-    mass: Arc<Parameter>,
-    width: Arc<Parameter>,
-    texname: SmartString<LazyCompact>,
-    antitexname: SmartString<LazyCompact>,
-    charge: f64,
-    ghost_number: isize,
-    lepton_number: isize,
-    y: isize,
+    pub pdg_code: isize,
+    pub name: SmartString<LazyCompact>,
+    pub antiname: SmartString<LazyCompact>,
+    pub spin: isize,
+    pub color: isize,
+    pub mass: Arc<Parameter>,
+    pub width: Arc<Parameter>,
+    pub texname: SmartString<LazyCompact>,
+    pub antitexname: SmartString<LazyCompact>,
+    pub charge: f64,
+    pub ghost_number: isize,
+    pub lepton_number: isize,
+    pub y_charge: isize,
 }
 
 impl Particle {
@@ -242,7 +246,7 @@ impl Particle {
             charge: particle.charge.clone(),
             ghost_number: particle.ghost_number.clone(),
             lepton_number: particle.lepton_number.clone(),
-            y: particle.y.clone(),
+            y_charge: particle.y_charge.clone(),
         }
     }
 }
@@ -250,7 +254,7 @@ impl Particle {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableLorentzStructure {
     name: SmartString<LazyCompact>,
-    spins: Vec<usize>,
+    spins: Vec<isize>,
     structure: SmartString<LazyCompact>,
 }
 
@@ -267,10 +271,11 @@ impl SerializableLorentzStructure {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct LorentzStructure {
-    name: SmartString<LazyCompact>,
-    spins: Vec<usize>,
-    structure: Atom,
+    pub name: SmartString<LazyCompact>,
+    pub spins: Vec<isize>,
+    pub structure: Atom,
 }
 
 impl LorentzStructure {
@@ -322,14 +327,15 @@ impl SerializableParameter {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Parameter {
-    name: SmartString<LazyCompact>,
-    lhablock: Option<SmartString<LazyCompact>>,
-    lhacode: Option<Vec<usize>>,
-    nature: ParameterNature,
-    parameter_type: ParameterType,
-    value: Option<f64>,
-    expression: Option<Atom>,
+    pub name: SmartString<LazyCompact>,
+    pub lhablock: Option<SmartString<LazyCompact>>,
+    pub lhacode: Option<Vec<usize>>,
+    pub nature: ParameterNature,
+    pub parameter_type: ParameterType,
+    pub value: Option<f64>,
+    pub expression: Option<Atom>,
 }
 
 impl Parameter {
@@ -354,9 +360,9 @@ impl Parameter {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
-    name: SmartString<LazyCompact>,
-    expansion_order: isize,
-    hierarchy: isize,
+    pub name: SmartString<LazyCompact>,
+    pub expansion_order: isize,
+    pub hierarchy: isize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -376,17 +382,17 @@ impl SerializableModel {
             .wrap_err_with(|| format!("Could not open model yaml file {}", file_path))
             .suggestion("Does the path exist?")?;
         serde_yaml::from_reader(f)
-            .wrap_err("Could not parse model yaml content")
+            .map_err(|e| eyre!(format!("Error parsing model yaml: {}", e)))
             .suggestion("Is it a correct yaml file")
     }
 
     pub fn from_yaml_str(yaml_str: String) -> Result<SerializableModel, Report> {
         serde_yaml::from_str(yaml_str.as_str())
-            .wrap_err("Could not parse model yaml content")
+            .map_err(|e| eyre!(format!("Error parsing model yaml: {}", e)))
             .suggestion("Is it a correct yaml file")
     }
 
-    pub fn from_model(model: Model, sb_state: &symbolica::state::State) -> SerializableModel {
+    pub fn from_model(model: &Model, sb_state: &symbolica::state::State) -> SerializableModel {
         SerializableModel {
             name: model.name.clone(),
             orders: model
@@ -432,24 +438,29 @@ impl SerializableModel {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Model {
     pub name: SmartString<LazyCompact>,
-    orders: Vec<Arc<Order>>,
-    parameters: Vec<Arc<Parameter>>,
-    particles: Vec<Arc<Particle>>,
-    lorentz_structures: Vec<Arc<LorentzStructure>>,
-    couplings: Vec<Arc<Coupling>>,
-    vertex_rules: Vec<Arc<VertexRule>>,
-    order_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
-    parameter_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
-    lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
-    particle_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
-    particle_pdg_to_position: HashMap<isize, usize, RandomState>,
-    coupling_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
-    vertex_rule_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub orders: Vec<Arc<Order>>,
+    pub parameters: Vec<Arc<Parameter>>,
+    pub particles: Vec<Arc<Particle>>,
+    pub lorentz_structures: Vec<Arc<LorentzStructure>>,
+    pub couplings: Vec<Arc<Coupling>>,
+    pub vertex_rules: Vec<Arc<VertexRule>>,
+    pub order_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub parameter_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub particle_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub particle_pdg_to_position: HashMap<isize, usize, RandomState>,
+    pub coupling_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub vertex_rule_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
 }
 
 impl Model {
+    pub fn is_empty(&self) -> bool {
+        self.name == "ModelNotLoaded" || self.particles.is_empty()
+    }
+
     pub fn default() -> Model {
         Model {
             name: SmartString::<LazyCompact>::from("ModelNotLoaded"),
@@ -601,6 +612,14 @@ impl Model {
         model
     }
 
+    pub fn to_serializable(&self, sb_state: &symbolica::state::State) -> SerializableModel {
+        SerializableModel::from_model(self, sb_state)
+    }
+
+    pub fn to_yaml(&self, sb_state: &symbolica::state::State) -> Result<String, Error> {
+        serde_yaml::to_string(&self.to_serializable(sb_state))
+    }
+
     pub fn from_file(
         file_path: String,
         sb_state: &mut symbolica::state::State,
@@ -621,6 +640,7 @@ impl Model {
         })
     }
 
+    #[inline]
     pub fn get_particle(&self, name: &SmartString<LazyCompact>) -> Arc<Particle> {
         if let Some(position) = self.particle_name_to_position.get(name) {
             return self.particles[*position].clone();
@@ -628,6 +648,7 @@ impl Model {
             panic!("Particle '{}' not found in model '{}'.", name, self.name);
         }
     }
+    #[inline]
     pub fn get_particle_from_pdg(&self, pdg: isize) -> Arc<Particle> {
         if let Some(position) = self.particle_pdg_to_position.get(&pdg) {
             return self.particles[*position].clone();
@@ -638,6 +659,7 @@ impl Model {
             );
         }
     }
+    #[inline]
     pub fn get_parameter(&self, name: &SmartString<LazyCompact>) -> Arc<Parameter> {
         if let Some(position) = self.parameter_name_to_position.get(name) {
             return self.parameters[*position].clone();
@@ -645,6 +667,7 @@ impl Model {
             panic!("Parameter '{}' not found in model '{}'.", name, self.name);
         }
     }
+    #[inline]
     pub fn get_order(&self, name: &SmartString<LazyCompact>) -> Arc<Order> {
         if let Some(position) = self.order_name_to_position.get(name) {
             return self.orders[*position].clone();
@@ -655,6 +678,7 @@ impl Model {
             );
         }
     }
+    #[inline]
     pub fn get_lorentz_structure(&self, name: &SmartString<LazyCompact>) -> Arc<LorentzStructure> {
         if let Some(position) = self.lorentz_structure_name_to_position.get(name) {
             return self.lorentz_structures[*position].clone();
@@ -665,6 +689,7 @@ impl Model {
             );
         }
     }
+    #[inline]
     pub fn get_coupling(&self, name: &SmartString<LazyCompact>) -> Arc<Coupling> {
         if let Some(position) = self.coupling_name_to_position.get(name) {
             return self.couplings[*position].clone();
@@ -672,6 +697,7 @@ impl Model {
             panic!("Coupling '{}' not found in model '{}'.", name, self.name);
         }
     }
+    #[inline]
     pub fn get_vertex_rule(&self, name: &SmartString<LazyCompact>) -> Arc<VertexRule> {
         if let Some(position) = self.vertex_rule_name_to_position.get(name) {
             return self.vertex_rules[*position].clone();

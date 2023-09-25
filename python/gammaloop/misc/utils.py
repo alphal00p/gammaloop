@@ -4,16 +4,20 @@ import logging
 import logging.handlers
 import os
 import sys
-import symbolica as sb
-import gammaloop.misc.common as common
+import symbolica as sb  # pylint: disable=import-error
 import yaml
+
+import gammaloop.misc.common as common
+
 
 class NoAliasDumper(yaml.SafeDumper):
     def ignore_aliases(self, data):
         return True
 
+
 def verbose_yaml_dump(data):
     return yaml.dump(data, Dumper=NoAliasDumper, default_flow_style=False, sort_keys=False)
+
 
 class Colour(StrEnum):
     PURPLE = '\033[95m'
@@ -27,6 +31,7 @@ class Colour(StrEnum):
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
+
 def parse_python_expression(expr: str | None) -> sb.Expression | None:
     if expr is None:
         return None
@@ -37,32 +42,35 @@ def parse_python_expression(expr: str | None) -> sb.Expression | None:
         .replace('math.pi', 'pi')
     try:
         return sb.Expression.parse(santized_expr)
-    except Exception as e:
-        common.logger.critical("Symbolica failed to parse expression:\n{}\nwith exception:\n{}".format(santized_expr, e))
+    except Exception as exception:  # pylint: disable=broad-except
+        common.logger.critical(
+            "Symbolica failed to parse expression:\n%s\nwith exception:\n%s", santized_expr, exception)
         return None
+
 
 def expression_to_string(expr: sb.Expression | None) -> str | None:
     if expr is None:
         return None
     try:
         return expr.pretty_str(
-            terms_on_new_line = False,
-            color_top_level_sum = False,
-            color_builtin_functions = False,
-            print_finite_field = False,
-            explicit_rational_polynomial = False,
-            number_thousands_separator = None,
-            multiplication_operator = '*',
-            square_brackets_for_function = False,
-            num_exp_as_superscript = False,
-            latex = False)
-    except Exception as e:
-        common.logger.critical("Symbolica failed to cast expression to string:\n{}\nwith exception:\n{}".format(expr, e))
+            terms_on_new_line=False,
+            color_top_level_sum=False,
+            color_builtin_functions=False,
+            print_finite_field=False,
+            explicit_rational_polynomial=False,
+            number_thousands_separator=None,
+            multiplication_operator='*',
+            square_brackets_for_function=False,
+            num_exp_as_superscript=False,
+            latex=False)
+    except Exception as exception:  # pylint: disable=broad-except
+        common.logger.critical(
+            "Symbolica failed to cast expression to string:\n%s\nwith exception:\n%s", expr, exception)
         return None
 
+
 def setup_logging() -> logging.StreamHandler:
-    console_format = '[{} %(asctime)s {}] @{}%(name)s{} %(levelname)s: %(message)s'.format(
-        Colour.GREEN, Colour.END, Colour.BLUE, Colour.END)
+    console_format = f'[{Colour.GREEN} %(asctime)s {Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
     file_format = '[%(asctime)s] %(name)s %(levelname)s: %(message)s'
 
     console_handler = logging.StreamHandler(sys.stdout)

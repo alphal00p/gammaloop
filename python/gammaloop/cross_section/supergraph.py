@@ -1,31 +1,140 @@
 from __future__ import annotations
-from gammaloop.base_objects.graph import Graph, Edge, Vertex
+from gammaloop.base_objects.model import Model
+from gammaloop.base_objects.graph import Graph, Edge
+from gammaloop.misc.common import Side
+import gammaloop.cross_section.cross_section as cross_section
+
 
 class SuperGraphCut(object):
-    def __init__(self, cut_edges: list[Edges], forward_scattering_graph: ForwardScatteringGraph):
-        self.cut_edges: list[Edges] = cut_edges
+    def __init__(self, cut_edges: list[Edge], forward_scattering_graph: ForwardScatteringGraph):
+        self.cut_edges: list[Edge] = cut_edges
         self.forward_scattering_graph: ForwardScatteringGraph = forward_scattering_graph
 
+    @staticmethod
+    def from_serializable_dict(model: Model, graph: Graph, sg_dict: dict) -> SuperGraphCut:
+
+        return SuperGraphCut(
+            [graph.get_edge(edge_name) for edge_name in sg_dict['cut_edges']],
+            ForwardScatteringGraph.from_serializable_dict(
+                model, sg_dict['forward_scattering_graph'])
+        )
+
+    def to_serializable_dict(self) -> dict:
+        return {
+            'cut_edges': [edge.name for edge in self.cut_edges],
+            'forward_scattering_graph': self.forward_scattering_graph.to_serializable_dict(),
+        }
+
+
 class SuperGraph(object):
-    def __init__(self, id: int, graph: Graph, cuts: list[SuperGraphCut]):
-        self.id: int = id
+    def __init__(self, sg_id: int, graph: Graph, multiplicity: float, topology_class: list[int], cuts: list[SuperGraphCut]):
+        self.sg_id: int = sg_id
         self.graph: Graph = graph
+        self.multiplicity: float = multiplicity
+        self.topology_class: list[int] = topology_class
         self.cuts: list[SuperGraphCut] = cuts
 
+    @staticmethod
+    def from_serializable_dict(model: Model, sg_dict: dict) -> SuperGraph:
+
+        graph = Graph.from_serializable_dict(model, sg_dict['graph'])
+        return SuperGraph(
+            sg_dict['sg_id'],
+            graph,
+            sg_dict['multiplicity'],
+            sg_dict['topology_class'],
+            [SuperGraphCut.from_serializable_dict(
+                model, graph, cut_dict) for cut_dict in sg_dict['cuts']]
+        )
+
+    def to_serializable_dict(self) -> dict:
+        return {
+            'sg_id': self.sg_id,
+            'graph': self.graph.to_serializable_dict(),
+            'multiplicity': self.multiplicity,
+            'topology_class': self.topology_class,
+            'cuts': [cut.to_serializable_dict() for cut in self.cuts],
+        }
+
+
 class ForwardScatteringGraphCut(object):
-    def __init__(self, cut_edges: list[Edges], amplitudes: (Amplitude, Amplitude)):
-        self.cut_edges: list[Edges] = cut_edges
-        self.amplitudes: (Amplitude, Amplitude) = amplitudes
+    def __init__(self, cut_edges: list[Edge], amplitudes: (cross_section.Amplitude, cross_section.Amplitude)):
+        self.cut_edges: list[Edge] = cut_edges
+        self.amplitudes: (cross_section.Amplitude,
+                          cross_section.Amplitude) = amplitudes
+
+    @staticmethod
+    def from_serializable_dict(graph: Graph, model: Model, fsgc_dict: dict) -> ForwardScatteringGraphCut:
+
+        return ForwardScatteringGraphCut(
+            [graph.get_edge(edge_name)
+             for edge_name in fsgc_dict['cut_edges']],
+            (cross_section.Amplitude.from_serializable_dict(model, fsgc_dict['amplitudes'][0]), cross_section.Amplitude.from_serializable_dict(
+                model, fsgc_dict['amplitudes'][1]))
+        )
+
+    def to_serializable_dict(self) -> dict:
+        return {
+            'cut_edges': [edge.name for edge in self.cut_edges],
+            'amplitudes': [amplitude.to_serializable_dict() for amplitude in self.amplitudes],
+        }
+
 
 class ForwardScatteringGraph(object):
-    def __init__(self, id: (int, int), graph: Graph, cuts: list[ForwardScatteringGraphCut]):
-        # ID format (SG_id, SG_cut_id)
-        self.id: (int, int) = id
+    def __init__(self, sg_id: int, sg_cut_id: int, graph: Graph, multiplicity: float, cuts: list[ForwardScatteringGraphCut]):
+        self.sg_id: int = sg_id
+        self.sg_cut_id: int = sg_cut_id
         self.graph: Graph = graph
+        self.multiplicity: float = multiplicity
         self.cuts: list[ForwardScatteringGraphCut] = cuts
 
-class Amplitude(object):
-    def __init__(self, id: (int, int, int, int), graph: Graph):
-        # ID format (SG_id, SG_cut_id, FS_cut_id, cut_side)
-        self.id: (int, int, int, int) = id
+    @staticmethod
+    def from_serializable_dict(model: Model, amplitude_graph_dict: dict) -> ForwardScatteringGraph:
+        graph = Graph.from_serializable_dict(
+            model, amplitude_graph_dict['graph'])
+        return ForwardScatteringGraph(
+            amplitude_graph_dict['sg_id'],
+            amplitude_graph_dict['sg_cut_id'],
+            graph,
+            amplitude_graph_dict['multiplicity'],
+            [ForwardScatteringGraphCut.from_serializable_dict(
+                model, graph, cut_dict) for cut_dict in amplitude_graph_dict['cuts']]
+        )
+
+    def to_serializable_dict(self) -> dict:
+        return {
+            'sg_id': self.sg_id,
+            'sg_cut_id': self.sg_cut_id,
+            'graph': self.graph.to_serializable_dict(),
+            'multiplicity': self.multiplicity,
+            'cuts': [cut.to_serializable_dict() for cut in self.cuts],
+        }
+
+
+class AmplitudeGraph(object):
+    def __init__(self, sg_id: int, sg_cut_id: int, fs_cut_id: int, amplitude_side: Side, graph: Graph):
+        self.sg_id: int = sg_id
+        self.sg_cut_id: int = sg_cut_id
+        self.fs_cut_id: int = fs_cut_id
+        self.amplitude_side: Side = amplitude_side
         self.graph: Graph = graph
+
+    @staticmethod
+    def from_serializable_dict(model: Model, amplitude_graph_dict: dict) -> AmplitudeGraph:
+
+        return AmplitudeGraph(
+            amplitude_graph_dict['sg_id'],
+            amplitude_graph_dict['sg_cut_id'],
+            amplitude_graph_dict['fs_cut_id'],
+            Side[amplitude_graph_dict['amplitude_side']],
+            Graph.from_serializable_dict(model, amplitude_graph_dict['graph'])
+        )
+
+    def to_serializable_dict(self) -> dict:
+        return {
+            'sg_id': self.sg_id,
+            'sg_cut_id': self.sg_cut_id,
+            'fs_cut_id': self.fs_cut_id,
+            'amplitude_side': str(self.amplitude_side),
+            'graph': self.graph.to_serializable_dict(),
+        }

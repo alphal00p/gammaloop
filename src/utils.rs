@@ -7,6 +7,7 @@ use num::Complex;
 use num::ToPrimitive;
 use num_traits::{Float, FloatConst, FromPrimitive, Num, NumAssign, NumCast, Signed};
 use num_traits::{Inv, One, Zero};
+use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -25,6 +26,21 @@ pub const VERSION: &str = "0.0.1";
 const MAX_DIMENSION: usize = MAX_LOOP * 3;
 
 pub const PINCH_TEST_THRESHOLD: f64 = 1e-10;
+
+pub const LEFT: usize = 0;
+pub const RIGHT: usize = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Side {
+    LEFT = 0,
+    RIGHT = 1,
+}
+
+impl Into<usize> for Side {
+    fn into(self) -> usize {
+        self as usize
+    }
+}
 
 pub trait FloatConvertFrom<U> {
     fn convert_from(x: &U) -> Self;
