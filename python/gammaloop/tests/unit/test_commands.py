@@ -7,6 +7,12 @@ class TestShellCommand:
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string("!ls"))
 
+    def test_set_drawing_config(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "set drawing.n_graphs_per_page 1337"))
+        assert gloop.config['drawing']['n_graphs_per_page'] == 1337
+
 
 class TestLoadModel:
 

@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 from enum import Enum
-
+import yaml
 import symbolica  # pylint: disable=import-error
 from gammaloop.misc.utils import setup_logging
 
@@ -16,6 +16,11 @@ GL_CONSOLE_HANDLER = setup_logging()
 GL_DEBUG = False
 GL_IS_SYMBOLICA_REGISTERED = None
 
+GAMMALOOP_CONFIG_PATHS = [
+    pjoin(DATA_PATH, 'config', 'gammaloop_config.yaml'),
+    pjoin(os.path.expanduser('~'), '.gammaloop_config.yaml'),
+]
+
 logger = logging.getLogger('GammaLoop')
 
 try:
@@ -27,6 +32,20 @@ except ImportError:
     sys.exit(1)
 
 
+def load_configuration(config_path, quiet: bool = False) -> dict:
+    if not quiet:
+        logger.info(
+            "Updating gammaLoop configuration from '%s'.", config_path)
+    try:
+        gammaloop_config = yaml.load(open(config_path, 'r', encoding='utf-8'),
+                                     Loader=yaml.FullLoader)
+    except yaml.YAMLError as exc:
+        logger.critical(
+            "Could not load gammaLoop configuration from '%s'. Error: \n%s", config_path, str(exc))
+        sys.exit(1)
+    return gammaloop_config
+
+
 def register_symbolica() -> bool:
     # pylint: disable=global-statement
     global GL_IS_SYMBOLICA_REGISTERED
@@ -36,21 +55,23 @@ def register_symbolica() -> bool:
         return GL_IS_SYMBOLICA_REGISTERED
 
     if 'SYMBOLICA_LICENSE' not in os.environ:
-        license_file_path = os.path.join(
-            DATA_PATH, 'config', 'symbolica_license.txt')
-        if os.path.isfile(license_file_path):
-            with open(license_file_path, 'r', encoding='utf-8') as file:
-                symbolica_license = file.read().split('\n')[0].strip()
-                if symbolica_license != "<PASE_YOUR_SYMBOLICA_LICENSE_HERE>":
-                    try:
-                        set_license_key(symbolica_license)
-                        GL_IS_SYMBOLICA_REGISTERED = True
-                        return True
-                    except:  # pylint: disable=bare-except
-                        logger.critical(
-                            "Could not set Symbolica license key from file '%s'.", license_file_path)
-                        GL_IS_SYMBOLICA_REGISTERED = True
-                        return False
+        symbolica_license = None
+        for path in GAMMALOOP_CONFIG_PATHS:
+            if os.path.exists(path):
+                gammaloop_config = load_configuration(path, quiet=True)
+                if 'symbolica_license' in gammaloop_config and gammaloop_config['symbolica_license'] != "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>":
+                    symbolica_license = gammaloop_config['symbolica_license']
+                    break
+        if symbolica_license is not None:
+            try:
+                set_license_key(symbolica_license)
+                GL_IS_SYMBOLICA_REGISTERED = True
+                return True
+            except:  # pylint: disable=bare-except
+                logger.critical(
+                    "Could not set Symbolica license key from gammaloop configuration file specifying license '%s'.", symbolica_license)
+                GL_IS_SYMBOLICA_REGISTERED = True
+                return False
         else:
             GL_IS_SYMBOLICA_REGISTERED = False
             return False
@@ -61,7 +82,7 @@ def register_symbolica() -> bool:
             return True
         except:  # pylint: disable=bare-except
             logger.critical(
-                "Could not set Symbolica license key from environment variable 'SYMBOLICA_LICENSE'.")
+                "Could not set Symbolica license key from environment variable 'SYMBOLICA_LICENSE' specifying license '%s'.", os.environ['SYMBOLICA_LICENSE'])
             GL_IS_SYMBOLICA_REGISTERED = False
             return False
 
