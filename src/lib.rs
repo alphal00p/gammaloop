@@ -9,9 +9,11 @@ pub mod integrate;
 pub mod model;
 pub mod observables;
 pub mod tests;
+pub mod tests_from_pytest;
 pub mod utils;
 
 use color_eyre::{Help, Report};
+#[allow(unused)]
 use colored::Colorize;
 use eyre::WrapErr;
 

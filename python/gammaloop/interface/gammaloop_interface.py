@@ -382,7 +382,7 @@ class GammaLoop(object):
         if output_metadata['output_type'] == 'amplitudes':
             self.amplitudes = cross_section.AmplitudeList()
             self.rust_worker.reset_amplitudes()
-            for amplitude_name in output_metadata['amplitudes']:
+            for amplitude_name in output_metadata['contents']:
                 with open(pjoin(args.path_to_launch, 'sources', 'amplitudes', f'{amplitude_name}', 'amplitude.yaml'), 'r', encoding='utf-8') as file:
                     amplitude_yaml = file.read()
                     self.amplitudes.add_amplitude(
@@ -393,7 +393,7 @@ class GammaLoop(object):
         if output_metadata['output_type'] == 'cross_sections':
             self.cross_sections = cross_section.CrossSectionList()
             self.rust_worker.reset_cross_sections()
-            for cross_section_name in output_metadata['cross_sections']:
+            for cross_section_name in output_metadata['contents']:
                 with open(pjoin(args.path_to_launch, 'sources', 'cross_sections', f'{cross_section_name}', 'cross_section.yaml'), 'r', encoding='utf-8') as file:
                     cross_section_yaml = file.read()
                     self.cross_sections.add_cross_section(

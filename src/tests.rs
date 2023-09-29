@@ -1,10 +1,12 @@
-#![allow(dead_code)]
-use crate::*;
-#[allow(unused)]
+#![allow(unused)]
+use crate::integrands::IntegrandSettings;
+use crate::utils;
 use crate::{
-    h_function_test::HFunctionTestSettings, integrands::UnitVolumeSettings,
-    observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings,
+    h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
+    observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings, Complex,
+    IntegratedPhase, Settings,
 };
+use colored::Colorize;
 
 use crate::inspect::inspect;
 use crate::integrate::{havana_integrate, UserData};
@@ -199,6 +201,8 @@ fn get_unit_volume_integrand() -> UnitVolumeSettings {
 
 #[cfg(test)]
 mod tests_integral {
+    use crate::{HFunction, HFunctionSettings, ParameterizationMode};
+
     use super::*;
 
     #[test]
@@ -292,6 +296,8 @@ mod tests_integral {
 
 #[cfg(test)]
 mod tests_inspect {
+    use crate::{HFunction, HFunctionSettings, ParameterizationMode};
+
     use super::*;
 
     // Amazingly enough, a simple failing test induces a segfault on MacOS... :/

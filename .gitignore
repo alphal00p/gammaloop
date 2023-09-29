@@ -45,6 +45,9 @@ logos/
 pip-log.txt
 pip-delete-this-directory.txt
 
+# GammaLoop test outputs
+TEST_OUTPUT*/
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
