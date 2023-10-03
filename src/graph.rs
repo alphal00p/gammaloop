@@ -66,7 +66,7 @@ impl HasVertexInfo for ExternalVertexInfo {
 #[derive(Debug, Clone)]
 pub struct InteractionVertexInfo {
     #[allow(unused)]
-    vertex_rule: Arc<model::VertexRule>,
+    pub vertex_rule: Arc<model::VertexRule>,
 }
 
 impl HasVertexInfo for InteractionVertexInfo {

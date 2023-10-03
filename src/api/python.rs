@@ -244,7 +244,7 @@ impl PythonWorker {
         cross_section_names: Vec<&str>,
     ) -> PyResult<String> {
         let mut n_exported: usize = 0;
-        for cross_section in &self.cross_sections.cross_sections {
+        for cross_section in &self.cross_sections.container {
             if cross_section_names.contains(&cross_section.name.as_str()) {
                 n_exported += 1;
                 let res = cross_section.export(
@@ -273,7 +273,7 @@ impl PythonWorker {
         amplitude_names: Vec<&str>,
     ) -> PyResult<String> {
         let mut n_exported: usize = 0;
-        for amplitude in &self.amplitudes.amplitudes {
+        for amplitude in &self.amplitudes.container {
             if amplitude_names.contains(&amplitude.name.as_str()) {
                 n_exported += 1;
                 let res = amplitude.export(

@@ -498,13 +498,13 @@ impl Amplitude {
 
 #[derive(Debug, Clone)]
 pub struct CrossSectionList {
-    pub cross_sections: Vec<CrossSection>,
+    pub container: Vec<CrossSection>,
 }
 
 impl CrossSectionList {
     pub fn default() -> CrossSectionList {
         CrossSectionList {
-            cross_sections: Vec::new(),
+            container: Vec::new(),
         }
     }
 
@@ -540,7 +540,7 @@ impl CrossSectionList {
         serializable_cross_sections: &Vec<SerializableCrossSection>,
     ) -> CrossSectionList {
         CrossSectionList {
-            cross_sections: serializable_cross_sections
+            container: serializable_cross_sections
                 .iter()
                 .map(|sg| CrossSection::from_serializable_cross_section(model, sg))
                 .collect(),
@@ -548,7 +548,7 @@ impl CrossSectionList {
     }
 
     pub fn to_serializable(&self) -> Vec<SerializableCrossSection> {
-        self.cross_sections
+        self.container
             .iter()
             .map(|cs| cs.to_serializable())
             .collect()
@@ -559,19 +559,19 @@ impl CrossSectionList {
     }
 
     pub fn add_cross_section(&mut self, cross_section: CrossSection) {
-        self.cross_sections.push(cross_section);
+        self.container.push(cross_section);
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct AmplitudeList {
-    pub amplitudes: Vec<Amplitude>,
+    pub container: Vec<Amplitude>,
 }
 
 impl AmplitudeList {
     pub fn default() -> AmplitudeList {
         AmplitudeList {
-            amplitudes: Vec::new(),
+            container: Vec::new(),
         }
     }
 
@@ -601,7 +601,7 @@ impl AmplitudeList {
         serializable_amplitudes: &Vec<SerializableAmplitude>,
     ) -> AmplitudeList {
         AmplitudeList {
-            amplitudes: serializable_amplitudes
+            container: serializable_amplitudes
                 .iter()
                 .map(|sg| Amplitude::from_serializable_amplitude(model, sg))
                 .collect(),
@@ -609,7 +609,7 @@ impl AmplitudeList {
     }
 
     pub fn to_serializable(&self) -> Vec<SerializableAmplitude> {
-        self.amplitudes
+        self.container
             .iter()
             .map(|cs| cs.to_serializable())
             .collect()
@@ -620,6 +620,6 @@ impl AmplitudeList {
     }
 
     pub fn add_amplitude(&mut self, amplitude: Amplitude) {
-        self.amplitudes.push(amplitude);
+        self.container.push(amplitude);
     }
 }
