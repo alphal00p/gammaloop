@@ -1,9 +1,9 @@
-import_model sm
+#import_model sm
 #export_model ./sm_model.yaml
-import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/epem_a_ddx_NLO.py --format=qgraph
-#import_model scalars
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/epem_a_ddx_NLO.py --format=qgraph
+import_model scalars
 #export_model ./scalars.yaml
-#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_triangle.py --format=qgraph
+import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_triangle.py --format=qgraph
 !rm -rf TEST_OUTPUT
 output TEST_OUTPUT
 launch TEST_OUTPUT

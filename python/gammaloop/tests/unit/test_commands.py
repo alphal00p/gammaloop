@@ -7,6 +7,12 @@ class TestShellCommand:
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string("!ls"))
 
+    def test_set_drawing_config(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "set drawing.n_graphs_per_page 1337"))
+        assert gloop.config['drawing']['n_graphs_per_page'] == 1337
+
 
 class TestLoadModel:
 
@@ -62,6 +68,30 @@ class TestLoadQGraph:
         assert len(gloop.amplitudes) == 1
         assert len(gloop.amplitudes[0].amplitude_graphs) == 1
 
+    def test_fishnet_2x2(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"import_model scalars; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'fishnet_2x2.py')} -f qgraph --no_compile"))
+        assert len(gloop.amplitudes) == 1
+        assert len(gloop.amplitudes[0].amplitude_graphs) == 1
+        assert len(gloop.amplitudes[0].amplitude_graphs[0].graph.edges) == 16
+        assert len(
+            gloop.amplitudes[0].amplitude_graphs[0].graph.vertices) == 13
+        assert len(
+            gloop.amplitudes[0].amplitude_graphs[0].graph.external_connections) == 4
+
+    def test_fishnet_2x3(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"import_model scalars; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'fishnet_2x3.py')} -f qgraph --no_compile"))
+        assert len(gloop.amplitudes) == 1
+        assert len(gloop.amplitudes[0].amplitude_graphs) == 1
+        assert len(gloop.amplitudes[0].amplitude_graphs[0].graph.edges) == 21
+        assert len(
+            gloop.amplitudes[0].amplitude_graphs[0].graph.vertices) == 16
+        assert len(
+            gloop.amplitudes[0].amplitude_graphs[0].graph.external_connections) == 4
+
 
 class TestMasslessScalarTriangleAmplitude:
 
@@ -78,6 +108,40 @@ class TestMasslessScalarTriangleAmplitude:
             assert len(amplitudes) == 1
             assert len(amplitudes[0].amplitude_graphs) == 1
             assert amplitudes[0].name == 'massless_triangle'
+        gloop.run(CommandList.from_string("info"))
+
+
+class TestScalarFishnet2x2:
+
+    def test_info(self, scalar_fishnet_2x2_export):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_fishnet_2x2_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'fishnet_2x2'
+        gloop.run(CommandList.from_string("info"))
+
+
+class TestScalarFishnet2x3:
+
+    def test_info(self, scalar_fishnet_2x3_export):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_fishnet_2x3_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'fishnet_2x3'
         gloop.run(CommandList.from_string("info"))
 
 

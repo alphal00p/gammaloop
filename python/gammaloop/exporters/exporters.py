@@ -49,6 +49,10 @@ class GammaLoopExporter(object):
 
         os.makedirs(pjoin(export_root, 'runs'))
 
+        return OutputMetaData({
+            'model_name': self.gammaloop.model.name,
+        })
+
 
 class AmplitudesExporter(GammaLoopExporter):
 
@@ -58,13 +62,11 @@ class AmplitudesExporter(GammaLoopExporter):
 
     def export(self, export_root: Path, amplitudes: cross_section.AmplitudeList):
 
-        super(AmplitudesExporter, self).generic_export(export_root)
+        output_data = super(AmplitudesExporter,
+                            self).generic_export(export_root)
+        output_data['output_type'] = 'amplitudes'
+        output_data['contents'] = [amplitude.name for amplitude in amplitudes]
 
-        output_data = OutputMetaData({
-            'model_name': self.gammaloop.model.name,
-            'output_type': 'amplitudes',
-            'amplitudes': [amplitude.name for amplitude in amplitudes]
-        })
         with open(pjoin(export_root, 'output_metadata.yaml'), 'w', encoding='utf-8') as file:
             file.write(output_data.to_yaml_str())
 
@@ -96,13 +98,12 @@ class CrossSectionsExporter(GammaLoopExporter):
 
     def export(self, export_root: Path, cross_sections: cross_section.CrossSectionList):
 
-        super(CrossSectionsExporter, self).generic_export(export_root)
+        output_data = super(CrossSectionsExporter,
+                            self).generic_export(export_root)
+        output_data['output_type'] = 'cross_sections'
+        output_data['contents'] = [
+            cross_section.name for cross_section in cross_sections]
 
-        output_data = OutputMetaData({
-            'model_name': self.gammaloop.model.name,
-            'output_type': 'cross_sections',
-            'cross_sections': [cross_section.name for cross_section in cross_sections]
-        })
         with open(pjoin(export_root, 'output_metadata.yaml'), 'w', encoding='utf-8') as file:
             file.write(output_data.to_yaml_str())
 

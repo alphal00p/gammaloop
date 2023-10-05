@@ -13,6 +13,21 @@ use std::path::Path;
 use symbolica;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum OutputType {
+    #[serde(rename = "amplitudes")]
+    Amplitudes,
+    #[serde(rename = "cross_sections")]
+    CrossSections,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OutputMetaData {
+    pub model_name: String,
+    pub output_type: OutputType,
+    pub contents: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SerializableSuperGraphCut {
     pub cut_edges: Vec<SmartString<LazyCompact>>,
     pub forward_scattering_graph: SerializableForwardScatteringGraph,

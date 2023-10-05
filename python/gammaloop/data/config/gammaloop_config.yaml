@@ -1,0 +1,4 @@
+symbolica:
+  license: "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>"
+drawing:
+  n_graphs_per_page: 1

@@ -5,9 +5,9 @@ import importlib
 from argparse import ArgumentParser
 import subprocess
 import os
-import yaml
 from pprint import pformat
-from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin
+import yaml
+from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS
 from gammaloop.misc.utils import Colour
 import gammaloop.base_objects.model as model
 import gammaloop.base_objects.graph as graph
@@ -31,7 +31,78 @@ AVAILABLE_COMMANDS = [
     'inspect',
     'test_ir_limits',
     'test_uv_limits',
+    'set'
 ]
+
+
+class GammaLoopConfiguration(object):
+
+    def __init__(self, path: str | None = None):
+        self._config = {
+            'symbolica': {
+                'license': "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>"
+            },
+            'drawing': {
+                'n_graphs_per_page': 1
+            }
+        }
+        if path is None:
+            for config_path in GAMMALOOP_CONFIG_PATHS:
+                if os.path.exists(config_path):
+                    self.update(load_configuration(config_path, ''))
+        else:
+            self.update(load_configuration(path))
+
+    @classmethod
+    def _update_config_chunk(cls, root_path: str, config_chunk: dict, updater: dict) -> None:
+        for key, value in updater.items():
+            if root_path == '':
+                setting_path = key
+            else:
+                setting_path = '.'.join([root_path, key])
+            if not isinstance(key, str):
+                raise GammaLoopError(
+                    f"Invalid path for setting {setting_path}")
+            if key not in config_chunk:
+                raise GammaLoopError(
+                    f"No settings {setting_path} in gammaloop configuration.")
+            if isinstance(value, dict):
+                if key.endswith('_dict'):
+                    config_chunk[key] = updater
+                    return
+                if any(not isinstance(k, str) for k in updater):
+                    if all(isinstance(k, str) for k in config_chunk[key]):
+                        raise GammaLoopError(
+                            f"Invalid value for setting {setting_path}:\n{pformat(updater)}")
+                    else:
+                        config_chunk[key] = updater
+                        return
+                else:
+                    cls._update_config_chunk(
+                        setting_path, config_chunk[key], value)
+            else:
+                if type(value) is not type(config_chunk[key]):
+                    raise GammaLoopError(
+                        f"Invalid value for setting {setting_path}:\n{pformat(updater)}")
+                config_chunk[key] = value
+                return
+
+    def update(self, new_setting, path: str = '') -> None:
+        context = self._config
+        for key in path.split('.'):
+            if key == "":
+                break
+            if key not in context:
+                raise GammaLoopError(
+                    f"No settings '{path}' in gammaloop configuration.")
+            context = context[key]
+        self._update_config_chunk(path, context, new_setting)
+
+    def __getitem__(self, key: str):
+        if key in self._config:
+            return self._config[key]
+        else:
+            raise GammaLoopError(f"Unknown gammloop setting '{key}'")
 
 
 def split_str_args(str_args) -> list[str]:
@@ -112,6 +183,7 @@ class GammaLoop(object):
         self.cross_sections: cross_section.CrossSectionList = cross_section.CrossSectionList()
         self.amplitudes: cross_section.AmplitudeList = cross_section.AmplitudeList()
 
+        self.config: GammaLoopConfiguration = GammaLoopConfiguration()
         self.launched_output: Path | None = None
         self.command_history: CommandList = CommandList()
 
@@ -159,6 +231,32 @@ class GammaLoop(object):
                         getattr(self, f'do_{cmd}')(args)
                     else:
                         raise GammaLoopError(f"Invalid command '{cmd}'")
+
+    # set command
+    set_parser = ArgumentParser(prog='set')
+    set_parser.add_argument('path', metavar='path', type=str,
+                            help='Setting path to set value to')
+    set_parser.add_argument(
+        'value', metavar='value', type=str, help='value to set as valid python syntax')
+
+    def do_set(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.set_parser.print_help()
+            return
+        args = self.set_parser.parse_args(split_str_args(str_args))
+
+        try:
+            config_value = eval(args.value)  # pylint: disable=eval-used
+        except Exception as exc:
+            raise GammaLoopError(
+                f"Invalid value '{args.value}' for setting '{args.path}'. Error:\n{exc}") from exc
+        setting_path = args.path.split('.')
+        if len(setting_path) == 1:
+            setting_route = ''
+        else:
+            setting_route = '.'.join(setting_path[:-1])
+        self.config.update(
+            {setting_path[-1]: config_value}, path=setting_route)
 
     # import_model command
     import_model_parser = ArgumentParser(prog='import_model')
@@ -382,7 +480,7 @@ class GammaLoop(object):
         if output_metadata['output_type'] == 'amplitudes':
             self.amplitudes = cross_section.AmplitudeList()
             self.rust_worker.reset_amplitudes()
-            for amplitude_name in output_metadata['amplitudes']:
+            for amplitude_name in output_metadata['contents']:
                 with open(pjoin(args.path_to_launch, 'sources', 'amplitudes', f'{amplitude_name}', 'amplitude.yaml'), 'r', encoding='utf-8') as file:
                     amplitude_yaml = file.read()
                     self.amplitudes.add_amplitude(
@@ -393,7 +491,7 @@ class GammaLoop(object):
         if output_metadata['output_type'] == 'cross_sections':
             self.cross_sections = cross_section.CrossSectionList()
             self.rust_worker.reset_cross_sections()
-            for cross_section_name in output_metadata['cross_sections']:
+            for cross_section_name in output_metadata['contents']:
                 with open(pjoin(args.path_to_launch, 'sources', 'cross_sections', f'{cross_section_name}', 'cross_section.yaml'), 'r', encoding='utf-8') as file:
                     cross_section_yaml = file.read()
                     self.cross_sections.add_cross_section(

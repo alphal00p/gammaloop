@@ -10,6 +10,12 @@ run_rust_tests() {
 run_python_tests() {
     cd python/gammaloop;
     ./run_python_tests.sh $@;
+    # Pass the following option to see output on fails
+    #./run_python_tests.sh $@ -s --log-cli-level DEBUG;
+    # or:
+    #./run_python_tests.sh $@ -rx;
+    # Pass the following option to see output on all tests
+    #./run_python_tests.sh $@ -rP;
     cd -;
 }
 
