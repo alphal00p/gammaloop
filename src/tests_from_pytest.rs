@@ -1,6 +1,8 @@
 #![allow(unused_imports)]
+use crate::cff::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::model::Model;
+use crate::tests::approx_eq;
 use colored::Colorize;
 use serde;
 use std::env;
@@ -74,6 +76,27 @@ mod tests_scalar_massless_triangle {
                 == 3
         );
 
+        let graph = &amplitude.amplitude_graphs[0].graph;
+        let cff = generate_cff_expression(graph).unwrap();
+        assert_eq!(cff.terms.len(), 6);
+
+        // this is a bit handcrafted at the moment
+        // In the future this is generated automatically when the full evaluation stack is there
+        let energy_cache = [
+            1.0,
+            1.0,
+            -2.0,
+            10.770329614269007,
+            22.9128784747792,
+            3.7416573867739413,
+        ];
+
+        let benchmark_val = 0.011605113880815013;
+        let res = cff.evaluate(&energy_cache);
+
+        println!("res = {}", res);
+        assert!(approx_eq(res, benchmark_val, 1e-15));
+
         // TODO: @Mathijs, you can put your own checks there
     }
 }
@@ -101,6 +124,10 @@ fn pytest_scalar_fishnet_2x2() {
             .len()
             == 4
     );
+
+    let graph = &amplitude.amplitude_graphs[0].graph;
+    let cff = generate_cff_expression(graph).unwrap();
+    assert!(cff.terms.len() > 0);
 
     // TODO: @Mathijs, you can put your own checks there
 }
@@ -130,4 +157,34 @@ fn pytest_scalar_fishnet_2x3() {
     );
 
     // TODO: @Mathijs, you can put your own checks there
+}
+
+#[test]
+#[ignore]
+fn pytest_scalar_cube() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let mut sb_state = symbolica::state::State::new();
+    let sb_workspace = symbolica::state::Workspace::new();
+    let (model, amplitude) = load_amplitude_output(
+        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
+        &mut sb_state,
+        &sb_workspace,
+    );
+
+    assert_eq!(model.name, "scalars");
+    assert!(amplitude.amplitude_graphs.len() == 1);
+    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 20);
+    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 16);
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .external_connections
+            .len()
+            == 8
+    );
+
+    let graph = &amplitude.amplitude_graphs[0].graph;
+    let cff = generate_cff_expression(graph).unwrap();
+    assert!(cff.terms.len() > 0);
 }

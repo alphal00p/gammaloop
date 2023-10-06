@@ -50,6 +50,16 @@ import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','fishnet_2x3.py')} -f qgraph
 output {output_path}"""))
     return output_path
 
+@pytest.fixture(scope="session")
+def scalar_cube_export(tmpdir_factory):
+    gloop = get_gamma_loop_interpreter()
+    output_path = tmpdir_factory.mktemp("TEST_AMPLITUDE_cube").join("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','cube.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
 
 @pytest.fixture(scope="session")
 def epem_a_ddx_nlo_export(tmpdir_factory):

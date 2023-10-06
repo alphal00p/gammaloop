@@ -22,7 +22,7 @@ fn load_default_settings() -> Settings {
     Settings::from_file("./src/test_resources/default_tests_config.yaml").unwrap()
 }
 
-fn approx_eq(res: f64, target: f64, tolerance: f64) -> bool {
+pub fn approx_eq(res: f64, target: f64, tolerance: f64) -> bool {
     if target == 0.0 {
         return res.abs() < tolerance;
     } else {
