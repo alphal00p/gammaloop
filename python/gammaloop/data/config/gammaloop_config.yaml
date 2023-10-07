@@ -1,4 +1,25 @@
 symbolica:
   license: "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>"
 drawing:
-  n_graphs_per_page: 1
+  mode: "feynmp"
+  combined_graphs_pdf_grid_shape: [3, 2]
+  feynmp:
+    show_edge_labels: true
+    show_particle_names: true
+    show_edge_names: true
+    show_edge_momenta: true
+    draw_arrow_for_all_edges: true
+    draw_lmb: true
+    arc_max_distance: 1.
+    external_legs_tension: 3.0
+    default_tension: 1.0
+    show_vertex_labels: frue
+    use_vertex_names: frue
+    vertex_size: 2.5
+    vertex_shape: "circle"
+    line_width: 1.0
+    line_color: "black"
+    label_color: "blue"
+    lmb_color: "red"
+    anchor_tension: 2.0
+    caption_size: "20pt"

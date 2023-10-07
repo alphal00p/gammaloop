@@ -1,9 +1,16 @@
-#import_model sm
+import_model sm
 #export_model ./sm_model.yaml
-#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/epem_a_ddx_NLO.py --format=qgraph
-import_model scalars
-#export_model ./scalars.yaml
-import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_triangle.py --format=qgraph
+import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/epem_a_ddx_NLO.py --format=qgraph
+#import_model scalars
+export_model ./scalars.yaml
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_triangle.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/fishnet_2x2.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/cube.py --format=qgraph
+#set drawing.feynmp.show_edge_labels False
+#set drawing.feynmp.show_vertex_labels True
+#set drawing.feynmp.use_vertex_names True
+#set drawing.feynmp.caption_size "10pt"
+#set drawing.combined_graphs_pdf_grid_shape [1,1]
 !rm -rf TEST_OUTPUT
 output TEST_OUTPUT
 launch TEST_OUTPUT

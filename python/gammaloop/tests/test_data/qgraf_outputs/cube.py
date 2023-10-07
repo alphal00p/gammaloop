@@ -1,7 +1,7 @@
 graphs = []
 # To be imported after having the gammaloop UFO model named "scalars"
 
-#edge name convention XY where XY are the vertices connected by the edge
+# edge name convention XY where XY are the vertices connected by the edge
 # massless cube diagram
 graphs.append(
     {
@@ -60,7 +60,7 @@ graphs.append(
                 "type": "in",
                 "momentum": "p7",
                 "indices": (),
-                "vertices": (107,7)
+                "vertices": (107, 7)
             },
             1008: {
                 "name": "p8",
@@ -224,62 +224,62 @@ graphs.append(
                 "vertex_id": -1,
                 "edge_ids": (1008,)
             },
-           1: {
-            "PDGs": (1000, 1000, 1000, 1000),
-            "momenta": ("N/A", "N/A", "N/A", "N/A"),
-            "indices": (),
-            "vertex_id": 0,
-            "edge_ids": (1001, 12, 15, 31),
-           },
-           2: {
-            "PDGs": (1000, 1000, 1000, 1000),
-            "momenta": ("N/A", "N/A", "N/A", "N/A"),
-            "indices": (),
-            "vertex_id": 0,
-            "edge_ids": (12, 1002, 24, 26),
-           },
-           3: {
-            "PDGs": (1000, 1000, 1000, 1000),
-            "momenta": ("N/A", "N/A", "N/A", "N/A"),
-            "indices": (),
-            "vertex_id": 0,
-            "edge_ids": (31, 43, 1003, 37),
-           },
-           4: {
-            "PDGs": (1000, 1000, 1000, 1000),
-            "momenta": ("N/A", "N/A", "N/A", "N/A"),
-            "indices": (),
-            "vertex_id": 0,
-            "edge_ids": (24, 1004, 48, 43),
-           },
-           5: {
-            "PDGs": (1000, 1000, 1000, 1000),
-            "momenta": ("N/A", "N/A", "N/A", "N/A"),
-            "indices": (),
-            "vertex_id": 0,
-            "edge_ids": (15, 75, 1005, 56),
-           },
-        6: {
-            "PDGs": (1000, 1000, 1000, 1000),
-            "momenta": ("N/A", "N/A", "N/A", "N/A"),
-            "indices": (),
-            "vertex_id": 0,
-            "edge_ids": (26, 56, 1006, 68),
-           },
-        7: {
-            "PDGs": (1000, 1000, 1000, 1000),
-            "momenta": ("N/A", "N/A", "N/A", "N/A"),
-            "indices": (),
-            "vertex_id": 0,
-            "edge_ids": (37, 75, 1007, 87),
-           },
-        8: {
-            "PDGs": (1000, 1000, 1000, 1000),
-            "momenta": ("N/A", "N/A", "N/A", "N/A"),
-            "indices": (),
-            "vertex_id": 0,
-            "edge_ids": (48, 68, 87, 1008),
-           },
+            1: {
+                "PDGs": (1000, 1000, 1000, 1000),
+                "momenta": ("N/A", "N/A", "N/A", "N/A"),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (1001, 12, 15, 31),
+            },
+            2: {
+                "PDGs": (1000, 1000, 1000, 1000),
+                "momenta": ("N/A", "N/A", "N/A", "N/A"),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (12, 1002, 24, 26),
+            },
+            3: {
+                "PDGs": (1000, 1000, 1000, 1000),
+                "momenta": ("N/A", "N/A", "N/A", "N/A"),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (31, 43, 1003, 37),
+            },
+            4: {
+                "PDGs": (1000, 1000, 1000, 1000),
+                "momenta": ("N/A", "N/A", "N/A", "N/A"),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (24, 1004, 48, 43),
+            },
+            5: {
+                "PDGs": (1000, 1000, 1000, 1000),
+                "momenta": ("N/A", "N/A", "N/A", "N/A"),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (15, 75, 1005, 56),
+            },
+            6: {
+                "PDGs": (1000, 1000, 1000, 1000),
+                "momenta": ("N/A", "N/A", "N/A", "N/A"),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (26, 56, 1006, 68),
+            },
+            7: {
+                "PDGs": (1000, 1000, 1000, 1000),
+                "momenta": ("N/A", "N/A", "N/A", "N/A"),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (37, 75, 1007, 87),
+            },
+            8: {
+                "PDGs": (1000, 1000, 1000, 1000),
+                "momenta": ("N/A", "N/A", "N/A", "N/A"),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (48, 68, 87, 1008),
+            },
         },
         "overall_factor": "1"
     }

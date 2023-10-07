@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import yaml
 import gammaloop.cross_section.supergraph as supergraph
 import gammaloop.base_objects as base_objects
@@ -12,6 +13,18 @@ class CrossSection(object):
     def __init__(self, name: str, supergraphs: list[supergraph.SuperGraph]):
         self.name: str = name
         self.supergraphs: list[supergraph.SuperGraph] = supergraphs
+
+    def draw(self, model: base_objects.model.Model, drawings_path: str, **drawing_options) -> list[Path]:
+
+        if len(self.supergraphs) == 0:
+            return
+
+        drawing_file_paths: list[Path] = []
+        for super_graph in self.supergraphs:
+            drawing_file_paths.append(super_graph.draw(
+                model, drawings_path, **drawing_options))
+
+        return drawing_file_paths
 
     @staticmethod
     def from_serializable_dict(model: base_objects.model.Model, cross_section_dict: dict) -> CrossSection:
@@ -36,17 +49,24 @@ class CrossSection(object):
     def to_yaml_str(self) -> str:
         return utils.verbose_yaml_dump(self.to_serializable_dict())
 
-    def draw(self, _model: base_objects.model.Model, drawings_path: str):
-        # TODO
-        with open(drawings_path, 'w', encoding='utf-8') as file:
-            file.write("Not implemented yet.")
-
 
 class Amplitude(object):
 
     def __init__(self, name: str, amplitude_graphs: list[supergraph.AmplitudeGraph]):
         self.name: str = name
         self.amplitude_graphs: list[supergraph.AmplitudeGraph] = amplitude_graphs
+
+    def draw(self, model: base_objects.model.Model, drawings_path: str, **drawing_options) -> list[Path]:
+
+        if len(self.amplitude_graphs) == 0:
+            return
+
+        drawing_file_paths: list[Path] = []
+        for amplitude_graph in self.amplitude_graphs:
+            drawing_file_paths.append(
+                amplitude_graph.draw(model, drawings_path, f'{amplitude_graph.fs_cut_id}_{amplitude_graph.graph.name}', **drawing_options))
+
+        return drawing_file_paths
 
     @staticmethod
     def from_serializable_dict(model: base_objects.model.Model, amplitude_dict: dict) -> Amplitude:
@@ -69,11 +89,6 @@ class Amplitude(object):
 
     def to_yaml_str(self) -> str:
         return utils.verbose_yaml_dump(self.to_serializable_dict())
-
-    def draw(self, _model: base_objects.model.Model, drawings_path: str):
-        # TODO
-        with open(drawings_path, 'w', encoding='utf-8') as file:
-            file.write("Not implemented yet.")
 
 
 class CrossSectionList(list):

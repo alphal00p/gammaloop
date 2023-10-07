@@ -1,7 +1,9 @@
 from __future__ import annotations
+
+from pathlib import Path
 from gammaloop.base_objects.model import Model
 from gammaloop.base_objects.graph import Graph, Edge
-from gammaloop.misc.common import Side
+from gammaloop.misc.common import Side, pjoin
 import gammaloop.cross_section.cross_section as cross_section
 
 
@@ -34,7 +36,15 @@ class SuperGraph(object):
         self.topology_class: list[int] = topology_class
         self.cuts: list[SuperGraphCut] = cuts
 
-    @staticmethod
+    def draw(self, model: Model, drawings_path: str, file_name: str | None = None, **drawing_options) -> Path:
+        if len(self.graph.edges) == 0 and len(self.cuts) > 0:
+            return self.cuts[0].forward_scattering_graph.draw(model, drawings_path, file_name, specify_cut=False, **drawing_options)
+
+        if file_name is None:
+            file_name = f'{self.sg_id}_{self.graph.name}'
+        return self.graph.draw(model, pjoin(drawings_path, file_name), caption=f"Supergraph {self.graph.name.replace('_',' ')}"+r" ({\bf #%d})" % self.sg_id, **drawing_options)
+
+    @ staticmethod
     def from_serializable_dict(model: Model, sg_dict: dict) -> SuperGraph:
 
         graph = Graph.from_serializable_dict(model, sg_dict['graph'])
@@ -63,7 +73,7 @@ class ForwardScatteringGraphCut(object):
         self.amplitudes: (cross_section.Amplitude,
                           cross_section.Amplitude) = amplitudes
 
-    @staticmethod
+    @ staticmethod
     def from_serializable_dict(graph: Graph, model: Model, fsgc_dict: dict) -> ForwardScatteringGraphCut:
 
         return ForwardScatteringGraphCut(
@@ -87,6 +97,18 @@ class ForwardScatteringGraph(object):
         self.graph: Graph = graph
         self.multiplicity: float = multiplicity
         self.cuts: list[ForwardScatteringGraphCut] = cuts
+
+    def draw(self, model: Model, drawings_path: str, file_name: str | None, specify_cut: bool = True, **drawing_options) -> Path:
+
+        if file_name is None:
+            file_name = f'{self.sg_id}_{self.sg_cut_id}_{self.graph.name}'
+
+        if specify_cut:
+            g_id = f'#(sg={self.sg_id},sg_cut={self.sg_cut_id})'
+        else:
+            g_id = f'#{self.sg_id}'
+        return self.graph.draw(model, pjoin(drawings_path, file_name),
+                               caption=f"FSG {self.graph.name.replace(f'_{self.sg_id}','').replace('_',' ')}"+r" ({\bf %s})" % g_id, **drawing_options)
 
     @staticmethod
     def from_serializable_dict(model: Model, amplitude_graph_dict: dict) -> ForwardScatteringGraph:
@@ -118,6 +140,16 @@ class AmplitudeGraph(object):
         self.fs_cut_id: int = fs_cut_id
         self.amplitude_side: Side = amplitude_side
         self.graph: Graph = graph
+
+    def draw(self, model: Model, drawings_path: str, file_name: str | None, **drawing_options) -> Path:
+
+        if file_name is None:
+            file_name = f'{self.sg_id}_{self.sg_cut_id}_{self.fs_cut_id}_{str(self.amplitude_side).lower()}_{self.graph.name}'
+            g_id = f'#(sg={self.fs_cut_id},sg_cut={self.sg_cut_id},fs_cut={self.fs_cut_id},side={str(self.amplitude_side).lower()})'
+        else:
+            g_id = f'#{self.fs_cut_id}'
+        return self.graph.draw(model, pjoin(drawings_path, file_name),
+                               caption=f"Amplitude {self.graph.name.replace(f'_{self.fs_cut_id}','').replace('_',' ')}"+r" ({\bf %s})" % g_id, **drawing_options)
 
     @staticmethod
     def from_serializable_dict(model: Model, amplitude_graph_dict: dict) -> AmplitudeGraph:

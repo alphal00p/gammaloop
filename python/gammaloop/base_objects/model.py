@@ -330,6 +330,12 @@ class Particle(object):
         self.lepton_number: int = lepton_number
         self.y_charge: int = y_charge
 
+    def is_ghost(self) -> bool:
+        return self.ghost_number != 0
+
+    def is_massive(self) -> bool:
+        return self.mass.value is None or abs(self.mass.value) > 0.
+
     @staticmethod
     def from_ufo_object(model: Model, ufo_object) -> Particle:
 

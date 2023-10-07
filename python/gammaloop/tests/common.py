@@ -30,3 +30,17 @@ def run_rust_test(rust_tests_binary, output_path, test_name) -> bool:
     logger.debug("RUST TEST STDOUT:\n%s", output.decode("utf-8"))
     logger.debug("RUST TEST STDERR:\n%s", error.decode("utf-8"))
     return True
+
+
+def run_drawing(drawing_path: str) -> bool:
+
+    process = Popen(['make', f'feynman_diagrams.pdf'],
+                    cwd=drawing_path, stdout=PIPE, stderr=PIPE)
+    output, error = process.communicate()
+    if process.returncode != 0 or not os.path.isfile(pjoin(drawing_path, 'feynman_diagrams.pdf')):
+        logger.info("DRAWING TEST STDOUT:\n%s", output.decode("utf-8"))
+        logger.info("DRAWING TEST STDERR:\n%s", error.decode("utf-8"))
+        return False
+    logger.debug("DRAWING TEST STDOUT:\n%s", output.decode("utf-8"))
+    logger.debug("DRAWING TEST STDERR:\n%s", error.decode("utf-8"))
+    return True

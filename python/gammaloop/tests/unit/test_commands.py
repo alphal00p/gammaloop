@@ -1,4 +1,4 @@
-from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin
+from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
 from gammaloop.interface.gammaloop_interface import CommandList
 
 
@@ -10,8 +10,12 @@ class TestShellCommand:
     def test_set_drawing_config(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
-            "set drawing.n_graphs_per_page 1337"))
-        assert gloop.config['drawing']['n_graphs_per_page'] == 1337
+            "set drawing.combined_graphs_pdf_grid_shape [1,1]"))
+        gloop.run(CommandList.from_string(
+            "set drawing.feynmp.show_edge_labels True"))
+        assert gloop.config['drawing']['combined_graphs_pdf_grid_shape'] == [
+            1, 1]
+        assert gloop.config['drawing']['feynmp']['show_edge_labels'] == True
 
 
 class TestLoadModel:
@@ -110,6 +114,10 @@ class TestMasslessScalarTriangleAmplitude:
             assert amplitudes[0].name == 'massless_triangle'
         gloop.run(CommandList.from_string("info"))
 
+    def test_drawing(self, scalar_massless_triangle_export):
+        assert run_drawing(pjoin(scalar_massless_triangle_export, 'sources',
+                           'amplitudes', 'massless_triangle', 'drawings'))
+
 
 class TestScalarFishnet2x2:
 
@@ -126,6 +134,10 @@ class TestScalarFishnet2x2:
             assert len(amplitudes[0].amplitude_graphs) == 1
             assert amplitudes[0].name == 'fishnet_2x2'
         gloop.run(CommandList.from_string("info"))
+
+    def test_drawing(self, scalar_fishnet_2x2_export):
+        assert run_drawing(pjoin(scalar_fishnet_2x2_export, 'sources',
+                           'amplitudes', 'fishnet_2x2', 'drawings'))
 
 
 class TestScalarFishnet2x3:
@@ -144,6 +156,31 @@ class TestScalarFishnet2x3:
             assert amplitudes[0].name == 'fishnet_2x3'
         gloop.run(CommandList.from_string("info"))
 
+    def test_drawing(self, scalar_fishnet_2x3_export):
+        assert run_drawing(pjoin(scalar_fishnet_2x3_export, 'sources',
+                           'amplitudes', 'fishnet_2x3', 'drawings'))
+
+
+class TestScalarCube:
+
+    def test_info(self, scalar_cube_export):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_cube_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'cube'
+        gloop.run(CommandList.from_string("info"))
+
+    def test_drawing(self, scalar_cube_export):
+        assert run_drawing(pjoin(scalar_cube_export, 'sources',
+                           'amplitudes', 'cube', 'drawings'))
+
 
 class TestEpEmADdxNLOCrossSection:
 
@@ -161,3 +198,7 @@ class TestEpEmADdxNLOCrossSection:
         for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
             assert len(amplitudes) == 0
         gloop.run(CommandList.from_string("info"))
+
+    def test_drawing(self, epem_a_ddx_nlo_export):
+        assert run_drawing(pjoin(epem_a_ddx_nlo_export, 'sources',
+                           'cross_sections', 'epem_a_ddx_NLO', 'drawings'))

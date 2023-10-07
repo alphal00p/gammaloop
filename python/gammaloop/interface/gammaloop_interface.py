@@ -23,6 +23,7 @@ AVAILABLE_COMMANDS = [
     'import_model',
     'export_model',
     'import_graphs',
+    'show_settings',
     'output',
     'help',
     'launch',
@@ -43,7 +44,29 @@ class GammaLoopConfiguration(object):
                 'license': "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>"
             },
             'drawing': {
-                'n_graphs_per_page': 1
+                'mode': 'feynmp',
+                'combined_graphs_pdf_grid_shape': [3, 2],
+                'feynmp': {
+                    'show_edge_labels': True,
+                    'show_particle_names': True,
+                    'show_edge_names': True,
+                    'show_edge_momenta': True,
+                    'draw_arrow_for_all_edges': True,
+                    'draw_lmb': True,
+                    'arc_max_distance': 1.,
+                    'external_legs_tension': 3.0,
+                    'default_tension': 1.0,
+                    'show_vertex_labels': False,
+                    'use_vertex_names': False,
+                    'vertex_size': 2.5,
+                    'vertex_shape': 'circle',
+                    'line_width': 1.0,
+                    'line_color': 'black',
+                    'label_color': 'blue',
+                    'lmb_color': 'red',
+                    'anchor_tension': 2.0,
+                    'caption_size': '20pt',
+                }
             }
         }
         if path is None:
@@ -97,6 +120,17 @@ class GammaLoopConfiguration(object):
                     f"No settings '{path}' in gammaloop configuration.")
             context = context[key]
         self._update_config_chunk(path, context, new_setting)
+
+    def get_setting(self, path):
+        context = self._config
+        for key in path.split('.'):
+            if key == "":
+                break
+            if key not in context:
+                raise GammaLoopError(
+                    f"No settings '{path}' in gammaloop configuration.")
+            context = context[key]
+        return context
 
     def __getitem__(self, key: str):
         if key in self._config:
@@ -217,7 +251,8 @@ class GammaLoop(object):
     def run(self, cmds: CommandList) -> None:
 
         for cmd, args in cmds:
-            logger.debug("Running command '%s' with arguments '%s'", cmd, args)
+            logger.debug("Running command '%s%s%s' with arguments '%s%s%s'",
+                         Colour.GREEN, cmd, Colour.END, Colour.BLUE, args, Colour.END)
             self.command_history.append((cmd, args))
             match cmd:
                 case 'shell_run':  # Triggered by special character '!' at the beginning of the command
@@ -257,6 +292,21 @@ class GammaLoop(object):
             setting_route = '.'.join(setting_path[:-1])
         self.config.update(
             {setting_path[-1]: config_value}, path=setting_route)
+
+    # show_settings command
+    show_settings = ArgumentParser(prog='show_settings')
+    show_settings.add_argument('path', metavar='path', type=str,
+                               help='Setting path to show')
+
+    def do_show_settings(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.show_settings.print_help()
+            return
+        args = self.show_settings.parse_args(split_str_args(str_args))
+
+        setting = self.config.get_setting(args.path)
+        logger.info("Current value of setting '%s%s%s':\n%s",
+                    Colour.GREEN, args.path, Colour.END, pformat(setting))
 
     # import_model command
     import_model_parser = ArgumentParser(prog='import_model')
@@ -385,7 +435,7 @@ class GammaLoop(object):
 
         if graph_type == 'forward_scattering_graph':
             logger.warning(
-                "Processing of forward scattering graphs not fully implemented yet.")
+                "%sProcessing of forward scattering graphs not fully implemented yet.%s", Colour.RED, Colour.END)
             self.cross_sections = cross_section.CrossSectionList([cross_section.CrossSection(
                 f'{file_path.stem}',
                 # Wrap the forward scattering graphs within a dummy supergraph
@@ -443,11 +493,12 @@ class GammaLoop(object):
             cross_section_exporter = CrossSectionsExporter(self, args)
             cross_section_exporter.export(
                 args.output_path, self.cross_sections)
+            logger.info("Cross-sections exported to '%s'.", args.output_path)
 
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
             amplitude_exporter.export(args.output_path, self.amplitudes)
-
+            logger.info("Amplitudes exported to '%s'.", args.output_path)
     #
     # Run interface type of commands below (those bound to a particular output already generated)
     #

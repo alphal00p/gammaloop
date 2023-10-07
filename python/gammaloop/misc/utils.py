@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+from collections import deque, defaultdict
 import logging
 import logging.handlers
 import os
@@ -96,3 +97,290 @@ def setup_logging() -> logging.StreamHandler:
     logging.getLogger().setLevel(logging.DEBUG)
 
     return console_handler
+
+
+def remove_duplicates(seq):
+    seen = set()
+    seen_add = seen.add
+    return [x for x in seq if not (x in seen or seen_add(x))]
+
+
+### useful graph algorithms ###
+
+def generate_spanning_trees(result: list[tuple[int]], edge_map: list[(int, int)], adjacency_map: dict[int, list[((int, (int, int)), int)]], current_tree: set[int],
+                            accumulated_edge_sequence: list[int], excluded_edges: list[int], seen_edge_sequences: set[tuple[int]] | None, target_number_of_st_to_find=None, follow=False) -> None:
+    """Compute all spanning trees of a graph component. Disconnected graphs
+    are supported: only the component connected to the vertex in `tree` is considered.
+    """
+    if target_number_of_st_to_find is not None and len(result) >= target_number_of_st_to_find:
+        return
+    if seen_edge_sequences is not None:
+        sorted_sequence = tuple(sorted(accumulated_edge_sequence))
+        if sorted_sequence in seen_edge_sequences:
+            return
+        seen_edge_sequences.add(sorted_sequence)
+
+    # find all edges that connect the tree to a new node
+    # This is the most computationally heavy function, it is written like this for performance reason
+    # len(current_tree) > len(edge_map)-len(accumulated_edge_sequence):
+    if len(current_tree) > len(edge_map)//2:
+        connected_edges = [(i, e) for i, e in enumerate(
+            edge_map) if i not in accumulated_edge_sequence and e[0] != e[1] and (e[0] in current_tree) ^ (e[1] in current_tree)]
+    else:
+        connected_edges = [e for v in current_tree for (
+            e, v2) in adjacency_map[v] if v2 not in current_tree]
+
+    edges_filtered = [(i, e)
+                      for i, e in connected_edges if i not in excluded_edges]
+
+    if len(edges_filtered) == 0:
+        if len(connected_edges) == 0:
+            # no more new edges, so we are done
+            spanning_tree = tuple(sorted(accumulated_edge_sequence))
+            if spanning_tree not in result:
+                result.append(spanning_tree)
+                if follow:
+                    print(
+                        f"Current length of spanning trees: {len(result)}", end='\r')
+
+    else:
+        # these edges can be added in any order, so only allow an order from lowest to highest
+        for e_i, (i, edge_vertices) in enumerate(connected_edges):
+            excluded_edges.extend(j for j, _ in connected_edges[:e_i])
+            new_vertex = edge_vertices[0] if edge_vertices[1] in current_tree else edge_vertices[1]
+            accumulated_edge_sequence.append(i)
+            current_tree.add(new_vertex)
+            generate_spanning_trees(
+                result, edge_map, adjacency_map, current_tree, accumulated_edge_sequence,
+                excluded_edges, seen_edge_sequences, target_number_of_st_to_find, follow)
+            current_tree.remove(new_vertex)
+            accumulated_edge_sequence.pop()
+            excluded_edges = excluded_edges[:-e_i]
+
+
+def find_longest_cycle(edge_map: list[(int, int)]) -> list[int]:
+    adjacency_map = defaultdict(list)
+    for i, (u, v) in enumerate(edge_map):
+        adjacency_map[u].append((v, i))
+        # Add the reverse connection as it is an undirected graph
+        adjacency_map[v].append((u, i))
+
+    longest_cycle = []
+
+    def dfs(u, visited_edges, stack):
+        nonlocal longest_cycle
+        stack.append(u)
+
+        for v, edge_id in adjacency_map[u]:
+            if edge_id in visited_edges:
+                continue
+
+            # A potential cycle is found
+            if v in stack:
+                cycle_start_index = stack.index(v)
+                cycle = stack[cycle_start_index:]
+
+                # Check if the cycle is simple (doesn't contain other cycles)
+                if len(cycle) == len(set(cycle)):
+                    if len(cycle) > len(longest_cycle):
+                        longest_cycle = cycle
+
+            else:
+                # Continue DFS
+                dfs(v, visited_edges | {edge_id}, stack.copy())
+
+    for vertex in adjacency_map:
+        dfs(vertex, set(), [])
+
+    # Convert the cycle of vertices to a cycle of edges
+    edge_cycle = []
+    for i in range(len(longest_cycle)):
+        u, v = longest_cycle[i], longest_cycle[(i + 1) % len(longest_cycle)]
+        edge_id = next(edge for edge in adjacency_map[u] if edge[0] == v)[1]
+        edge_cycle.append(edge_id)
+
+    return edge_cycle
+
+
+def edges_cycle_to_vertex_cycle(edges: list[(int, int)]):
+    # Check if the list is empty
+    if not edges:
+        return []
+
+    # Special case: single unique edge forming a cycle
+    unique_edges = set((min(src, dest), max(src, dest))
+                       for src, dest in edges)
+    if len(unique_edges) == 1:
+        # Handle self-loop as a special case
+        if edges[0][0] == edges[0][1]:
+            return [edges[0][0]]
+        return list(edges[0])
+
+    # Initialize the ordered list of nodes with the source node of the first edge
+    ordered_nodes = [edges[0][0]]
+
+    # Initialize a set to keep track of visited edges
+    visited_edges = set()
+
+    # Start from the source node of the first edge
+    current_node = edges[0][0]
+
+    while True:
+        found = False
+        for src, dest in edges:
+            # Create edge tuple for checking visited status
+            edge = (min(src, dest), max(src, dest))
+
+            if edge in visited_edges:
+                continue
+
+            if src == current_node:
+                next_node = dest
+                found = True
+            elif dest == current_node:
+                next_node = src
+                found = True
+
+            if found:
+                # Mark edge as visited
+                visited_edges.add(edge)
+
+                # Break if the cycle is complete
+                if next_node == ordered_nodes[0]:
+                    return ordered_nodes
+
+                # Add the next node to the ordered list
+                ordered_nodes.append(next_node)
+
+                # Move to the next node for the next iteration
+                current_node = next_node
+                break
+
+        if not found:
+            raise common.GammaLoopError(f"Invalid cycle {str(edges)}")
+
+
+def create_adjacency_list(edge_map: list[(int, (int, int))]) -> defaultdict:
+    adj_list = defaultdict(set)
+    for _, (u, v) in edge_map:  # pylint: disable=invalid-name
+        adj_list[u].add(v)
+        adj_list[v].add(u)
+    return adj_list
+
+
+def find_shortest_path(edge_map: list[(int, int)], start: int, targets: list[int]) -> list[int]:
+    edge_map = list(enumerate(edge_map))
+    graph = create_adjacency_list(edge_map)
+    visited = set()
+    # Queue for BFS initialized with the start node and parent
+    queue = deque([(start, None)])
+    parent = {start: None}  # Dictionary to hold the parent of each node
+
+    while queue:
+        current_node, _ = queue.popleft()
+
+        # If this node is the target, reconstruct and return the path
+        if current_node in targets:
+            path = []
+            while current_node is not None:
+                path.insert(0, current_node)
+                current_node = parent[current_node]
+            return path
+
+        visited.add(current_node)
+
+        for neighbor in graph[current_node]:
+            if neighbor not in visited:
+                parent[neighbor] = current_node
+                queue.append((neighbor, current_node))
+                visited.add(neighbor)
+
+
+def find_all_paths(edge_map: list[(int, int)], start: int, dest: int, excluding: set[int] | None = None) -> list[list[(int, bool)]]:
+    if excluding is None:
+        excluding = set()
+    # find all paths from source to dest
+    loop = start == dest
+    start_check = 1 if loop else 0
+    paths = [[(start, True)]]  # store direction
+    if not loop:
+        paths.append([(start, False)])
+    res = []
+    while True:
+        newpaths = []
+        for p in paths:  # pylint: disable=invalid-name
+            if len(p) > 1 and p[-1][0] == dest:
+                res.append(p)
+                continue
+            last_vertex = edge_map[p[-1][0]
+                                   ][1] if p[-1][1] else edge_map[p[-1][0]][0]
+            for i, x in enumerate(edge_map):  # pylint: disable=invalid-name
+                if i not in excluding and all(i != pp[0] for pp in p[start_check:]):
+                    if loop and i == start:
+                        # if we need a loop, we need to enter from the right direction
+                        if x[0] == last_vertex:
+                            newpaths.append(p + [(i, True)])
+                        continue
+
+                    if x[0] == last_vertex and all(x[1] not in edge_map[pp[0]] for pp in p[start_check:-1]):
+                        newpaths.append(p + [(i, True)])
+                    if x[1] == last_vertex and all(x[0] not in edge_map[pp[0]] for pp in p[start_check:-1]):
+                        newpaths.append(p + [(i, False)])
+        paths = newpaths
+        if len(paths) == 0:
+            break
+    return res
+
+
+def generate_momentum_flow(edge_map: list[(int, int)], loop_momenta: list[int], sink_edge: int | None, ext: list[int]) -> list[(list[int], list[int])]:
+    """ Specify sing_edge to None for a vacuum graph"""
+
+    flows = []
+    for loop_momentum in loop_momenta:
+        paths = find_all_paths(edge_map,
+                               loop_momentum, loop_momentum, excluding={lm for lm in loop_momenta if lm != loop_momentum})
+        assert len(paths) == 1
+        flows.append(paths[0][:-1])
+
+    # now route the external loop_momenta to the sink
+    ext_flows = []
+    for i, e in enumerate(ext):  # pylint: disable=invalid-name
+        if e == sink_edge:
+            continue
+        paths = find_all_paths(edge_map, e, sink_edge,
+                               excluding=set(loop_momenta))
+        assert len(paths) == 1
+        ext_flows.append((i, paths[0]))
+
+    # propagator momenta
+    signatures: list[(list[int], list[int])] = [
+        ([0 for _ in range(len(loop_momenta))], [0 for _ in range(len(ext))])
+        for _ in range(len(edge_map))]
+    for i, _ in enumerate(edge_map):
+        if i in ext:
+            if i == sink_edge:
+                for j, y in ext_flows:  # pylint: disable=invalid-name
+                    overall_sign = 1 if y[0][1] else -1
+                    for yy in y:  # pylint: disable=invalid-name
+                        if yy[0] == i:
+                            prop_sign = 1 if yy[1] else -1
+                            signatures[i][1][j] += prop_sign * overall_sign
+                            break
+            else:
+                signatures[i][1][ext.index(i)] += 1
+        elif i in loop_momenta:
+            signatures[i][0][loop_momenta.index(i)] += 1
+        else:
+            for j, y in enumerate(flows):  # pylint: disable=invalid-name
+                for yy in y:  # pylint: disable=invalid-name
+                    if yy[0] == i:
+                        signatures[i][0][j] += (1 if yy[1] else -1)
+                        break
+            for j, y in ext_flows:  # pylint: disable=invalid-name
+                overall_sign = 1 if y[0][1] else -1
+                for yy in y:  # pylint: disable=invalid-name
+                    if yy[0] == i:
+                        signatures[i][1][j] += (1 if yy[1] else -1)
+                        break
+
+    return signatures

@@ -216,6 +216,8 @@ pub struct SerializableGraph {
         Option<SmartString<LazyCompact>>,
         Option<SmartString<LazyCompact>>,
     )>,
+    loop_momentum_basis: Vec<SmartString<LazyCompact>>,
+    edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,
 }
 
 impl SerializableGraph {
@@ -238,11 +240,17 @@ impl SerializableGraph {
                 .iter()
                 .map(|(v1, v2)| {
                     (
-                        v1.as_ref().map(|v| graph.vertices[*v].name.clone()),
-                        v2.as_ref().map(|v| graph.vertices[*v].name.clone()),
+                        v1.as_ref().map(|&v| graph.vertices[v].name.clone()),
+                        v2.as_ref().map(|&v| graph.vertices[v].name.clone()),
                     )
                 })
                 .collect(),
+            loop_momentum_basis: graph
+                .loop_momentum_basis
+                .iter()
+                .map(|&e| graph.edges[e].name.clone())
+                .collect(),
+            edge_signatures: graph.edge_signatures.clone(),
         }
     }
 
@@ -258,8 +266,10 @@ pub struct Graph {
     pub name: SmartString<LazyCompact>,
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
+    pub edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,
     pub overall_factor: f64,
     pub external_connections: Vec<(Option<usize>, Option<usize>)>,
+    pub loop_momentum_basis: Vec<usize>,
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
 }
@@ -282,8 +292,10 @@ impl Graph {
             edges: vec![],
             overall_factor: graph.overall_factor,
             external_connections: vec![],
+            loop_momentum_basis: vec![],
             vertex_name_to_position,
             edge_name_to_position: HashMap::default(),
+            edge_signatures: graph.edge_signatures.clone(),
         };
 
         // Then build edges
@@ -313,6 +325,12 @@ impl Graph {
                     }),
                 )
             })
+            .collect();
+
+        g.loop_momentum_basis = graph
+            .loop_momentum_basis
+            .iter()
+            .map(|e| g.get_edge_position(e).unwrap())
             .collect();
 
         g

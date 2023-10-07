@@ -7,7 +7,7 @@ import yaml
 
 import gammaloop
 import gammaloop.cross_section as cross_section
-from gammaloop.misc.common import DATA_PATH, pjoin
+from gammaloop.misc.common import DATA_PATH, pjoin, GammaLoopError
 import gammaloop.misc.utils as utils
 
 
@@ -53,6 +53,32 @@ class GammaLoopExporter(object):
             'model_name': self.gammaloop.model.name,
         })
 
+    def finalize_drawing(self, drawings_path: Path, drawing_file_paths: list[Path]):
+
+        drawing_file_relative_paths: list[Path] = [os.path.relpath(
+            p, drawings_path) for p in drawing_file_paths]
+
+        shutil.copy(
+            pjoin(DATA_PATH, 'templates', 'drawing', 'combine_pages.py'),
+            pjoin(drawings_path, 'combine_pages.py'))
+
+        with open(pjoin(DATA_PATH, 'templates', 'drawing', 'makefile'), 'r', encoding='utf-8') as makefile_in:
+            with open(pjoin(drawings_path, 'makefile'), 'w', encoding='utf-8') as makefile_out:
+                all_targets = []
+                for drawing_file_path in drawing_file_paths:
+                    if drawing_file_path.suffix != '.tex':
+                        raise GammaLoopError(
+                            "Finalization of diagram drawings only supports latex format.")
+                    drawing_name = pjoin(os.path.relpath(
+                        drawing_file_path.parent, drawings_path), drawing_file_path.stem)
+                    all_targets.append(f'{drawing_name}.pdf')
+                makefile_out.write(makefile_in.read().format(
+                    all_targets=' '.join(all_targets),
+                    output_name='feynman_diagrams.pdf',
+                    n_rows=self.gammaloop.config['drawing']['combined_graphs_pdf_grid_shape'][0],
+                    n_columns=self.gammaloop.config['drawing']['combined_graphs_pdf_grid_shape'][1]
+                ))
+
 
 class AmplitudesExporter(GammaLoopExporter):
 
@@ -80,8 +106,11 @@ class AmplitudesExporter(GammaLoopExporter):
             with open(pjoin(export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'amplitude.yaml'), 'w', encoding='utf-8') as file:
                 file.write(amplitude_yaml)
             drawings_path = pjoin(
-                export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings.pdf')
-            amplitude.draw(self.gammaloop.model, drawings_path)
+                export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
+            os.makedirs(drawings_path)
+            drawing_file_paths = amplitude.draw(
+                self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
+            self.finalize_drawing(Path(drawings_path), drawing_file_paths)
             self.gammaloop.rust_worker.add_amplitude_from_yaml_str(
                 amplitude_yaml)
 
@@ -117,8 +146,12 @@ class CrossSectionsExporter(GammaLoopExporter):
             with open(pjoin(export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'cross_section.yaml'), 'w', encoding='utf-8') as file:
                 file.write(yaml_xs)
             drawings_path = pjoin(
-                export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'drawings.pdf')
-            one_cross_section.draw(self.gammaloop.model, drawings_path)
+                export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'drawings')
+            os.makedirs(drawings_path)
+            drawing_file_paths = one_cross_section.draw(
+                self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
+            self.finalize_drawing(Path(drawings_path), drawing_file_paths)
+
             self.gammaloop.rust_worker.add_cross_section_from_yaml_str(yaml_xs)
 
         # Now address the rust export aspect
