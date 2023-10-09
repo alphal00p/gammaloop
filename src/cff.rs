@@ -19,7 +19,7 @@ use symbolica::{
 
 use log::info;
 
-const MAX_VERTEX_COUNT: usize = 64;
+const MAX_VERTEX_COUNT: usize = 32;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Esurface {
@@ -352,12 +352,12 @@ enum CFFVertexType {
 
 #[derive(Clone, PartialEq, Eq, Hash, Copy)]
 struct CFFVertex {
-    identifier: [usize; MAX_VERTEX_COUNT],
+    identifier: [u8; MAX_VERTEX_COUNT],
     len: usize,
 }
 
 impl CFFVertex {
-    fn from_vec(vec: Vec<usize>) -> Self {
+    fn from_vec(vec: Vec<u8>) -> Self {
         if vec.len() > MAX_VERTEX_COUNT {
             panic!(
                 "Current maximum number of supported vertices is {}",
@@ -390,12 +390,12 @@ impl CFFVertex {
     }
 
     fn sorted_vertex(&self) -> Self {
-        let mut new_identifier: Vec<usize> = Vec::from(&self.identifier[0..self.len]);
+        let mut new_identifier: Vec<u8> = Vec::from(&self.identifier[0..self.len]);
         new_identifier.sort();
         Self::from_vec(new_identifier)
     }
 
-    fn iter(&self) -> impl Iterator<Item = usize> + '_ {
+    fn iter(&self) -> impl Iterator<Item = u8> + '_ {
         self.identifier.iter().take(self.len).copied()
     }
 }
@@ -511,8 +511,8 @@ impl CFFIntermediateGraph {
         let mut edge_map = HashMap::with_capacity(num_edges);
 
         for (index, edge) in edges.into_iter().enumerate() {
-            let left_vertex = CFFVertex::from_vec(vec![edge.0]);
-            let right_vertex = CFFVertex::from_vec(vec![edge.1]);
+            let left_vertex = CFFVertex::from_vec(vec![edge.0 as u8]);
+            let right_vertex = CFFVertex::from_vec(vec![edge.1 as u8]);
 
             edge_map.insert(index, (left_vertex, right_vertex));
         }
@@ -924,8 +924,8 @@ impl CFFIntermediateGraph {
 
         let shift = vertex_to_contract_from
             .iter()
-            .filter(|v| external_data.contains_key(v))
-            .map(|v| *external_data.get(&v).unwrap())
+            .filter(|v| external_data.contains_key(&(*v as usize)))
+            .map(|v| *external_data.get(&(v as usize)).unwrap())
             .sorted()
             .collect_vec();
 
@@ -1077,11 +1077,11 @@ fn get_orientations(
                     let right_vertex;
 
                     if edge_orientation {
-                        left_vertex = CFFVertex::from_vec(vec![edge_vertices[0]]);
-                        right_vertex = CFFVertex::from_vec(vec![edge_vertices[1]]);
+                        left_vertex = CFFVertex::from_vec(vec![edge_vertices[0] as u8]);
+                        right_vertex = CFFVertex::from_vec(vec![edge_vertices[1] as u8]);
                     } else {
-                        left_vertex = CFFVertex::from_vec(vec![edge_vertices[1]]);
-                        right_vertex = CFFVertex::from_vec(vec![edge_vertices[0]]);
+                        left_vertex = CFFVertex::from_vec(vec![edge_vertices[1] as u8]);
+                        right_vertex = CFFVertex::from_vec(vec![edge_vertices[0] as u8]);
                     }
 
                     edges.insert(*edge_id, (left_vertex, right_vertex));
@@ -1157,7 +1157,7 @@ fn generate_cff_from_orientations(
     );
 
     let mut cache_hits = 0;
-
+    let mut non_cache_hits = 0;
     for (term_id, (orientation, graph)) in acyclic_orientations_and_graphs.into_iter().enumerate() {
         println!("processing orientation {}", term_id);
 
@@ -1209,6 +1209,7 @@ fn generate_cff_from_orientations(
                                 .inequivalent_nodes
                                 .insert(hashable_child, (term_id, child_node_id));
                             tree.insert_graph(node_id, child)?;
+                            non_cache_hits += 1;
                         }
                     }
                 } else {
@@ -1221,6 +1222,11 @@ fn generate_cff_from_orientations(
     }
 
     println!("number of cache hits: {}", cache_hits);
+    println!("number of non cache hits: {}", non_cache_hits);
+    println!(
+        "percentage of cache hits: {}",
+        cache_hits as f64 / (cache_hits + non_cache_hits) as f64
+    );
 
     Ok(cff_expression)
 }
@@ -1271,8 +1277,11 @@ mod tests_cff {
         // test if test_struct contains edges, 0, 1, 2 and if they have the correct vertices
         for index in 0..3 {
             let (left_vertex, right_vertex) = test_struct.edges.get(&index).unwrap();
-            assert_eq!(left_vertex, &CFFVertex::from_vec(vec![index]));
-            assert_eq!(right_vertex, &CFFVertex::from_vec(vec![(index + 1) % 3]));
+            assert_eq!(left_vertex, &CFFVertex::from_vec(vec![index as u8]));
+            assert_eq!(
+                right_vertex,
+                &CFFVertex::from_vec(vec![((index + 1) % 3) as u8])
+            );
         }
 
         // test if test_struct contains vertices 0, 1, 2 and if they have the correct edges
@@ -1285,8 +1294,8 @@ mod tests_cff {
             assert_eq!(outgoing_edges.len(), 1);
             assert_eq!(incoming_edges.len(), 1);
 
-            assert_eq!(outgoing_edges[0], index);
-            assert_eq!(incoming_edges[0], (index + 2) % 3);
+            assert_eq!(outgoing_edges[0] as u8, index);
+            assert_eq!(incoming_edges[0] as u8, (index + 2) % 3);
         }
     }
 
@@ -1934,11 +1943,15 @@ mod tests_cff {
         for i in 0..edges.len() {
             position_map.insert(i, i);
         }
+        let energy_cache = [3.0; 17];
 
         println!("generating orientations");
         let orientations = generate_orientations_for_testing(edges);
         println!("orientations generated");
-        let cff = generate_cff_from_orientations(orientations, &position_map, &external_data);
-        println!("cff generated");
+        let cff =
+            generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
+        println!("cff terms = {}", cff.terms.len());
+        let test = cff.evaluate(&energy_cache);
+        println!("test = {}", test);
     }
 }
