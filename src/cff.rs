@@ -204,18 +204,23 @@ impl CFFTree {
                         res
                     }
                     Some(esurface_id) => {
-                        let res = esurface_cache[esurface_id].inv()
-                            * (tree_node_data
-                                .children
-                                .iter()
-                                .map(|child_index| {
-                                    self.recursive_eval_from_node(
-                                        *child_index,
-                                        esurface_cache,
-                                        node_cache,
-                                    )
-                                })
-                                .sum::<T>());
+                        let res;
+                        if tree_node_data.children.len() != 0 {
+                            res = esurface_cache[esurface_id].inv()
+                                * (tree_node_data
+                                    .children
+                                    .iter()
+                                    .map(|child_index| {
+                                        self.recursive_eval_from_node(
+                                            *child_index,
+                                            esurface_cache,
+                                            node_cache,
+                                        )
+                                    })
+                                    .sum::<T>());
+                        } else {
+                            res = esurface_cache[esurface_id].inv();
+                        }
                         node_cache[self.term_id][node_id] = Some(res);
                         res
                     }
@@ -583,9 +588,13 @@ impl CFFIntermediateGraph {
         Err(eyre!("Could not find vertex that is not v"))
     }
 
-    fn get_source_sink_canditate_list(&self) -> Result<Vec<(CFFVertex, CFFVertexType)>, Report> {
+    fn get_source_sink_candidate_list(&self) -> Result<Vec<(CFFVertex, CFFVertexType)>, Report> {
         let mut res = vec![];
-        for (vertex, (outgoing_edges, incoming_edges)) in self.vertices.iter() {
+        for (vertex, (outgoing_edges, incoming_edges)) in self
+            .vertices
+            .iter()
+            .filter(|(v, _)| self.has_connected_complement(v).unwrap())
+        {
             if outgoing_edges.len() == 0 {
                 res.push((*vertex, CFFVertexType::Sink));
             } else if incoming_edges.len() == 0 {
@@ -600,10 +609,14 @@ impl CFFIntermediateGraph {
     }
 
     fn get_source_or_sink(&self) -> Result<(CFFVertex, CFFVertexType), Report> {
-        for (vertex, (outgoing_edges, incoming_edges)) in self.vertices.iter() {
-            if outgoing_edges.len() == 0 {
+        for (vertex, (outgoing_edges, incoming_edges)) in self
+            .vertices
+            .iter()
+            .filter(|(v, _)| self.has_connected_complement(v).unwrap())
+        {
+            if outgoing_edges.len() == 0 && incoming_edges.len() != 0 {
                 return Ok((*vertex, CFFVertexType::Sink));
-            } else if incoming_edges.len() == 0 {
+            } else if incoming_edges.len() == 0 && outgoing_edges.len() != 0 {
                 return Ok((*vertex, CFFVertexType::Source));
             }
         }
@@ -712,6 +725,9 @@ impl CFFIntermediateGraph {
                         }
                     }
 
+                    new_vertices.shrink_to_fit();
+                    new_edges.shrink_to_fit();
+
                     let new_graph = CFFIntermediateGraph {
                         vertices: new_vertices,
                         edges: new_edges,
@@ -793,6 +809,9 @@ impl CFFIntermediateGraph {
                         }
                     }
 
+                    new_vertices.shrink_to_fit();
+                    new_edges.shrink_to_fit();
+
                     let new_graph = CFFIntermediateGraph {
                         vertices: new_vertices,
                         edges: new_edges,
@@ -858,24 +877,26 @@ impl CFFIntermediateGraph {
         position_map: &HashMap<usize, usize>,
         external_data: &HashMap<usize, usize>, // (external vertex, external edge)
         global_orientation: &Orientation,
-    ) -> Result<Option<(Vec<Self>, Esurface)>, Report> {
-        if self.edges.len() == 0 {
-            return Ok(None);
-        }
-
+    ) -> Result<(Option<Vec<Self>>, Esurface), Report> {
         let (vertex_to_contract_from, vertex_type) = self.get_source_or_sink()?;
-
-        let children = self
-            .contract_from_vertex(&vertex_to_contract_from, vertex_type)?
-            .into_iter()
-            .filter(|(graph, new_vertex)| {
-                if graph.get_vertex_type(new_vertex).unwrap() != vertex_type {
-                    return !graph.has_directed_cycle(new_vertex).unwrap();
-                }
-                true
-            })
-            .map(|(graph, _)| graph)
-            .collect_vec();
+        // no need to perform the contraction if we only have two vertices, we only need
+        // to extract the final esurface.
+        let children = if self.vertices.len() > 2 {
+            Some(
+                self.contract_from_vertex(&vertex_to_contract_from, vertex_type)?
+                    .into_iter()
+                    .filter(|(graph, new_vertex)| {
+                        if graph.get_vertex_type(new_vertex).unwrap() != vertex_type {
+                            return !graph.has_directed_cycle(new_vertex).unwrap();
+                        }
+                        true
+                    })
+                    .map(|(graph, _)| graph)
+                    .collect_vec(),
+            )
+        } else {
+            None
+        };
 
         let mut energies = match vertex_type {
             CFFVertexType::Sink => self
@@ -921,7 +942,7 @@ impl CFFIntermediateGraph {
             shift_signature,
         };
 
-        Ok(Some((children, esurface)))
+        Ok((children, esurface))
     }
 
     fn get_vertex_type(&self, vertex: &CFFVertex) -> Result<CFFVertexType, String> {
@@ -1156,19 +1177,20 @@ fn generate_cff_from_orientations(
                     _ => unreachable!(), // this is impossible by definition of get_bottom_layer()
                 };
 
-                if let Some((children, esurface)) =
+                let (option_children, esurface) =
                     node.graph
-                        .generate_childern(position_map, external_data, &orientation)?
-                {
-                    if let Some(esurface_id) =
-                        cff_expression.esurfaces.iter().position(|e| e == &esurface)
-                    {
-                        tree.insert_esurface(node_id, esurface_id)?;
-                    } else {
-                        tree.insert_esurface(node_id, cff_expression.esurfaces.len())?;
-                        cff_expression.esurfaces.push(esurface);
-                    }
+                        .generate_childern(position_map, external_data, &orientation)?;
 
+                if let Some(esurface_id) =
+                    cff_expression.esurfaces.iter().position(|e| e == &esurface)
+                {
+                    tree.insert_esurface(node_id, esurface_id)?;
+                } else {
+                    tree.insert_esurface(node_id, cff_expression.esurfaces.len())?;
+                    cff_expression.esurfaces.push(esurface);
+                }
+
+                if let Some(children) = option_children {
                     for child in children.into_iter() {
                         let hashable_child = child.to_hashable();
                         if let Some((cff_expression_term_id, cff_expression_node_id)) =
@@ -1191,7 +1213,6 @@ fn generate_cff_from_orientations(
                     }
                 } else {
                     tree_done = true;
-                    break;
                 }
             }
         }
@@ -1313,12 +1334,12 @@ mod tests_cff {
     }
 
     #[test]
-    fn test_source_sink_canditate_list() {
+    fn test_source_sink_candidate_list() {
         let bubble_edge_vec = vec![(0, 1), (0, 1)];
 
         let cff_test_struct1 = CFFIntermediateGraph::from_vec(bubble_edge_vec);
 
-        let source_sink_canditate_list = cff_test_struct1.get_source_sink_canditate_list().unwrap();
+        let source_sink_canditate_list = cff_test_struct1.get_source_sink_candidate_list().unwrap();
 
         assert_eq!(source_sink_canditate_list.len(), 2);
         assert!(source_sink_canditate_list
@@ -1329,13 +1350,20 @@ mod tests_cff {
         let triangle_edge_vec = vec![(0, 1), (1, 2), (2, 0)];
 
         let source_sink_canditate_list =
-            CFFIntermediateGraph::from_vec(triangle_edge_vec).get_source_sink_canditate_list();
+            CFFIntermediateGraph::from_vec(triangle_edge_vec).get_source_sink_candidate_list();
 
         assert!(
             source_sink_canditate_list.is_err(),
             "{:?}",
             source_sink_canditate_list
         );
+
+        let double_bubble = vec![(0, 1), (0, 1), (2, 1), (2, 1)];
+        let cff_test_struct3 = CFFIntermediateGraph::from_vec(double_bubble);
+        let list = cff_test_struct3.get_source_sink_candidate_list().unwrap();
+        assert!(list.contains(&(CFFVertex::from_vec(vec![0]), CFFVertexType::Source)));
+        assert!(list.contains(&(CFFVertex::from_vec(vec![2]), CFFVertexType::Source)));
+        assert!(!list.contains(&(CFFVertex::from_vec(vec![1]), CFFVertexType::Sink)));
     }
 
     #[test]
@@ -1666,6 +1694,12 @@ mod tests_cff {
         let cff =
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
 
+        for tree in cff.terms.iter() {
+            for node in tree.nodes.iter() {
+                println!("{:?}", node);
+            }
+        }
+
         let q = LorentzVector::from_args(1., 2., 3., 4.);
         let zero = LorentzVector::from_args(0., 0., 0., 0.);
 
@@ -1694,15 +1728,16 @@ mod tests_cff {
             .product::<f64>();
         let cff_res = energy_prefactor * cff.evaluate(&energy_cache);
 
-        println!("cff_res = {:+e}", cff_res);
-
-        let absolute_error = cff_res - 1.0794792137096797e-13;
+        let target = 1.0794792137096797e-13;
+        let absolute_error = cff_res - target;
         let relative_error = absolute_error / cff_res;
 
         assert!(
             relative_error.abs() < 1.0e-15,
-            "relative error: {:+e}",
-            relative_error
+            "relative error: {:+e}, target: {:+e}, result: {:+e}",
+            relative_error,
+            target,
+            cff_res
         );
     }
 
@@ -1772,6 +1807,16 @@ mod tests_cff {
             "relative error: {:+e}",
             relative_error
         );
+
+        // test that the I do not include the empty graphs at the end
+        for term in cff.terms.iter() {
+            for node_id in term.get_bottom_layer().iter() {
+                let bottom_node = &term.nodes[*node_id];
+                if let CFFTreeNode::Data(data) = bottom_node {
+                    assert!(data.graph.vertices.len() == 2);
+                }
+            }
+        }
     }
 
     #[test]
@@ -1862,7 +1907,7 @@ mod tests_cff {
     }
 
     #[test]
-    #[ignore]
+    //#[ignore]
     fn fishnet2b3() {
         let edges = vec![
             (0, 1),
@@ -1894,6 +1939,6 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(edges);
         println!("orientations generated");
         let cff = generate_cff_from_orientations(orientations, &position_map, &external_data);
-        println!("number of cff terms: {}", cff.unwrap().terms.len());
+        println!("cff generated");
     }
 }
