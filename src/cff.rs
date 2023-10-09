@@ -17,7 +17,7 @@ use symbolica::{
     state::{ResettableBuffer, State, Workspace},
 };
 
-use log::{debug, info};
+use log::info;
 
 const MAX_VERTEX_COUNT: usize = 64;
 
@@ -95,11 +95,17 @@ impl Esurface {
 pub struct CFFTree {
     nodes: Vec<CFFTreeNode>,
     orientation: Orientation,
+    term_id: usize,
+    num_data_nodes: usize,
 }
 
 impl CFFTree {
-    fn from_root_graph(graph: CFFIntermediateGraph, orientation: Orientation) -> Self {
-        let node = CFFTreeNode {
+    fn from_root_graph(
+        graph: CFFIntermediateGraph,
+        orientation: Orientation,
+        term_id: usize,
+    ) -> Self {
+        let node = CFFTreeNodeData {
             node_id: 0,
             graph,
             children: vec![],
@@ -107,17 +113,19 @@ impl CFFTree {
             esurface_id: None,
         };
 
-        let tree = vec![node];
+        let tree = vec![CFFTreeNode::Data(node)];
         Self {
             nodes: tree,
             orientation,
+            term_id,
+            num_data_nodes: 1,
         }
     }
 
-    fn insert_graph(&mut self, parent: usize, graph: CFFIntermediateGraph) {
+    fn insert_graph(&mut self, parent: usize, graph: CFFIntermediateGraph) -> Result<(), Report> {
         let node_id = self.nodes.len();
 
-        let node = CFFTreeNode {
+        let node = CFFTreeNodeData {
             node_id,
             graph,
             children: vec![],
@@ -125,61 +133,52 @@ impl CFFTree {
             esurface_id: None,
         };
 
-        self.nodes.push(node);
-        self.nodes[parent].children.push(node_id);
+        self.nodes.push(CFFTreeNode::Data(node));
+        match self.nodes[parent] {
+            CFFTreeNode::Data(ref mut tree_node_data) => {
+                tree_node_data.children.push(node_id);
+                self.num_data_nodes += 1;
+                Ok(())
+            }
+            CFFTreeNode::Pointer(_) => Err(eyre!("Parent node is a pointer")),
+        }
     }
 
-    fn insert_esurface(&mut self, node_id: usize, esurface_id: usize) {
-        self.nodes[node_id].esurface_id = Some(esurface_id);
+    fn insert_pointer(&mut self, parent: usize, pointer: CFFTreeNodePointer) -> Result<(), Report> {
+        let node_id = self.nodes.len();
+        self.nodes.push(CFFTreeNode::Pointer(pointer));
+
+        match self.nodes[parent] {
+            CFFTreeNode::Data(ref mut tree_node_data) => {
+                tree_node_data.children.push(node_id);
+                Ok(())
+            }
+            CFFTreeNode::Pointer(_) => Err(eyre!("Parent node is a pointer")),
+        }
+    }
+
+    fn insert_esurface(&mut self, node_id: usize, esurface_id: usize) -> Result<(), Report> {
+        match self.nodes[node_id] {
+            CFFTreeNode::Data(ref mut tree_node_data) => {
+                tree_node_data.esurface_id = Some(esurface_id);
+                Ok(())
+            }
+            CFFTreeNode::Pointer(_) => Err(eyre!("Node is a pointer")),
+        }
     }
 
     fn get_bottom_layer(&self) -> Vec<usize> {
         self.nodes
             .iter()
-            .filter(|node| node.children.len() == 0)
-            .map(|node| node.node_id)
+            .filter(|node| match node {
+                CFFTreeNode::Data(tree_node_data) => tree_node_data.children.len() == 0,
+                CFFTreeNode::Pointer(_) => false,
+            })
+            .map(|node| match node {
+                CFFTreeNode::Data(tree_node_data) => tree_node_data.node_id,
+                CFFTreeNode::Pointer(_) => unreachable!(),
+            })
             .collect_vec()
-    }
-
-    fn to_atom(
-        &self,
-        symbolic_esurfaces: &[Atom],
-        state: &mut State,
-        workspace: &Workspace,
-    ) -> Atom {
-        self.to_atom_from_node(0, symbolic_esurfaces, state, workspace)
-    }
-
-    fn to_atom_from_node(
-        &self,
-        node_id: usize,
-        symbolic_esurfaces: &[Atom],
-        state: &State,
-        workspace: &Workspace,
-    ) -> Atom {
-        let graph_at_id = &self.nodes[node_id];
-        let atom_one = Atom::new_num(1);
-        let atom_one_builder = atom_one.builder(state, workspace);
-
-        if let Some(esurface_id) = graph_at_id.esurface_id {
-            let mut esurface_builder =
-                graph_at_id
-                    .children
-                    .iter()
-                    .fold(atom_one_builder, |acc, child_index| {
-                        acc + &self.to_atom_from_node(
-                            *child_index,
-                            symbolic_esurfaces,
-                            state,
-                            workspace,
-                        )
-                    });
-
-            esurface_builder = esurface_builder * &symbolic_esurfaces[esurface_id];
-            return Atom::new_from_view(&esurface_builder.as_atom_view());
-        } else {
-            return Atom::new_num(1);
-        }
     }
 
     fn to_serializable(&self) -> SerializableCFFTree {
@@ -189,25 +188,49 @@ impl CFFTree {
         SerializableCFFTree { nodes, orientation }
     }
 
-    fn recursive_eval_from_node<T: FloatLike>(&self, node_id: usize, esurface_cache: &[T]) -> T {
-        let option_esurface_at_node = self.nodes[node_id].esurface_id;
-        match option_esurface_at_node {
-            None => Into::<T>::into(1.),
-            Some(esurface_id) => {
-                esurface_cache[esurface_id].inv()
-                    * (self.nodes[node_id]
-                        .children
-                        .iter()
-                        .map(|child_index| {
-                            self.recursive_eval_from_node(*child_index, esurface_cache)
-                        })
-                        .sum::<T>())
+    fn recursive_eval_from_node<T: FloatLike>(
+        &self,
+        node_id: usize,
+        esurface_cache: &[T],
+        node_cache: &mut Vec<Vec<Option<T>>>,
+    ) -> T {
+        match &self.nodes[node_id] {
+            CFFTreeNode::Data(tree_node_data) => {
+                let option_esurface_at_node = tree_node_data.esurface_id;
+                match option_esurface_at_node {
+                    None => {
+                        let res = Into::<T>::into(1.);
+                        node_cache[self.term_id][node_id] = Some(res);
+                        res
+                    }
+                    Some(esurface_id) => {
+                        let res = esurface_cache[esurface_id].inv()
+                            * (tree_node_data
+                                .children
+                                .iter()
+                                .map(|child_index| {
+                                    self.recursive_eval_from_node(
+                                        *child_index,
+                                        esurface_cache,
+                                        node_cache,
+                                    )
+                                })
+                                .sum::<T>());
+                        node_cache[self.term_id][node_id] = Some(res);
+                        res
+                    }
+                }
             }
+            CFFTreeNode::Pointer(pointer) => node_cache[pointer.term_id][pointer.node_id].unwrap(),
         }
     }
 
-    fn evaluate_tree<T: FloatLike>(&self, esurface_cache: &[T]) -> T {
-        self.recursive_eval_from_node(0, esurface_cache)
+    fn evaluate_tree<T: FloatLike>(
+        &self,
+        esurface_cache: &[T],
+        node_cache: &mut Vec<Vec<Option<T>>>,
+    ) -> T {
+        self.recursive_eval_from_node(0, esurface_cache, node_cache)
     }
 }
 
@@ -218,7 +241,7 @@ struct SerializableCFFTree {
 }
 
 #[derive(Debug, Clone)]
-struct CFFTreeNode {
+struct CFFTreeNodeData {
     node_id: usize,
     graph: CFFIntermediateGraph,
     children: Vec<usize>,
@@ -226,13 +249,13 @@ struct CFFTreeNode {
     esurface_id: Option<usize>,
 }
 
-impl CFFTreeNode {
-    fn to_serializable(&self) -> SerializableCFFTreeNode {
+impl CFFTreeNodeData {
+    fn to_serializable(&self) -> SerializableCFFTreeNodeData {
         let children = self.children.clone();
         let node_id = self.node_id;
         let esurface_id = self.esurface_id;
 
-        SerializableCFFTreeNode {
+        SerializableCFFTreeNodeData {
             node_id,
             children,
             esurface_id,
@@ -240,16 +263,44 @@ impl CFFTreeNode {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct CFFTreeNodePointer {
+    term_id: usize,
+    node_id: usize,
+}
+
+#[derive(Debug, Clone)]
+enum CFFTreeNode {
+    Data(CFFTreeNodeData),
+    Pointer(CFFTreeNodePointer),
+}
+
+impl CFFTreeNode {
+    fn to_serializable(&self) -> SerializableCFFTreeNode {
+        match self {
+            CFFTreeNode::Data(data) => SerializableCFFTreeNode::Data(data.to_serializable()),
+            CFFTreeNode::Pointer(pointer) => SerializableCFFTreeNode::Pointer(*pointer),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct SerializableCFFTreeNode {
+struct SerializableCFFTreeNodeData {
     node_id: usize,
     children: Vec<usize>,
     esurface_id: Option<usize>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+enum SerializableCFFTreeNode {
+    Data(SerializableCFFTreeNodeData),
+    Pointer(CFFTreeNodePointer),
+}
+
 pub struct CFFExpression {
     pub terms: Vec<CFFTree>,
     pub esurfaces: Vec<Esurface>,
+    inequivalent_nodes: HashMap<HashableCFFIntermediateGraph, (usize, usize)>,
 }
 
 impl CFFExpression {
@@ -262,34 +313,16 @@ impl CFFExpression {
 
     pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         let esurface_cache = self.compute_esurface_cache(energy_cache);
-        self.terms
+        let mut node_cache = self
+            .terms
             .iter()
-            .map(|tree| tree.evaluate_tree(&esurface_cache))
-            .sum::<T>()
-    }
-
-    pub fn to_atoms(&self, state: &mut State, workspace: &Workspace) -> Vec<Atom> {
-        let symbolic_esurfaces = self
-            .esurfaces
-            .iter()
-            .map(|e| {
-                // create indentifier eta that contains the energies contained in esurface
-                let indentiefier_string = e
-                    .energies
-                    .iter()
-                    .fold(String::from("inveta"), |acc, energy| {
-                        format!("{}{},", acc, energy)
-                    });
-
-                let esurface = Atom::parse(&indentiefier_string, state, workspace).unwrap();
-                esurface
-            })
+            .map(|t| vec![None; t.nodes.len()])
             .collect_vec();
 
         self.terms
             .iter()
-            .map(|t| t.to_atom(&symbolic_esurfaces, state, workspace))
-            .collect()
+            .map(|tree| tree.evaluate_tree(&esurface_cache, &mut node_cache))
+            .sum::<T>()
     }
 
     fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
@@ -352,12 +385,9 @@ impl CFFVertex {
     }
 
     fn sorted_vertex(&self) -> Self {
-        let mut new_identifier = self.identifier;
+        let mut new_identifier: Vec<usize> = Vec::from(&self.identifier[0..self.len]);
         new_identifier.sort();
-        Self {
-            identifier: new_identifier,
-            len: self.len,
-        }
+        Self::from_vec(new_identifier)
     }
 
     fn iter(&self) -> impl Iterator<Item = usize> + '_ {
@@ -923,36 +953,19 @@ impl CFFIntermediateGraph {
         self.edges.keys().map(|k| *k).sorted().collect_vec()
     }
 
-    fn compare(&self, other: &Self) -> bool {
-        if self.edges.len() != other.edges.len() || self.vertices.len() != other.vertices.len() {
-            return false;
+    fn to_hashable(&self) -> HashableCFFIntermediateGraph {
+        let sorted_keys = self.edges.keys().map(|k| *k).sorted().collect_vec();
+        let sorted_edges = sorted_keys
+            .into_iter()
+            .map(|k| {
+                let (left_vertex, right_vertex) = self.edges.get(&k).unwrap();
+                let res = (k, left_vertex.sorted_vertex(), right_vertex.sorted_vertex());
+                res
+            })
+            .collect();
+        HashableCFFIntermediateGraph {
+            edges: sorted_edges,
         }
-
-        let self_edges = self.get_sorted_edge_list();
-        let other_edges = other.get_sorted_edge_list();
-
-        for (self_edge, other_edge) in self_edges.iter().zip(other_edges.iter()) {
-            if self_edge != other_edge {
-                return false;
-            }
-
-            let (self_left_vertex, self_right_vertex) = self.edges.get(self_edge).unwrap();
-            let (other_left_vertex, other_right_vertex) = other.edges.get(other_edge).unwrap();
-
-            if self_left_vertex.sorted_vertex() != other_left_vertex.sorted_vertex()
-                || self_right_vertex.sorted_vertex() != other_right_vertex.sorted_vertex()
-            {
-                return false;
-            }
-        }
-
-        true
-    }
-}
-
-impl PartialEq for CFFIntermediateGraph {
-    fn eq(&self, other: &Self) -> bool {
-        self.compare(other)
     }
 }
 
@@ -977,6 +990,35 @@ impl Display for CFFIntermediateGraph {
         write!(f, "{}", string)
     }
 }
+
+#[derive(Debug, Hash)]
+struct HashableCFFIntermediateGraph {
+    edges: Vec<(usize, CFFVertex, CFFVertex)>,
+}
+
+impl PartialEq for HashableCFFIntermediateGraph {
+    fn eq(&self, other: &Self) -> bool {
+        if self.edges.len() != other.edges.len() {
+            return false;
+        }
+
+        for (self_edge, other_edge) in self.edges.iter().zip(other.edges.iter()) {
+            if self_edge.0 != other_edge.0 {
+                return false;
+            } else {
+                if self_edge.1.sorted_vertex() != other_edge.1.sorted_vertex()
+                    || self_edge.2.sorted_vertex() != other_edge.2.sorted_vertex()
+                {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+}
+
+impl Eq for HashableCFFIntermediateGraph {}
 
 fn get_orientations(
     graph: &Graph,
@@ -1076,39 +1118,76 @@ fn generate_cff_from_orientations(
     position_map: &HashMap<usize, usize>,
     external_data: &HashMap<usize, usize>,
 ) -> Result<CFFExpression, Report> {
-    let mut cff_trees: Vec<CFFTree> = vec![];
-    let mut esurfaces: Vec<Esurface> = vec![];
+    let mut cff_expression = CFFExpression {
+        terms: vec![],
+        esurfaces: vec![],
+        inequivalent_nodes: HashMap::default(),
+    };
 
-    let mut counter = 0;
-    for (orientation, graph) in orientations_and_graphs.into_iter() {
-        if graph.has_directed_cycle_initial()? {
-            continue;
-        }
+    // filter cyclic orientations beforehand
+    let acyclic_orientations_and_graphs = orientations_and_graphs
+        .into_iter()
+        .filter(|(_, graph)| !graph.has_directed_cycle_initial().unwrap())
+        .collect_vec();
 
-        debug!("processing orientation {}", counter);
-        counter += 1;
+    println!(
+        "number of acyclic orientations for {}",
+        acyclic_orientations_and_graphs.len()
+    );
 
-        let mut tree = CFFTree::from_root_graph(graph, orientation);
+    let mut cache_hits = 0;
+
+    for (term_id, (orientation, graph)) in acyclic_orientations_and_graphs.into_iter().enumerate() {
+        println!("processing orientation {}", term_id);
+
+        let mut tree = CFFTree::from_root_graph(graph, orientation, term_id);
         let mut tree_done = false;
 
         while !tree_done {
+            // println!("processing layer {}", layer);
             let bottom_layer = tree.get_bottom_layer();
+            if bottom_layer.len() == 0 {
+                break;
+            }
 
             for node_id in bottom_layer.into_iter() {
-                let node = &tree.nodes[node_id];
+                let node = match &tree.nodes[node_id] {
+                    CFFTreeNode::Data(tree_node_data) => tree_node_data,
+                    _ => unreachable!(), // this is impossible by definition of get_bottom_layer()
+                };
+
                 if let Some((children, esurface)) =
                     node.graph
                         .generate_childern(position_map, external_data, &orientation)?
                 {
-                    if let Some(esurface_id) = esurfaces.iter().position(|e| e == &esurface) {
-                        tree.insert_esurface(node_id, esurface_id);
+                    if let Some(esurface_id) =
+                        cff_expression.esurfaces.iter().position(|e| e == &esurface)
+                    {
+                        tree.insert_esurface(node_id, esurface_id)?;
                     } else {
-                        tree.insert_esurface(node_id, esurfaces.len());
-                        esurfaces.push(esurface);
+                        tree.insert_esurface(node_id, cff_expression.esurfaces.len())?;
+                        cff_expression.esurfaces.push(esurface);
                     }
 
                     for child in children.into_iter() {
-                        tree.insert_graph(node_id, child);
+                        let hashable_child = child.to_hashable();
+                        if let Some((cff_expression_term_id, cff_expression_node_id)) =
+                            cff_expression.inequivalent_nodes.get(&hashable_child)
+                        {
+                            let new_pointer = CFFTreeNodePointer {
+                                term_id: *cff_expression_term_id,
+                                node_id: *cff_expression_node_id,
+                            };
+                            tree.insert_pointer(node_id, new_pointer)?;
+                            cache_hits += 1;
+                        } else {
+                            let child_node_id = tree.nodes.len();
+
+                            cff_expression
+                                .inequivalent_nodes
+                                .insert(hashable_child, (term_id, child_node_id));
+                            tree.insert_graph(node_id, child)?;
+                        }
                     }
                 } else {
                     tree_done = true;
@@ -1117,14 +1196,12 @@ fn generate_cff_from_orientations(
             }
         }
 
-        cff_trees.push(tree);
+        cff_expression.terms.push(tree);
     }
 
-    info!("total number of orientations: {}", counter);
-    Ok(CFFExpression {
-        terms: cff_trees,
-        esurfaces,
-    })
+    println!("number of cache hits: {}", cache_hits);
+
+    Ok(cff_expression)
 }
 
 #[cfg(test)]
@@ -1381,7 +1458,7 @@ mod tests_cff {
 
         let stupid_test_graph = CFFIntermediateGraph::from_vec(triangle_edge_vec);
 
-        let test_tree = CFFTree::from_root_graph(stupid_test_graph, Orientation::default(3));
+        let test_tree = CFFTree::from_root_graph(stupid_test_graph, Orientation::default(3), 0);
         let bottom_layer = test_tree.get_bottom_layer();
         assert_eq!(bottom_layer.len(), 1);
         // needs more tests
@@ -1422,11 +1499,11 @@ mod tests_cff {
         let test_graph1 = CFFIntermediateGraph::from_vec(triangle_edge_vec);
         let test_graph2 = CFFIntermediateGraph::from_vec(triangle_edge_vec2);
 
-        assert_eq!(test_graph1, test_graph2);
+        assert_eq!(test_graph1.to_hashable(), test_graph2.to_hashable());
 
         let triangle_edge_vec3 = vec![(0, 1), (1, 2), (2, 0)];
         let test_graph3 = CFFIntermediateGraph::from_vec(triangle_edge_vec3);
-        assert_ne!(test_graph1, test_graph3);
+        assert_ne!(test_graph1.to_hashable(), test_graph3.to_hashable());
 
         let more_edge_vec = vec![(0, 1), (2, 1), (0, 2)];
         let test_graph1 = CFFIntermediateGraph::from_vec(more_edge_vec);
@@ -1457,8 +1534,8 @@ mod tests_cff {
         assert_eq!(test_graph_1_contract_from_0.len(), 1);
         assert_eq!(test_graph4_contract_from_2.len(), 1);
         assert_eq!(
-            test_graph_1_contract_from_0[0],
-            test_graph4_contract_from_2[0]
+            test_graph_1_contract_from_0[0].to_hashable(),
+            test_graph4_contract_from_2[0].to_hashable(),
         );
     }
 
@@ -1495,6 +1572,25 @@ mod tests_cff {
         assert_eq!(res, 2.);
     }
 
+    #[test]
+    fn test_hashable_graph() {
+        let triangle_edgfes = vec![(0, 1), (1, 2), (2, 0)];
+        let cff_struct = CFFIntermediateGraph::from_vec(triangle_edgfes);
+
+        println!("{:?}", cff_struct);
+        println!("{:?}", cff_struct.to_hashable());
+
+        let hashable = cff_struct.to_hashable();
+        let vertex1 = CFFVertex::from_vec(vec![0]);
+        let vertex2 = CFFVertex::from_vec(vec![1]);
+        let vertex3 = CFFVertex::from_vec(vec![2]);
+
+        assert_eq!(vertex1.sorted_vertex(), vertex1);
+        assert_eq!(hashable.edges.len(), 3);
+        assert_eq!(hashable.edges[0], (0, vertex1, vertex2));
+        assert_eq!(hashable.edges[1], (1, vertex2, vertex3));
+        assert_eq!(hashable.edges[2], (2, vertex3, vertex1));
+    }
     #[test]
     fn test_cff_generation_triangle() {
         let triangle = vec![(2, 0), (0, 1), (1, 2)];
@@ -1536,9 +1632,6 @@ mod tests_cff {
             .chain(external_energy_cache.iter())
             .map(|e| *e)
             .collect_vec();
-        println!("energy_cache: {:?}", energy_cache);
-        let pure_cff = cff.evaluate(&energy_cache);
-        println!("pure_cff: {}", pure_cff);
 
         let energy_prefactor = virtual_energy_cache
             .iter()
@@ -1549,7 +1642,11 @@ mod tests_cff {
         let absolute_error: f64 = cff_res - 6.33354922553617e-9_f64;
         let relative_error = absolute_error.abs() / cff_res.abs();
 
-        assert!(relative_error < 1.0e-15);
+        assert!(
+            relative_error.abs() < 1.0e-15,
+            "relative error: {:+e}",
+            relative_error
+        );
     }
 
     #[test]
@@ -1558,7 +1655,7 @@ mod tests_cff {
 
         let mut external_data = HashMap::default();
         external_data.insert(0, 5);
-        external_data.insert(0, 6);
+        external_data.insert(3, 6);
 
         let mut position_map = HashMap::default();
         for i in 0..5 {
@@ -1597,10 +1694,16 @@ mod tests_cff {
             .product::<f64>();
         let cff_res = energy_prefactor * cff.evaluate(&energy_cache);
 
+        println!("cff_res = {:+e}", cff_res);
+
         let absolute_error = cff_res - 1.0794792137096797e-13;
         let relative_error = absolute_error / cff_res;
 
-        assert!(relative_error < 1.0e-15)
+        assert!(
+            relative_error.abs() < 1.0e-15,
+            "relative error: {:+e}",
+            relative_error
+        );
     }
 
     #[test]
@@ -1664,10 +1767,11 @@ mod tests_cff {
 
         let absolute_error = res - 1.2625322619777278e-21;
         let relative_error = absolute_error / res;
-
-        // println!("absolute_error = {:+e}", absolute_error);
-        // println!("relative_error = {:+e}", relative_error);
-        assert!(relative_error < 1.0e-15);
+        assert!(
+            relative_error.abs() < 1.0e-15,
+            "relative error: {:+e}",
+            relative_error
+        );
     }
 
     #[test]
