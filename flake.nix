@@ -34,6 +34,7 @@
     devShells = forEachSupportedSystem ({pkgs}: {
       default = pkgs.mkShell {
         #devshell definition :
+        LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
         packages = with pkgs; [
           rustToolchain
@@ -47,8 +48,12 @@
           cargo-deny
           cargo-edit
           cargo-watch
-          python3
+          python311
+          texlive.combined.scheme-medium
           poetry
+          ghostscript
+          mupdf
+          poppler_utils
           rust-analyzer
         ];
       };

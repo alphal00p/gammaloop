@@ -24,9 +24,6 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-.devenv
-.direnv
-.envrc
 # logos
 logos/
 
@@ -102,6 +99,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.devenv
+.direnv
+.envrc
 
 # mkdocs documentation
 /site
@@ -138,4 +138,6 @@ Cargo.lock
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
+# latex logs
+*.log
 # End of https://www.toptal.com/developers/gitignore/api/rust,python

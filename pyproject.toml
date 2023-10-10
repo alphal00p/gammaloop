@@ -5,8 +5,9 @@ description = "Gammaloop computes differential cross-sections using Local Unitar
 authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>" ]
 
 [tool.poetry.dependencies]
-#python = "^3.10"
-python = "^3.7"
+python = "^3.11"
+pytest = "^7.4.2"
+pymupdf = "^1.23.4"
 
 [tool.poetry.dev-dependencies]
 PyYAML = "^6.0.1"
