@@ -30,6 +30,12 @@ logos/
 # C compiled objects
 *.o
 
+# Ignore swap files
+*.swp
+
+# ignore vscode repo
+.vscode/
+
 # compiled library
 *.a
 *.dylib

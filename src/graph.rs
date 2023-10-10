@@ -222,7 +222,7 @@ pub struct SerializableGraph {
         Option<SmartString<LazyCompact>>,
     )>,
     loop_momentum_basis: Vec<SmartString<LazyCompact>>,
-    edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,
+    edge_signatures: HashMap<SmartString<LazyCompact>, (Vec<isize>, Vec<isize>)>,
 }
 
 impl SerializableGraph {
@@ -255,7 +255,12 @@ impl SerializableGraph {
                 .iter()
                 .map(|&e| graph.edges[e].name.clone())
                 .collect(),
-            edge_signatures: graph.edge_signatures.clone(),
+            edge_signatures: graph
+                .edge_signatures
+                .iter()
+                .enumerate()
+                .map(|(i_e, sig)| (graph.edges[i_e].name.clone(), sig.clone()))
+                .collect(),
         }
     }
 
@@ -300,9 +305,11 @@ impl Graph {
             loop_momentum_basis: vec![],
             vertex_name_to_position,
             edge_name_to_position: HashMap::default(),
-            edge_signatures: graph.edge_signatures.clone(),
+            edge_signatures: vec![],
         };
 
+        let mut edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
+            HashMap::default();
         // Then build edges
         g.edges = graph
             .edges
@@ -310,8 +317,23 @@ impl Graph {
             .map(|e| Edge::from_serializable_edge(model, &g, e))
             .collect();
         for (i_e, e) in g.edges.iter().enumerate() {
-            g.edge_name_to_position.insert(e.name.clone(), i_e);
+            edge_name_to_position.insert(e.name.clone(), i_e);
         }
+        for (vertex, serializable_vertex) in g.vertices.iter_mut().zip(graph.vertices.iter()) {
+            vertex.edges = serializable_vertex
+                .edges
+                .iter()
+                .map(|e| edge_name_to_position.get(e).unwrap().clone())
+                .collect();
+        }
+        g.edge_name_to_position = edge_name_to_position;
+
+        let mut edge_signatures: Vec<(Vec<isize>, Vec<isize>)> =
+            vec![(vec![], vec![]); graph.edges.len()];
+        for (e_name, sig) in graph.edge_signatures.iter() {
+            edge_signatures[g.get_edge_position(e_name).unwrap().clone()] = sig.clone();
+        }
+        g.edge_signatures = edge_signatures;
 
         g.external_connections = graph
             .external_connections

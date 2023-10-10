@@ -5,11 +5,11 @@ import itertools
 from pathlib import Path
 from enum import StrEnum
 import yaml
+from typing import Any
 
-import gammaloop.base_objects as base_objects
-from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger  # pylint: disable=unused-import
+from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger  # pylint: disable=unused-import # type: ignore
 import gammaloop.misc.utils as utils
-from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter
+from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter  # type: ignore
 
 
 class EdgeType(StrEnum):
@@ -23,7 +23,7 @@ class EdgeType(StrEnum):
 class VertexInfo(object):
 
     @staticmethod
-    def from_serializable_dict(model: Model, serializable_dict: dict) -> VertexInfo:
+    def from_serializable_dict(model: Model, serializable_dict: dict[str, Any]) -> VertexInfo:
         if serializable_dict['type'] == 'interacton_vertex_info':
             return InteractonVertexInfo.from_serializable_dict(model, serializable_dict)
         elif serializable_dict['type'] == 'external_vertex_info':
@@ -32,10 +32,10 @@ class VertexInfo(object):
             raise GammaLoopError(
                 f"Unknown vertex info type: {serializable_dict['type']}")
 
-    def get_particles(self):
+    def get_particles(self) -> list[Particle]:
         raise NotImplementedError()
 
-    def is_external(self):
+    def is_external(self) -> bool:
         return False
 
 
@@ -46,14 +46,14 @@ class InteractonVertexInfo(VertexInfo):
     def get_type(self) -> str:
         return 'interacton_vertex_info'
 
-    def to_serializable_dict(self) -> dict:
+    def to_serializable_dict(self) -> dict[str, Any]:
         return {
             'type': self.get_type(),
             'vertex_rule': self.vertex_rule.name
         }
 
     @staticmethod
-    def from_serializable_dict(model: Model, serializable_dict: dict) -> InteractonVertexInfo:
+    def from_serializable_dict(model: Model, serializable_dict: dict[str, Any]) -> InteractonVertexInfo:
         return InteractonVertexInfo(model.get_vertex_rule(serializable_dict['vertex_rule']))
 
     def get_particles(self) -> list[Particle]:
@@ -61,12 +61,12 @@ class InteractonVertexInfo(VertexInfo):
 
 
 class ExternalVertexInfo(VertexInfo):
-    def __init__(self, direction: EdgeType, particle: base_objects.model.Particle):
+    def __init__(self, direction: EdgeType, particle: Particle):
 
         self.direction: EdgeType = direction
-        self.particle: base_objects.model.Particle = particle
+        self.particle: Particle = particle
 
-    def is_external(self):
+    def is_external(self) -> bool:
         return True
 
     def get_type(self) -> str:
@@ -80,7 +80,7 @@ class ExternalVertexInfo(VertexInfo):
         }
 
     @staticmethod
-    def from_serializable_dict(model: Model, serializable_dict: dict) -> ExternalVertexInfo:
+    def from_serializable_dict(model: Model, serializable_dict: dict[str, Any]) -> ExternalVertexInfo:
         return ExternalVertexInfo(
             EdgeType(serializable_dict['direction']),
             model.get_particle(serializable_dict['particle'])
@@ -97,6 +97,8 @@ class Vertex(object):
         self.edges: list[Edge] | None = edges
 
     def set_vertex_rule_from_model(self, model: Model) -> None:
+        assert (self.edges is not None)
+
         if len(self.edges) == 1:
             self.vertex_info = ExternalVertexInfo(
                 EdgeType.OUTGOING if self.edges[0].edge_type == EdgeType.OUTGOING else EdgeType.INCOMING, self.edges[0].particle)
@@ -158,11 +160,11 @@ class Vertex(object):
         constant_definitions['vertexSize'] = f'{vertex_size:.2f}thick'
         constant_definitions['blobSize'] = f'{vertex_size*3:.2f}'
 
-        drawing = []
+        drawing: list[str] = []
         if self.vertex_info.is_external():
             return drawing
 
-        vertex_pos = graph.get_vertex_position(self.name)
+        vertex_pos: int = graph.get_vertex_position(self.name)
         prefix = r'\showVertexLabel{'
         if not show_vertex_labels:
             prefix = r'\hideVertexLabel{'
@@ -173,11 +175,11 @@ class Vertex(object):
         is_blob = False
         if not is_blob:
             drawing.append(
-                r'\efmfv{decor.shape=\vertexShape,decor.filled=full,decor.size=\vertexSize}{v%d}' % (  # pylint: disable=consider-using-f-string
+                r'\efmfv{decor.shape=\vertexShape,decor.filled=full,label.dist=\labelDistance,decor.size=\vertexSize}{v%d}' % (  # pylint: disable=consider-using-f-string
                     vertex_pos))
         else:
             drawing.append(
-                r'\efmfv{decor.shape=\vertexShape,decor.filled=shaded,decor.size=\blobSize}{v%d}' % (  # pylint: disable=consider-using-f-string
+                r'\efmfv{decor.shape=\vertexShape,decor.filled=shaded,label.dist=\labelDistance,decor.size=\blobSize}{v%d}' % (  # pylint: disable=consider-using-f-string
                     vertex_pos))
 
         return drawing
@@ -204,10 +206,9 @@ class Edge(object):
             'vertices': [self.vertices[0].name, self.vertices[1].name]
         }
 
-    def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_edge_labels=True, show_particle_names=True, show_edge_names=True,
-             show_edge_momenta=True, draw_arrow_for_all_edges=True, draw_lmb=True, arc_max_distance=1., external_legs_tension=3., default_tension=1.0, line_width=1.0,
-             line_color='black', label_color='blue', lmb_color='red', **_opts) -> list[str]:
-
+    def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_edge_labels=True, show_particle_names=True, show_edge_names=True, show_edge_composite_momenta=False,
+             label_size='15pt', label_distance=13.0, show_edge_momenta=True, draw_arrow_for_all_edges=True, draw_lmb=True, arc_max_distance=1., external_legs_tension=3., default_tension=1.0, line_width=1.0,
+             arrow_size_for_single_line=2.5, arrow_size_for_double_line=2.5, line_color='black', label_color='black', lmb_color='red', non_lmb_color='blue', **_opts) -> list[str]:
         constant_definitions['arcMaxDistance'] = f'{arc_max_distance:.2f}'
         constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'
         constant_definitions['defaultTension'] = f'{default_tension:.2f}'
@@ -215,11 +216,16 @@ class Edge(object):
         constant_definitions['lineColor'] = line_color
         constant_definitions['lmbColor'] = lmb_color
         constant_definitions['labelColor'] = label_color
+        constant_definitions['labelSize'] = label_size
+        constant_definitions['nonLmbColor'] = non_lmb_color
+        constant_definitions['arrowSize'] = f'{arrow_size_for_single_line:.2f}'
+        constant_definitions['doubleArrowSize'] = f'{arrow_size_for_double_line:.2f}'
+        constant_definitions['labelDistance'] = f'{label_distance:.2f}'
 
         template_line = r'\efmf{%(line_type)s%(comma)s%(options)s}{%(left_vertex)s,%(right_vertex)s}'
         lmb_position = graph.loop_momentum_basis.index(
             self) if self in graph.loop_momentum_basis else None
-        line_options = {}
+        line_options: dict[str, str] = {}
 
         if self.particle.is_ghost():
             line_type = 'dots_arrow'
@@ -252,7 +258,7 @@ class Edge(object):
         edge_name_label = ''
         if show_edge_names:
             edge_name_label = self.name  # pylint: disable=consider-using-f-string
-        label_components = []
+        label_components: list[str] = []
         if show_particle_names:
             label_components.append(self.particle.texname)
 
@@ -271,6 +277,21 @@ class Edge(object):
                 if lmb_position is not None:
                     label_components.append(r'k_{%d}' % (  # pylint: disable=consider-using-f-string
                         lmb_position))
+        if show_edge_composite_momenta:
+            mom_sig = graph.get_edge_signature(self.name)
+            if (mom_sig[0].count(0) + mom_sig[1].count(0)) < len(mom_sig[0])+len(mom_sig[1])-1:
+                str_mom = ''.join(
+                    ((f'+' if s > 0 else '-' if abs(s)
+                     == 1 else f'{s:+d}')+f'k_{{{i_lm}}}')
+                    for i_lm, s in enumerate(mom_sig[0]) if s != 0)+''.join(
+                    ((f'+' if s > 0 else '-' if abs(s)
+                     == 1 else f'{s:+d}')+f'p_{{{i_ext+1}}}')
+                    for i_ext, s in enumerate(mom_sig[1]) if s != 0)
+                if str_mom.startswith('+'):
+                    str_mom = str_mom[1:]
+                if any(char in str_mom for char in ['+', '-']):
+                    str_mom = f'({str_mom})'
+                label_components.append(str_mom)
 
         line_options['label'] = '%s%s$%s%s$' % (  # pylint: disable=consider-using-f-string
             r"\setLabelColor{\labelColor}" if lmb_position is None else r"\setLabelColor{\lmbColor}",
@@ -278,7 +299,7 @@ class Edge(object):
             '|' if edge_name_label != '' and len(label_components) > 0 else '',
             '|'.join(label_components)
         )
-
+        line_options['label.dist'] = r'\labelDistance'
         if show_edge_labels:
             line_options['label'] = r'\showEdgeLabel{%s}' % line_options[  # pylint: disable=consider-using-f-string
                 'label']
@@ -327,22 +348,26 @@ class Edge(object):
             line_options['right'] = line_options["right"]+r'*\arcMaxDistance'
 
         replace_dict = {}
-        replace_dict['line_type'] = line_type
+        replace_dict['line_type'] = line_type.replace('_arrow', '')
         replace_dict['left_vertex'] = f'v{graph.get_vertex_position(self.vertices[0].name)}'
         replace_dict['right_vertex'] = f'v{graph.get_vertex_position(self.vertices[1].name)}'
         replace_dict['options'] = ','.join(
             f'{k}={v}' for k, v in line_options.items())
         replace_dict['comma'] = ',' if len(replace_dict['options']) > 0 else ''
-        drawing = []
+        drawing: list[str] = []
         drawing.append(
             f"% == Drawing edge '{self.name}' (e{graph.get_edge_position(self.name)}) with particle {self.particle.name}")
         drawing.append(template_line % replace_dict)
 
-        if 'arrow' not in line_type and draw_arrow_for_all_edges:
+        if ('arrow' not in line_type and draw_arrow_for_all_edges) or 'arrow' in line_type:
             if 'label' in line_options:
                 del line_options['label']
-            replace_dict['line_type'] = 'phantom_arrow'
+            if any(t in line_type for t in ['dbl', 'zigzag', 'wiggly', 'curly']):
+                replace_dict['line_type'] = 'my_double_phantom_arrow'
+            else:
+                replace_dict['line_type'] = 'my_phantom_arrow'
             line_options['tension'] = 0
+            line_options['fore'] = r'\nonLmbColor'
             replace_dict['options'] = ','.join(
                 f'{k}={v}' for k, v in line_options.items())
             replace_dict['comma'] = ',' if len(
@@ -354,7 +379,10 @@ class Edge(object):
         if draw_lmb and lmb_position is not None:
             if 'label' in line_options:
                 del line_options['label']
-            replace_dict['line_type'] = 'phantom_arrow'
+            if any(t in line_type for t in ['dbl', 'zigzag', 'wiggly', 'curly']):
+                replace_dict['line_type'] = 'my_double_phantom_arrow'
+            else:
+                replace_dict['line_type'] = 'my_phantom_arrow'
             line_options['tension'] = 0
             line_options['fore'] = r'\lmbColor'
             replace_dict['options'] = ','.join(
@@ -383,17 +411,23 @@ class Edge(object):
 
 
 class Graph(object):
-    def __init__(self, name: str, vertices: list[Vertex], edges: list[Edge], external_connections: list[(Vertex | None, Vertex | None)],
-                 loop_momentum_basis: list[Edge] | None = None, overall_factor: float = 1.0, edge_signatures: list[(list[int], list[int])] | None = None):
+    def __init__(self, name: str, vertices: list[Vertex], edges: list[Edge], external_connections: list[tuple[Vertex | None, Vertex | None]],
+                 loop_momentum_basis: list[Edge] | None = None, overall_factor: float = 1.0, edge_signatures: dict[str,
+                                                                                                                   tuple[list[int], list[int]]] | None = None):
         self.name: str = name
         self.vertices: list[Vertex] = vertices
         self.edges: list[Edge] = edges
-        self.edge_signatures: list[(list[int], list[int])] = edge_signatures
+        if edge_signatures is None:
+            self.edge_signatures: dict[str,
+                                       tuple[list[int], list[int]]] = {}
+        else:
+            self.edge_signatures: dict[str,
+                                       tuple[list[int], list[int]]] = edge_signatures
         self.overall_factor = overall_factor
         # For forward scattering graphs, keep track of the bipartite map, i.e. which in and out externals will carry identical momenta.
-        self.external_connections: list[(
-            Vertex | None, Vertex | None)] = external_connections
-        self.loop_momentum_basis: list[Edge] = loop_momentum_basis
+        self.external_connections: list[tuple[
+            Vertex | None, Vertex | None]] = external_connections
+        self.loop_momentum_basis: list[Edge] | None = loop_momentum_basis
         self.name_to_position: dict[str, dict[str, int]] = {}
 
     def get_sorted_incoming_edges(self):
@@ -418,17 +452,17 @@ class Graph(object):
                     break
         return sorted_outgoing_edges
 
-    def get_edge_signature(self, edge_name):
-        return self.edge_signatures[self.get_edge_position(edge_name)]
+    def get_edge_signature(self, edge_name: str) -> tuple[list[int], list[int]]:
+        return self.edge_signatures[edge_name]
 
     @ staticmethod
     def empty_graph(name: str) -> Graph:
-        return Graph(name, [], [], [], loop_momentum_basis=[], overall_factor=1.0, edge_signatures=[])
+        return Graph(name, [], [], [], loop_momentum_basis=[], overall_factor=1.0, edge_signatures={})
 
     def get_edge(self, edge_name: str) -> Edge:
         return self.edges[self.name_to_position['edges'][edge_name]]
 
-    def get_vertex(self, vertex_name: str) -> Parameter:
+    def get_vertex(self, vertex_name: str) -> Vertex:
         return self.vertices[self.name_to_position['vertices'][vertex_name]]
 
     def get_edge_position(self, edge_name: str) -> int:
@@ -593,7 +627,8 @@ class Graph(object):
             # Arbitrarily pick the first valid momentum basis as the chosen one.
             graph.loop_momentum_basis = all_lmbs[0]
 
-        graph.edge_signatures = graph.generate_momentum_flow()
+        graph.edge_signatures = {graph.edges[i].name: sig for i, sig in enumerate(
+            graph.generate_momentum_flow())}
 
         return graph
 
@@ -704,15 +739,15 @@ class Graph(object):
 
         return merged_signatures
 
-    def draw(self, model: Model, file_path_without_extension=str | None, caption=None, **drawing_options) -> Path:
+    def draw(self, model: Model, file_path_without_extension=str | None, caption=None, diagram_id=None, **drawing_options) -> Path:
         match drawing_options['mode']:
             case 'feynmp':
-                return self.draw_feynmp(model, file_path_without_extension, caption, **drawing_options['feynmp'])
+                return self.draw_feynmp(model, file_path_without_extension, caption, diagram_id, **drawing_options['feynmp'])
             case _:
                 raise GammaLoopError(
                     "Feynman drawing mode '%d' is not supported. Currently only 'feynmp' is supported." % drawing_options['mode'])
 
-    def draw_feynmp(self, model: Model, file_path_without_extension=str | None, caption=None, caption_size='20pt', **drawing_options) -> Path:
+    def draw_feynmp(self, model: Model, file_path_without_extension=str | None, caption=None, diagram_id=None, caption_size='20pt', **drawing_options) -> Path:
 
         with open(pjoin(DATA_PATH, 'templates', 'drawing', 'drawing.tex'), 'r', encoding='utf-8') as file:
             template = file.read()
@@ -786,7 +821,10 @@ class Graph(object):
                 replace_dict['caption'] = replace_dict['drawing_name']
             replace_dict['caption'] = replace_dict['caption'].replace(
                 '_', ' ').replace('#', r'\#')
-
+            if diagram_id is not None:
+                replace_dict['diagram_id'] = diagram_id.replace('#', r'\#')
+            else:
+                replace_dict['diagram_id'] = ''
             replace_dict['constant_definitions'] = '\n'.join(
                 r'\newcommand{\%s}{%s}' % (k, v) for k, v in constant_definitions.items()  # pylint: disable=consider-using-f-string
             )

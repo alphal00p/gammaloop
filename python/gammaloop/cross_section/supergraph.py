@@ -42,7 +42,7 @@ class SuperGraph(object):
 
         if file_name is None:
             file_name = f'{self.sg_id}_{self.graph.name}'
-        return self.graph.draw(model, pjoin(drawings_path, file_name), caption=f"Supergraph {self.graph.name.replace('_',' ')}"+r" ({\bf #%d})" % self.sg_id, **drawing_options)
+        return self.graph.draw(model, pjoin(drawings_path, file_name), caption=f"Supergraph {self.graph.name.replace('_',' ')}", diagram_id='#%d' % self.sg_id, **drawing_options)
 
     @ staticmethod
     def from_serializable_dict(model: Model, sg_dict: dict) -> SuperGraph:
@@ -108,7 +108,7 @@ class ForwardScatteringGraph(object):
         else:
             g_id = f'#{self.sg_id}'
         return self.graph.draw(model, pjoin(drawings_path, file_name),
-                               caption=f"FSG {self.graph.name.replace(f'_{self.sg_id}','').replace('_',' ')}"+r" ({\bf %s})" % g_id, **drawing_options)
+                               caption=f"FSG {self.graph.name.replace(f'_{self.sg_id}','').replace('_',' ')}", diagram_id=g_id, **drawing_options)
 
     @staticmethod
     def from_serializable_dict(model: Model, amplitude_graph_dict: dict) -> ForwardScatteringGraph:
@@ -149,7 +149,7 @@ class AmplitudeGraph(object):
         else:
             g_id = f'#{self.fs_cut_id}'
         return self.graph.draw(model, pjoin(drawings_path, file_name),
-                               caption=f"Amplitude {self.graph.name.replace(f'_{self.fs_cut_id}','').replace('_',' ')}"+r" ({\bf %s})" % g_id, **drawing_options)
+                               caption=f"Amplitude {self.graph.name.replace(f'_{self.fs_cut_id}','').replace('_',' ')}", diagram_id=g_id, **drawing_options)
 
     @staticmethod
     def from_serializable_dict(model: Model, amplitude_graph_dict: dict) -> AmplitudeGraph:

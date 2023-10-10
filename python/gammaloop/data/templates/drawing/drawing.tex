@@ -1,11 +1,10 @@
 \documentclass{article}
 \usepackage{feynmp}
-\usepackage{geometry}
+\usepackage[paperwidth=70cm,paperheight=120cm,centering,textwidth=70cm,textheight=100cm,left=-2cm,top=10cm]{geometry}
 \usepackage{amsmath}
 \usepackage{xcolor}
 
 \thispagestyle{empty}
-\newgeometry{left=0.5cm,top=1cm,right=0.5cm}
 
 %% Definition of constants 
 %(constant_definitions)s
@@ -32,8 +31,24 @@
 
 \begin{document}
 \begin{fmffile}{diagram_%(drawing_name)s}
-\setlength{\unitlength}{1pt}
-\begin{fmfgraph*}(530,400)
+\fmfcmd{
+ style_def my_phantom_arrow expr p =
+  draw_phantom_arrow p;
+  shrink (\arrowSize);
+    cfill (arrow p);
+  endshrink;
+ enddef;
+}
+\fmfcmd{
+ style_def my_double_phantom_arrow expr p =
+  draw_phantom_arrow p;
+  shrink (\doubleArrowSize);
+    cfill (arrow p);
+  endshrink;
+ enddef;
+}
+\hspace{8cm}\setlength{\unitlength}{1pt}\fontsize{\labelSize}{\labelSize*1.2}\selectfont
+\begin{fmfgraph*}(1500,1200)
 
 %% incoming external vertices
 %(incoming_vertices)s
@@ -60,6 +75,6 @@
 \end{fmffile}
 \begin{center}
 \vspace{0.5cm}
-{\fontsize{\captionSize}{\captionSize}\selectfont %(caption)s}
+{\fontfamily{qcr}\selectfont\fontsize{\captionSize}{\captionSize*1.2}\selectfont %(caption)s {\bf \fontfamily{qcr}\selectfont\fontsize{\captionSize}{\captionSize}\selectfont %(diagram_id)s}}
 \end{center}
 \end{document}

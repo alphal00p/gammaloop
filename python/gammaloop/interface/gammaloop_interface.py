@@ -51,21 +51,27 @@ class GammaLoopConfiguration(object):
                     'show_particle_names': True,
                     'show_edge_names': True,
                     'show_edge_momenta': True,
+                    'show_edge_composite_momenta': True,
+                    'label_size': "20pt",
+                    'label_distance': 13.0,
                     'draw_arrow_for_all_edges': True,
                     'draw_lmb': True,
-                    'arc_max_distance': 1.,
+                    'arc_max_distance': 1.0,
                     'external_legs_tension': 3.0,
                     'default_tension': 1.0,
-                    'show_vertex_labels': False,
-                    'use_vertex_names': False,
-                    'vertex_size': 2.5,
-                    'vertex_shape': 'circle',
-                    'line_width': 1.0,
-                    'line_color': 'black',
-                    'label_color': 'blue',
-                    'lmb_color': 'red',
+                    'show_vertex_labels': True,
+                    'use_vertex_names': True,
+                    'vertex_size': 5.0,
+                    'vertex_shape': "circle",
+                    'line_width': 1.5,
+                    'arrow_size_for_single_line': 1.5,
+                    'arrow_size_for_double_line': 1.5,
+                    'line_color': "black",
+                    'label_color': "black",
+                    'non_lmb_color': "blue",
+                    'lmb_color': "red",
                     'anchor_tension': 2.0,
-                    'caption_size': '20pt',
+                    'caption_size': "40pt",
                 }
             }
         }
@@ -92,23 +98,23 @@ class GammaLoopConfiguration(object):
             if isinstance(value, dict):
                 if key.endswith('_dict'):
                     config_chunk[key] = updater
-                    return
+                    continue
                 if any(not isinstance(k, str) for k in updater):
                     if all(isinstance(k, str) for k in config_chunk[key]):
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}:\n{pformat(updater)}")
                     else:
                         config_chunk[key] = updater
-                        return
+                        continue
                 else:
                     cls._update_config_chunk(
                         setting_path, config_chunk[key], value)
             else:
                 if type(value) is not type(config_chunk[key]):
                     raise GammaLoopError(
-                        f"Invalid value for setting {setting_path}:\n{pformat(updater)}")
+                        f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
                 config_chunk[key] = value
-                return
+                continue
 
     def update(self, new_setting, path: str = '') -> None:
         context = self._config
@@ -292,6 +298,9 @@ class GammaLoop(object):
             setting_route = '.'.join(setting_path[:-1])
         self.config.update(
             {setting_path[-1]: config_value}, path=setting_route)
+        str_setting = pformat(config_value)
+        logger.info("Setting '%s%s%s' to:%s%s%s%s", Colour.GREEN,
+                    args.path, Colour.END, Colour.BLUE, '\n' if len(str_setting) > 20 else ' ', str_setting, Colour.END)
 
     # show_settings command
     show_settings = ArgumentParser(prog='show_settings')
@@ -305,8 +314,9 @@ class GammaLoop(object):
         args = self.show_settings.parse_args(split_str_args(str_args))
 
         setting = self.config.get_setting(args.path)
-        logger.info("Current value of setting '%s%s%s':\n%s",
-                    Colour.GREEN, args.path, Colour.END, pformat(setting))
+        str_setting: str = pformat(setting)
+        logger.info("Current value of setting %s%s%s:%s%s%s%s",
+                    Colour.GREEN, args.path, Colour.END, '\n' if len(str_setting) > 20 else ' ', Colour.BLUE, str_setting, Colour.END)
 
     # import_model command
     import_model_parser = ArgumentParser(prog='import_model')

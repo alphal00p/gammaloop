@@ -111,6 +111,7 @@ class AmplitudesExporter(GammaLoopExporter):
             drawing_file_paths = amplitude.draw(
                 self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
             self.finalize_drawing(Path(drawings_path), drawing_file_paths)
+
             self.gammaloop.rust_worker.add_amplitude_from_yaml_str(
                 amplitude_yaml)
 

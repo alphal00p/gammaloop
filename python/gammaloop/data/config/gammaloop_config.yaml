@@ -8,18 +8,24 @@ drawing:
     show_particle_names: true
     show_edge_names: true
     show_edge_momenta: true
+    show_edge_composite_momenta: true
+    label_size: "20pt"
+    label_distance: 13.0
     draw_arrow_for_all_edges: true
     draw_lmb: true
-    arc_max_distance: 1.
+    arc_max_distance: 1.0
     external_legs_tension: 3.0
     default_tension: 1.0
-    show_vertex_labels: frue
-    use_vertex_names: frue
-    vertex_size: 2.5
+    show_vertex_labels: true
+    use_vertex_names: true
+    vertex_size: 5.0
     vertex_shape: "circle"
-    line_width: 1.0
+    line_width: 1.75
+    arrow_size_for_single_line: 1.5
+    arrow_size_for_double_line: 2.0
     line_color: "black"
-    label_color: "blue"
+    label_color: "black"
+    non_lmb_color: "blue"
     lmb_color: "red"
     anchor_tension: 2.0
-    caption_size: "20pt"
+    caption_size: "40pt"

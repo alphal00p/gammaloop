@@ -49,3 +49,8 @@ sdist-include = ["LICENSE.md", "README.md"]
 [project.scripts]
 gammaloop_rust_cli = "gammaloop._gammaloop:rust_cli"
 gammaloop = "gammaloop:cli"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

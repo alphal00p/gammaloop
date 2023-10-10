@@ -1,3 +1,4 @@
+import pytest
 from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
 from gammaloop.interface.gammaloop_interface import CommandList
 
@@ -100,7 +101,7 @@ class TestLoadQGraph:
 class TestMasslessScalarTriangleAmplitude:
 
     # This test uses a session-wide fixture defined in conftest.py
-    def test_info(self, scalar_massless_triangle_export):
+    def test_info(self, scalar_massless_triangle_export: str):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             f"launch {scalar_massless_triangle_export}"))
@@ -140,6 +141,7 @@ class TestScalarFishnet2x2:
                            'amplitudes', 'fishnet_2x2', 'drawings'))
 
 
+@pytest.mark.slow
 class TestScalarFishnet2x3:
 
     def test_info(self, scalar_fishnet_2x3_export):
