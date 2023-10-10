@@ -26,6 +26,7 @@ share/python-wheels/
 MANIFEST
 .devenv
 .direnv
+.envrc
 # logos
 logos/
 
