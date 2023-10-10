@@ -51,6 +51,11 @@ pub fn load_amplitude_output(
 
 #[cfg(test)]
 mod tests_scalar_massless_triangle {
+    use lorentz_vector::LorentzVector;
+    use smartstring::SmartString;
+
+    use crate::graph::EdgeType;
+
     use super::*;
 
     #[test]
@@ -79,22 +84,61 @@ mod tests_scalar_massless_triangle {
         let graph = &amplitude.amplitude_graphs[0].graph;
         let cff = generate_cff_expression(graph).unwrap();
         assert_eq!(cff.terms.len(), 6);
+        assert_eq!(cff.esurfaces.len(), 6);
 
-        // this is a bit handcrafted at the moment
-        // In the future this is generated automatically when the full evaluation stack is there
-        let energy_cache = [
-            1.0,
-            1.0,
-            -2.0,
-            10.770329614269007,
-            22.9128784747792,
-            3.7416573867739413,
-        ];
+        println!("what is this {:?}", graph.edge_signatures);
 
-        let benchmark_val = 0.011605113880815013;
-        let res = cff.evaluate(&energy_cache);
+        let p1 = LorentzVector::from_args(1.0, 3.0, 4.0, 5.0);
+        let p2 = -LorentzVector::from_args(1.0, 6.0, 7.0, 8.0);
 
-        println!("res = {}", res);
+        let k = LorentzVector::from_args(0.0, 1.0, 2.0, 3.0);
+
+        let onshell_energies = graph.compute_onshell_energies(&[k], &[p1, p2, p1 - p2]);
+
+        assert_eq!(onshell_energies.len(), 6);
+        assert_eq!(
+            onshell_energies[graph.get_edge_position(&SmartString::from("p1")).unwrap()],
+            p1.t
+        );
+
+        assert_eq!(
+            onshell_energies[graph.get_edge_position(&SmartString::from("p2")).unwrap()],
+            p2.t
+        );
+        assert_eq!(
+            onshell_energies[graph.get_edge_position(&SmartString::from("p3")).unwrap()],
+            (p1 - p2).t
+        );
+        assert_eq!(
+            onshell_energies[graph.get_edge_position(&SmartString::from("q1")).unwrap()],
+            (k - p2).spatial_distance()
+        );
+        assert_eq!(
+            onshell_energies[graph.get_edge_position(&SmartString::from("q2")).unwrap()],
+            k.spatial_distance()
+        );
+        assert_eq!(
+            onshell_energies[graph.get_edge_position(&SmartString::from("q3")).unwrap()],
+            (k - p1 - p2).spatial_distance()
+        );
+
+        println!("onshell energies = {:?}", onshell_energies);
+        assert_eq!(onshell_energies.len(), 6);
+
+        let edge_types = graph.get_edge_type_list();
+
+        let energy_product = onshell_energies
+            .iter()
+            .zip(edge_types.iter())
+            .filter(|(_e, t)| **t == EdgeType::Virtual)
+            .map(|(e, _)| 2.0 * e)
+            .product::<f64>()
+            .recip();
+
+        let res = energy_product * cff.evaluate(&onshell_energies, &edge_types);
+        let benchmark_val = 4.646388885763160e-6;
+
+        println!("res = {:+e}", res);
         assert!(approx_eq(res, benchmark_val, 1e-15));
 
         // TODO: @Mathijs, you can put your own checks there

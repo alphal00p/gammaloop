@@ -1,8 +1,13 @@
-use crate::model;
+use crate::{
+    model,
+    utils::{compute_momentum, FloatLike},
+};
 use ahash::RandomState;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
+use lorentz_vector::LorentzVector;
+use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, sync::Arc};
@@ -360,5 +365,47 @@ impl Graph {
     #[inline]
     pub fn get_edge_position(&self, name: &SmartString<LazyCompact>) -> Option<usize> {
         self.edge_name_to_position.get(name).map(|p| *p)
+    }
+
+    #[inline]
+    pub fn compute_emr<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+    ) -> Vec<LorentzVector<T>> {
+        self.edge_signatures
+            .iter()
+            .map(|sig| compute_momentum(sig, loop_moms, external_moms))
+            .collect()
+    }
+
+    #[inline]
+    pub fn compute_onshell_energies<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+    ) -> Vec<T> {
+        self.edge_signatures
+            .iter()
+            .map(|sig| compute_momentum(sig, loop_moms, external_moms))
+            .zip(self.edges.iter())
+            .map(|(emr_mom, edge)| match edge.edge_type {
+                EdgeType::Virtual => {
+                    if let Some(mass_value) = edge.particle.mass.value {
+                        let energy_squared =
+                            emr_mom.spatial_squared() + Into::<T>::into(mass_value * mass_value);
+                        energy_squared.sqrt()
+                    } else {
+                        emr_mom.spatial_distance()
+                    }
+                }
+                _ => emr_mom.t,
+            })
+            .collect()
+    }
+
+    #[inline]
+    pub fn get_edge_type_list(&self) -> Vec<EdgeType> {
+        self.edges.iter().map(|e| e.edge_type.clone()).collect()
     }
 }

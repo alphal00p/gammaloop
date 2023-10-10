@@ -70,7 +70,7 @@ impl Esurface {
 
     // the energy cache contains the energies of external edges as well as the virtual,
     // use the location in the supergraph to determine the index
-    fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    fn compute_value<T: FloatLike>(&self, energy_cache: &[T], edge_types: &[EdgeType]) -> T {
         let energy_sum = self
             .energies
             .iter()
@@ -80,8 +80,13 @@ impl Esurface {
         let shift_sum = self
             .shift
             .iter()
-            .map(|index| energy_cache[*index])
+            .map(|index| match edge_types[*index] {
+                EdgeType::Incoming => energy_cache[*index],
+                EdgeType::Outgoing => -energy_cache[*index],
+                EdgeType::Virtual => unreachable!(),
+            })
             .sum::<T>();
+
         let shift_sign = match self.shift_signature {
             true => Into::<T>::into(1.),
             false => Into::<T>::into(-1.),
@@ -316,8 +321,8 @@ impl CFFExpression {
         SerializableCFFExpression { terms, esurfaces }
     }
 
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        let esurface_cache = self.compute_esurface_cache(energy_cache);
+    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T], edge_types: &[EdgeType]) -> T {
+        let esurface_cache = self.compute_esurface_cache(energy_cache, edge_types);
         let mut node_cache = self
             .terms
             .iter()
@@ -330,10 +335,14 @@ impl CFFExpression {
             .sum::<T>()
     }
 
-    fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
+    fn compute_esurface_cache<T: FloatLike>(
+        &self,
+        energy_cache: &[T],
+        edge_types: &[EdgeType],
+    ) -> Vec<T> {
         self.esurfaces
             .iter()
-            .map(|e| e.compute_value(energy_cache))
+            .map(|e| e.compute_value(energy_cache, edge_types))
             .collect()
     }
 }
@@ -1591,7 +1600,15 @@ mod tests_cff {
             shift_signature,
         };
 
-        let res = esurface.compute_value(&energies_cache);
+        let edge_types = vec![
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
+        ];
+
+        let res = esurface.compute_value(&energies_cache, &edge_types);
         assert_eq!(res, 15.);
 
         let shift_signature = false;
@@ -1605,7 +1622,9 @@ mod tests_cff {
             shift_signature,
         };
 
-        let res = esurface.compute_value(&energies_cache);
+        let edge_types = vec![EdgeType::Virtual, EdgeType::Incoming, EdgeType::Virtual];
+
+        let res = esurface.compute_value(&energies_cache, &edge_types);
         assert_eq!(res, 2.);
     }
 
@@ -1670,12 +1689,24 @@ mod tests_cff {
             .map(|e| *e)
             .collect_vec();
 
+        let edge_types = [
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
+        ];
+
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (2. * e).inv())
             .product::<f64>();
-        let cff_res: f64 =
-            energy_prefactor * cff.evaluate(&energy_cache) * (2. * std::f64::consts::PI).pow(-3);
+
+        let cff_res: f64 = energy_prefactor
+            * cff.evaluate(&energy_cache, &edge_types)
+            * (2. * std::f64::consts::PI).pow(-3);
+
         let absolute_error: f64 = cff_res - 6.33354922553617e-9_f64;
         let relative_error = absolute_error.abs() / cff_res.abs();
 
@@ -1709,6 +1740,16 @@ mod tests_cff {
             }
         }
 
+        let edge_types = [
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
+        ];
+
         let q = LorentzVector::from_args(1., 2., 3., 4.);
         let zero = LorentzVector::from_args(0., 0., 0., 0.);
 
@@ -1735,7 +1776,7 @@ mod tests_cff {
             .iter()
             .map(|e| (2. * e).inv())
             .product::<f64>();
-        let cff_res = energy_prefactor * cff.evaluate(&energy_cache);
+        let cff_res = energy_prefactor * cff.evaluate(&energy_cache, &edge_types);
 
         let target = 1.0794792137096797e-13;
         let absolute_error = cff_res - target;
@@ -1761,6 +1802,19 @@ mod tests_cff {
             (3, 4),
             (3, 5),
             (5, 4),
+        ];
+
+        let edge_types = vec![
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
         ];
 
         let mut external_data = HashMap::default();
@@ -1807,7 +1861,7 @@ mod tests_cff {
             .iter()
             .map(|e| (2. * e).inv())
             .product::<f64>();
-        let res = cff.evaluate(&energies_cache) * energy_prefactor;
+        let res = cff.evaluate(&energies_cache, &edge_types) * energy_prefactor;
 
         let absolute_error = res - 1.2625322619777278e-21;
         let relative_error = absolute_error / res;
@@ -1843,6 +1897,25 @@ mod tests_cff {
             (3, 6),
             (4, 7),
             (5, 8),
+        ];
+
+        let _edge_types = vec![
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
         ];
 
         let mut external_data = HashMap::default();
@@ -1938,6 +2011,16 @@ mod tests_cff {
             (8, 11),
         ];
 
+        // vector with 17 virtuals and 4 incoming
+        let mut edge_types = vec![];
+        for _i in 0..17 {
+            edge_types.push(EdgeType::Virtual);
+        }
+
+        for _i in 0..4 {
+            edge_types.push(EdgeType::Incoming);
+        }
+
         let external_data = HashMap::default();
         let mut position_map = HashMap::default();
         for i in 0..edges.len() {
@@ -1951,7 +2034,7 @@ mod tests_cff {
         let cff =
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
         println!("cff terms = {}", cff.terms.len());
-        let test = cff.evaluate(&energy_cache);
+        let test = cff.evaluate(&energy_cache, &edge_types);
         println!("test = {}", test);
     }
 }

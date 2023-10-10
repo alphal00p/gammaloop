@@ -657,8 +657,8 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
 #[allow(unused)]
 pub fn compute_momentum<T: FloatLike>(
     signature: &(Vec<isize>, Vec<isize>),
-    loop_moms: &Vec<LorentzVector<T>>,
-    external_moms: &Vec<LorentzVector<T>>,
+    loop_moms: &[LorentzVector<T>],
+    external_moms: &[LorentzVector<T>],
 ) -> LorentzVector<T> {
     let mut res = LorentzVector::default();
     for (i_l, sign) in signature.0.iter().enumerate() {
