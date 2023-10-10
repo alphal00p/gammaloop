@@ -24,7 +24,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+.devenv
+.direnv
 # logos
 logos/
 
