@@ -69,4 +69,7 @@ include = ["python/gammaloop"]
 exclude = [
   "python/gammaloop/data/templates/drawing/combine_pages.py",
   "python/gammaloop/data/models/*",
+  "python/gammaloop/_gammaloop.so",
+  "python/gammaloop/requirements.txt",
+  "python/gammaloop/run_python_tests.sh",
 ]

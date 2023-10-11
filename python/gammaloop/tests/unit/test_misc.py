@@ -9,9 +9,16 @@ class TestCode:
     def test_pyright(self):
         process = Popen(['pyright'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
         output, error = process.communicate()
-        if process.returncode != 0:
-            logger.info("PYRIGHT TEST STDOUT:\n%s", output.decode("utf-8"))
-            logger.info("PYRIGHT TEST STDERR:\n%s", error.decode("utf-8"))
-        logger.debug("PYRIGHT TEST STDOUT:\n%s", output.decode("utf-8"))
-        logger.debug("PYRIGHT TEST STDERR:\n%s", error.decode("utf-8"))
+        stdout = output.decode("utf-8")
+        stderr = error.decode("utf-8")
+        success = (process.returncode ==
+                   0 and '0 error' in stdout and '0 warning' in stdout)
+        if not success:
+            logger.info("PYRIGHT TEST STDOUT:\n%s", stdout)
+            logger.info("PYRIGHT TEST STDERR:\n%s", stderr)
+        else:
+            logger.debug("PYRIGHT TEST STDOUT:\n%s", stdout)
+            logger.debug("PYRIGHT TEST STDERR:\n%s", stderr)
         assert process.returncode == 0
+        assert '0 error' in stdout
+        assert '0 warning' in stdout
