@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "fail-on-warnings", deny(warnings))]
+
 pub mod api;
 pub mod cff;
 pub mod cli_functions;

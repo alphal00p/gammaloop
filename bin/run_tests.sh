@@ -16,7 +16,7 @@ run_python_tests() {
     #./run_python_tests.sh $@ -rx;
     # Pass the following option to see output on all tests
     #./run_python_tests.sh $@ -rP;
-    cd -;
+    cd - >& /dev/null
 }
 
 if [ $# -eq 0 ]

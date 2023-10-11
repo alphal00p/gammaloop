@@ -1,3 +1,4 @@
+# type: ignore
 # This file is part of the UFO.
 #
 # This file contains definitions for functions that
@@ -18,35 +19,34 @@ from .object_library import all_functions, Function
 # shortcuts for functions from cmath
 #
 
-complexconjugate = Function(name = 'complexconjugate',
-                            arguments = ('z',),
-                            expression = 'z.conjugate()')
+complexconjugate = Function(name='complexconjugate',
+                            arguments=('z',),
+                            expression='z.conjugate()')
 
 
-re = Function(name = 're',
-              arguments = ('z',),
-              expression = 'z.real')
+re = Function(name='re',
+              arguments=('z',),
+              expression='z.real')
 
-im = Function(name = 'im',
-              arguments = ('z',),
-              expression = 'z.imag')
+im = Function(name='im',
+              arguments=('z',),
+              expression='z.imag')
 
 
 # New functions (trigonometric)
 
-sec = Function(name = 'sec',
-             arguments = ('z',),
-             expression = '1./cos(z)')
+sec = Function(name='sec',
+               arguments=('z',),
+               expression='1./cos(z)')
 
-asec = Function(name = 'asec',
-             arguments = ('z',),
-             expression = 'acos(1./z)')
+asec = Function(name='asec',
+                arguments=('z',),
+                expression='acos(1./z)')
 
-csc = Function(name = 'csc',
-             arguments = ('z',),
-             expression = '1./sin(z)')
+csc = Function(name='csc',
+               arguments=('z',),
+               expression='1./sin(z)')
 
-acsc = Function(name = 'acsc',
-             arguments = ('z',),
-             expression = 'asin(1./z)')
-
+acsc = Function(name='acsc',
+                arguments=('z',),
+                expression='asin(1./z)')

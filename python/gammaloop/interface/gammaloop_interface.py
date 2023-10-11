@@ -5,17 +5,18 @@ import importlib
 from argparse import ArgumentParser
 import subprocess
 import os
+from typing import Any
 from pprint import pformat
 import yaml
-from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS
+from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered
 from gammaloop.misc.utils import Colour
 import gammaloop.base_objects.model as model
-import gammaloop.base_objects.graph as graph
+from gammaloop.base_objects.graph import Graph
 import gammaloop.cross_section.cross_section as cross_section
 import gammaloop.cross_section.supergraph as supergraph
 from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExporter, OutputMetaData
 # This is the pyo3 binding of the gammaloop rust engine
-import gammaloop._gammaloop as gl_rust  # pylint: disable=import-error, no-name-in-module
+import gammaloop._gammaloop as gl_rust  # pylint: disable=import-error, no-name-in-module # type: ignore
 
 # pylint: disable=unused-variable
 
@@ -39,7 +40,7 @@ AVAILABLE_COMMANDS = [
 class GammaLoopConfiguration(object):
 
     def __init__(self, path: str | None = None):
-        self._config = {
+        self._config: dict[str, Any] = {
             'symbolica': {
                 'license': "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>"
             },
@@ -78,12 +79,12 @@ class GammaLoopConfiguration(object):
         if path is None:
             for config_path in GAMMALOOP_CONFIG_PATHS:
                 if os.path.exists(config_path):
-                    self.update(load_configuration(config_path, ''))
+                    self.update(load_configuration(config_path), '')
         else:
             self.update(load_configuration(path))
 
     @classmethod
-    def _update_config_chunk(cls, root_path: str, config_chunk: dict, updater: dict) -> None:
+    def _update_config_chunk(cls, root_path: str, config_chunk: dict[str, Any], updater: Any) -> None:
         for key, value in updater.items():
             if root_path == '':
                 setting_path = key
@@ -116,7 +117,7 @@ class GammaLoopConfiguration(object):
                 config_chunk[key] = value
                 continue
 
-    def update(self, new_setting, path: str = '') -> None:
+    def update(self, new_setting: Any, path: str = '') -> None:
         context = self._config
         for key in path.split('.'):
             if key == "":
@@ -127,7 +128,7 @@ class GammaLoopConfiguration(object):
             context = context[key]
         self._update_config_chunk(path, context, new_setting)
 
-    def get_setting(self, path):
+    def get_setting(self, path: str):
         context = self._config
         for key in path.split('.'):
             if key == "":
@@ -145,11 +146,11 @@ class GammaLoopConfiguration(object):
             raise GammaLoopError(f"Unknown gammloop setting '{key}'")
 
 
-def split_str_args(str_args) -> list[str]:
+def split_str_args(str_args: str) -> list[str]:
     return str_args.split(' ') if str_args != '' else []
 
 
-class CommandList(list):
+class CommandList(list[tuple[str, str]]):
 
     @staticmethod
     def from_file(filename: str):
@@ -183,7 +184,7 @@ class CommandList(list):
 
     def parse(self, cmd_str: str) -> None:
         multi_line = ''
-        for line in sum([t.split('\n') for t in cmd_str.strip().split(';')], []):
+        for line in sum([t.split('\n') for t in cmd_str.strip().split(';')], []):  # type: ignore
             line = line.strip()
             if line == '':
                 continue
@@ -218,7 +219,7 @@ class GammaLoop(object):
         # Initialize a gammaloop rust engine worker which will be used throughout the session
         self.rust_worker: gl_rust.Worker = gl_rust.Worker.new()
         logger.debug(
-            "Successfully initialized GammaLoop rust worker from library %s.", gl_rust.__file__)
+            "Successfully initialized GammaLoop rust worker from library %s.", gl_rust.__file__)  # type: ignore
 
         self.cross_sections: cross_section.CrossSectionList = cross_section.CrossSectionList()
         self.amplitudes: cross_section.AmplitudeList = cross_section.AmplitudeList()
@@ -226,6 +227,11 @@ class GammaLoop(object):
         self.config: GammaLoopConfiguration = GammaLoopConfiguration()
         self.launched_output: Path | None = None
         self.command_history: CommandList = CommandList()
+
+        if gl_is_symbolica_registered is False:
+            raise GammaLoopError("Symbolica is not registered and since gammaLoop uses it both within Python and Rust, multiple instances of Symbolica are necessary.\n"
+                                 + "Please register Symbolica by setting the environment variable 'SYMBOLICA_LICENSE' or by adding it to the gammaloop configuration file.\n"
+                                 + "Also make sure you have a working internet connection.")
 
     def get_model_from_rust_worker(self) -> model.Model:
         return model.Model.from_yaml(self.rust_worker.get_model())
@@ -337,6 +343,8 @@ class GammaLoop(object):
             case 'yaml':
                 with open(args.model, 'r', encoding='utf-8') as file:
                     self.model = model.Model.from_yaml(file.read())
+            case _:
+                raise GammaLoopError(f"Invalid model format: '{args.format}'")
 
         # Assign the UFO model to our rust worker
         self.rust_worker.load_model_from_yaml_str(self.model.to_yaml())
@@ -367,7 +375,9 @@ class GammaLoop(object):
             case 'yaml':
                 with open(args.model_file_path, 'w', encoding='utf-8') as file:
                     file.write(self.model.to_yaml())
-
+            case _:
+                raise GammaLoopError(
+                    "Invalid model format: '%s' for exporting model.", args.format)
         logger.info("Successfully exported model '%s' to '%s'.",
                     self.model.name, args.model_file_path)
 
@@ -410,9 +420,9 @@ class GammaLoop(object):
                     len(qgraph_loaded_module.graphs), args.file_path)
         del sys.path[0]
 
-        graphs = []
+        graphs: list[Graph] = []
         for i_qg, qgraph_object in enumerate(qgraph_loaded_module.graphs):
-            graphs.append(graph.Graph.from_qgraph(
+            graphs.append(Graph.from_qgraph(
                 self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}"))
         logger.info("Successfully loaded %s graphs.",
                     len(qgraph_loaded_module.graphs))
@@ -450,7 +460,7 @@ class GammaLoop(object):
                 f'{file_path.stem}',
                 # Wrap the forward scattering graphs within a dummy supergraph
                 [cross_section.supergraph.SuperGraph(
-                    sg_id=i, graph=graph.Graph.empty_graph('DUMMY'), multiplicity=1.0,
+                    sg_id=i, graph=Graph.empty_graph('DUMMY'), multiplicity=1.0,
                     topology_class=[],
                     cuts=[
                         cross_section.supergraph.SuperGraphCut(
@@ -604,7 +614,7 @@ class GammaLoop(object):
         if str_args == 'help':
             self.inspect_parser.print_help()
             return
-        args = self.inspect_parser.parse_args(split_str_args(str_args))
+        _args = self.inspect_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
@@ -619,7 +629,7 @@ class GammaLoop(object):
         if str_args == 'help':
             self.integrate_parser.print_help()
             return
-        args = self.integrate_parser.parse_args(split_str_args(str_args))
+        _args = self.integrate_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
@@ -634,7 +644,7 @@ class GammaLoop(object):
         if str_args == 'help':
             self.test_ir_limits_parser.print_help()
             return
-        args = self.test_ir_limits_parser.parse_args(split_str_args(str_args))
+        _args = self.test_ir_limits_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
@@ -649,7 +659,7 @@ class GammaLoop(object):
         if str_args == 'help':
             self.test_uv_limits_parser.print_help()
             return
-        args = self.test_uv_limits_parser.parse_args(split_str_args(str_args))
+        _args = self.test_uv_limits_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(

@@ -2,7 +2,7 @@
 name = "gammaloop"
 version = "0.0.1"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
-authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>" ]
+authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -52,5 +52,21 @@ gammaloop = "gammaloop:cli"
 
 [tool.pytest.ini_options]
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "typecheck: marks tests about type checking  (deselect with '-m \"not typecheck\"')",
+]
+
+[tool.mypy]
+disable_error_code = "no-redef"
+check_untyped_defs = true
+exclude = [
+  'python/gammaloop/data/templates/drawing/combine_pages.py',
+  'python/gammaloop/data/models/*',
+]
+
+[tool.pyright]
+include = ["python/gammaloop"]
+exclude = [
+  "python/gammaloop/data/templates/drawing/combine_pages.py",
+  "python/gammaloop/data/models/*",
 ]

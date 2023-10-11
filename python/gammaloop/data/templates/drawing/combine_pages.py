@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+# type: ignore
 
 import sys
 import argparse
+from typing import Iterator, Any
 try:
     import fitz  # PyMuPDF
 except ImportError:
@@ -9,12 +11,12 @@ except ImportError:
     sys.exit(1)
 
 
-def divide_chunks(l, n):
+def divide_chunks(l: list[Any], n: int) -> Iterator[Any]:
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
 
-def merge_pages_into_grid(input_pdf_path, output_pdf_path, pages_to_merge, grid_shape, margins):
+def merge_pages_into_grid(input_pdf_path: str, output_pdf_path: str, pages_to_merge: list[int] | None, grid_shape: tuple[int, int], margins: tuple[float]):
     rows, cols = grid_shape
     pdf = fitz.open(input_pdf_path)
 
@@ -25,7 +27,7 @@ def merge_pages_into_grid(input_pdf_path, output_pdf_path, pages_to_merge, grid_
     pdf_output = fitz.open()
 
     # Get dimensions from the first page
-    page = pdf[pages_to_merge[0]]
+    page: list[Any] = pdf[pages_to_merge[0]]
     rect = page.rect
     new_width = rect.width * cols
     new_height = rect.height * rows

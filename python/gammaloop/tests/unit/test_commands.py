@@ -1,6 +1,7 @@
 import pytest
 from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
 from gammaloop.interface.gammaloop_interface import CommandList
+from pathlib import Path
 
 
 class TestShellCommand:
@@ -33,7 +34,7 @@ class TestLoadModel:
         assert len(gloop.model.orders) == 2
 
     # This test uses a session-wide fixture defined in conftest.py
-    def test_load_sm_from_yaml(self, sm_model_yaml_file):
+    def test_load_sm_from_yaml(self, sm_model_yaml_file: str):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             f"import_model {sm_model_yaml_file} --format yaml"))
@@ -101,7 +102,7 @@ class TestLoadQGraph:
 class TestMasslessScalarTriangleAmplitude:
 
     # This test uses a session-wide fixture defined in conftest.py
-    def test_info(self, scalar_massless_triangle_export: str):
+    def test_info(self, scalar_massless_triangle_export: Path):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             f"launch {scalar_massless_triangle_export}"))
@@ -115,14 +116,14 @@ class TestMasslessScalarTriangleAmplitude:
             assert amplitudes[0].name == 'massless_triangle'
         gloop.run(CommandList.from_string("info"))
 
-    def test_drawing(self, scalar_massless_triangle_export):
+    def test_drawing(self, scalar_massless_triangle_export: str):
         assert run_drawing(pjoin(scalar_massless_triangle_export, 'sources',
                            'amplitudes', 'massless_triangle', 'drawings'))
 
 
 class TestScalarFishnet2x2:
 
-    def test_info(self, scalar_fishnet_2x2_export):
+    def test_info(self, scalar_fishnet_2x2_export: Path):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             f"launch {scalar_fishnet_2x2_export}"))
@@ -136,7 +137,7 @@ class TestScalarFishnet2x2:
             assert amplitudes[0].name == 'fishnet_2x2'
         gloop.run(CommandList.from_string("info"))
 
-    def test_drawing(self, scalar_fishnet_2x2_export):
+    def test_drawing(self, scalar_fishnet_2x2_export: Path):
         assert run_drawing(pjoin(scalar_fishnet_2x2_export, 'sources',
                            'amplitudes', 'fishnet_2x2', 'drawings'))
 
@@ -144,7 +145,7 @@ class TestScalarFishnet2x2:
 @pytest.mark.slow
 class TestScalarFishnet2x3:
 
-    def test_info(self, scalar_fishnet_2x3_export):
+    def test_info(self, scalar_fishnet_2x3_export: Path):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             f"launch {scalar_fishnet_2x3_export}"))
@@ -158,14 +159,14 @@ class TestScalarFishnet2x3:
             assert amplitudes[0].name == 'fishnet_2x3'
         gloop.run(CommandList.from_string("info"))
 
-    def test_drawing(self, scalar_fishnet_2x3_export):
+    def test_drawing(self, scalar_fishnet_2x3_export: str):
         assert run_drawing(pjoin(scalar_fishnet_2x3_export, 'sources',
                            'amplitudes', 'fishnet_2x3', 'drawings'))
 
 
 class TestScalarCube:
 
-    def test_info(self, scalar_cube_export):
+    def test_info(self, scalar_cube_export: Path):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             f"launch {scalar_cube_export}"))
@@ -179,7 +180,7 @@ class TestScalarCube:
             assert amplitudes[0].name == 'cube'
         gloop.run(CommandList.from_string("info"))
 
-    def test_drawing(self, scalar_cube_export):
+    def test_drawing(self, scalar_cube_export: Path):
         assert run_drawing(pjoin(scalar_cube_export, 'sources',
                            'amplitudes', 'cube', 'drawings'))
 
@@ -187,7 +188,7 @@ class TestScalarCube:
 class TestEpEmADdxNLOCrossSection:
 
     # This test uses a session-wide fixture defined in conftest.py
-    def test_info(self, epem_a_ddx_nlo_export):
+    def test_info(self, epem_a_ddx_nlo_export: Path):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             f"launch {epem_a_ddx_nlo_export}"))
@@ -201,6 +202,6 @@ class TestEpEmADdxNLOCrossSection:
             assert len(amplitudes) == 0
         gloop.run(CommandList.from_string("info"))
 
-    def test_drawing(self, epem_a_ddx_nlo_export):
+    def test_drawing(self, epem_a_ddx_nlo_export: Path):
         assert run_drawing(pjoin(epem_a_ddx_nlo_export, 'sources',
                            'cross_sections', 'epem_a_ddx_NLO', 'drawings'))

@@ -7,6 +7,7 @@ use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use lorentz_vector::LorentzVector;
+#[allow(unused_imports)]
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};

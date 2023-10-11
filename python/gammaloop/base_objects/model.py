@@ -4,7 +4,7 @@ import importlib
 import importlib.util
 import os
 import sys
-
+from typing import Any
 from enum import StrEnum
 import yaml
 from symbolica import Expression as SBE  # pylint: disable=import-error
@@ -24,19 +24,19 @@ class ParameterNature(StrEnum):
 
 
 class SerializableVertexRule(object):
-    def __init__(self, name: str, particles: list[str], color_structures: list[str], lorentz_structures: list[str], couplings: list[list[str]]):
+    def __init__(self, name: str, particles: list[str], color_structures: list[str], lorentz_structures: list[str], couplings: list[list[str | None]]):
         self.name: str = name
         self.particles: list[str] = particles
         self.color_structures: list[str] = color_structures
         self.lorentz_structures: list[str] = lorentz_structures
-        self.couplings: list[list[str]] = couplings
+        self.couplings: list[list[str | None]] = couplings
 
     @staticmethod
     def from_vertex_rule(vertex_rule: VertexRule) -> SerializableVertexRule:
         return SerializableVertexRule(
             vertex_rule.name,
             [particle.name for particle in vertex_rule.particles],
-            [utils.expression_to_string(c)
+            [utils.expression_to_string_safe(c)
              for c in vertex_rule.color_structures],
             [lorentz.name for lorentz in vertex_rule.lorentz_structures],
             [
@@ -49,7 +49,7 @@ class SerializableVertexRule(object):
         )
 
     @staticmethod
-    def from_dict(dict_repr) -> SerializableVertexRule:
+    def from_dict(dict_repr: dict[str, Any]) -> SerializableVertexRule:
         return SerializableVertexRule(
             dict_repr['name'],
             dict_repr['particles'],
@@ -60,16 +60,16 @@ class SerializableVertexRule(object):
 
 
 class VertexRule(object):
-    def __init__(self, name: str, particles: list[Particle], color_structures: list[str], lorentz_structures: list[LorentzStructure], couplings: dict[(int, int), Coupling]):
+    def __init__(self, name: str, particles: list[Particle], color_structures: list[str], lorentz_structures: list[LorentzStructure], couplings: dict[tuple[int, int], Coupling]):
         self.name: str = name
         self.particles: list[Particle] = particles
-        self.color_structures: list[SBE] = [utils.parse_python_expression(
+        self.color_structures: list[SBE] = [utils.parse_python_expression_safe(
             color_structure) for color_structure in color_structures]
         self.lorentz_structures: list[LorentzStructure] = lorentz_structures
-        self.couplings: dict[(int, int), Coupling] = couplings
+        self.couplings: dict[tuple[int, int], Coupling] = couplings
 
     @staticmethod
-    def from_ufo_object(model: Model, ufo_object) -> VertexRule:
+    def from_ufo_object(model: Model, ufo_object: Any) -> VertexRule:
         return VertexRule(
             ufo_object.name,
             [model.get_particle(particle.name)
@@ -90,7 +90,7 @@ class VertexRule(object):
             serializable_vertex_rule.color_structures,
             [model.get_lorentz_structure(
                 lorentz_name) for lorentz_name in serializable_vertex_rule.lorentz_structures],
-            dict(((i, j), model.get_coupling(serializable_vertex_rule.couplings[i][j]))
+            dict(((i, j), model.get_coupling(serializable_vertex_rule.couplings[i][j]))  # type: ignore
                  for i in range(len(serializable_vertex_rule.color_structures))
                  for j in range(len(serializable_vertex_rule.lorentz_structures)) if serializable_vertex_rule.couplings[i][j] is not None)
         )
@@ -100,21 +100,21 @@ class VertexRule(object):
 
 
 class SerializableCoupling(object):
-    def __init__(self, name: str, expression: str, orders: list[(str, int)]):
+    def __init__(self, name: str, expression: str, orders: list[tuple[str, int]]):
         self.name: str = name
         self.expression: str = expression
-        self.orders: list[(str, int)] = orders
+        self.orders: list[tuple[str, int]] = orders
 
     @staticmethod
     def from_coupling(coupling: Coupling) -> SerializableCoupling:
         return SerializableCoupling(
             coupling.name,
-            utils.expression_to_string(coupling.expression),
+            utils.expression_to_string_safe(coupling.expression),
             list(coupling.orders.items())
         )
 
     @staticmethod
-    def from_dict(dict_repr) -> SerializableCoupling:
+    def from_dict(dict_repr: dict[str, Any]) -> SerializableCoupling:
         return SerializableCoupling(
             dict_repr['name'],
             dict_repr['expression'],
@@ -125,11 +125,11 @@ class SerializableCoupling(object):
 class Coupling(object):
     def __init__(self, name: str, expression: str, orders: dict[str, int]):
         self.name: str = name
-        self.expression: SBE = utils.parse_python_expression(expression)
+        self.expression: SBE = utils.parse_python_expression_safe(expression)
         self.orders: dict[str, int] = orders
 
     @staticmethod
-    def from_ufo_object(ufo_object) -> Coupling:
+    def from_ufo_object(ufo_object: Any) -> Coupling:
         return Coupling(ufo_object.name, ufo_object.value, ufo_object.order)
 
     @staticmethod
@@ -155,11 +155,11 @@ class SerializableLorentzStructure(object):
         return SerializableLorentzStructure(
             lorentz_structure.name,
             lorentz_structure.spins,
-            utils.expression_to_string(lorentz_structure.structure)
+            utils.expression_to_string_safe(lorentz_structure.structure)
         )
 
     @staticmethod
-    def from_dict(dict_repr) -> SerializableLorentzStructure:
+    def from_dict(dict_repr: dict[str, Any]) -> SerializableLorentzStructure:
         return SerializableLorentzStructure(
             dict_repr['name'],
             dict_repr['spins'],
@@ -171,10 +171,10 @@ class LorentzStructure(object):
     def __init__(self, name: str, spins: list[int], structure: str):
         self.name: str = name
         self.spins: list[int] = spins
-        self.structure: SBE = utils.parse_python_expression(structure)
+        self.structure: SBE = utils.parse_python_expression_safe(structure)
 
     @staticmethod
-    def from_ufo_object(ufo_object) -> LorentzStructure:
+    def from_ufo_object(ufo_object: Any) -> LorentzStructure:
         return LorentzStructure(ufo_object.name, ufo_object.spins, ufo_object.structure)
 
     @staticmethod
@@ -192,7 +192,7 @@ class LorentzStructure(object):
 class SerializableParameter(object):
     def __init__(self, lhablock: str | None, lhacode: int | None, name: str, nature: str, parameter_type: str, value: float | None, expression: str | None):
         self.lhablock: str | None = lhablock
-        self.lhacode: list[int] | None = lhacode
+        self.lhacode: int | None = lhacode
         self.name: str = name
         self.nature: str = nature
         self.parameter_type: str = parameter_type
@@ -209,7 +209,7 @@ class SerializableParameter(object):
         )
 
     @staticmethod
-    def from_dict(dict_repr) -> SerializableParameter:
+    def from_dict(dict_repr: dict[str, Any]) -> SerializableParameter:
         return SerializableParameter(
             dict_repr['lhablock'], dict_repr['lhacode'], dict_repr['name'],
             dict_repr['nature'], dict_repr['parameter_type'], dict_repr['value'],
@@ -218,9 +218,15 @@ class SerializableParameter(object):
 
 
 class Parameter(object):
-    def __init__(self, lhablock: str | None, lhacode: int | None, name: str, nature: str, parameter_type: str, value: float | None, expression: str | None):
+
+    # Useful for assigning typed defaults
+    @staticmethod
+    def default() -> Parameter:
+        return Parameter(lhablock='DUMMY', lhacode=0, name='DUMMY', nature=ParameterNature.INTERNAL, parameter_type=ParameterType.REAL, value=0., expression='0')
+
+    def __init__(self, lhablock: str | None, lhacode: int | None, name: str, nature: ParameterNature, parameter_type: ParameterType, value: float | None, expression: str | None):
         self.lhablock: str | None = lhablock
-        self.lhacode: list[int] | None = lhacode
+        self.lhacode: int | None = lhacode
         self.name: str = name
         self.nature: ParameterNature = nature
         self.parameter_type: ParameterType = parameter_type
@@ -228,7 +234,7 @@ class Parameter(object):
         self.expression: SBE | None = utils.parse_python_expression(expression)
 
     @staticmethod
-    def from_ufo_object(ufo_object) -> Parameter:
+    def from_ufo_object(ufo_object: Any) -> Parameter:
         if ufo_object.nature == 'external':
             param_value = float(ufo_object.value)
             param_expression: str | None = None
@@ -272,7 +278,7 @@ class Parameter(object):
 
 
 class SerializableParticle(object):
-    def __init__(self, pdg_code: int, name: str, antiname: str, spin: int, color: int, mass: str, width: str, texname: str, antitexname: str, charge: int, ghost_number: int, lepton_number: int, y_charge: int):
+    def __init__(self, pdg_code: int, name: str, antiname: str, spin: int, color: int, mass: str, width: str, texname: str, antitexname: str, charge: float, ghost_number: int, lepton_number: int, y_charge: int):
         self.pdg_code: int = pdg_code
         self.name: str = name
         self.antiname: str = antiname
@@ -301,7 +307,7 @@ class SerializableParticle(object):
         )
 
     @classmethod
-    def from_dict(cls, dict_repr) -> SerializableParticle:
+    def from_dict(cls, dict_repr: dict[str, Any]) -> SerializableParticle:
         return SerializableParticle(
             dict_repr['pdg_code'], dict_repr['name'], dict_repr['antiname'], dict_repr['spin'], dict_repr['color'],
             dict_repr['mass'],
@@ -315,7 +321,7 @@ class SerializableParticle(object):
 
 
 class Particle(object):
-    def __init__(self, pdg_code: int, name: str, antiname: str, spin: int, color: int, mass: Parameter, width: Parameter, texname: str, antitexname: str, charge: int, ghost_number: int, lepton_number: int, y_charge: int):
+    def __init__(self, pdg_code: int, name: str, antiname: str, spin: int, color: int, mass: Parameter, width: Parameter, texname: str, antitexname: str, charge: float, ghost_number: int, lepton_number: int, y_charge: int):
         self.pdg_code: int = pdg_code
         self.name: str = name
         self.antiname: str = antiname
@@ -330,6 +336,10 @@ class Particle(object):
         self.lepton_number: int = lepton_number
         self.y_charge: int = y_charge
 
+    @staticmethod
+    def default() -> Particle:
+        return Particle(0, '', '', 1, 1, Parameter.default(), Parameter.default(), '', '', 0, 0, 0, 0)
+
     def is_ghost(self) -> bool:
         return self.ghost_number != 0
 
@@ -337,7 +347,7 @@ class Particle(object):
         return self.mass.value is None or abs(self.mass.value) > 0.
 
     @staticmethod
-    def from_ufo_object(model: Model, ufo_object) -> Particle:
+    def from_ufo_object(model: Model, ufo_object: Any) -> Particle:
 
         return Particle(
             ufo_object.pdg_code, ufo_object.name, ufo_object.antiname, ufo_object.spin, ufo_object.color,
@@ -383,11 +393,11 @@ class Order(object):
         self.name: str = name
 
     @staticmethod
-    def from_ufo_object(ufo_object) -> Order:
+    def from_ufo_object(ufo_object: Any) -> Order:
         return Order(ufo_object.expansion_order, ufo_object.hierarchy, ufo_object.name)
 
     @staticmethod
-    def from_dict(dict_repr) -> Order:
+    def from_dict(dict_repr: Any) -> Order:
         return Order(dict_repr['expansion_order'], dict_repr['hierarchy'], dict_repr['name'])
 
 
@@ -430,7 +440,7 @@ class SerializableModel(object):
         })
 
     @staticmethod
-    def from_yaml(yaml_str) -> SerializableModel:
+    def from_yaml(yaml_str: str) -> SerializableModel:
         yaml_model = yaml.load(yaml_str, Loader=yaml.FullLoader)
         serializable_model = SerializableModel(yaml_model['name'])
         serializable_model.orders = [Order.from_dict(

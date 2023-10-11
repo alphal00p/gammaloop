@@ -1,3 +1,4 @@
+# type: ignore
 from __future__ import absolute_import
 from . import particles
 from . import couplings
@@ -7,11 +8,11 @@ from . import vertices
 from . import coupling_orders
 from . import function_library
 from . import object_library
-#from . import write_param_card
+# from . import write_param_card
 try:
     from . import decays
 except ImportError:
-    pass    
+    pass
 try:
     from . import build_restrict
 except ImportError:
@@ -28,7 +29,7 @@ all_lorentz = lorentz.all_lorentz
 all_parameters = parameters.all_parameters
 all_orders = coupling_orders.all_orders
 all_functions = function_library.all_functions
-#all_decays = decays.all_decays
+# all_decays = decays.all_decays
 
 
 __author__ = "N. Christensen, C. Duhr"

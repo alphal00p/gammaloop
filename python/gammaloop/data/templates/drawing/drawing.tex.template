@@ -1,3 +1,4 @@
+
 \documentclass{article}
 \usepackage{feynmp}
 \usepackage[paperwidth=70cm,paperheight=120cm,centering,textwidth=70cm,textheight=100cm,left=-2cm,top=10cm]{geometry}
@@ -49,7 +50,7 @@
 }
 \hspace{8cm}\setlength{\unitlength}{1pt}\fontsize{\labelSize}{\labelSize*1.2}\selectfont
 \begin{fmfgraph*}(1500,1200)
-
+ %% ignore: latex
 %% incoming external vertices
 %(incoming_vertices)s
 

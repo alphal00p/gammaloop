@@ -1,22 +1,22 @@
 from enum import StrEnum
-
+from typing import TextIO, Any
 from collections import deque, defaultdict
 import logging
 import logging.handlers
 import os
 import sys
-import symbolica as sb  # pylint: disable=import-error
+import symbolica as sb  # pylint: disable=import-error # type: ignore
 import yaml
 
 import gammaloop.misc.common as common
 
 
 class NoAliasDumper(yaml.SafeDumper):
-    def ignore_aliases(self, data):
+    def ignore_aliases(self, data: Any):
         return True
 
 
-def verbose_yaml_dump(data):
+def verbose_yaml_dump(data: Any):
     return yaml.dump(data, Dumper=NoAliasDumper, default_flow_style=False, sort_keys=False)
 
 
@@ -36,6 +36,15 @@ class Colour(StrEnum):
 def parse_python_expression(expr: str | None) -> sb.Expression | None:
     if expr is None:
         return None
+    try:
+        return parse_python_expression_safe(expr)
+    except Exception as exception:  # pylint: disable=broad-except
+        common.logger.critical("%s", exception)
+        return None
+
+
+def parse_python_expression_safe(expr: str) -> sb.Expression:
+
     santized_expr = expr.replace('**', '^')\
         .replace('cmath.sqrt', 'sqrt')\
         .replace('cmath.pi', 'pi')\
@@ -44,14 +53,21 @@ def parse_python_expression(expr: str | None) -> sb.Expression | None:
     try:
         return sb.Expression.parse(santized_expr)
     except Exception as exception:  # pylint: disable=broad-except
-        common.logger.critical(
+        raise common.GammaLoopError(
             "Symbolica failed to parse expression:\n%s\nwith exception:\n%s", santized_expr, exception)
-        return None
 
 
 def expression_to_string(expr: sb.Expression | None) -> str | None:
     if expr is None:
         return None
+    try:
+        return expression_to_string(expr)
+    except Exception as exception:  # pylint: disable=broad-except
+        common.logger.critical("%s", exception)
+        return None
+
+
+def expression_to_string_safe(expr: sb.Expression) -> str:
     try:
         return expr.pretty_str(
             terms_on_new_line=False,
@@ -65,12 +81,11 @@ def expression_to_string(expr: sb.Expression | None) -> str | None:
             num_exp_as_superscript=False,
             latex=False)
     except Exception as exception:  # pylint: disable=broad-except
-        common.logger.critical(
+        raise common.GammaLoopError(
             "Symbolica failed to cast expression to string:\n%s\nwith exception:\n%s", expr, exception)
-        return None
 
 
-def setup_logging() -> logging.StreamHandler:
+def setup_logging() -> logging.StreamHandler[TextIO]:
     console_format = f'[{Colour.GREEN} %(asctime)s {Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
     file_format = '[%(asctime)s] %(name)s %(levelname)s: %(message)s'
 
@@ -95,20 +110,18 @@ def setup_logging() -> logging.StreamHandler:
         logging.getLogger().addHandler(error_file_handler)
 
     logging.getLogger().setLevel(logging.DEBUG)
-
     return console_handler
 
 
-def remove_duplicates(seq):
-    seen = set()
+def remove_duplicates(seq: list[Any]):
+    seen: set[Any] = set()
     seen_add = seen.add
     return [x for x in seq if not (x in seen or seen_add(x))]
 
 
 ### useful graph algorithms ###
-
-def generate_spanning_trees(result: list[tuple[int]], edge_map: list[(int, int)], adjacency_map: dict[int, list[((int, (int, int)), int)]], current_tree: set[int],
-                            accumulated_edge_sequence: list[int], excluded_edges: list[int], seen_edge_sequences: set[tuple[int]] | None, target_number_of_st_to_find=None, follow=False) -> None:
+def generate_spanning_trees(result: list[tuple[int, ...]], edge_map: list[tuple[int, int]], adjacency_map: dict[int, list[tuple[tuple[int, tuple[int, int]], int]]], current_tree: set[int],
+                            accumulated_edge_sequence: list[int], excluded_edges: list[int], seen_edge_sequences: set[tuple[int, ...]] | None, target_number_of_st_to_find: int | None = None, follow: bool = False) -> None:
     """Compute all spanning trees of a graph component. Disconnected graphs
     are supported: only the component connected to the vertex in `tree` is considered.
     """
@@ -158,16 +171,16 @@ def generate_spanning_trees(result: list[tuple[int]], edge_map: list[(int, int)]
             excluded_edges = excluded_edges[:-e_i]
 
 
-def find_longest_cycle(edge_map: list[(int, int)]) -> list[int]:
-    adjacency_map = defaultdict(list)
+def find_longest_cycle(edge_map: list[tuple[int, int]]) -> list[int]:
+    adjacency_map: dict[int, list[tuple[int, int]]] = defaultdict(list)
     for i, (u, v) in enumerate(edge_map):
         adjacency_map[u].append((v, i))
         # Add the reverse connection as it is an undirected graph
         adjacency_map[v].append((u, i))
 
-    longest_cycle = []
+    longest_cycle: list[int] = []
 
-    def dfs(u, visited_edges, stack):
+    def dfs(u: int, visited_edges: set[int], stack: list[int]):
         nonlocal longest_cycle
         stack.append(u)
 
@@ -193,16 +206,17 @@ def find_longest_cycle(edge_map: list[(int, int)]) -> list[int]:
         dfs(vertex, set(), [])
 
     # Convert the cycle of vertices to a cycle of edges
-    edge_cycle = []
+    edge_cycle: list[int] = []
     for i in range(len(longest_cycle)):
         u, v = longest_cycle[i], longest_cycle[(i + 1) % len(longest_cycle)]
-        edge_id = next(edge for edge in adjacency_map[u] if edge[0] == v)[1]
+        edge_id: int = next(
+            edge for edge in adjacency_map[u] if edge[0] == v)[1]
         edge_cycle.append(edge_id)
 
     return edge_cycle
 
 
-def edges_cycle_to_vertex_cycle(edges: list[(int, int)]):
+def edges_cycle_to_vertex_cycle(edges: list[tuple[int, int]]) -> list[int]:
     # Check if the list is empty
     if not edges:
         return []
@@ -220,13 +234,13 @@ def edges_cycle_to_vertex_cycle(edges: list[(int, int)]):
     ordered_nodes = [edges[0][0]]
 
     # Initialize a set to keep track of visited edges
-    visited_edges = set()
+    visited_edges: set[tuple[int, int]] = set()
 
     # Start from the source node of the first edge
     current_node = edges[0][0]
 
     while True:
-        found = False
+        next_node: int | None = None  # Define a default value for next_node
         for src, dest in edges:
             # Create edge tuple for checking visited status
             edge = (min(src, dest), max(src, dest))
@@ -236,12 +250,10 @@ def edges_cycle_to_vertex_cycle(edges: list[(int, int)]):
 
             if src == current_node:
                 next_node = dest
-                found = True
             elif dest == current_node:
                 next_node = src
-                found = True
 
-            if found:
+            if next_node is not None:
                 # Mark edge as visited
                 visited_edges.add(edge)
 
@@ -255,33 +267,35 @@ def edges_cycle_to_vertex_cycle(edges: list[(int, int)]):
                 # Move to the next node for the next iteration
                 current_node = next_node
                 break
-
-        if not found:
+        else:
+            # Handle the case where next_node is not defined
             raise common.GammaLoopError(f"Invalid cycle {str(edges)}")
 
 
-def create_adjacency_list(edge_map: list[(int, (int, int))]) -> defaultdict:
-    adj_list = defaultdict(set)
+def create_adjacency_list(edge_map: list[tuple[int, tuple[int, int]]]) -> dict[int, set[int]]:
+    adj_list: dict[int, set[int]] = defaultdict(set)
     for _, (u, v) in edge_map:  # pylint: disable=invalid-name
         adj_list[u].add(v)
         adj_list[v].add(u)
     return adj_list
 
 
-def find_shortest_path(edge_map: list[(int, int)], start: int, targets: list[int]) -> list[int]:
-    edge_map = list(enumerate(edge_map))
+def find_shortest_path(edge_map_list: list[tuple[int, int]], start: int, targets: list[int]) -> list[int]:
+    edge_map = list(enumerate(edge_map_list))
     graph = create_adjacency_list(edge_map)
-    visited = set()
+    visited: set[int] = set()
     # Queue for BFS initialized with the start node and parent
-    queue = deque([(start, None)])
-    parent = {start: None}  # Dictionary to hold the parent of each node
+    queue: deque[tuple[int, None | int]] = deque([(start, None)])
+    # Dictionary to hold the parent of each node
+    parent: dict[int, None | int] = {start: None}
 
     while queue:
+        current_node: int | None = None
         current_node, _ = queue.popleft()
 
         # If this node is the target, reconstruct and return the path
         if current_node in targets:
-            path = []
+            path: list[int] = []
             while current_node is not None:
                 path.insert(0, current_node)
                 current_node = parent[current_node]
@@ -295,19 +309,22 @@ def find_shortest_path(edge_map: list[(int, int)], start: int, targets: list[int
                 queue.append((neighbor, current_node))
                 visited.add(neighbor)
 
+    raise common.GammaLoopError(
+        "Cannot find path between start vertex and target ones.")
 
-def find_all_paths(edge_map: list[(int, int)], start: int, dest: int, excluding: set[int] | None = None) -> list[list[(int, bool)]]:
+
+def find_all_paths(edge_map: list[tuple[int, int]], start: int, dest: int, excluding: set[int] | None = None) -> list[list[tuple[int, bool]]]:
     if excluding is None:
         excluding = set()
     # find all paths from source to dest
     loop = start == dest
     start_check = 1 if loop else 0
-    paths = [[(start, True)]]  # store direction
+    paths: list[list[tuple[int, bool]]] = [[(start, True)]]  # store direction
     if not loop:
         paths.append([(start, False)])
-    res = []
+    res: list[list[tuple[int, bool]]] = []
     while True:
-        newpaths = []
+        newpaths: list[list[tuple[int, bool]]] = []
         for p in paths:  # pylint: disable=invalid-name
             if len(p) > 1 and p[-1][0] == dest:
                 res.append(p)
@@ -332,10 +349,10 @@ def find_all_paths(edge_map: list[(int, int)], start: int, dest: int, excluding:
     return res
 
 
-def generate_momentum_flow(edge_map: list[(int, int)], loop_momenta: list[int], sink_edge: int | None, ext: list[int]) -> list[(list[int], list[int])]:
+def generate_momentum_flow(edge_map: list[tuple[int, int]], loop_momenta: list[int], sink_edge: int, ext: list[int]) -> list[tuple[list[int], list[int]]]:
     """ Specify sing_edge to None for a vacuum graph"""
 
-    flows = []
+    flows: list[list[tuple[int, bool]]] = []
     for loop_momentum in loop_momenta:
         paths = find_all_paths(edge_map,
                                loop_momentum, loop_momentum, excluding={lm for lm in loop_momenta if lm != loop_momentum})
@@ -343,7 +360,7 @@ def generate_momentum_flow(edge_map: list[(int, int)], loop_momenta: list[int], 
         flows.append(paths[0][:-1])
 
     # now route the external loop_momenta to the sink
-    ext_flows = []
+    ext_flows: list[tuple[int, list[tuple[int, bool]]]] = []
     for i, e in enumerate(ext):  # pylint: disable=invalid-name
         if e == sink_edge:
             continue
@@ -353,7 +370,7 @@ def generate_momentum_flow(edge_map: list[(int, int)], loop_momenta: list[int], 
         ext_flows.append((i, paths[0]))
 
     # propagator momenta
-    signatures: list[(list[int], list[int])] = [
+    signatures: list[tuple[list[int], list[int]]] = [
         ([0 for _ in range(len(loop_momenta))], [0 for _ in range(len(ext))])
         for _ in range(len(edge_map))]
     for i, _ in enumerate(edge_map):

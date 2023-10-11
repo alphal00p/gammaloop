@@ -7,7 +7,7 @@ from enum import StrEnum
 import yaml
 from typing import Any
 
-from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger  # pylint: disable=unused-import # type: ignore
+from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger, EMPTY_LIST  # pylint: disable=unused-import # type: ignore
 import gammaloop.misc.utils as utils
 from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter  # type: ignore
 
@@ -28,6 +28,8 @@ class VertexInfo(object):
             return InteractonVertexInfo.from_serializable_dict(model, serializable_dict)
         elif serializable_dict['type'] == 'external_vertex_info':
             return ExternalVertexInfo.from_serializable_dict(model, serializable_dict)
+        elif serializable_dict['type'] == 'unspecified':
+            return VertexInfo()
         else:
             raise GammaLoopError(
                 f"Unknown vertex info type: {serializable_dict['type']}")
@@ -37,6 +39,14 @@ class VertexInfo(object):
 
     def is_external(self) -> bool:
         return False
+
+    def get_type(self) -> str:
+        return 'unspecified'
+
+    def to_serializable_dict(self) -> dict[str, Any]:
+        return {
+            'type': self.get_type()
+        }
 
 
 class InteractonVertexInfo(VertexInfo):
@@ -72,7 +82,7 @@ class ExternalVertexInfo(VertexInfo):
     def get_type(self) -> str:
         return 'external_vertex_info'
 
-    def to_serializable_dict(self) -> dict:
+    def to_serializable_dict(self) -> dict[str, Any]:
         return {
             'type': self.get_type(),
             'particle': self.particle.name,
@@ -93,8 +103,18 @@ class ExternalVertexInfo(VertexInfo):
 class Vertex(object):
     def __init__(self, name: str, vertex_info: VertexInfo | None = None, edges: list[Edge] | None = None):
         self.name: str = name
-        self.vertex_info: VertexInfo | None = vertex_info
-        self.edges: list[Edge] | None = edges
+        if vertex_info is None:
+            self.vertex_info: VertexInfo = VertexInfo()
+        else:
+            self.vertex_info: VertexInfo = vertex_info
+        if edges is None:
+            self.edges: list[Edge] = []
+        else:
+            self.edges: list[Edge] = edges
+
+    @staticmethod
+    def default() -> Vertex:
+        return Vertex('dummy_vertex')
 
     def set_vertex_rule_from_model(self, model: Model) -> None:
         assert (self.edges is not None)
@@ -104,7 +124,7 @@ class Vertex(object):
                 EdgeType.OUTGOING if self.edges[0].edge_type == EdgeType.OUTGOING else EdgeType.INCOMING, self.edges[0].particle)
             return
 
-        if self.vertex_info is None:
+        if self.vertex_info.get_type() == 'unspecified':
             vertex_particles = [e.particle if e.vertices[1] is self else e.particle.get_anti_particle(
                 model) for e in self.edges]
             orig_vertex_particles = list(vertex_particles)
@@ -124,35 +144,35 @@ class Vertex(object):
         self.sort_edges_according_to_vertex_info(model)
 
     def sort_edges_according_to_vertex_info(self, model: Model) -> None:
-        vertex_particles = self.vertex_info.get_particles()
+        vertex_particles: list[Particle] = self.vertex_info.get_particles()
         if len(vertex_particles) <= 1:
             return
-        sorted_edges = []
-        vertex_particles = [(e.particle, e) if e.vertices[1] is self else (
+        sorted_edges: list[Edge] = []
+        vertex_particles_per_edge = [(e.particle, e) if e.vertices[1] is self else (
             e.particle.get_anti_particle(model), e) for e in self.edges]
-        orig_vertex_particles = [v[0] for v in vertex_particles]
+        orig_vertex_particles = [v[0] for v in vertex_particles_per_edge]
         for part in orig_vertex_particles:
-            for i, (e_p, _edge) in enumerate(vertex_particles):
+            for i, (e_p, _edge) in enumerate(vertex_particles_per_edge):
                 if e_p == part:
-                    sorted_edges.append(vertex_particles.pop(i)[1])
+                    sorted_edges.append(vertex_particles_per_edge.pop(i)[1])
                     break
             else:
                 raise GammaLoopError(
-                    f"Particle {part[0].name} not found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
-        if len(vertex_particles) > 0:
+                    f"Particle {part.name} not found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
+        if len(vertex_particles_per_edge) > 0:
             raise GammaLoopError(
                 f"Not all particles were found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
         self.edges = sorted_edges
 
-    def to_serializable_dict(self) -> dict:
+    def to_serializable_dict(self) -> dict[str, Any]:
         return {
             'name': self.name,
             'vertex_info': self.vertex_info.to_serializable_dict(),
             'edges': [e.name for e in self.edges]
         }
 
-    def draw(self, graph, _model: Model, constant_definitions: dict[str, str], show_vertex_labels=False,
-             use_vertex_names=False, vertex_size=2.5, vertex_shape='circle', **_opts) -> list[str]:
+    def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_vertex_labels: bool = False,
+             use_vertex_names: bool = False, vertex_size: float = 2.5, vertex_shape: str = 'circle', **_opts: dict[str, Any]) -> list[str]:
         # Possible shape choices are 'circle', 'square', 'triangle', 'diamond', 'pentagon', 'hexagon', 'triagram',
         # 'tetragram', 'pentagram', 'hexagram', 'triacross', 'cross', 'pentacross' and 'hexacross'.
 
@@ -186,19 +206,27 @@ class Vertex(object):
 
 
 class Edge(object):
-    def __init__(self, name: str, edge_type: EdgeType, particle: Particle, vertices: (Vertex, Vertex) | None = None):
+    def __init__(self, name: str, edge_type: EdgeType, particle: Particle, vertices: tuple[Vertex, Vertex] | None = None):
         self.name: str = name
         self.edge_type: EdgeType = edge_type
         self.particle: Particle = particle
-        self.vertices: (Vertex, Vertex) | None = vertices
+        if vertices is None:
+            self.vertices: tuple[Vertex, Vertex] = (
+                Vertex.default(), Vertex.default())
+        else:
+            self.vertices: tuple[Vertex, Vertex] = vertices
 
-    def get_vertex_positions(self, graph: Graph) -> (int, int):
+    @staticmethod
+    def default() -> Edge:
+        return Edge('dummy_edge', EdgeType.VIRTUAL, Particle.default())
+
+    def get_vertex_positions(self, graph: Graph) -> tuple[int, int]:
         return (
             graph.get_vertex_position(self.vertices[0].name),
             graph.get_vertex_position(self.vertices[1].name),
         )
 
-    def to_serializable_dict(self) -> dict:
+    def to_serializable_dict(self) -> dict[str, Any]:
         return {
             'name': self.name,
             'edge_type': self.edge_type.value,
@@ -206,9 +234,9 @@ class Edge(object):
             'vertices': [self.vertices[0].name, self.vertices[1].name]
         }
 
-    def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_edge_labels=True, show_particle_names=True, show_edge_names=True, show_edge_composite_momenta=False,
-             label_size='15pt', label_distance=13.0, show_edge_momenta=True, draw_arrow_for_all_edges=True, draw_lmb=True, arc_max_distance=1., external_legs_tension=3., default_tension=1.0, line_width=1.0,
-             arrow_size_for_single_line=2.5, arrow_size_for_double_line=2.5, line_color='black', label_color='black', lmb_color='red', non_lmb_color='blue', **_opts) -> list[str]:
+    def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_edge_labels: bool = True, show_particle_names: bool = True, show_edge_names: bool = True, show_edge_composite_momenta: bool = False,
+             label_size: str = '15pt', label_distance: float = 13.0, show_edge_momenta: bool = True, draw_arrow_for_all_edges: bool = True, draw_lmb: bool = True, arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
+             arrow_size_for_single_line: float = 2.5, arrow_size_for_double_line: float = 2.5, line_color: str = 'black', label_color: str = 'black', lmb_color: str = 'red', non_lmb_color: str = 'blue', **_opts: Any) -> list[str]:
         constant_definitions['arcMaxDistance'] = f'{arc_max_distance:.2f}'
         constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'
         constant_definitions['defaultTension'] = f'{default_tension:.2f}'
@@ -246,6 +274,8 @@ class Edge(object):
                 case 4:
                     line_type = 'zigzag'
                 case 5:
+                    line_type = 'dbl_wiggly'
+                case _:
                     line_type = 'dbl_wiggly'
 
         if self.particle.is_massive() and abs(self.particle.spin) != 3:
@@ -318,6 +348,8 @@ class Edge(object):
                     line_options[base_side] = str(0.3)
                 case 1:
                     line_options[other_side] = str(0.3)
+                case _:
+                    raise GammaLoopError("Unreachable code.")
         elif len(multi_edges) == 3:
             match self_position:
                 case 0:
@@ -326,6 +358,8 @@ class Edge(object):
                     pass
                 case 2:
                     line_options[other_side] = str(0.4)
+                case _:
+                    raise GammaLoopError("Unreachable code.")
         elif len(multi_edges) > 3:
             if len(multi_edges) % 2 == 1:
                 max_range = float(len(multi_edges)//2)
@@ -366,7 +400,7 @@ class Edge(object):
                 replace_dict['line_type'] = 'my_double_phantom_arrow'
             else:
                 replace_dict['line_type'] = 'my_phantom_arrow'
-            line_options['tension'] = 0
+            line_options['tension'] = '0'
             line_options['fore'] = r'\nonLmbColor'
             replace_dict['options'] = ','.join(
                 f'{k}={v}' for k, v in line_options.items())
@@ -383,7 +417,7 @@ class Edge(object):
                 replace_dict['line_type'] = 'my_double_phantom_arrow'
             else:
                 replace_dict['line_type'] = 'my_phantom_arrow'
-            line_options['tension'] = 0
+            line_options['tension'] = '0'
             line_options['fore'] = r'\lmbColor'
             replace_dict['options'] = ','.join(
                 f'{k}={v}' for k, v in line_options.items())
@@ -427,11 +461,14 @@ class Graph(object):
         # For forward scattering graphs, keep track of the bipartite map, i.e. which in and out externals will carry identical momenta.
         self.external_connections: list[tuple[
             Vertex | None, Vertex | None]] = external_connections
-        self.loop_momentum_basis: list[Edge] | None = loop_momentum_basis
+        if loop_momentum_basis is None:
+            self.loop_momentum_basis: list[Edge] = []
+        else:
+            self.loop_momentum_basis: list[Edge] = loop_momentum_basis
         self.name_to_position: dict[str, dict[str, int]] = {}
 
-    def get_sorted_incoming_edges(self):
-        sorted_incoming_edges = []
+    def get_sorted_incoming_edges(self) -> list[Edge]:
+        sorted_incoming_edges: list[Edge] = []
         for (u, _v) in self.external_connections:  # pylint: disable=invalid-name
             if u is None:
                 continue
@@ -441,8 +478,8 @@ class Graph(object):
                     break
         return sorted_incoming_edges
 
-    def get_sorted_outgoing_edges(self):
-        sorted_outgoing_edges = []
+    def get_sorted_outgoing_edges(self) -> list[Edge]:
+        sorted_outgoing_edges: list[Edge] = []
         for (_u, v) in self.external_connections:  # pylint: disable=invalid-name
             if v is None:
                 continue
@@ -494,7 +531,7 @@ class Graph(object):
         for i_v, vertex in enumerate(self.vertices):
             self.name_to_position['vertices'][vertex.name] = i_v
 
-    def to_serializable_dict(self) -> dict:
+    def to_serializable_dict(self) -> dict[str, Any]:
         return {
             'name': self.name,
             'vertices': [v.to_serializable_dict() for v in self.vertices],
@@ -507,17 +544,17 @@ class Graph(object):
         }
 
     @ staticmethod
-    def from_serializable_dict(model: Model, serializable_dict: dict) -> Graph:
+    def from_serializable_dict(model: Model, serializable_dict: dict[str, Any]) -> Graph:
 
-        graph_vertices = []
-        vertex_name_to_vertex_map = {}
+        graph_vertices: list[Vertex] = []
+        vertex_name_to_vertex_map: dict[str, Vertex] = {}
         for v_graph in serializable_dict['vertices']:
             v_name = v_graph['name']
             vert = Vertex(v_name)
             vertex_name_to_vertex_map[v_name] = vert
             graph_vertices.append(vert)
 
-        graph_edges = []
+        graph_edges: list[Edge] = []
         edge_name_to_edge_map = {}
         for e_qgraph in serializable_dict['edges']:
             e_name = e_qgraph['name']
@@ -538,11 +575,10 @@ class Graph(object):
         external_connections = [(vertex_name_to_vertex_map[e[0]] if e[0] is not None else None,
                                  vertex_name_to_vertex_map[e[1]] if e[1] is not None else None) for e in serializable_dict['external_connections']]
 
-        loop_momentum_basis = [edge_name_to_edge_map[e_name]
-                               for e_name in serializable_dict['loop_momentum_basis']]
+        loop_momentum_basis: list[Edge] = [edge_name_to_edge_map[e_name]
+                                           for e_name in serializable_dict['loop_momentum_basis']]
         graph = Graph(serializable_dict['name'], graph_vertices, graph_edges,
-                      external_connections, serializable_dict['overall_factor'],
-                      loop_momentum_basis, serializable_dict['edge_signatures'])
+                      external_connections, loop_momentum_basis, serializable_dict['overall_factor'], serializable_dict['edge_signatures'])
         graph.synchronize_name_map()
 
         return graph
@@ -556,18 +592,18 @@ class Graph(object):
         return utils.verbose_yaml_dump(self.to_serializable_dict())
 
     @ staticmethod
-    def from_qgraph(model: Model, qgraph_object, name: str = 'default') -> Graph:
+    def from_qgraph(model: Model, qgraph_object: dict[str, Any], name: str = 'default') -> Graph:
         """ Imports graph form a stylicized qgraph python output file. Will be deprecated when using in-house gammaloop graph generation. """
 
-        graph_vertices = []
-        vertex_qgraph_index_to_vertex_map = {}
+        graph_vertices: list[Vertex] = []
+        vertex_qgraph_index_to_vertex_map: dict[str, Vertex] = {}
         qgraph_vertices = list(qgraph_object['nodes'].items())
         for i_vertex, (v_qgraph_index, v_qgraph) in enumerate(qgraph_vertices):
             vert = Vertex(f"v{i_vertex+1}")
             vertex_qgraph_index_to_vertex_map[v_qgraph_index] = vert
             graph_vertices.append(vert)
 
-        graph_edges = []
+        graph_edges: list[Edge] = []
         edge_qgraph_index_to_edge_map = {}
         qgraph_edges = list(qgraph_object['edges'].items())
         for e_qgraph_index, e_qgraph in qgraph_edges:
@@ -583,7 +619,8 @@ class Graph(object):
                           for e_qgraph_index in v_qgraph['edge_ids']]
             vert.set_vertex_rule_from_model(model)
 
-        external_connections = {}
+        external_connections: dict[str,
+                                   list[Vertex | None]] = {}
         for node_id, node in qgraph_vertices:
             # Hack necessary because of inconsistent qgraph output style :'(
             if isinstance(node['momenta'], str):
@@ -611,11 +648,11 @@ class Graph(object):
                     external_connections[node['momenta'][0]] = [
                         None, vertex_qgraph_index_to_vertex_map[node_id]]
 
-        external_connections = [v for k, v in sorted(
+        external_connections_for_graph: list[tuple[Vertex | None, Vertex | None]] = [(v[0], v[1]) for _, v in sorted(
             list(external_connections.items()), key=lambda el: el[0])]
 
         graph = Graph(name, graph_vertices, graph_edges,
-                      external_connections, float(qgraph_object['overall_factor']))
+                      external_connections_for_graph, None, float(qgraph_object['overall_factor']), None)
         graph.synchronize_name_map()
 
         all_lmbs = graph.generate_loop_momentum_bases(
@@ -632,8 +669,8 @@ class Graph(object):
 
         return graph
 
-    def get_edge_map(self) -> list[(int, int)]:
-        result = []
+    def get_edge_map(self) -> list[tuple[int, int]]:
+        result: list[tuple[int, int]] = []
         for edge in self.edges:
             result.append(
                 (
@@ -643,8 +680,8 @@ class Graph(object):
             )
         return result
 
-    def get_adjacency_map(self, edge_map: list[(int, int)]) -> dict[int, list[((int, (int, int)), int)]]:
-        result = {}
+    def get_adjacency_map(self, edge_map: list[tuple[int, int]]) -> dict[int, list[tuple[tuple[int, tuple[int, int]], int]]]:
+        result: dict[int, list[tuple[tuple[int, tuple[int, int]], int]]] = {}
         for i_e, edge in enumerate(edge_map):
             result.setdefault(edge[0], []).append(((i_e, edge), edge[1]))
             result.setdefault(edge[1], []).append(((i_e, edge), edge[0]))
@@ -656,16 +693,15 @@ class Graph(object):
         # logger.debug("Generating loop momentum bases for graph %s", self.name)
 
         # This function need to be called for each disconnected subgraph of self.
-        vertices_not_encountered: list[list[tuple[int]]] = list(
-            range(len(self.vertices)))
-        all_spanning_tree_lists_from_disconnected_components = []
+        vertices_not_encountered: list[int] = list(range(len(self.vertices)))
+        all_spanning_tree_lists_from_disconnected_components: list[list[tuple[int, ...]]] = [
+        ]
         while len(vertices_not_encountered) > 0:
             seed_vertex_position = vertices_not_encountered[0]
-            seen_edge_sequences: set[int] = set()
             accumulated_edge_sequence: list[int] = []
             excluded_edges: list[int] = []
-            seen_edge_sequences = None
-            spanning_trees_for_this_subgraph: list[tuple[int]] = []
+            seen_edge_sequences: set[tuple[int, ...]] | None = None
+            spanning_trees_for_this_subgraph: list[tuple[int, ...]] = []
             edge_map = self.get_edge_map()
             adjacency_map = self.get_adjacency_map(edge_map)
             # Use the code below to profile this computationally intensive function
@@ -690,7 +726,7 @@ class Graph(object):
                 spanning_trees_for_this_subgraph)
 
         # Now build the cartesian product of all lists of spanning tree components from disconnected subgraphs
-        spanning_trees = [tuple(sum((list(st) for st in st_combination), [])) for st_combination in
+        spanning_trees = [tuple(sum((list(st) for st in st_combination), EMPTY_LIST)) for st_combination in
                           itertools.product(*all_spanning_tree_lists_from_disconnected_components)]
 
         # logger.debug("At total of %d loop momentum bases were found for graph %s", len(
@@ -698,12 +734,13 @@ class Graph(object):
 
         return [[e for e_i, e in enumerate(self.edges) if e_i not in spanning_tree] for spanning_tree in spanning_trees]
 
-    def generate_momentum_flow(self) -> list[(list[int], list[int])]:
-        if self.loop_momentum_basis is None:
+    def generate_momentum_flow(self) -> list[tuple[list[int], list[int]]]:
+        if len(self.loop_momentum_basis) == 0:
             raise GammaLoopError(
                 "Specify a loop momentum basis before generating a momentum flow.")
         if len(self.external_connections) == 0:
-            sink_edge = None
+            # In that case simply route to the first edge as sink
+            sink_edge = 0
         else:
             if self.external_connections[-1][1] is not None:
                 sink_edge = self.get_edge_position(
@@ -711,7 +748,7 @@ class Graph(object):
             else:
                 sink_edge = self.get_edge_position(
                     self.get_sorted_incoming_edges()[-1].name)
-        external_edges = []
+        external_edges: list[int] = []
         incoming_edges = iter(self.get_sorted_incoming_edges())
         outgoing_edges = iter(self.get_sorted_outgoing_edges())
         for (in_v, out_v) in self.external_connections:
@@ -725,7 +762,7 @@ class Graph(object):
                                                   [self.get_edge_position(lmb_e.name) for lmb_e in self.loop_momentum_basis], sink_edge, external_edges)
 
         # Merge identical external momenta
-        merged_signatures = []
+        merged_signatures: list[tuple[list[int], list[int]]] = []
         for sig in signatures:
             external_sig = iter(sig[1])
             merged_external_sig = [0 for _ in range(
@@ -739,7 +776,7 @@ class Graph(object):
 
         return merged_signatures
 
-    def draw(self, model: Model, file_path_without_extension=str | None, caption=None, diagram_id=None, **drawing_options) -> Path:
+    def draw(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, **drawing_options: Any) -> Path:
         match drawing_options['mode']:
             case 'feynmp':
                 return self.draw_feynmp(model, file_path_without_extension, caption, diagram_id, **drawing_options['feynmp'])
@@ -747,13 +784,13 @@ class Graph(object):
                 raise GammaLoopError(
                     "Feynman drawing mode '%d' is not supported. Currently only 'feynmp' is supported." % drawing_options['mode'])
 
-    def draw_feynmp(self, model: Model, file_path_without_extension=str | None, caption=None, diagram_id=None, caption_size='20pt', **drawing_options) -> Path:
+    def draw_feynmp(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, caption_size: str = '20pt', **drawing_options: Any) -> Path:
 
-        with open(pjoin(DATA_PATH, 'templates', 'drawing', 'drawing.tex'), 'r', encoding='utf-8') as file:
+        with open(pjoin(DATA_PATH, 'templates', 'drawing', 'drawing.tex.template'), 'r', encoding='utf-8') as file:
             template = file.read()
         source_file_path = Path(file_path_without_extension+'.tex')
 
-        constant_definitions = {}
+        constant_definitions: dict[str, str] = {}
 
         with open(source_file_path, 'w', encoding='utf-8') as file:
             replace_dict = {}
@@ -780,14 +817,14 @@ class Graph(object):
             longest_cycle_edges = utils.find_longest_cycle(edge_map)
             longest_cycle = utils.edges_cycle_to_vertex_cycle([
                 self.edges[i_e].get_vertex_positions(self) for i_e in longest_cycle_edges])
-            incoming_edges_paths: list[(Edge, tuple[int])] = []
+            incoming_edges_paths: list[tuple[Edge, list[int]]] = []
             for edge in self.get_sorted_incoming_edges():
                 incoming_edges_paths.append((edge, utils.find_shortest_path(
                     edge_map, self.get_vertex_position(
                         edge.vertices[0].name),
                     longest_cycle)))
 
-            outgoing_edges_paths: list[(Edge, tuple[int])] = []
+            outgoing_edges_paths: list[tuple[Edge, list[int]]] = []
             for edge in self.get_sorted_outgoing_edges():
                 outgoing_edges_paths.append((edge, utils.find_shortest_path(
                     edge_map, self.get_vertex_position(
@@ -795,10 +832,10 @@ class Graph(object):
                     longest_cycle)))
 
             replace_dict['incoming_edge_definitions'] = '\n'.join(
-                sum((edge.draw(self, model, constant_definitions, **drawing_options) for edge, _ in incoming_edges_paths), []))
+                sum((edge.draw(self, model, constant_definitions, **drawing_options) for edge, _ in incoming_edges_paths), EMPTY_LIST))
             replace_dict['outgoing_edge_definitions'] = '\n'.join(
-                sum((edge.draw(self, model, constant_definitions, **drawing_options) for edge, _ in outgoing_edges_paths), []))
-            internal_edges_drawing = []
+                sum((edge.draw(self, model, constant_definitions, **drawing_options) for edge, _ in outgoing_edges_paths), EMPTY_LIST))
+            internal_edges_drawing: list[str] = []
             for edge in self.edges:
                 if edge.edge_type != EdgeType.VIRTUAL:
                     continue
@@ -812,7 +849,7 @@ class Graph(object):
                 self.draw_anchor_tension(incoming_edges_paths, outgoing_edges_paths, constant_definitions, longest_cycle, **drawing_options))
 
             replace_dict['vertex_definitions'] = '\n'.join(
-                sum((vertex.draw(self, model, constant_definitions, **drawing_options) for vertex in self.vertices), []))
+                sum((vertex.draw(self, model, constant_definitions, **drawing_options) for vertex in self.vertices), EMPTY_LIST))
 
             constant_definitions['captionSize'] = caption_size
             if caption:
@@ -833,23 +870,24 @@ class Graph(object):
 
         return source_file_path
 
-    def draw_anchor_tension(self, incoming_edges_paths: list[Edge, tuple[int]], outgoing_edges_paths: list[Edge, tuple[int]], constant_definitions: dict[str, str],
-                            longest_cycle: list[int], anchor_tension: float = 2.0, anchor_lines='phantom',
-                            show_anchor_vertices=False, anchor_color='red', **_opts) -> list[str]:
+    def draw_anchor_tension(self, incoming_edges_paths: list[tuple[Edge, list[int]]], outgoing_edges_paths: list[tuple[Edge, list[int]]], constant_definitions: dict[str, str],
+                            longest_cycle: list[int] | None, anchor_tension: float = 2.0, anchor_lines: str = 'phantom',
+                            show_anchor_vertices: bool = False, anchor_color: str = 'red', **_opts: Any) -> list[str]:
 
         constant_definitions['anchorTension'] = f'{anchor_tension:.2f}'
         constant_definitions['anchorLine'] = anchor_lines
         constant_definitions['anchorColor'] = anchor_color
 
-        drawing = []
+        drawing: list[str] = []
 
         # Collect how many attachment point there is from the left and from the right
         left_attachment_points = utils.remove_duplicates(
-            [p[-1] for e_in, p in incoming_edges_paths])
+            [p[-1] for _e_in, p in incoming_edges_paths])
         # Remove duplicates without changing order
         right_attachment_points = utils.remove_duplicates(
-            [p[-1] for e_out, p in outgoing_edges_paths])
+            [p[-1] for _e_out, p in outgoing_edges_paths])
 
+        external_route: list[int] | None = None
         if len(left_attachment_points) == 1 and len(right_attachment_points) == 1:
             external_route = [left_attachment_points[0],
                               right_attachment_points[0]]
@@ -905,6 +943,7 @@ class Graph(object):
 
             # print('top_vertices', top_vertices)
             # print('bot_vertices', bot_vertices)
+            connections: dict[Vertex, str] = {}
             if len(top_vertices) > 0:
                 for i_v, t_v in enumerate(top_vertices):
                     connections[self.vertices[t_v]] = f't{i_v+1}'

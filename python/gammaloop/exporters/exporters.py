@@ -4,15 +4,16 @@ import os
 from pathlib import Path
 import shutil
 import yaml
+from typing import Any
 
-import gammaloop
-import gammaloop.cross_section as cross_section
+from gammaloop.cross_section.cross_section import AmplitudeList, CrossSectionList
 from gammaloop.misc.common import DATA_PATH, pjoin, GammaLoopError
 import gammaloop.misc.utils as utils
+import gammaloop.interface.gammaloop_interface as gammaloop_interface
 
 
-class OutputMetaData(dict):
-    def __init__(self, *args, **opts):
+class OutputMetaData(dict[str, Any]):
+    def __init__(self, *args: Any, **opts: Any):
         super(OutputMetaData, self).__init__(*args, **opts)
 
     def to_yaml_str(self):
@@ -25,8 +26,9 @@ class OutputMetaData(dict):
 
 class GammaLoopExporter(object):
 
-    def __init__(self, gammaloop_interface: gammaloop.gamma_loop_interface.GammaLoop, _args: argparse.Namespace):
-        self.gammaloop: gammaloop.gamma_loop_interface.GammaLoop = gammaloop_interface
+    # Need to use Any for type here because we must use gammaloop_interface.GammaLoop to avoid circular imports and mypy can't resolve routed paths
+    def __init__(self, gammaloop_interface: Any, _args: argparse.Namespace):
+        self.gammaloop: gammaloop_interface.GammaLoop = gammaloop_interface
         # Process args argument further here if needed
 
     def generic_export(self, export_root: Path):
@@ -55,16 +57,13 @@ class GammaLoopExporter(object):
 
     def finalize_drawing(self, drawings_path: Path, drawing_file_paths: list[Path]):
 
-        drawing_file_relative_paths: list[Path] = [os.path.relpath(
-            p, drawings_path) for p in drawing_file_paths]
-
         shutil.copy(
             pjoin(DATA_PATH, 'templates', 'drawing', 'combine_pages.py'),
             pjoin(drawings_path, 'combine_pages.py'))
 
         with open(pjoin(DATA_PATH, 'templates', 'drawing', 'makefile'), 'r', encoding='utf-8') as makefile_in:
             with open(pjoin(drawings_path, 'makefile'), 'w', encoding='utf-8') as makefile_out:
-                all_targets = []
+                all_targets: list[str] = []
                 for drawing_file_path in drawing_file_paths:
                     if drawing_file_path.suffix != '.tex':
                         raise GammaLoopError(
@@ -82,11 +81,11 @@ class GammaLoopExporter(object):
 
 class AmplitudesExporter(GammaLoopExporter):
 
-    def __init__(self, gammaloop_interface: gammaloop.gamma_loop_interface.GammaLoop, args: argparse.Namespace):
+    def __init__(self, gammaloop_interface: gammaloop_interface.GammaLoop, args: argparse.Namespace):
         GammaLoopExporter.__init__(self, gammaloop_interface, args)
         # Further processing here for additional info if need be
 
-    def export(self, export_root: Path, amplitudes: cross_section.AmplitudeList):
+    def export(self, export_root: Path, amplitudes: AmplitudeList):
 
         output_data = super(AmplitudesExporter,
                             self).generic_export(export_root)
@@ -122,11 +121,11 @@ class AmplitudesExporter(GammaLoopExporter):
 
 class CrossSectionsExporter(GammaLoopExporter):
 
-    def __init__(self, gammaloop_interface: gammaloop.gamma_loop_interface.GammaLoop, args: argparse.Namespace):
+    def __init__(self, gammaloop_interface: gammaloop_interface.GammaLoop, args: argparse.Namespace):
         GammaLoopExporter.__init__(self, gammaloop_interface, args)
         # Further processing here for additional info if need be
 
-    def export(self, export_root: Path, cross_sections: cross_section.CrossSectionList):
+    def export(self, export_root: Path, cross_sections: CrossSectionList):
 
         output_data = super(CrossSectionsExporter,
                             self).generic_export(export_root)

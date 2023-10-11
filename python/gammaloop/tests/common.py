@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from subprocess import Popen, PIPE
 import gammaloop
 from gammaloop.misc.common import GL_PATH, logger
@@ -16,10 +17,10 @@ def get_gamma_loop_interpreter() -> gammaloop.GammaLoop:
     return gloop
 
 
-def run_rust_test(rust_tests_binary, output_path, test_name) -> bool:
+def run_rust_test(rust_tests_binary: Path, output_path: Path, test_name: str) -> bool:
 
-    new_env = os.environ.copy()
-    new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = output_path
+    new_env: dict[str, str] = os.environ.copy()
+    new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = str(output_path)
     process = Popen([rust_tests_binary, f'pytest_{test_name}', '--test-threads=1', '--ignored',
                     '--nocapture'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE, env=new_env)
     output, error = process.communicate()
