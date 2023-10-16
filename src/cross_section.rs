@@ -135,7 +135,7 @@ impl SuperGraph {
             graph: g,
             multiplicity: serializable_supergraph.multiplicity,
             topology_class: serializable_supergraph.topology_class.clone(),
-            cuts: cuts,
+            cuts,
         }
     }
 }
@@ -261,7 +261,7 @@ impl ForwardScatteringGraph {
             sg_cut_id: forward_scattering_graph.sg_cut_id,
             graph: g,
             multiplicity: forward_scattering_graph.multiplicity,
-            cuts: cuts,
+            cuts,
         }
     }
 }
@@ -333,7 +333,7 @@ impl SerializableCrossSection {
             supergraphs: cross_section
                 .supergraphs
                 .iter()
-                .map(|sg| SerializableSuperGraph::from_supergraph(sg))
+                .map(SerializableSuperGraph::from_supergraph)
                 .collect(),
         }
     }
@@ -424,7 +424,7 @@ impl SerializableAmplitude {
             amplitude_graphs: amplitude
                 .amplitude_graphs
                 .iter()
-                .map(|sg| SerializableAmplitudeGraph::from_amplitude_graph(sg))
+                .map(SerializableAmplitudeGraph::from_amplitude_graph)
                 .collect(),
         }
     }
@@ -511,18 +511,12 @@ impl Amplitude {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CrossSectionList {
     pub container: Vec<CrossSection>,
 }
 
 impl CrossSectionList {
-    pub fn default() -> CrossSectionList {
-        CrossSectionList {
-            container: Vec::new(),
-        }
-    }
-
     pub fn from_file(model: &Model, file_path: String) -> Result<CrossSectionList, Report> {
         let f = File::open(file_path.clone())
             .wrap_err_with(|| format!("Could not open cross-section yaml file {}", file_path))
@@ -530,29 +524,33 @@ impl CrossSectionList {
         serde_yaml::from_reader(f)
             .wrap_err("Could not parse cross-section yaml content")
             .suggestion("Is it a correct yaml file")
-            .map(|serializable_cross_sections| {
-                CrossSectionList::from_serializable_cross_sections(
-                    model,
-                    &serializable_cross_sections,
-                )
-            })
+            .map(
+                |serializable_cross_sections: Vec<SerializableCrossSection>| {
+                    CrossSectionList::from_serializable_cross_sections(
+                        model,
+                        &serializable_cross_sections,
+                    )
+                },
+            )
     }
 
     pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<CrossSectionList, Report> {
         serde_yaml::from_str(yaml_str.as_str())
             .wrap_err("Could not parse cross-section yaml content")
             .suggestion("Is it a correct yaml file")
-            .map(|serializable_cross_sections| {
-                CrossSectionList::from_serializable_cross_sections(
-                    model,
-                    &serializable_cross_sections,
-                )
-            })
+            .map(
+                |serializable_cross_sections: Vec<SerializableCrossSection>| {
+                    CrossSectionList::from_serializable_cross_sections(
+                        model,
+                        &serializable_cross_sections,
+                    )
+                },
+            )
     }
 
     pub fn from_serializable_cross_sections(
         model: &Model,
-        serializable_cross_sections: &Vec<SerializableCrossSection>,
+        serializable_cross_sections: &[SerializableCrossSection],
     ) -> CrossSectionList {
         CrossSectionList {
             container: serializable_cross_sections
@@ -578,18 +576,12 @@ impl CrossSectionList {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AmplitudeList {
     pub container: Vec<Amplitude>,
 }
 
 impl AmplitudeList {
-    pub fn default() -> AmplitudeList {
-        AmplitudeList {
-            container: Vec::new(),
-        }
-    }
-
     pub fn from_file(model: &Model, file_path: String) -> Result<AmplitudeList, Report> {
         let f = File::open(file_path.clone())
             .wrap_err_with(|| format!("Could not open amplitude list yaml file {}", file_path))
@@ -597,7 +589,7 @@ impl AmplitudeList {
         serde_yaml::from_reader(f)
             .wrap_err("Could not parse amplitude list yaml content")
             .suggestion("Is it a correct yaml file")
-            .map(|serializable_amplitudes| {
+            .map(|serializable_amplitudes: Vec<SerializableAmplitude>| {
                 AmplitudeList::from_serializable_amplitudes(model, &serializable_amplitudes)
             })
     }
@@ -606,14 +598,14 @@ impl AmplitudeList {
         serde_yaml::from_str(yaml_str.as_str())
             .wrap_err("Could not parse amplitude list yaml content")
             .suggestion("Is it a correct yaml file")
-            .map(|serializable_amplitudes| {
+            .map(|serializable_amplitudes: Vec<SerializableAmplitude>| {
                 AmplitudeList::from_serializable_amplitudes(model, &serializable_amplitudes)
             })
     }
 
     pub fn from_serializable_amplitudes(
         model: &Model,
-        serializable_amplitudes: &Vec<SerializableAmplitude>,
+        serializable_amplitudes: &[SerializableAmplitude],
     ) -> AmplitudeList {
         AmplitudeList {
             container: serializable_amplitudes

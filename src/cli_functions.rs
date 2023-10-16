@@ -229,7 +229,7 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
             "{}",
             format!(
                 "Havana integration completed after {} sample evaluations.",
-                format!("{:.2}M", (result.neval as f64) / (1000000. as f64))
+                format!("{:.2}M", (result.neval as f64) / 1000000.)
                     .bold()
                     .blue()
             )

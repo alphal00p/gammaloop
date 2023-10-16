@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Display},
-    hash::Hash,
+    hash::{Hash, Hasher},
 };
 
 use crate::{
@@ -1021,9 +1021,19 @@ impl Display for CFFIntermediateGraph {
     }
 }
 
-#[derive(Debug, Hash)]
+#[derive(Debug)]
 struct HashableCFFIntermediateGraph {
     edges: Vec<(usize, CFFVertex, CFFVertex)>,
+}
+
+impl Hash for HashableCFFIntermediateGraph {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for e in &self.edges {
+            e.0.hash(state);
+            e.1.sorted_vertex().hash(state);
+            e.2.sorted_vertex().hash(state);
+        }
+    }
 }
 
 impl PartialEq for HashableCFFIntermediateGraph {

@@ -96,10 +96,7 @@ impl PythonWorker {
             &self.sb_workspace,
         )
         .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-        .map(|m| {
-            self.model = m;
-            ()
-        })
+        .map(|m| self.model = m)
     }
 
     pub fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
@@ -109,10 +106,7 @@ impl PythonWorker {
             &self.sb_workspace,
         )
         .map_err(|e| exceptions::PyException::new_err(e.root_cause().to_string()))
-        .map(|m| {
-            self.model = m;
-            ()
-        })
+        .map(|m| self.model = m)
     }
 
     // Note: one could consider returning a PyModel class containing the serialisable model as well,
@@ -147,10 +141,7 @@ impl PythonWorker {
         }
         CrossSectionList::from_file(&self.model, String::from(file_path))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|cs| {
-                self.cross_sections = cs;
-                ()
-            })
+            .map(|cs| self.cross_sections = cs)
     }
 
     pub fn load_cross_sections_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
@@ -161,10 +152,7 @@ impl PythonWorker {
         }
         CrossSectionList::from_yaml_str(&self.model, String::from(yaml_str))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|cs| {
-                self.cross_sections = cs;
-                ()
-            })
+            .map(|cs| self.cross_sections = cs)
     }
 
     // Note: one could consider returning a PyCrossSectionList class containing the serialisable model as well,
@@ -204,10 +192,7 @@ impl PythonWorker {
         }
         AmplitudeList::from_file(&self.model, String::from(file_path))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| {
-                self.amplitudes = a;
-                ()
-            })
+            .map(|a| self.amplitudes = a)
     }
 
     pub fn load_amplitudes_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
@@ -218,10 +203,7 @@ impl PythonWorker {
         }
         AmplitudeList::from_yaml_str(&self.model, String::from(yaml_str))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| {
-                self.amplitudes = a;
-                ()
-            })
+            .map(|a| self.amplitudes = a)
     }
 
     // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,
