@@ -122,7 +122,7 @@ impl VertexRule {
                         .map(|coupling_name| {
                             coupling_name
                                 .as_ref()
-                                .map(|cpl_name| model.get_coupling(&cpl_name))
+                                .map(|cpl_name| model.get_coupling(cpl_name))
                         })
                         .collect()
                 })
@@ -197,19 +197,19 @@ pub struct SerializableParticle {
 impl SerializableParticle {
     pub fn from_particle(particle: &Particle) -> SerializableParticle {
         SerializableParticle {
-            pdg_code: particle.pdg_code.clone(),
+            pdg_code: particle.pdg_code,
             name: particle.name.clone(),
             antiname: particle.antiname.clone(),
-            spin: particle.spin.clone(),
-            color: particle.color.clone(),
+            spin: particle.spin,
+            color: particle.color,
             mass: particle.mass.name.clone(),
             width: particle.width.name.clone(),
             texname: particle.texname.clone(),
             antitexname: particle.antitexname.clone(),
-            charge: particle.charge.clone(),
-            ghost_number: particle.ghost_number.clone(),
-            lepton_number: particle.lepton_number.clone(),
-            y_charge: particle.y_charge.clone(),
+            charge: particle.charge,
+            ghost_number: particle.ghost_number,
+            lepton_number: particle.lepton_number,
+            y_charge: particle.y_charge,
         }
     }
 }
@@ -234,19 +234,19 @@ pub struct Particle {
 impl Particle {
     pub fn from_serializable_particle(model: &Model, particle: &SerializableParticle) -> Particle {
         Particle {
-            pdg_code: particle.pdg_code.clone(),
+            pdg_code: particle.pdg_code,
             name: particle.name.clone(),
             antiname: particle.antiname.clone(),
-            spin: particle.spin.clone(),
-            color: particle.color.clone(),
+            spin: particle.spin,
+            color: particle.color,
             mass: model.get_parameter(&particle.mass),
             width: model.get_parameter(&particle.width),
             texname: particle.texname.clone(),
             antitexname: particle.antitexname.clone(),
-            charge: particle.charge.clone(),
-            ghost_number: particle.ghost_number.clone(),
-            lepton_number: particle.lepton_number.clone(),
-            y_charge: particle.y_charge.clone(),
+            charge: particle.charge,
+            ghost_number: particle.ghost_number,
+            lepton_number: particle.lepton_number,
+            y_charge: particle.y_charge,
         }
     }
 }
@@ -318,7 +318,7 @@ impl SerializableParameter {
             lhacode: param.lhacode.clone(),
             nature: param.nature.clone(),
             parameter_type: param.parameter_type.clone(),
-            value: param.value.clone(),
+            value: param.value,
             expression: param
                 .expression
                 .as_ref()
@@ -350,7 +350,7 @@ impl Parameter {
             lhacode: param.lhacode.clone(),
             nature: param.nature.clone(),
             parameter_type: param.parameter_type.clone(),
-            value: param.value.clone(),
+            value: param.value,
             expression: param
                 .expression
                 .as_ref()
@@ -456,12 +456,8 @@ pub struct Model {
     pub vertex_rule_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
 }
 
-impl Model {
-    pub fn is_empty(&self) -> bool {
-        self.name == "ModelNotLoaded" || self.particles.is_empty()
-    }
-
-    pub fn default() -> Model {
+impl Default for Model {
+    fn default() -> Self {
         Model {
             name: SmartString::<LazyCompact>::from("ModelNotLoaded"),
             orders: vec![],
@@ -488,6 +484,11 @@ impl Model {
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
         }
     }
+}
+impl Model {
+    pub fn is_empty(&self) -> bool {
+        self.name == "ModelNotLoaded" || self.particles.is_empty()
+    }
 
     pub fn from_serializable_model(
         serializable_model: SerializableModel,
@@ -505,8 +506,8 @@ impl Model {
             .map(|(i_order, serializable_order)| {
                 let order = Arc::new(Order {
                     name: serializable_order.name.clone(),
-                    expansion_order: serializable_order.expansion_order.clone(),
-                    hierarchy: serializable_order.hierarchy.clone(),
+                    expansion_order: serializable_order.expansion_order,
+                    hierarchy: serializable_order.hierarchy,
                 });
                 model
                     .order_name_to_position
@@ -643,7 +644,7 @@ impl Model {
     #[inline]
     pub fn get_particle(&self, name: &SmartString<LazyCompact>) -> Arc<Particle> {
         if let Some(position) = self.particle_name_to_position.get(name) {
-            return self.particles[*position].clone();
+            self.particles[*position].clone()
         } else {
             panic!("Particle '{}' not found in model '{}'.", name, self.name);
         }
@@ -651,7 +652,7 @@ impl Model {
     #[inline]
     pub fn get_particle_from_pdg(&self, pdg: isize) -> Arc<Particle> {
         if let Some(position) = self.particle_pdg_to_position.get(&pdg) {
-            return self.particles[*position].clone();
+            self.particles[*position].clone()
         } else {
             panic!(
                 "Particle with PDG {} not found in model '{}'.",
@@ -662,7 +663,7 @@ impl Model {
     #[inline]
     pub fn get_parameter(&self, name: &SmartString<LazyCompact>) -> Arc<Parameter> {
         if let Some(position) = self.parameter_name_to_position.get(name) {
-            return self.parameters[*position].clone();
+            self.parameters[*position].clone()
         } else {
             panic!("Parameter '{}' not found in model '{}'.", name, self.name);
         }
@@ -670,7 +671,7 @@ impl Model {
     #[inline]
     pub fn get_order(&self, name: &SmartString<LazyCompact>) -> Arc<Order> {
         if let Some(position) = self.order_name_to_position.get(name) {
-            return self.orders[*position].clone();
+            self.orders[*position].clone()
         } else {
             panic!(
                 "Coupling order '{}' not found in model '{}'.",
@@ -681,7 +682,7 @@ impl Model {
     #[inline]
     pub fn get_lorentz_structure(&self, name: &SmartString<LazyCompact>) -> Arc<LorentzStructure> {
         if let Some(position) = self.lorentz_structure_name_to_position.get(name) {
-            return self.lorentz_structures[*position].clone();
+            self.lorentz_structures[*position].clone()
         } else {
             panic!(
                 "Lorentz structure '{}' not found in model '{}'.",
@@ -692,7 +693,7 @@ impl Model {
     #[inline]
     pub fn get_coupling(&self, name: &SmartString<LazyCompact>) -> Arc<Coupling> {
         if let Some(position) = self.coupling_name_to_position.get(name) {
-            return self.couplings[*position].clone();
+            self.couplings[*position].clone()
         } else {
             panic!("Coupling '{}' not found in model '{}'.", name, self.name);
         }
@@ -700,7 +701,7 @@ impl Model {
     #[inline]
     pub fn get_vertex_rule(&self, name: &SmartString<LazyCompact>) -> Arc<VertexRule> {
         if let Some(position) = self.vertex_rule_name_to_position.get(name) {
-            return self.vertex_rules[*position].clone();
+            self.vertex_rules[*position].clone()
         } else {
             panic!("Vertex rule '{}' not found in model '{}'.", name, self.name);
         }

@@ -51,7 +51,7 @@ pub fn inspect(
         &Sample::Continuous(
             1.,
             if force_radius {
-                xs_f64.clone()[1..].iter().map(|x| *x).collect::<Vec<_>>()
+                xs_f64.clone()[1..].to_vec()
             } else {
                 xs_f64.clone()
             },

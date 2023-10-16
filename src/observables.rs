@@ -272,7 +272,7 @@ impl EventManager {
                     }
                 }
                 ObservableSettings::CrossSection => {
-                    observables.push(Observables::CrossSection(CrossSectionObservable::new()));
+                    observables.push(Observables::CrossSection(CrossSectionObservable::default()));
                 }
                 ObservableSettings::AFB(settings) => {
                     if track_events {
@@ -313,7 +313,7 @@ impl EventManager {
                     selectors.push(Selectors::RangeFilter(RangedSelector::new(settings)));
                 }
                 PhaseSpaceSelectorSettings::Jet(settings) => {
-                    selectors.push(Selectors::Jet(JetSelector::new(&settings)));
+                    selectors.push(Selectors::Jet(JetSelector::new(settings)));
                 }
             }
         }
@@ -362,7 +362,7 @@ impl EventManager {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     pub fn add_event(&mut self, mut event: Event) -> bool {
@@ -419,6 +419,7 @@ impl EventManager {
     pub fn update_live_result(&mut self) {
         for o in &mut self.observables {
             // for now, only live update the cross section
+            #[allow(clippy::single_match)]
             match o {
                 Observables::CrossSection(c) => c.update_live_result(),
                 _ => {}
@@ -456,6 +457,7 @@ impl EventManager {
 
 #[derive(Default, Debug, Clone)]
 pub struct Event {
+    #[allow(clippy::type_complexity)]
     pub kinematic_configuration: (
         SmallVec<[LorentzVector<f64>; 2]>,
         SmallVec<[LorentzVector<f64>; 4]>,
@@ -655,21 +657,21 @@ impl JetClustering {
 
         let index_offset = 2;
         if ext.len() == 5 {
-            let pt1 = ext[index_offset + 0].pt();
+            let pt1 = ext[index_offset].pt();
             let pt2 = ext[index_offset + 1].pt();
             let pt3 = ext[index_offset + 2].pt();
-            let dr12 = ext[index_offset + 0].delta_r(&ext[index_offset + 1]);
-            let dr13 = ext[index_offset + 0].delta_r(&ext[index_offset + 2]);
+            let dr12 = ext[index_offset].delta_r(&ext[index_offset + 1]);
+            let dr13 = ext[index_offset].delta_r(&ext[index_offset + 2]);
             let dr23 = ext[index_offset + 1].delta_r(&ext[index_offset + 2]);
 
             // we have at least 2 jets
             if dr12 < self.d_r {
-                let m12 = ext[index_offset + 0] + ext[index_offset + 1];
+                let m12 = ext[index_offset] + ext[index_offset + 1];
                 let pt12 = m12.pt();
                 self.ordered_pt.push(pt12);
                 self.ordered_pt.push(pt3);
             } else if dr13 < self.d_r {
-                let m13 = ext[index_offset + 0] + ext[index_offset + 2];
+                let m13 = ext[index_offset] + ext[index_offset + 2];
                 let pt13 = m13.pt();
                 self.ordered_pt.push(pt13);
                 self.ordered_pt.push(pt2);
@@ -729,7 +731,7 @@ impl EventSelector for JetSelector {
         // }
         self.clustering.ordered_pt.len() >= self.jet_selector_settings.min_jets
             && self.clustering.ordered_pt.len() <= self.jet_selector_settings.max_jets
-            && (self.clustering.ordered_pt.len() == 0
+            && (self.clustering.ordered_pt.is_empty()
                 || (self.clustering.ordered_pt[0] >= self.jet_selector_settings.min_j1pt
                     && (self.jet_selector_settings.max_j1pt < 0.0
                         || (self.clustering.ordered_pt[0] <= self.jet_selector_settings.max_j1pt))))
@@ -798,20 +800,13 @@ pub trait Observable {
     fn update_result(&mut self, total_events: usize, iter: usize);
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CrossSectionObservable {
     pub re: AverageAndErrorAccumulator,
     pub im: AverageAndErrorAccumulator,
 }
 
 impl CrossSectionObservable {
-    pub fn new() -> CrossSectionObservable {
-        CrossSectionObservable {
-            re: AverageAndErrorAccumulator::default(),
-            im: AverageAndErrorAccumulator::default(),
-        }
-    }
-
     pub fn add_sample(&mut self, integrand: Complex<f64>, integrator_weight: f64) {
         self.re.add_sample(integrand.re * integrator_weight);
         self.im.add_sample(integrand.im * integrator_weight);
@@ -861,6 +856,7 @@ pub struct Jet1PTObservable {
 }
 
 impl Jet1PTObservable {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         x_min: f64,
         x_max: f64,
@@ -939,7 +935,7 @@ impl Observable for Jet1PTObservable {
 
         if self.write_to_file {
             let file_name = {
-                let split = self.filename.split(".").collect::<Vec<_>>();
+                let split = self.filename.split('.').collect::<Vec<_>>();
                 if split.len() == 1 {
                     format!("{}_iter_{}", self.filename, iter)
                 } else {
@@ -1082,7 +1078,7 @@ impl Observable for AFBObservable {
 
         if self.write_to_file {
             let file_name = {
-                let split = self.filename.split(".").collect::<Vec<_>>();
+                let split = self.filename.split('.').collect::<Vec<_>>();
                 if split.len() == 1 {
                     format!("{}_iter_{}", self.filename, iter)
                 } else {
@@ -1145,6 +1141,7 @@ pub struct SingleParticleObservable {
 }
 
 impl SingleParticleObservable {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         x_min: f64,
         x_max: f64,
@@ -1247,19 +1244,17 @@ impl Observable for SingleParticleObservable {
         }
 
         //let title = format!("{}({})", self.quantity, self.pdgs.iter().map(|&pdg| pdg.to_string()).join(",") );
-        let title = format!(
-            "{}",
-            Path::new(&self.filename)
-                .file_stem()
-                .unwrap()
-                .to_str()
-                .unwrap()
-        );
+        let title = Path::new(&self.filename)
+            .file_stem()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         let x_axis_mode = if self.log_x_axis { "LOG" } else { "LIN" };
         let y_axis_mode = if self.log_y_axis { "LOG" } else { "LIN" };
         if self.write_to_file {
             let file_name = {
-                let split = self.filename.split(".").collect::<Vec<_>>();
+                let split = self.filename.split('.').collect::<Vec<_>>();
                 if split.len() == 1 {
                     format!("{}_iter_{}", self.filename, iter)
                 } else {

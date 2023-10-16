@@ -75,10 +75,12 @@ pub struct HFunctionSettings {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum ParameterizationMode {
     #[serde(rename = "cartesian")]
     Cartesian,
     #[serde(rename = "spherical")]
+    #[default]
     Spherical,
     #[serde(rename = "hyperspherical")]
     HyperSpherical,
@@ -87,8 +89,10 @@ pub enum ParameterizationMode {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
+    #[default]
     Log,
     #[serde(rename = "linear")]
     Linear,
@@ -100,8 +104,10 @@ pub struct GeneralSettings {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize)]
+#[derive(Default)]
 pub enum IntegratedPhase {
     #[serde(rename = "real")]
+    #[default]
     Real,
     #[serde(rename = "imag")]
     Imag,
@@ -109,11 +115,7 @@ pub enum IntegratedPhase {
     Both,
 }
 
-impl Default for IntegratedPhase {
-    fn default() -> IntegratedPhase {
-        IntegratedPhase::Real
-    }
-}
+
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct KinematicsSettings {
@@ -145,17 +147,9 @@ pub struct ParameterizationSettings {
     pub shifts: Vec<(f64, f64, f64, f64)>,
 }
 
-impl Default for ParameterizationMapping {
-    fn default() -> ParameterizationMapping {
-        ParameterizationMapping::Log
-    }
-}
 
-impl Default for ParameterizationMode {
-    fn default() -> ParameterizationMode {
-        ParameterizationMode::Spherical
-    }
-}
+
+
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Settings {

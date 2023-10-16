@@ -36,9 +36,9 @@ pub enum Side {
     RIGHT = 1,
 }
 
-impl Into<usize> for Side {
-    fn into(self) -> usize {
-        self as usize
+impl From<Side> for usize {
+    fn from(val: Side) -> Self {
+        val as usize
     }
 }
 
@@ -167,8 +167,7 @@ pub fn parse_python_expression(
         .map_err(|e| {
             format!(
                 "Failed to parse expression : '{}'\nError: {}",
-                processed_string,
-                e.to_string()
+                processed_string, e
             )
         })
         .unwrap()
@@ -222,7 +221,7 @@ pub fn format_uncertainty(mean: f64, sdev: f64) -> String {
         format!("{:e} ± {:e}", v, dv)
     } else if dv.is_infinite() {
         format!("{:e} ± inf", v)
-    } else if v == 0. && (dv >= 1e5 || dv < 1e-4) {
+    } else if v == 0. && !(1e-4..1e5).contains(&dv) {
         if dv == 0. {
             "0(0)".to_owned()
         } else {
@@ -325,7 +324,7 @@ impl Signum for f128::f128 {
     #[inline]
     fn multiply_sign(&self, sign: i8) -> f128::f128 {
         match sign {
-            1 => self.clone(),
+            1 => *self,
             0 => f128::f128::zero(),
             -1 => self.neg(),
             _ => unreachable!("Sign should be -1,0,1"),
@@ -337,7 +336,7 @@ impl Signum for f64 {
     #[inline]
     fn multiply_sign(&self, sign: i8) -> f64 {
         match sign {
-            1 => self.clone(),
+            1 => *self,
             0 => f64::zero(),
             -1 => self.neg(),
             _ => unreachable!("Sign should be -1,0,1"),
@@ -442,7 +441,7 @@ pub fn pinch_dampening_function<T: FloatLike>(
     // Make sure the function is even in t-tstar
     assert!(powers.1 % 2 == 0);
     let a = dampening_arg.powi(powers.0);
-    return a / (a + Into::<T>::into(multiplier as f64) * delta_t.powi(powers.1));
+    a / (a + Into::<T>::into(multiplier) * delta_t.powi(powers.1))
 }
 
 pub fn h<T: FloatLike>(
@@ -454,29 +453,29 @@ pub fn h<T: FloatLike>(
     let sig = if let Some(s) = sigma {
         s
     } else {
-        Into::<T>::into(h_function_settings.sigma as f64)
+        Into::<T>::into(h_function_settings.sigma)
     };
     let power = h_function_settings.power;
     match h_function_settings.function {
         crate::HFunction::Exponential => {
-            (-(t * t) / (sig * sig)).exp() * Into::<T>::into(2 as f64)
+            (-(t * t) / (sig * sig)).exp() * Into::<T>::into(2_f64)
                 / (<T as FloatConst>::PI().sqrt() * sig)
         }
         crate::HFunction::PolyExponential => {
             // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
             let normalisation = match power {
-                None | Some(0) => <T as FloatConst>::PI().sqrt() * sig / Into::<T>::into(2 as f64),
-                Some(1) => Into::<T>::into(0.84156821507077141791912486734584) * sig,
-                Some(3) => Into::<T>::into(1.0334768470686885731753571058796) * sig,
-                Some(4) => Into::<T>::into(1.3293403881791370204736256125059) * sig,
-                Some(6) => Into::<T>::into(2.8802375077214635443595221604294) * sig,
-                Some(7) => Into::<T>::into(4.7835669713476085553643210523305) * sig,
-                Some(9) => Into::<T>::into(16.225745976182285657187445130217) * sig,
-                Some(10) => Into::<T>::into(32.735007058911249129163030707957) * sig,
-                Some(12) => Into::<T>::into(155.83746592258341696260606919938) * sig,
-                Some(13) => Into::<T>::into(364.65850035656604157775795299621) * sig,
-                Some(15) => Into::<T>::into(2257.6375530154730006506618195504) * sig,
-                Some(16) => Into::<T>::into(5939.8044185378636927153327426791) * sig,
+                None | Some(0) => <T as FloatConst>::PI().sqrt() * sig / Into::<T>::into(2_f64),
+                Some(1) => Into::<T>::into(0.841_568_215_070_771_4) * sig,
+                Some(3) => Into::<T>::into(1.033_476_847_068_688_6) * sig,
+                Some(4) => Into::<T>::into(1.329_340_388_179_137) * sig,
+                Some(6) => Into::<T>::into(2.880_237_507_721_463_7) * sig,
+                Some(7) => Into::<T>::into(4.783_566_971_347_609) * sig,
+                Some(9) => Into::<T>::into(16.225_745_976_182_285) * sig,
+                Some(10) => Into::<T>::into(32.735_007_058_911_25) * sig,
+                Some(12) => Into::<T>::into(155.837_465_922_583_42) * sig,
+                Some(13) => Into::<T>::into(364.658_500_356_566_04) * sig,
+                Some(15) => Into::<T>::into(2_257.637_553_015_473) * sig,
+                Some(16) => Into::<T>::into(5_939.804_418_537_864) * sig,
                 _ => panic!(
                     "Value {} of power in poly exponential h function not supported",
                     power.unwrap()
@@ -487,23 +486,23 @@ pub fn h<T: FloatLike>(
                 Some(p) => (t / sig).powi(-(p as i32)) / normalisation,
             };
             prefactor
-                * (Into::<T>::into(2 as f64) - (t * t) / (sig * sig) - (sig * sig) / (t * t)).exp()
+                * (Into::<T>::into(2_f64) - (t * t) / (sig * sig) - (sig * sig) / (t * t)).exp()
         }
         crate::HFunction::PolyLeftRightExponential => {
             // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp( -((t^2/sigma^2 +1)/ (t/sigma) -2) )
             let normalisation = match power {
-                None | Some(0) => Into::<T>::into(2.0669536941373771463507142117592) * sig,
-                Some(1) => Into::<T>::into(1.6831364301415428358382497346917) * sig,
-                Some(3) => Into::<T>::into(3.7500901242789199821889639464509) * sig,
-                Some(4) => Into::<T>::into(9.567133942695217110728642104661) * sig,
-                Some(6) => Into::<T>::into(139.3731017521535023682282031464) * sig,
-                Some(7) => Into::<T>::into(729.31700071313208315551590599241) * sig,
-                Some(9) => Into::<T>::into(32336.242742929754092264781379699) * sig,
-                Some(10) => Into::<T>::into(263205.21704946897873941957467669) * sig,
-                Some(12) => Into::<T>::into(2.4275037178930974606209829109376e7) * sig,
-                Some(13) => Into::<T>::into(2.694265921644288712310551611566e8) * sig,
-                Some(15) => Into::<T>::into(9.0407420577601240420566809613266e12) * sig,
-                Some(16) => Into::<T>::into(1.4525174802464911684668046368611e14) * sig,
+                None | Some(0) => Into::<T>::into(2.066_953_694_137_377) * sig,
+                Some(1) => Into::<T>::into(1.683_136_430_141_542_8) * sig,
+                Some(3) => Into::<T>::into(3.750_090_124_278_92) * sig,
+                Some(4) => Into::<T>::into(9.567_133_942_695_218) * sig,
+                Some(6) => Into::<T>::into(139.373_101_752_153_5) * sig,
+                Some(7) => Into::<T>::into(729.317_000_713_132_1) * sig,
+                Some(9) => Into::<T>::into(32_336.242_742_929_753) * sig,
+                Some(10) => Into::<T>::into(263_205.217_049_469) * sig,
+                Some(12) => Into::<T>::into(2.427_503_717_893_097_5e7) * sig,
+                Some(13) => Into::<T>::into(2.694_265_921_644_289e8) * sig,
+                Some(15) => Into::<T>::into(9.040_742_057_760_125e12) * sig,
+                Some(16) => Into::<T>::into(1.452_517_480_246_491_3e14) * sig,
                 _ => panic!(
                     "Value {} of power in poly exponential h function not supported",
                     power.unwrap()
@@ -514,7 +513,7 @@ pub fn h<T: FloatLike>(
                 Some(p) => (t / sig).powi(-(p as i32)) / normalisation,
             };
             prefactor
-                * (Into::<T>::into(2 as f64) - ((t * t) / (sig * sig) + T::one()) / (t / sig)).exp()
+                * (Into::<T>::into(2_f64) - ((t * t) / (sig * sig) + T::one()) / (t / sig)).exp()
         }
         crate::HFunction::ExponentialCT => {
             let delta_t_sq = (t - tstar.unwrap()) * (t - tstar.unwrap());
@@ -543,17 +542,14 @@ pub fn h<T: FloatLike>(
 /// Calculate the determinant of any complex-valued input matrix using LU-decomposition.
 /// Original C-code by W. Gong and D.E. Soper.
 #[allow(unused)]
-pub fn determinant<T: Float + RealNumberLike>(
-    bb: &Vec<Complex<T>>,
-    dimension: usize,
-) -> Complex<T> {
+pub fn determinant<T: Float + RealNumberLike>(bb: &[Complex<T>], dimension: usize) -> Complex<T> {
     // Define matrix related variables.
     let mut determinant = Complex::new(T::one(), T::zero());
     let mut indx = [0; MAX_DIMENSION];
     let mut d = 1; // initialize parity parameter
 
     // Inintialize the matrix to be decomposed with the transferred matrix b.
-    let mut aa = bb.clone();
+    let mut aa = bb.to_vec();
 
     // Define parameters used in decomposition.
     let mut imax = 0;
@@ -586,7 +582,7 @@ pub fn determinant<T: Float + RealNumberLike>(
             for i in 0..j {
                 sum = aa[i * dimension + j];
                 for k in 0..i {
-                    sum = sum - aa[i * dimension + k] * aa[k * dimension + j];
+                    sum -= aa[i * dimension + k] * aa[k * dimension + j];
                 }
                 aa[i * dimension + j] = sum;
             }
@@ -595,7 +591,7 @@ pub fn determinant<T: Float + RealNumberLike>(
             for i in j..dimension {
                 sum = aa[i * dimension + j];
                 for k in 0..j {
-                    sum = sum - aa[i * dimension + k] * aa[k * dimension + j];
+                    sum -= aa[i * dimension + k] * aa[k * dimension + j];
                 }
                 aa[i * dimension + j] = sum;
                 // Figure of merit for the pivot.
@@ -622,7 +618,7 @@ pub fn determinant<T: Float + RealNumberLike>(
             if j + 1 != dimension {
                 dumc = aa[j * dimension + j].inv();
                 for i in j + 1..dimension {
-                    aa[i * dimension + j] = aa[i * dimension + j] * dumc;
+                    aa[i * dimension + j] *= dumc;
                 }
             }
         }
@@ -633,9 +629,9 @@ pub fn determinant<T: Float + RealNumberLike>(
     } else {
         // Multiply the diagonal elements.
         for diagonal in 0..dimension {
-            determinant = determinant * aa[diagonal * dimension + diagonal];
+            determinant *= aa[diagonal * dimension + diagonal];
         }
-        determinant = determinant * <T as NumCast>::from(d).unwrap();
+        determinant *= <T as NumCast>::from(d).unwrap();
     }
     determinant
 }
@@ -680,7 +676,7 @@ pub fn one_loop_e_surface_bilinear_form<T: FloatLike>(
     m2_sq: T,
     e_shift: T,
 ) -> ([[T; 3]; 3], [T; 3], T) {
-    let two = Into::<T>::into(2 as f64);
+    let two = Into::<T>::into(2_f64);
     let e_shift_sq = e_shift * e_shift;
     let p1_sq = p1[0] * p1[0] + p1[1] * p1[1] + p1[2] * p1[2];
     let p2_sq = p2[0] * p2[0] + p2[1] * p2[1] + p2[2] * p2[2];
@@ -728,13 +724,11 @@ pub fn one_loop_e_surface_exists<T: FloatLike>(
     let test = (e_shift * e_shift - p_norm_sq)
         - (m1_sq.sqrt() + m2_sq.sqrt()) * (m1_sq.sqrt() + m2_sq.sqrt());
     if test.abs() < Into::<T>::into(PINCH_TEST_THRESHOLD) {
-        return (false, true);
+        (false, true)
+    } else if test < T::zero() {
+        (false, false)
     } else {
-        if test < T::zero() {
-            return (false, false);
-        } else {
-            return (true, false);
-        }
+        (true, false)
     }
 }
 
@@ -801,19 +795,19 @@ pub fn one_loop_get_e_surf_t_scaling<T: FloatLike>(
             a_coef += k[i] * a[i][j] * k[j];
         }
     }
-    a_coef *= Into::<T>::into(4 as f64);
+    a_coef *= Into::<T>::into(4_f64);
     let mut b_coef = T::zero();
     for i in 0..=2 {
         b_coef += k[i] * b[i];
     }
-    b_coef *= Into::<T>::into(4 as f64);
-    let discr = b_coef * b_coef - Into::<T>::into(4 as f64) * a_coef * c_coef;
+    b_coef *= Into::<T>::into(4_f64);
+    let discr = b_coef * b_coef - Into::<T>::into(4_f64) * a_coef * c_coef;
     if discr < T::zero() {
         [T::zero(), T::zero()]
     } else {
         [
-            (-b_coef + discr.sqrt()) / (Into::<T>::into(2 as f64) * a_coef),
-            (-b_coef - discr.sqrt()) / (Into::<T>::into(2 as f64) * a_coef),
+            (-b_coef + discr.sqrt()) / (Into::<T>::into(2_f64) * a_coef),
+            (-b_coef - discr.sqrt()) / (Into::<T>::into(2_f64) * a_coef),
         ]
     }
 }
@@ -855,15 +849,15 @@ pub fn get_n_dim_for_n_loop_momenta(
             if !force_radius {
                 n_dim += 1;
             }
-            return n_dim;
+            n_dim
         }
         ParameterizationMode::HyperSpherical
         | ParameterizationMode::Cartesian
         | ParameterizationMode::Spherical => {
             if force_radius {
-                return 3 * n_loop_momenta - 1;
+                3 * n_loop_momenta - 1
             } else {
-                return 3 * n_loop_momenta;
+                3 * n_loop_momenta
             }
         }
     }
@@ -1031,8 +1025,7 @@ pub fn global_inv_parameterize<T: FloatLike>(
 
             let cartesian_xs = moms
                 .iter()
-                .map(|lv| [lv.x, lv.y, lv.z])
-                .flatten()
+                .flat_map(|lv| [lv.x, lv.y, lv.z])
                 .collect::<Vec<_>>();
 
             let mut k_r_sq = cartesian_xs.iter().map(|xi| *xi * xi).sum::<T>();
@@ -1280,7 +1273,7 @@ pub const WEEK: usize = 604_800;
 pub fn format_wdhms(seconds: usize) -> String {
     let mut compound_duration = vec![];
     if seconds == 0 {
-        compound_duration.push(format!("{}", "0s"));
+        compound_duration.push("0s".to_string());
         return compound_duration.join(" ");
     }
 
@@ -1327,29 +1320,28 @@ pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
     // get an estimate for x0 to start newton iterations.
     let q = 1.0 - p;
 
-    if 1.0 - 1.0e-8 <= a && a <= 1.0 + 1.0e-8 {
+    if (1.0 - 1.0e-8..=1.0 + 1.0e-8).contains(&a) {
         return -q.ln();
     }
 
     let gamma_a = gamma(a);
     let b = q * gamma_a;
-    let c = 0.57721566490153286060651209008240;
+    let c = 0.577_215_664_901_532_9;
 
     let mut x0 = 0.5;
     if a < 1.0 {
         if b > 0.6 || (b >= 0.45 && a >= 0.3) {
-            let u: f64;
-            if b * q > 10e-8 {
-                u = (p * gamma(a + 1.0)).powf(a.recip());
+            let u = if b * q > 10e-8 {
+                (p * gamma(a + 1.0)).powf(a.recip())
             } else {
-                u = (-q / a - c).exp();
-            }
+                (-q / a - c).exp()
+            };
             x0 = u / (1.0 - u / (a + 1.0));
-        } else if a < 0.3 && 0.35 <= b && b <= 0.6 {
+        } else if a < 0.3 && (0.35..=0.6).contains(&b) {
             let t = (-c - b).exp();
             let u = t * t.exp();
             x0 = t * u.exp();
-        } else if (0.15 <= b && b <= 0.35) || (0.15 <= b && b < 0.45 && a >= 0.3) {
+        } else if (0.15..=0.35).contains(&b) || ((0.15..0.45).contains(&b) && a >= 0.3) {
             let y = -b.ln();
             let u = y - (1.0 - a) * y.ln();
             x0 = y - (1.0 - a) * y.ln() - (1.0 + (1.0 - a) / (1.0 + u)).ln();
@@ -1402,7 +1394,7 @@ pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
         let b_1 = 6.61053765625462;
         let b_2 = 6.40691597760039;
         let b_3 = 1.27364489782223;
-        let b_4 = 0.3611708101884203e-1;
+        let b_4 = 3.611_708_101_884_203e-2;
 
         let t2 = t * t;
         let t3 = t2 * t;
@@ -1425,45 +1417,37 @@ pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
 
         if a >= 500.0 && (1.0 - w / a).abs() < 1.0e-6 {
             return w;
-        } else {
-            if p > 0.5 {
-                if w < 3.0 * a {
-                    x0 = w;
-                } else {
-                    let d = 2f64.max(a * (a - 1.0));
-                    if b > 10f64.powf(-d) {
-                        let u = -b.ln() + (a - 1.0) * w.ln() - (1.0 + (1.0 - a) / (1.0 + w)).ln();
-                        x0 = -b.ln() + (a - 1.0) * u.ln() - (1.0 + (1.0 - a) / (1.0 + u)).ln();
-                    } else {
-                        let y = -b.ln();
-                        let c1 = (a - 1.0) * y.ln();
-                        let c2 = (a - 1.0) * (1.0 + c1);
-                        let c3 =
-                            (a - 1.0) * (-0.5 * c1 * c1 + (a - 2.0) * c1 + (3.0 * a - 5.0) * 0.5);
-                        let c4 = (a - 1.0)
-                            * (1.0 / 3.0 * c1 * c1 * c1 - (3.0 * a - 5.0) * 0.5 * c1 * c1
-                                + (a * a - 6.0 * a + 7.0) * c1
-                                + (11.0 * a * a - 46.0 * a + 47.0) / 6.0);
-                        let c5 = (a - 1.0)
-                            * (-0.25 * c1 * c1 * c1 * c1
-                                + (11.0 * a - 7.0) / 6.0 * c1 * c1 * c1
-                                + (-3.0 * a * a - 13.0) * c1 * c1
-                                + (2.0 * a * a * a - 25.0 * a * a + 72.0 * a - 61.0) * 0.5 * c1
-                                + (25.0 * a * a * a - 195.0 * a * a + 477.0 * a - 379.0) / 12.0);
-                        x0 = y
-                            + c1
-                            + c2 / (y)
-                            + c3 / (y * y)
-                            + c4 / (y * y * y)
-                            + c5 / (y * y * y * y);
-                    }
-                }
+        } else if p > 0.5 {
+            if w < 3.0 * a {
+                x0 = w;
             } else {
-                // this part is heavily simplified from the paper, if any issues occur this estimate
-                // will need more refinement.
-                let v = (p * gamma(a + 1.0)).ln();
-                x0 = ((v + w) / a).exp();
+                let d = 2f64.max(a * (a - 1.0));
+                if b > 10f64.powf(-d) {
+                    let u = -b.ln() + (a - 1.0) * w.ln() - (1.0 + (1.0 - a) / (1.0 + w)).ln();
+                    x0 = -b.ln() + (a - 1.0) * u.ln() - (1.0 + (1.0 - a) / (1.0 + u)).ln();
+                } else {
+                    let y = -b.ln();
+                    let c1 = (a - 1.0) * y.ln();
+                    let c2 = (a - 1.0) * (1.0 + c1);
+                    let c3 = (a - 1.0) * (-0.5 * c1 * c1 + (a - 2.0) * c1 + (3.0 * a - 5.0) * 0.5);
+                    let c4 = (a - 1.0)
+                        * (1.0 / 3.0 * c1 * c1 * c1 - (3.0 * a - 5.0) * 0.5 * c1 * c1
+                            + (a * a - 6.0 * a + 7.0) * c1
+                            + (11.0 * a * a - 46.0 * a + 47.0) / 6.0);
+                    let c5 = (a - 1.0)
+                        * (-0.25 * c1 * c1 * c1 * c1
+                            + (11.0 * a - 7.0) / 6.0 * c1 * c1 * c1
+                            + (-3.0 * a * a - 13.0) * c1 * c1
+                            + (2.0 * a * a * a - 25.0 * a * a + 72.0 * a - 61.0) * 0.5 * c1
+                            + (25.0 * a * a * a - 195.0 * a * a + 477.0 * a - 379.0) / 12.0);
+                    x0 = y + c1 + c2 / (y) + c3 / (y * y) + c4 / (y * y * y) + c5 / (y * y * y * y);
+                }
             }
+        } else {
+            // this part is heavily simplified from the paper, if any issues occur this estimate
+            // will need more refinement.
+            let v = (p * gamma(a + 1.0)).ln();
+            x0 = ((v + w) / a).exp();
         }
     }
 
@@ -1471,25 +1455,23 @@ pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
     let mut x_n = x0;
     for _ in 0..n_iter {
         let r = x_n.powf(a - 1.0) * (-x_n).exp() / gamma_a;
-        let t_n;
-        if p <= 0.5 {
-            t_n = (gamma_lr(a, x_n) - p) / r;
+        let t_n = if p <= 0.5 {
+            (gamma_lr(a, x_n) - p) / r
         } else {
-            t_n = -(gamma_ur(a, x_n) - q) / r;
-        }
+            -(gamma_ur(a, x_n) - q) / r
+        };
         let w_n = (a - 1.0 - x_n) / 2.0;
 
-        let h_n;
-        if t_n.abs() <= 0.1 && (w_n * t_n).abs() <= 0.1 {
-            h_n = t_n + w_n * t_n * t_n;
+        let h_n = if t_n.abs() <= 0.1 && (w_n * t_n).abs() <= 0.1 {
+            t_n + w_n * t_n * t_n
         } else {
-            h_n = t_n;
-        }
+            t_n
+        };
 
         x_n -= h_n;
     }
 
-    return x_n;
+    x_n
 }
 
 #[allow(unused)]
@@ -1520,17 +1502,15 @@ pub fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
 pub fn print_banner() {
     info!(
         "\n{}{}\n",
-        format!(
-            "{}",
-            r#"                                        _                       
+        r"                                        _                       
                                        | |                      
    __ _  __ _ _ __ ___  _ __ ___   __ _| |     ___   ___  _ __  
   / _` |/ _` | '_ ` _ \| '_ ` _ \ / _` | |    / _ \ / _ \| '_ \ 
  | (_| | (_| | | | | | | | | | | | (_| | |___| (_) | (_) | |_) |
   \__, |\__,_|_| |_| |_|_| |_| |_|\__,_|______\___/ \___/| .__/ 
    __/ |                                                 | |    
-"#
-        )
+"
+        .to_string()
         .bold()
         .blue(),
         format!(

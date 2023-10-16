@@ -136,7 +136,7 @@ mod tests_scalar_massless_triangle {
             .recip();
 
         let res = energy_product * cff.evaluate(&onshell_energies, &edge_types);
-        let benchmark_val = 4.646388885763160e-6;
+        let benchmark_val = 4.646_388_885_763_16e-6;
 
         println!("res = {:+e}", res);
         assert!(approx_eq(res, benchmark_val, 1e-15));
@@ -171,7 +171,7 @@ fn pytest_scalar_fishnet_2x2() {
 
     let graph = &amplitude.amplitude_graphs[0].graph;
     let cff = generate_cff_expression(graph).unwrap();
-    assert!(cff.terms.len() > 0);
+    assert!(!cff.terms.is_empty());
 
     // TODO: @Mathijs, you can put your own checks there
 }
@@ -230,5 +230,5 @@ fn pytest_scalar_cube() {
 
     let graph = &amplitude.amplitude_graphs[0].graph;
     let cff = generate_cff_expression(graph).unwrap();
-    assert!(cff.terms.len() > 0);
+    assert!(!cff.terms.is_empty());
 }

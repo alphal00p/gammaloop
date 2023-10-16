@@ -53,7 +53,7 @@ gammaloop = "gammaloop:cli"
 [tool.pytest.ini_options]
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-  "typecheck: marks tests about type checking  (deselect with '-m \"not typecheck\"')",
+  "codecheck: marks tests about type checking and rust coding style (clippy) (deselect with '-m \"not codecheck\"')",
 ]
 
 [tool.mypy]

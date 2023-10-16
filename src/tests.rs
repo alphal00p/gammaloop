@@ -24,7 +24,7 @@ fn load_default_settings() -> Settings {
 
 pub fn approx_eq(res: f64, target: f64, tolerance: f64) -> bool {
     if target == 0.0 {
-        return res.abs() < tolerance;
+        res.abs() < tolerance
     } else {
         ((res - target) / target).abs() < tolerance
     }
@@ -32,7 +32,7 @@ pub fn approx_eq(res: f64, target: f64, tolerance: f64) -> bool {
 
 fn validate_error(error: f64, target_diff: f64) -> bool {
     if target_diff == 0.0 {
-        return true;
+        true
     } else {
         (error / target_diff).abs() < DIFF_TARGET_TO_ERROR_MUST_BE_LESS_THAN
     }
@@ -52,7 +52,7 @@ fn compare_integration(
     rayon::ThreadPoolBuilder::new()
         .num_threads(N_CORES_FOR_INTEGRATION_IN_TESTS)
         .build_global()
-        .unwrap_or_else(|_| {});
+        .unwrap_or(());
 
     let user_data_generator = |settings: &Settings| UserData {
         integrand: (0..N_CORES_FOR_INTEGRATION_IN_TESTS)
@@ -61,8 +61,8 @@ fn compare_integration(
     };
     match phase {
         IntegratedPhase::Both => {
-            (*settings).integrator.integrated_phase = IntegratedPhase::Real;
-            let res = havana_integrate(&settings, user_data_generator, Some(target));
+            settings.integrator.integrated_phase = IntegratedPhase::Real;
+            let res = havana_integrate(settings, user_data_generator, Some(target));
             if !approx_eq(res.result[0], target.re, applied_tolerance)
                 || !validate_error(res.error[0], target.re - res.result[0])
             {
@@ -78,8 +78,8 @@ fn compare_integration(
                 );
                 return false;
             }
-            (*settings).integrator.integrated_phase = IntegratedPhase::Imag;
-            let res = havana_integrate(&settings, user_data_generator, Some(target));
+            settings.integrator.integrated_phase = IntegratedPhase::Imag;
+            let res = havana_integrate(settings, user_data_generator, Some(target));
             if !approx_eq(res.result[1], target.im, applied_tolerance)
                 || !validate_error(res.error[1], target.re - res.result[1])
             {
@@ -97,8 +97,8 @@ fn compare_integration(
             }
         }
         IntegratedPhase::Real => {
-            (*settings).integrator.integrated_phase = IntegratedPhase::Real;
-            let res = havana_integrate(&settings, user_data_generator, Some(target));
+            settings.integrator.integrated_phase = IntegratedPhase::Real;
+            let res = havana_integrate(settings, user_data_generator, Some(target));
             if !approx_eq(res.result[0], target.re, applied_tolerance)
                 || !validate_error(res.error[0], target.im - res.result[0])
             {
@@ -116,8 +116,8 @@ fn compare_integration(
             }
         }
         IntegratedPhase::Imag => {
-            (*settings).integrator.integrated_phase = IntegratedPhase::Imag;
-            let res = havana_integrate(&settings, user_data_generator, Some(target));
+            settings.integrator.integrated_phase = IntegratedPhase::Imag;
+            let res = havana_integrate(settings, user_data_generator, Some(target));
             if !approx_eq(res.result[1], target.im, applied_tolerance)
                 || !validate_error(res.error[1], target.im - res.result[1])
             {
@@ -144,9 +144,9 @@ fn compare_inspect(
     is_momentum_space: bool,
     target: Complex<f64>,
 ) -> bool {
-    let mut integrand = integrand_factory(&settings);
+    let mut integrand = integrand_factory(settings);
     let res = inspect(
-        &settings,
+        settings,
         &mut integrand,
         pt,
         false,
@@ -165,7 +165,7 @@ fn compare_inspect(
         );
         return false;
     }
-    return true;
+    true
 }
 
 fn get_h_function_test_integrand() -> HFunctionTestSettings {

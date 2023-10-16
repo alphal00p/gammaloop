@@ -28,7 +28,7 @@ impl HFunctionTestIntegrand {
         let n_dim = 1;
         HFunctionTestIntegrand {
             settings,
-            n_dim: n_dim,
+            n_dim,
             integrand_settings,
         }
     }
@@ -74,7 +74,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
     }
 
     fn get_n_dim(&self) -> usize {
-        return self.n_dim;
+        self.n_dim
     }
 
     fn evaluate_sample(
@@ -121,10 +121,10 @@ impl HasIntegrand for HFunctionTestIntegrand {
                 );
             }
             let res = self.evaluate_sample_generic(sample_xs_f128.as_slice());
-            return Complex::new(
+            Complex::new(
                 f128::f128::to_f64(&res.re).unwrap(),
                 f128::f128::to_f64(&res.im).unwrap(),
-            );
+            )
         } else {
             return self.evaluate_sample_generic(sample_xs.as_slice());
         }

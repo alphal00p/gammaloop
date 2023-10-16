@@ -116,13 +116,13 @@ impl UnitSurfaceIntegrand {
         UnitSurfaceIntegrand {
             settings,
             n_3d_momenta: integrand_settings.n_3d_momenta,
-            n_dim: n_dim,
-            surface: surface,
+            n_dim,
+            surface,
         }
     }
 
     fn evaluate_numerator<T: FloatLike>(&self, loop_momenta: &[LorentzVector<T>]) -> T {
-        return T::from_f64(1.0).unwrap();
+        T::from_f64(1.0).unwrap()
     }
 
     fn parameterize<T: FloatLike>(&self, xs: &[T]) -> (Vec<[T; 3]>, T) {
@@ -148,7 +148,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
     }
 
     fn get_n_dim(&self) -> usize {
-        return self.n_dim;
+        self.n_dim
     }
 
     fn evaluate_sample(
@@ -194,7 +194,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             info!("Sampling jacobian : {:+.16e}", jac);
             info!("Final contribution: {:+.16e}", itg_wgt * jac);
         }
-        return Complex::new(itg_wgt, 0.) * jac;
+        Complex::new(itg_wgt, 0.) * jac
     }
 }
 
@@ -223,8 +223,8 @@ impl UnitVolumeIntegrand {
         UnitVolumeIntegrand {
             settings,
             n_3d_momenta: integrand_settings.n_3d_momenta,
-            n_dim: n_dim,
-            volume: volume,
+            n_dim,
+            volume,
         }
     }
 
@@ -236,9 +236,9 @@ impl UnitVolumeIntegrand {
             .sqrt()
             > Into::<T>::into(self.settings.kinematics.e_cm)
         {
-            return T::from_f64(0.0).unwrap();
+            T::from_f64(0.0).unwrap()
         } else {
-            return T::from_f64(1.0).unwrap();
+            T::from_f64(1.0).unwrap()
         }
     }
 
@@ -265,7 +265,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
     }
 
     fn get_n_dim(&self) -> usize {
-        return self.n_dim;
+        self.n_dim
     }
 
     fn evaluate_sample(
@@ -309,6 +309,6 @@ impl HasIntegrand for UnitVolumeIntegrand {
             info!("Sampling jacobian : {:+.16e}", jac);
             info!("Final contribution: {:+.16e}", itg_wgt * jac);
         }
-        return Complex::new(itg_wgt, 0.) * jac;
+        Complex::new(itg_wgt, 0.) * jac
     }
 }

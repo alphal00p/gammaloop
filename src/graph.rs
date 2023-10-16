@@ -218,6 +218,7 @@ pub struct SerializableGraph {
     vertices: Vec<SerializableVertex>,
     edges: Vec<SerializableEdge>,
     overall_factor: f64,
+    #[allow(clippy::type_complexity)]
     external_connections: Vec<(
         Option<SmartString<LazyCompact>>,
         Option<SmartString<LazyCompact>>,
@@ -324,7 +325,7 @@ impl Graph {
             vertex.edges = serializable_vertex
                 .edges
                 .iter()
-                .map(|e| edge_name_to_position.get(e).unwrap().clone())
+                .map(|e| *edge_name_to_position.get(e).unwrap())
                 .collect();
         }
         g.edge_name_to_position = edge_name_to_position;
@@ -332,7 +333,7 @@ impl Graph {
         let mut edge_signatures: Vec<(Vec<isize>, Vec<isize>)> =
             vec![(vec![], vec![]); graph.edges.len()];
         for (e_name, sig) in graph.edge_signatures.iter() {
-            edge_signatures[g.get_edge_position(e_name).unwrap().clone()] = sig.clone();
+            edge_signatures[g.get_edge_position(e_name).unwrap()] = sig.clone();
         }
         g.edge_signatures = edge_signatures;
 
@@ -374,7 +375,7 @@ impl Graph {
 
     #[inline]
     pub fn get_vertex_position(&self, name: &SmartString<LazyCompact>) -> Option<usize> {
-        self.vertex_name_to_position.get(name).map(|p| *p)
+        self.vertex_name_to_position.get(name).copied()
     }
 
     #[inline]
@@ -387,7 +388,7 @@ impl Graph {
 
     #[inline]
     pub fn get_edge_position(&self, name: &SmartString<LazyCompact>) -> Option<usize> {
-        self.edge_name_to_position.get(name).map(|p| *p)
+        self.edge_name_to_position.get(name).copied()
     }
 
     #[inline]

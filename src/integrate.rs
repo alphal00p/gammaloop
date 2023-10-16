@@ -187,7 +187,7 @@ where
             writeln!(
                 f,
                 "{}",
-                Table::new(tabled_data).with(Style::psql()).to_string()
+                Table::new(tabled_data).with(Style::psql())
             )
             .unwrap();
         }
@@ -284,10 +284,10 @@ where
                             .green()
                         }
                     } else {
-                        format!("{}", "").normal()
+                        "".to_string().normal()
                     }
                 } else {
-                    format!("{}", "").normal()
+                    "".to_string().normal()
                 },
                 if itg.avg.abs() != 0. {
                     let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
@@ -377,7 +377,7 @@ where
                                         _ => "N/A".to_string(),
                                     }
                                 } else {
-                                    format!("{}", "N/A")
+                                    "N/A".to_string()
                                 }
                             )
                         );

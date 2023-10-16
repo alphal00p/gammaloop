@@ -176,7 +176,7 @@ impl CFFTree {
         self.nodes
             .iter()
             .filter(|node| match node {
-                CFFTreeNode::Data(tree_node_data) => tree_node_data.children.len() == 0,
+                CFFTreeNode::Data(tree_node_data) => tree_node_data.children.is_empty(),
                 CFFTreeNode::Pointer(_) => false,
             })
             .map(|node| match node {
@@ -209,9 +209,8 @@ impl CFFTree {
                         res
                     }
                     Some(esurface_id) => {
-                        let res;
-                        if tree_node_data.children.len() != 0 {
-                            res = esurface_cache[esurface_id].inv()
+                        let res = if !tree_node_data.children.is_empty() {
+                            esurface_cache[esurface_id].inv()
                                 * (tree_node_data
                                     .children
                                     .iter()
@@ -222,10 +221,10 @@ impl CFFTree {
                                             node_cache,
                                         )
                                     })
-                                    .sum::<T>());
+                                    .sum::<T>())
                         } else {
-                            res = esurface_cache[esurface_id].inv();
-                        }
+                            esurface_cache[esurface_id].inv()
+                        };
                         node_cache[self.term_id][node_id] = Some(res);
                         res
                     }
@@ -416,7 +415,7 @@ impl Display for CFFVertex {
             string.push_str(&format!("{},", self.identifier[index]));
         }
         string.pop();
-        string.push_str(")");
+        string.push(')');
         write!(f, "{}", string)
     }
 }
@@ -444,7 +443,7 @@ impl Orientation {
         }
     }
 
-    fn to_serializable(&self) -> SerializableOrientation {
+    fn to_serializable(self) -> SerializableOrientation {
         let orientation = self.into_iter().collect_vec();
         SerializableOrientation { orientation }
     }
@@ -528,15 +527,13 @@ impl CFFIntermediateGraph {
 
         for (index, edge) in edge_map.iter() {
             let (left_vertex, right_vertex) = edge;
-            let (outgoing_edges, incoming_edges) = vertex_map
-                .entry(left_vertex.clone())
-                .or_insert((vec![], vec![]));
+            let (outgoing_edges, incoming_edges) =
+                vertex_map.entry(*left_vertex).or_insert((vec![], vec![]));
 
             outgoing_edges.push(*index);
 
-            let (outgoing_edges, incoming_edges) = vertex_map
-                .entry(right_vertex.clone())
-                .or_insert((vec![], vec![]));
+            let (outgoing_edges, incoming_edges) =
+                vertex_map.entry(*right_vertex).or_insert((vec![], vec![]));
 
             incoming_edges.push(*index);
         }
@@ -566,14 +563,15 @@ impl CFFIntermediateGraph {
 
             for current_vertex in current_vertices.iter() {
                 for all_vertex in self.vertices.keys().filter(|all_v| {
-                    self.are_adjacent(&current_vertex, all_v).unwrap() && **all_v != *vertex
+                    self.are_adjacent(current_vertex, all_v).unwrap() && **all_v != *vertex
                 }) {
                     // disallow passing along the giving vertex, emulating the graph with vertex removed.
-                    if self.are_adjacent(current_vertex, all_vertex)? && *all_vertex != *vertex {
-                        if visited_vertices.insert(all_vertex) {
-                            delta += 1;
-                            vertices_found_in_previous_iteration.insert(all_vertex);
-                        }
+                    if self.are_adjacent(current_vertex, all_vertex)?
+                        && *all_vertex != *vertex
+                        && visited_vertices.insert(all_vertex)
+                    {
+                        delta += 1;
+                        vertices_found_in_previous_iteration.insert(all_vertex);
                     }
                 }
             }
@@ -604,14 +602,14 @@ impl CFFIntermediateGraph {
             .iter()
             .filter(|(v, _)| self.has_connected_complement(v).unwrap())
         {
-            if outgoing_edges.len() == 0 {
+            if outgoing_edges.is_empty() {
                 res.push((*vertex, CFFVertexType::Sink));
-            } else if incoming_edges.len() == 0 {
+            } else if incoming_edges.is_empty() {
                 res.push((*vertex, CFFVertexType::Source));
             }
         }
 
-        if res.len() == 0 {
+        if res.is_empty() {
             return Err(eyre!("no source or sink found"));
         }
         Ok(res)
@@ -623,9 +621,9 @@ impl CFFIntermediateGraph {
             .iter()
             .filter(|(v, _)| self.has_connected_complement(v).unwrap())
         {
-            if outgoing_edges.len() == 0 && incoming_edges.len() != 0 {
+            if outgoing_edges.is_empty() && !incoming_edges.is_empty() {
                 return Ok((*vertex, CFFVertexType::Sink));
-            } else if incoming_edges.len() == 0 && outgoing_edges.len() != 0 {
+            } else if incoming_edges.is_empty() && !outgoing_edges.is_empty() {
                 return Ok((*vertex, CFFVertexType::Source));
             }
         }
@@ -703,14 +701,14 @@ impl CFFIntermediateGraph {
                     let outgoing_edges_of_new_vertex = outgoing_edges_of_adjacent_vertex
                         .iter()
                         .filter(|e| !edges_to_be_deleted.contains(e))
-                        .map(|e| *e)
+                        .copied()
                         .collect_vec();
 
                     let incoming_edges_of_new_vertex = incoming_edges_of_adjacent_vertex
                         .iter()
                         .chain(edges_of_vertex.iter())
                         .filter(|e| !edges_to_be_deleted.contains(e))
-                        .map(|e| *e)
+                        .copied()
                         .collect_vec();
 
                     new_vertices.remove(vertex);
@@ -774,7 +772,7 @@ impl CFFIntermediateGraph {
                 let mut res = vec![];
 
                 for (adjacent_vertex, edges_to_be_deleted) in adjacent_vertices.iter() {
-                    let new_vertex = vertex.join(&adjacent_vertex);
+                    let new_vertex = vertex.join(adjacent_vertex);
 
                     let (outgoing_edges_of_adjacent_vertex, incoming_edges_of_adjacent_vertex) =
                         self.vertices
@@ -788,13 +786,13 @@ impl CFFIntermediateGraph {
                         .iter()
                         .chain(edges_of_vertex.iter())
                         .filter(|e| !edges_to_be_deleted.contains(e))
-                        .map(|e| *e)
+                        .copied()
                         .collect_vec();
 
                     let incoming_edges_of_new_vertex = incoming_edges_of_adjacent_vertex
                         .iter()
                         .filter(|e| !edges_to_be_deleted.contains(e))
-                        .map(|e| *e)
+                        .copied()
                         .collect_vec();
 
                     new_vertices.remove(vertex);
@@ -959,9 +957,9 @@ impl CFFIntermediateGraph {
             .vertices
             .get(vertex)
             .ok_or_else(|| String::from("vertex not in graph"))?;
-        if outgoing.len() == 0 {
+        if outgoing.is_empty() {
             Ok(CFFVertexType::Sink)
-        } else if ingoing.len() == 0 {
+        } else if ingoing.is_empty() {
             Ok(CFFVertexType::Source)
         } else {
             Ok(CFFVertexType::Both)
@@ -980,17 +978,17 @@ impl CFFIntermediateGraph {
     }
 
     fn get_sorted_edge_list(&self) -> Vec<usize> {
-        self.edges.keys().map(|k| *k).sorted().collect_vec()
+        self.edges.keys().copied().sorted().collect_vec()
     }
 
     fn to_hashable(&self) -> HashableCFFIntermediateGraph {
-        let sorted_keys = self.edges.keys().map(|k| *k).sorted().collect_vec();
+        let sorted_keys = self.edges.keys().copied().sorted().collect_vec();
         let sorted_edges = sorted_keys
             .into_iter()
             .map(|k| {
                 let (left_vertex, right_vertex) = self.edges.get(&k).unwrap();
-                let res = (k, left_vertex.sorted_vertex(), right_vertex.sorted_vertex());
-                res
+
+                (k, left_vertex.sorted_vertex(), right_vertex.sorted_vertex())
             })
             .collect();
         HashableCFFIntermediateGraph {
@@ -1043,14 +1041,11 @@ impl PartialEq for HashableCFFIntermediateGraph {
         }
 
         for (self_edge, other_edge) in self.edges.iter().zip(other.edges.iter()) {
-            if self_edge.0 != other_edge.0 {
+            if self_edge.0 != other_edge.0
+                || self_edge.1.sorted_vertex() != other_edge.1.sorted_vertex()
+                || self_edge.2.sorted_vertex() != other_edge.2.sorted_vertex()
+            {
                 return false;
-            } else {
-                if self_edge.1.sorted_vertex() != other_edge.1.sorted_vertex()
-                    || self_edge.2.sorted_vertex() != other_edge.2.sorted_vertex()
-                {
-                    return false;
-                }
             }
         }
 
@@ -1091,7 +1086,7 @@ fn get_orientations(
 
                 for (edge_orientation, edge_id) in orientation.into_iter().zip(virtual_edges.iter())
                 {
-                    let edge_vertices = graph.edges[*edge_id].vertices.clone();
+                    let edge_vertices = graph.edges[*edge_id].vertices;
                     let left_vertex;
                     let right_vertex;
 
@@ -1105,16 +1100,20 @@ fn get_orientations(
 
                     edges.insert(*edge_id, (left_vertex, right_vertex));
 
-                    if vertices.contains_key(&left_vertex) {
-                        vertices.get_mut(&left_vertex).unwrap().0.push(*edge_id);
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        vertices.entry(left_vertex)
+                    {
+                        e.insert((vec![*edge_id], vec![]));
                     } else {
-                        vertices.insert(left_vertex, (vec![*edge_id], vec![]));
+                        vertices.get_mut(&left_vertex).unwrap().0.push(*edge_id);
                     }
 
-                    if vertices.contains_key(&right_vertex) {
-                        vertices.get_mut(&right_vertex).unwrap().1.push(*edge_id);
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        vertices.entry(right_vertex)
+                    {
+                        e.insert((vec![], vec![*edge_id]));
                     } else {
-                        vertices.insert(right_vertex, (vec![], vec![*edge_id]));
+                        vertices.get_mut(&right_vertex).unwrap().1.push(*edge_id);
                     }
                 }
 
@@ -1142,7 +1141,7 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
         }
     }
 
-    let (orientations, position_map) = get_orientations(&graph);
+    let (orientations, position_map) = get_orientations(graph);
     info!("generating cff for graph: {}", graph.name);
     info!(
         "number of orientations for {}: {}",
@@ -1186,7 +1185,7 @@ fn generate_cff_from_orientations(
         while !tree_done {
             // println!("processing layer {}", layer);
             let bottom_layer = tree.get_bottom_layer();
-            if bottom_layer.len() == 0 {
+            if bottom_layer.is_empty() {
                 break;
             }
 
@@ -1544,7 +1543,7 @@ mod tests_cff {
             .get_directed_neighbours(&CFFVertex::from_vec(vec![2]))
             .unwrap();
 
-        assert!(neighbours.len() == 0);
+        assert!(neighbours.is_empty());
     }
 
     #[test]
@@ -1693,11 +1692,8 @@ mod tests_cff {
         let external_energy_cache = [p1.t, p2.t, p3.t];
 
         // combine the virtual and external energies
-        let energy_cache = virtual_energy_cache
-            .iter()
-            .chain(external_energy_cache.iter())
-            .map(|e| *e)
-            .collect_vec();
+        let mut energy_cache = virtual_energy_cache.to_vec();
+        energy_cache.extend(external_energy_cache);
 
         let edge_types = [
             EdgeType::Virtual,
@@ -1717,13 +1713,16 @@ mod tests_cff {
             * cff.evaluate(&energy_cache, &edge_types)
             * (2. * std::f64::consts::PI).pow(-3);
 
-        let absolute_error: f64 = cff_res - 6.33354922553617e-9_f64;
+        let target_res = 6.333_549_225_536_17e-9_f64;
+        let absolute_error: f64 = cff_res - target_res;
         let relative_error = absolute_error.abs() / cff_res.abs();
 
         assert!(
             relative_error.abs() < 1.0e-15,
-            "relative error: {:+e}",
-            relative_error
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
         );
     }
 
@@ -1776,11 +1775,8 @@ mod tests_cff {
 
         let external_energy_cache = [q.t, -q.t];
 
-        let energy_cache = virtual_energy_cache
-            .iter()
-            .chain(external_energy_cache.iter())
-            .map(|e| *e)
-            .collect_vec();
+        let mut energy_cache = virtual_energy_cache.to_vec();
+        energy_cache.extend(external_energy_cache);
 
         let energy_prefactor = virtual_energy_cache
             .iter()
