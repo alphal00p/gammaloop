@@ -61,7 +61,7 @@ def expression_to_string(expr: sb.Expression | None) -> str | None:
     if expr is None:
         return None
     try:
-        return expression_to_string(expr)
+        return expression_to_string_safe(expr)
     except Exception as exception:  # pylint: disable=broad-except
         common.logger.critical("%s", exception)
         return None
