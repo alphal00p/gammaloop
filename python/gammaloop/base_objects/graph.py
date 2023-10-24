@@ -591,7 +591,7 @@ class Graph(object):
     def to_yaml_str(self) -> str:
         return utils.verbose_yaml_dump(self.to_serializable_dict())
 
-    @ staticmethod
+    @staticmethod
     def from_qgraph(model: Model, qgraph_object: dict[str, Any], name: str = 'default') -> Graph:
         """ Imports graph form a stylicized qgraph python output file. Will be deprecated when using in-house gammaloop graph generation. """
 

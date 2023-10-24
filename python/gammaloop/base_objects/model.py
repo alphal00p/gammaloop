@@ -4,12 +4,14 @@ import importlib
 import importlib.util
 import os
 import sys
-from typing import Any
+from typing import Any, Callable
 from enum import StrEnum
 import yaml
-from symbolica import Expression as SBE  # pylint: disable=import-error
-from gammaloop.misc.common import pjoin, DATA_PATH, GammaLoopError
+import cmath
+from symbolica import Expression as SBE, AtomType  # pylint: disable=import-error
+from gammaloop.misc.common import pjoin, DATA_PATH, GammaLoopError, logger
 import gammaloop.misc.utils as utils
+from gammaloop.base_objects.param_card import ParamCard
 pjoin = os.path.join
 
 
@@ -100,9 +102,10 @@ class VertexRule(object):
 
 
 class SerializableCoupling(object):
-    def __init__(self, name: str, expression: str, orders: list[tuple[str, int]]):
+    def __init__(self, name: str, expression: str, orders: list[tuple[str, int]], value: tuple[float, float] | None):
         self.name: str = name
         self.expression: str = expression
+        self.value: tuple[float, float] | None = value
         self.orders: list[tuple[str, int]] = orders
 
     @staticmethod
@@ -110,7 +113,9 @@ class SerializableCoupling(object):
         return SerializableCoupling(
             coupling.name,
             utils.expression_to_string_safe(coupling.expression),
-            list(coupling.orders.items())
+            list(coupling.orders.items()),
+            None if coupling.value is None else (
+                coupling.value.real, coupling.value.imag)
         )
 
     @staticmethod
@@ -118,14 +123,16 @@ class SerializableCoupling(object):
         return SerializableCoupling(
             dict_repr['name'],
             dict_repr['expression'],
-            dict_repr['orders']
+            dict_repr['orders'],
+            dict_repr['value']
         )
 
 
 class Coupling(object):
-    def __init__(self, name: str, expression: str, orders: dict[str, int]):
+    def __init__(self, name: str, expression: str, orders: dict[str, int], value: complex | None = None):
         self.name: str = name
         self.expression: SBE = utils.parse_python_expression_safe(expression)
+        self.value: complex | None = value
         self.orders: dict[str, int] = orders
 
     @staticmethod
@@ -137,7 +144,9 @@ class Coupling(object):
         return Coupling(
             serializable_coupling.name,
             serializable_coupling.expression,
-            dict(serializable_coupling.orders)
+            dict(serializable_coupling.orders),
+            None if serializable_coupling.value is None else complex(
+                *serializable_coupling.value)
         )
 
     def to_serializable_coupling(self) -> SerializableCoupling:
@@ -190,13 +199,13 @@ class LorentzStructure(object):
 
 
 class SerializableParameter(object):
-    def __init__(self, lhablock: str | None, lhacode: int | None, name: str, nature: str, parameter_type: str, value: float | None, expression: str | None):
+    def __init__(self, lhablock: str | None, lhacode: tuple[int, ...] | None, name: str, nature: str, parameter_type: str, value: tuple[float, float] | None, expression: str | None):
         self.lhablock: str | None = lhablock
-        self.lhacode: int | None = lhacode
+        self.lhacode: tuple[int, ...] | None = lhacode
         self.name: str = name
         self.nature: str = nature
         self.parameter_type: str = parameter_type
-        self.value: float | None = value
+        self.value: tuple[float, float] | None = value
         self.expression: str | None = expression
 
     @staticmethod
@@ -204,7 +213,9 @@ class SerializableParameter(object):
         return SerializableParameter(
             parameter.lhablock, parameter.lhacode, parameter.name,
             str(parameter.nature), str(
-                parameter.parameter_type), parameter.value,
+                parameter.parameter_type),
+            None if parameter.value is None else (
+                parameter.value.real, parameter.value.imag),
             utils.expression_to_string(parameter.expression)
         )
 
@@ -222,30 +233,27 @@ class Parameter(object):
     # Useful for assigning typed defaults
     @staticmethod
     def default() -> Parameter:
-        return Parameter(lhablock='DUMMY', lhacode=0, name='DUMMY', nature=ParameterNature.INTERNAL, parameter_type=ParameterType.REAL, value=0., expression='0')
+        return Parameter(lhablock='DUMMY', lhacode=(0,), name='DUMMY', nature=ParameterNature.INTERNAL, parameter_type=ParameterType.REAL, value=0., expression='0')
 
-    def __init__(self, lhablock: str | None, lhacode: int | None, name: str, nature: ParameterNature, parameter_type: ParameterType, value: float | None, expression: str | None):
+    def __init__(self, lhablock: str | None, lhacode: tuple[int, ...] | None, name: str, nature: ParameterNature, parameter_type: ParameterType, value: complex | None, expression: str | None):
         self.lhablock: str | None = lhablock
-        self.lhacode: int | None = lhacode
+        self.lhacode: tuple[int, ...] | None = lhacode
         self.name: str = name
         self.nature: ParameterNature = nature
         self.parameter_type: ParameterType = parameter_type
-        self.value: float | None = value
+        self.value: complex | None = value
         self.expression: SBE | None = utils.parse_python_expression(expression)
 
     @staticmethod
     def from_ufo_object(ufo_object: Any) -> Parameter:
         if ufo_object.nature == 'external':
-            param_value = float(ufo_object.value)
+            param_value = complex(ufo_object.value)
             param_expression: str | None = None
-            match param_value:
-                case 0.: param_expression = '0'
-                case 1.: param_expression = '1'
-                case _: param_expression = None
         elif ufo_object.nature == 'internal':
-            param_expression = ufo_object.value
+            param_expression: str | None = ufo_object.value
             try:
-                param_value = float(ufo_object.value)
+                param_value = complex(ufo_object.value)
+                param_expression = None
             except ValueError:
                 param_value = None
         else:
@@ -253,7 +261,9 @@ class Parameter(object):
                 f"Invalid parameter nature '{ufo_object.nature}'")
 
         return Parameter(
-            ufo_object.lhablock, ufo_object.lhacode, ufo_object.name,
+            ufo_object.lhablock,
+            None if ufo_object.lhacode is None else tuple(ufo_object.lhacode),
+            ufo_object.name,
             ParameterNature(ufo_object.nature), ParameterType(ufo_object.type),
             param_value, param_expression
         )
@@ -264,7 +274,9 @@ class Parameter(object):
             serializable_parameter.lhablock, serializable_parameter.lhacode, serializable_parameter.name,
             ParameterNature(serializable_parameter.nature), ParameterType(
                 serializable_parameter.parameter_type),
-            serializable_parameter.value, serializable_parameter.expression
+            None if serializable_parameter.value is None else complex(
+                *serializable_parameter.value),
+            serializable_parameter.expression
         )
 
     def to_serializable_parameter(self) -> SerializableParameter:
@@ -405,6 +417,7 @@ class SerializableModel(object):
 
     def __init__(self, name: str):
         self.name: str = name
+        self.restriction: str | None = None
         self.orders: list[Order] = []
         self.parameters: list[SerializableParameter] = []
         self.particles: list[SerializableParticle] = []
@@ -415,6 +428,7 @@ class SerializableModel(object):
     @staticmethod
     def from_model(model: Model) -> SerializableModel:
         serializable_model = SerializableModel(model.name)
+        serializable_model.restriction = model.restriction
         serializable_model.orders = model.orders
         serializable_model.parameters = [
             parameter.to_serializable_parameter() for parameter in model.parameters]
@@ -431,6 +445,7 @@ class SerializableModel(object):
     def to_yaml(self) -> str:
         return utils.verbose_yaml_dump({
             'name': self.name,
+            'restriction': self.restriction,
             'orders': [order.__dict__ for order in self.orders],
             'parameters': [parameter.__dict__ for parameter in self.parameters],
             'particles': [particle.__dict__ for particle in self.particles],
@@ -443,6 +458,7 @@ class SerializableModel(object):
     def from_yaml(yaml_str: str) -> SerializableModel:
         yaml_model = yaml.load(yaml_str, Loader=yaml.FullLoader)
         serializable_model = SerializableModel(yaml_model['name'])
+        serializable_model.restriction = yaml_model['restriction']
         serializable_model.orders = [Order.from_dict(
             order) for order in yaml_model['orders']]
         serializable_model.parameters = [SerializableParameter.from_dict(
@@ -460,8 +476,13 @@ class SerializableModel(object):
 
 class Model(object):
 
+    # Because parameters are now sorted accorded to their dependency,
+    # it should not be necessary to go deeper than 1 level of recursion
+    MAX_ALLOWED_RECURSION_IN_PARAMETER_EVALUATION = 1
+
     def __init__(self, name: str):
         self.name: str = name
+        self.restriction: str | None = None
         self.orders: list[Order] = []
         self.parameters: list[Parameter] = []
         self.particles: list[Particle] = []
@@ -471,8 +492,89 @@ class Model(object):
 
         self.name_to_position: dict[str, dict[str | int, int]] = {}
 
+    def get_full_name(self) -> str:
+        return f"{self.name}-{'full' if self.restriction is None else self.restriction}"
+
+    # We must delay the building of model functions to make sure Symbolica has been registered at this point.
+    @classmethod
+    def set_model_functions(cls):
+        cls.model_functions: dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]] = {
+            SBE.fun('Theta'): lambda xs: 0. if xs[0].real < 0. else 1.,
+            SBE.fun('tan'): lambda xs: cmath.tan(xs[0]),
+            SBE.fun('acos'): lambda xs: cmath.acos(xs[0]),
+            SBE.fun('asin'): lambda xs: cmath.asin(xs[0]),
+            SBE.fun('atan'): lambda xs: cmath.atan(xs[0]),
+            SBE.fun('complexconjugate'): lambda xs: xs[0].conjugate(),
+            SBE.fun('complex'): lambda xs: xs[0]+complex(0, 1)*xs[1],
+        }
+
+    @classmethod
+    def get_model_functions(cls) -> dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]]:
+        if not hasattr(cls, 'model_functions'):
+            cls.set_model_functions()
+        return dict(cls.model_functions)
+
+    @classmethod
+    def set_model_variables(cls):
+        cls.model_variables: dict[SBE, complex] = {
+            SBE.var('I'): complex(0, 1),
+            SBE.var('pi'): cmath.pi
+        }
+
+    @classmethod
+    def get_model_variables(cls) -> dict[SBE, complex]:
+        if not hasattr(cls, 'model_variables'):
+            cls.set_model_variables()
+        return dict(cls.model_variables)
+
     def is_empty(self) -> bool:
         return self.name == 'NotLoaded' or len(self.particles) == 0
+
+    def get_internal_parameters(self) -> list[Parameter]:
+        return [parameter for parameter in self.parameters if parameter.nature == ParameterNature.INTERNAL]
+
+    def get_external_parameters(self) -> list[Parameter]:
+        return [parameter for parameter in self.parameters if parameter.nature == ParameterNature.EXTERNAL]
+
+    def sort_parameters(self):
+        """ Sort parameters to linearize their evaluations, meaning all dependent parameters of parameter i appear before i """
+
+        sorted_parameters: list[Parameter] = self.get_external_parameters()
+
+        remaining_parameters: list[Parameter] = self.get_internal_parameters()
+        for p in list(remaining_parameters):
+            if p.expression is None:
+                if p.value is None:
+                    raise GammaLoopError(
+                        "Parameter {} has no expression and no value".format(p.name))
+                else:
+                    sorted_parameters.append(
+                        remaining_parameters.pop(remaining_parameters.index(p)))
+
+        x_ = SBE.var('x_')
+        param_variables: dict[str, dict[str, Any]] = {
+            p.name: {
+                'var': SBE.var(p.name),
+                'dependent_params': [m[x_]  # type: ignore
+                                     for m in p.expression.match(x_, x_.req_type(AtomType.Var))]
+            } for p in remaining_parameters if p.expression is not None
+        }
+
+        while len(remaining_parameters) > 0:
+            n_added: int = 0
+            for p in list(remaining_parameters):
+                if not any(
+                        any(dep_param == param_variables[p.name]['var']
+                            for p in remaining_parameters)
+                        for dep_param in param_variables[p.name]['dependent_params']):
+                    n_added += 1
+                    sorted_parameters.append(
+                        remaining_parameters.pop(remaining_parameters.index(p)))
+            if n_added == 0:
+                raise GammaLoopError(
+                    "Circular dependency in parameters of model {}", self.name)
+
+        self.parameters = sorted_parameters
 
     @staticmethod
     def from_ufo_model(ufo_model_path: str) -> Model:
@@ -524,11 +626,30 @@ class Model(object):
         model.name_to_position['vertex_rules'] = {
             vertex_rule.name: i for i, vertex_rule in enumerate(model.vertex_rules)}
 
+        model.sort_parameters()
         return model
+
+    def sync_name_to_position_dict(self):
+        self.name_to_position.clear()
+        self.name_to_position['orders'] = {
+            order.name: i for i, order in enumerate(self.orders)}
+        self.name_to_position['parameters'] = {
+            param.name: i for i, param in enumerate(self.parameters)}
+        self.name_to_position['particles'] = {
+            particle.name: i for i, particle in enumerate(self.particles)}
+        self.name_to_position['particles_from_PDG'] = {
+            particle.pdg_code: i for i, particle in enumerate(self.particles)}
+        self.name_to_position['lorentz_structures'] = {
+            lorentz.name: i for i, lorentz in enumerate(self.lorentz_structures)}
+        self.name_to_position['couplings'] = {
+            coupling.name: i for i, coupling in enumerate(self.couplings)}
+        self.name_to_position['vertex_rules'] = {
+            vertex_rule.name: i for i, vertex_rule in enumerate(self.vertex_rules)}
 
     @staticmethod
     def from_serializable_model(serializable_model: SerializableModel) -> Model:
         model = Model(serializable_model.name)
+        model.restriction = serializable_model.restriction
         model.orders = serializable_model.orders
 
         model.name_to_position['orders'] = {
@@ -576,6 +697,14 @@ class Model(object):
     def get_parameter(self, parameter_name: str) -> Parameter:
         return self.parameters[self.name_to_position['parameters'][parameter_name]]
 
+    def get_parameter_from_lha_specification(self, lhablock: str, lhacode: tuple[int, ...]) -> Parameter | None:
+        for parameter in self.parameters:
+            if parameter.lhablock is None:
+                continue
+            if parameter.lhablock.lower() == lhablock.lower() and parameter.lhacode == lhacode:
+                return parameter
+        return None
+
     def get_particle(self, particle_name: str) -> Particle:
         return self.particles[self.name_to_position['particles'][particle_name]]
 
@@ -590,3 +719,185 @@ class Model(object):
 
     def get_vertex_rule(self, vertex_name: str) -> VertexRule:
         return self.vertex_rules[self.name_to_position['vertex_rules'][vertex_name]]
+
+    def remove_zero_couplings(self) -> tuple[list[Coupling], list[VertexRule]]:
+
+        removed_couplings: list[Coupling] = []
+        remaining_couplings: list[Coupling] = []
+        for coupling in self.couplings:
+            if coupling.value == 0.:
+                removed_couplings.append(coupling)
+            else:
+                remaining_couplings.append(coupling)
+        self.couplings = remaining_couplings
+
+        removed_vertex_rules: list[VertexRule] = []
+        remaining_vertex_rules: list[VertexRule] = []
+        for vertex_rule in self.vertex_rules:
+            vertex_rule.couplings = {
+                key: coupling
+                for key, coupling in vertex_rule.couplings.items() if coupling.value != 0.
+            }
+            if len(vertex_rule.couplings) == 0:
+                removed_vertex_rules.append(vertex_rule)
+            else:
+                remaining_vertex_rules.append(vertex_rule)
+        self.vertex_rules = remaining_vertex_rules
+        self.sync_name_to_position_dict()
+
+        return (removed_couplings, removed_vertex_rules)
+
+    def get_parameter_values(self) -> dict[SBE, complex]:
+        parameter_map: dict[SBE, complex] = {}
+        for parameter in self.parameters:
+            if parameter.value is None:
+                raise GammaLoopError(
+                    f"The value of parameter {parameter.name} has not been set yet")
+            parameter_map[SBE.var(parameter.name)] = parameter.value
+        return parameter_map
+
+    def update_coupling_values(self) -> None:
+        parameter_values = self.get_model_variables()
+        parameter_values.update(self.get_parameter_values())
+        for coupling in self.couplings:
+            coupling.value = utils.evaluate_symbolica_expression_safe(
+                coupling.expression, parameter_values, self.get_model_functions())
+
+    def update_internal_parameters(self, input_card: InputParamCard) -> None:
+        evaluation_variables: dict[SBE, complex] = self.get_model_variables()
+        for parameter in self.get_external_parameters():
+            parameter.value = input_card[parameter.name.lower()]
+            evaluation_variables[SBE.var(parameter.name)] = parameter.value
+
+        # Collect constant internal parameters such as ZERO
+        for parameter in self.get_internal_parameters():
+            if parameter.expression is None:
+                if parameter.value is None:
+                    raise GammaLoopError(
+                        "Internal parameter '{parameter.name}' has no value nor expression.")
+                evaluation_variables[SBE.var(parameter.name)] = parameter.value
+
+        # Now update all other dependent variables
+        # Note that this is done in a loop because some parameters may depend on other parameters
+        evaluation_round: int = 0
+        while True:
+            evaluation_round += 1
+            found_new_evaluation = False
+            found_unevaluated = False
+            for parameter in self.get_internal_parameters():
+                parameter_SBE = SBE.var(parameter.name)
+                if parameter_SBE not in evaluation_variables:
+                    if parameter.expression is None:
+                        raise GammaLoopError(
+                            f"Internal parameter '{parameter.name}' has no value nor expression.")
+                    if evaluation_round == Model.MAX_ALLOWED_RECURSION_IN_PARAMETER_EVALUATION:
+                        eval_result = utils.evaluate_symbolica_expression_safe(
+                            parameter.expression, evaluation_variables, self.get_model_functions())
+                    else:
+                        eval_result = utils.evaluate_symbolica_expression(
+                            parameter.expression, evaluation_variables, self.get_model_functions())
+                    if eval_result is not None:
+                        parameter.value = eval_result
+                        evaluation_variables[parameter_SBE] = parameter.value
+                        found_new_evaluation = True
+                    else:
+                        found_unevaluated = True
+
+            if not found_unevaluated:
+                break
+            if not found_new_evaluation:
+                logger.critical(
+                    "Could not evaluate all internal parameters. Reprocessing evaluation now to show latest error:")
+                for parameter in self.get_internal_parameters():
+                    if parameter.expression is not None:
+                        eval_result = utils.evaluate_symbolica_expression_safe(
+                            parameter.expression, evaluation_variables, self.get_model_functions())
+                raise GammaLoopError(
+                    "Could not evaluate all internal parameters.")
+
+            if evaluation_round >= Model.MAX_ALLOWED_RECURSION_IN_PARAMETER_EVALUATION:
+                raise GammaLoopError(
+                    "Maximum number of allowed recursions in parameter evaluation reached.")
+
+    def apply_input_param_card(self, input_card: InputParamCard, simplify: bool = False) -> None:
+
+        external_parameters = self.get_external_parameters()
+        zero_parameters: list[str] = []
+        for param in external_parameters:
+            if param.name.lower() not in input_card:
+                if param.value is not None:
+                    logger.debug(
+                        "Parameter '%s' not set in input parameter card. It will be added now with its default value of %s", param.name, param.value)
+                    input_card[param.name.lower()] = param.value
+                else:
+                    raise GammaLoopError(
+                        f"Parameter '{param.name}' is external with no default value, but not set in input parameter card.")
+            else:
+                param.value = input_card[param.name.lower()]
+
+            if param.value == 0. and simplify:
+                zero_parameters.append(param.name)
+                param.nature = ParameterNature.INTERNAL
+                param.expression = utils.parse_python_expression_safe('ZERO')
+                del input_card[param.name.lower()]
+
+        if len(zero_parameters) > 0:
+            logger.debug("The following %d external parameters were forced to zero by the restriction card:\n%s", len(
+                zero_parameters), ', '.join(zero_parameters))
+
+        self.update_internal_parameters(input_card)
+        self.update_coupling_values()
+
+        if simplify:
+            removed_couplings, removed_vertices = self.remove_zero_couplings()
+            if len(removed_couplings) > 0:
+                logger.debug("A total of %d couplings have been removed due restriction card specification.", len(
+                    removed_couplings))
+            if len(removed_vertices) > 0:
+                logger.debug("A total of %d vertices have been removed due restriction card specification:\n%s",
+                             len(removed_vertices),
+                             ', '.join(f"{v_r.name}->({'|'.join(p.name for p in v_r.particles)})" for v_r in removed_vertices))
+
+
+class InputParamCard(dict[str, complex]):
+
+    @staticmethod
+    def from_param_card(param_card: ParamCard, model: Model | None = None) -> InputParamCard:
+        input_param_card = InputParamCard()
+        all_parameters, _restrictions = param_card.analyze_param_card(model)
+        for param_name, locations in all_parameters.items():
+            if len(locations) != 1:
+                raise GammaLoopError(
+                    f"Composite parameter defined across multiple LHA entries not supported. Parameter name: {param_name} and locations: {locations}")
+            block_name, block_lhaid = locations[0]
+            param_value = param_card.get_value(
+                block_name, block_lhaid, 0.0)
+            if not isinstance(param_value, float):
+                raise GammaLoopError(
+                    f"Parameter value must be float, this is not the case for parameter '{param_name}' with value '{param_value}'.")
+            input_param_card[param_name] = complex(param_value, 0.)
+        return input_param_card
+
+    @staticmethod
+    def default_from_model(model: Model) -> InputParamCard:
+        input_param_card = InputParamCard()
+        for param in model.get_external_parameters():
+            if param.value is not None:
+                input_param_card[param.name.lower()] = param.value
+            else:
+                raise GammaLoopError(
+                    f"Model '{model.name}' cannot be loaded without any restriction card since at least one parameter, '{param.name}' lacks a default value.")
+        return input_param_card
+
+    def from_yaml(self, yaml_str: str) -> InputParamCard:
+        yaml_dict = yaml.load(yaml_str, Loader=yaml.FullLoader)
+        for param_name, param_value in yaml_dict.items():
+            self[param_name] = param_value
+        return self
+
+    def from_yaml_file(self, yaml_path: str) -> InputParamCard:
+        with open(yaml_path, 'r') as f:
+            return self.from_yaml(f.read())
+
+    def to_yaml(self) -> str:
+        return utils.verbose_yaml_dump(self)

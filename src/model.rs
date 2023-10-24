@@ -2,6 +2,7 @@ use crate::utils;
 use ahash::RandomState;
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
+use num::Complex;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -137,6 +138,7 @@ pub struct SerializableCoupling {
     expression: SmartString<LazyCompact>,
     #[serde(with = "vectorize")]
     orders: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    value: Option<(f64, f64)>,
 }
 
 impl SerializableCoupling {
@@ -148,6 +150,7 @@ impl SerializableCoupling {
             name: coupling.name.clone(),
             expression: utils::to_str_expression(&coupling.expression, sb_state),
             orders: coupling.orders.clone(),
+            value: coupling.value.map(|value| (value.re, value.im)),
         }
     }
 }
@@ -157,6 +160,7 @@ pub struct Coupling {
     pub name: SmartString<LazyCompact>,
     pub expression: Atom,
     pub orders: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub value: Option<Complex<f64>>,
 }
 
 impl Coupling {
@@ -173,6 +177,7 @@ impl Coupling {
                 sb_workspace,
             ),
             orders: coupling.orders.clone(),
+            value: coupling.value.map(|value| Complex::new(value.0, value.1)),
         }
     }
 }
@@ -303,7 +308,7 @@ pub struct SerializableParameter {
     lhacode: Option<Vec<usize>>,
     nature: ParameterNature,
     parameter_type: ParameterType,
-    value: Option<f64>,
+    value: Option<(f64, f64)>,
     expression: Option<SmartString<LazyCompact>>,
 }
 
@@ -318,7 +323,7 @@ impl SerializableParameter {
             lhacode: param.lhacode.clone(),
             nature: param.nature.clone(),
             parameter_type: param.parameter_type.clone(),
-            value: param.value,
+            value: param.value.map(|value| (value.re, value.im)),
             expression: param
                 .expression
                 .as_ref()
@@ -334,7 +339,7 @@ pub struct Parameter {
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
     pub parameter_type: ParameterType,
-    pub value: Option<f64>,
+    pub value: Option<Complex<f64>>,
     pub expression: Option<Atom>,
 }
 
@@ -350,7 +355,7 @@ impl Parameter {
             lhacode: param.lhacode.clone(),
             nature: param.nature.clone(),
             parameter_type: param.parameter_type.clone(),
-            value: param.value,
+            value: param.value.map(|value| Complex::new(value.0, value.1)),
             expression: param
                 .expression
                 .as_ref()
@@ -368,6 +373,7 @@ pub struct Order {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableModel {
     pub name: SmartString<LazyCompact>,
+    pub restriction: Option<SmartString<LazyCompact>>,
     orders: Vec<Order>,
     parameters: Vec<SerializableParameter>,
     particles: Vec<SerializableParticle>,
@@ -395,6 +401,7 @@ impl SerializableModel {
     pub fn from_model(model: &Model, sb_state: &symbolica::state::State) -> SerializableModel {
         SerializableModel {
             name: model.name.clone(),
+            restriction: model.restriction.clone(),
             orders: model
                 .orders
                 .iter()
@@ -441,6 +448,7 @@ impl SerializableModel {
 #[derive(Debug, Clone)]
 pub struct Model {
     pub name: SmartString<LazyCompact>,
+    pub restriction: Option<SmartString<LazyCompact>>,
     pub orders: Vec<Arc<Order>>,
     pub parameters: Vec<Arc<Parameter>>,
     pub particles: Vec<Arc<Particle>>,
@@ -460,6 +468,7 @@ impl Default for Model {
     fn default() -> Self {
         Model {
             name: SmartString::<LazyCompact>::from("ModelNotLoaded"),
+            restriction: None,
             orders: vec![],
             parameters: vec![],
             particles: vec![],
@@ -497,6 +506,7 @@ impl Model {
     ) -> Model {
         let mut model: Model = Model::default();
         model.name = serializable_model.name;
+        model.restriction = serializable_model.restriction;
 
         // Extract coupling orders
         model.orders = serializable_model

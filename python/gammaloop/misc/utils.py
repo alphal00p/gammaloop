@@ -1,12 +1,15 @@
 from enum import StrEnum
-from typing import TextIO, Any
+from typing import TextIO, Any, Callable
 from collections import deque, defaultdict
+from symbolica import Expression as SBE  # pylint: disable=import-error
 import logging
 import logging.handlers
 import os
 import sys
 import symbolica as sb  # pylint: disable=import-error # type: ignore
 import yaml
+import re
+from pprint import pformat
 
 import gammaloop.misc.common as common
 
@@ -33,6 +36,46 @@ class Colour(StrEnum):
     END = '\033[0m'
 
 
+def recursive_replace_all(expr: sb.Expression, replace: Callable[[SBE], SBE], max_recursion: int = 1000) -> SBE:
+    n_iter = 0
+    while n_iter < max_recursion:
+        replaced_expr = replace(expr)
+        if replaced_expr == expr:
+            break
+        expr = replaced_expr
+        n_iter += 1
+    if n_iter == max_recursion:
+        raise common.GammaLoopError(
+            "Symbolica @%s failed to fully replace expression:\n%s\nwith %d recursions.", sb.__file__, expr, max_recursion)
+    return expr
+
+
+def evaluate_symbolica_expression(expr: sb.Expression, evaluation_variables: dict[SBE, complex], evaluation_functions: dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]]) -> complex | None:
+    try:
+        return evaluate_symbolica_expression_safe(expr, evaluation_variables, evaluation_functions)
+    except common.GammaLoopError:
+        return None
+
+
+def evaluate_symbolica_expression_safe(expr: sb.Expression, evaluation_variables: dict[SBE, complex], evaluation_functions: dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]]) -> complex:
+    try:
+        res: complex = expr.evaluate_complex(  # type: ignore
+            evaluation_variables, evaluation_functions)
+        # Small adjustment to avoid havin -0. in either the real or imaginary part
+        return complex(0 if abs(res.real) == 0. else res.real,  # type: ignore
+                       0 if abs(res.imag) == 0. else res.imag)  # type: ignore
+    except BaseException as e:
+        raise common.GammaLoopError(
+            "Symbolica (@%s) failed to evaluate expression:\n%s\nwith exception:\n%s.\nVariables:\n%s\nFunctions:\n%s",
+            sb.__file__,
+            expression_to_string(expr), e,
+            pformat({expression_to_string(k): v for k,
+                    v in evaluation_variables.items()}),
+            pformat([expression_to_string(k()).replace('()', '')  # type: ignore
+                    for k in evaluation_functions.keys()])
+        )
+
+
 def parse_python_expression(expr: str | None) -> sb.Expression | None:
     if expr is None:
         return None
@@ -43,6 +86,20 @@ def parse_python_expression(expr: str | None) -> sb.Expression | None:
         return None
 
 
+def replace_pseudo_floats(expression: str):
+    # Check for actual floats
+    actual_floats = re.findall(r'\d+\.\d+', expression)
+    if actual_floats:
+        raise ValueError(
+            f"Expression contains the following floating point values in the expression: {actual_floats}" +
+            "\nThis is not supported by Symbolica and typically, the model needs to be adjusted to declare those floats as internal constant parameters.")
+
+    # Replace pseudo-floats
+    modified_expression = re.sub(r'(\d+)\.', r'\1', expression)
+
+    return modified_expression
+
+
 def parse_python_expression_safe(expr: str) -> sb.Expression:
 
     santized_expr = expr.replace('**', '^')\
@@ -50,11 +107,18 @@ def parse_python_expression_safe(expr: str) -> sb.Expression:
         .replace('cmath.pi', 'pi')\
         .replace('math.sqrt', 'sqrt')\
         .replace('math.pi', 'pi')
+    santized_expr = replace_pseudo_floats(santized_expr)
+
     try:
-        return sb.Expression.parse(santized_expr)
+        sb_expr = sb.Expression.parse(santized_expr)
+        # No longer needed since we automatically include a `complex(x,y)` function in the function map.
+        # sb_expr = recursive_replace_all(sb_expr, lambda e: e.replace_all(
+        #     SBE.parse('complex(x_,y_)'), SBE.parse('x_+I*y_')), max_recursion=1000)
     except Exception as exception:  # pylint: disable=broad-except
         raise common.GammaLoopError(
-            "Symbolica failed to parse expression:\n%s\nwith exception:\n%s", santized_expr, exception)
+            "Symbolica (@%s) failed to parse expression:\n%s\nwith exception:\n%s", sb.__file__, santized_expr, exception)
+
+    return sb_expr
 
 
 def expression_to_string(expr: sb.Expression | None) -> str | None:
@@ -82,7 +146,7 @@ def expression_to_string_safe(expr: sb.Expression) -> str:
             latex=False)
     except Exception as exception:  # pylint: disable=broad-except
         raise common.GammaLoopError(
-            "Symbolica failed to cast expression to string:\n%s\nwith exception:\n%s", expr, exception)
+            "Symbolica (@%s)failed to cast expression to string:\n%s\nwith exception:\n%s", sb.__file__, expr, exception)
 
 
 def setup_logging() -> logging.StreamHandler[TextIO]:
@@ -397,7 +461,8 @@ def generate_momentum_flow(edge_map: list[tuple[int, int]], loop_momenta: list[i
                 overall_sign = 1 if y[0][1] else -1
                 for yy in y:  # pylint: disable=invalid-name
                     if yy[0] == i:
-                        signatures[i][1][j] += overall_sign * (1 if yy[1] else -1)
+                        signatures[i][1][j] += overall_sign * \
+                            (1 if yy[1] else -1)
                         break
 
     return signatures

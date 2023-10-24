@@ -8,9 +8,10 @@ import os
 from typing import Any
 from pprint import pformat
 import yaml
-from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered
+from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH
 from gammaloop.misc.utils import Colour
-import gammaloop.base_objects.model as model
+from gammaloop.base_objects.model import Model, InputParamCard
+from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
 from gammaloop.base_objects.graph import Graph
 import gammaloop.cross_section.cross_section as cross_section
 import gammaloop.cross_section.supergraph as supergraph
@@ -214,7 +215,8 @@ class CommandList(list[tuple[str, str]]):
 class GammaLoop(object):
 
     def __init__(self):
-        self.model: model.Model = model.Model('NotLoaded')
+        self.model: Model = Model('NotLoaded')
+        self.model_directory: Path = Path('NotLoaded')
 
         # Initialize a gammaloop rust engine worker which will be used throughout the session
         self.rust_worker: gl_rust.Worker = gl_rust.Worker.new()
@@ -233,8 +235,8 @@ class GammaLoop(object):
                                  + "Please register Symbolica by setting the environment variable 'SYMBOLICA_LICENSE' or by adding it to the gammaloop configuration file.\n"
                                  + "Also make sure you have a working internet connection.")
 
-    def get_model_from_rust_worker(self) -> model.Model:
-        return model.Model.from_yaml(self.rust_worker.get_model())
+    def get_model_from_rust_worker(self) -> Model:
+        return Model.from_yaml(self.rust_worker.get_model())
 
     def get_cross_sections_from_rust_worker(self) -> cross_section.CrossSectionList:
         if self.model.is_empty():
@@ -337,19 +339,74 @@ class GammaLoop(object):
             return
         args = self.import_model_parser.parse_args(split_str_args(str_args))
 
+        model_directory: str = os.path.dirname(args.model)
+        if model_directory == '':
+            model_directory = pjoin(GL_PATH, 'data', 'models')
+        else:
+            model_directory = os.path.abspath(model_directory)
+
+        split_model_specification = os.path.basename(args.model).split('-')
+        model_name: str = ''
+        model_restriction: str | None = None
+        if len(split_model_specification) > 3:
+            raise GammaLoopError(
+                "Model names cannot contain hyphens and must be specified with format <model_name>[-<restriction_name>].")
+        elif len(split_model_specification) == 2:
+            model_name, model_restriction = split_model_specification
+        elif len(split_model_specification) == 1:
+            model_name = split_model_specification[0]
+            if args.format == 'ufo':
+                if os.path.isfile(pjoin(model_directory, model_name, 'restrict_default.dat')):
+                    model_restriction = 'default'
+            else:
+                if os.path.isfile(pjoin(model_directory, 'restrict_default.dat')):
+                    model_restriction = 'default'
+
         match args.format:
             case 'ufo':
-                self.model = model.Model.from_ufo_model(args.model)
+                self.model = Model.from_ufo_model(
+                    pjoin(model_directory, model_name))
+                model_restriction_dir = pjoin(model_directory, model_name)
             case 'yaml':
-                with open(args.model, 'r', encoding='utf-8') as file:
-                    self.model = model.Model.from_yaml(file.read())
+                with open(pjoin(model_directory, model_name), 'r', encoding='utf-8') as file:
+                    self.model = Model.from_yaml(file.read())
+                model_restriction_dir = model_directory
             case _:
                 raise GammaLoopError(f"Invalid model format: '{args.format}'")
+
+        self.model.restriction = model_restriction
+
+        if model_restriction not in [None, 'full']:
+            if not os.path.isfile(pjoin(model_restriction_dir, f'restrict_{model_restriction}.dat')):
+                raise GammaLoopError(
+                    f"Restriction file 'restrict_{model_restriction}.dat' not found for model '{model_name}' in directory '{pjoin(model_directory,model_name)}'.")
+            else:
+                param_card = ParamCard(
+                    pjoin(model_restriction_dir, f'restrict_{model_restriction}.dat'))
+        else:
+            model_restriction = 'full'
+            if not os.path.isfile(pjoin(model_restriction_dir, 'restrict_full.dat')):
+                self.model.apply_input_param_card(
+                    InputParamCard.default_from_model(self.model), simplify=False)
+                ParamCardWriter.write(
+                    Path(pjoin(model_restriction_dir, 'restrict_full.dat')), self.model, generic=True)
+            param_card = ParamCard(
+                pjoin(model_restriction_dir, 'restrict_full.dat'))
+
+        if model_restriction != 'full':
+            self.model.apply_input_param_card(InputParamCard.from_param_card(
+                param_card, self.model), simplify=True)
+        else:
+            self.model.apply_input_param_card(InputParamCard.from_param_card(
+                param_card, self.model), simplify=False)
+
+        self.model_directory = Path(model_directory)
 
         # Assign the UFO model to our rust worker
         self.rust_worker.load_model_from_yaml_str(self.model.to_yaml())
 
-        logger.info("Successfully loaded model '%s'.", self.model.name)
+        logger.info("Successfully loaded model '%s'.",
+                    self.model.get_full_name())
 
     # export_model command
     export_model_parser = ArgumentParser(prog='export_model')
@@ -379,7 +436,7 @@ class GammaLoop(object):
                 raise GammaLoopError(
                     "Invalid model format: '%s' for exporting model.", args.format)
         logger.info("Successfully exported model '%s' to '%s'.",
-                    self.model.name, args.model_file_path)
+                    self.model.get_full_name(), args.model_file_path)
 
     # import_graphs command
     import_graphs_parser = ArgumentParser(prog='import_graphs')
@@ -527,6 +584,8 @@ class GammaLoop(object):
     launch_parser = ArgumentParser(prog='launch')
     launch_parser.add_argument(
         'path_to_launch', type=str, help='Path to launch a given run command to')
+    launch_parser.add_argument('--no_overwrite_model', '-nom', action='store_true', default=False,
+                               help='Do not overwrite model with the new parameter and coupling values derived from the param card.')
 
     def do_launch(self, str_args: str) -> None:
         if str_args == 'help':
@@ -543,9 +602,14 @@ class GammaLoop(object):
 
         # Sync the model with the one used in the output
         with open(pjoin(args.path_to_launch, 'sources', 'model', f"{output_metadata['model_name']}.yaml"), 'r', encoding='utf-8') as file:
-            yaml_model = file.read()
-            self.model = model.Model.from_yaml(yaml_model)
-            self.rust_worker.load_model_from_yaml_str(yaml_model)
+            self.model = Model.from_yaml(file.read())
+        self.model.apply_input_param_card(InputParamCard.from_param_card(
+            ParamCard(pjoin(args.path_to_launch, 'cards', 'param_card.dat')), self.model), simplify=False)
+        processed_yaml_model = self.model.to_yaml()
+        if not args.no_overwrite_model:
+            with open(pjoin(args.path_to_launch, 'sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
+                file.write(processed_yaml_model)
+        self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
 
         # Depending on the type of output, sync cross-section or amplitude
         if output_metadata['output_type'] == 'amplitudes':

@@ -427,8 +427,11 @@ impl Graph {
             .map(|(emr_mom, edge)| match edge.edge_type {
                 EdgeType::Virtual => {
                     if let Some(mass_value) = edge.particle.mass.value {
-                        let energy_squared =
-                            emr_mom.spatial_squared() + Into::<T>::into(mass_value * mass_value);
+                        if mass_value.im != 0. {
+                            panic!("Complex masses not yet supported in gammaLoop")
+                        }
+                        let energy_squared = emr_mom.spatial_squared()
+                            + Into::<T>::into(mass_value.re * mass_value.re);
                         energy_squared.sqrt()
                     } else {
                         emr_mom.spatial_distance()
@@ -533,7 +536,7 @@ impl Graph {
     }
 
     pub fn generate_cff(&mut self) {
-        self.derived_data.cff_expression = Some(generate_cff_expression(&self).unwrap());
+        self.derived_data.cff_expression = Some(generate_cff_expression(self).unwrap());
     }
 
     #[inline]
@@ -560,7 +563,7 @@ impl Graph {
         // this can be simplified, since the flip is only needed in the external part of the enerrgy cache
 
         let mut flipped_externals = Vec::with_capacity(independent_external_momenta.len() + 1);
-        let mut non_flipped_externals = independent_external_momenta.clone().to_vec();
+        let mut non_flipped_externals = independent_external_momenta.to_vec();
         non_flipped_externals.push(LorentzVector::<T>::new());
 
         for (index, edge) in self
@@ -598,7 +601,7 @@ impl Graph {
                             &non_flipped_externals,
                         )
                         .spatial_squared()
-                            + Into::<T>::into(mass_value * mass_value);
+                            + Into::<T>::into(mass_value.re * mass_value.re);
                         energy_squared.sqrt()
                     } else {
                         compute_momentum(

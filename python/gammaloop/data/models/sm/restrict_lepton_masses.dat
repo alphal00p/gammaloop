@@ -26,11 +26,11 @@ Block MASS
 ###################################
 ## INFORMATION FOR DECAY
 ###################################
-DECAY   6 1.491500E+00
-DECAY  15 2.270000e-12
-DECAY  23 2.441404e+00 
-DECAY  24 2.047600e+00 
-DECAY  25 6.38233934e-03 
+DECAY   6 1.491500E+00 # WT
+DECAY  15 2.270000e-12 # WTau
+DECAY  23 2.441404e+00 # WZ
+DECAY  24 2.047600e+00 # WW
+DECAY  25 6.38233934e-03 # WH
 
 ###################################
 ## INFORMATION FOR WOLFENSTEIN

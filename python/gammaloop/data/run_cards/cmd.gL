@@ -1,7 +1,8 @@
 #import_model sm
+#import_model sm-full
 #export_model ./sm_model.yaml
 #import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/epem_a_ddx_NLO.py --format=qgraph
-import_model scalars
+import_model scalars-full
 #export_model ./scalars.yaml
 import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_triangle.py --format=qgraph
 #import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/fishnet_2x3.py --format=qgraph

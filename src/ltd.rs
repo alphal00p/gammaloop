@@ -425,7 +425,7 @@ impl LTDTerm {
                 match graph.edges[*i].particle.mass.value {
                     Some(mass) => {
                         momentum.t = (emr[*i].spatial_squared()
-                            + Into::<T>::into(mass) * Into::<T>::into(mass))
+                            + Into::<T>::into(mass.re) * Into::<T>::into(mass.re))
                         .sqrt()
                             * Into::<T>::into(*s)
                     }
@@ -470,7 +470,8 @@ impl LTDTerm {
 
             match edge.particle.mass.value {
                 Some(mass) => {
-                    inv_res *= momentum.square() - Into::<T>::into(mass) * Into::<T>::into(mass);
+                    inv_res *=
+                        momentum.square() - Into::<T>::into(mass.re) * Into::<T>::into(mass.re);
                 }
                 None => {
                     inv_res *= momentum.square();
@@ -562,7 +563,7 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
             }
         }
 
-        if found_signature == false {
+        if !found_signature {
             panic!(
                 "cut structure has no equivalent in the lmb: cut_structure: {:?}. associated_lmb: {:?}. all_lmbs: {:?}",
                 cut_signature,

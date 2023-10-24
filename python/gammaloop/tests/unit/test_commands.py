@@ -22,15 +22,26 @@ class TestShellCommand:
 
 class TestLoadModel:
 
-    def test_load_sm_from_ufo(self):
+    def test_load_full_sm_from_ufo(self):
         gloop = get_gamma_loop_interpreter()
-        gloop.run(CommandList.from_string("import_model sm --format ufo"))
+        gloop.run(CommandList.from_string("import_model sm-full --format ufo"))
 
         assert len(gloop.model.particles) == 43
         assert len(gloop.model.lorentz_structures) == 22
         assert len(gloop.model.couplings) == 108
         assert len(gloop.model.parameters) == 72
         assert len(gloop.model.vertex_rules) == 153
+        assert len(gloop.model.orders) == 2
+
+    def test_load_sm_from_ufo(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string("import_model sm --format ufo"))
+
+        assert len(gloop.model.particles) == 43
+        assert len(gloop.model.lorentz_structures) == 22
+        assert len(gloop.model.couplings) == 72
+        assert len(gloop.model.parameters) == 72
+        assert len(gloop.model.vertex_rules) == 119
         assert len(gloop.model.orders) == 2
 
     # This test uses a session-wide fixture defined in conftest.py
@@ -41,9 +52,9 @@ class TestLoadModel:
 
         assert len(gloop.model.particles) == 43
         assert len(gloop.model.lorentz_structures) == 22
-        assert len(gloop.model.couplings) == 108
+        assert len(gloop.model.couplings) == 72
         assert len(gloop.model.parameters) == 72
-        assert len(gloop.model.vertex_rules) == 153
+        assert len(gloop.model.vertex_rules) == 119
         assert len(gloop.model.orders) == 2
 
     def test_load_scalars(self):
@@ -205,7 +216,25 @@ class TestEpEmADdxNLOCrossSection:
     def test_drawing(self, epem_a_ddx_nlo_export: Path):
         assert run_drawing(pjoin(epem_a_ddx_nlo_export, 'sources',
                            'cross_sections', 'epem_a_ddx_NLO', 'drawings'))
-        
+
+    def test_info_massive(self, massive_epem_a_ddx_nlo_export: Path):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {massive_epem_a_ddx_nlo_export}"))
+        assert gloop.model.name == 'sm'
+        assert gloop.get_model_from_rust_worker().name == 'sm'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 1
+            assert len(cross_sections[0].supergraphs) == 4
+            assert cross_sections[0].name == 'epem_a_ddx_NLO'
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 0
+        gloop.run(CommandList.from_string("info"))
+
+    def test_drawing_massive(self, massive_epem_a_ddx_nlo_export: Path):
+        assert run_drawing(pjoin(massive_epem_a_ddx_nlo_export, 'sources',
+                           'cross_sections', 'epem_a_ddx_NLO', 'drawings'))
+
 
 class TestScalarBubble:
 
@@ -222,7 +251,7 @@ class TestScalarBubble:
             assert len(amplitudes[0].amplitude_graphs) == 1
             assert amplitudes[0].name == 'bubble'
         gloop.run(CommandList.from_string("info"))
-    
+
     def test_drawing(self, scalar_bubble_export: Path):
         assert run_drawing(pjoin(scalar_bubble_export, 'sources',
                            'amplitudes', 'bubble', 'drawings'))

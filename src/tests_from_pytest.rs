@@ -14,6 +14,9 @@ use std::path::Path;
 use std::{clone, env};
 use symbolica;
 
+#[allow(unused)]
+const LTD_COMPARISON_TOLERANCE: f64 = 1.0e-15;
+
 pub fn load_amplitude_output(
     output_path: String,
     sb_state: &mut symbolica::state::State,
@@ -131,7 +134,7 @@ mod tests_scalar_massless_triangle {
 
         let res = energy_product * graph.evaluate_cff_expression(&[k], &[p1, p2]);
 
-        println!("res = {:+e}", res);
+        // println!("res = {:+e}", res);
 
         // test the lmb generation;;
         assert_eq!(
@@ -148,16 +151,16 @@ mod tests_scalar_massless_triangle {
 
         let ltd_res = graph.evaluate_ltd_expression(&[k], &[p1, p2, LorentzVector::new()]);
         for edge in graph.edges.iter() {
-            let position = graph.get_edge_position(&edge.name).unwrap();
-            println!(
-                "edge name: {}\n edge position: {}\n vertices: {:?}\n signature: {:?}",
-                edge.name,
-                position,
-                edge.vertices,
-                graph.loop_momentum_basis.edge_signatures[position],
-            );
+            let _position = graph.get_edge_position(&edge.name).unwrap();
+            // println!(
+            //     "edge name: {}\n edge position: {}\n vertices: {:?}\n signature: {:?}",
+            //     edge.name,
+            //     position,
+            //     edge.vertices,
+            //     graph.loop_momentum_basis.edge_signatures[position],
+            // );
         }
-        println!("ltd_res = {:+e}", ltd_res);
+        // println!("ltd_res = {:+e}", ltd_res);
 
         approx_eq(ltd_res, res, 1.0e-15);
         // TODO: @Mathijs, you can put your own checks there
@@ -202,17 +205,15 @@ fn pytest_scalar_fishnet_2x2() {
     let zero_vector = LorentzVector::from_args(0.0, 0.0, 0.0, 0.0);
 
     let emr = graph.compute_emr(&[k1, k2, k3, k4], &[zero_vector; 4]);
-    println!(
-        "number of lmbs: {}",
-        graph
-            .clone()
-            .derived_data
-            .loop_momentum_bases
-            .unwrap()
-            .len()
-    );
+    let n_lmb = graph
+        .clone()
+        .derived_data
+        .loop_momentum_bases
+        .unwrap()
+        .len();
+    assert_eq!(n_lmb, 192);
+    //println!("number of lmbs: {}", n_lmb);
 
-    println!("checking lmbs");
     for basis in graph.derived_data.loop_momentum_bases.unwrap() {
         let momenta_in_basis = basis.basis.iter().map(|index| emr[*index]).collect_vec();
         let new_emr = basis
@@ -222,10 +223,10 @@ fn pytest_scalar_fishnet_2x2() {
             .collect_vec();
         assert_eq!(emr.len(), new_emr.len());
         for (e1, e2) in emr.iter().zip(new_emr.iter()) {
-            approx_eq(e1.t, e2.t, 1.0e-15);
-            approx_eq(e1.x, e2.x, 1.0e-15);
-            approx_eq(e1.y, e2.y, 1.0e-15);
-            approx_eq(e1.z, e2.z, 1.0e-15);
+            assert!(approx_eq(e1.t, e2.t, LTD_COMPARISON_TOLERANCE));
+            assert!(approx_eq(e1.x, e2.x, LTD_COMPARISON_TOLERANCE));
+            assert!(approx_eq(e1.y, e2.y, LTD_COMPARISON_TOLERANCE));
+            assert!(approx_eq(e1.z, e2.z, LTD_COMPARISON_TOLERANCE));
         }
     }
 

@@ -4,12 +4,15 @@ import os
 from pathlib import Path
 import shutil
 import yaml
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from gammaloop.cross_section.cross_section import AmplitudeList, CrossSectionList
 from gammaloop.misc.common import DATA_PATH, pjoin, GammaLoopError
 import gammaloop.misc.utils as utils
 import gammaloop.interface.gammaloop_interface as gammaloop_interface
+
+if TYPE_CHECKING:
+    from gammaloop.interface.gammaloop_interface import GammaLoop
 
 
 class OutputMetaData(dict[str, Any]):
@@ -26,9 +29,8 @@ class OutputMetaData(dict[str, Any]):
 
 class GammaLoopExporter(object):
 
-    # Need to use Any for type here because we must use gammaloop_interface.GammaLoop to avoid circular imports and mypy can't resolve routed paths
-    def __init__(self, gammaloop_interface: Any, _args: argparse.Namespace):
-        self.gammaloop: gammaloop_interface.GammaLoop = gammaloop_interface
+    def __init__(self, gammaloop_interface: GammaLoop, _args: argparse.Namespace):
+        self.gammaloop: GammaLoop = gammaloop_interface
         # Process args argument further here if needed
 
     def generic_export(self, export_root: Path):
@@ -37,8 +39,9 @@ class GammaLoopExporter(object):
 
         # Build the output structure
         os.makedirs(pjoin(export_root, 'Cards'))
-        with open(pjoin(export_root, 'Cards', 'param_card.yaml'), 'w', encoding='utf-8') as file:
-            file.write("TODO")
+        shutil.copy(pjoin(self.gammaloop.model_directory, self.gammaloop.model.name,
+                          f"restrict_{'full' if self.gammaloop.model.restriction is None else self.gammaloop.model.restriction}.dat"),
+                    pjoin(export_root, 'Cards', 'param_card.dat'))
         shutil.copy(pjoin(DATA_PATH, 'run_cards', 'rust_run_config.yaml'), pjoin(
             export_root, 'Cards', 'run_card.yaml'))
         with open(pjoin(export_root, 'Cards', 'proc_card.gL'), 'w', encoding='utf-8') as file:
