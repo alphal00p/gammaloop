@@ -9,6 +9,7 @@ pub mod h_function_test;
 pub mod inspect;
 pub mod integrands;
 pub mod integrate;
+pub mod ltd;
 pub mod model;
 pub mod observables;
 pub mod tests;
@@ -74,8 +75,7 @@ pub struct HFunctionSettings {
     pub power: Option<usize>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
 pub enum ParameterizationMode {
     #[serde(rename = "cartesian")]
     Cartesian,
@@ -88,8 +88,7 @@ pub enum ParameterizationMode {
     HyperSphericalFlat,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
     #[default]
@@ -103,8 +102,7 @@ pub struct GeneralSettings {
     pub debug: usize,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default)]
 pub enum IntegratedPhase {
     #[serde(rename = "real")]
     #[default]
@@ -114,8 +112,6 @@ pub enum IntegratedPhase {
     #[serde(rename = "both")]
     Both,
 }
-
-
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct KinematicsSettings {
@@ -146,10 +142,6 @@ pub struct ParameterizationSettings {
     #[serde(default = "_default_shifts")]
     pub shifts: Vec<(f64, f64, f64, f64)>,
 }
-
-
-
-
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Settings {

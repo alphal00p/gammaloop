@@ -397,7 +397,7 @@ def generate_momentum_flow(edge_map: list[tuple[int, int]], loop_momenta: list[i
                 overall_sign = 1 if y[0][1] else -1
                 for yy in y:  # pylint: disable=invalid-name
                     if yy[0] == i:
-                        signatures[i][1][j] += (1 if yy[1] else -1)
+                        signatures[i][1][j] += overall_sign * (1 if yy[1] else -1)
                         break
 
     return signatures

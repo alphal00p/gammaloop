@@ -205,3 +205,24 @@ class TestEpEmADdxNLOCrossSection:
     def test_drawing(self, epem_a_ddx_nlo_export: Path):
         assert run_drawing(pjoin(epem_a_ddx_nlo_export, 'sources',
                            'cross_sections', 'epem_a_ddx_NLO', 'drawings'))
+        
+
+class TestScalarBubble:
+
+    def test_info(self, scalar_bubble_export: Path):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_bubble_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'bubble'
+        gloop.run(CommandList.from_string("info"))
+    
+    def test_drawing(self, scalar_bubble_export: Path):
+        assert run_drawing(pjoin(scalar_bubble_export, 'sources',
+                           'amplitudes', 'bubble', 'drawings'))

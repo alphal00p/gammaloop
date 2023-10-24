@@ -21,3 +21,7 @@ class TestRust:
     def test_rust_scalar_cube(self, compile_rust_tests: Path, scalar_cube_export: Path):
         assert run_rust_test(compile_rust_tests, scalar_cube_export,
                              'scalar_cube')
+
+    def test_rust_scalar_bubble(self, compile_rust_tests: Path, scalar_bubble_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_bubble_export,
+                             'scalar_bubble')

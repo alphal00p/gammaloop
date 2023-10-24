@@ -51,6 +51,7 @@ vectorize = "0.2.0"
 log = "*"
 env_logger = "*"
 pyo3-log = "*"
+nalgebra = "0.32.3"
 
 [dependencies.pyo3]
 features = ["extension-module", "multiple-pymethods"]
