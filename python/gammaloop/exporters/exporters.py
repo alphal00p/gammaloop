@@ -38,13 +38,13 @@ class GammaLoopExporter(object):
         os.makedirs(export_root)
 
         # Build the output structure
-        os.makedirs(pjoin(export_root, 'Cards'))
+        os.makedirs(pjoin(export_root, 'cards'))
         shutil.copy(pjoin(self.gammaloop.model_directory, self.gammaloop.model.name,
                           f"restrict_{'full' if self.gammaloop.model.restriction is None else self.gammaloop.model.restriction}.dat"),
-                    pjoin(export_root, 'Cards', 'param_card.dat'))
+                    pjoin(export_root, 'cards', 'param_card.dat'))
         shutil.copy(pjoin(DATA_PATH, 'run_cards', 'rust_run_config.yaml'), pjoin(
-            export_root, 'Cards', 'run_card.yaml'))
-        with open(pjoin(export_root, 'Cards', 'proc_card.gL'), 'w', encoding='utf-8') as file:
+            export_root, 'cards', 'run_card.yaml'))
+        with open(pjoin(export_root, 'cards', 'proc_card.gL'), 'w', encoding='utf-8') as file:
             file.write(self.gammaloop.command_history.nice_string())
 
         os.makedirs(pjoin(export_root, 'sources'))
