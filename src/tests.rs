@@ -1,6 +1,6 @@
 #![allow(unused)]
 use crate::integrands::IntegrandSettings;
-use crate::utils;
+use crate::utils::{self, approx_eq};
 use crate::{
     h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
     observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings, Complex,
@@ -20,14 +20,6 @@ const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
 
 fn load_default_settings() -> Settings {
     Settings::from_file("./src/test_resources/default_tests_config.yaml").unwrap()
-}
-
-pub fn approx_eq(res: f64, target: f64, tolerance: f64) -> bool {
-    if target == 0.0 {
-        res.abs() < tolerance
-    } else {
-        ((res - target) / target).abs() < tolerance
-    }
 }
 
 fn validate_error(error: f64, target_diff: f64) -> bool {
@@ -145,14 +137,7 @@ fn compare_inspect(
     target: Complex<f64>,
 ) -> bool {
     let mut integrand = integrand_factory(settings);
-    let res = inspect(
-        settings,
-        &mut integrand,
-        pt,
-        false,
-        is_momentum_space,
-        true,
-    );
+    let res = inspect(settings, &mut integrand, pt, false, is_momentum_space, true);
     if !approx_eq(res.re, target.re, INSPECT_TOLERANCE)
         || !approx_eq(res.im, target.im, INSPECT_TOLERANCE)
     {

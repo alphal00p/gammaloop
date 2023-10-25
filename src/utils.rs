@@ -732,6 +732,27 @@ pub fn one_loop_e_surface_exists<T: FloatLike>(
     }
 }
 
+pub fn approx_eq(res: f64, target: f64, tolerance: f64) -> bool {
+    if target == 0.0 {
+        res.abs() < tolerance
+    } else {
+        ((res - target) / target).abs() < tolerance
+    }
+}
+
+// panics with useful error message
+#[allow(unused)]
+pub fn assert_approx_eq(res: f64, target: f64, tolerance: f64) {
+    if approx_eq(res, target, tolerance) {
+        return;
+    } else {
+        panic!(
+            "assert_approx_eq failed: {} != {} with tolerance {}",
+            res, target, tolerance
+        )
+    }
+}
+
 #[allow(unused)]
 pub fn one_loop_eval_e_surf<T: FloatLike>(
     k: &[T; 3],

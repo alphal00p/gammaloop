@@ -3,8 +3,7 @@ use crate::cff::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::EdgeType;
 use crate::model::Model;
-use crate::tests::approx_eq;
-use crate::utils::compute_momentum;
+use crate::utils::{assert_approx_eq, compute_momentum};
 use colored::Colorize;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
@@ -59,6 +58,7 @@ pub fn load_amplitude_output(
 #[cfg(test)]
 mod tests_scalar_massless_triangle {
     use lorentz_vector::LorentzVector;
+    use rayon::prelude::IndexedParallelIterator;
     use smartstring::SmartString;
 
     use crate::graph::EdgeType;
@@ -162,7 +162,7 @@ mod tests_scalar_massless_triangle {
         }
         // println!("ltd_res = {:+e}", ltd_res);
 
-        approx_eq(ltd_res, res, 1.0e-15);
+        assert_approx_eq(res, ltd_res, 1.0e-5);
         // TODO: @Mathijs, you can put your own checks there
     }
 }
@@ -223,10 +223,10 @@ fn pytest_scalar_fishnet_2x2() {
             .collect_vec();
         assert_eq!(emr.len(), new_emr.len());
         for (e1, e2) in emr.iter().zip(new_emr.iter()) {
-            assert!(approx_eq(e1.t, e2.t, LTD_COMPARISON_TOLERANCE));
-            assert!(approx_eq(e1.x, e2.x, LTD_COMPARISON_TOLERANCE));
-            assert!(approx_eq(e1.y, e2.y, LTD_COMPARISON_TOLERANCE));
-            assert!(approx_eq(e1.z, e2.z, LTD_COMPARISON_TOLERANCE));
+            assert_approx_eq(e1.t, e2.t, LTD_COMPARISON_TOLERANCE);
+            assert_approx_eq(e1.x, e2.x, LTD_COMPARISON_TOLERANCE);
+            assert_approx_eq(e1.y, e2.y, LTD_COMPARISON_TOLERANCE);
+            assert_approx_eq(e1.z, e2.z, LTD_COMPARISON_TOLERANCE);
         }
     }
 
