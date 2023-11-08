@@ -4,9 +4,17 @@
 #import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/epem_a_ddx_NLO.py --format=qgraph
 import_model scalars-full
 #export_model ./scalars.yaml
-import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_triangle.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_triangle.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/bubble.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_box.py --format=qgraph
 #import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/fishnet_2x3.py --format=qgraph
 #import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/cube.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/fishnet_2x2.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/sunrise.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/double_triangle.py --format=qgraph
+import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/mercedes.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/triangle_box.py --format=qgraph
+#import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/isopod.py --format=qgraph
 set drawing.feynmp.show_edge_composite_momenta True
 show_settings drawing.feynmp.show_edge_composite_momenta
 #set drawing.feynmp.show_edge_labels False

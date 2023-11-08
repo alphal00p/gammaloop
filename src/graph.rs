@@ -11,6 +11,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
+use num::Complex;
 #[allow(unused_imports)]
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
@@ -443,6 +444,21 @@ impl Graph {
     }
 
     #[inline]
+    pub fn compute_energy_product<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+    ) -> T {
+        let all_energies = self.compute_onshell_energies(loop_moms, external_moms);
+
+        self.edges
+            .iter()
+            .zip(all_energies.iter())
+            .filter(|(e, _)| e.edge_type == EdgeType::Virtual)
+            .map(|(_, val)| Into::<T>::into(2.) * val)
+            .fold(Into::<T>::into(1.), |acc, x| acc * x)
+    }
+    #[inline]
     pub fn get_edge_type_list(&self) -> Vec<EdgeType> {
         self.edges.iter().map(|e| e.edge_type.clone()).collect()
     }
@@ -450,13 +466,43 @@ impl Graph {
     pub fn generate_loop_momentum_bases(&mut self) {
         let loop_number = self.loop_momentum_basis.basis.len();
         let num_edges = self.edges.len();
+        let external_signature_length = self.loop_momentum_basis.edge_signatures[0].1.len();
 
-        let lmbs = self
+        // the full virtual signature matrix in the form of a flattened vector
+        let signature_matrix_flattened = self
+            .loop_momentum_basis
+            .edge_signatures
+            .iter()
+            .flat_map(|sig| sig.0.iter().map(|s| *s as f64).collect_vec())
+            .collect_vec();
+
+        // convert to dmatrix
+        let signature_matrix =
+            DMatrix::from_row_slice(num_edges, loop_number, &signature_matrix_flattened);
+
+        // the full external signature matrix in the form of a flattened vector
+        let external_signature_matrix_flattened = self
+            .loop_momentum_basis
+            .edge_signatures
+            .iter()
+            .flat_map(|sig| sig.1.iter().map(|s| *s as f64).collect_vec())
+            .collect_vec();
+
+        // convert to dmatrix
+        let external_signature_matrix = DMatrix::from_row_slice(
+            num_edges,
+            external_signature_length,
+            &external_signature_matrix_flattened,
+        );
+
+        let possible_lmbs = self
             .edges
             .iter()
             .filter(|e| e.edge_type == EdgeType::Virtual)
             .map(|e| self.get_edge_position(&e.name).unwrap())
-            .combinations(loop_number)
+            .combinations(loop_number);
+
+        let valid_lmbs = possible_lmbs
             .map(|basis| {
                 let reduced_signature_matrix_flattened = basis
                     .iter()
@@ -481,43 +527,63 @@ impl Graph {
                 reduced_signature_matrix.determinant() != 0. // nonzero determinant means valid lmb
             })
             .map(|(basis, reduced_signature_matrix)| {
-                let inverted_reduced_signature_matrix =
-                    reduced_signature_matrix.try_inverse().unwrap();
+                let mut sorted_basis = basis;
+                sorted_basis.sort();
+                (sorted_basis, reduced_signature_matrix)
+            });
 
-                let virtual_signatures_slice = self
-                    .loop_momentum_basis
-                    .edge_signatures
+        let lmbs = valid_lmbs
+            .map(|(basis, reduced_signature_matrix)| {
+                let mut new_signatures = self.loop_momentum_basis.edge_signatures.clone();
+
+                // construct the signatures
+
+                // for this we need the reduced external signatures
+                let reduced_external_signatures_vec = basis
                     .iter()
-                    .flat_map(|(virt, _real)| virt.iter().map(|s| *s as f64).collect_vec())
+                    .flat_map(|&e| {
+                        self.loop_momentum_basis.edge_signatures[e]
+                            .1
+                            .iter()
+                            .map(|s| *s as f64)
+                    })
                     .collect_vec();
 
-                let virtual_signatures_matrix =
-                    DMatrix::from_row_slice(num_edges, loop_number, &virtual_signatures_slice);
+                let reduced_external_signatures = DMatrix::from_row_slice(
+                    loop_number,
+                    external_signature_length,
+                    &reduced_external_signatures_vec,
+                );
 
-                let new_signature_matrix =
-                    virtual_signatures_matrix * inverted_reduced_signature_matrix.clone();
+                // also the inverse of the reduced_signature matrix
+                let reduced_signature_matrix_inverse =
+                    reduced_signature_matrix.clone().try_inverse().unwrap();
 
-                let mut new_edge_signatures = self.loop_momentum_basis.edge_signatures.clone();
-                for (edge_index, signature) in new_edge_signatures.iter_mut().enumerate() {
-                    if basis.contains(&edge_index) {
-                        signature.0 = inverted_reduced_signature_matrix
-                            .row(basis.iter().position(|&e| e == edge_index).unwrap())
-                            .iter()
-                            .map(|s| *s as isize)
-                            .collect_vec();
-                    } else {
-                        signature.0 = new_signature_matrix
-                            .row(edge_index)
-                            .iter()
-                            .map(|s| *s as isize)
-                            .collect_vec();
-                    }
+                let new_virtual_signatures =
+                    signature_matrix.clone() * reduced_signature_matrix_inverse.clone();
+                let new_external_signatures = external_signature_matrix.clone()
+                    - signature_matrix.clone()
+                        * reduced_signature_matrix_inverse.clone()
+                        * reduced_external_signatures;
+
+                // convert back to isize vecs
+                for (edge_id, new_signature) in new_signatures.iter_mut().enumerate() {
+                    let new_virtual_signature = new_virtual_signatures
+                        .row(edge_id)
+                        .iter()
+                        .map(|s| s.round() as isize)
+                        .collect_vec();
+                    let new_external_signature = new_external_signatures
+                        .row(edge_id)
+                        .iter()
+                        .map(|s| s.round() as isize)
+                        .collect_vec();
+
+                    *new_signature = (new_virtual_signature, new_external_signature);
                 }
-
-                let sorted_basis = basis.into_iter().sorted().collect_vec();
                 LoopMomentumBasis {
-                    basis: sorted_basis,
-                    edge_signatures: new_edge_signatures,
+                    basis,
+                    edge_signatures: new_signatures,
                 }
             })
             .collect_vec();
@@ -544,12 +610,16 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
-    ) -> T {
-        self.derived_data
-            .ltd_expression
-            .as_ref()
-            .unwrap()
-            .evaluate(loop_moms, external_moms, self)
+    ) -> Complex<T> {
+        let loop_number = self.loop_momentum_basis.basis.len();
+        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32);
+
+        prefactor
+            * self.derived_data.ltd_expression.as_ref().unwrap().evaluate(
+                loop_moms,
+                external_moms,
+                self,
+            )
     }
 
     #[inline]
@@ -557,36 +627,30 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         independent_external_momenta: &[LorentzVector<T>],
-    ) -> T {
+    ) -> Complex<T> {
         let mut energy_cache = vec![T::zero(); self.edges.len()];
-
-        // this can be simplified, since the flip is only needed in the external part of the enerrgy cache
+        // some gymnastics to account for the sign of outgoing momenta
 
         let mut flipped_externals = Vec::with_capacity(independent_external_momenta.len() + 1);
-        let mut non_flipped_externals = independent_external_momenta.to_vec();
-        non_flipped_externals.push(LorentzVector::<T>::new());
 
         for (index, edge) in self
             .edges
             .iter()
+            .filter(|edge| edge.edge_type != EdgeType::Virtual)
             .enumerate()
-            .filter(|(_index, edge)| edge.edge_type != EdgeType::Virtual)
         {
-            if index < independent_external_momenta.len() - 1 {
+            if index < independent_external_momenta.len() {
                 match edge.edge_type {
                     EdgeType::Incoming => {
-                        flipped_externals.push(independent_external_momenta[index]);
+                        flipped_externals.push(independent_external_momenta[index].t);
                     }
                     EdgeType::Outgoing => {
-                        flipped_externals.push(-independent_external_momenta[index]);
+                        flipped_externals.push(-independent_external_momenta[index].t);
                     }
                     _ => unreachable!(),
                 }
             } else {
-                let dependend_momenta = -flipped_externals
-                    .iter()
-                    .fold(LorentzVector::<T>::new(), |acc, p| acc + p); // maybe implement std::iter::sum for LorentzVector
-                flipped_externals.push(dependend_momenta);
+                flipped_externals.push(-flipped_externals.iter().fold(T::zero(), |acc, x| acc + x));
             }
         }
 
@@ -598,7 +662,7 @@ impl Graph {
                         let energy_squared = compute_momentum(
                             &self.loop_momentum_basis.edge_signatures[index],
                             loop_moms,
-                            &non_flipped_externals,
+                            independent_external_momenta,
                         )
                         .spatial_squared()
                             + Into::<T>::into(mass_value.re * mass_value.re);
@@ -607,20 +671,28 @@ impl Graph {
                         compute_momentum(
                             &self.loop_momentum_basis.edge_signatures[index],
                             loop_moms,
-                            &non_flipped_externals,
+                            independent_external_momenta,
                         )
                         .spatial_distance()
                     }
                 }
-                _ => flipped_externals[index].t,
+                _ => flipped_externals[index],
             };
         }
 
-        self.derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .evaluate(&energy_cache)
+        let loop_number = self.loop_momentum_basis.basis.len();
+        let internal_vertex_numer = self.vertices.len() - self.external_connections.len();
+
+        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32)
+            * Complex::new(-T::one(), T::zero()).powi(internal_vertex_numer as i32 - 1);
+
+        prefactor
+            * self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .evaluate(&energy_cache)
     }
 }
 

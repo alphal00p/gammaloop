@@ -44,6 +44,18 @@ output {output_path}"""))
 
 
 @pytest.fixture(scope="session")
+def scalar_massless_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_massless_box_scalar")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','massless_box.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
 def scalar_fishnet_2x2_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     output_path = Path(tmpdir_factory.mktemp(
@@ -87,6 +99,66 @@ def scalar_bubble_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','bubble.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def scalar_sunrise_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_bubble")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','sunrise.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def scalar_double_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_double_triangle")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','double_triangle.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def scalar_mercedes_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_mercedes")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','mercedes.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def scalar_triangle_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_triangle_box")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','triangle_box.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def scalar_isopod_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_isopod")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','isopod.py')} -f qgraph --no_compile
 output {output_path}"""))
     return output_path
 

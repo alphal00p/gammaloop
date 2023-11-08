@@ -424,10 +424,9 @@ impl LTDTerm {
                 let mut momentum = emr[*i];
                 match graph.edges[*i].particle.mass.value {
                     Some(mass) => {
-                        momentum.t = (emr[*i].spatial_squared()
-                            + Into::<T>::into(mass.re) * Into::<T>::into(mass.re))
-                        .sqrt()
-                            * Into::<T>::into(*s)
+                        momentum.t =
+                            (emr[*i].spatial_squared() + Into::<T>::into(mass.re * mass.re)).sqrt()
+                                * Into::<T>::into(*s)
                     }
                     None => {
                         momentum.t = emr[*i].spatial_distance() * Into::<T>::into(*s);
@@ -437,34 +436,30 @@ impl LTDTerm {
             })
             .collect_vec();
 
-        let inv_energy_prefactor = edge_momenta_of_associated_lmb
-            .iter()
-            .map(|momentum| Into::<T>::into(2.) * momentum.t.abs())
-            .fold(Into::<T>::into(1.), |acc, two_e| acc * two_e);
-
         // subtract external momenta
-        let loop_momenta_of_associated_lmb = edge_momenta_of_associated_lmb
-            .iter()
-            .zip(self.associated_lmb.iter())
-            .map(|(momentum, (index, _))| {
-                let mut momentum = *momentum;
-                for (i, external_momentum) in external_moms.iter().enumerate() {
-                    momentum -= external_momentum
-                        * Into::<T>::into(self.signature_of_lmb[*index].1[i] as f64);
-                }
-                momentum
-            })
-            .collect_vec();
+        //  let loop_momenta_of_associated_lmb = edge_momenta_of_associated_lmb
+        //      .iter()
+        //      .zip(self.associated_lmb.iter())
+        //      .map(|(momentum, (index, _))| {
+        //          let mut momentum = *momentum;
+        //          for (i, external_momentum) in external_moms.iter().enumerate() {
+        //              momentum -= external_momentum
+        //                  * Into::<T>::into(self.signature_of_lmb[*index].1[i] as f64);
+        //          }
+        //          momentum
+        //      })
+        //      .collect_vec();
 
         // iterate over remaining propagators
         let mut inv_res = Into::<T>::into(1.);
+        let mut energy_product = Into::<T>::into(1.);
 
         for (index, edge) in graph.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && self.associated_lmb.iter().all(|(i, _)| i != index)
         }) {
             let momentum = compute_momentum(
                 &self.signature_of_lmb[index],
-                &loop_momenta_of_associated_lmb,
+                &edge_momenta_of_associated_lmb,
                 external_moms,
             );
 
@@ -472,14 +467,19 @@ impl LTDTerm {
                 Some(mass) => {
                     inv_res *=
                         momentum.square() - Into::<T>::into(mass.re) * Into::<T>::into(mass.re);
+                    energy_product *= Into::<T>::into(2.)
+                        * (momentum.spatial_squared() + Into::<T>::into(mass.re * mass.re)).sqrt();
                 }
                 None => {
+                    println!("momentum {}", momentum);
+                    println!("momentum squared: {}", momentum.square());
                     inv_res *= momentum.square();
+                    energy_product *= Into::<T>::into(2.) * momentum.spatial_distance();
                 }
             }
         }
 
-        (inv_res * inv_energy_prefactor).recip()
+        inv_res.recip() * energy_product
     }
 }
 
@@ -523,7 +523,7 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
         .collect_vec();
 
     let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);
-    let countour_closure = vec![ContourClosure::Below; graph.loop_momentum_basis.basis.len()];
+    let countour_closure = vec![ContourClosure::Above; graph.loop_momentum_basis.basis.len()];
     let cut_structure = cut_structure_generator.generate_structure(&countour_closure, true);
 
     graph.generate_loop_momentum_bases_if_not_exists();
@@ -537,7 +537,7 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
                 associated_lmb.push((position_map[index], *sign));
             }
         }
-        associated_lmb.sort_by(|a, b| a.0.cmp(&b.0));
+        // associated_lmb.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut found_signature = false;
 

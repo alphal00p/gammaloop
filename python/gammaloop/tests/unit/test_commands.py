@@ -132,6 +132,28 @@ class TestMasslessScalarTriangleAmplitude:
                            'amplitudes', 'massless_triangle', 'drawings'))
 
 
+class TestMasslessScalarBoxAmplitude:
+
+    # This test uses a session-wide fixture defined in conftest.py
+    def test_info(self, scalar_massless_box_export: Path):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_massless_box_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'massless_box'
+        gloop.run(CommandList.from_string("info"))
+
+    def test_drawing(self, scalar_massless_box_export: str):
+        assert run_drawing(pjoin(scalar_massless_box_export, 'sources',
+                           'amplitudes', 'massless_box', 'drawings'))
+
+
 class TestScalarFishnet2x2:
 
     def test_info(self, scalar_fishnet_2x2_export: Path):
@@ -255,3 +277,87 @@ class TestScalarBubble:
     def test_drawing(self, scalar_bubble_export: Path):
         assert run_drawing(pjoin(scalar_bubble_export, 'sources',
                            'amplitudes', 'bubble', 'drawings'))
+
+
+class TestScalarDoubleTriangle:
+
+    def test_info(self, scalar_double_triangle_export: Path):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_double_triangle_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'double_triangle'
+        gloop.run(CommandList.from_string("info"))
+
+    def test_drawing(self, scalar_double_triangle_export: Path):
+        assert run_drawing(pjoin(scalar_double_triangle_export, 'sources',
+                           'amplitudes', 'double_triangle', 'drawings'))
+
+
+class TestScalarMercedes:
+
+    def test_info(self, scalar_mercedes_export: Path):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_mercedes_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'mercedes'
+        gloop.run(CommandList.from_string("info"))
+
+    def test_drawing(self, scalar_mercedes_export: Path):
+        assert run_drawing(pjoin(scalar_mercedes_export, 'sources',
+                           'amplitudes', 'mercedes', 'drawings'))
+
+
+class TestScalarTriangleBox:
+
+    def test_info(self, scalar_triangle_box_export: Path):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_triangle_box_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'triangle_box'
+        gloop.run(CommandList.from_string("info"))
+
+    def test_drawing(self, scalar_triangle_box_export: Path):
+        assert run_drawing(pjoin(scalar_triangle_box_export, 'sources',
+                           'amplitudes', 'triangle_box', 'drawings'))
+
+
+class TestScalarIsopod:
+
+    def test_info(self, scalar_isopod_export: Path):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"launch {scalar_isopod_export}"))
+        assert gloop.model.name == 'scalars'
+        assert gloop.get_model_from_rust_worker().name == 'scalars'
+        for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
+            assert len(cross_sections) == 0
+        for amplitudes in [gloop.amplitudes, gloop.get_amplitudes_from_rust_worker()]:
+            assert len(amplitudes) == 1
+            assert len(amplitudes[0].amplitude_graphs) == 1
+            assert amplitudes[0].name == 'isopod'
+        gloop.run(CommandList.from_string("info"))
+
+    def test_drawing(self, scalar_isopod_export: Path):
+        assert run_drawing(pjoin(scalar_isopod_export, 'sources',
+                           'amplitudes', 'isopod', 'drawings'))

@@ -658,10 +658,28 @@ pub fn compute_momentum<T: FloatLike>(
 ) -> LorentzVector<T> {
     let mut res = LorentzVector::default();
     for (i_l, sign) in signature.0.iter().enumerate() {
-        res += loop_moms[i_l] * Into::<T>::into(*sign as f64);
+        match sign {
+            1 => {
+                res += loop_moms[i_l];
+            }
+            -1 => {
+                res -= loop_moms[i_l];
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
     }
     for (i_l, sign) in signature.1.iter().enumerate() {
-        res += external_moms[i_l] * Into::<T>::into(*sign as f64);
+        match sign {
+            1 => {
+                res += external_moms[i_l];
+            }
+            -1 => {
+                res -= external_moms[i_l];
+            }
+            0 => {}
+            _ => unreachable!("Sign should be, -1,0,1"),
+        }
     }
     res
 }
@@ -744,10 +762,9 @@ pub fn approx_eq(res: f64, target: f64, tolerance: f64) -> bool {
 #[allow(unused)]
 pub fn assert_approx_eq(res: f64, target: f64, tolerance: f64) {
     if approx_eq(res, target, tolerance) {
-        return;
     } else {
         panic!(
-            "assert_approx_eq failed: {} != {} with tolerance {}",
+            "assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",
             res, target, tolerance
         )
     }
@@ -1541,4 +1558,14 @@ pub fn print_banner() {
         .bold()
         .blue(),
     );
+}
+
+#[allow(unused)]
+pub fn upgrade_lorentz_vector(k: &LorentzVector<f64>) -> LorentzVector<f128::f128> {
+    LorentzVector::from_args(
+        Into::<f128::f128>::into(k.t),
+        Into::<f128::f128>::into(k.x),
+        Into::<f128::f128>::into(k.y),
+        Into::<f128::f128>::into(k.z),
+    )
 }
