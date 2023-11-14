@@ -34,7 +34,7 @@
     devShells = forEachSupportedSystem ({pkgs}: {
       default = pkgs.mkShell {
         #devshell definition :
-        LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+        # LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
         packages = with pkgs; [
           rustToolchain
@@ -55,6 +55,7 @@
           mupdf
           poppler_utils
           rust-analyzer
+          maturin
         ];
       };
     });

@@ -5,6 +5,7 @@ pub mod cff;
 pub mod cli_functions;
 pub mod cross_section;
 pub mod graph;
+pub mod tensor;
 pub mod h_function_test;
 pub mod inspect;
 pub mod integrands;

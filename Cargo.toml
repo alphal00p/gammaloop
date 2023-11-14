@@ -52,6 +52,7 @@ log = "*"
 env_logger = "*"
 pyo3-log = "*"
 nalgebra = "0.32.3"
+num-complex = "0.4.4"
 
 [dependencies.pyo3]
 features = ["extension-module", "multiple-pymethods"]
