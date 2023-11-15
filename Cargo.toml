@@ -55,7 +55,7 @@ nalgebra = "0.32.3"
 num-complex = "0.4.4"
 
 [dependencies.pyo3]
-features = ["extension-module", "multiple-pymethods"]
+features = ["multiple-pymethods"]
 optional = true
 version = "0.19"
 
@@ -72,7 +72,9 @@ name = "cli"
 required-features = ["binary"]
 
 [features]
+extension-module = ["pyo3/extension-module"]
 default = ["python_api"]
+
 python_api = ["pyo3"]
 binary = []
 fail-on-warnings = []
