@@ -21,6 +21,20 @@ from gammaloop.misc.common import GL_PATH, GammaLoopError, logger
 #        ['--exclude', "'python/gammaloop/data/models/*'"])
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--runrust", action="store_true", default=False, help="run rust tests"
+    )
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runrust"):
+        # --runrust given in cli: do not skip slow tests
+        return
+    skip_rust = pytest.mark.skip(reason="need --runrust option to run")
+    for item in items:
+        if "rust" in item.keywords:
+            item.add_marker(skip_rust)
+
 @pytest.fixture(scope="session")
 def sm_model_yaml_file(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()

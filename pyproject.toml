@@ -28,7 +28,8 @@ authors = [
   { email = "valentin.hirschi@gmail.com" },
   { name = "Valentin Hirschi" },
 ]
-dependencies = ["PyYAML>=6.0.1", "symbolica>=0.1.0"]
+
+dependencies = ["PyYAML>=6.0.1", "symbolica>=0.1.0","PyMuPDF>=1.23.4"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -53,6 +54,7 @@ gammaloop = "gammaloop:cli"
 [tool.pytest.ini_options]
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "rust: marks test for rust interop (deselect with '-m \"not rust\"')",
   "codecheck: marks tests about type checking and rust coding style (clippy) (deselect with '-m \"not codecheck\"')",
 ]
 

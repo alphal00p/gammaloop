@@ -6,7 +6,7 @@ authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
 categories = ["science"]
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
 keywords = ["loop", "cross-section", "perturbative", "physics"]
-license-file = "License.md"
+license-file = "LICENSE.md"
 readme = "README.md"
 repository = "https://github.com/alphal00p/gammaloop"
 

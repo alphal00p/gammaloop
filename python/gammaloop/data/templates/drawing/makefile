@@ -23,7 +23,7 @@ $(ALLGRAPHS): $(sort $(GRAPHS_PDF))
 	pdfunite $^ $@
 
 $(OUTPUT): $(ALLGRAPHS)
-	./combine_pages.py $(ALLGRAPHS) $(OUTPUT) --margins 0.15 0.15 --grid_shape $(N_ROWS_IN_MERGED_OUTPUT) $(N_COLUMNS_IN_MERGED_OUTPUT)
+	python3 ./combine_pages.py $(ALLGRAPHS) $(OUTPUT) --margins 0.15 0.15 --grid_shape $(N_ROWS_IN_MERGED_OUTPUT) $(N_COLUMNS_IN_MERGED_OUTPUT)
 	@echo "\n> Feynman diagrams all written to file '"$(OUTPUT)"'\n"
 
 clean:
