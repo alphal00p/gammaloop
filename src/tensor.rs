@@ -1,11 +1,10 @@
 use std::{
     borrow::Cow,
-    collections::{ BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap},
     iter::FromIterator,
     ops::Bound::Included,
     usize,
 };
-
 
 type AbstractIndex = usize;
 type Dimension = usize;
@@ -410,13 +409,13 @@ where
         let trace_sign = trace_dimension.negative();
         let mut trace = T::default();
 
-        for i in 0..trace_dimension.into() {
+        for (i, sign) in trace_sign.iter().enumerate().take(trace_dimension.into()) {
             let mut indices = self.current_indices.clone();
             for &pos in self.trace_indices.iter() {
                 indices[pos] = i;
             }
             if let Some(value) = self.tensor.elements.get(&indices) {
-                if trace_sign[i] {
+                if *sign {
                     trace -= *value;
                 } else {
                     trace += *value;
@@ -582,7 +581,7 @@ impl<T: Default + Clone> DenseTensor<T> {
     }
 
     pub fn set(&mut self, indices: &[usize], value: T) {
-        let idx = self.flat_index(&indices);
+        let idx = self.flat_index(indices);
         if let Ok(i) = idx {
             self.data[i] = value;
         }
@@ -593,7 +592,7 @@ impl<T: Default + Clone> DenseTensor<T> {
     }
 
     pub fn get(&self, indices: &[usize]) -> Option<&T> {
-        if let Ok(idx) = self.flat_index(&indices) {
+        if let Ok(idx) = self.flat_index(indices) {
             Some(&self.data[idx])
         } else {
             None
@@ -693,12 +692,12 @@ where
         let trace_sign = trace_dimension.negative();
         let mut trace = T::default();
 
-        for i in 0..trace_dimension.into() {
+        for (i, sign) in trace_sign.iter().enumerate().take(trace_dimension.into()) {
             let mut indices = self.current_indices.clone();
             for &pos in self.trace_indices.iter() {
                 indices[pos] = i;
             }
-            if trace_sign[i] {
+            if *sign {
                 trace -= *self.tensor.get(&indices).unwrap();
             } else {
                 trace += *self.tensor.get(&indices).unwrap();
@@ -869,7 +868,6 @@ where
 
             for (index_a, fiber_a) in self.iter_fibers(i) {
                 for (index_b, fiber_b) in other.iter_fibers(j) {
-
                     let result_index = final_structure
                         .flat_index(
                             &index_a[..i]
@@ -883,7 +881,6 @@ where
                         .unwrap();
 
                     for k in 0..dimension_of_contraction {
-
                         // Adjust indices for fetching from the other tensor
                         if metric[k] {
                             result_data[result_index] -= *fiber_a[k] * *fiber_b[k];
@@ -950,7 +947,6 @@ where
 
             for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
                 for (index_b, fiber_b) in other.iter_fibers(j) {
-
                     let result_index = final_structure
                         .flat_index(
                             &index_a[..i]
@@ -989,17 +985,13 @@ where
 
     pub fn contract_with_sparse(&self, other: &Self) -> Option<Self> {
         if let Some((i, j)) = self.match_index(other) {
-
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = BTreeMap::new();
-
 
             let metric = self.structure()[i].signature.negative();
 
             for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
                 for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
-
-
                     let result_index = index_a[..i]
                         .iter()
                         .chain(&index_a[i + 1..])
@@ -1023,11 +1015,8 @@ where
                         nonzero = true;
                     }
 
-                    if nonzero {
-
-                        if value != T::default() {
-                            result_data.insert(result_index, value);
-                        }
+                    if nonzero && value != T::default() {
+                        result_data.insert(result_index, value);
                     }
                 }
             }
@@ -1046,7 +1035,6 @@ where
         None
     }
 }
-
 
 #[allow(dead_code)]
 struct SymbolicTensor {

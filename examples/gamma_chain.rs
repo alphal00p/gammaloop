@@ -1,8 +1,6 @@
 // Gamma chain example
 
-use std::{
-    ops::Neg,time::Instant,
-};
+use std::{ops::Neg, time::Instant};
 
 use _gammaloop::tensor::{
     DenseTensor,
@@ -53,8 +51,6 @@ fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex64> {
 }
 
 fn pslash(indices: (usize, usize), p: [Complex64; 4]) -> DenseTensor<Complex64> {
-
-
     let minkindex = indices.0 + indices.1;
 
     let p = DenseTensor::from_data(
@@ -62,12 +58,8 @@ fn pslash(indices: (usize, usize), p: [Complex64; 4]) -> DenseTensor<Complex64> 
         TensorStructure::from_idxsing(&[minkindex], &[Lorentz(4)]),
     )
     .unwrap();
-
-    let  pslash = gamma(minkindex, indices).contract_with_dense(&p).unwrap();
-
-    pslash
+    gamma(minkindex, indices).contract_with_dense(&p).unwrap()
 }
-
 
 #[allow(dead_code)]
 fn mink_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
@@ -81,7 +73,7 @@ fn eucl_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
 where
     T: Num + std::default::Default + std::clone::Clone,
 {
- DenseTensor::from_data(&p, TensorStructure::from_idxsing(&[index], &[Euclidean(4)])).unwrap()
+    DenseTensor::from_data(&p, TensorStructure::from_idxsing(&[index], &[Euclidean(4)])).unwrap()
 }
 
 fn benchmark_chain(
@@ -117,7 +109,6 @@ fn benchmark_chain(
         .contract_with_dense(&eucl_four_vector(contracting_index, u))
         .unwrap()
 }
-
 
 #[allow(dead_code)]
 fn identity(indices: (usize, usize), signature: Signature) -> DenseTensor<Complex64> {
@@ -162,7 +153,7 @@ fn main() {
 
     // println!("P {:?}", p11);
 
-    let spacings: [i32; 2] = [30, 400];
+    let spacings: [i32; 2] = [30, 40];
     let mut start = 1;
     let mut ranges = Vec::new();
 
@@ -171,7 +162,7 @@ fn main() {
         start += spacing;
     }
 
-    let vec: Vec<i32> = ranges.into_iter().flat_map(|x| x).collect();
+    let vec: Vec<i32> = ranges.into_iter().flatten().collect();
 
     let start = Instant::now();
     let chain = benchmark_chain(&vec, vbar, u);

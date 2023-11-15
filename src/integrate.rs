@@ -184,12 +184,7 @@ where
                 File::create(&format!("results_it_{}.txt", iter))
                     .expect("Could not create results file"),
             );
-            writeln!(
-                f,
-                "{}",
-                Table::new(tabled_data).with(Style::psql())
-            )
-            .unwrap();
+            writeln!(f, "{}", Table::new(tabled_data).with(Style::psql())).unwrap();
         }
 
         iter += 1;

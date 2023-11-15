@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-
 use crate::tensor::{SparseTensor, VecSlotExt};
 
 use super::{DenseTensor, HasTensorStructure, TensorStructure};
@@ -17,7 +16,6 @@ fn indexflatten() {
     println!("{:?}", a.expanded_index(flatidx).unwrap());
 }
 
-
 #[test]
 fn construct_dense_tensor() {
     let a = TensorStructure::from_integers(&[1, 2, 3], &[2, 3, 4]);
@@ -26,7 +24,6 @@ fn construct_dense_tensor() {
     let a = super::DenseTensor::from_data(&data, a).unwrap();
     println!("{:?}", a);
 }
-
 
 #[test]
 fn construct_sparse_tensor() -> Result<(), String> {
@@ -63,7 +60,6 @@ fn contract_densor() {
 
 #[test]
 fn contract_spensor() {
-
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
 
     let a = SparseTensor::from_data(&data_a, &[2, 1]).unwrap();
