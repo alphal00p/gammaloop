@@ -57,7 +57,7 @@ fn contract_densor() {
 
     let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
     let b = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
-    let f = a.contract_dT(&b).unwrap();
+    let f = a.contract_with_dense(&b).unwrap();
     assert_eq!(f.data, [7.0, 10.0, 15.0, 22.0]);
 }
 
@@ -72,7 +72,7 @@ fn contract_spensor() {
 
     let b = SparseTensor::from_data(&data_b, &[1, 3]).unwrap();
 
-    let f = a.contract_sT(&b).unwrap();
+    let f = a.contract_with_sparse(&b).unwrap();
 
     let result = BTreeMap::from([(vec![0, 1], 2.0), (vec![1, 0], 2.0)]);
 
@@ -91,6 +91,6 @@ fn contract_densor_with_spensor() {
 
     let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
     println!("{:?}", b);
-    let f = a.contract_dT(&b).unwrap();
+    let f = a.contract_with_dense(&b).unwrap();
     println!("{:?}", f);
 }

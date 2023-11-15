@@ -6,6 +6,7 @@ use std::{
     usize,
 };
 
+
 type AbstractIndex = usize;
 type Dimension = usize;
 type ConcreteIndex = usize;
@@ -849,11 +850,11 @@ where
         }
         result
     }
-    pub fn contract_sT(&self, other: &SparseTensor<T>) -> Option<Self> {
-        other.contract_dT(self)
+    pub fn contract_with_sparse(&self, other: &SparseTensor<T>) -> Option<Self> {
+        other.contract_with_dense(self)
     }
 
-    pub fn contract_dT(&self, other: &Self) -> Option<Self> {
+    pub fn contract_with_dense(&self, other: &Self) -> Option<Self> {
         if let Some((i, j)) = self.match_index(other) {
             // println!("{},{}", i, j);
             let self_shape = self.shape();
@@ -940,11 +941,10 @@ where
         }
         result
     }
-    pub fn contract_dT(&self, other: &DenseTensor<T>) -> Option<DenseTensor<T>> {
+    pub fn contract_with_dense(&self, other: &DenseTensor<T>) -> Option<DenseTensor<T>> {
         if let Some((i, j)) = self.match_index(other) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = vec![T::default(); final_structure.size()];
-            let dimension_of_contraction = self.shape()[i];
 
             let metric = self.structure()[i].signature.negative();
 
@@ -987,7 +987,7 @@ where
         None
     }
 
-    pub fn contract_sT(&self, other: &Self) -> Option<Self> {
+    pub fn contract_with_sparse(&self, other: &Self) -> Option<Self> {
         if let Some((i, j)) = self.match_index(other) {
 
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
@@ -1047,6 +1047,8 @@ where
     }
 }
 
+
+#[allow(dead_code)]
 struct SymbolicTensor {
     structure: TensorStructure,
     expression: String,
@@ -1058,6 +1060,7 @@ impl HasTensorStructure for SymbolicTensor {
     }
 }
 
+#[allow(dead_code)]
 enum Tensor<T> {
     Num(NumTensor<T>),
     Symbolic(SymbolicTensor),
