@@ -1054,5 +1054,7 @@ enum Tensor<T> {
     Symbolic(SymbolicTensor),
 }
 
+mod ufo_spin_tensors;
+
 #[cfg(test)]
 mod tests;
