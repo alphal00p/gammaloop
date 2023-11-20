@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::tensor::{SparseTensor, VecSlotExt};
+use crate::tensor::{SparseTensor, VecSlotExtension};
 
 use super::{DenseTensor, HasTensorStructure, TensorStructure};
 

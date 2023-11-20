@@ -1,6 +1,7 @@
 use num::complex::Complex64;
+use statrs::function::gamma;
 
-use super::{Signature, DenseTensor, TensorStructure,VecSlotExt, SparseTensor,Signature::Lorentz,Signature::Euclidean};
+use super::{Signature, DenseTensor, TensorStructure,VecSlotExtension, SparseTensor,Signature::Lorentz,Signature::Euclidean, Tensor};
 
 #[allow(dead_code)]
 pub fn identity(indices: (usize, usize), signature: Signature) -> SparseTensor<Complex64> {
@@ -28,7 +29,7 @@ pub fn euclidean_identity(indices: (usize, usize))-> SparseTensor<Complex64>{
 }
 
 #[allow(dead_code)]
-fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex64> {
+pub fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex64> {
     // Gamma(1,2,3) Dirac matrix (γ^μ1)_s2_s3
     let structure = TensorStructure::from_idxsing(
         &[indices.0, indices.1, minkindex],
@@ -121,7 +122,6 @@ pub fn proj_p(indices: (usize, usize))-> SparseTensor<Complex64> {
     );
 
     let chalf = Complex64::new(0.5, 0.0);
-    let cnhalf = Complex64::new(-0.5, 0.0);
 
     let mut proj_p = SparseTensor::empty(structure);
 
@@ -137,4 +137,17 @@ pub fn proj_p(indices: (usize, usize))-> SparseTensor<Complex64> {
 
     proj_p}
 
-pub fn sigma();
+
+pub fn sigma(indices: (usize, usize),minkdices: (usize,usize)) -> SparseTensor<Complex64>{
+    let k = indices.0+indices.1;
+
+    let imhalf = Complex64::new(0.0, 0.5);
+
+    let gamma1 = gamma(minkdices.0, (indices.0,k));
+    let gamma2 = gamma(minkdices.1, (k,indices.1));
+    let gamma3 = gamma(minkdices.1, (indices.0,k));
+    let gamma4 = gamma(minkdices.0, (k,indices.1));
+
+    (gamma1.contract_with_sparse(&gamma2).unwrap()-gamma3.contract_with_sparse(&gamma4).unwrap())*imhalf
+
+}

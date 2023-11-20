@@ -6,49 +6,14 @@ use _gammaloop::tensor::{
     DenseTensor,
     Signature::Lorentz,
     Signature::{self, Euclidean},
-    SparseTensor, TensorStructure, VecSlotExt,
+    SparseTensor, TensorStructure, VecSlotExtension,
+    ufo_spin_tensors::{gamma, sigma},
 };
 
-use num_complex::Complex64;
-use num_traits::{Num, ToPrimitive};
+use num::complex::Complex64;
+use num::traits::{Num, ToPrimitive};
 
-fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex64> {
-    let structure = TensorStructure::from_idxsing(
-        &[indices.0, indices.1, minkindex],
-        &[Euclidean(4), Euclidean(4), Lorentz(4)],
-    );
 
-    let c1 = Complex64::new(1.0, 0.0);
-    let cn1 = Complex64::new(-1.0, 0.0);
-    let ci = Complex64::new(0.0, 1.0);
-    let cni = Complex64::new(0.0, -1.0);
-
-    let mut gamma = SparseTensor::empty(structure);
-
-    // dirac gamma matrices
-
-    gamma.set(&[0, 0, 0], c1).unwrap();
-    gamma.set(&[1, 1, 0], c1).unwrap();
-    gamma.set(&[2, 2, 0], cn1).unwrap();
-    gamma.set(&[3, 3, 0], cn1).unwrap();
-
-    gamma.set(&[0, 3, 1], c1).unwrap();
-    gamma.set(&[1, 2, 1], c1).unwrap();
-    gamma.set(&[2, 1, 1], cn1).unwrap();
-    gamma.set(&[3, 0, 1], cn1).unwrap();
-
-    gamma.set(&[0, 3, 2], cni).unwrap();
-    gamma.set(&[1, 2, 2], ci).unwrap();
-    gamma.set(&[2, 1, 2], ci).unwrap();
-    gamma.set(&[3, 0, 2], cni).unwrap();
-
-    gamma.set(&[0, 2, 3], c1).unwrap();
-    gamma.set(&[1, 3, 3], cn1).unwrap();
-    gamma.set(&[2, 0, 3], cn1).unwrap();
-    gamma.set(&[3, 1, 3], c1).unwrap();
-
-    gamma
-}
 
 
 fn pslash(indices: (usize, usize), p: [Complex64; 4]) -> DenseTensor<Complex64> {
@@ -123,6 +88,12 @@ fn identity(indices: (usize, usize), signature: Signature) -> DenseTensor<Comple
 
 #[allow(unused_variables)]
 fn main() {
+
+    let start = Instant::now();
+
+    let s = sigma((1,2), (3,3));
+    let duration = start.elapsed();
+    println!("{:?} in {:?}", s,duration);
     // let p = [Complex64::new(1.0, 0.0); 4];
     // let p1 = pslash((1, 2), p);
 
@@ -170,4 +141,6 @@ fn main() {
     let duration = start.elapsed();
 
     println!("{:?} in {:?}", chain, duration);
+
+    
 }

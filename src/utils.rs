@@ -5,8 +5,8 @@ use itertools::{izip, Itertools};
 use lorentz_vector::{Field, LorentzVector, RealNumberLike};
 use num::Complex;
 use num::ToPrimitive;
-use num_traits::{Float, FloatConst, FromPrimitive, Num, NumAssign, NumCast, Signed};
-use num_traits::{Inv, One, Zero};
+use num::traits::{Float, FloatConst, FromPrimitive, Num, NumAssign, NumCast, Signed};
+use num::traits::{Inv, One, Zero};
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
@@ -960,7 +960,7 @@ pub fn global_parameterize<T: FloatLike>(
                         // r = e_cm * b * x/(1-x)
                         let b = Into::<T>::into(settings.parameterization.b);
                         let radius = e_cm * b * x_r[0] / (T::one() - x_r[0]);
-                        jac *= <T as num_traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                        jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
                         radius
                     }
                 }
@@ -1096,7 +1096,7 @@ pub fn global_inv_parameterize<T: FloatLike>(
                     }
                     ParameterizationMapping::Linear => {
                         let b = Into::<T>::into(settings.parameterization.b);
-                        inv_jac /= <T as num_traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
+                        inv_jac /= <T as num::traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
                         xs.push(k_r / (e_cm * b + k_r));
                     }
                 }
@@ -1219,7 +1219,7 @@ pub fn parameterize3d<T: FloatLike>(
                     // r = e_cm * b * x/(1-x)
                     let b = Into::<T>::into(settings.parameterization.b);
                     let radius = e_cm * b * x_r[0] / (T::one() - x_r[0]);
-                    jac *= <T as num_traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                    jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
                     radius
                 }
             };
@@ -1293,7 +1293,7 @@ pub fn inv_parametrize3d<T: FloatLike>(
         }
         ParameterizationMapping::Linear => {
             let b = Into::<T>::into(settings.parameterization.b);
-            jac /= <T as num_traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
+            jac /= <T as num::traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
             k_r / (e_cm * b + k_r)
         }
     };

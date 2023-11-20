@@ -3,9 +3,9 @@ use crate::utils;
 use crate::utils::FloatLike;
 use crate::ParameterizationMapping;
 use crate::Settings;
+use num::traits::ToPrimitive;
 use num::Complex;
-use num_traits::ToPrimitive;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -51,7 +51,7 @@ impl HFunctionTestIntegrand {
                 // r = e_cm * b * x/(1-x)
                 let b = Into::<T>::into(self.settings.parameterization.b);
                 let radius = e_cm * b * xs[0] / (T::one() - xs[0]);
-                jac *= <T as num_traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
                 radius
             }
         };

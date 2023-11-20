@@ -1407,7 +1407,7 @@ fn generate_cff_from_orientations(
 #[cfg(test)]
 mod tests_cff {
     use lorentz_vector::LorentzVector;
-    use num_traits::Inv;
+    use num::traits::Inv;
 
     use super::*;
 

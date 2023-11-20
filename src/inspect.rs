@@ -9,7 +9,7 @@ use crate::Integrand;
 use crate::Settings;
 use lorentz_vector::LorentzVector;
 use num::Complex;
-use num_traits::ToPrimitive;
+use num::traits::ToPrimitive;
 
 pub fn inspect(
     settings: &Settings,

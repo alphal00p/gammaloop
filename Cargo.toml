@@ -33,7 +33,6 @@ lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = 
     "f128_support",
 ] }
 num = "0.3"
-num-traits = "0.2"
 hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
 rand = "0.8"
 rayon = "1.5"
