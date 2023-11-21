@@ -1,9 +1,14 @@
 use crate::{
     cli_functions::cli,
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
+    inspect,
+    integrands::Integrand,
     model::Model,
+    Settings,
 };
+use ahash::HashMap;
 use git_version::git_version;
+use std::{fs, path::Path};
 use symbolica;
 const GIT_VERSION: &str = git_version!();
 
@@ -61,6 +66,7 @@ pub struct PythonWorker {
     sb_workspace: symbolica::state::Workspace,
     pub cross_sections: CrossSectionList,
     pub amplitudes: AmplitudeList,
+    pub integrands: HashMap<String, Integrand>,
 }
 
 impl Clone for PythonWorker {
@@ -71,6 +77,7 @@ impl Clone for PythonWorker {
             sb_workspace: symbolica::state::Workspace::new(),
             cross_sections: self.cross_sections.clone(),
             amplitudes: self.amplitudes.clone(),
+            integrands: self.integrands.clone(),
         }
     }
 }
@@ -86,6 +93,7 @@ impl PythonWorker {
             sb_workspace: symbolica::state::Workspace::new(),
             cross_sections: CrossSectionList::default(),
             amplitudes: AmplitudeList::default(),
+            integrands: HashMap::default(),
         })
     }
 
@@ -206,6 +214,12 @@ impl PythonWorker {
             .map(|a| self.amplitudes = a)
     }
 
+    pub fn load_amplitudes_derived_data(&mut self, path: &str) -> PyResult<()> {
+        self.amplitudes
+            .load_derived_data(path)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+    }
+
     // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,
     // but since python already has its native class for this, it is better for now to pass a yaml representation
     // which will be deserialize in said native class.
@@ -255,7 +269,7 @@ impl PythonWorker {
         amplitude_names: Vec<&str>,
     ) -> PyResult<String> {
         let mut n_exported: usize = 0;
-        for amplitude in &self.amplitudes.container {
+        for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.as_str()) {
                 n_exported += 1;
                 let res = amplitude.export(
@@ -276,5 +290,80 @@ impl PythonWorker {
             )));
         }
         Ok("Successful export".to_string())
+    }
+
+    pub fn load_amplitude_integrands(&mut self, path_to_settings: &str) -> PyResult<String> {
+        self.integrands.clear();
+
+        let mut integrand_counter = 0;
+        for amplitude in &self.amplitudes.container {
+            let integrand = match amplitude.generate_integrand(Path::new(path_to_settings)) {
+                Ok(integrand) => integrand,
+                Err(err) => return Err(exceptions::PyException::new_err(err.to_string())),
+            };
+            self.integrands.insert(
+                amplitude.name.to_string(),
+                Integrand::GammaLoopIntegrand(integrand),
+            );
+            integrand_counter += 1;
+        }
+
+        log::info!("Loaded integrands {:?}", self.integrands.keys());
+
+        Ok(format!(
+            "Loaded {} integrands from {} amplitudes",
+            integrand_counter,
+            self.amplitudes.container.len()
+        ))
+    }
+
+    pub fn inspect_integrand(
+        &mut self,
+        integrand: &str,
+        pt: Vec<f64>,
+        term: Vec<usize>,
+        force_radius: bool,
+        is_momentum_space: bool,
+        use_f128: bool,
+    ) -> PyResult<String> {
+        match self.integrands.get_mut(integrand) {
+            Some(integrand) => {
+                let settings = match integrand {
+                    Integrand::GammaLoopIntegrand(integrand) => integrand.settings.clone(),
+                    _ => todo!(),
+                };
+
+                inspect::inspect(
+                    &settings,
+                    integrand,
+                    pt,
+                    &term,
+                    force_radius,
+                    is_momentum_space,
+                    use_f128,
+                );
+            }
+            None => {
+                return Err(exceptions::PyException::new_err(format!(
+                    "Could not find integrand {}",
+                    integrand
+                )))
+            }
+        };
+
+        Ok(format!("Inspected integrand: {:?}", integrand))
+    }
+
+    pub fn write_default_settings(&self, path: &str) -> PyResult<String> {
+        let default = Settings::default();
+        let default_string = serde_yaml::to_string(&default)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        let path = Path::new(path).join("cards").join("run_card.yaml");
+
+        fs::write(path, default_string)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        Ok("Wrote default settings file".to_string())
     }
 }

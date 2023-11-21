@@ -344,6 +344,18 @@ impl Signum for f64 {
     }
 }
 
+impl Signum for f32 {
+    #[inline]
+    fn multiply_sign(&self, sign: i8) -> Self {
+        match sign {
+            1 => *self,
+            0 => f32::zero(),
+            -1 => self.neg(),
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+}
+
 impl<T: Num + Neg<Output = T> + Copy> Signum for Complex<T> {
     #[inline]
     fn multiply_sign(&self, sign: i8) -> Complex<T> {
@@ -1561,11 +1573,90 @@ pub fn print_banner() {
 }
 
 #[allow(unused)]
+#[inline]
 pub fn upgrade_lorentz_vector(k: &LorentzVector<f64>) -> LorentzVector<f128::f128> {
+    cast_lorentz_vector(k)
+}
+
+#[allow(unused)]
+#[inline]
+pub fn cast_lorentz_vector<T1: Into<T2> + Field, T2: Field>(
+    k: &LorentzVector<T1>,
+) -> LorentzVector<T2> {
     LorentzVector::from_args(
-        Into::<f128::f128>::into(k.t),
-        Into::<f128::f128>::into(k.x),
-        Into::<f128::f128>::into(k.y),
-        Into::<f128::f128>::into(k.z),
+        Into::<T2>::into(k.t),
+        Into::<T2>::into(k.x),
+        Into::<T2>::into(k.y),
+        Into::<T2>::into(k.z),
     )
+}
+
+#[allow(unused)]
+#[inline]
+pub fn cast_complex<T1: Into<T2>, T2>(z: Complex<T1>) -> Complex<T2> {
+    Complex::new(Into::<T2>::into(z.re), Into::<T2>::into(z.im))
+}
+
+#[allow(unused)]
+pub fn perform_spatial_rotation<T: FloatLike>(
+    k: &LorentzVector<T>,
+    alpha: f64,
+    beta: f64,
+    gamma: f64,
+) -> LorentzVector<T> {
+    let sin_alpha = Into::<T>::into(alpha).sin();
+    let cos_alpha = Into::<T>::into(alpha).cos();
+    let sin_beta = Into::<T>::into(beta).sin();
+    let cos_beta = Into::<T>::into(beta).cos();
+    let sin_gamma = Into::<T>::into(gamma).sin();
+    let cos_gamma = Into::<T>::into(gamma).cos();
+
+    LorentzVector::from_args(
+        k.t,
+        cos_beta * cos_gamma * k.x
+            + (-cos_alpha * sin_gamma + sin_alpha * sin_beta * cos_gamma) * k.y
+            + (sin_alpha * sin_gamma + cos_alpha * sin_beta * cos_gamma) * k.z,
+        cos_beta * sin_gamma * k.x
+            + (cos_alpha * cos_gamma + sin_alpha * sin_beta * sin_gamma) * k.y
+            + (-sin_alpha * cos_gamma + cos_alpha * sin_beta * sin_gamma) * k.z,
+        -sin_beta * k.x + sin_alpha * cos_beta * k.y + cos_alpha * cos_beta * k.z,
+    )
+}
+
+#[allow(unused)]
+pub fn perform_pi2_rotation_x<T: FloatLike>(k: &LorentzVector<T>) -> LorentzVector<T> {
+    LorentzVector::from_args(k.t, k.x, -k.z, k.y)
+}
+
+#[allow(unused)]
+pub fn perform_pi2_rotation_y<T: FloatLike>(k: &LorentzVector<T>) -> LorentzVector<T> {
+    LorentzVector::from_args(k.t, k.z, k.y, -k.x)
+}
+
+#[allow(unused)]
+pub fn perform_pi2_rotation_z<T: FloatLike>(k: &LorentzVector<T>) -> LorentzVector<T> {
+    LorentzVector::from_args(k.t, -k.y, k.x, k.z)
+}
+
+#[allow(unused)]
+pub fn format_for_compare_digits(x: f64, y: f64) -> (String, String) {
+    let string_x = format!("{:+e}", x);
+    let string_y = format!("{:+e}", y);
+
+    let string_vec = string_x
+        .chars()
+        .zip(string_y.chars())
+        .map(|(char_x, char_y)| {
+            if char_x == char_y {
+                (char_x.to_string().green(), char_y.to_string().green())
+            } else {
+                (char_x.to_string().red(), char_y.to_string().red())
+            }
+        })
+        .collect_vec();
+
+    let string_x = string_vec.iter().map(|(x, _)| x).join("");
+    let string_y = string_vec.iter().map(|(_, y)| y).join("");
+
+    (string_x, string_y)
 }

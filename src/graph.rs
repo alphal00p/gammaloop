@@ -1,6 +1,6 @@
 use crate::{
-    cff::{generate_cff_expression, CFFExpression},
-    ltd::{generate_ltd_expression, LTDExpression},
+    cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
+    ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model,
     utils::{compute_momentum, FloatLike},
 };
@@ -9,6 +9,7 @@ use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use itertools::Itertools;
+use log::warn;
 use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
 use num::Complex;
@@ -16,7 +17,7 @@ use num::Complex;
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -623,11 +624,11 @@ impl Graph {
     }
 
     #[inline]
-    pub fn evaluate_cff_expression<T: FloatLike>(
+    pub fn evaluate_cff_orientations<T: FloatLike>(
         &self,
         loop_moms: &[LorentzVector<T>],
         independent_external_momenta: &[LorentzVector<T>],
-    ) -> Complex<T> {
+    ) -> Vec<T> {
         let mut energy_cache = vec![T::zero(); self.edges.len()];
         // some gymnastics to account for the sign of outgoing momenta
 
@@ -680,19 +681,37 @@ impl Graph {
             };
         }
 
+        self.derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .evaluate_orientations(&energy_cache)
+    }
+
+    #[inline]
+    pub fn evaluate_cff_expression<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        independent_external_momenta: &[LorentzVector<T>],
+    ) -> Complex<T> {
         let loop_number = self.loop_momentum_basis.basis.len();
         let internal_vertex_numer = self.vertices.len() - self.external_connections.len();
 
         let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32)
             * Complex::new(-T::one(), T::zero()).powi(internal_vertex_numer as i32 - 1);
 
+        // here numerator evaluation can be weaved into the summation
         prefactor
             * self
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .evaluate(&energy_cache)
+                .evaluate_cff_orientations(loop_moms, independent_external_momenta)
+                .into_iter()
+                .sum::<T>()
+    }
+
+    pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
+        let derived_data = DerivedGraphData::load_from_path(path)?;
+        self.derived_data = derived_data;
+        Ok(())
     }
 }
 
@@ -712,10 +731,80 @@ impl DerivedGraphData {
             ltd_expression: None,
         }
     }
+
+    pub fn to_serializable(&self) -> SerializableDerivedGraphData {
+        SerializableDerivedGraphData {
+            loop_momentum_bases: self
+                .loop_momentum_bases
+                .clone()
+                .map(|lmbs| lmbs.iter().map(|lmb| lmb.to_serializable()).collect_vec()),
+            cff_expression: self.cff_expression.clone().map(|cff| cff.to_serializable()),
+            ltd_expression: self.ltd_expression.clone().map(|ltd| ltd.to_serializable()),
+        }
+    }
+
+    pub fn from_serializable(serializable: SerializableDerivedGraphData) -> Self {
+        DerivedGraphData {
+            loop_momentum_bases: serializable.loop_momentum_bases.map(|lmbs| {
+                lmbs.iter()
+                    .map(LoopMomentumBasis::from_serializable)
+                    .collect_vec()
+            }),
+            cff_expression: serializable
+                .cff_expression
+                .map(CFFExpression::from_serializable),
+            ltd_expression: serializable
+                .ltd_expression
+                .map(LTDExpression::from_serializable),
+        }
+    }
+
+    pub fn load_from_path(path: &Path) -> Result<Self, Report> {
+        match std::fs::read(path) {
+            Ok(derived_data_bytes) => {
+                let derived_data: SerializableDerivedGraphData =
+                    bincode::deserialize(&derived_data_bytes)?;
+                Ok(Self::from_serializable(derived_data))
+            }
+            Err(_) => {
+                warn!("no derived data found");
+                Ok(Self::new_empty())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableDerivedGraphData {
+    pub loop_momentum_bases: Option<Vec<SerializableLoopMomentumBasis>>,
+    pub cff_expression: Option<SerializableCFFExpression>,
+    pub ltd_expression: Option<SerializableLTDExpression>,
 }
 
 #[derive(Debug, Clone)]
 pub struct LoopMomentumBasis {
+    pub basis: Vec<usize>,
+    pub edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,
+}
+
+impl LoopMomentumBasis {
+    pub fn to_serializable(&self) -> SerializableLoopMomentumBasis {
+        SerializableLoopMomentumBasis {
+            basis: self.basis.clone(),
+            edge_signatures: self.edge_signatures.clone(),
+        }
+    }
+
+    pub fn from_serializable(serializable: &SerializableLoopMomentumBasis) -> LoopMomentumBasis {
+        LoopMomentumBasis {
+            basis: serializable.basis.clone(),
+            edge_signatures: serializable.edge_signatures.clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SerializableLoopMomentumBasis {
     pub basis: Vec<usize>,
     pub edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,
 }

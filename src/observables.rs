@@ -6,14 +6,14 @@ use libc::{c_double, c_int, c_void};
 use log::{debug, error, info, trace, warn};
 use lorentz_vector::LorentzVector;
 use num::Complex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
 pub enum PhaseSpaceSelectorSettings {
@@ -23,7 +23,7 @@ pub enum PhaseSpaceSelectorSettings {
     RangeFilter(RangeFilterSettings),
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
 pub enum ObservableSettings {
@@ -36,7 +36,7 @@ pub enum ObservableSettings {
     CrossSection,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct RangeFilterSettings {
     pub pdgs: Vec<isize>,
@@ -45,7 +45,7 @@ pub struct RangeFilterSettings {
     pub max_value: f64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct JetSliceSettings {
     pub min_jets: usize,
@@ -57,7 +57,7 @@ pub struct JetSliceSettings {
     pub use_fastjet: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct Jet1PTSettings {
     pub x_min: f64,
@@ -70,7 +70,7 @@ pub struct Jet1PTSettings {
     pub use_fastjet: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct AFBSettings {
     pub x_min: f64,
@@ -80,7 +80,7 @@ pub struct AFBSettings {
     pub filename: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct SingleParticleObservableSettings {
     pub x_min: f64,
@@ -107,7 +107,7 @@ fn default_false() -> bool {
     false
 }
 
-#[derive(Debug, Copy, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FilterQuantity {
     #[serde(rename = "E")]
     Energy,

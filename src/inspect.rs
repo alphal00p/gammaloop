@@ -15,6 +15,7 @@ pub fn inspect(
     settings: &Settings,
     integrand: &mut Integrand,
     mut pt: Vec<f64>,
+    term: &[usize],
     mut force_radius: bool,
     is_momentum_space: bool,
     use_f128: bool,
@@ -47,8 +48,9 @@ pub fn inspect(
         .map(|x| f128::f128::to_f64(x).unwrap())
         .collect::<Vec<_>>();
 
-    let eval = integrand.evaluate_sample(
-        &Sample::Continuous(
+    let sample = match integrand {
+        Integrand::GammaLoopIntegrand(int) => int.create_sample(term, xs_f64.clone()),
+        _ => Sample::Continuous(
             1.,
             if force_radius {
                 xs_f64.clone()[1..].to_vec()
@@ -56,10 +58,9 @@ pub fn inspect(
                 xs_f64.clone()
             },
         ),
-        1.,
-        1,
-        use_f128,
-    );
+    };
+
+    let eval = integrand.evaluate_sample(&sample, 0., 1, use_f128);
     info!(
         "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
         format!(

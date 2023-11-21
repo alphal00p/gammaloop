@@ -185,8 +185,35 @@ impl CFFTree {
     fn to_serializable(&self) -> SerializableCFFTree {
         let nodes = self.nodes.iter().map(|n| n.to_serializable()).collect_vec();
         let orientation = self.orientation.to_serializable();
+        let term_id = self.term_id;
+        let num_data_nodes = self.num_data_nodes;
 
-        SerializableCFFTree { nodes, orientation }
+        SerializableCFFTree {
+            nodes,
+            orientation,
+            term_id,
+            num_data_nodes,
+        }
+    }
+
+    fn from_serializable(serializable: SerializableCFFTree) -> Self {
+        let nodes = serializable
+            .nodes
+            .into_iter()
+            .map(CFFTreeNode::from_serializable)
+            .collect_vec();
+
+        let term_id = serializable.term_id;
+        let num_data_nodes = serializable.num_data_nodes;
+
+        let orientation = Orientation::from_serializable(serializable.orientation);
+
+        Self {
+            nodes,
+            orientation,
+            term_id,
+            num_data_nodes,
+        }
     }
 
     fn recursive_eval_from_node<T: FloatLike>(
@@ -243,6 +270,8 @@ impl CFFTree {
 struct SerializableCFFTree {
     nodes: Vec<SerializableCFFTreeNode>,
     orientation: SerializableOrientation,
+    term_id: usize,
+    num_data_nodes: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -257,12 +286,34 @@ struct CFFTreeNodeData {
 impl CFFTreeNodeData {
     fn to_serializable(&self) -> SerializableCFFTreeNodeData {
         let children = self.children.clone();
+        let graph = self.graph.to_serializable();
         let node_id = self.node_id;
         let esurface_id = self.esurface_id;
+        let parent = self._parent;
 
         SerializableCFFTreeNodeData {
             node_id,
+            graph,
             children,
+            esurface_id,
+            parent,
+        }
+    }
+
+    fn from_serializable(serializable: SerializableCFFTreeNodeData) -> Self {
+        let SerializableCFFTreeNodeData {
+            node_id,
+            graph,
+            children,
+            esurface_id,
+            parent,
+        } = serializable;
+
+        Self {
+            node_id,
+            graph: CFFIntermediateGraph::from_serializable(graph),
+            children,
+            _parent: parent,
             esurface_id,
         }
     }
@@ -287,12 +338,23 @@ impl CFFTreeNode {
             CFFTreeNode::Pointer(pointer) => SerializableCFFTreeNode::Pointer(*pointer),
         }
     }
+
+    fn from_serializable(serializable: SerializableCFFTreeNode) -> Self {
+        match serializable {
+            SerializableCFFTreeNode::Data(data) => {
+                CFFTreeNode::Data(CFFTreeNodeData::from_serializable(data))
+            }
+            SerializableCFFTreeNode::Pointer(pointer) => CFFTreeNode::Pointer(pointer),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct SerializableCFFTreeNodeData {
     node_id: usize,
+    graph: SerializableCFFIntermediateGraph,
     children: Vec<usize>,
+    parent: Option<usize>,
     esurface_id: Option<usize>,
 }
 
@@ -313,14 +375,45 @@ impl CFFExpression {
     pub fn to_serializable(&self) -> SerializableCFFExpression {
         let terms = self.terms.iter().map(|t| t.to_serializable()).collect_vec();
         let esurfaces = self.esurfaces.clone();
+        let inequivalent_nodes = self
+            .inequivalent_nodes
+            .iter()
+            .map(|(k, v)| (k.clone(), v.0, v.1))
+            .collect_vec();
 
-        SerializableCFFExpression { terms, esurfaces }
+        SerializableCFFExpression {
+            terms,
+            esurfaces,
+            inequivalent_nodes,
+        }
     }
 
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        // fuck outgoing momenta
+    pub fn from_serializable(serializable: SerializableCFFExpression) -> Self {
+        let terms = serializable
+            .terms
+            .into_iter()
+            .map(CFFTree::from_serializable)
+            .collect_vec();
 
+        let esurfaces = serializable.esurfaces;
+
+        let inequivalent_nodes = serializable
+            .inequivalent_nodes
+            .into_iter()
+            .map(|(k, v1, v2)| (k, (v1, v2)))
+            .collect();
+
+        Self {
+            terms,
+            esurfaces,
+            inequivalent_nodes,
+        }
+    }
+
+    #[inline]
+    pub fn evaluate_orientations<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
         let esurface_cache = self.compute_esurface_cache(energy_cache);
+
         let mut node_cache = self
             .terms
             .iter()
@@ -330,10 +423,18 @@ impl CFFExpression {
         self.terms
             .iter()
             .map(|tree| tree.evaluate_tree(&esurface_cache, &mut node_cache))
+            .collect()
+    }
+
+    #[inline]
+    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+        self.evaluate_orientations(energy_cache)
+            .into_iter()
             .sum::<T>()
     }
 
-    fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
+    #[inline]
+    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
         self.esurfaces
             .iter()
             .map(|e| e.compute_value(energy_cache))
@@ -345,18 +446,24 @@ impl CFFExpression {
 pub struct SerializableCFFExpression {
     terms: Vec<SerializableCFFTree>,
     esurfaces: Vec<Esurface>,
+    inequivalent_nodes: Vec<(HashableCFFIntermediateGraph, usize, usize)>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Copy)]
 enum CFFVertexType {
     Source,
     Sink,
     Both,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Copy)]
 struct CFFVertex {
     identifier: [u8; MAX_VERTEX_COUNT],
     len: usize,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct ReadableCFFVertex {
+    identifier: Vec<u8>,
 }
 
 impl CFFVertex {
@@ -401,6 +508,15 @@ impl CFFVertex {
     fn iter(&self) -> impl Iterator<Item = u8> + '_ {
         self.identifier.iter().take(self.len).copied()
     }
+
+    fn to_serializable(self) -> ReadableCFFVertex {
+        let identifier = (0..self.len).map(|i| self.identifier[i]).collect_vec();
+        ReadableCFFVertex { identifier }
+    }
+
+    fn from_serializable(serializable: ReadableCFFVertex) -> Self {
+        Self::from_vec(serializable.identifier)
+    }
 }
 
 impl Display for CFFVertex {
@@ -442,6 +558,22 @@ impl Orientation {
         let orientation = self.into_iter().collect_vec();
         SerializableOrientation { orientation }
     }
+
+    fn from_serializable(serializable: SerializableOrientation) -> Self {
+        let num_edges = serializable.orientation.len();
+
+        let identifier = serializable
+            .orientation
+            .into_iter()
+            .enumerate()
+            .map(|(index, value)| if value { 0 } else { 1 << index })
+            .sum();
+
+        Self {
+            identifier,
+            num_edges,
+        }
+    }
 }
 
 impl IntoIterator for Orientation {
@@ -457,7 +589,7 @@ impl IntoIterator for Orientation {
     }
 }
 
-// OrientationIterator allows us to iterator over the edges in a graph, and
+// OrientationIterator allows us to iterate over the edges in a graph, and
 // view their orientation as a boolean
 struct OrientationIterator {
     identifier: usize,
@@ -505,6 +637,44 @@ struct CFFIntermediateGraph {
 
 #[allow(unused)]
 impl CFFIntermediateGraph {
+    fn from_serializable(serializable: SerializableCFFIntermediateGraph) -> Self {
+        let mut edges = HashMap::default();
+        let mut vertices = HashMap::default();
+
+        for vertex in serializable.vertices.into_iter() {
+            let (outgoing, incoming) = (vertex.1, vertex.2);
+            vertices.insert(CFFVertex::from_serializable(vertex.0), (outgoing, incoming));
+        }
+
+        for edge in serializable.edges.into_iter() {
+            edges.insert(
+                edge.0,
+                (
+                    CFFVertex::from_serializable(edge.1),
+                    CFFVertex::from_serializable(edge.2),
+                ),
+            );
+        }
+
+        CFFIntermediateGraph { vertices, edges }
+    }
+
+    fn to_serializable(&self) -> SerializableCFFIntermediateGraph {
+        let vertices = self
+            .vertices
+            .iter()
+            .map(|(v, (o, i))| (v.to_serializable(), o.clone(), i.clone()))
+            .collect_vec();
+
+        let edges = self
+            .edges
+            .iter()
+            .map(|(i, (l, r))| (*i, l.to_serializable(), r.to_serializable()))
+            .collect_vec();
+
+        SerializableCFFIntermediateGraph { vertices, edges }
+    }
+
     // helper function for testing
     fn from_vec(edges: Vec<(usize, usize)>) -> Self {
         let num_edges = edges.len();
@@ -597,9 +767,9 @@ impl CFFIntermediateGraph {
             .iter()
             .filter(|(v, _)| self.has_connected_complement(v).unwrap())
         {
-            if outgoing_edges.is_empty() {
+            if outgoing_edges.is_empty() && !incoming_edges.is_empty() {
                 res.push((*vertex, CFFVertexType::Sink));
-            } else if incoming_edges.is_empty() {
+            } else if incoming_edges.is_empty() && !outgoing_edges.is_empty() {
                 res.push((*vertex, CFFVertexType::Source));
             }
         }
@@ -611,19 +781,11 @@ impl CFFIntermediateGraph {
     }
 
     fn get_source_or_sink(&self) -> Result<(CFFVertex, CFFVertexType), Report> {
-        for (vertex, (outgoing_edges, incoming_edges)) in self
-            .vertices
-            .iter()
-            .filter(|(v, _)| self.has_connected_complement(v).unwrap())
-        {
-            if outgoing_edges.is_empty() && !incoming_edges.is_empty() {
-                return Ok((*vertex, CFFVertexType::Sink));
-            } else if incoming_edges.is_empty() && !outgoing_edges.is_empty() {
-                return Ok((*vertex, CFFVertexType::Source));
-            }
-        }
+        let mut sources_and_sinks = self.get_source_sink_candidate_list()?;
 
-        Err(eyre!("no source or sink found"))
+        // sort by the first vertex in the vertex set
+        sources_and_sinks.sort_by(|(a, _), (b, _)| a.identifier[0].cmp(&b.identifier[0]));
+        Ok(sources_and_sinks[0])
     }
 
     fn are_adjacent(&self, vertex1: &CFFVertex, vertex2: &CFFVertex) -> Result<bool, Report> {
@@ -1014,7 +1176,13 @@ impl Display for CFFIntermediateGraph {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct SerializableCFFIntermediateGraph {
+    edges: Vec<(usize, ReadableCFFVertex, ReadableCFFVertex)>,
+    vertices: Vec<(ReadableCFFVertex, Vec<usize>, Vec<usize>)>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct HashableCFFIntermediateGraph {
     edges: Vec<(usize, CFFVertex, CFFVertex)>,
 }
@@ -1138,11 +1306,7 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
 
     let (orientations, position_map) = get_orientations(graph);
     info!("generating cff for graph: {}", graph.name);
-    info!(
-        "number of orientations for {}: {}",
-        graph.name,
-        orientations.len()
-    );
+    info!("number of orientations: {}", orientations.len());
 
     generate_cff_from_orientations(orientations, &position_map, &external_data)
 }
@@ -1164,21 +1328,18 @@ fn generate_cff_from_orientations(
         .filter(|(_, graph)| !graph.has_directed_cycle_initial().unwrap())
         .collect_vec();
 
-    println!(
-        "number of acyclic orientations for {}",
+    info!(
+        "number of acyclic orientations: {}",
         acyclic_orientations_and_graphs.len()
     );
 
     let mut cache_hits = 0;
     let mut non_cache_hits = 0;
     for (term_id, (orientation, graph)) in acyclic_orientations_and_graphs.into_iter().enumerate() {
-        println!("processing orientation {}", term_id);
-
         let mut tree = CFFTree::from_root_graph(graph, orientation, term_id);
         let mut tree_done = false;
 
         while !tree_done {
-            // println!("processing layer {}", layer);
             let bottom_layer = tree.get_bottom_layer();
             if bottom_layer.is_empty() {
                 break;
@@ -1234,11 +1395,10 @@ fn generate_cff_from_orientations(
         cff_expression.terms.push(tree);
     }
 
-    println!("number of cache hits: {}", cache_hits);
-    println!("number of non cache hits: {}", non_cache_hits);
-    println!(
-        "percentage of cache hits: {}",
-        cache_hits as f64 / (cache_hits + non_cache_hits) as f64
+    info!("number of cache hits: {}", cache_hits);
+    info!(
+        "percentage of cache hits: {:.1}%",
+        cache_hits as f64 / (cache_hits + non_cache_hits) as f64 * 100.0
     );
 
     Ok(cff_expression)
@@ -1697,26 +1857,25 @@ mod tests_cff {
             EdgeType::Incoming,
         ];
 
-        let _energy_prefactor = virtual_energy_cache
+        let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (2. * e).inv())
             .product::<f64>();
 
-        //   let cff_res: f64 = energy_prefactor
-        //       * cff.evaluate(&energy_cache, &edge_types)
-        //       * (2. * std::f64::consts::PI).pow(-3);
+        let cff_res: f64 =
+            energy_prefactor * cff.evaluate(&energy_cache) * (2. * std::f64::consts::PI).powi(-3);
 
-        //   let target_res = 6.333_549_225_536_17e-9_f64;
-        //   let absolute_error: f64 = cff_res - target_res;
-        //   let relative_error = absolute_error.abs() / cff_res.abs();
+        let target_res = 6.333_549_225_536_17e-9_f64;
+        let absolute_error: f64 = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
 
-        //   assert!(
-        //       relative_error.abs() < 1.0e-15,
-        //       "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
-        //       relative_error,
-        //       target_res,
-        //       cff_res
-        //   );
+        assert!(
+            relative_error.abs() < 1.0e-15,
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
     } //
 
     #[test]
@@ -1771,23 +1930,23 @@ mod tests_cff {
         let mut energy_cache = virtual_energy_cache.to_vec();
         energy_cache.extend(external_energy_cache);
 
-        let _energy_prefactor = virtual_energy_cache
+        let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (2. * e).inv())
             .product::<f64>();
-        // let cff_res = energy_prefactor * cff.evaluate(&energy_cache, &edge_types);
+        let cff_res = energy_prefactor * cff.evaluate(&energy_cache);
 
-        // let target = 1.0794792137096797e-13;
-        // let absolute_error = cff_res - target;
-        // let relative_error = absolute_error / cff_res;
+        let target = 1.0794792137096797e-13;
+        let absolute_error = cff_res - target;
+        let relative_error = absolute_error / cff_res;
 
-        // assert!(
-        //     relative_error.abs() < 1.0e-15,
-        //     "relative error: {:+e}, target: {:+e}, result: {:+e}",
-        //     relative_error,
-        //     target,
-        //     cff_res
-        // );
+        assert!(
+            relative_error.abs() < 1.0e-15,
+            "relative error: {:+e}, target: {:+e}, result: {:+e}",
+            relative_error,
+            target,
+            cff_res
+        );
     }
 
     #[test]
@@ -1826,7 +1985,7 @@ mod tests_cff {
         }
 
         let orientataions = generate_orientations_for_testing(tbt_edges);
-        let _cff =
+        let cff =
             generate_cff_from_orientations(orientataions, &position_map, &external_data).unwrap();
 
         let q = LorentzVector::from_args(1.0, 2.0, 3.0, 4.0);
@@ -1856,32 +2015,23 @@ mod tests_cff {
 
         let virtual_energy_cache = energies_cache[0..8].to_vec();
 
-        let _energy_prefactor = virtual_energy_cache
+        let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (2. * e).inv())
             .product::<f64>();
-        //   let res = cff.evaluate(&energies_cache, &edge_types) * energy_prefactor;
+        let res = cff.evaluate(&energies_cache) * energy_prefactor;
 
-        //   let absolute_error = res - 1.2625322619777278e-21;
-        //   let relative_error = absolute_error / res;
-        //   assert!(
-        //       relative_error.abs() < 1.0e-15,
-        //       "relative error: {:+e}",
-        //       relative_error
-        //   );
-
-        //   // test that the I do not include the empty graphs at the end
-        //   for term in cff.terms.iter() {
-        //       for node_id in term.get_bottom_layer().iter() {
-        //           let bottom_node = &term.nodes[*node_id];
-        //           if let CFFTreeNode::Data(data) = bottom_node {
-        //               assert!(data.graph.vertices.len() == 2);
-        //           }
-        //       }
-        //   }
+        let absolute_error = res - 1.2625322619777278e-21;
+        let relative_error = absolute_error / res;
+        assert!(
+            relative_error.abs() < 1.0e-15,
+            "relative error: {:+e}",
+            relative_error
+        );
     }
 
     #[test]
+    #[ignore]
     fn fishnet2b2() {
         let edges = vec![
             (0, 1),
@@ -1945,6 +2095,7 @@ mod tests_cff {
     }
 
     #[test]
+    #[ignore]
     fn cube() {
         let edges = vec![
             (0, 1),
@@ -1974,21 +2125,18 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(edges);
 
         // get time before cff generation
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         let cff =
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
-        let num_terms = cff.terms.len();
-        let num_nodes = cff.terms.iter().map(|t| t.nodes.len()).sum::<usize>();
+        let _num_terms = cff.terms.len();
+        let _num_nodes = cff.terms.iter().map(|t| t.nodes.len()).sum::<usize>();
 
-        let finish = std::time::Instant::now();
-        println!("time to generate cff: {:?}", finish - start);
-        println!("number of cff terms: {}", num_terms);
-        println!("number of nodes: {}", num_nodes);
+        let _finish = std::time::Instant::now();
     }
 
     #[test]
-    //#[ignore]
+    #[ignore] // this is now in the python tests
     fn fishnet2b3() {
         let edges = vec![
             (0, 1),
@@ -2033,7 +2181,5 @@ mod tests_cff {
         let cff =
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
         println!("cff terms = {}", cff.terms.len());
-        // let test = cff.evaluate(&energy_cache, &edge_types);
-        //println!("test = {}", test);
     }
 }

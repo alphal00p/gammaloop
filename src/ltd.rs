@@ -5,8 +5,10 @@ use crate::{
     utils::{compute_momentum, FloatLike},
 };
 use itertools::Itertools;
+use log::info;
 use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ContourClosure {
@@ -436,20 +438,6 @@ impl LTDTerm {
             })
             .collect_vec();
 
-        // subtract external momenta
-        //  let loop_momenta_of_associated_lmb = edge_momenta_of_associated_lmb
-        //      .iter()
-        //      .zip(self.associated_lmb.iter())
-        //      .map(|(momentum, (index, _))| {
-        //          let mut momentum = *momentum;
-        //          for (i, external_momentum) in external_moms.iter().enumerate() {
-        //              momentum -= external_momentum
-        //                  * Into::<T>::into(self.signature_of_lmb[*index].1[i] as f64);
-        //          }
-        //          momentum
-        //      })
-        //      .collect_vec();
-
         // iterate over remaining propagators
         let mut inv_res = Into::<T>::into(1.);
         let mut energy_product = Into::<T>::into(1.);
@@ -471,8 +459,6 @@ impl LTDTerm {
                         * (momentum.spatial_squared() + Into::<T>::into(mass.re * mass.re)).sqrt();
                 }
                 None => {
-                    println!("momentum {}", momentum);
-                    println!("momentum squared: {}", momentum.square());
                     inv_res *= momentum.square();
                     energy_product *= Into::<T>::into(2.) * momentum.spatial_distance();
                 }
@@ -481,6 +467,26 @@ impl LTDTerm {
 
         inv_res.recip() * energy_product
     }
+
+    fn to_serializable(&self) -> SerializableLTDTerm {
+        SerializableLTDTerm {
+            associated_lmb: self.associated_lmb.clone(),
+            signature_of_lmb: self.signature_of_lmb.clone(),
+        }
+    }
+
+    fn from_serializable(serializable: SerializableLTDTerm) -> Self {
+        Self {
+            associated_lmb: serializable.associated_lmb,
+            signature_of_lmb: serializable.signature_of_lmb,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableLTDTerm {
+    associated_lmb: Vec<(usize, f64)>,
+    signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -502,9 +508,36 @@ impl LTDExpression {
             .map(|term| term.evaluate(external_moms, &emr, graph))
             .sum()
     }
+
+    pub fn to_serializable(&self) -> SerializableLTDExpression {
+        SerializableLTDExpression {
+            terms: self
+                .terms
+                .iter()
+                .map(|term| term.to_serializable())
+                .collect(),
+        }
+    }
+
+    pub fn from_serializable(serializable: SerializableLTDExpression) -> Self {
+        Self {
+            terms: serializable
+                .terms
+                .into_iter()
+                .map(LTDTerm::from_serializable)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableLTDExpression {
+    terms: Vec<SerializableLTDTerm>,
 }
 
 pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
+    info!("generating ltd expression for graph: {:?}", graph.name);
+
     let loop_line_signatures = graph
         .edges
         .iter()
@@ -527,6 +560,15 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
     let cut_structure = cut_structure_generator.generate_structure(&countour_closure, true);
 
     graph.generate_loop_momentum_bases_if_not_exists();
+    info!(
+        "number of spanning trees: {}",
+        graph
+            .derived_data
+            .loop_momentum_bases
+            .as_ref()
+            .unwrap()
+            .len()
+    );
 
     let mut ltd_terms = Vec::with_capacity(cut_structure.len());
 

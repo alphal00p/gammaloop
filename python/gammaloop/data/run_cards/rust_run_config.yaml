@@ -1,42 +1,51 @@
 General:
   debug: 0
+  use_ltd: false
 Integrand:
-  type: unit_volume
-  n_3d_momenta: 5
-Integrator:
-  n_bins: 16
-  min_samples_for_update: 10000
-  n_start: 100000
-  n_increase: 100000
-  n_max: 1000000
-  integrated_phase: real
-  learning_rate: 1.5
-  train_on_avg: false
-  show_max_wgt_info: true
+  type: gamma_loop
 Kinematics:
-  e_cm: 60.0
+  e_cm: 3.0
+  externals: !constant
+  - - 2.0
+    - 2.0
+    - 3.0
+    - 4.0
+  - - 1.0
+    - 2.0
+    - 9.0
+    - 3.0
 Parameterization:
-  b: 1.0
+  mode: spherical
   mapping: linear
-  mode: spherical # choices are cartesian, spherical, hyperspherical and hyperspherical_flat
-#Selectors: []
-Selectors:
-  - type: jet
-    min_jets: 0
-    max_jets: 1000
-    min_jpt: 0.0
-    min_j1pt: 15.
-    max_j1pt: -1.
-    dR: 0.7
-    use_fastjet: true
-Observables:
-  - type: cross_section
-#   - type: jet1pt
-#     x_min: 0.
-#     x_max: 100.
-#     dR: 0.7
-#     min_jpt: 5.
-#     n_bins: 100
-#     write_to_file: true
-#     filename: "observables/jet1_pt.HwU"
-#     use_fastjet: true
+  b: 1.0
+Integrator:
+  n_bins: 0
+  bin_number_evolution: null
+  min_samples_for_update: 0
+  n_start: 0
+  n_increase: 0
+  n_max: 0
+  integrated_phase: real
+  learning_rate: 0.0
+  train_on_avg: false
+  show_max_wgt_info: false
+  max_prob_ratio: 0.0
+Observables: []
+Selectors: []
+Stability:
+  rotation_axis: x
+  levels:
+  - precision: Double
+    required_precision_for_re: 1e-15
+    required_precision_for_im: 1e-15
+    escalate_for_large_weight_threshold: 0.9
+    accepted_radius_in_x_range:
+    - 0.0
+    - 0.9
+  - precision: Quad
+    required_precision_for_re: 1e-15
+    required_precision_for_im: 1e-15
+    escalate_for_large_weight_threshold: -1.0
+    accepted_radius_in_x_range:
+    - 0.0
+    - 1.0

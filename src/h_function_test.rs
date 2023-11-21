@@ -5,14 +5,15 @@ use crate::ParameterizationMapping;
 use crate::Settings;
 use num::Complex;
 use num_traits::ToPrimitive;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HFunctionTestSettings {
     pub h_function: crate::HFunctionSettings,
 }
 
+#[derive(Clone)]
 pub struct HFunctionTestIntegrand {
     pub settings: Settings,
     pub n_dim: usize,

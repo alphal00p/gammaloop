@@ -1,5 +1,6 @@
 General:
   debug: 0
+  use_ltd: false
 Integrand:
   type: unit_volume
   n_3d_momenta: 11
@@ -13,6 +14,7 @@ Integrator:
   learning_rate: 1.5
   train_on_avg: false
   show_max_wgt_info: true
+  max_prob_ratio: 0.01
 Kinematics:
   e_cm: 60.0
 Parameterization:

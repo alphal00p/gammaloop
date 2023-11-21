@@ -75,7 +75,10 @@ class GammaLoopConfiguration(object):
                     'anchor_tension': 2.0,
                     'caption_size': "40pt",
                 }
-            }
+            },
+            'export_settings': {
+                'write_default_settings': True,
+            },
         }
         if path is None:
             for config_path in GAMMALOOP_CONFIG_PATHS:
@@ -622,6 +625,11 @@ class GammaLoop(object):
                         cross_section.Amplitude.from_yaml_str(self.model, amplitude_yaml))
                     self.rust_worker.add_amplitude_from_yaml_str(
                         amplitude_yaml)
+            self.rust_worker.load_amplitudes_derived_data(
+                pjoin(args.path_to_launch, 'sources', 'amplitudes'))
+
+            self.rust_worker.load_amplitude_integrands(
+                pjoin(args.path_to_launch, 'cards', 'run_card.yaml'))
 
         if output_metadata['output_type'] == 'cross_sections':
             self.cross_sections = cross_section.CrossSectionList()
@@ -673,6 +681,18 @@ class GammaLoop(object):
 
     # inspect command
     inspect_parser = ArgumentParser(prog='inspect')
+    inspect_parser.add_argument(
+        "integrand", type=str, help="Integrand to inspect.")
+    inspect_parser.add_argument('--use-f128', '-f128', action='store_true',
+                                default=False, help='Use f128 precision for the inspection.')
+    inspect_parser.add_argument('--point', '-p', nargs="+", type=float,
+                                default=None, help='Point to inspect.')
+    inspect_parser.add_argument(
+        '--term', '-t', nargs="+", type=int, default=None, help="term to inspect.")
+    inspect_parser.add_argument('--is-momentum-space', '-ms', action='store_true',
+                                default=False, help='Inspect in momentum space.')
+    inspect_parser.add_argument(
+        '--force-radius', '-fr', action='store_true', default=False, help='Force radius to be used.')
 
     def do_inspect(self, str_args: str) -> None:
         if str_args == 'help':
@@ -684,7 +704,11 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        raise GammaLoopError("Command not implemented yet")
+        args = self.inspect_parser.parse_args(split_str_args(str_args))
+        self.rust_worker.inspect_integrand(
+            args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
+
+        # raise GammaLoopError("Command not implemented yet")
 
     # integrate command
     integrate_parser = ArgumentParser(prog='integrate')

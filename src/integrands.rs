@@ -1,3 +1,4 @@
+use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
 use crate::observables::EventManager;
 use crate::utils::FloatLike;
@@ -7,11 +8,11 @@ use enum_dispatch::enum_dispatch;
 use log::{debug, error, info, trace, warn};
 use lorentz_vector::LorentzVector;
 use num::Complex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
 pub enum IntegrandSettings {
@@ -21,6 +22,8 @@ pub enum IntegrandSettings {
     UnitVolume(UnitVolumeSettings),
     #[serde(rename = "h_function_test")]
     HFunctionTest(HFunctionTestSettings),
+    #[serde(rename = "gamma_loop")]
+    GammaLoop,
 }
 
 impl Display for IntegrandSettings {
@@ -31,6 +34,7 @@ impl Display for IntegrandSettings {
             IntegrandSettings::HFunctionTest(_) => {
                 write!(f, "h_function_test")
             }
+            IntegrandSettings::GammaLoop => write!(f, "gamma_loop"),
         }
     }
 }
@@ -68,10 +72,12 @@ pub trait HasIntegrand {
 }
 
 #[enum_dispatch(HasIntegrand)]
+#[derive(Clone)]
 pub enum Integrand {
     UnitSurface(UnitSurfaceIntegrand),
     UnitVolume(UnitVolumeIntegrand),
     HFunctionTest(HFunctionTestIntegrand),
+    GammaLoopIntegrand(GammaLoopIntegrand),
 }
 
 pub fn integrand_factory(settings: &Settings) -> Integrand {
@@ -85,14 +91,18 @@ pub fn integrand_factory(settings: &Settings) -> Integrand {
         IntegrandSettings::HFunctionTest(integrand_settings) => Integrand::HFunctionTest(
             HFunctionTestIntegrand::new(settings.clone(), integrand_settings),
         ),
+        IntegrandSettings::GammaLoop => {
+            unimplemented!("unsupported integrand construction method, please use the exporter to generate the integrand");
+        }
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UnitSurfaceSettings {
     pub n_3d_momenta: usize,
 }
 
+#[derive(Clone)]
 pub struct UnitSurfaceIntegrand {
     pub settings: Settings,
     pub n_dim: usize,
@@ -198,11 +208,12 @@ impl HasIntegrand for UnitSurfaceIntegrand {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UnitVolumeSettings {
     pub n_3d_momenta: usize,
 }
 
+#[derive(Clone)]
 pub struct UnitVolumeIntegrand {
     pub settings: Settings,
     pub n_dim: usize,

@@ -26,3 +26,4 @@ show_settings drawing.feynmp.show_edge_composite_momenta
 output TEST_OUTPUT
 launch TEST_OUTPUT
 info
+inspect mercedes -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327 -t 0

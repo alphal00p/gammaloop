@@ -29,3 +29,5 @@ drawing:
     lmb_color: "red"
     anchor_tension: 2.0
     caption_size: "40pt"
+export_settings: 
+  write_default_settings: false

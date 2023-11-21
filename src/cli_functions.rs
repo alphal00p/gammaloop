@@ -103,6 +103,16 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
                         .long("debug")
                         .value_name("LEVEL")
                         .help("Set the debug level. Higher means more verbose."),
+                )
+                .arg(
+                    Arg::with_name("term")
+                        .short("t")
+                        .long("term")
+                        .required(true)
+                        .multiple(true)
+                        .allow_hyphen_values(true)
+                        .value_name("TERM")
+                        .help("Specify the term to inspect"),
                 ),
         )
         .subcommand(
@@ -178,11 +188,18 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
             .map(|x| f64::from_str(x.trim_end_matches(',')).unwrap())
             .collect::<Vec<_>>();
         let force_radius = matches.is_present("force_radius");
+        let term = match matches.values_of("term") {
+            Some(t) => t
+                .map(|x| usize::from_str(x.trim_end_matches(',')).unwrap())
+                .collect::<Vec<_>>(),
+            None => vec![],
+        };
 
         let _result = inspect(
             &settings,
             &mut integrand,
             pt.clone(),
+            &term,
             force_radius,
             matches.is_present("momentum_space"),
             matches.is_present("use_f128"),

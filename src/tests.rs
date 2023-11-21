@@ -133,11 +133,20 @@ fn compare_integration(
 fn compare_inspect(
     settings: &mut Settings,
     pt: Vec<f64>,
+    term: &[usize],
     is_momentum_space: bool,
     target: Complex<f64>,
 ) -> bool {
     let mut integrand = integrand_factory(settings);
-    let res = inspect(settings, &mut integrand, pt, false, is_momentum_space, true);
+    let res = inspect(
+        settings,
+        &mut integrand,
+        pt,
+        term,
+        false,
+        is_momentum_space,
+        true,
+    );
     if !approx_eq(res.re, target.re, INSPECT_TOLERANCE)
         || !approx_eq(res.im, target.im, INSPECT_TOLERANCE)
     {
@@ -302,6 +311,7 @@ mod tests_inspect {
         assert!(compare_inspect(
             &mut settings,
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            &[0],
             true,
             Complex::new(1.3793965770302298e3, 0.0)
         ));
@@ -313,6 +323,7 @@ mod tests_inspect {
         assert!(compare_inspect(
             &mut settings,
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+            &[0],
             true,
             Complex::new(4.792927924134406e-45, 0.0)
         ));
@@ -334,6 +345,7 @@ mod tests_inspect {
         assert!(compare_inspect(
             &mut settings,
             vec![0.2188450233532342,],
+            &[0],
             false,
             Complex::new(1.4016882047579115e-34, 0.0)
         ));
@@ -348,6 +360,7 @@ mod tests_inspect {
         assert!(compare_inspect(
             &mut settings,
             vec![0.2188450233532342,],
+            &[0],
             false,
             Complex::new(3.112977432926161e-4, 0.0)
         ));

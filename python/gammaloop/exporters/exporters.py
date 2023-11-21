@@ -121,6 +121,9 @@ class AmplitudesExporter(GammaLoopExporter):
         self.gammaloop.rust_worker.export_amplitudes(
             str(export_root), [amp.name for amp in amplitudes])
 
+        if self.gammaloop.config['export_settings']['write_default_settings']:
+            self.gammaloop.rust_worker.write_default_settings(str(export_root))
+
 
 class CrossSectionsExporter(GammaLoopExporter):
 

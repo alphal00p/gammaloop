@@ -1,9 +1,14 @@
+use crate::gammaloop_integrand::{
+    GammaLoopIntegrand, GammaLoopIntegrandType, GammaloopIntegrandTerm,
+};
 use crate::graph::{Graph, SerializableGraph};
 use crate::model::Model;
 use crate::utils::*;
+use bincode;
 use color_eyre::{Help, Report};
 #[allow(unused_imports)]
 use eyre::{eyre, Context};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -309,6 +314,10 @@ impl AmplitudeGraph {
             graph: Graph::from_serializable_graph(model, &amplitude_graph.graph),
         }
     }
+
+    pub fn create_amplitude_integrand_term(&self) -> GammaloopIntegrandTerm {
+        GammaloopIntegrandTerm::from_single_graph(self.graph.clone())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -484,7 +493,7 @@ impl Amplitude {
 
     #[allow(unused)]
     pub fn export(
-        &self,
+        &mut self,
         export_root: &str,
         model: &Model,
         sb_state: &mut symbolica::state::State,
@@ -492,6 +501,12 @@ impl Amplitude {
     ) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
+
+        // generate cff and ltd for each graph in the ampltiudes, ltd also generates lmbs
+        for amplitude_graph in self.amplitude_graphs.iter_mut() {
+            amplitude_graph.graph.generate_cff();
+            amplitude_graph.graph.generate_ltd();
+        }
 
         // Then dumped the new yaml representation of the amplitude now containing all that additional information
         let path = Path::new(export_root)
@@ -504,10 +519,57 @@ impl Amplitude {
             serde_yaml::to_string(&self.to_serializable())?,
         )?;
 
+        // dump the derived data in a binary file
+        for amplitude_graph in self.amplitude_graphs.iter() {
+            fs::write(
+                path.join(format!("derived_data_{}.bin", amplitude_graph.graph.name)),
+                bincode::serialize(&amplitude_graph.graph.derived_data.to_serializable())?,
+            );
+        }
         // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
-        fs::write(path.join("cff_expression.yaml"), "TODO")?;
 
         Ok(())
+    }
+
+    pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
+        for ampltitude_graph in self.amplitude_graphs.iter_mut() {
+            let graph_path = path.join(format!(
+                "derived_data_{}.bin",
+                ampltitude_graph.graph.name.as_str()
+            ));
+            ampltitude_graph.graph.load_derived_data(&graph_path)?;
+        }
+        Ok(())
+    }
+
+    pub fn generate_integrand(
+        &self,
+        path_to_settings: &Path,
+    ) -> Result<GammaLoopIntegrand, Report> {
+        let terms = self
+            .amplitude_graphs
+            .iter()
+            .map(|amplitude_graph| amplitude_graph.create_amplitude_integrand_term())
+            .collect_vec();
+
+        let settings_string = fs::read_to_string(path_to_settings)
+            .wrap_err_with(|| {
+                format!(
+                    "Could not open settings yaml file {}",
+                    path_to_settings.display()
+                )
+            })
+            .suggestion("does the path exist?")?;
+
+        let settings = serde_yaml::from_str(&settings_string)
+            .wrap_err("Could not parse settings yaml content")
+            .suggestion("Is it a correct yaml file")?;
+
+        Ok(GammaLoopIntegrand::from_terms(
+            terms,
+            GammaLoopIntegrandType::Amplitude,
+            settings,
+        ))
     }
 }
 
@@ -628,5 +690,14 @@ impl AmplitudeList {
 
     pub fn add_amplitude(&mut self, amplitude: Amplitude) {
         self.container.push(amplitude);
+    }
+
+    pub fn load_derived_data(&mut self, path: &str) -> Result<(), Report> {
+        let path = Path::new(path);
+        for amplitude in self.container.iter_mut() {
+            let ampltitude_path = path.join(amplitude.name.as_str());
+            amplitude.load_derived_data(&ampltitude_path)?;
+        }
+        Ok(())
     }
 }

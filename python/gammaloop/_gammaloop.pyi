@@ -45,6 +45,9 @@ class Worker:
     def load_amplitudes_from_yaml_str(self, yaml_str: str) -> None:
         """ Loads a list of amplitudes from a yaml string representation of that list. """
 
+    def load_amplitudes_derived_data(self, file_path: str) -> None:
+        """ Loads the derived data associated to the amplitudes. """
+
     def get_amplitudes(self) -> str:
         """ Returns the yaml string representation of the list of all amplitudes currently loaded in the worker. """
 
@@ -56,3 +59,12 @@ class Worker:
 
     def export_amplitudes(self, export_root: str, cross_section_names: list[str]) -> None:
         """ Exports the amplitudes given in argument to the export root given in argument. """
+
+    def load_amplitude_integrands(self, path_to_settings: str) -> None:
+        """ Loads the gammalooop integrand objects"""
+
+    def write_default_settings(self, export_root: str) -> None:
+        """ Writes the default settings to the export root given in argument. """
+
+    def inspect_integrand(self, integrand: str, pt: list[float], term: list[int], force_radius: bool, is_momentum_space: bool, use_f128: bool) -> None:
+        """ Inspects the integrand given in argument at the point given in argument. """

@@ -4,6 +4,7 @@ pub mod api;
 pub mod cff;
 pub mod cli_functions;
 pub mod cross_section;
+pub mod gammaloop_integrand;
 pub mod graph;
 pub mod h_function_test;
 pub mod inspect;
@@ -23,10 +24,12 @@ use colored::Colorize;
 use eyre::WrapErr;
 
 use integrands::*;
+use lorentz_vector::LorentzVector;
 use num::Complex;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
+use utils::FloatLike;
 
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +40,7 @@ pub const MAX_LOOP: usize = 3;
 #[cfg(feature = "higher_loops")]
 pub const MAX_LOOP: usize = 6;
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub enum HFunction {
     #[default]
     #[serde(rename = "poly_exponential")]
@@ -66,7 +69,7 @@ fn _default_shifts() -> Vec<(f64, f64, f64, f64)> {
     vec![(1.0, 0.0, 0.0, 0.0); 15]
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HFunctionSettings {
     pub function: HFunction,
     pub sigma: f64,
@@ -76,7 +79,7 @@ pub struct HFunctionSettings {
     pub power: Option<usize>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum ParameterizationMode {
     #[serde(rename = "cartesian")]
     Cartesian,
@@ -89,7 +92,7 @@ pub enum ParameterizationMode {
     HyperSphericalFlat,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Default, Serialize)]
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
     #[default]
@@ -98,12 +101,13 @@ pub enum ParameterizationMapping {
     Linear,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct GeneralSettings {
     pub debug: usize,
+    pub use_ltd: bool,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize)]
 pub enum IntegratedPhase {
     #[serde(rename = "real")]
     #[default]
@@ -114,12 +118,14 @@ pub enum IntegratedPhase {
     Both,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct KinematicsSettings {
     pub e_cm: f64,
+    #[serde(default = "Externals::default")]
+    pub externals: Externals,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct IntegratorSettings {
     pub n_bins: usize,
     pub bin_number_evolution: Option<Vec<usize>>,
@@ -131,9 +137,10 @@ pub struct IntegratorSettings {
     pub learning_rate: f64,
     pub train_on_avg: bool,
     pub show_max_wgt_info: bool,
+    pub max_prob_ratio: f64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ParameterizationSettings {
     pub mode: ParameterizationMode,
     pub mapping: ParameterizationMapping,
@@ -144,7 +151,19 @@ pub struct ParameterizationSettings {
     pub shifts: Vec<(f64, f64, f64, f64)>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+impl Default for ParameterizationSettings {
+    fn default() -> Self {
+        Self {
+            b: 1.0,
+            mode: ParameterizationMode::Spherical,
+            mapping: ParameterizationMapping::Linear,
+            input_rescaling: vec![vec![(0.0, 1.0); 3]; 15],
+            shifts: vec![(1.0, 0.0, 0.0, 0.0); 15],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Settings {
     #[serde(rename = "General")]
     pub general: GeneralSettings,
@@ -160,6 +179,9 @@ pub struct Settings {
     pub observables: Vec<ObservableSettings>,
     #[serde(rename = "Selectors")]
     pub selectors: Vec<PhaseSpaceSelectorSettings>,
+    #[serde(rename = "Stability")]
+    #[serde(default = "StabilitySettings::default")]
+    pub stability: StabilitySettings,
 }
 
 impl Settings {
@@ -180,4 +202,112 @@ pub struct IntegrationResult {
     pub result: Vec<f64>,
     pub error: Vec<f64>,
     pub prob: Vec<f64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct StabilitySettings {
+    rotation_axis: RotationMethod,
+    levels: Vec<StabilityLevelSetting>,
+}
+
+impl Default for StabilitySettings {
+    fn default() -> Self {
+        Self {
+            rotation_axis: RotationMethod::default(),
+            levels: vec![
+                StabilityLevelSetting::default_double(),
+                StabilityLevelSetting::default_quad(),
+            ],
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct StabilityLevelSetting {
+    precision: Precision,
+    required_precision_for_re: f64,
+    required_precision_for_im: f64,
+    escalate_for_large_weight_threshold: f64,
+    accepted_radius_in_x_range: [f64; 2],
+}
+
+impl StabilityLevelSetting {
+    fn default_double() -> Self {
+        Self {
+            precision: Precision::Double,
+            required_precision_for_re: 1e-15,
+            required_precision_for_im: 1e-15,
+            escalate_for_large_weight_threshold: 0.9,
+            accepted_radius_in_x_range: [0.0, 0.9],
+        }
+    }
+
+    fn default_quad() -> Self {
+        Self {
+            precision: Precision::Quad,
+            required_precision_for_re: 1e-15,
+            required_precision_for_im: 1e-15,
+            escalate_for_large_weight_threshold: -1.0,
+            accepted_radius_in_x_range: [0.0, 1.0],
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy)]
+pub enum RotationMethod {
+    #[serde(rename = "x")]
+    #[default]
+    Pi2X,
+    #[serde(rename = "y")]
+    Pi2Y,
+    #[serde(rename = "z")]
+    Pi2Z,
+}
+
+impl RotationMethod {
+    fn rotation_function<T: FloatLike>(&self) -> impl Fn(&LorentzVector<T>) -> LorentzVector<T> {
+        match self {
+            RotationMethod::Pi2X => utils::perform_pi2_rotation_x,
+            RotationMethod::Pi2Y => utils::perform_pi2_rotation_y,
+            RotationMethod::Pi2Z => utils::perform_pi2_rotation_z,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy)]
+pub enum Precision {
+    Single, // this might be useful for eventual deployment on gpu
+    #[default]
+    Double,
+    Quad,
+    Arb(usize),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Externals {
+    #[serde(rename = "constant")]
+    Constant(Vec<[f64; 4]>),
+    // add different type of pdfs here when needed
+}
+
+impl Externals {
+    #[allow(unused_variables)]
+    #[inline]
+    pub fn get_externals(&self, x_space_point: &[f64]) -> (Vec<LorentzVector<f64>>, f64) {
+        match self {
+            Externals::Constant(externals) => (
+                externals
+                    .iter()
+                    .map(|[e0, e1, e2, e3]| LorentzVector::from_args(*e0, *e1, *e2, *e3))
+                    .collect(),
+                1.0,
+            ),
+        }
+    }
+}
+
+impl Default for Externals {
+    fn default() -> Self {
+        Externals::Constant(vec![[0.0; 4]; 15])
+    }
 }
