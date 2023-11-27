@@ -1640,8 +1640,8 @@ pub fn perform_pi2_rotation_z<T: FloatLike>(k: &LorentzVector<T>) -> LorentzVect
 
 #[allow(unused)]
 pub fn format_for_compare_digits(x: f64, y: f64) -> (String, String) {
-    let string_x = format!("{:+e}", x);
-    let string_y = format!("{:+e}", y);
+    let string_x = format!("{:.16e}", x);
+    let string_y = format!("{:.16e}", y);
 
     let string_vec = string_x
         .chars()
