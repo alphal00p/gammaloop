@@ -19,11 +19,40 @@ pub enum GammaLoopIntegrandType {
     CrossSection,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct GammaloopIntegrandTermStatistics {
+    pub max_re_eval: f64,
+    pub max_im_eval: f64,
+    pub max_weight: f64,
+    pub n_nan_evals: usize,
+    pub zero_evals: usize,
+    pub num_unstable_f32_points: usize,
+    pub num_unstable_f64_points: usize,
+    pub num_unstable_f128_points: usize,
+    pub num_unstable_arb_points: usize,
+}
+
+impl GammaloopIntegrandTermStatistics {
+    fn new() -> Self {
+        Self {
+            max_re_eval: 0.0,
+            max_im_eval: 0.0,
+            max_weight: 0.0,
+            n_nan_evals: 0,
+            zero_evals: 0,
+            num_unstable_f32_points: 0,
+            num_unstable_f64_points: 0,
+            num_unstable_f128_points: 0,
+            num_unstable_arb_points: 0,
+        }
+    }
+}
+
 // represents a single locally finite term
 #[derive(Clone)]
 pub struct GammaloopIntegrandTerm {
     pub graphs: Vec<Graph>,
-    pub max_wgt: f64,
+    pub statistics: GammaloopIntegrandTermStatistics,
     pub n_dim: usize,
     pub n_moms: usize,
 }
@@ -56,7 +85,7 @@ impl GammaloopIntegrandTerm {
 
     pub fn from_single_graph(graph: Graph) -> Self {
         Self {
-            max_wgt: 1.0,
+            statistics: GammaloopIntegrandTermStatistics::new(),
             n_dim: graph.loop_momentum_basis.basis.len() * 3,
             n_moms: graph.loop_momentum_basis.basis.len(),
             graphs: vec![graph],
@@ -70,10 +99,6 @@ pub struct GammaLoopIntegrand {
     terms: Vec<GammaloopIntegrandTerm>,
     index_tree: IndexTree,
     integrand_type: GammaLoopIntegrandType,
-    _num_unstable_f32_points: usize,
-    num_unstable_f64_points: usize,
-    num_unstable_f128_points: usize,
-    _num_unstable_arb_points: usize,
 }
 
 impl Default for GammaLoopIntegrand {
@@ -85,10 +110,6 @@ impl Default for GammaLoopIntegrand {
             terms: Vec::new(),
             index_tree,
             integrand_type: GammaLoopIntegrandType::Amplitude,
-            _num_unstable_f32_points: 0,
-            num_unstable_f64_points: 0,
-            num_unstable_f128_points: 0,
-            _num_unstable_arb_points: 0,
         }
     }
 }
@@ -108,6 +129,7 @@ impl HasIntegrand for GammaLoopIntegrand {
         use_f128: bool,
     ) -> num::Complex<f64> {
         let (term, cont_sample) = self.index_tree.unpack_sample(sample);
+
         let x_space_point = if let Sample::Continuous(cont_weight, xs) = cont_sample.unwrap() {
             xs
         } else {
@@ -155,7 +177,7 @@ impl HasIntegrand for GammaLoopIntegrand {
             Vec::with_capacity(self.settings.stability.levels.len());
 
         let rotation_method = self.settings.stability.rotation_axis.rotation_function();
-        let wgt_ratio = wgt / self.terms[term].max_wgt;
+        let wgt_ratio = wgt / self.terms[term].statistics.max_weight;
 
         let rotated_loop_moms = loop_moms.iter().map(&rotation_method).collect_vec();
         let rotated_external_moms = external_moms.iter().map(&rotation_method).collect_vec();
@@ -164,8 +186,8 @@ impl HasIntegrand for GammaLoopIntegrand {
             // overwrite the stability settings if use_f128 is enabled
             [StabilityLevelSetting {
                 precision: Precision::Quad,
-                required_precision_for_re: 1e-15,
-                required_precision_for_im: 1e-15,
+                required_precision_for_re: 1e-12,
+                required_precision_for_im: 1e-12,
                 escalate_for_large_weight_threshold: -1.,
                 accepted_radius_in_x_range: [0., 1.],
             }]
@@ -186,6 +208,7 @@ impl HasIntegrand for GammaLoopIntegrand {
                 &rotated_loop_moms,
                 &rotated_external_moms,
                 stability_level.precision,
+                true,
             );
 
             let error_real = if result.re.is_zero() && rotated_result.re.is_zero() {
@@ -209,16 +232,16 @@ impl HasIntegrand for GammaLoopIntegrand {
             if !stable {
                 match stability_level.precision {
                     Precision::Single => {
-                        self._num_unstable_f32_points += 1;
+                        self.terms[term].statistics.num_unstable_f32_points += 1;
                     }
                     Precision::Double => {
-                        self.num_unstable_f64_points += 1;
+                        self.terms[term].statistics.num_unstable_f64_points += 1;
                     }
                     Precision::Quad => {
-                        self.num_unstable_f128_points += 1;
+                        self.terms[term].statistics.num_unstable_f128_points += 1;
                     }
                     Precision::Arb(_) => {
-                        self._num_unstable_arb_points += 1;
+                        self.terms[term].statistics.num_unstable_arb_points += 1;
                     }
                 }
 
@@ -229,8 +252,8 @@ impl HasIntegrand for GammaLoopIntegrand {
                     format_for_compare_digits(result.im, rotated_result.im);
 
                 debug!(
-                    "unstable point: {:?}\n
-                     result:         {} + {}i\n
+                    "unstable point: {:?}
+                     result:         {} + {}i
                      rotated_result: {} + {}i",
                     x_space_point,
                     real_colored,
@@ -243,8 +266,8 @@ impl HasIntegrand for GammaLoopIntegrand {
             }
         }
 
-        if wgt > self.terms[term].max_wgt {
-            self.terms[term].max_wgt = wgt;
+        if wgt > self.terms[term].statistics.max_weight {
+            self.terms[term].statistics.max_weight = wgt;
         }
 
         let (most_reliable_result, stable, precision) = results_of_stability_levels.last().unwrap();
@@ -252,13 +275,29 @@ impl HasIntegrand for GammaLoopIntegrand {
             warn!("Returning unstable point, consider adding more stability levels");
         }
 
-        most_reliable_result * jacobian * pdf_weight
+        let res = most_reliable_result * jacobian * pdf_weight;
+
+        // update the max evals
+        if res.re.is_nan() {
+            self.terms[term].statistics.n_nan_evals += 1;
+        } else if res.re.abs() > self.terms[term].statistics.max_re_eval {
+            self.terms[term].statistics.max_re_eval = res.re.abs();
+        }
+
+        if res.im.is_nan() {
+            self.terms[term].statistics.n_nan_evals += 1;
+        } else if res.im.abs() > self.terms[term].statistics.max_im_eval {
+            self.terms[term].statistics.max_im_eval = res.im.abs();
+        }
+
+        res
     }
 
     fn get_event_manager_mut(&mut self) -> &mut crate::observables::EventManager {
         todo!()
     }
 
+    // this maybe needs to change to Vec<usize>
     fn get_n_dim(&self) -> usize {
         match self.integrand_type {
             GammaLoopIntegrandType::Amplitude => {
@@ -279,6 +318,7 @@ impl HasIntegrand for GammaLoopIntegrand {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 impl GammaLoopIntegrand {
     pub fn evaluate_at_prec(
         &self,
@@ -288,6 +328,7 @@ impl GammaLoopIntegrand {
         rotated_loop_moms: &[LorentzVector<f64>],
         rotated_external_moms: &[LorentzVector<f64>],
         precision: Precision,
+        measure_timing: bool,
     ) -> (Complex<f64>, Complex<f64>) {
         // cast the momenta to the relevant precision
         match precision {
@@ -295,11 +336,27 @@ impl GammaLoopIntegrand {
                 unimplemented!("From<f64> for f32 can't be implemented")
             }
             Precision::Double => {
+                let before = if measure_timing {
+                    Some(std::time::Instant::now())
+                } else {
+                    None
+                };
+
                 let result = self.terms[term].evaluate_in_momentum_space(
                     loop_moms,
                     external_moms,
                     self.settings.general.use_ltd,
                 );
+
+                let after = before.map(|t| t.elapsed());
+
+                if measure_timing {
+                    debug!(
+                        "time for f64 evaluation: {:?} μs",
+                        after.unwrap().as_micros()
+                    );
+                }
+
                 let rotated_result = self.terms[term].evaluate_in_momentum_space(
                     rotated_loop_moms,
                     rotated_external_moms,
@@ -325,11 +382,26 @@ impl GammaLoopIntegrand {
                     .map(cast_lorentz_vector::<f64, f128::f128>)
                     .collect_vec();
 
+                let before = if measure_timing {
+                    Some(std::time::Instant::now())
+                } else {
+                    None
+                };
+
                 let result = self.terms[term].evaluate_in_momentum_space(
                     &loop_moms_f128,
                     &external_moms_f128,
                     self.settings.general.use_ltd,
                 );
+
+                let after = before.map(|t| t.elapsed());
+                if measure_timing {
+                    debug!(
+                        "time for f128 evaluation: {} μs",
+                        after.unwrap().as_micros()
+                    );
+                }
+
                 let rotated_result = self.terms[term].evaluate_in_momentum_space(
                     &rotated_loop_moms_f128,
                     &rotated_external_moms_f128,
@@ -364,10 +436,6 @@ impl GammaLoopIntegrand {
             integrand_type,
             settings,
             index_tree,
-            _num_unstable_f32_points: 0,
-            num_unstable_f64_points: 0,
-            num_unstable_f128_points: 0,
-            _num_unstable_arb_points: 0,
         }
     }
 
@@ -377,6 +445,7 @@ impl GammaLoopIntegrand {
     }
 }
 
+// struct to encode arbitrary discrete grid structure
 #[derive(Clone, Debug)]
 enum IndexTree {
     Leaf(usize),
@@ -384,6 +453,7 @@ enum IndexTree {
 }
 
 impl IndexTree {
+    // recursively build the grid according to the tree
     fn create_grid(
         &self,
         settings: &Settings,
