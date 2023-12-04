@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::tensor::{SparseTensor, VecSlotExtension};
 
-use super::{DenseTensor, HasTensorStructure, TensorStructure};
+use super::{
+    ContractableWithDense, ContractableWithSparse, DenseTensor, HasTensorStructure, TensorStructure,
+};
 
 #[test]
 fn indexflatten() {

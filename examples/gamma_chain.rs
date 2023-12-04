@@ -4,10 +4,10 @@ use std::{ops::Neg, time::Instant};
 
 use _gammaloop::tensor::{
     ufo_spin_tensors::{gamma, sigma},
-    DenseTensor,
+    ContractableWithDense, DenseTensor,
     Representation::Lorentz,
     Representation::{self, Euclidean},
-    SparseTensor, TensorStructure, VecSlotExtension,
+    TensorStructure, VecSlotExtension,
 };
 
 use num::complex::Complex64;

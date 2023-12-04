@@ -1,10 +1,8 @@
-use num::complex::Complex64;
-use statrs::function::gamma;
-
 use super::{
-    DenseTensor, Representation, Representation::Euclidean, Representation::Lorentz, SparseTensor,
-    Tensor, TensorStructure, VecSlotExtension,
+    ContractableWithSparse, Representation, Representation::Euclidean, Representation::Lorentz,
+    SparseTensor, TensorStructure, VecSlotExtension,
 };
+use num::complex::Complex64;
 
 #[allow(dead_code)]
 pub fn identity(indices: (usize, usize), signature: Representation) -> SparseTensor<Complex64> {
