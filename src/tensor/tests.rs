@@ -1,9 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::tensor::{SparseTensor, VecSlotExtension};
-
-use super::{
-    ContractableWithDense, ContractableWithSparse, DenseTensor, HasTensorStructure, TensorStructure,
+use crate::tensor::{
+    ContractableWithDense, ContractableWithSparse, DenseTensor, HasTensorStructure, SparseTensor,
+    TensorStructure, VecSlotExtension,
 };
 
 #[test]
