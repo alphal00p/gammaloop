@@ -1,12 +1,13 @@
+use enum_dispatch::enum_dispatch;
+use num::traits::Num;
+use std::collections::HashSet;
 use std::{
     borrow::Cow,
+    cmp::Ordering,
     collections::{BTreeMap, HashMap},
     iter::FromIterator,
-    ops::{Bound::Included, Add, Sub, Mul}, cmp::Ordering,
+    ops::{Add, Bound::Included, Mul, Sub},
 };
-use std::collections::HashSet;
-use enum_dispatch::enum_dispatch;
-use num::traits::{Num};
 
 type AbstractIndex = usize;
 type Dimension = usize;
@@ -14,67 +15,67 @@ type ConcreteIndex = usize;
 type Position = usize;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
-pub enum Signature {
+pub enum Representation {
     Euclidean(Dimension),
     Lorentz(Dimension),
 }
 
-impl PartialOrd for Signature {
+impl PartialOrd for Representation {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for Signature{
+impl Ord for Representation {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Signature::Euclidean(dim1), Signature::Euclidean(dim2)) |
-            (Signature::Lorentz(dim1), Signature::Lorentz(dim2)) => dim1.cmp(dim2),
-            (Signature::Euclidean(_), Signature::Lorentz(_)) => Ordering::Less,
-            (Signature::Lorentz(_), Signature::Euclidean(_)) => Ordering::Greater,
+            (Representation::Euclidean(dim1), Representation::Euclidean(dim2))
+            | (Representation::Lorentz(dim1), Representation::Lorentz(dim2)) => dim1.cmp(dim2),
+            (Representation::Euclidean(_), Representation::Lorentz(_)) => Ordering::Less,
+            (Representation::Lorentz(_), Representation::Euclidean(_)) => Ordering::Greater,
         }
     }
 }
 
-impl Signature {
+impl Representation {
     pub fn negative(&self) -> Vec<bool> {
         match self {
-            Signature::Euclidean(value) => vec![false; *value],
-            Signature::Lorentz(value) => std::iter::once(false)
+            Representation::Euclidean(value) => vec![false; *value],
+            Representation::Lorentz(value) => std::iter::once(false)
                 .chain(std::iter::repeat(true).take(*value - 1))
                 .collect::<Vec<_>>(),
         }
     }
 }
 
-impl From<Dimension> for Signature {
+impl From<Dimension> for Representation {
     fn from(value: Dimension) -> Self {
-        Signature::Euclidean(value)
+        Representation::Euclidean(value)
     }
 }
 
-impl<'a> std::iter::FromIterator<&'a Signature> for Vec<Dimension> {
-    fn from_iter<T: IntoIterator<Item = &'a Signature>>(iter: T) -> Self {
+impl<'a> std::iter::FromIterator<&'a Representation> for Vec<Dimension> {
+    fn from_iter<T: IntoIterator<Item = &'a Representation>>(iter: T) -> Self {
         iter.into_iter()
             .map(|&rep| -> Dimension { (&rep).into() })
             .collect()
     }
 }
 
-impl From<&Signature> for Dimension {
-    fn from(rep: &Signature) -> Self {
+impl From<&Representation> for Dimension {
+    fn from(rep: &Representation) -> Self {
         match rep {
-            Signature::Euclidean(value) => *value,
-            Signature::Lorentz(value) => *value,
+            Representation::Euclidean(value) => *value,
+            Representation::Lorentz(value) => *value,
         }
     }
 }
 
-impl From<Signature> for Dimension {
-    fn from(rep: Signature) -> Self {
+impl From<Representation> for Dimension {
+    fn from(rep: Representation) -> Self {
         match rep {
-            Signature::Euclidean(value) => value,
-            Signature::Lorentz(value) => value,
+            Representation::Euclidean(value) => value,
+            Representation::Lorentz(value) => value,
         }
     }
 }
@@ -82,7 +83,7 @@ impl From<Signature> for Dimension {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Slot {
     index: AbstractIndex,
-    signature: Signature,
+    representation: Representation,
 }
 
 impl PartialOrd for Slot {
@@ -93,20 +94,18 @@ impl PartialOrd for Slot {
 
 impl Ord for Slot {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.signature.cmp(&other.signature) {
+        match self.representation.cmp(&other.representation) {
             Ordering::Equal => self.index.cmp(&other.index),
             other => other,
         }
     }
 }
 
-
-
-impl From<(AbstractIndex, Signature)> for Slot {
-    fn from(value: (AbstractIndex, Signature)) -> Self {
+impl From<(AbstractIndex, Representation)> for Slot {
+    fn from(value: (AbstractIndex, Representation)) -> Self {
         Slot {
             index: value.0,
-            signature: value.1,
+            representation: value.1,
         }
     }
 }
@@ -114,14 +113,14 @@ impl From<(AbstractIndex, Signature)> for Slot {
 pub type TensorStructure = Vec<Slot>;
 
 pub trait VecSlotExtension {
-    fn from_idxsing(indices: &[AbstractIndex], dims: &[Signature]) -> Self;
+    fn from_idxsing(indices: &[AbstractIndex], dims: &[Representation]) -> Self;
     fn from_integers(indices: &[AbstractIndex], dims: &[usize]) -> Self;
     fn match_index(&self, other: &Self) -> Option<(Position, Position)>;
-    fn traces(&self) -> Vec<[Position;2]>;
+    fn traces(&self) -> Vec<[Position; 2]>;
     fn merge_at(&self, other: &Self, positions: (Position, Position)) -> Self;
     fn shape(&self) -> Vec<Dimension>;
     fn order(&self) -> usize;
-    fn same_content(&self, other: &Self) -> bool ;
+    fn same_content(&self, other: &Self) -> bool;
     fn find_permutation(&self, other: &Self) -> Option<Vec<usize>>;
     fn strides_row_major(&self) -> Vec<usize>;
     fn strides_column_major(&self) -> Vec<usize>;
@@ -133,7 +132,7 @@ pub trait VecSlotExtension {
 }
 
 impl VecSlotExtension for TensorStructure {
-    fn from_idxsing(indices: &[AbstractIndex], signatures: &[Signature]) -> Self {
+    fn from_idxsing(indices: &[AbstractIndex], signatures: &[Representation]) -> Self {
         indices
             .iter()
             .zip(signatures.iter())
@@ -142,8 +141,8 @@ impl VecSlotExtension for TensorStructure {
     }
 
     fn same_content(&self, other: &Self) -> bool {
-        let set1: HashSet<_>= self.iter().collect();
-        let set2: HashSet<_>= other.iter().collect();
+        let set1: HashSet<_> = self.iter().collect();
+        let set2: HashSet<_> = other.iter().collect();
         set1 == set2
     }
 
@@ -151,12 +150,12 @@ impl VecSlotExtension for TensorStructure {
         if self.len() != other.len() {
             return None;
         }
-    
+
         let mut index_map = HashMap::new();
         for (i, item) in other.iter().enumerate() {
             index_map.entry(item).or_insert_with(Vec::new).push(i);
         }
-    
+
         let mut permutation = Vec::with_capacity(self.len());
         let mut used_indices = HashSet::new();
         for item in self {
@@ -174,7 +173,7 @@ impl VecSlotExtension for TensorStructure {
                 return None;
             }
         }
-    
+
         Some(permutation)
     }
 
@@ -182,7 +181,7 @@ impl VecSlotExtension for TensorStructure {
         indices
             .iter()
             .zip(dims.iter())
-            .map(|(&index, &dim)| Slot::from((index, Signature::Euclidean(dim))))
+            .map(|(&index, &dim)| Slot::from((index, Representation::Euclidean(dim))))
             .collect()
     }
 
@@ -197,7 +196,7 @@ impl VecSlotExtension for TensorStructure {
         None
     }
 
-    fn traces(&self) -> Vec<[Position;2]> {
+    fn traces(&self) -> Vec<[Position; 2]> {
         let mut positions = HashMap::new();
 
         // Track the positions of each element
@@ -230,7 +229,7 @@ impl VecSlotExtension for TensorStructure {
     }
 
     fn shape(&self) -> Vec<Dimension> {
-        self.iter().map(|slot| &slot.signature).collect()
+        self.iter().map(|slot| &slot.representation).collect()
     }
 
     fn order(&self) -> usize {
@@ -246,7 +245,7 @@ impl VecSlotExtension for TensorStructure {
         }
 
         for i in 0..self.order() - 1 {
-            strides[i + 1] = strides[i] * usize::from(self[i].signature);
+            strides[i + 1] = strides[i] * usize::from(self[i].representation);
         }
 
         strides
@@ -259,7 +258,7 @@ impl VecSlotExtension for TensorStructure {
         }
 
         for i in (0..self.order() - 1).rev() {
-            strides[i] = strides[i + 1] * usize::from(self[i + 1].signature);
+            strides[i] = strides[i + 1] * usize::from(self[i + 1].representation);
         }
 
         strides
@@ -274,7 +273,7 @@ impl VecSlotExtension for TensorStructure {
             return Err("Mismatched order".to_string());
         }
 
-        for (i, &dim_len) in self.iter().map(|slot| &slot.signature).enumerate() {
+        for (i, &dim_len) in self.iter().map(|slot| &slot.representation).enumerate() {
             if indices[i] >= usize::from(dim_len) {
                 return Err(format!(
                     "Index {} out of bounds for dimension {} of size {}",
@@ -317,7 +316,6 @@ impl VecSlotExtension for TensorStructure {
     }
 }
 
-
 #[enum_dispatch]
 pub trait HasTensorStructure {
     fn structure(&self) -> &Vec<Slot>;
@@ -354,7 +352,7 @@ pub trait HasTensorStructure {
         self.structure().match_index(other.structure())
     }
 
-    fn traces(&self) -> Vec<[Position;2]> {
+    fn traces(&self) -> Vec<[Position; 2]> {
         self.structure().traces()
     }
 }
@@ -387,7 +385,6 @@ impl<T> SparseTensor<T> {
         }
     }
 
-    
     pub fn set(&mut self, indices: &[usize], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         self.elements.insert(indices.to_vec(), value);
@@ -395,8 +392,10 @@ impl<T> SparseTensor<T> {
     }
 }
 
-
-impl<T> SparseTensor<T> where T: Clone {
+impl<T> SparseTensor<T>
+where
+    T: Clone,
+{
     pub fn from_data(
         data: &[(Vec<ConcreteIndex>, T)],
         indices: &[AbstractIndex],
@@ -417,11 +416,12 @@ impl<T> SparseTensor<T> where T: Clone {
             structure: TensorStructure::from_integers(indices, &dimensions),
         })
     }
-    
 }
 
-impl<T> SparseTensor<T> where T: Clone+Default{
-
+impl<T> SparseTensor<T>
+where
+    T: Clone + Default,
+{
     pub fn get(&self, indices: &[usize]) -> Result<Cow<T>, String> {
         self.verify_indices(indices)?;
         // if the index is in the bTree return the value, else return default, lazily allocating the default
@@ -431,7 +431,6 @@ impl<T> SparseTensor<T> where T: Clone+Default{
         })
     }
 }
-
 
 pub struct SparseTensorIterator<'a, T> {
     iter: std::collections::btree_map::Iter<'a, Vec<usize>, T>,
@@ -453,8 +452,6 @@ impl<'a, T> Iterator for SparseTensorIterator<'a, T> {
     }
 }
 
-
-
 pub struct SparseTensorTraceIterator<'a, T> {
     tensor: &'a SparseTensor<T>,
     trace_indices: [Position; 2],
@@ -468,10 +465,10 @@ impl<'a, T> SparseTensorTraceIterator<'a, T> {
         assert!(
             trace_indices
                 .iter()
-                .map(|&pos| tensor.structure()[pos].signature)
+                .map(|&pos| tensor.structure()[pos].representation)
                 .collect::<Vec<_>>()
                 .iter()
-                .all(|&sig| sig == tensor.structure()[trace_indices[0]].signature),
+                .all(|&sig| sig == tensor.structure()[trace_indices[0]].representation),
             "Trace indices must point to the same dimension"
         );
         SparseTensorTraceIterator {
@@ -512,7 +509,7 @@ where
             return None;
         }
 
-        let trace_dimension = self.tensor.structure()[self.trace_indices[0]].signature;
+        let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
         let mut trace = T::default();
 
@@ -640,19 +637,15 @@ where
 }
 
 impl<T: Clone + Default> SparseTensor<T> {
-
-    
-
     pub fn iter_fibers(&self, fiber_index: usize) -> SparseTensorFiberIterator<T> {
         SparseTensorFiberIterator::new(self, fiber_index)
     }
 
-    pub fn iter_trace(&self, trace_indices: [Position;2] ) -> SparseTensorTraceIterator<T> {
+    pub fn iter_trace(&self, trace_indices: [Position; 2]) -> SparseTensorTraceIterator<T> {
         SparseTensorTraceIterator::new(self, trace_indices)
     }
 }
-impl<T> SparseTensor<T>{
-
+impl<T> SparseTensor<T> {
     pub fn iter(&self) -> SparseTensorIterator<T> {
         SparseTensorIterator::new(self)
     }
@@ -688,7 +681,6 @@ impl<T: Default + Clone> DenseTensor<T> {
 }
 
 impl<T: Clone> DenseTensor<T> {
-
     pub fn from_data(data: &[T], structure: TensorStructure) -> Result<Self, String> {
         if data.len() != structure.size() {
             return Err("Data length does not match shape".to_string());
@@ -701,7 +693,6 @@ impl<T: Clone> DenseTensor<T> {
 }
 
 impl<T> DenseTensor<T> {
-
     pub fn set(&mut self, indices: &[usize], value: T) {
         let idx = self.flat_index(indices);
         if let Ok(i) = idx {
@@ -760,16 +751,16 @@ pub struct DenseTensorTraceIterator<'a, T> {
 }
 
 impl<'a, T> DenseTensorTraceIterator<'a, T> {
-    fn new(tensor: &'a DenseTensor<T>, trace_indices: [Position;2]) -> Self {
+    fn new(tensor: &'a DenseTensor<T>, trace_indices: [Position; 2]) -> Self {
         assert!(trace_indices.len() >= 2, "Invalid trace indices");
         //trace positions must point to the same dimension
         assert!(
             trace_indices
                 .iter()
-                .map(|&pos| tensor.structure()[pos].signature)
+                .map(|&pos| tensor.structure()[pos].representation)
                 .collect::<Vec<_>>()
                 .iter()
-                .all(|&sig| sig == tensor.structure()[trace_indices[0]].signature),
+                .all(|&sig| sig == tensor.structure()[trace_indices[0]].representation),
             "Trace indices must point to the same dimension"
         );
         DenseTensorTraceIterator {
@@ -810,7 +801,7 @@ where
             return None;
         }
 
-        let trace_dimension = self.tensor.structure()[self.trace_indices[0]].signature;
+        let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
         let mut trace = T::default();
 
@@ -930,7 +921,7 @@ impl<T> DenseTensor<T> {
         DenseTensorFiberIterator::new(self, fixedindex)
     }
 
-    pub fn iter_trace(&self, trace_indices: [Position;2]) -> DenseTensorTraceIterator<T> {
+    pub fn iter_trace(&self, trace_indices: [Position; 2]) -> DenseTensorTraceIterator<T> {
         DenseTensorTraceIterator::new(self, trace_indices)
     }
 }
@@ -950,40 +941,51 @@ where
         + std::ops::Mul<Output = T>
         + Copy
         + std::cmp::PartialEq
-        + std::fmt::Debug{
-    pub fn contract(&self,other: &Self) -> Option<Self>{
-        match  (self, other){
-            (NumTensor::Dense(s),NumTensor::Dense(o))=> s.contract_with_dense(o).map(NumTensor::Dense),
-            (NumTensor::Dense(s),NumTensor::Sparse(o))=> s.contract_with_sparse(o).map(NumTensor::Dense),
-            (NumTensor::Sparse(s),NumTensor::Dense(o))=> s.contract_with_dense(o).map(NumTensor::Dense),
-            (NumTensor::Sparse(s),NumTensor::Sparse(o))=> s.contract_with_sparse(o).map(NumTensor::Sparse),
+        + std::fmt::Debug,
+{
+    pub fn contract(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (NumTensor::Dense(s), NumTensor::Dense(o)) => {
+                s.contract_with_dense(o).map(NumTensor::Dense)
+            }
+            (NumTensor::Dense(s), NumTensor::Sparse(o)) => {
+                s.contract_with_sparse(o).map(NumTensor::Dense)
+            }
+            (NumTensor::Sparse(s), NumTensor::Dense(o)) => {
+                s.contract_with_dense(o).map(NumTensor::Dense)
+            }
+            (NumTensor::Sparse(s), NumTensor::Sparse(o)) => {
+                s.contract_with_sparse(o).map(NumTensor::Sparse)
+            }
         }
     }
-
-    
 }
 
-
-impl<T> Add<DenseTensor<T>> for DenseTensor<T> where T: Num+Clone+Copy{
+impl<T> Add<DenseTensor<T>> for DenseTensor<T>
+where
+    T: Num + Clone + Copy,
+{
     type Output = DenseTensor<T>;
     fn add(self, other: DenseTensor<T>) -> DenseTensor<T> {
-        assert!(self.structure().same_content( other.structure()));
+        assert!(self.structure().same_content(other.structure()));
 
         let mut result = self.clone();
 
         for (indices, value) in other.iter() {
             let current_value = self.get(&indices).unwrap();
-            result.set(&indices,    *current_value + *value);
+            result.set(&indices, *current_value + *value);
         }
         result
     }
-
 }
 
-impl<T> Add<SparseTensor<T>> for SparseTensor<T> where T: Num+Clone+    Default+Copy{
+impl<T> Add<SparseTensor<T>> for SparseTensor<T>
+where
+    T: Num + Clone + Default + Copy,
+{
     type Output = SparseTensor<T>;
     fn add(self, other: SparseTensor<T>) -> SparseTensor<T> {
-        assert!(self.structure().same_content( other.structure()));
+        assert!(self.structure().same_content(other.structure()));
 
         let mut result = self.clone();
 
@@ -992,18 +994,20 @@ impl<T> Add<SparseTensor<T>> for SparseTensor<T> where T: Num+Clone+    Default+
             result.set(indices, current_value + *value).unwrap();
         }
 
-        for (indices, value)in self.iter(){
-            result.elements.entry(indices.clone()).or_insert( *value);
+        for (indices, value) in self.iter() {
+            result.elements.entry(indices.clone()).or_insert(*value);
         }
         result
     }
-
 }
 
-impl<T> Add<SparseTensor<T>> for DenseTensor<T> where T: Num+Clone+    Default+Copy{
+impl<T> Add<SparseTensor<T>> for DenseTensor<T>
+where
+    T: Num + Clone + Default + Copy,
+{
     type Output = DenseTensor<T>;
     fn add(self, other: SparseTensor<T>) -> DenseTensor<T> {
-        assert!(self.structure().same_content( other.structure()));
+        assert!(self.structure().same_content(other.structure()));
 
         let mut result = self.clone();
 
@@ -1015,58 +1019,72 @@ impl<T> Add<SparseTensor<T>> for DenseTensor<T> where T: Num+Clone+    Default+C
     }
 }
 
-impl<T> Add<DenseTensor<T>> for SparseTensor<T> where T: Num+Clone+    Default+Copy{
+impl<T> Add<DenseTensor<T>> for SparseTensor<T>
+where
+    T: Num + Clone + Default + Copy,
+{
     type Output = DenseTensor<T>;
     fn add(self, other: DenseTensor<T>) -> DenseTensor<T> {
         other + self
     }
 }
 
-impl<T> Sub<DenseTensor<T>> for DenseTensor<T> where T: Num+Clone+Copy{
+impl<T> Sub<DenseTensor<T>> for DenseTensor<T>
+where
+    T: Num + Clone + Copy,
+{
     type Output = DenseTensor<T>;
     fn sub(self, other: DenseTensor<T>) -> DenseTensor<T> {
-        assert!(self.structure().same_content( other.structure()));
+        assert!(self.structure().same_content(other.structure()));
 
         let mut result = self.clone();
 
         for (indices, value) in other.iter() {
             let current_value = self.get(&indices).unwrap();
-            result.set(&indices,    *current_value - *value);
+            result.set(&indices, *current_value - *value);
         }
         result
     }
-
 }
 
-impl<T> Sub<SparseTensor<T>> for SparseTensor<T> where T: Num+  Default+Copy{
+impl<T> Sub<SparseTensor<T>> for SparseTensor<T>
+where
+    T: Num + Default + Copy,
+{
     type Output = SparseTensor<T>;
     fn sub(self, other: SparseTensor<T>) -> SparseTensor<T> {
-        assert!(self.structure().same_content( other.structure()));
-        let permutation = self.structure().find_permutation(other.structure()).unwrap();
+        assert!(self.structure().same_content(other.structure()));
+        let permutation = self
+            .structure()
+            .find_permutation(other.structure())
+            .unwrap();
 
         let mut result = self.clone();
 
-        for (indices, value)in self.iter(){
-            result.elements.entry(indices.clone()).or_insert( *value);
+        for (indices, value) in self.iter() {
+            result.elements.entry(indices.clone()).or_insert(*value);
         }
         for (indices, value) in self.iter() {
-            let permuted_indices: Vec<usize>= permutation.iter().map(|&index| indices[index]).collect();
+            let permuted_indices: Vec<usize> =
+                permutation.iter().map(|&index| indices[index]).collect();
             let other_value = other.get(&permuted_indices).unwrap().into_owned();
             result.set(indices, other_value - *value).unwrap();
-            if other_value - *value == T::default(){
+            if other_value - *value == T::default() {
                 result.elements.remove(indices);
             }
         }
 
         result
     }
-
 }
 
-impl<T> Sub<SparseTensor<T>> for DenseTensor<T> where T: Num+Clone+    Default+Copy{
+impl<T> Sub<SparseTensor<T>> for DenseTensor<T>
+where
+    T: Num + Clone + Default + Copy,
+{
     type Output = DenseTensor<T>;
     fn sub(self, other: SparseTensor<T>) -> DenseTensor<T> {
-        assert!(self.structure().same_content( other.structure()));
+        assert!(self.structure().same_content(other.structure()));
 
         let mut result = self.clone();
 
@@ -1078,39 +1096,45 @@ impl<T> Sub<SparseTensor<T>> for DenseTensor<T> where T: Num+Clone+    Default+C
     }
 }
 
-impl<T> Sub<DenseTensor<T>> for SparseTensor<T> where T: Num+Clone+    Default+Copy{
+impl<T> Sub<DenseTensor<T>> for SparseTensor<T>
+where
+    T: Num + Clone + Default + Copy,
+{
     type Output = DenseTensor<T>;
     fn sub(self, other: DenseTensor<T>) -> DenseTensor<T> {
         other - self
     }
 }
 
-impl<T> Mul<T> for DenseTensor<T> where T: Num+Clone+Copy{
+impl<T> Mul<T> for DenseTensor<T>
+where
+    T: Num + Clone + Copy,
+{
     type Output = DenseTensor<T>;
     fn mul(self, other: T) -> DenseTensor<T> {
         let mut result = self.clone();
 
         for (indices, value) in self.iter() {
-            result.set(&indices,    other * *value);
+            result.set(&indices, other * *value);
         }
         result
     }
-
 }
 
-impl<T> Mul<T> for SparseTensor<T> where T: Num+Copy {
+impl<T> Mul<T> for SparseTensor<T>
+where
+    T: Num + Copy,
+{
     type Output = SparseTensor<T>;
     fn mul(self, other: T) -> Self::Output {
-        
         let mut result = self.clone();
 
         for (indices, value) in self.iter() {
-            result.set(&indices,    other * *value);
+            result.set(&indices, other * *value);
         }
         result
     }
 }
-
 
 impl<T> DenseTensor<T>
 where
@@ -1153,7 +1177,7 @@ where
             let self_shape = self.shape();
 
             let dimension_of_contraction = self_shape[i];
-            let metric = self.structure()[i].signature.negative();
+            let metric = self.structure()[i].representation.negative();
 
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
 
@@ -1237,7 +1261,7 @@ where
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = vec![T::default(); final_structure.size()];
 
-            let metric = self.structure()[i].signature.negative();
+            let metric = self.structure()[i].representation.negative();
 
             for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
                 for (index_b, fiber_b) in other.iter_fibers(j) {
@@ -1282,7 +1306,7 @@ where
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = BTreeMap::new();
 
-            let metric = self.structure()[i].signature.negative();
+            let metric = self.structure()[i].representation.negative();
 
             for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
                 for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
@@ -1330,6 +1354,75 @@ where
     }
 }
 
+pub trait Contractable_with_sparse<T> {
+    type Output;
+    fn contract_with_sparse(&self, other: &SparseTensor<T>) -> Self::Output;
+}
+
+macro_rules! contract_with_sparse_impl {
+    ($t:ty,$u:ty) => {
+        impl Contractable_with_sparse<$u> for SparseTensor<$t> {
+            type Output = Option<SparseTensor<$t>>;
+            fn contract_with_sparse(&self, other: &SparseTensor<$u>) -> Self::Output {
+                if let Some((i, j)) = self.match_index(other) {
+                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let mut result_data = BTreeMap::new();
+
+                    let metric = self.structure()[i].representation.negative();
+
+                    for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
+                        for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
+                            let result_index = index_a[..i]
+                                .iter()
+                                .chain(&index_a[i + 1..])
+                                .chain(&index_b[..j])
+                                .chain(&index_b[j + 1..])
+                                .cloned()
+                                .collect::<Vec<_>>();
+
+                            let mut value = <$t>::default();
+                            let mut nonzero = false;
+                            for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
+                                nonzeros_b.binary_search(&x).ok().map(|j| (i, j, x)) // Only store the positions
+                            }) {
+                                // Adjust indices for fetching from the other tensor
+                                if metric[x] {
+                                    value -= *fiber_a[i] * *fiber_b[j];
+                                } else {
+                                    value += *fiber_a[i] * *fiber_b[j];
+                                }
+
+                                nonzero = true;
+                            }
+
+                            if nonzero && value != <$t>::default() {
+                                result_data.insert(result_index, value);
+                            }
+                        }
+                    }
+
+                    let result = SparseTensor {
+                        elements: result_data,
+                        structure: final_structure,
+                    };
+
+                    if result.traces().is_empty() {
+                        return Some(result);
+                    } else {
+                        return Some(result.internal_contract());
+                    }
+                }
+                None
+            }
+        }
+    };
+}
+
+contract_with_sparse_impl!(f64, f64);
+contract_with_sparse_impl!(num::Complex<f64>, num::Complex<f64>);
+
+contract_with_sparse_impl!(num::Complex<f64>, f64);
+
 #[allow(dead_code)]
 struct SymbolicTensor {
     structure: TensorStructure,
@@ -1342,18 +1435,12 @@ impl HasTensorStructure for SymbolicTensor {
     }
 }
 
-
-
-
-
 #[allow(dead_code)]
 #[enum_dispatch(HasTensorStructure)]
 enum Tensor<T> {
     Num(NumTensor<T>),
     Symbolic(SymbolicTensor),
 }
-
-
 
 pub mod ufo_spin_tensors;
 

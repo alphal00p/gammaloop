@@ -3,18 +3,15 @@
 use std::{ops::Neg, time::Instant};
 
 use _gammaloop::tensor::{
-    DenseTensor,
-    Signature::Lorentz,
-    Signature::{self, Euclidean},
-    SparseTensor, TensorStructure, VecSlotExtension,
     ufo_spin_tensors::{gamma, sigma},
+    DenseTensor,
+    Representation::Lorentz,
+    Representation::{self, Euclidean},
+    SparseTensor, TensorStructure, VecSlotExtension,
 };
 
 use num::complex::Complex64;
 use num::traits::{Num, ToPrimitive};
-
-
-
 
 fn pslash(indices: (usize, usize), p: [Complex64; 4]) -> DenseTensor<Complex64> {
     let minkindex = indices.0 + indices.1;
@@ -77,7 +74,7 @@ fn benchmark_chain(
 }
 
 #[allow(dead_code)]
-fn identity(indices: (usize, usize), signature: Signature) -> DenseTensor<Complex64> {
+fn identity(indices: (usize, usize), signature: Representation) -> DenseTensor<Complex64> {
     let structure = TensorStructure::from_idxsing(&[indices.0, indices.1], &[signature, signature]);
     let mut identity = DenseTensor::default(structure);
     for i in 0..signature.into() {
@@ -88,12 +85,11 @@ fn identity(indices: (usize, usize), signature: Signature) -> DenseTensor<Comple
 
 #[allow(unused_variables)]
 fn main() {
-
     let start = Instant::now();
 
-    let s = sigma((1,2), (3,3));
+    let s = sigma((1, 2), (3, 3));
     let duration = start.elapsed();
-    println!("{:?} in {:?}", s,duration);
+    println!("{:?} in {:?}", s, duration);
     // let p = [Complex64::new(1.0, 0.0); 4];
     // let p1 = pslash((1, 2), p);
 
@@ -141,6 +137,4 @@ fn main() {
     let duration = start.elapsed();
 
     println!("{:?} in {:?}", chain, duration);
-
-    
 }

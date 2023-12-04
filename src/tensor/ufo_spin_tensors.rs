@@ -1,10 +1,13 @@
 use num::complex::Complex64;
 use statrs::function::gamma;
 
-use super::{Signature, DenseTensor, TensorStructure,VecSlotExtension, SparseTensor,Signature::Lorentz,Signature::Euclidean, Tensor};
+use super::{
+    DenseTensor, Representation, Representation::Euclidean, Representation::Lorentz, SparseTensor,
+    Tensor, TensorStructure, VecSlotExtension,
+};
 
 #[allow(dead_code)]
-pub fn identity(indices: (usize, usize), signature: Signature) -> SparseTensor<Complex64> {
+pub fn identity(indices: (usize, usize), signature: Representation) -> SparseTensor<Complex64> {
     //TODO: make it just swap indices
     let structure = TensorStructure::from_idxsing(&[indices.0, indices.1], &[signature, signature]);
     let mut identity = SparseTensor::empty(structure);
@@ -15,14 +18,14 @@ pub fn identity(indices: (usize, usize), signature: Signature) -> SparseTensor<C
 }
 
 #[allow(dead_code)]
-pub fn lorentz_identity(indices: (usize, usize))-> SparseTensor<Complex64>{
+pub fn lorentz_identity(indices: (usize, usize)) -> SparseTensor<Complex64> {
     // IdentityL(1,2) (Lorentz) Kronecker delta δ^μ1_μ1
     let signature = Lorentz(4);
     identity(indices, signature)
 }
 
 #[allow(dead_code)]
-pub fn euclidean_identity(indices: (usize, usize))-> SparseTensor<Complex64>{
+pub fn euclidean_identity(indices: (usize, usize)) -> SparseTensor<Complex64> {
     // Identity(1,2) (Spinorial) Kronecker delta δ_s1_s2
     let signature = Euclidean(4);
     identity(indices, signature)
@@ -69,85 +72,76 @@ pub fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex6
 }
 
 pub fn gamma5(indices: (usize, usize)) -> SparseTensor<Complex64> {
-    let structure = TensorStructure::from_idxsing(
-        &[indices.0, indices.1],
-        &[Euclidean(4), Euclidean(4)],
-    );
+    let structure =
+        TensorStructure::from_idxsing(&[indices.0, indices.1], &[Euclidean(4), Euclidean(4)]);
 
     let c1 = Complex64::new(1.0, 0.0);
 
     let mut gamma5 = SparseTensor::empty(structure);
 
-    gamma5.set(&[0,2], c1).unwrap();
-    gamma5.set(&[1,3],c1).unwrap();
-    gamma5.set(&[2,0],c1).unwrap();
-    gamma5.set(&[3,1],c1).unwrap();
+    gamma5.set(&[0, 2], c1).unwrap();
+    gamma5.set(&[1, 3], c1).unwrap();
+    gamma5.set(&[2, 0], c1).unwrap();
+    gamma5.set(&[3, 1], c1).unwrap();
 
     gamma5
-
 }
 
-pub fn proj_m(indices: (usize, usize))-> SparseTensor<Complex64> {
+pub fn proj_m(indices: (usize, usize)) -> SparseTensor<Complex64> {
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
-    let structure = TensorStructure::from_idxsing(
-        &[indices.0, indices.1],
-        &[Euclidean(4), Euclidean(4)],
-    );
+    let structure =
+        TensorStructure::from_idxsing(&[indices.0, indices.1], &[Euclidean(4), Euclidean(4)]);
 
     let chalf = Complex64::new(0.5, 0.0);
     let cnhalf = Complex64::new(-0.5, 0.0);
 
     let mut proj_m = SparseTensor::empty(structure);
 
-    proj_m.set(&[0,0], chalf).unwrap();
-    proj_m.set(&[1,1], chalf).unwrap();
-    proj_m.set(&[2,2], chalf).unwrap();
-    proj_m.set(&[3,3], chalf).unwrap();
+    proj_m.set(&[0, 0], chalf).unwrap();
+    proj_m.set(&[1, 1], chalf).unwrap();
+    proj_m.set(&[2, 2], chalf).unwrap();
+    proj_m.set(&[3, 3], chalf).unwrap();
 
-    proj_m.set(&[0,2], cnhalf).unwrap();
-    proj_m.set(&[1,3],cnhalf).unwrap();
-    proj_m.set(&[2,0],cnhalf).unwrap();
-    proj_m.set(&[3,1],cnhalf).unwrap();
+    proj_m.set(&[0, 2], cnhalf).unwrap();
+    proj_m.set(&[1, 3], cnhalf).unwrap();
+    proj_m.set(&[2, 0], cnhalf).unwrap();
+    proj_m.set(&[3, 1], cnhalf).unwrap();
 
     proj_m
-
-
 }
 
-pub fn proj_p(indices: (usize, usize))-> SparseTensor<Complex64> {
+pub fn proj_p(indices: (usize, usize)) -> SparseTensor<Complex64> {
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
-    let structure = TensorStructure::from_idxsing(
-        &[indices.0, indices.1],
-        &[Euclidean(4), Euclidean(4)],
-    );
+    let structure =
+        TensorStructure::from_idxsing(&[indices.0, indices.1], &[Euclidean(4), Euclidean(4)]);
 
     let chalf = Complex64::new(0.5, 0.0);
 
     let mut proj_p = SparseTensor::empty(structure);
 
-    proj_p.set(&[0,0], chalf).unwrap();
-    proj_p.set(&[1,1], chalf).unwrap();
-    proj_p.set(&[2,2], chalf).unwrap();
-    proj_p.set(&[3,3], chalf).unwrap();
+    proj_p.set(&[0, 0], chalf).unwrap();
+    proj_p.set(&[1, 1], chalf).unwrap();
+    proj_p.set(&[2, 2], chalf).unwrap();
+    proj_p.set(&[3, 3], chalf).unwrap();
 
-    proj_p.set(&[0,2], chalf).unwrap();
-    proj_p.set(&[1,3],chalf).unwrap();
-    proj_p.set(&[2,0],chalf).unwrap();
-    proj_p.set(&[3,1],chalf).unwrap();
+    proj_p.set(&[0, 2], chalf).unwrap();
+    proj_p.set(&[1, 3], chalf).unwrap();
+    proj_p.set(&[2, 0], chalf).unwrap();
+    proj_p.set(&[3, 1], chalf).unwrap();
 
-    proj_p}
+    proj_p
+}
 
-
-pub fn sigma(indices: (usize, usize),minkdices: (usize,usize)) -> SparseTensor<Complex64>{
-    let k = indices.0+indices.1;
+pub fn sigma(indices: (usize, usize), minkdices: (usize, usize)) -> SparseTensor<Complex64> {
+    let k = indices.0 + indices.1;
 
     let imhalf = Complex64::new(0.0, 0.5);
 
-    let gamma1 = gamma(minkdices.0, (indices.0,k));
-    let gamma2 = gamma(minkdices.1, (k,indices.1));
-    let gamma3 = gamma(minkdices.1, (indices.0,k));
-    let gamma4 = gamma(minkdices.0, (k,indices.1));
+    let gamma1 = gamma(minkdices.0, (indices.0, k));
+    let gamma2 = gamma(minkdices.1, (k, indices.1));
+    let gamma3 = gamma(minkdices.1, (indices.0, k));
+    let gamma4 = gamma(minkdices.0, (k, indices.1));
 
-    (gamma1.contract_with_sparse(&gamma2).unwrap()-gamma3.contract_with_sparse(&gamma4).unwrap())*imhalf
-
+    (gamma1.contract_with_sparse(&gamma2).unwrap() - gamma3.contract_with_sparse(&gamma4).unwrap())
+        * imhalf
 }

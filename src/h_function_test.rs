@@ -5,7 +5,7 @@ use crate::ParameterizationMapping;
 use crate::Settings;
 use num::traits::ToPrimitive;
 use num::Complex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
