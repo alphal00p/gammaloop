@@ -3,6 +3,7 @@ use crate::{
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
     inspect,
     integrands::Integrand,
+    integrate::havana_integrate,
     model::Model,
     Settings,
 };
@@ -352,6 +353,38 @@ impl PythonWorker {
         };
 
         Ok(format!("Inspected integrand: {:?}", integrand))
+    }
+
+    pub fn integrate_integrand(
+        &mut self,
+        integrand: &str,
+        num_cores: usize,
+        target: Option<(f64, f64)>,
+    ) -> PyResult<String> {
+        match self.integrands.get_mut(integrand) {
+            Some(integrand_enum) => match integrand_enum {
+                Integrand::GammaLoopIntegrand(gloop_integrand) => {
+                    let settings = gloop_integrand.settings.clone();
+                    let target = match target {
+                        Some((re, im)) => Some(num::Complex::new(re, im)),
+                        _ => None,
+                    };
+
+                    let _result = havana_integrate(
+                        &settings,
+                        |set| gloop_integrand.user_data_generator(num_cores, set),
+                        target,
+                    );
+
+                    Ok(format!("Integrated integrand {}", integrand))
+                }
+                _ => unimplemented!("unsupported integrand type"),
+            },
+            None => Err(exceptions::PyException::new_err(format!(
+                "Could not find integrand {}",
+                integrand
+            ))),
+        }
     }
 
     pub fn write_default_settings(&self, path: &str) -> PyResult<String> {

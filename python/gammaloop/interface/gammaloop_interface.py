@@ -698,13 +698,12 @@ class GammaLoop(object):
         if str_args == 'help':
             self.inspect_parser.print_help()
             return
-        _args = self.inspect_parser.parse_args(split_str_args(str_args))
+        args = self.inspect_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        args = self.inspect_parser.parse_args(split_str_args(str_args))
         self.rust_worker.inspect_integrand(
             args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
 
@@ -712,18 +711,24 @@ class GammaLoop(object):
 
     # integrate command
     integrate_parser = ArgumentParser(prog='integrate')
+    integrate_parser.add_argument(
+        "integrand", type=str, help="Integrand to integrate.")
+    integrate_parser.add_argument('--cores', '-c', type=int, default=1,)
+    integrate_parser.add_argument(
+        '--target', '-t', nargs=2, type=float, default=None)
 
     def do_integrate(self, str_args: str) -> None:
         if str_args == 'help':
             self.integrate_parser.print_help()
             return
-        _args = self.integrate_parser.parse_args(split_str_args(str_args))
+        args = self.integrate_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        raise GammaLoopError("Command not implemented yet")
+        self.rust_worker.integrate_integrand(
+            args.integrand, args.cores, args.target)
 
     # test_ir_limits
     test_ir_limits_parser = ArgumentParser(prog='test_ir_limits')

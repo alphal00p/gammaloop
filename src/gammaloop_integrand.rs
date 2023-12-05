@@ -1,6 +1,7 @@
 use super::Settings;
 use crate::graph::Graph;
-use crate::integrands::HasIntegrand;
+use crate::integrands::{HasIntegrand, Integrand};
+use crate::integrate::UserData;
 use crate::utils::{
     cast_complex, cast_lorentz_vector, format_for_compare_digits, global_parameterize, FloatLike,
 };
@@ -186,8 +187,8 @@ impl HasIntegrand for GammaLoopIntegrand {
             // overwrite the stability settings if use_f128 is enabled
             [StabilityLevelSetting {
                 precision: Precision::Quad,
-                required_precision_for_re: 1e-12,
-                required_precision_for_im: 1e-12,
+                required_precision_for_re: 1e-5,
+                required_precision_for_im: 1e-5,
                 escalate_for_large_weight_threshold: -1.,
                 accepted_radius_in_x_range: [0., 1.],
             }]
@@ -197,7 +198,10 @@ impl HasIntegrand for GammaLoopIntegrand {
         };
 
         for stability_level in stab_iterator {
-            if wgt_ratio > stability_level.escalate_for_large_weight_threshold {
+            if wgt_ratio > stability_level.escalate_for_large_weight_threshold
+                && stability_level.escalate_for_large_weight_threshold > 0.
+            {
+                debug!("escalating for large weight ratio");
                 continue;
             }
 
@@ -290,7 +294,10 @@ impl HasIntegrand for GammaLoopIntegrand {
             self.terms[term].statistics.max_im_eval = res.im.abs();
         }
 
-        res
+        let prefactor = (2. * std::f64::consts::PI).powi(self.terms[term].n_dim as i32)
+            * (Complex::i()).powi(self.terms[term].n_moms as i32);
+
+        res / prefactor
     }
 
     fn get_event_manager_mut(&mut self) -> &mut crate::observables::EventManager {
@@ -309,13 +316,9 @@ impl HasIntegrand for GammaLoopIntegrand {
         }
     }
 
-    fn merge_results<I: HasIntegrand>(&mut self, _other: &mut I, _iter: usize) {
-        todo!()
-    }
+    fn merge_results<I: HasIntegrand>(&mut self, _other: &mut I, _iter: usize) {}
 
-    fn update_results(&mut self, _iter: usize) {
-        todo!()
-    }
+    fn update_results(&mut self, _iter: usize) {}
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -442,6 +445,12 @@ impl GammaLoopIntegrand {
     #[inline]
     pub fn create_sample(&self, index: &[usize], xs: Vec<f64>) -> Sample<f64> {
         self.index_tree.create_sample(index, xs)
+    }
+
+    pub fn user_data_generator(&self, num_cores: usize, _settings: &Settings) -> UserData {
+        UserData {
+            integrand: vec![Integrand::GammaLoopIntegrand(self.clone()); num_cores],
+        }
     }
 }
 
