@@ -1,13 +1,17 @@
 use super::*;
-
+use std::ops::Neg;
+use symbolica::{
+    representations::{Atom, AtomBuilder},
+    state::{BufferHandle, State, Workspace},
+};
 impl<T> DenseTensor<T>
 where
-    T: Default
+    T: for<'a> std::ops::AddAssign<&'a T>
+        + for<'b> std::ops::SubAssign<&'b T>
+        + Default
         + Clone
-        + std::ops::AddAssign
-        + std::ops::SubAssign
         + std::ops::Mul<Output = T>
-        + Copy
+        + std::ops::Neg<Output = T>
         + std::cmp::PartialEq
         + std::fmt::Debug,
 {
@@ -23,7 +27,7 @@ where
                 .map(|(_, x)| x)
                 .collect();
 
-            let mut new_result = DenseTensor::default(new_structure);
+            let mut new_result = DenseTensor::from_data_coerced(&self.data, new_structure).unwrap();
             for (idx, t) in result.iter_trace(trace) {
                 new_result.set(&idx, t);
             }
@@ -31,92 +35,59 @@ where
         }
         result
     }
-
-    pub fn contract_with_dense(&self, other: &Self) -> Option<Self> {
-        if let Some((i, j)) = self.match_index(other) {
-            // println!("{},{}", i, j);
-            let self_shape = self.shape();
-
-            let dimension_of_contraction = self_shape[i];
-            let metric = self.structure()[i].representation.negative();
-
-            let final_structure = self.structure().merge_at(other.structure(), (i, j));
-
-            // Initialize result tensor with default values
-            let mut result_data = vec![T::default(); final_structure.size()];
-
-            for (index_a, fiber_a) in self.iter_fibers(i) {
-                for (index_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = final_structure
-                        .flat_index(
-                            &index_a[..i]
-                                .iter()
-                                .chain(&index_a[i + 1..])
-                                .chain(&index_b[..j])
-                                .chain(&index_b[j + 1..])
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap();
-
-                    for k in 0..dimension_of_contraction {
-                        // Adjust indices for fetching from the other tensor
-                        if metric[k] {
-                            result_data[result_index] -= *fiber_a[k] * *fiber_b[k];
-                        } else {
-                            result_data[result_index] += *fiber_a[k] * *fiber_b[k];
-                        }
-                    }
-                }
-            }
-
-            let result = DenseTensor {
-                data: result_data,
-                structure: final_structure,
-            };
-
-            if result.traces().is_empty() {
-                return Some(result);
-            } else {
-                return Some(result.internal_contract());
-            }
-        }
-        None
-    }
 }
 
 impl<T> SparseTensor<T>
 where
-    T: Default
-        + Clone
-        + std::ops::AddAssign
-        + std::ops::SubAssign
+    T: for<'a> std::ops::AddAssign<&'a T>
+        + for<'b> std::ops::SubAssign<&'b T>
         + std::ops::Mul<Output = T>
-        + Copy
+        + std::ops::Neg<Output = T>
         + std::cmp::PartialEq
-        + std::fmt::Debug,
+        + std::fmt::Debug
+        + std::clone::Clone,
 {
     pub fn internal_contract(&self) -> Self {
-        let mut result = self.clone();
-        for trace in self.traces() {
-            // println!("trace {:?}", trace);
-            let new_structure = self
-                .structure()
-                .clone()
-                .into_iter()
-                .enumerate()
-                .filter(|&(i, _)| !trace.contains(&i))
-                .map(|(_, x)| x)
-                .collect();
+        let trace = self.traces()[0];
 
-            let mut new_result = SparseTensor::empty(new_structure);
-            for (idx, t) in result.iter_trace(trace).filter(|(_, t)| *t != T::default()) {
-                new_result.set(&idx, t).unwrap();
-            }
-            result = new_result;
+        // println!("trace {:?}", trace);
+        let new_structure = self
+            .structure()
+            .clone()
+            .into_iter()
+            .enumerate()
+            .filter(|&(i, _)| !trace.contains(&i))
+            .map(|(_, x)| x)
+            .collect();
+
+        let mut new_result = SparseTensor::empty(new_structure);
+        for (idx, t) in self.iter_trace(trace) {
+            //filter(|(_, t)| *t != T::default())
+            new_result.set(&idx, t).unwrap();
         }
-        result
+
+        if new_result.traces().is_empty() {
+            new_result
+        } else {
+            new_result.internal_contract()
+        }
     }
+}
+
+// pub trait NumTensor {}
+
+// impl<T> NumTensor for DenseTensor<T> {}
+// impl<T> NumTensor for SparseTensor<T> {}
+// pub trait Densest<A: NumTensor, B: NumTensor> {}
+// pub trait Contractable<T> {
+//     fn contract<C: NumTensor + Densest<SparseTensor<T>, Self>>(
+//         &self,
+//         other: &SparseTensor<T>,
+//     ) -> Option<C>;
+// }
+
+pub trait ContractableWithDense<T> {
+    fn contract_with_dense(&self, other: &DenseTensor<T>) -> Option<DenseTensor<T>>;
 }
 
 pub trait ContractableWithSparse<T> {
@@ -124,11 +95,6 @@ pub trait ContractableWithSparse<T> {
     where
         Self: std::marker::Sized;
 }
-
-pub trait ContractableWithDense<T> {
-    fn contract_with_dense(&self, other: &DenseTensor<T>) -> Option<DenseTensor<T>>;
-}
-
 macro_rules! contract_with_dense_impl {
     ($t:ty,$u:ty) => {
         impl ContractableWithDense<$t> for SparseTensor<$u> {
@@ -155,7 +121,7 @@ macro_rules! contract_with_dense_impl {
                             for (i, k) in nonzeros.iter().enumerate() {
                                 // Adjust indices for fetching from the other tensor
                                 if metric[*k] {
-                                    result_data[result_index] -= *fiber_a[i] * *fiber_b[*k];
+                                    result_data[result_index] -= (*fiber_a[i] * *fiber_b[*k]);
                                 } else {
                                     result_data[result_index] += *fiber_a[i] * *fiber_b[*k];
                                 }
@@ -232,10 +198,12 @@ macro_rules! contract_with_dense_impl {
         }
     };
 }
-
+// contract_with_dense_impl!(
+//     AtomBuilder<'_, BufferHandle<'_, Atom>>,
+//     AtomBuilder<'_, BufferHandle<'_, Atom>>
+// );
 contract_with_dense_impl!(f64, f64);
 contract_with_dense_impl!(num::Complex<f64>, num::Complex<f64>);
-
 contract_with_dense_impl!(num::Complex<f64>, f64);
 
 macro_rules! contract_with_sparse_impl {
@@ -303,5 +271,4 @@ macro_rules! contract_with_sparse_impl {
 
 contract_with_sparse_impl!(f64, f64);
 contract_with_sparse_impl!(num::Complex<f64>, num::Complex<f64>);
-
 contract_with_sparse_impl!(num::Complex<f64>, f64);

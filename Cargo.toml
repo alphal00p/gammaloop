@@ -15,6 +15,9 @@ repository = "https://github.com/alphal00p/gammaloop"
 inherits = "dev"
 opt-level = 2
 
+[profile.release]
+#lto=true
+
 [dependencies]
 # You may need bleeding edge changes
 #symbolica = { git = "https://github.com/alphal00p/symbolica" }

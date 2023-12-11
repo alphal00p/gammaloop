@@ -54,6 +54,7 @@ impl<'a, T> SparseTensorTraceIterator<'a, T> {
             .enumerate()
             .rev()
             .filter(|(pos, _)| !self.trace_indices.contains(pos))
+        // Filter out the trace indices
         {
             *index += 1;
             // If the index goes beyond the shape boundary, wrap around to 0
@@ -69,7 +70,11 @@ impl<'a, T> SparseTensorTraceIterator<'a, T> {
 
 impl<'a, T> Iterator for SparseTensorTraceIterator<'a, T>
 where
-    T: Clone + Copy + Default + std::ops::AddAssign + std::ops::SubAssign + std::cmp::PartialEq,
+    T: for<'c> std::ops::AddAssign<&'c T>
+        + for<'b> std::ops::SubAssign<&'b T>
+        + std::cmp::PartialEq
+        + std::ops::Neg<Output = T>
+        + std::clone::Clone,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -79,18 +84,36 @@ where
 
         let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
-        let mut trace = T::default();
+        let mut iter = trace_sign.iter().enumerate();
+        let mut indices = self.current_indices.clone();
+        let (i, mut sign) = iter.next().unwrap(); //First element (to eliminate the need for default)
 
-        for (i, sign) in trace_sign.iter().enumerate().take(trace_dimension.into()) {
-            let mut indices = self.current_indices.clone();
-            for &pos in self.trace_indices.iter() {
-                indices[pos] = i;
-            }
+        indices[self.trace_indices[0]] = i;
+        indices[self.trace_indices[1]] = i;
+
+        // Data might not exist at that concrete index position, we advance it till it does, and if not we skip
+
+        while self.tensor.is_empty_at(&indices) {
+            let Some((i, signint)) = iter.next() else {
+                self.done = !self.increment_indices();
+                return self.next(); // skip
+            };
+            indices[self.trace_indices[0]] = i;
+            indices[self.trace_indices[1]] = i;
+            sign = signint;
+        }
+
+        let value = (*self.tensor.elements.get(&indices).unwrap()).clone(); //Should now be safe to unwrap
+        let mut trace = if *sign { value.neg() } else { value };
+
+        for (i, sign) in iter {
+            indices[self.trace_indices[0]] = i;
+            indices[self.trace_indices[1]] = i;
             if let Some(value) = self.tensor.elements.get(&indices) {
                 if *sign {
-                    trace -= *value;
+                    trace -= value;
                 } else {
-                    trace += *value;
+                    trace += value;
                 }
             }
         }
@@ -150,10 +173,7 @@ impl<'a, T> SparseTensorFiberIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for SparseTensorFiberIterator<'a, T>
-where
-    T: Clone + Default,
-{
+impl<'a, T> Iterator for SparseTensorFiberIterator<'a, T> {
     type Item = (Vec<ConcreteIndex>, Vec<Position>, Vec<&'a T>);
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
@@ -204,7 +224,7 @@ where
     }
 }
 
-impl<T: Clone + Default> SparseTensor<T> {
+impl<T> SparseTensor<T> {
     pub fn iter_fibers(&self, fiber_index: usize) -> SparseTensorFiberIterator<T> {
         SparseTensorFiberIterator::new(self, fiber_index)
     }
@@ -299,7 +319,11 @@ impl<'a, T> DenseTensorTraceIterator<'a, T> {
 
 impl<'a, T> Iterator for DenseTensorTraceIterator<'a, T>
 where
-    T: Clone + Copy + Default + std::ops::AddAssign + std::ops::SubAssign + std::cmp::PartialEq,
+    T: for<'c> std::ops::AddAssign<&'c T>
+        + for<'b> std::ops::SubAssign<&'b T>
+        + std::cmp::PartialEq
+        + Clone
+        + std::ops::Neg<Output = T>,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -309,17 +333,28 @@ where
 
         let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
-        let mut trace = T::default();
+        let mut iter = trace_sign.iter();
+        let mut indices = self.current_indices.clone();
+        let sign = iter.next().unwrap(); //First sign
 
-        for (i, sign) in trace_sign.iter().enumerate().take(trace_dimension.into()) {
-            let mut indices = self.current_indices.clone();
+        for &pos in self.trace_indices.iter() {
+            indices[pos] = 0;
+        }
+
+        let value = self.tensor.get(&indices).unwrap().clone();
+
+        let mut trace = if *sign { value.neg() } else { value };
+
+        for (i, sign) in iter.enumerate() {
             for &pos in self.trace_indices.iter() {
                 indices[pos] = i;
             }
-            if *sign {
-                trace -= *self.tensor.get(&indices).unwrap();
-            } else {
-                trace += *self.tensor.get(&indices).unwrap();
+            if let Some(value) = self.tensor.get(&indices) {
+                if *sign {
+                    trace -= value;
+                } else {
+                    trace += value;
+                }
             }
         }
 

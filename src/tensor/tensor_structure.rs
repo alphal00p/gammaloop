@@ -8,28 +8,28 @@ pub type Dimension = usize;
 pub type ConcreteIndex = usize;
 pub type Position = usize;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord)]
 pub enum Representation {
     Euclidean(Dimension),
     Lorentz(Dimension),
 }
 
-impl PartialOrd for Representation {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
+// impl PartialOrd for Representation {
+//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }
 
-impl Ord for Representation {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Representation::Euclidean(dim1), Representation::Euclidean(dim2))
-            | (Representation::Lorentz(dim1), Representation::Lorentz(dim2)) => dim1.cmp(dim2),
-            (Representation::Euclidean(_), Representation::Lorentz(_)) => Ordering::Less,
-            (Representation::Lorentz(_), Representation::Euclidean(_)) => Ordering::Greater,
-        }
-    }
-}
+// impl Ord for Representation {
+//     fn cmp(&self, other: &Self) -> Ordering {
+//         match (self, other) {
+//             (Representation::Euclidean(dim1), Representation::Euclidean(dim2))
+//             | (Representation::Lorentz(dim1), Representation::Lorentz(dim2)) => dim1.cmp(dim2),
+//             (Representation::Euclidean(_), Representation::Lorentz(_)) => Ordering::Less,
+//             (Representation::Lorentz(_), Representation::Euclidean(_)) => Ordering::Greater,
+//         }
+//     }
+// }
 
 impl Representation {
     pub fn negative(&self) -> Vec<bool> {
