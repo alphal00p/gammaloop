@@ -8,8 +8,8 @@ use crate::utils;
 use crate::Integrand;
 use crate::Settings;
 use lorentz_vector::LorentzVector;
-use num::Complex;
 use num::traits::ToPrimitive;
+use num::Complex;
 
 pub fn inspect(
     settings: &Settings,

@@ -136,9 +136,8 @@ fn sparse_sub() {
     let b = SparseTensor::from_data(&data_b, &[2, 1]).unwrap();
 
     let f = a - b;
-    println!("{:?}",f);
+    println!("{:?}", f);
 }
-
 
 #[test]
 fn contract_densor_with_spensor() {
