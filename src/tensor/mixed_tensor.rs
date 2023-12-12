@@ -49,8 +49,9 @@ impl SparseTensor<Atom> {
                         .unwrap();
                     for (i, k) in nonzeros.iter().enumerate() {
                         if metric[*k] {
-                            result_data[result_index] = result_data[result_index]
-                                - fiber_a[i].builder(state, workspace) * fiber_b[*k];
+                            result_data[result_index] = -(fiber_a[i].builder(state, workspace)
+                                * fiber_b[*k])
+                                + result_data[result_index].as_atom_view();
                         }
                     }
                 }
