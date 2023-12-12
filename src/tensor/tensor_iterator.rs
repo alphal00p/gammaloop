@@ -421,10 +421,7 @@ impl<'a, T> DenseTensorFiberIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for DenseTensorFiberIterator<'a, T>
-where
-    T: Clone + Default,
-{
+impl<'a, T> Iterator for DenseTensorFiberIterator<'a, T> {
     type Item = (Vec<usize>, Vec<&'a T>);
 
     fn next(&mut self) -> Option<Self::Item> {

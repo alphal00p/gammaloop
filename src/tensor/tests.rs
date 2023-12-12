@@ -161,7 +161,7 @@ fn atom_builder() {
     let mut state = State::new();
     let ws: Workspace = Workspace::new();
 
-    let x = Atom::parse("x", &mut state, &ws).unwrap();
+    let x = Atom::parse("0", &mut state, &ws).unwrap();
     let y = Atom::parse("y", &mut state, &ws).unwrap();
 
     let mut xb: symbolica::representations::AtomBuilder<
@@ -171,12 +171,19 @@ fn atom_builder() {
 
     xb = (-(xb + &y + &x) * &y * &ws.new_num(3) / &ws.new_num(4)).pow(&ws.new_num(5)) / &y;
 
-    let mut result = Vec::with_capacity(10);
-    for _ in 0..10 {
-        result.push(ws.new_num(9));
-    }
+    let zero = ws.new_num(0);
 
-    for a in result {
+    let neutral_summand = zero.builder(&state, &ws);
+
+    // vec![neutral_summand; 5];
+    let zero = ws.new_num(0);
+
+    let neutral_summand = zero.builder(&state, &ws);
+    let mut result_data = (0..4)
+        .map(|_| zero.builder(&state, &ws))
+        .collect::<Vec<_>>();
+
+    for a in result_data {
         println!("{}", a.as_atom_view().printer(&state));
     }
 

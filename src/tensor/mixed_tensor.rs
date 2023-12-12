@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, ops::DerefMut};
 
 use symbolica::{
-    representations::{default::Linear, Atom, AtomBuilder, AtomSet},
+    representations::{default::Linear, AsAtomView, Atom, AtomBuilder, AtomSet},
     state::{BufferHandle, State, Workspace},
 };
 
@@ -17,60 +17,45 @@ pub struct SparseSymbolicTensor<'a, A: DerefMut<Target = Atom<P>>, P: AtomSet = 
     pub elements: BTreeMap<Vec<usize>, A>,
     pub structure: Vec<Slot>,
 }
+impl SparseTensor<Atom> {
+    fn contract_with_dense(
+        &self,
+        other: &DenseTensor<Atom>,
+        workspace: &Workspace,
+        state: &State,
+    ) -> Option<DenseTensor<Atom>> {
+        if let Some((i, j)) = self.match_index(other) {
+            let final_structure = self.structure().merge_at(other.structure(), (i, j));
+            let zero = workspace.new_num(0);
 
-// impl<'a> ContractableWithDense<AtomBuilder<'a, BufferHandle<'a, Atom>>>
-//     for SparseTensor<AtomBuilder<'a, BufferHandle<'a, Atom>>>
-// {
-//     fn contract_with_dense(
-//         &self,
-//         other: &DenseTensor<AtomBuilder<'a, BufferHandle<'a, Atom>>>,
-//     ) -> Option<DenseTensor<AtomBuilder<'a, BufferHandle<'a, Atom>>>> {
-//         if let Some((i, j)) = self.match_index(other) {
-//             let final_structure = self.structure().merge_at(other.structure(), (i, j));
-//             let mut result_data = vec![<$t>::default(); final_structure.size()];
+            let neutral_summand = zero.builder(&state, &workspace);
+            let mut result_data = (0..final_structure.size())
+                .map(|_| zero.builder(&state, &workspace))
+                .collect::<Vec<_>>();
+            let metric = self.structure()[i].representation.negative();
 
-//             let metric = self.structure()[i].representation.negative();
-
-//             self.iter_fibers(i)
-//                 .into_iter()
-//                 .for_each(|(index_a, nonzeros, fiber_a)| {
-//                     other
-//                         .iter_fibers(j)
-//                         .into_iter()
-//                         .for_each(|(index_b, fiber_b)| {
-//                             let result_index = final_structure
-//                                 .flat_index(
-//                                     &index_a[..i]
-//                                         .iter()
-//                                         .chain(&index_a[i + 1..])
-//                                         .chain(&index_b[..j])
-//                                         .chain(&index_b[j + 1..])
-//                                         .cloned()
-//                                         .collect::<Vec<_>>(),
-//                                 )
-//                                 .unwrap();
-//                             for (i, k) in nonzeros.iter().enumerate() {
-//                                 // Adjust indices for fetching from the other tensor
-//                                 if metric[*k] {
-//                                     result_data[result_index] -= (*fiber_a[i] * *fiber_b[*k]);
-//                                 } else {
-//                                     result_data[result_index] += *fiber_a[i] * *fiber_b[*k];
-//                                 }
-//                             }
-//                         });
-//                 });
-
-//             let result = DenseTensor {
-//                 data: result_data,
-//                 structure: final_structure,
-//             };
-
-//             if result.traces().is_empty() {
-//                 return Some(result);
-//             } else {
-//                 return Some(result.internal_contract());
-//             }
-//         }
-//         None
-//     }
-// }
+            for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
+                for (index_b, fiber_b) in other.iter_fibers(j) {
+                    let result_index = final_structure
+                        .flat_index(
+                            &index_a[..i]
+                                .iter()
+                                .chain(&index_a[i + 1..])
+                                .chain(&index_b[..j])
+                                .chain(&index_b[j + 1..])
+                                .cloned()
+                                .collect::<Vec<_>>(),
+                        )
+                        .unwrap();
+                    for (i, k) in nonzeros.iter().enumerate() {
+                        if metric[*k] {
+                            result_data[result_index] = result_data[result_index]
+                                - fiber_a[i].builder(state, workspace) * fiber_b[*k];
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+}
