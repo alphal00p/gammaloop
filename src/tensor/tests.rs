@@ -208,4 +208,44 @@ fn atom_builder() {
 }
 
 #[test]
-fn mixed_sym_tensor_contraction() {}
+fn symbolic_zeros() {
+    let state = State::new();
+    let ws = Workspace::new();
+
+    let structure = TensorStructure::from_integers(&[1, 3], &[2, 2]);
+
+    let zeros = DenseTensor::symbolic_zeros(structure, &ws, &state);
+    println!("{:?}", zeros);
+}
+
+#[test]
+fn convert_sym() {
+    let state = State::new();
+    let ws = Workspace::new();
+    let data_b = [1.6, 2.6, 3.34, -17.125, 5.0, 6.0];
+    let structur_b = TensorStructure::from_integers(&[1, 4], &[2, 3]);
+    let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
+
+    let symb = b.to_symbolic(&ws, &state);
+    println!("{:?}", symb);
+}
+
+#[test]
+fn symbolic_matrix_mult() {
+    let mut state = State::new();
+    let ws = Workspace::new();
+
+    let structura = TensorStructure::from_integers(&[1, 4], &[2, 3]);
+    let a = DenseTensor::symbolic_labels("a", structura, &ws, &mut state);
+    println!("{:?}", a);
+
+    let data_b = [1.6, 2.6, 3.34, -17.125, 5.0, 6.0];
+    let structur_b = TensorStructure::from_integers(&[3, 4], &[2, 3]);
+    let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
+
+    // let symb = b.to_symbolic(&ws, &state);
+
+    // symb.contract_with_dense(&a);
+    // let structurb = TensorStructure::from_integers(&[2, 4], &[2, 3]);
+    // let b = DenseTensor::symbolic_labels("b", structurb, &ws, &mut state);
+}

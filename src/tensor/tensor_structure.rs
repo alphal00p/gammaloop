@@ -3,6 +3,8 @@ use enum_dispatch::enum_dispatch;
 use std::collections::HashSet;
 use std::{cmp::Ordering, collections::HashMap};
 
+use super::TensorStructureIndexIterator;
+
 pub type AbstractIndex = usize;
 pub type Dimension = usize;
 pub type ConcreteIndex = usize;
@@ -123,6 +125,7 @@ pub trait VecSlotExtension {
     fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String>;
     fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String>;
     fn size(&self) -> usize;
+    fn index_iter(&self) -> TensorStructureIndexIterator;
 }
 
 impl VecSlotExtension for TensorStructure {
@@ -298,7 +301,7 @@ impl VecSlotExtension for TensorStructure {
             indices.push(index / stride);
             index %= stride;
         }
-        if index == 0 {
+        if flat_index < self.size() {
             Ok(indices)
         } else {
             Err(format!("Index {} out of bounds", flat_index))
@@ -307,6 +310,10 @@ impl VecSlotExtension for TensorStructure {
 
     fn size(&self) -> usize {
         self.shape().iter().product()
+    }
+
+    fn index_iter(&self) -> TensorStructureIndexIterator {
+        TensorStructureIndexIterator::new(self.clone())
     }
 }
 

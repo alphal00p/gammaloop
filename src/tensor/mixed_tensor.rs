@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
-
 use symbolica::{
-    representations::{number::Number, AsAtomView},
+    representations::{number::Number, AsAtomView, Atom},
     state::{State, Workspace},
 };
 
@@ -190,7 +189,7 @@ impl ConvertableToSymbolic for f64 {
         let natrat = symbolica::rings::rational::Rational::from_large(rugrat);
         let symrat = ws.new_num(Number::from(natrat));
 
-        Some(symrat.builder(state, ws))
+        return Some(symrat.builder(state, ws));
     }
 }
 
@@ -207,7 +206,7 @@ impl<T: ConvertableToSymbolic> SparseTensor<T> {
 }
 
 impl<'a> DenseTensor<Expr<'a>> {
-    fn symbolic_zeros(
+    pub fn symbolic_zeros(
         structure: TensorStructure,
         ws: &'a Workspace,
         state: &'a State,
@@ -217,6 +216,30 @@ impl<'a> DenseTensor<Expr<'a>> {
         let result_data = vec![neutral_summand; structure.size()];
         DenseTensor {
             data: result_data,
+            structure,
+        }
+    }
+
+    pub fn symbolic_labels(
+        label: &str,
+        structure: TensorStructure,
+        ws: &'a Workspace,
+        state: &'a mut State,
+    ) -> DenseTensor<Expr<'a>> {
+        let mut data = vec![];
+        for index in structure.index_iter() {
+            let indices_str = index
+                .into_iter()
+                .map(|index| index.to_string())
+                .collect::<Vec<String>>()
+                .join("_");
+
+            let value = Atom::parse(&format!("{}_{}", label, indices_str), state, ws).unwrap();
+
+            data.push(value);
+        }
+        DenseTensor {
+            data: data.iter().map(|a| a.builder(state, ws)).collect(),
             structure,
         }
     }
