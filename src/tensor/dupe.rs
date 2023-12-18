@@ -1,5 +1,3 @@
-use symbolica::representations::Num;
-
 use super::Expr;
 
 pub trait Dupe {

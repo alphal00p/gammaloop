@@ -1,9 +1,5 @@
 use super::*;
 use std::ops::Neg;
-use symbolica::{
-    representations::{Atom, AtomBuilder},
-    state::{BufferHandle, State, Workspace},
-};
 impl<T> DenseTensor<T>
 where
     T: for<'a> std::ops::AddAssign<&'a T>

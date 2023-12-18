@@ -1,12 +1,9 @@
-use std::{collections::BTreeMap, ops::DerefMut};
+use std::collections::BTreeMap;
 
-use rug::Rational;
 use symbolica::{
-    representations::{default::Linear, number::Number, AsAtomView, Atom, AtomBuilder, AtomSet},
-    state::{BufferHandle, State, Workspace},
+    representations::{number::Number, AsAtomView},
+    state::{State, Workspace},
 };
-
-use crate::tensor::Slot;
 
 use super::{
     ContractableWithDense, ContractableWithSparse, DenseTensor, Expr, HasTensorStructure,
@@ -90,7 +87,7 @@ impl<'a> ContractableWithDense<Expr<'a>> for DenseTensor<Expr<'a>> {
                                 .collect::<Vec<_>>(),
                         )
                         .unwrap();
-                    for i in (0..dimension_of_contraction) {
+                    for i in 0..dimension_of_contraction {
                         if metric[i] {
                             result_data[result_index] -= &(fiber_a[i].clone() * fiber_b[i]);
                         } else {
@@ -217,7 +214,7 @@ impl<'a> DenseTensor<Expr<'a>> {
     ) -> DenseTensor<Expr<'a>> {
         let zero = ws.new_num(0);
         let neutral_summand = zero.builder(state, ws);
-        let mut result_data = vec![neutral_summand; structure.size()];
+        let result_data = vec![neutral_summand; structure.size()];
         DenseTensor {
             data: result_data,
             structure,

@@ -7,8 +7,7 @@ use crate::tensor::{
 use num::Complex;
 use symbolica::{
     representations::{AsAtomView, Atom},
-    rings::rational::Rational,
-    state::{ResettableBuffer, State, Workspace},
+    state::{State, Workspace},
 };
 
 #[test]
@@ -157,7 +156,7 @@ fn contract_densor_with_spensor() {
 
 #[test]
 fn atom_builder() {
-    let im = Complex::new(0, 1);
+    // let im = Complex::new(0, 1);
     let mut state = State::new();
     let ws: Workspace = Workspace::new();
 
@@ -166,10 +165,10 @@ fn atom_builder() {
     let z = Atom::parse("z", &mut state, &ws).unwrap();
     let w = Atom::parse("w", &mut state, &ws).unwrap();
 
-    let mut xb = x.builder(&state, &ws);
-    let mut yb = y.builder(&state, &ws);
-    let mut zb = z.builder(&state, &ws);
-    let mut wb = w.builder(&state, &ws);
+    let xb = x.builder(&state, &ws);
+    let yb = y.builder(&state, &ws);
+    let zb = z.builder(&state, &ws);
+    let wb = w.builder(&state, &ws);
 
     let a = vec![xb, yb];
     let b = vec![zb, wb];
@@ -185,12 +184,10 @@ fn atom_builder() {
 
     let mut xb = x.builder(&state, &ws);
 
-    let mut yb: symbolica::representations::AtomBuilder<
-        '_,
-        symbolica::state::BufferHandle<'_, Atom>,
-    > = y.builder(&state, &ws);
+    let yb: symbolica::representations::AtomBuilder<'_, symbolica::state::BufferHandle<'_, Atom>> =
+        y.builder(&state, &ws);
 
-    xb = xb + &(yb * &ws.new_num(2));
+    xb += &(yb * &ws.new_num(2));
 
     // xb = (-(xb + &y + &x) * &y * &ws.new_num(Rational::new(1, 2)) / &ws.new_num(4))
     //     .pow(&ws.new_num(5))
@@ -198,12 +195,8 @@ fn atom_builder() {
 
     let zero = ws.new_num(0);
 
-    let neutral_summand = zero.builder(&state, &ws);
-
     // vec![neutral_summand; 5];
-
-    let neutral_summand = zero.builder(&state, &ws);
-    let mut result_data = (0..1)
+    let result_data = (0..1)
         .map(|_| zero.builder(&state, &ws))
         .collect::<Vec<_>>();
 
@@ -213,3 +206,6 @@ fn atom_builder() {
 
     println!("{}", xb.as_atom_view().printer(&state));
 }
+
+#[test]
+fn mixed_sym_tensor_contraction() {}

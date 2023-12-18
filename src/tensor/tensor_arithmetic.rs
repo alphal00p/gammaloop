@@ -160,7 +160,7 @@ where
             let permuted_indices: Vec<usize> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self.get(&permuted_indices).unwrap();
-            result.set(&indices, *self_value - *value);
+            result.set(indices, *self_value - *value);
         }
         result
     }
