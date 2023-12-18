@@ -5,9 +5,9 @@ use crate::tensor::{
     TensorStructure, VecSlotExtension,
 };
 use num::Complex;
-use num::Rational;
 use symbolica::{
     representations::{AsAtomView, Atom},
+    rings::rational::Rational,
     state::{ResettableBuffer, State, Workspace},
 };
 
@@ -161,25 +161,49 @@ fn atom_builder() {
     let mut state = State::new();
     let ws: Workspace = Workspace::new();
 
-    let x = Atom::parse("0", &mut state, &ws).unwrap();
+    let x = Atom::parse("x", &mut state, &ws).unwrap();
     let y = Atom::parse("y", &mut state, &ws).unwrap();
+    let z = Atom::parse("z", &mut state, &ws).unwrap();
+    let w = Atom::parse("w", &mut state, &ws).unwrap();
 
-    let mut xb: symbolica::representations::AtomBuilder<
+    let mut xb = x.builder(&state, &ws);
+    let mut yb = y.builder(&state, &ws);
+    let mut zb = z.builder(&state, &ws);
+    let mut wb = w.builder(&state, &ws);
+
+    let a = vec![xb, yb];
+    let b = vec![zb, wb];
+    let zero = ws.new_num(0);
+    let mut result_data = (0..2)
+        .map(|_| zero.builder(&state, &ws))
+        .collect::<Vec<_>>();
+    for (i, a) in a.iter().enumerate() {
+        let mut new_b = a.as_atom_view().builder(&state, &ws);
+        new_b = new_b * &b[i];
+        result_data[i] = new_b + &result_data[i];
+    }
+
+    let mut xb = x.builder(&state, &ws);
+
+    let mut yb: symbolica::representations::AtomBuilder<
         '_,
         symbolica::state::BufferHandle<'_, Atom>,
-    > = x.builder(&state, &ws);
+    > = y.builder(&state, &ws);
 
-    xb = (-(xb + &y + &x) * &y * &ws.new_num(3) / &ws.new_num(4)).pow(&ws.new_num(5)) / &y;
+    xb = xb + &(yb * &ws.new_num(2));
+
+    // xb = (-(xb + &y + &x) * &y * &ws.new_num(Rational::new(1, 2)) / &ws.new_num(4))
+    //     .pow(&ws.new_num(5))
+    //     / &y;
 
     let zero = ws.new_num(0);
 
     let neutral_summand = zero.builder(&state, &ws);
 
     // vec![neutral_summand; 5];
-    let zero = ws.new_num(0);
 
     let neutral_summand = zero.builder(&state, &ws);
-    let mut result_data = (0..4)
+    let mut result_data = (0..1)
         .map(|_| zero.builder(&state, &ws))
         .collect::<Vec<_>>();
 

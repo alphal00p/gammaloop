@@ -108,14 +108,14 @@ pub type TensorStructure = Vec<Slot>;
 
 pub trait VecSlotExtension {
     fn from_idxsing(indices: &[AbstractIndex], dims: &[Representation]) -> Self;
-    fn from_integers(indices: &[AbstractIndex], dims: &[usize]) -> Self;
+    fn from_integers(indices: &[AbstractIndex], dims: &[Dimension]) -> Self;
     fn match_index(&self, other: &Self) -> Option<(Position, Position)>;
     fn traces(&self) -> Vec<[Position; 2]>;
     fn merge_at(&self, other: &Self, positions: (Position, Position)) -> Self;
     fn shape(&self) -> Vec<Dimension>;
     fn order(&self) -> usize;
     fn same_content(&self, other: &Self) -> bool;
-    fn find_permutation(&self, other: &Self) -> Option<Vec<usize>>;
+    fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>>;
     fn strides_row_major(&self) -> Vec<usize>;
     fn strides_column_major(&self) -> Vec<usize>;
     fn strides(&self) -> Vec<usize>;
@@ -140,7 +140,7 @@ impl VecSlotExtension for TensorStructure {
         set1 == set2
     }
 
-    fn find_permutation(&self, other: &Self) -> Option<Vec<usize>> {
+    fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>> {
         if self.len() != other.len() {
             return None;
         }

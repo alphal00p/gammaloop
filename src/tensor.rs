@@ -1,5 +1,13 @@
 use std::{collections::BTreeMap, ops::Bound::Included};
 pub mod tensor_structure;
+use symbolica::{
+    representations::{Atom, AtomBuilder},
+    state::BufferHandle,
+};
+type Expr<'a> = AtomBuilder<'a, BufferHandle<'a, Atom>>;
+
+pub mod dupe;
+pub use dupe::*;
 pub use tensor_structure::*;
 pub mod num_tensor;
 pub use num_tensor::*;

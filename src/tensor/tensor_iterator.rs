@@ -1,3 +1,5 @@
+use std::ops::{AddAssign, Neg, SubAssign};
+
 use super::*;
 
 pub struct SparseTensorIterator<'a, T> {
@@ -72,9 +74,8 @@ impl<'a, T> Iterator for SparseTensorTraceIterator<'a, T>
 where
     T: for<'c> std::ops::AddAssign<&'c T>
         + for<'b> std::ops::SubAssign<&'b T>
-        + std::cmp::PartialEq
         + std::ops::Neg<Output = T>
-        + std::clone::Clone,
+        + Clone,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -319,11 +320,7 @@ impl<'a, T> DenseTensorTraceIterator<'a, T> {
 
 impl<'a, T> Iterator for DenseTensorTraceIterator<'a, T>
 where
-    T: for<'c> std::ops::AddAssign<&'c T>
-        + for<'b> std::ops::SubAssign<&'b T>
-        + std::cmp::PartialEq
-        + Clone
-        + std::ops::Neg<Output = T>,
+    T: for<'c> AddAssign<&'c T> + for<'b> SubAssign<&'b T> + Neg<Output = T> + Clone,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {

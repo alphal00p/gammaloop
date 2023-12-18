@@ -8,12 +8,8 @@ impl<T> DenseTensor<T>
 where
     T: for<'a> std::ops::AddAssign<&'a T>
         + for<'b> std::ops::SubAssign<&'b T>
-        + Default
-        + Clone
-        + std::ops::Mul<Output = T>
-        + std::ops::Neg<Output = T>
-        + std::cmp::PartialEq
-        + std::fmt::Debug,
+        + Neg<Output = T>
+        + Clone,
 {
     pub fn internal_contract(&self) -> Self {
         let mut result = self.clone();
@@ -41,11 +37,8 @@ impl<T> SparseTensor<T>
 where
     T: for<'a> std::ops::AddAssign<&'a T>
         + for<'b> std::ops::SubAssign<&'b T>
-        + std::ops::Mul<Output = T>
         + std::ops::Neg<Output = T>
-        + std::cmp::PartialEq
-        + std::fmt::Debug
-        + std::clone::Clone,
+        + Clone,
 {
     pub fn internal_contract(&self) -> Self {
         let trace = self.traces()[0];
