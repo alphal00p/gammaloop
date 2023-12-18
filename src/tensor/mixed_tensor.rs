@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, ops::DerefMut};
 
 use rug::Rational;
 use symbolica::{
-    representations::{default::Linear, AsAtomView, Atom, AtomBuilder, AtomSet},
+    representations::{default::Linear, number::Number, AsAtomView, Atom, AtomBuilder, AtomSet},
     state::{BufferHandle, State, Workspace},
 };
 
@@ -184,25 +184,26 @@ impl<'a> ContractableWithSparse<Expr<'a>> for SparseTensor<Expr<'a>> {
 }
 
 pub trait ConvertableToSymbolic {
-    fn to_symbolic(&self, ws: &Workspace, state: &State) -> Option<Expr<'_>>;
+    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Expr<'a>>;
 }
 
 impl ConvertableToSymbolic for f64 {
-    fn to_symbolic(&self, ws: &Workspace, state: &State) -> Option<Expr<'_>> {
-        let rugrat = rug::Rational::from_f64(0.49).unwrap();
-        ws.new_num(Number::Large(rugrat));
-        let r = Rational::from_f64(*self)?;
-        let ratom = ws.new_num();
+    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Expr<'a>> {
+        let rugrat = rug::Rational::from_f64(*self)?;
+        let natrat = symbolica::rings::rational::Rational::from_large(rugrat);
+        let symrat = ws.new_num(Number::from(natrat));
 
-        None
+        Some(symrat.builder(state, ws))
     }
 }
 
 impl<T: ConvertableToSymbolic> SparseTensor<T> {
-    pub fn to_symbolic(&self, ws: &Workspace, state: &State) -> SparseTensor<Expr<'_>> {
+    pub fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> SparseTensor<Expr<'a>> {
         let mut result = SparseTensor::empty(self.structure.clone());
         for (index, value) in self.iter() {
-            result.set(index, value.to_symbolic(ws, state)).unwrap();
+            result
+                .set(index, value.to_symbolic(ws, state).unwrap())
+                .unwrap();
         }
         result
     }
@@ -232,7 +233,7 @@ impl<T: ConvertableToSymbolic> DenseTensor<T> {
     ) -> DenseTensor<Expr<'b>> {
         let mut result = DenseTensor::symbolic_zeros(self.structure.clone(), ws, state);
         for (index, value) in self.iter() {
-            result.set(&index, value.to_symbolic(ws, state));
+            result.set(&index, value.to_symbolic(ws, state).unwrap());
         }
         result
     }
