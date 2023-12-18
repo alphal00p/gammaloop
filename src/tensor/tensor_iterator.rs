@@ -286,7 +286,6 @@ impl<'a, T> Iterator for DenseTensorIterator<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Ok(indices) = self.tensor.expanded_index(self.current_flat_index) {
-            println!("{} to {:?}", self.current_flat_index, indices);
             let value = self.tensor.get_linear(self.current_flat_index).unwrap();
 
             self.current_flat_index += 1;

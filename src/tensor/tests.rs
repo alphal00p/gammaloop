@@ -236,14 +236,25 @@ fn symbolic_matrix_mult() {
     let ws = Workspace::new();
 
     let structura = TensorStructure::from_integers(&[1, 4], &[2, 3]);
-    let a = DenseTensor::symbolic_labels("a", structura, &ws, &mut state);
-    println!("{:?}", a);
+    let alabels = DenseTensor::symbolic_labels("a", &structura, &ws, &mut state);
+    let structurb = TensorStructure::from_integers(&[3, 4], &[2, 3]);
+    let blabels = DenseTensor::symbolic_labels("b", &structurb, &ws, &mut state);
+    let a = DenseTensor {
+        data: alabels.iter().map(|a| a.builder(&state, &ws)).collect(),
+        structure: structura,
+    };
+    let b = DenseTensor {
+        data: blabels.iter().map(|a| a.builder(&state, &ws)).collect(),
+        structure: structurb.clone(),
+    };
 
     let data_b = [1.6, 2.6, 3.34, -17.125, 5.0, 6.0];
-    let structur_b = TensorStructure::from_integers(&[3, 4], &[2, 3]);
-    let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
+    let b = DenseTensor::from_data(&data_b, structurb.clone()).unwrap();
 
-    // let symb = b.to_symbolic(&ws, &state);
+    let symb = b.to_symbolic(&ws, &state);
+
+    let f = a.contract_with_dense(&symb);
+    println!("{:?}", f.unwrap());
 
     // symb.contract_with_dense(&a);
     // let structurb = TensorStructure::from_integers(&[2, 4], &[2, 3]);

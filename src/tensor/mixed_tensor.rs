@@ -222,10 +222,10 @@ impl<'a> DenseTensor<Expr<'a>> {
 
     pub fn symbolic_labels(
         label: &str,
-        structure: TensorStructure,
+        structure: &TensorStructure,
         ws: &'a Workspace,
         state: &'a mut State,
-    ) -> DenseTensor<Expr<'a>> {
+    ) -> Vec<Atom> {
         let mut data = vec![];
         for index in structure.index_iter() {
             let indices_str = index
@@ -238,10 +238,7 @@ impl<'a> DenseTensor<Expr<'a>> {
 
             data.push(value);
         }
-        DenseTensor {
-            data: data.iter().map(|a| a.builder(state, ws)).collect(),
-            structure,
-        }
+        data
     }
 }
 
