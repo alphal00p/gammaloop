@@ -4,7 +4,7 @@ use std::{ops::Neg, time::Instant};
 
 use _gammaloop::tensor::{
     ufo_spin_tensors::{gamma, sigma},
-    ContractableWithDense, DenseTensor,
+    ContractableWithDense, DenseTensor, Expr,
     Representation::Lorentz,
     Representation::{self, Euclidean},
     TensorStructure, VecSlotExtension,
@@ -12,24 +12,29 @@ use _gammaloop::tensor::{
 
 use num::complex::Complex64;
 use num::traits::{Num, ToPrimitive};
+use symbolica::{
+    representations::Atom,
+    state::{State, Workspace},
+};
 
-fn pslash(indices: (usize, usize), p: [Complex64; 4]) -> DenseTensor<Complex64> {
+fn pslash(indices: (usize, usize), p: &[Complex64; 4]) -> DenseTensor<Complex64> {
     let minkindex = indices.0 + indices.1;
 
-    let p = DenseTensor::from_data(
-        &p,
-        TensorStructure::from_idxsing(&[minkindex], &[Lorentz(4)]),
-    )
-    .unwrap();
+    let p = mink_four_vector(minkindex, p);
     gamma(minkindex, indices).contract_with_dense(&p).unwrap()
 }
 
 #[allow(dead_code)]
-fn mink_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
-where
-    T: Num + std::default::Default + std::clone::Clone,
-{
-    DenseTensor::from_data(&p, TensorStructure::from_idxsing(&[index], &[Lorentz(4)])).unwrap()
+fn mink_four_vector<T: std::clone::Clone>(index: usize, p: &[T; 4]) -> DenseTensor<T> {
+    DenseTensor::from_data(p, TensorStructure::from_idxsing(&[index], &[Lorentz(4)])).unwrap()
+}
+
+fn mink_four_vector_lablels(label: &str, ws: &Workspace, state: &mut State) -> [Atom; 4] {
+    let structure = TensorStructure::from_idxsing(&[1], &[Lorentz(4)]);
+
+    DenseTensor::symbolic_labels(label, &structure, ws, state)
+        .try_into()
+        .unwrap_or_else(|v: Vec<_>| panic!("Expected a Vec of length 4 but it was {}", v.len()))
 }
 
 fn eucl_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
@@ -37,6 +42,11 @@ where
     T: Num + std::default::Default + std::clone::Clone,
 {
     DenseTensor::from_data(&p, TensorStructure::from_idxsing(&[index], &[Euclidean(4)])).unwrap()
+}
+
+fn eucl_four_vector_labels(label: &str, ws: &Workspace, state: &mut State) -> Vec<Atom> {
+    let structure = TensorStructure::from_idxsing(&[1], &[Euclidean(4)]);
+    DenseTensor::symbolic_labels(label, &structure, ws, state)
 }
 
 fn benchmark_chain(
@@ -56,7 +66,7 @@ fn benchmark_chain(
                 Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
-            let pslash = pslash((contracting_index, contracting_index + 1), p);
+            let pslash = pslash((contracting_index, contracting_index + 1), &p);
             result = pslash.contract_with_dense(&result).unwrap();
         } else {
             result = gamma(
@@ -71,6 +81,40 @@ fn benchmark_chain(
     result
         .contract_with_dense(&eucl_four_vector(contracting_index, u))
         .unwrap()
+}
+
+fn symbolic_chain<'a>(
+    minkindices: &[i32],
+    ws: &'a Workspace,
+    state: &'a mut State,
+) -> DenseTensor<Expr<'a>> {
+    let vbar = eucl_four_vector_labels("vbar", ws, state);
+    let u = eucl_four_vector_labels("u", ws, state);
+    let mut internal_mom = Vec::new();
+
+    for (i, m) in minkindices.iter().filter(|&x| *x > 0).enumerate() {
+        let p = mink_four_vector_lablels(&format!("p{}", i), ws, state);
+        internal_mom.push(p);
+    }
+
+    let mut i = 0;
+
+    let mut contracting_index = 0;
+
+    for m in minkindices {
+        if *m > 0 {
+            let minkindex = 2 * contracting_index;
+            let p = mink_four_vector(minkindex, &internal_mom[i]);
+            let pslash = gamma(minkindex, (contracting_index, contracting_index + 1))
+                .to_symbolic(ws, state)
+                .contract_with_dense(&p)
+                .unwrap();
+            i += 1;
+        } else {
+        }
+        contracting_index += 1;
+    }
+    todo!()
 }
 
 #[allow(dead_code)]

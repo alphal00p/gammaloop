@@ -4,7 +4,7 @@ use symbolica::{
     representations::{Atom, AtomBuilder},
     state::BufferHandle,
 };
-type Expr<'a> = AtomBuilder<'a, BufferHandle<'a, Atom>>;
+pub type Expr<'a> = AtomBuilder<'a, BufferHandle<'a, Atom>>;
 
 pub mod dupe;
 pub use dupe::*;

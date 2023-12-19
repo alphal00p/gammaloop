@@ -176,7 +176,49 @@ impl<T> DenseTensor<T> {
         }
     }
 }
+// why no specialization? :(
+// impl<T, U> From<DenseTensor<U>> for DenseTensor<T>
+// where
+//     U: Into<T>,
+// {
+//     fn from(other: DenseTensor<U>) -> Self {
+//         let data = other.data.into_iter().map(|x| x.into()).collect();
+//         DenseTensor {
+//             data,
+//             structure: other.structure,
+//         }
+//     }
+// }
 
+impl<T> DenseTensor<T> {
+    pub fn conver_to<U>(&self) -> DenseTensor<U>
+    where
+        U: for<'a> From<&'a T>,
+    {
+        let data = self.data.iter().map(|x| x.into()).collect();
+        DenseTensor {
+            data,
+            structure: self.structure.clone(),
+        }
+    }
+}
+
+impl<T> SparseTensor<T> {
+    pub fn convert_to<U>(&self) -> SparseTensor<U>
+    where
+        U: for<'a> From<&'a T>,
+    {
+        let elements = self
+            .elements
+            .iter()
+            .map(|(k, v)| (k.clone(), v.into()))
+            .collect();
+        SparseTensor {
+            elements,
+            structure: self.structure.clone(),
+        }
+    }
+}
 trait NumericTensor<T> {}
 
 impl<T> NumericTensor<T> for DenseTensor<T> {}

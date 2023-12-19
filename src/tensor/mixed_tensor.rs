@@ -193,6 +193,21 @@ impl ConvertableToSymbolic for f64 {
     }
 }
 
+impl ConvertableToSymbolic for Complex<f64> {
+    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Expr<'a>> {
+        let real = self.re.to_symbolic(ws, state)?;
+        let imag = self.im.to_symbolic(ws, state)?;
+        let zero = ws.new_num(0);
+        let one = ws.new_num(1);
+        let i = ws.new_num(Number::from(
+            symbolica::rings::rational::Rational::from_large(rug::Rational::from_f64(1.0).unwrap()),
+        ));
+        let symrat = zero + &real + &(i * &imag);
+
+        return Some(symrat.builder(state, ws));
+    }
+}
+
 impl<T: ConvertableToSymbolic> SparseTensor<T> {
     pub fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> SparseTensor<Expr<'a>> {
         let mut result = SparseTensor::empty(self.structure.clone());
