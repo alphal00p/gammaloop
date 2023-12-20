@@ -209,24 +209,24 @@ fn atom_builder() {
 
 #[test]
 fn symbolic_zeros() {
-    let state = State::new();
+    let mut state = State::new();
     let ws = Workspace::new();
 
     let structure = TensorStructure::from_integers(&[1, 3], &[2, 2]);
 
-    let zeros = DenseTensor::symbolic_zeros(structure, &ws, &state);
+    let zeros = DenseTensor::symbolic_zeros(structure, &ws, &mut state);
     println!("{:?}", zeros);
 }
 
 #[test]
 fn convert_sym() {
-    let state = State::new();
+    let mut state = State::new();
     let ws = Workspace::new();
     let data_b = [1.6, 2.6, 3.34, -17.125, 5.0, 6.0];
     let structur_b = TensorStructure::from_integers(&[1, 4], &[2, 3]);
     let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let symb = b.to_symbolic(&ws, &state);
+    let symb = b.to_symbolic(&ws, &mut state);
     println!("{:?}", symb);
 }
 
@@ -236,24 +236,18 @@ fn symbolic_matrix_mult() {
     let ws = Workspace::new();
 
     let structura = TensorStructure::from_integers(&[1, 4], &[2, 3]);
-    let alabels = DenseTensor::symbolic_labels("a", &structura, &ws, &mut state);
+    let aatom = DenseTensor::symbolic_labels("a", structura, &ws, &mut state);
     let structurb = TensorStructure::from_integers(&[3, 4], &[2, 3]);
-    let blabels = DenseTensor::symbolic_labels("b", &structurb, &ws, &mut state);
-    let a = DenseTensor {
-        data: alabels.iter().map(|a| a.builder(&state, &ws)).collect(),
-        structure: structura,
-    };
-    let b = DenseTensor {
-        data: blabels.iter().map(|a| a.builder(&state, &ws)).collect(),
-        structure: structurb.clone(),
-    };
+    let batom = DenseTensor::symbolic_labels("b", structurb.clone(), &ws, &mut state);
 
     let data_b = [1.6, 2.6, 3.34, -17.125, 5.0, 6.0];
-    let b = DenseTensor::from_data(&data_b, structurb.clone()).unwrap();
+    let b = DenseTensor::from_data(&data_b, structurb).unwrap();
 
-    let symb = b.to_symbolic(&ws, &state);
+    let symb = b.to_symbolic(&ws, &mut state);
 
-    let f = a.contract_with_dense(&symb);
+    let f = aatom
+        .builder(&state, &ws)
+        .contract_with_dense(&symb.builder(&state, &ws));
     println!("{:?}", f.unwrap());
 
     // symb.contract_with_dense(&a);

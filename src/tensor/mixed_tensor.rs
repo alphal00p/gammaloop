@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, ops::DerefMut};
 use symbolica::{
     representations::{number::Number, AsAtomView, Atom},
     state::{State, Workspace},
@@ -180,41 +180,72 @@ impl<'a> ContractableWithSparse<Expr<'a>> for SparseTensor<Expr<'a>> {
 }
 
 pub trait ConvertableToSymbolic {
-    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Expr<'a>>;
+    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Atom>;
 }
 
 impl ConvertableToSymbolic for f64 {
-    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Expr<'a>> {
+    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Atom> {
         let rugrat = rug::Rational::from_f64(*self)?;
         let natrat = symbolica::rings::rational::Rational::from_large(rugrat);
-        let symrat = ws.new_num(Number::from(natrat));
+        let symrat = Atom::new_from_view(&ws.new_num(Number::from(natrat)).as_view());
 
-        return Some(symrat.builder(state, ws));
+        Some(symrat)
     }
 }
 
-impl ConvertableToSymbolic for Complex<f64> {
-    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Expr<'a>> {
+impl ConvertableToSymbolic for num::Complex<f64> {
+    fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Atom> {
         let real = self.re.to_symbolic(ws, state)?;
         let imag = self.im.to_symbolic(ws, state)?;
-        let zero = ws.new_num(0);
-        let one = ws.new_num(1);
-        let i = ws.new_num(Number::from(
-            symbolica::rings::rational::Rational::from_large(rug::Rational::from_f64(1.0).unwrap()),
-        ));
-        let symrat = zero + &real + &(i * &imag);
+        let i = Atom::new_var(State::I);
+        let symrat = (i.builder(state, ws) * &imag) + &real;
 
-        return Some(symrat.builder(state, ws));
+        return Some(Atom::new_from_view(&symrat.as_atom_view()));
+    }
+}
+
+impl SparseTensor<Atom> {
+    pub fn builder<'a>(&self, state: &'a State, ws: &'a Workspace) -> SparseTensor<Expr<'a>> {
+        let mut result = SparseTensor::empty(self.structure.clone());
+        for (index, value) in self.iter() {
+            result.set(index, value.builder(state, ws)).unwrap();
+        }
+        result
+    }
+}
+
+impl DenseTensor<Atom> {
+    pub fn builder<'a>(&self, state: &'a State, ws: &'a Workspace) -> DenseTensor<Expr<'a>> {
+        let mut result = DenseTensor::neutral_builder(self.structure.clone(), ws, state);
+        for (index, value) in self.iter() {
+            result.set(&index, value.builder(state, ws));
+        }
+        result
     }
 }
 
 impl<T: ConvertableToSymbolic> SparseTensor<T> {
-    pub fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> SparseTensor<Expr<'a>> {
+    pub fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> SparseTensor<Atom> {
         let mut result = SparseTensor::empty(self.structure.clone());
         for (index, value) in self.iter() {
             result
                 .set(index, value.to_symbolic(ws, state).unwrap())
                 .unwrap();
+        }
+        result
+    }
+
+    pub fn to_symbolic_builder<'a>(
+        &self,
+        ws: &'a Workspace,
+        state: &'a State,
+    ) -> SparseTensor<Expr<'a>> {
+        let mut result = SparseTensor::empty(self.structure.clone());
+        for (index, value) in self.iter() {
+            result.set(
+                index,
+                value.to_symbolic(ws, state).unwrap().builder(state, ws),
+            );
         }
         result
     }
@@ -224,23 +255,34 @@ impl<'a> DenseTensor<Expr<'a>> {
     pub fn symbolic_zeros(
         structure: TensorStructure,
         ws: &'a Workspace,
+        state: &'a mut State,
+    ) -> DenseTensor<Atom> {
+        let result_data = vec![0; structure.size()];
+
+        DenseTensor {
+            data: result_data.iter().map(|&x| Atom::new_num(x)).collect(),
+            structure,
+        }
+    }
+
+    pub fn neutral_builder(
+        structure: TensorStructure,
+        ws: &'a Workspace,
         state: &'a State,
     ) -> DenseTensor<Expr<'a>> {
-        let zero = ws.new_num(0);
-        let neutral_summand = zero.builder(state, ws);
-        let result_data = vec![neutral_summand; structure.size()];
+        let zero = Atom::new_num(0).builder(state, ws);
+        let result_data = vec![zero; structure.size()];
         DenseTensor {
             data: result_data,
             structure,
         }
     }
-
     pub fn symbolic_labels(
         label: &str,
-        structure: &TensorStructure,
+        structure: TensorStructure,
         ws: &'a Workspace,
         state: &'a mut State,
-    ) -> Vec<Atom> {
+    ) -> DenseTensor<Atom> {
         let mut data = vec![];
         for index in structure.index_iter() {
             let indices_str = index
@@ -253,7 +295,14 @@ impl<'a> DenseTensor<Expr<'a>> {
 
             data.push(value);
         }
-        data
+        DenseTensor { data, structure }
+    }
+
+    pub fn finish(self) -> DenseTensor<Atom> {
+        DenseTensor {
+            data: self.data.into_iter().map(|x| x.into_atom()).collect(),
+            structure: self.structure,
+        }
     }
 }
 
@@ -261,11 +310,26 @@ impl<T: ConvertableToSymbolic> DenseTensor<T> {
     pub fn to_symbolic<'a: 'b, 'b>(
         &'b self,
         ws: &'a Workspace,
-        state: &'a State,
-    ) -> DenseTensor<Expr<'b>> {
+        state: &'a mut State,
+    ) -> DenseTensor<Atom> {
         let mut result = DenseTensor::symbolic_zeros(self.structure.clone(), ws, state);
         for (index, value) in self.iter() {
             result.set(&index, value.to_symbolic(ws, state).unwrap());
+        }
+        result
+    }
+
+    pub fn to_symbolic_builder<'a: 'b, 'b>(
+        &'b self,
+        ws: &'a Workspace,
+        state: &'a mut State,
+    ) -> DenseTensor<Expr<'a>> {
+        let mut result = DenseTensor::neutral_builder(self.structure.clone(), ws, state);
+        for (index, value) in self.iter() {
+            result.set(
+                &index,
+                value.to_symbolic(ws, state).unwrap().builder(state, ws),
+            );
         }
         result
     }

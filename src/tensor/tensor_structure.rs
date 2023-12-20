@@ -313,7 +313,7 @@ impl VecSlotExtension for TensorStructure {
     }
 
     fn index_iter(&self) -> TensorStructureIndexIterator {
-        TensorStructureIndexIterator::new(self.clone())
+        TensorStructureIndexIterator::new(self)
     }
 }
 
