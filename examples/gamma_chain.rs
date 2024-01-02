@@ -1,6 +1,7 @@
 // Gamma chain example
 
 use std::{ops::Neg, time::Instant};
+use wide::f64x4;
 
 use _gammaloop::tensor::{
     ufo_spin_tensors::{gamma, sigma},
@@ -12,9 +13,13 @@ use _gammaloop::tensor::{
 
 use num::complex::Complex64;
 use num::traits::{Num, ToPrimitive};
-use rayon::result;
 use symbolica::{
-    representations::Atom,
+    poly::{
+        evaluate::{BorrowedHornerScheme, InstructionSetPrinter},
+        polynomial::MultivariatePolynomial,
+    },
+    representations::{AsAtomView, Atom, Identifier},
+    rings::rational::RationalField,
     state::{State, Workspace},
 };
 
@@ -43,6 +48,17 @@ fn labeled_mink_four_vector(
     // .unwrap_or_else(|v: Vec<_>| panic!("Expected a Vec of length 4 but it was {}", v.len()))
 }
 
+fn numbered_labeled_mink_four_vector<'a>(
+    label: Identifier,
+    number: usize,
+    index: AbstractIndex,
+    state: &'a State,
+    ws: &'a Workspace,
+) -> DenseTensor<Expr<'a>> {
+    let structure = TensorStructure::from_idxsing(&[index], &[Lorentz(4)]);
+    DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
+}
+
 fn eucl_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
 where
     T: Num + std::default::Default + std::clone::Clone,
@@ -58,6 +74,17 @@ fn labeled_eucl_four_vector(
 ) -> DenseTensor<Atom> {
     let structure = TensorStructure::from_idxsing(&[index], &[Euclidean(4)]);
     DenseTensor::symbolic_labels(label, structure, ws, state)
+}
+
+fn numbered_labeled_eucl_four_vector<'a>(
+    label: Identifier,
+    number: usize,
+    index: AbstractIndex,
+    state: &'a State,
+    ws: &'a Workspace,
+) -> DenseTensor<Expr<'a>> {
+    let structure = TensorStructure::from_idxsing(&[index], &[Euclidean(4)]);
+    DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
 }
 
 fn benchmark_chain(
@@ -91,6 +118,55 @@ fn benchmark_chain(
     }
     result
         .contract_with_dense(&eucl_four_vector(contracting_index, u))
+        .unwrap()
+}
+
+fn symbolic_chain_function<'a>(
+    minkindices: &[i32],
+    ws: &'a Workspace,
+    state: &'a mut State,
+) -> DenseTensor<Expr<'a>> {
+    let mut contracting_index = 0;
+    let id = state.get_or_insert_fn("p", None).unwrap();
+    let vbar = labeled_eucl_four_vector("vbar", contracting_index, ws, state).builder(state, ws);
+    let mut result = vbar;
+
+    // for (i, m) in minkindices.iter().filter(|&x| *x > 0).enumerate() {
+    //     let p = labeled_mink_four_vector(&format!("p{}", i), ws, state);
+    //     internal_mom.push(p);
+    // }
+
+    let mut i = 0;
+
+    for m in minkindices {
+        if *m > 0 {
+            let minkindex = 2 * contracting_index;
+            let p = numbered_labeled_mink_four_vector(id, i, minkindex, state, ws);
+            let pslash = gamma(minkindex, (contracting_index, contracting_index + 1))
+                .to_symbolic(ws, state)
+                .builder(state, ws)
+                .contract_with_dense(&p)
+                .unwrap();
+            result = pslash.contract_with_dense(&result).unwrap();
+
+            i += 1;
+        } else {
+            result = gamma(
+                usize::try_from(m.neg()).unwrap(),
+                (contracting_index, contracting_index + 1),
+            )
+            .to_symbolic_builder(ws, state)
+            .contract_with_dense(&result)
+            .unwrap();
+        }
+        contracting_index += 1;
+    }
+    let result = result.finish();
+
+    let u = labeled_eucl_four_vector("u", contracting_index, ws, state);
+    result
+        .builder(state, ws)
+        .contract_with_dense(&u.builder(state, ws))
         .unwrap()
 }
 
@@ -193,7 +269,7 @@ fn main() {
 
     // println!("P {:?}", p11);
 
-    let spacings: [i32; 2] = [3, 4];
+    let spacings: [i32; 2] = [4, 5];
     let mut start = 1;
     let mut ranges = Vec::new();
 
@@ -217,5 +293,79 @@ fn main() {
     let chain = symbolic_chain(&vec, &ws, &mut state);
     let duration = start.elapsed();
 
-    println!("{:?} in {:?}", chain, duration);
+    // println!("{:?} in {:?}", chain, duration);
+    let mut out = ws.new_atom();
+    let s = chain.finish().data.remove(0);
+
+    s.as_view().expand(&ws, &state, &mut out);
+
+    println!("{}", out.printer(&state));
+
+    let poly: MultivariatePolynomial<_, u8> = out
+        .as_view()
+        .to_polynomial(&RationalField::new(), None)
+        .unwrap();
+
+    let (h, _ops, scheme) = poly.optimize_horner_scheme(4000);
+    let mut i = h.to_instr(poly.nvars);
+
+    println!(
+        "Number of operations={}, with scheme={:?}",
+        BorrowedHornerScheme::from(&h).op_count_cse(),
+        scheme,
+    );
+
+    i.fuse_operations();
+
+    for _ in 0..100_000 {
+        if !i.common_pair_elimination() {
+            break;
+        }
+        i.fuse_operations();
+    }
+
+    let op_count = i.op_count();
+    let o = i.to_output(poly.var_map.as_ref().unwrap().to_vec(), true);
+    let o_f64 = o.convert::<f64>();
+
+    println!("Writing output to evaluate.cpp");
+    std::fs::write(
+        "evaluate.cpp",
+        format!(
+            "{}",
+            InstructionSetPrinter {
+                instr: &o,
+                state: &state,
+                mode: symbolica::poly::evaluate::InstructionSetMode::CPP(
+                    symbolica::poly::evaluate::InstructionSetModeCPPSettings {
+                        write_header_and_test: true,
+                        always_pass_output_array: false,
+                    }
+                )
+            }
+        ),
+    )
+    .unwrap();
+
+    let mut evaluator = o_f64.evaluator();
+
+    let start = Instant::now();
+    evaluator.evaluate(&(0..poly.nvars).map(|x| x as f64 + 1.).collect::<Vec<_>>())[0];
+    let duration = start.elapsed();
+
+    println!("Final number of operations={}", op_count);
+    println!("Evaluation = {:?}", duration);
+
+    // evaluate with simd
+    let o_f64x4 = o.convert::<f64x4>();
+    let mut evaluator = o_f64x4.evaluator();
+
+    println!(
+        "Evaluation with simd = {:?}",
+        evaluator.evaluate(
+            &(0..poly.nvars)
+                .map(|x| f64x4::new([x as f64 + 1., x as f64 + 2., x as f64 + 3., x as f64 + 4.]))
+                .collect::<Vec<_>>()
+        )[0]
+    );
 }

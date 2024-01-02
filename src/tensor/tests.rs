@@ -209,12 +209,9 @@ fn atom_builder() {
 
 #[test]
 fn symbolic_zeros() {
-    let mut state = State::new();
-    let ws = Workspace::new();
-
     let structure = TensorStructure::from_integers(&[1, 3], &[2, 2]);
 
-    let zeros = DenseTensor::symbolic_zeros(structure, &ws, &mut state);
+    let zeros = DenseTensor::symbolic_zeros(structure);
     println!("{:?}", zeros);
 }
 
@@ -238,7 +235,7 @@ fn symbolic_matrix_mult() {
     let structura = TensorStructure::from_integers(&[1, 4], &[2, 3]);
     let aatom = DenseTensor::symbolic_labels("a", structura, &ws, &mut state);
     let structurb = TensorStructure::from_integers(&[3, 4], &[2, 3]);
-    let batom = DenseTensor::symbolic_labels("b", structurb.clone(), &ws, &mut state);
+    let _batom = DenseTensor::symbolic_labels("b", structurb.clone(), &ws, &mut state);
 
     let data_b = [1.6, 2.6, 3.34, -17.125, 5.0, 6.0];
     let b = DenseTensor::from_data(&data_b, structurb).unwrap();
