@@ -1,4 +1,6 @@
 use enum_dispatch::enum_dispatch;
+use symbolica::representations::{AsAtomView, Atom, FunctionBuilder, Identifier};
+use symbolica::state::{State, Workspace};
 
 use std::collections::HashSet;
 use std::{cmp::Ordering, collections::HashMap};
@@ -41,6 +43,27 @@ impl Representation {
                 .chain(std::iter::repeat(true).take(*value - 1))
                 .collect::<Vec<_>>(),
         }
+    }
+
+    pub fn to_fnbuilder<'a, 'b: 'a>(
+        &'a self,
+        ws: &'b Workspace,
+        state: &'b mut State,
+    ) -> FunctionBuilder<'a> {
+        let (value, id) = match self {
+            Representation::Euclidean(value) => (*value, state.get_or_insert_fn("euc", None)),
+            Representation::Lorentz(value) => (*value, state.get_or_insert_fn("lor", None)),
+        };
+
+        let mut value_builder = FunctionBuilder::new(id.unwrap(), state, ws);
+
+        value_builder = value_builder.add_arg(Atom::new_num(value as i64).as_atom_view());
+
+        value_builder
+    }
+
+    pub fn to_symbolic(&self, ws: &Workspace, state: &mut State) -> Atom {
+        self.to_fnbuilder(ws, state).finish().into_atom()
     }
 }
 
@@ -106,6 +129,15 @@ impl From<(AbstractIndex, Representation)> for Slot {
     }
 }
 
+impl Slot {
+    pub fn register_names(&self, state: &mut State) {}
+    pub fn to_symbolic(&self, ws: &Workspace, state: &mut State) -> Atom {
+        let mut value_builder = self.representation.to_fnbuilder(ws, state);
+        value_builder = value_builder.add_arg(Atom::new_num(self.index as i64).as_atom_view());
+        value_builder.finish().into_atom()
+    }
+}
+
 pub type TensorStructure = Vec<Slot>;
 
 pub trait VecSlotExtension {
@@ -126,6 +158,7 @@ pub trait VecSlotExtension {
     fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String>;
     fn size(&self) -> usize;
     fn index_iter(&self) -> TensorStructureIndexIterator;
+    fn to_symbolic(&self, label: Identifier, ws: &Workspace, state: &mut State) -> Atom;
 }
 
 impl VecSlotExtension for TensorStructure {
@@ -314,6 +347,19 @@ impl VecSlotExtension for TensorStructure {
 
     fn index_iter(&self) -> TensorStructureIndexIterator {
         TensorStructureIndexIterator::new(self)
+    }
+
+    fn to_symbolic(&self, label: Identifier, ws: &Workspace, state: &mut State) -> Atom {
+        let atoms = self
+            .iter()
+            .map(|slot| slot.to_symbolic(ws, state))
+            .collect::<Vec<_>>();
+
+        let mut value_builder = FunctionBuilder::new(label, state, ws);
+        for atom in atoms {
+            value_builder = value_builder.add_arg(atom.as_atom_view());
+        }
+        value_builder.finish().into_atom()
     }
 }
 

@@ -1,17 +1,17 @@
 use symbolica::{
-    representations::{AsAtomView, Atom},
+    representations::{AsAtomView, Atom, Identifier},
     state::{State, Workspace},
 };
 
 use super::{ContractableWithDense, Expr, HasTensorStructure, TensorStructure, VecSlotExtension};
 
-#[allow(dead_code)]
-struct SymbolicTensor {
+#[derive(Debug)]
+pub struct SymbolicTensor {
     structure: TensorStructure,
     expression: Atom,
 }
-
-struct SymbolicTensorBuilder<'a> {
+#[derive(Debug)]
+pub struct SymbolicTensorBuilder<'a> {
     structure: TensorStructure,
     expression: Expr<'a>,
 }
@@ -29,10 +29,29 @@ impl<'a> HasTensorStructure for SymbolicTensorBuilder<'a> {
 }
 
 impl<'a> SymbolicTensorBuilder<'a> {
-    pub fn new(structure: TensorStructure, expression: Expr<'a>) -> Self {
+    pub fn new(
+        structure: TensorStructure,
+        label: Identifier,
+        ws: &'a Workspace,
+        state: &'a mut State,
+    ) -> Self {
         SymbolicTensorBuilder {
+            expression: structure
+                .clone()
+                .to_symbolic(label, ws, state)
+                .builder(state, ws),
             structure,
-            expression,
+        }
+    }
+
+    pub fn from_symbolic_tensor(
+        tensor: SymbolicTensor,
+        state: &'a State,
+        ws: &'a Workspace,
+    ) -> Self {
+        SymbolicTensorBuilder {
+            expression: tensor.expression.builder(state, ws),
+            structure: tensor.structure,
         }
     }
 
@@ -52,10 +71,15 @@ impl<'a> SymbolicTensorBuilder<'a> {
 }
 
 impl SymbolicTensor {
-    pub fn new(structure: TensorStructure, expression: Atom) -> Self {
+    pub fn new(
+        structure: TensorStructure,
+        label: Identifier,
+        ws: &Workspace,
+        state: &mut State,
+    ) -> Self {
         SymbolicTensor {
+            expression: structure.clone().to_symbolic(label, ws, state),
             structure,
-            expression,
         }
     }
 
@@ -64,6 +88,6 @@ impl SymbolicTensor {
     }
 
     pub fn builder<'a>(self, state: &'a State, ws: &'a Workspace) -> SymbolicTensorBuilder<'a> {
-        SymbolicTensorBuilder::new(self.structure, self.expression.builder(state, ws))
+        SymbolicTensorBuilder::from_symbolic_tensor(self, state, ws)
     }
 }

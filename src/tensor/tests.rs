@@ -6,9 +6,11 @@ use crate::tensor::{
 };
 use num::Complex;
 use symbolica::{
-    representations::{AsAtomView, Atom},
+    representations::{AsAtomView, Atom, Identifier},
     state::{State, Workspace},
 };
+
+use super::symbolic_tensor::SymbolicTensor;
 
 #[test]
 fn indexflatten() {
@@ -250,4 +252,23 @@ fn symbolic_matrix_mult() {
     // symb.contract_with_dense(&a);
     // let structurb = TensorStructure::from_integers(&[2, 4], &[2, 3]);
     // let b = DenseTensor::symbolic_labels("b", structurb, &ws, &mut state);
+}
+
+#[test]
+fn symbolic_contract() {
+    let mut state = State::new();
+    let ws = Workspace::new();
+
+    let structura = TensorStructure::from_integers(&[1, 4], &[2, 3]);
+
+    let structurb = TensorStructure::from_integers(&[3, 2], &[2, 3]);
+
+    let labela = state.get_or_insert_fn("T", None).unwrap();
+    let labelb = state.get_or_insert_fn("P", None).unwrap();
+
+    let a = SymbolicTensor::new(structura, labela, &ws, &mut state);
+    let b = SymbolicTensor::new(structurb, labelb, &ws, &mut state);
+    let f = a.builder(&state, &ws).contract(&b);
+
+    println!("{:?}", f);
 }
