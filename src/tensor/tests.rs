@@ -6,7 +6,7 @@ use crate::tensor::{
 };
 use num::Complex;
 use symbolica::{
-    representations::{AsAtomView, Atom, Identifier},
+    representations::{AsAtomView, Atom},
     state::{State, Workspace},
 };
 
@@ -236,17 +236,17 @@ fn symbolic_matrix_mult() {
 
     let structura = TensorStructure::from_integers(&[1, 4], &[2, 3]);
     let aatom = DenseTensor::symbolic_labels("a", structura, &ws, &mut state);
-    let structurb = TensorStructure::from_integers(&[3, 4], &[2, 3]);
+    let structurb = TensorStructure::from_integers(&[4, 1], &[3, 2]);
     let _batom = DenseTensor::symbolic_labels("b", structurb.clone(), &ws, &mut state);
 
-    let data_b = [1.6, 2.6, 3.34, -17.125, 5.0, 6.0];
+    let data_b = [1.5, 2.25, 3.5, -17.125, 5.0, 6.0];
     let b = DenseTensor::from_data(&data_b, structurb).unwrap();
 
     let symb = b.to_symbolic(&ws, &mut state);
 
     let f = aatom
         .builder(&state, &ws)
-        .contract_with_dense(&symb.builder(&state, &ws));
+        .contract_with_dense(&_batom.builder(&state, &ws));
     println!("{:?}", f.unwrap());
 
     // symb.contract_with_dense(&a);
@@ -270,5 +270,9 @@ fn symbolic_contract() {
     let b = SymbolicTensor::new(structurb, labelb, &ws, &mut state);
     let f = a.builder(&state, &ws).contract(&b);
 
-    println!("{:?}", f);
+     println!("{:?}", f);
+    assert_eq!(
+        *f.finish().get_atom(),
+        Atom::parse("T(euc(2,1),euc(3,4))*P(euc(2,3),euc(3,2))", &mut state, &ws).unwrap()
+    );
 }

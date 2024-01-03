@@ -3,7 +3,6 @@ use symbolica::{
     representations::{number::Number, AsAtomView, Atom, FunctionBuilder, Identifier},
     state::{State, Workspace},
 };
-use tabled::builder;
 
 use super::{
     ContractableWithDense, ContractableWithSparse, DenseTensor, Expr, HasTensorStructure,

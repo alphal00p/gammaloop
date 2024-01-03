@@ -130,7 +130,6 @@ impl From<(AbstractIndex, Representation)> for Slot {
 }
 
 impl Slot {
-    pub fn register_names(&self, state: &mut State) {}
     pub fn to_symbolic(&self, ws: &Workspace, state: &mut State) -> Atom {
         let mut value_builder = self.representation.to_fnbuilder(ws, state);
         value_builder = value_builder.add_arg(Atom::new_num(self.index as i64).as_atom_view());

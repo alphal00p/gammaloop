@@ -5,7 +5,8 @@ where
     T: for<'a> std::ops::AddAssign<&'a T>
         + for<'b> std::ops::SubAssign<&'b T>
         + Neg<Output = T>
-        + Clone,
+        + Clone
+        + std::fmt::Debug,
 {
     pub fn internal_contract(&self) -> Self {
         let mut result = self.clone();

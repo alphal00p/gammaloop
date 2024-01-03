@@ -18,7 +18,7 @@ use symbolica::{
         evaluate::{BorrowedHornerScheme, InstructionSetPrinter},
         polynomial::MultivariatePolynomial,
     },
-    representations::{AsAtomView, Atom, Identifier},
+    representations::{Atom, Identifier},
     rings::rational::RationalField,
     state::{State, Workspace},
 };
@@ -47,7 +47,7 @@ fn labeled_mink_four_vector(
     // .try_into()
     // .unwrap_or_else(|v: Vec<_>| panic!("Expected a Vec of length 4 but it was {}", v.len()))
 }
-
+#[allow(dead_code)]
 fn numbered_labeled_mink_four_vector<'a>(
     label: Identifier,
     number: usize,
@@ -75,6 +75,8 @@ fn labeled_eucl_four_vector(
     let structure = TensorStructure::from_idxsing(&[index], &[Euclidean(4)]);
     DenseTensor::symbolic_labels(label, structure, ws, state)
 }
+
+#[allow(dead_code)]
 
 fn numbered_labeled_eucl_four_vector<'a>(
     label: Identifier,
@@ -120,7 +122,7 @@ fn benchmark_chain(
         .contract_with_dense(&eucl_four_vector(contracting_index, u))
         .unwrap()
 }
-
+#[allow(dead_code)]
 fn symbolic_chain_function<'a>(
     minkindices: &[i32],
     ws: &'a Workspace,
@@ -350,7 +352,9 @@ fn main() {
     let mut evaluator = o_f64.evaluator();
 
     let start = Instant::now();
-    evaluator.evaluate(&(0..poly.nvars).map(|x| x as f64 + 1.).collect::<Vec<_>>())[0];
+    assert!(!evaluator
+        .evaluate(&(0..poly.nvars).map(|x| x as f64 + 1.).collect::<Vec<_>>())
+        .is_empty());
     let duration = start.elapsed();
 
     println!("Final number of operations={}", op_count);

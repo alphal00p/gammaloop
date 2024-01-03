@@ -22,7 +22,7 @@ pub use tensor_iterator::*;
 // }
 
 pub mod mixed_tensor;
-pub mod symbolic_atom;
+
 pub mod symbolic_tensor;
 pub mod tensor_arithmetic;
 pub mod tensor_contraction;

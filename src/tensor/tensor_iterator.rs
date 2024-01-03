@@ -405,7 +405,11 @@ impl<'a, T> DenseTensorTraceIterator<'a, T> {
 
 impl<'a, T> Iterator for DenseTensorTraceIterator<'a, T>
 where
-    T: for<'c> AddAssign<&'c T> + for<'b> SubAssign<&'b T> + Neg<Output = T> + Clone,
+    T: for<'c> AddAssign<&'c T>
+        + for<'b> SubAssign<&'b T>
+        + Neg<Output = T>
+        + Clone
+        + std::fmt::Debug,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -415,9 +419,10 @@ where
 
         let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
-        let mut iter = trace_sign.iter();
+  
+        let mut iter = trace_sign.iter().enumerate();
         let mut indices = self.current_indices.clone();
-        let sign = iter.next().unwrap(); //First sign
+        let (_, sign) = iter.next().unwrap(); //First sign
 
         for &pos in self.trace_indices.iter() {
             indices[pos] = 0;
@@ -427,10 +432,11 @@ where
 
         let mut trace = if *sign { value.neg() } else { value };
 
-        for (i, sign) in iter.enumerate() {
+        for (i, sign) in iter {
             for &pos in self.trace_indices.iter() {
                 indices[pos] = i;
             }
+
             if let Some(value) = self.tensor.get(&indices) {
                 if *sign {
                     trace -= value;
@@ -440,7 +446,7 @@ where
             }
         }
 
-        //make a vector withouth the trace indices
+        //make a vector without the trace indices
         let trace_indices: Vec<usize> = self
             .current_indices
             .clone()

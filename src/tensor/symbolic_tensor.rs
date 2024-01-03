@@ -3,7 +3,7 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use super::{ContractableWithDense, Expr, HasTensorStructure, TensorStructure, VecSlotExtension};
+use super::{Expr, HasTensorStructure, TensorStructure, VecSlotExtension};
 
 #[derive(Debug)]
 pub struct SymbolicTensor {
@@ -52,6 +52,13 @@ impl<'a> SymbolicTensorBuilder<'a> {
         SymbolicTensorBuilder {
             expression: tensor.expression.builder(state, ws),
             structure: tensor.structure,
+        }
+    }
+
+    pub fn finish(self) -> SymbolicTensor {
+        SymbolicTensor {
+            expression: self.expression.into_atom(),
+            structure: self.structure,
         }
     }
 
