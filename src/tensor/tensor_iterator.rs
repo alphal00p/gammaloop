@@ -419,7 +419,7 @@ where
 
         let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
-  
+
         let mut iter = trace_sign.iter().enumerate();
         let mut indices = self.current_indices.clone();
         let (_, sign) = iter.next().unwrap(); //First sign

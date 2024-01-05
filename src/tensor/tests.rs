@@ -6,7 +6,7 @@ use crate::tensor::{
 };
 use num::Complex;
 use symbolica::{
-    representations::{AsAtomView, Atom},
+    representations::Atom,
     state::{State, Workspace},
 };
 
@@ -30,7 +30,7 @@ fn construct_dense_tensor() {
     let a = TensorStructure::from_integers(&[1, 2, 3], &[2, 3, 4]);
 
     let data = vec![1.0; a.size()];
-    let a = super::DenseTensor::from_data(&data, a).unwrap();
+    super::DenseTensor::from_data(&data, a).unwrap();
 }
 
 #[test]
