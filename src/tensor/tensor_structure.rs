@@ -158,6 +158,9 @@ pub trait VecSlotExtension {
     fn size(&self) -> usize;
     fn index_iter(&self) -> TensorStructureIndexIterator;
     fn to_symbolic(&self, label: Identifier, ws: &Workspace, state: &mut State) -> Atom;
+    fn is_scalar(&self) -> bool {
+        self.order() == 0
+    }
 }
 
 impl VecSlotExtension for TensorStructure {
@@ -400,5 +403,9 @@ pub trait HasTensorStructure {
 
     fn traces(&self) -> Vec<[Position; 2]> {
         self.structure().traces()
+    }
+
+    fn is_scalar(&self) -> bool {
+        self.structure().is_scalar()
     }
 }

@@ -106,7 +106,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DenseTensor<T> {
     pub data: Vec<T>,
     pub structure: TensorStructure,
@@ -120,24 +120,26 @@ impl<T> HasTensorStructure for DenseTensor<T> {
 
 impl<T: Default + Clone> DenseTensor<T> {
     pub fn default(structure: TensorStructure) -> Self {
+        let length = if structure.is_scalar() {
+            1
+        } else {
+            structure.size()
+        };
         DenseTensor {
-            data: vec![T::default(); structure.size()],
+            data: vec![T::default(); length],
             structure,
         }
     }
 
     pub fn default_from_integers(indices: &[AbstractIndex], dims: &[usize]) -> Self {
         let structure = TensorStructure::from_integers(indices, dims);
-        DenseTensor {
-            data: vec![T::default(); structure.size()],
-            structure,
-        }
+        DenseTensor::default(structure)
     }
 }
 
 impl<T: Clone> DenseTensor<T> {
     pub fn from_data(data: &[T], structure: TensorStructure) -> Result<Self, String> {
-        if data.len() != structure.size() {
+        if data.len() != structure.size() && !(data.len() == 1 && structure.is_scalar()) {
             return Err("Data length does not match shape".to_string());
         }
         Ok(DenseTensor {
@@ -151,7 +153,11 @@ impl<T: Clone> DenseTensor<T> {
             return Err("Data length is too small".to_string());
         }
         let mut data = data.to_vec();
-        data.truncate(structure.size());
+        if structure.is_scalar() {
+            data.truncate(1);
+        } else {
+            data.truncate(structure.size());
+        }
         Ok(DenseTensor { data, structure })
     }
 }
@@ -171,6 +177,8 @@ impl<T> DenseTensor<T> {
     pub fn get(&self, indices: &[usize]) -> Option<&T> {
         if let Ok(idx) = self.flat_index(indices) {
             Some(&self.data[idx])
+        } else if self.structure.is_scalar() && indices.is_empty() {
+            Some(&self.data[0])
         } else {
             None
         }
