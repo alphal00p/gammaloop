@@ -1,7 +1,8 @@
 use crate::{
     cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
-    model,
+    model::{self, Model},
+    numerator::generate_numerator,
     utils::{compute_momentum, FloatLike},
 };
 use ahash::RandomState;
@@ -18,7 +19,11 @@ use num::Complex;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
-use symbolica::representations::Atom;
+use symbolica::{
+    id::Pattern,
+    representations::Atom,
+    state::{State, Workspace},
+};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -215,6 +220,36 @@ impl Vertex {
             vertex_info: deserialize_vertex_info(model, &vertex.vertex_info),
             // This will be filled in later during deserialization of the complete graph
             edges: vec![],
+        }
+    }
+
+    pub fn apply_vertex_rule(&self, state: &mut State, ws: &Workspace) -> Vec<Atom> {
+        match &self.vertex_info {
+            VertexInfo::ExternalVertexInfo(_) => vec![],
+            VertexInfo::InteractonVertexInfo(interaction_vertex_info) => {
+                let info = interaction_vertex_info;
+                info.vertex_rule
+                    .lorentz_structures
+                    .iter()
+                    .map(|ls| {
+                        let mut atom = ls.structure.clone();
+                        for (i, e) in self.edges.iter().enumerate() {
+                            let pat: Pattern = Atom::new_num(i as i64).into_pattern(state);
+                            let rhs = Pattern::parse(&format!("i{}", e), state, ws).unwrap();
+                            let a = atom.clone();
+                            pat.replace_all(
+                                a.as_view(),
+                                &rhs,
+                                state,
+                                ws,
+                                &HashMap::default(),
+                                &mut atom,
+                            );
+                        }
+                        atom
+                    })
+                    .collect_vec()
+            }
         }
     }
 }
@@ -605,6 +640,10 @@ impl Graph {
 
     pub fn generate_cff(&mut self) {
         self.derived_data.cff_expression = Some(generate_cff_expression(self).unwrap());
+    }
+
+    pub fn generate_numerator(&mut self, model: &Model, state: &mut State, ws: &Workspace) {
+        self.derived_data.numerator = Some(generate_numerator(self, model, state, ws));
     }
 
     #[inline]

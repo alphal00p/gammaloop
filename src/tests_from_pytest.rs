@@ -923,3 +923,26 @@ fn pytest_scalar_isopod() {
         LTD_COMPARISON_TOLERANCE,
     );
 }
+
+#[test]
+#[ignore]
+
+fn pytest_lbl_box() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let mut sb_state = symbolica::state::State::new();
+    let sb_workspace = symbolica::state::Workspace::new();
+    let (model, amplitude) = load_amplitude_output(
+        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
+        &mut sb_state,
+        &sb_workspace,
+    );
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_numerator(&model, &mut sb_state, &sb_workspace);
+    println!(
+        "{}",
+        graph.derived_data.numerator.unwrap().printer(&sb_state)
+    );
+}
