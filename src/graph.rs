@@ -18,6 +18,7 @@ use num::Complex;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
+use symbolica::representations::Atom;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -721,6 +722,7 @@ pub struct DerivedGraphData {
     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
+    pub numerator: Option<Atom>,
 }
 
 impl DerivedGraphData {
@@ -729,6 +731,7 @@ impl DerivedGraphData {
             loop_momentum_bases: None,
             cff_expression: None,
             ltd_expression: None,
+            numerator: None,
         }
     }
 
@@ -756,6 +759,7 @@ impl DerivedGraphData {
             ltd_expression: serializable
                 .ltd_expression
                 .map(LTDExpression::from_serializable),
+            numerator: None,
         }
     }
 
