@@ -12,6 +12,7 @@ pub mod integrands;
 pub mod integrate;
 pub mod ltd;
 pub mod model;
+pub mod numerator;
 pub mod observables;
 pub mod tensor;
 pub mod tests;
