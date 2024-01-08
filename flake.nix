@@ -35,6 +35,7 @@
       default = pkgs.mkShell {
         #devshell definition :
         # LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+        RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 
         packages = with pkgs; [
           rustToolchain
