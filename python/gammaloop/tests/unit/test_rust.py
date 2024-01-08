@@ -2,6 +2,7 @@ import pytest
 from pathlib import Path
 from gammaloop.tests.common import run_rust_test
 
+
 @pytest.mark.rust
 class TestRust:
 
@@ -49,3 +50,7 @@ class TestRust:
     def test_rust_scalar_isopod(self, compile_rust_tests: Path, scalar_isopod_export: Path):
         assert run_rust_test(compile_rust_tests, scalar_isopod_export,
                              'scalar_isopod')
+
+    def test_rust_lbl_box(self, compile_rust_tests: Path, lbl_box_export: Path):
+        assert run_rust_test(compile_rust_tests, lbl_box_export,
+                             'lbl_box')
