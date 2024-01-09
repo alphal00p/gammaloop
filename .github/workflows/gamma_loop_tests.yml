@@ -24,7 +24,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest
+        pip install pytest pyright
         if [ -f python/gammaloop/requirements.txt ]; then pip install -r python/gammaloop/requirements.txt; fi
     - name: Compile dependencies
       run: |
