@@ -22,7 +22,7 @@ jobs:
       with:
         python-version: "3.11"
     - name: build full latex
-    - uses: xu-cheng/texlive-action@v2
+      uses: xu-cheng/texlive-action@v2
       with:
         scheme: full
         run: |
