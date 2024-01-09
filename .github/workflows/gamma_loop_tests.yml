@@ -21,9 +21,6 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.11"
-    - name: Set Symbolica License
-      run: |
-        export SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"`
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -40,10 +37,10 @@ jobs:
         ./bin/compile_lib.sh --release
     - name: Run code checks
       run: |
-        ./bin/run_tests.sh python -m "codecheck"
+        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python -m "codecheck"
     - name: Run python tests
       run: |
-        ./bin/run_tests.sh python
+        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python
     - name: Run native rust tests
       run: |
-        ./bin/run_tests.sh rust
+        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh rust
