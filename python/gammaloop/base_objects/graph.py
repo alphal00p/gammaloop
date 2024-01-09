@@ -150,18 +150,17 @@ class Vertex(object):
         sorted_edges: list[Edge] = []
         vertex_particles_per_edge = [(e.particle, e) if e.vertices[1] is self else (
             e.particle.get_anti_particle(model), e) for e in self.edges]
-        orig_vertex_particles = [v[0] for v in vertex_particles_per_edge]
-        for part in orig_vertex_particles:
+        for part in vertex_particles:
             for i, (e_p, _edge) in enumerate(vertex_particles_per_edge):
                 if e_p == part:
                     sorted_edges.append(vertex_particles_per_edge.pop(i)[1])
                     break
             else:
                 raise GammaLoopError(
-                    f"Particle {part.name} not found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
+                    f"Particle {part.name} not found in vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}].")
         if len(vertex_particles_per_edge) > 0:
             raise GammaLoopError(
-                f"Not all particles were found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
+                f"Not all particles were found in vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}].")
         self.edges = sorted_edges
 
     def to_serializable_dict(self) -> dict[str, Any]:
