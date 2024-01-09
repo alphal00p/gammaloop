@@ -150,7 +150,6 @@ class Vertex(object):
         sorted_edges: list[Edge] = []
         vertex_particles_per_edge = [(e.particle, e) if e.vertices[1] is self else (
             e.particle.get_anti_particle(model), e) for e in self.edges]
-        orig_vertex_particles = [v[0] for v in vertex_particles_per_edge]
         for part in vertex_particles:
             for i, (e_p, _edge) in enumerate(vertex_particles_per_edge):
                 if e_p == part:
