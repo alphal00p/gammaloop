@@ -12,9 +12,9 @@ use itertools::Itertools;
 use log::warn;
 use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
-use num::Complex;
 #[allow(unused_imports)]
-use num_traits::Float;
+use num::traits::Float;
+use num::Complex;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
