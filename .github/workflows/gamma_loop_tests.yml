@@ -21,6 +21,9 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.11"
+    - name: Set Symbolica License
+      run: |
+        export SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"`
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
