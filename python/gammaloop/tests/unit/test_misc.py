@@ -3,7 +3,7 @@ import json
 from subprocess import Popen, PIPE
 from pprint import pformat
 from gammaloop.misc.common import GL_PATH, logger, GammaLoopError
-
+from pprint import pformat
 
 class TestCode:
 
@@ -37,6 +37,8 @@ class TestCode:
 
         compiler_artifact = output.decode("utf-8")
         warning_msg = None
+        i_msg = 0
+        found_warning = None
         for json_line in reversed(compiler_artifact.split("\n")):
             if json_line == "":
                 continue
@@ -52,4 +54,4 @@ class TestCode:
         if warning_msg is not None:
             logger.critical(warning_msg)
 
-        assert warning_msg is None
+        assert found_warning is None

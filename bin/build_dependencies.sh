@@ -11,8 +11,8 @@ clean_dependencies () {
 
 build_dependencies () {
     cd dependencies/fjcore
-    make -j8 >& /dev/null
-	RETCODE=$RETCODE+$?
+    make -j8 &> /dev/null
+    RETCODE=$RETCODE+$?
     cd ../..
 }
 
