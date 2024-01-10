@@ -711,6 +711,18 @@ impl Graph {
     pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
         let derived_data = DerivedGraphData::load_from_path(path)?;
         self.derived_data = derived_data;
+
+        // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
+        let lmb_indices = self.loop_momentum_basis.basis.clone();
+        self.set_lmb(&lmb_indices)?;
+        Ok(())
+    }
+
+    // attempt to set a new loop momentum basis
+    pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
+        let position = self.derived_data.search_lmb_position(lmb)?;
+        self.loop_momentum_basis =
+            self.derived_data.loop_momentum_bases.as_ref().unwrap()[position].clone();
         Ok(())
     }
 }
@@ -769,6 +781,25 @@ impl DerivedGraphData {
             Err(_) => {
                 warn!("no derived data found");
                 Ok(Self::new_empty())
+            }
+        }
+    }
+
+    // search the lmb position in the list of lmbs
+    fn search_lmb_position(&self, potential_lmb: &[usize]) -> Result<usize, Report> {
+        match &self.loop_momentum_bases {
+            None => Err(eyre!("loop momentum bases not yet generated")),
+            Some(lmbs) => {
+                let sorted_potential_lmb = potential_lmb.iter().sorted().collect_vec();
+
+                for (position, lmb) in lmbs.iter().enumerate() {
+                    let sorted_lmb = lmb.basis.iter().sorted().collect_vec();
+
+                    if sorted_lmb == sorted_potential_lmb {
+                        return Ok(position);
+                    }
+                }
+                Err(eyre!("lmb not found"))
             }
         }
     }
