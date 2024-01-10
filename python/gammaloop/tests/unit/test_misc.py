@@ -1,6 +1,7 @@
 import pytest
 import json
 from subprocess import Popen, PIPE
+from pprint import pformat
 from gammaloop.misc.common import GL_PATH, logger, GammaLoopError
 
 
@@ -46,7 +47,7 @@ class TestCode:
             if 'message' in json_obj:
                 json_msg = json_obj['message']
                 if "level" in json_msg and json_msg["level"] in ["warning", "error"]:
-                    warning_msg = f"Clippy issued at least one warning : {'Unknown' if 'message' not in json_msg else json_msg['message']}"
+                    warning_msg = f"Clippy issued at least one warning : {'Unknown' if 'message' not in json_msg else json_msg['message']}. Full result:\n{pformat(json_msg)}"
                     break
         if warning_msg is not None:
             logger.critical(warning_msg)
