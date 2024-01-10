@@ -127,15 +127,13 @@ class Vertex(object):
         if self.vertex_info.get_type() == 'unspecified':
             vertex_particles = [e.particle if e.vertices[1] is self else e.particle.get_anti_particle(
                 model) for e in self.edges]
-            orig_vertex_particles = list(vertex_particles)
-
             interactions = model.get_vertices_from_particles(vertex_particles)
             if len(interactions) == 0:
                 raise GammaLoopError(
-                    f"No interaction found for vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}]")
+                    f"No interaction found for vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}]")
             elif len(interactions) > 1:
                 raise GammaLoopError(
-                    f"Found more than one valid interaction for vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}]. Importing from qgraph is not supported in this case.")
+                    f"Found more than one valid interaction for vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}]. Importing from qgraph is not supported in this case.")
             self.vertex_info = InteractonVertexInfo(interactions[0])
         elif not isinstance(self.vertex_info, InteractonVertexInfo):
             raise GammaLoopError(

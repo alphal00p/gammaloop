@@ -62,10 +62,10 @@ class TestLoadModel:
         gloop.run(CommandList.from_string("import_model scalars"))
 
         assert len(gloop.model.particles) == 3
-        assert len(gloop.model.lorentz_structures) == 1
+        assert len(gloop.model.lorentz_structures) == 2
         assert len(gloop.model.couplings) == 1
         assert len(gloop.model.parameters) == 12
-        assert len(gloop.model.vertex_rules) == 10
+        assert len(gloop.model.vertex_rules) == 25
         assert len(gloop.model.orders) == 2
 
 
