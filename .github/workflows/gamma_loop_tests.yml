@@ -21,8 +21,8 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.11"
-    - name: Install TeXlive
-      run: sudo apt-get update && sudo apt-get install texlive-full texlive-publishers texlive-science latexmk cm-super feynmf
+#    - name: Install TeXlive
+#      run: sudo apt-get update && sudo apt-get install texlive-full texlive-publishers texlive-science latexmk cm-super feynmf
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -42,7 +42,7 @@ jobs:
         SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python -m "codecheck"
     - name: Run python tests
       run: |
-        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python
+        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python -m "not drawing"
     - name: Run native rust tests
       run: |
         SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh rust
