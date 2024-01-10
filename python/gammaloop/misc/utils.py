@@ -59,8 +59,8 @@ def evaluate_symbolica_expression(expr: sb.Expression, evaluation_variables: dic
 
 def evaluate_symbolica_expression_safe(expr: sb.Expression, evaluation_variables: dict[SBE, complex], evaluation_functions: dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]]) -> complex:
     try:
-        res: complex = expr.evaluate_complex(  # type: ignore
-            evaluation_variables, evaluation_functions)
+        res: complex = expr.evaluate_complex( # type: ignore
+            evaluation_variables, evaluation_functions) # type: ignore
         # Small adjustment to avoid havin -0. in either the real or imaginary part
         return complex(0 if abs(res.real) == 0. else res.real,  # type: ignore
                        0 if abs(res.imag) == 0. else res.imag)  # type: ignore
@@ -72,7 +72,7 @@ def evaluate_symbolica_expression_safe(expr: sb.Expression, evaluation_variables
             pformat({expression_to_string(k): v for k,
                     v in evaluation_variables.items()}),
             pformat([expression_to_string(k()).replace('()', '')  # type: ignore
-                    for k in evaluation_functions.keys()])
+                    for k in evaluation_functions.keys()]) # type: ignore
         )
 
 

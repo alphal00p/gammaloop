@@ -35,12 +35,18 @@ def run_rust_test(rust_tests_binary: Path, output_path: Path, test_name: str) ->
 
 def run_drawing(drawing_path: str) -> bool:
 
-    process = Popen(['make', f'feynman_diagrams.pdf'],
+    process = Popen(['make', 'feynman_diagrams.pdf'],
                     cwd=drawing_path, stdout=PIPE, stderr=PIPE)
     output, error = process.communicate()
     if process.returncode != 0 or not os.path.isfile(pjoin(drawing_path, 'feynman_diagrams.pdf')):
         logger.info("DRAWING TEST STDOUT:\n%s", output.decode("utf-8"))
         logger.info("DRAWING TEST STDERR:\n%s", error.decode("utf-8"))
+        if os.path.isfile(pjoin(drawing_path, 'compilation.log')):
+            with open(pjoin(drawing_path, 'compilation.log'), 'r', encoding="utf-8") as f:
+                compilation_log = f.read()
+        else:
+            compilation_log = "No compilation log found."
+        logger.info("DRAWING TEST compilation log:\n%s",compilation_log)
         return False
     logger.debug("DRAWING TEST STDOUT:\n%s", output.decode("utf-8"))
     logger.debug("DRAWING TEST STDERR:\n%s", error.decode("utf-8"))
