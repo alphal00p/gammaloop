@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import Counter
 
 import importlib
 import importlib.util
@@ -689,7 +690,7 @@ class Model(object):
         return self.to_serializable_model().to_yaml()
 
     def get_vertices_from_particles(self, particles: list[Particle]) -> list[VertexRule]:
-        return [vertex_rule for vertex_rule in self.vertex_rules if set(vertex_rule.particles) == set(particles)]
+        return [vertex_rule for vertex_rule in self.vertex_rules if Counter(vertex_rule.particles) == Counter(particles)]
 
     def get_order(self, order_name: str) -> Order:
         return self.orders[self.name_to_position['orders'][order_name]]
