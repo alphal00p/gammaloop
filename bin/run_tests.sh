@@ -7,13 +7,13 @@ run_rust_tests() {
     # Run the tests using specific categories and showing live println()'s
     #cargo test --release --features=binary --no-default-features -- tests_inspect --test-threads=1 --nocapture
     #cargo test --release --features=binary --no-default-features -- tests_integral --test-threads=1 --nocapture
-	RETCODE=$RETCODE+$?;
+    RETCODE=$RETCODE+$?;
 }
 
 run_python_tests() {
     cd python/gammaloop;
     ./run_python_tests.sh "$@";
-	RETCODE=$RETCODE+$?;
+    RETCODE=$RETCODE+$?;
     # Pass the following option to see output on fails
     #./run_python_tests.sh "$@" -s --log-cli-level DEBUG;
     # or:
@@ -44,7 +44,7 @@ elif [ "$1" == "all" ]
         run_python_tests "${@:2}"
 else
     echo "Invalid argument"
-	RETCODE=1;
+    RETCODE=1;
 fi
 
 exit $(($RETCODE))
