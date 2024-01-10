@@ -22,7 +22,7 @@ jobs:
       with:
         python-version: "3.11"
     - name: Install TeXlive
-      run: sudo apt-get update && sudo apt-get install texlive texlive-publishers texlive-science latexmk cm-super feynmf
+      run: sudo apt-get update && sudo apt-get install texlive-full texlive-publishers texlive-science latexmk cm-super feynmf
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
