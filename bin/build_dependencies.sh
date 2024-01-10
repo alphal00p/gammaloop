@@ -4,7 +4,7 @@ RETCODE=0;
 
 clean_dependencies () {
     cd dependencies/fjcore
-    rm *.o
+    rm -f *.o
     make clean
     cd ../..
 }

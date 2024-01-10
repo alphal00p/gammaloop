@@ -4,12 +4,12 @@ import os
 import itertools
 from pathlib import Path
 from enum import StrEnum
-import yaml
 from typing import Any
+import yaml
 
 from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger, EMPTY_LIST  # pylint: disable=unused-import # type: ignore
 import gammaloop.misc.utils as utils
-from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter  # type: ignore
+from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter  # type: ignore # pylint: disable=unused-import
 
 
 class EdgeType(StrEnum):
@@ -117,7 +117,7 @@ class Vertex(object):
         return Vertex('dummy_vertex')
 
     def set_vertex_rule_from_model(self, model: Model) -> None:
-        assert (self.edges is not None)
+        assert self.edges is not None
 
         if len(self.edges) == 1:
             self.vertex_info = ExternalVertexInfo(
@@ -233,7 +233,8 @@ class Edge(object):
         }
 
     def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_edge_labels: bool = True, show_particle_names: bool = True, show_edge_names: bool = True, show_edge_composite_momenta: bool = False,
-             label_size: str = '15pt', label_distance: float = 13.0, show_edge_momenta: bool = True, draw_arrow_for_all_edges: bool = True, draw_lmb: bool = True, arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
+             label_size: str = '15pt', label_distance: float = 13.0, show_edge_momenta: bool = True, draw_arrow_for_all_edges: bool = True, draw_lmb: bool = True,
+             arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
              arrow_size_for_single_line: float = 2.5, arrow_size_for_double_line: float = 2.5, line_color: str = 'black', label_color: str = 'black', lmb_color: str = 'red', non_lmb_color: str = 'blue', **_opts: Any) -> list[str]:
         constant_definitions['arcMaxDistance'] = f'{arc_max_distance:.2f}'
         constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'
@@ -309,10 +310,10 @@ class Edge(object):
             mom_sig = graph.get_edge_signature(self.name)
             if (mom_sig[0].count(0) + mom_sig[1].count(0)) < len(mom_sig[0])+len(mom_sig[1])-1:
                 str_mom = ''.join(
-                    ((f'+' if s > 0 else '-' if abs(s)
+                    (('+' if s > 0 else '-' if abs(s)
                      == 1 else f'{s:+d}')+f'k_{{{i_lm}}}')
                     for i_lm, s in enumerate(mom_sig[0]) if s != 0)+''.join(
-                    ((f'+' if s > 0 else '-' if abs(s)
+                    (('+' if s > 0 else '-' if abs(s)
                      == 1 else f'{s:+d}')+f'p_{{{i_ext+1}}}')
                     for i_ext, s in enumerate(mom_sig[1]) if s != 0)
                 if str_mom.startswith('+'):
@@ -780,7 +781,7 @@ class Graph(object):
                 return self.draw_feynmp(model, file_path_without_extension, caption, diagram_id, **drawing_options['feynmp'])
             case _:
                 raise GammaLoopError(
-                    "Feynman drawing mode '%d' is not supported. Currently only 'feynmp' is supported." % drawing_options['mode'])
+                    f"Feynman drawing mode '{drawing_options['mode']}' is not supported. Currently only 'feynmp' is supported.")
 
     def draw_feynmp(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, caption_size: str = '20pt', **drawing_options: Any) -> Path:
 
