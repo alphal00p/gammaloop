@@ -158,10 +158,10 @@ class Vertex(object):
                     break
             else:
                 raise GammaLoopError(
-                    f"Particle {part.name} not found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
+                    f"Particle {part.name} not found in vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}].")
         if len(vertex_particles_per_edge) > 0:
             raise GammaLoopError(
-                f"Not all particles were found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
+                f"Not all particles were found in vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}].")
         self.edges = sorted_edges
 
     def to_serializable_dict(self) -> dict[str, Any]:
