@@ -727,8 +727,12 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
+        target = None
+        if args.target is not None:
+            target = (args.target[0], args.target[1])
+
         self.rust_worker.integrate_integrand(
-            args.integrand, args.cores, args.target)
+            args.integrand, args.cores, target)
 
     # test_ir_limits
     test_ir_limits_parser = ArgumentParser(prog='test_ir_limits')
