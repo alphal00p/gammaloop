@@ -4,6 +4,7 @@ from subprocess import Popen, PIPE
 from pprint import pformat
 from gammaloop.misc.common import GL_PATH, logger, GammaLoopError
 
+
 class TestCode:
 
     @pytest.mark.codecheck
