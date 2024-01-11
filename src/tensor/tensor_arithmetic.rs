@@ -1,3 +1,5 @@
+use crate::tensor::ConcreteIndex;
+
 use super::{DenseTensor, HasTensorStructure, SparseTensor, VecSlotExtension};
 use num::traits::Num;
 use std::ops::{Add, Mul, Sub};
@@ -18,7 +20,7 @@ where
         let mut result = self.clone();
 
         for (indices, value) in other.iter() {
-            let permuted_indices: Vec<usize> =
+            let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self.get(&permuted_indices).unwrap();
             result.set(&indices, *self_value + *value);
@@ -42,7 +44,7 @@ where
         let mut result = self.clone();
 
         for (indices, value) in other.iter() {
-            let permuted_indices: Vec<usize> =
+            let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self
                 .get_with_defaults(&permuted_indices)
@@ -71,7 +73,7 @@ where
         let mut result = self.clone();
 
         for (indices, value) in other.iter() {
-            let permuted_indices: Vec<usize> =
+            let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self.get(&permuted_indices).unwrap();
             result.set(indices, *self_value + *value);
@@ -105,7 +107,7 @@ where
         let mut result = self.clone();
 
         for (indices, value) in other.iter() {
-            let permuted_indices: Vec<usize> =
+            let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self.get(&permuted_indices).unwrap();
             result.set(&indices, *self_value - *value);
@@ -129,7 +131,7 @@ where
         let mut result = self.clone();
 
         for (indices, value) in other.iter() {
-            let permuted_indices: Vec<usize> =
+            let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self
                 .get_with_defaults(&permuted_indices)
@@ -157,7 +159,7 @@ where
         let mut result = self.clone();
 
         for (indices, value) in other.iter() {
-            let permuted_indices: Vec<usize> =
+            let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self.get(&permuted_indices).unwrap();
             result.set(indices, *self_value - *value);

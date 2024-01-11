@@ -10,7 +10,7 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use super::{symbolic_tensor::SymbolicTensor, ufo_spin_tensors::sigma};
+use super::symbolic_tensor::SymbolicTensor;
 
 #[test]
 fn indexflatten() {
@@ -23,12 +23,6 @@ fn indexflatten() {
     // println!("{}", flatidx);
     // println!("{:?}", a.expanded_index(flatidx).unwrap());
     assert_eq!(idx, a.expanded_index(flatidx).unwrap());
-}
-
-#[test]
-fn sigmatest() {
-    let s = sigma::<f32>((1, 2), (1, 2));
-    println!("{:?}", s.elements);
 }
 
 #[test]
@@ -85,7 +79,9 @@ fn contract_densor() {
 fn mixed_tensor_contraction() {
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
 
-    let a = SparseTensor::from_data(&data_a, &[2, 1]).unwrap();
+    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+
+    let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let structur_b = TensorStructure::from_integers(&[2, 4], &[2, 2]);
 
@@ -102,12 +98,14 @@ fn mixed_tensor_contraction() {
 #[test]
 fn contract_spensor() {
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
+    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
 
-    let a = SparseTensor::from_data(&data_a, &[2, 1]).unwrap();
+    let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
+    let structur_b = TensorStructure::from_integers(&[1, 3], &[2, 2]);
 
-    let b = SparseTensor::from_data(&data_b, &[1, 3]).unwrap();
+    let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
     let f = a.contract_with_sparse(&b).unwrap();
 
@@ -119,12 +117,14 @@ fn contract_spensor() {
 #[test]
 fn sparse_addition() {
     let data_a = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
+    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
 
-    let a = SparseTensor::from_data(&data_a, &[2, 1]).unwrap();
+    let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
+    let structur_b = TensorStructure::from_integers(&[1, 2], &[2, 2]);
 
-    let b = SparseTensor::from_data(&data_b, &[1, 2]).unwrap();
+    let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
     let f = a + b;
 
@@ -136,12 +136,15 @@ fn sparse_addition() {
 #[test]
 fn sparse_sub() {
     let data_a = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
+    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
 
-    let a = SparseTensor::from_data(&data_a, &[2, 1]).unwrap();
+    let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 3.0)];
 
-    let b = SparseTensor::from_data(&data_b, &[2, 1]).unwrap();
+    let structur_b = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+
+    let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
     let f = a - b;
 
@@ -154,7 +157,9 @@ fn sparse_sub() {
 fn contract_densor_with_spensor() {
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
 
-    let a = SparseTensor::from_data(&data_a, &[2, 1]).unwrap();
+    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+
+    let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [1.0, 2.0, 3.0, 4.0];
     let structur_b = TensorStructure::from_integers(&[1, 4], &[2, 2]);

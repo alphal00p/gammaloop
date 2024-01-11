@@ -30,7 +30,7 @@ impl<'a> TensorStructureIndexIterator<'a> {
 }
 
 pub struct SparseTensorIterator<'a, T> {
-    iter: std::collections::btree_map::Iter<'a, Vec<usize>, T>,
+    iter: std::collections::btree_map::Iter<'a, Vec<ConcreteIndex>, T>,
 }
 
 impl<'a, T> SparseTensorIterator<'a, T> {
@@ -42,7 +42,7 @@ impl<'a, T> SparseTensorIterator<'a, T> {
 }
 
 impl<'a, T> Iterator for SparseTensorIterator<'a, T> {
-    type Item = (&'a Vec<usize>, &'a T);
+    type Item = (&'a Vec<ConcreteIndex>, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -50,7 +50,7 @@ impl<'a, T> Iterator for SparseTensorIterator<'a, T> {
 }
 
 impl<'a, T> IntoIterator for &'a SparseTensor<T> {
-    type Item = (&'a Vec<usize>, &'a T);
+    type Item = (&'a Vec<ConcreteIndex>, &'a T);
     type IntoIter = SparseTensorIterator<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -156,7 +156,7 @@ where
         }
 
         //make a vector withouth the trace indices
-        let trace_indices: Vec<usize> = self
+        let trace_indices: Vec<ConcreteIndex> = self
             .current_indices
             .clone()
             .into_iter()
@@ -291,7 +291,7 @@ impl<'a, T> DenseTensorIterator<'a, T> {
 }
 
 impl<'a, T> Iterator for DenseTensorIterator<'a, T> {
-    type Item = (Vec<usize>, &'a T);
+    type Item = (Vec<ConcreteIndex>, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Ok(indices) = self.tensor.expanded_index(self.current_flat_index) {
@@ -307,7 +307,7 @@ impl<'a, T> Iterator for DenseTensorIterator<'a, T> {
 }
 
 impl<'a, T> IntoIterator for &'a DenseTensor<T> {
-    type Item = (Vec<usize>, &'a T);
+    type Item = (Vec<ConcreteIndex>, &'a T);
     type IntoIter = DenseTensorIterator<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -316,7 +316,7 @@ impl<'a, T> IntoIterator for &'a DenseTensor<T> {
 }
 
 impl<T> IntoIterator for DenseTensor<T> {
-    type Item = (Vec<usize>, T);
+    type Item = (Vec<ConcreteIndex>, T);
     type IntoIter = DenseTensorIntoIterator<T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -339,7 +339,7 @@ impl<T> DenseTensorIntoIterator<T> {
 }
 
 impl<T> Iterator for DenseTensorIntoIterator<T> {
-    type Item = (Vec<usize>, T);
+    type Item = (Vec<ConcreteIndex>, T);
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Ok(indices) = self.tensor.expanded_index(self.current_flat_index) {
@@ -447,7 +447,7 @@ where
         }
 
         //make a vector without the trace indices
-        let trace_indices: Vec<usize> = self
+        let trace_indices: Vec<ConcreteIndex> = self
             .current_indices
             .clone()
             .into_iter()
@@ -514,7 +514,7 @@ impl<'a, T> DenseTensorFiberIterator<'a, T> {
 }
 
 impl<'a, T> Iterator for DenseTensorFiberIterator<'a, T> {
-    type Item = (Vec<usize>, Vec<&'a T>);
+    type Item = (Vec<ConcreteIndex>, Vec<&'a T>);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_fiber >= self.total_fibers {

@@ -8,7 +8,7 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub struct SparseTensor<T> {
-    pub elements: BTreeMap<Vec<usize>, T>,
+    pub elements: BTreeMap<Vec<ConcreteIndex>, T>,
     pub structure: Vec<Slot>,
 }
 
@@ -38,7 +38,7 @@ impl<T> SparseTensor<T> {
         !self.elements.contains_key(indices)
     }
 
-    pub fn set(&mut self, indices: &[usize], value: T) -> Result<(), String> {
+    pub fn set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         self.elements.insert(indices.to_vec(), value);
         Ok(())
@@ -49,7 +49,7 @@ impl<T> SparseTensor<T>
 where
     T: Default + std::cmp::PartialEq,
 {
-    pub fn smart_set(&mut self, indices: &[usize], value: T) -> Result<(), String> {
+    pub fn smart_set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         if value == T::default() {
             _ = self.elements.remove(indices);
@@ -66,11 +66,11 @@ where
 {
     pub fn from_data(
         data: &[(Vec<ConcreteIndex>, T)],
-        indices: &[AbstractIndex],
+        structure: TensorStructure,
     ) -> Result<Self, String> {
-        let mut dimensions = vec![0; indices.len()];
+        let mut dimensions = vec![0; structure.len()];
         for (index, _) in data {
-            if index.len() != indices.len() {
+            if index.len() != structure.len() {
                 return Err("Mismatched order".to_string());
             }
             for (i, &idx) in index.iter().enumerate() {
@@ -81,7 +81,7 @@ where
         }
         Ok(SparseTensor {
             elements: BTreeMap::from_iter(data.iter().cloned()),
-            structure: TensorStructure::from_integers(indices, &dimensions),
+            structure,
         })
     }
 }
@@ -90,13 +90,13 @@ impl<T> SparseTensor<T>
 where
     T: Clone + Default,
 {
-    pub fn get(&self, indices: &[usize]) -> Result<&T, String> {
+    pub fn get(&self, indices: &[ConcreteIndex]) -> Result<&T, String> {
         self.verify_indices(indices)?;
         self.elements
             .get(indices)
             .ok_or("No elements at that spot".to_string())
     }
-    pub fn get_with_defaults(&self, indices: &[usize]) -> Result<Cow<T>, String> {
+    pub fn get_with_defaults(&self, indices: &[ConcreteIndex]) -> Result<Cow<T>, String> {
         self.verify_indices(indices)?;
         // if the index is in the bTree return the value, else return default, lazily allocating the default
         Ok(match self.elements.get(indices) {
@@ -163,7 +163,7 @@ impl<T: Clone> DenseTensor<T> {
 }
 
 impl<T> DenseTensor<T> {
-    pub fn set(&mut self, indices: &[usize], value: T) {
+    pub fn set(&mut self, indices: &[ConcreteIndex], value: T) {
         let idx = self.flat_index(indices);
         if let Ok(i) = idx {
             self.data[i] = value;
@@ -174,7 +174,7 @@ impl<T> DenseTensor<T> {
         self.data.get(index)
     }
 
-    pub fn get(&self, indices: &[usize]) -> Option<&T> {
+    pub fn get(&self, indices: &[ConcreteIndex]) -> Option<&T> {
         if let Ok(idx) = self.flat_index(indices) {
             Some(&self.data[idx])
         } else if self.structure.is_scalar() && indices.is_empty() {
