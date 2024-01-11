@@ -1,4 +1,5 @@
-# GammaLoop
+# gammaLoop
+![tests status](https://github.com/alphal00p/gammaloop/actions/workflows/gamma_loop_tests.yml/badge.svg?event=push)
 
 *Computation of differential cross-sections using Local Unitarity.*
 
