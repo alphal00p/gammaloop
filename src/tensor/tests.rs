@@ -10,7 +10,7 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use super::symbolic_tensor::SymbolicTensor;
+use super::{symbolic_tensor::SymbolicTensor, ufo_spin_tensors::sigma};
 
 #[test]
 fn indexflatten() {
@@ -23,6 +23,12 @@ fn indexflatten() {
     // println!("{}", flatidx);
     // println!("{:?}", a.expanded_index(flatidx).unwrap());
     assert_eq!(idx, a.expanded_index(flatidx).unwrap());
+}
+
+#[test]
+fn sigmatest() {
+    let s = sigma::<f32>((1, 2), (1, 2));
+    println!("{:?}", s.elements);
 }
 
 #[test]

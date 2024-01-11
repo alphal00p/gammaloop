@@ -237,7 +237,7 @@ fn identity(indices: (usize, usize), signature: Representation) -> DenseTensor<C
 fn main() {
     let start = Instant::now();
 
-    let s = sigma((1, 2), (3, 3));
+    let s = sigma::<f64>((1, 2), (3, 3));
     let duration = start.elapsed();
     println!("{:?} in {:?}", s, duration);
     // let p = [Complex64::new(1.0, 0.0); 4];

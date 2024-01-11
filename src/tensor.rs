@@ -6,8 +6,6 @@ use symbolica::{
 };
 pub type Expr<'a> = AtomBuilder<'a, BufferHandle<'a, Atom>>;
 
-pub mod dupe;
-pub use dupe::*;
 pub use tensor_structure::*;
 pub mod num_tensor;
 pub use num_tensor::*;

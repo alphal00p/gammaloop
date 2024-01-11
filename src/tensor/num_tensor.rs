@@ -2,7 +2,7 @@ use enum_dispatch::enum_dispatch;
 use std::{borrow::Cow, collections::BTreeMap};
 
 use super::{
-    AbstractIndex, ConcreteIndex, Dimension, HasTensorStructure, Position, Slot, TensorStructure,
+    AbstractIndex, ConcreteIndex, Dimension, HasTensorStructure, Slot, TensorStructure,
     VecSlotExtension,
 };
 

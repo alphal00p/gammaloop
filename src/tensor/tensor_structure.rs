@@ -6,11 +6,12 @@ use std::collections::HashSet;
 use std::{cmp::Ordering, collections::HashMap};
 
 use super::TensorStructureIndexIterator;
-
+/// usize is used as label/id for index of tensor
 pub type AbstractIndex = usize;
+/// usize is used as a Dimension
 pub type Dimension = usize;
+/// usize is used as a concrete index, i.e. the concrete usize/index of the corresponding abstract index
 pub type ConcreteIndex = usize;
-pub type Position = usize;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord)]
 pub enum Representation {
@@ -18,24 +19,9 @@ pub enum Representation {
     Lorentz(Dimension),
 }
 
-// impl PartialOrd for Representation {
-//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-//         Some(self.cmp(other))
-//     }
-// }
-
-// impl Ord for Representation {
-//     fn cmp(&self, other: &Self) -> Ordering {
-//         match (self, other) {
-//             (Representation::Euclidean(dim1), Representation::Euclidean(dim2))
-//             | (Representation::Lorentz(dim1), Representation::Lorentz(dim2)) => dim1.cmp(dim2),
-//             (Representation::Euclidean(_), Representation::Lorentz(_)) => Ordering::Less,
-//             (Representation::Lorentz(_), Representation::Euclidean(_)) => Ordering::Greater,
-//         }
-//     }
-// }
-
 impl Representation {
+    #[inline]
+    // this could be implemented directly in the fiberiterator.
     pub fn negative(&self) -> Vec<bool> {
         match self {
             Representation::Euclidean(value) => vec![false; *value],
@@ -142,9 +128,9 @@ pub type TensorStructure = Vec<Slot>;
 pub trait VecSlotExtension {
     fn from_idxsing(indices: &[AbstractIndex], dims: &[Representation]) -> Self;
     fn from_integers(indices: &[AbstractIndex], dims: &[Dimension]) -> Self;
-    fn match_index(&self, other: &Self) -> Option<(Position, Position)>;
-    fn traces(&self) -> Vec<[Position; 2]>;
-    fn merge_at(&self, other: &Self, positions: (Position, Position)) -> Self;
+    fn match_index(&self, other: &Self) -> Option<(usize, usize)>;
+    fn traces(&self) -> Vec<[usize; 2]>;
+    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self;
     fn shape(&self) -> Vec<Dimension>;
     fn order(&self) -> usize;
     fn same_content(&self, other: &Self) -> bool;
@@ -209,7 +195,7 @@ impl VecSlotExtension for TensorStructure {
         Some(permutation)
     }
 
-    fn from_integers(indices: &[AbstractIndex], dims: &[usize]) -> Self {
+    fn from_integers(indices: &[AbstractIndex], dims: &[Dimension]) -> Self {
         indices
             .iter()
             .zip(dims.iter())
@@ -217,7 +203,7 @@ impl VecSlotExtension for TensorStructure {
             .collect()
     }
 
-    fn match_index(&self, other: &Self) -> Option<(Position, Position)> {
+    fn match_index(&self, other: &Self) -> Option<(usize, usize)> {
         for (i, slot_a) in self.iter().enumerate().rev() {
             for (j, slot_b) in other.iter().enumerate() {
                 if slot_a == slot_b {
@@ -228,7 +214,7 @@ impl VecSlotExtension for TensorStructure {
         None
     }
 
-    fn traces(&self) -> Vec<[Position; 2]> {
+    fn traces(&self) -> Vec<[usize; 2]> {
         let mut positions = HashMap::new();
 
         // Track the positions of each element
@@ -249,7 +235,7 @@ impl VecSlotExtension for TensorStructure {
             .collect()
     }
 
-    fn merge_at(&self, other: &Self, positions: (Position, Position)) -> Self {
+    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
         let mut slots_b = other.clone();
         let mut slots_a = self.clone();
 
@@ -318,7 +304,7 @@ impl VecSlotExtension for TensorStructure {
         Ok(())
     }
 
-    fn flat_index(&self, indices: &[usize]) -> Result<usize, String> {
+    fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String> {
         let strides = self.strides();
         self.verify_indices(indices)?;
 
@@ -329,7 +315,7 @@ impl VecSlotExtension for TensorStructure {
         Ok(idx)
     }
 
-    fn expanded_index(&self, flat_index: usize) -> Result<Vec<usize>, String> {
+    fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String> {
         let mut indices = vec![];
         let mut index = flat_index;
         for &stride in self.strides().iter() {
@@ -381,7 +367,7 @@ pub trait HasTensorStructure {
         self.structure().size()
     }
 
-    fn verify_indices(&self, indices: &[usize]) -> Result<(), String> {
+    fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String> {
         self.structure().verify_indices(indices)
     }
 
@@ -389,11 +375,11 @@ pub trait HasTensorStructure {
         self.structure().strides()
     }
 
-    fn flat_index(&self, indices: &[usize]) -> Result<usize, String> {
+    fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String> {
         self.structure().flat_index(indices)
     }
 
-    fn expanded_index(&self, flat_index: usize) -> Result<Vec<usize>, String> {
+    fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String> {
         self.structure().expanded_index(flat_index)
     }
 
@@ -401,7 +387,7 @@ pub trait HasTensorStructure {
         self.structure().match_index(other.structure())
     }
 
-    fn traces(&self) -> Vec<[Position; 2]> {
+    fn traces(&self) -> Vec<[usize; 2]> {
         self.structure().traces()
     }
 

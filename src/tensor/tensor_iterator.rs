@@ -60,13 +60,13 @@ impl<'a, T> IntoIterator for &'a SparseTensor<T> {
 
 pub struct SparseTensorTraceIterator<'a, T> {
     tensor: &'a SparseTensor<T>,
-    trace_indices: [Position; 2],
+    trace_indices: [usize; 2],
     current_indices: Vec<ConcreteIndex>,
     done: bool,
 }
 
 impl<'a, T> SparseTensorTraceIterator<'a, T> {
-    fn new(tensor: &'a SparseTensor<T>, trace_indices: [Position; 2]) -> Self {
+    fn new(tensor: &'a SparseTensor<T>, trace_indices: [usize; 2]) -> Self {
         //trace positions must point to the same dimension
         assert!(
             trace_indices
@@ -128,7 +128,7 @@ where
         indices[self.trace_indices[0]] = i;
         indices[self.trace_indices[1]] = i;
 
-        // Data might not exist at that concrete index position, we advance it till it does, and if not we skip
+        // Data might not exist at that concrete index usize, we advance it till it does, and if not we skip
 
         while self.tensor.is_empty_at(&indices) {
             let Some((i, signint)) = iter.next() else {
@@ -173,7 +173,7 @@ where
 
 pub struct SparseTensorFiberIterator<'a, T> {
     tensor: &'a SparseTensor<T>,
-    fiber_index: Position,
+    fiber_index: usize,
     current_indices: Vec<ConcreteIndex>,
     done: bool,
 }
@@ -204,14 +204,14 @@ impl<'a, T> SparseTensorFiberIterator<'a, T> {
                 *index = 0;
                 continue; // carry over to the next dimension
             }
-            return true; // We've successfully foun+155 m / -164 md the next combination
+            return true; // We've successfully found the next combination
         }
         false // No more combinations left
     }
 }
 
 impl<'a, T> Iterator for SparseTensorFiberIterator<'a, T> {
-    type Item = (Vec<ConcreteIndex>, Vec<Position>, Vec<&'a T>);
+    type Item = (Vec<ConcreteIndex>, Vec<usize>, Vec<&'a T>);
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
             return None;
@@ -233,7 +233,7 @@ impl<'a, T> Iterator for SparseTensorFiberIterator<'a, T> {
         let mut values: Vec<&'a T> = Vec::new();
 
         for (indices, value) in range.filter(|(key, _)| {
-            // Ensure that the difference with start_key is at the same position
+            // Ensure that the difference with start_key is at the same usize
             for (i, index) in key.iter().enumerate() {
                 if self.fiber_index != i && index != &self.current_indices[i] {
                     return false;
@@ -266,7 +266,7 @@ impl<T> SparseTensor<T> {
         SparseTensorFiberIterator::new(self, fiber_index)
     }
 
-    pub fn iter_trace(&self, trace_indices: [Position; 2]) -> SparseTensorTraceIterator<T> {
+    pub fn iter_trace(&self, trace_indices: [usize; 2]) -> SparseTensorTraceIterator<T> {
         SparseTensorTraceIterator::new(self, trace_indices)
     }
 }
@@ -357,13 +357,13 @@ impl<T> Iterator for DenseTensorIntoIterator<T> {
 
 pub struct DenseTensorTraceIterator<'a, T> {
     tensor: &'a DenseTensor<T>,
-    trace_indices: [Position; 2],
+    trace_indices: [usize; 2],
     current_indices: Vec<ConcreteIndex>,
     done: bool,
 }
 
 impl<'a, T> DenseTensorTraceIterator<'a, T> {
-    fn new(tensor: &'a DenseTensor<T>, trace_indices: [Position; 2]) -> Self {
+    fn new(tensor: &'a DenseTensor<T>, trace_indices: [usize; 2]) -> Self {
         assert!(trace_indices.len() >= 2, "Invalid trace indices");
         //trace positions must point to the same dimension
         assert!(
@@ -551,7 +551,7 @@ impl<T> DenseTensor<T> {
         DenseTensorFiberIterator::new(self, fixedindex)
     }
 
-    pub fn iter_trace(&self, trace_indices: [Position; 2]) -> DenseTensorTraceIterator<T> {
+    pub fn iter_trace(&self, trace_indices: [usize; 2]) -> DenseTensorTraceIterator<T> {
         DenseTensorTraceIterator::new(self, trace_indices)
     }
 }
