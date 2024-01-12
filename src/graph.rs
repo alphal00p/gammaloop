@@ -445,6 +445,41 @@ impl Graph {
     }
 
     #[inline]
+    pub fn compute_onshell_energies_in_lmb<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        lmb_idx: usize,
+    ) -> Vec<T> {
+        let lmb = self
+            .derived_data
+            .loop_momentum_bases
+            .as_ref()
+            .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[lmb_idx];
+
+        lmb.edge_signatures
+            .iter()
+            .map(|sig| compute_momentum(sig, loop_moms, external_moms))
+            .zip(self.edges.iter())
+            .map(|(emr_mom, edge)| match edge.edge_type {
+                EdgeType::Virtual => {
+                    if let Some(mass_value) = edge.particle.mass.value {
+                        if mass_value.im != 0. {
+                            panic!("Complex masses not yet supported in gammaLoop")
+                        }
+                        let energy_squared = emr_mom.spatial_squared()
+                            + Into::<T>::into(mass_value.re * mass_value.re);
+                        energy_squared.sqrt()
+                    } else {
+                        emr_mom.spatial_distance()
+                    }
+                }
+                _ => emr_mom.t,
+            })
+            .collect()
+    }
+
+    #[inline]
     pub fn compute_energy_product<T: FloatLike>(
         &self,
         loop_moms: &[LorentzVector<T>],
@@ -459,6 +494,24 @@ impl Graph {
             .map(|(_, val)| Into::<T>::into(2.) * val)
             .fold(Into::<T>::into(1.), |acc, x| acc * x)
     }
+
+    #[inline]
+    pub fn compute_energy_product_in_lmb<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        lmb_idx: usize,
+    ) -> T {
+        let all_energies = self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_idx);
+
+        self.edges
+            .iter()
+            .zip(all_energies.iter())
+            .filter(|(e, _)| e.edge_type == EdgeType::Virtual)
+            .map(|(_, val)| Into::<T>::into(2.) * val)
+            .fold(Into::<T>::into(1.), |acc, x| acc * x)
+    }
+
     #[inline]
     pub fn get_edge_type_list(&self) -> Vec<EdgeType> {
         self.edges.iter().map(|e| e.edge_type.clone()).collect()
