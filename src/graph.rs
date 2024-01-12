@@ -183,6 +183,10 @@ impl Edge {
             ],
         }
     }
+
+    pub fn numerator(self) -> Atom {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -234,8 +238,9 @@ impl Vertex {
                     .map(|ls| {
                         let mut atom = ls.structure.clone();
                         for (i, e) in self.edges.iter().enumerate() {
-                            let pat: Pattern = Atom::new_num(i as i64).into_pattern(state);
-                            let rhs = Pattern::parse(&format!("i{}", e), state, ws).unwrap();
+                            let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern(state);
+                            let rhs =
+                                Pattern::parse(&format!("{}i{}", self.name, e), state, ws).unwrap();
                             let a = atom.clone();
                             pat.replace_all(
                                 a.as_view(),
