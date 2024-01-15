@@ -133,6 +133,60 @@ impl VertexRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializablePropagator {
+    pub name: SmartString<LazyCompact>,
+    pub particle: SmartString<LazyCompact>,
+    pub numerator: SmartString<LazyCompact>,
+    pub denominator: SmartString<LazyCompact>,
+}
+
+impl SerializablePropagator {
+    pub fn from_propagator(
+        propagator: &Propagator,
+        sb_state: &symbolica::state::State,
+    ) -> SerializablePropagator {
+        SerializablePropagator {
+            name: propagator.name.clone(),
+            particle: propagator.particle.name.clone(),
+            numerator: utils::to_str_expression(&propagator.numerator, sb_state),
+            denominator: utils::to_str_expression(&propagator.denominator, sb_state),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Propagator {
+    pub name: SmartString<LazyCompact>,
+    pub particle: Arc<Particle>,
+    pub numerator: Atom,
+    pub denominator: Atom,
+}
+
+impl Propagator {
+    pub fn from_serializable_propagator(
+        model: &Model,
+        propagator: &SerializablePropagator,
+        sb_state: &mut symbolica::state::State,
+        sb_workspace: &symbolica::state::Workspace,
+    ) -> Propagator {
+        Propagator {
+            name: propagator.name.clone(),
+            particle: model.get_particle(&propagator.particle).clone(),
+            numerator: utils::parse_python_expression(
+                propagator.numerator.as_str(),
+                sb_state,
+                sb_workspace,
+            ),
+            denominator: utils::parse_python_expression(
+                propagator.denominator.as_str(),
+                sb_state,
+                sb_workspace,
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableCoupling {
     name: SmartString<LazyCompact>,
     expression: SmartString<LazyCompact>,
@@ -377,6 +431,7 @@ pub struct SerializableModel {
     orders: Vec<Order>,
     parameters: Vec<SerializableParameter>,
     particles: Vec<SerializableParticle>,
+    propagators: Vec<SerializablePropagator>,
     lorentz_structures: Vec<SerializableLorentzStructure>,
     couplings: Vec<SerializableCoupling>,
     vertex_rules: Vec<SerializableVertexRule>,
@@ -419,6 +474,13 @@ impl SerializableModel {
                 .iter()
                 .map(|particle| SerializableParticle::from_particle(particle.as_ref()))
                 .collect(),
+            propagators: model
+                .propagators
+                .iter()
+                .map(|propagator| {
+                    SerializablePropagator::from_propagator(propagator.as_ref(), sb_state)
+                })
+                .collect(),
             lorentz_structures: model
                 .lorentz_structures
                 .iter()
@@ -452,6 +514,7 @@ pub struct Model {
     pub orders: Vec<Arc<Order>>,
     pub parameters: Vec<Arc<Parameter>>,
     pub particles: Vec<Arc<Particle>>,
+    pub propagators: Vec<Arc<Propagator>>,
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Arc<Coupling>>,
     pub vertex_rules: Vec<Arc<VertexRule>>,
@@ -460,6 +523,7 @@ pub struct Model {
     pub lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub particle_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub particle_pdg_to_position: HashMap<isize, usize, RandomState>,
+    pub propagator_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub coupling_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub vertex_rule_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
 }
@@ -472,6 +536,7 @@ impl Default for Model {
             orders: vec![],
             parameters: vec![],
             particles: vec![],
+            propagators: vec![],
             lorentz_structures: vec![],
             couplings: vec![],
             vertex_rules: vec![],
@@ -487,6 +552,8 @@ impl Default for Model {
             particle_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             particle_pdg_to_position: HashMap::<isize, usize, RandomState>::default(),
+            propagator_name_to_position:
+                HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             coupling_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             vertex_rule_name_to_position:
@@ -561,6 +628,26 @@ impl Model {
                     .particle_pdg_to_position
                     .insert(particle.pdg_code, i_part);
                 particle
+            })
+            .collect();
+
+        // Extract propagators
+
+        model.propagators = serializable_model
+            .propagators
+            .iter()
+            .enumerate()
+            .map(|(i_prop, serializable_propagator)| {
+                let propagator = Arc::new(Propagator::from_serializable_propagator(
+                    &model,
+                    serializable_propagator,
+                    sb_state,
+                    sb_workspace,
+                ));
+                model
+                    .propagator_name_to_position
+                    .insert(propagator.name.clone(), i_prop);
+                propagator
             })
             .collect();
 
@@ -670,6 +757,16 @@ impl Model {
             );
         }
     }
+
+    #[inline]
+    pub fn get_propagator(&self, name: &SmartString<LazyCompact>) -> Arc<Propagator> {
+        if let Some(position) = self.propagator_name_to_position.get(name) {
+            self.propagators[*position].clone()
+        } else {
+            panic!("Propagator '{}' not found in model '{}'.", name, self.name);
+        }
+    }
+
     #[inline]
     pub fn get_parameter(&self, name: &SmartString<LazyCompact>) -> Arc<Parameter> {
         if let Some(position) = self.parameter_name_to_position.get(name) {

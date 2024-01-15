@@ -138,6 +138,7 @@ pub struct SerializableEdge {
     name: SmartString<LazyCompact>,
     edge_type: EdgeType,
     particle: SmartString<LazyCompact>,
+    propagator: SmartString<LazyCompact>,
     vertices: [SmartString<LazyCompact>; 2],
 }
 
@@ -147,6 +148,7 @@ impl SerializableEdge {
             name: edge.name.clone(),
             edge_type: edge.edge_type.clone(),
             particle: edge.particle.name.clone(),
+            propagator: edge.propagator.name.clone(),
             vertices: [
                 graph.vertices[edge.vertices[0]].name.clone(),
                 graph.vertices[edge.vertices[1]].name.clone(),
@@ -159,6 +161,7 @@ impl SerializableEdge {
 pub struct Edge {
     pub name: SmartString<LazyCompact>,
     pub edge_type: EdgeType,
+    pub propagator: Arc<model::Propagator>,
     pub particle: Arc<model::Particle>,
     pub vertices: [usize; 2],
 }
@@ -173,6 +176,7 @@ impl Edge {
             name: serializable_edge.name.clone(),
             edge_type: serializable_edge.edge_type.clone(),
             particle: model.get_particle(&serializable_edge.particle),
+            propagator: model.get_propagator(&serializable_edge.propagator),
             vertices: [
                 graph
                     .get_vertex_position(&serializable_edge.vertices[0])

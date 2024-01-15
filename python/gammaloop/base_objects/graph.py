@@ -9,7 +9,8 @@ import yaml
 
 from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger, EMPTY_LIST  # pylint: disable=unused-import # type: ignore
 import gammaloop.misc.utils as utils
-from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter  # type: ignore # pylint: disable=unused-import
+# type: ignore # pylint: disable=unused-import
+from gammaloop.base_objects.model import Model, Propagator, VertexRule, Particle, Parameter
 
 
 class EdgeType(StrEnum):
@@ -204,10 +205,15 @@ class Vertex(object):
 
 
 class Edge(object):
-    def __init__(self, name: str, edge_type: EdgeType, particle: Particle, vertices: tuple[Vertex, Vertex] | None = None):
+    def __init__(self, name: str, edge_type: EdgeType, particle: Particle, propagator: Propagator | None = None, vertices: tuple[Vertex, Vertex] | None = None):
         self.name: str = name
         self.edge_type: EdgeType = edge_type
         self.particle: Particle = particle
+        if propagator is None:
+            self.propagator: Propagator = Propagator.from_particle(
+                particle, 'Feynman')
+        else:
+            self.propagator: Propagator = propagator
         if vertices is None:
             self.vertices: tuple[Vertex, Vertex] = (
                 Vertex.default(), Vertex.default())
@@ -229,6 +235,7 @@ class Edge(object):
             'name': self.name,
             'edge_type': self.edge_type.value,
             'particle': self.particle.name,
+            'propagator': self.propagator.name,
             'vertices': [self.vertices[0].name, self.vertices[1].name]
         }
 
@@ -557,7 +564,11 @@ class Graph(object):
         edge_name_to_edge_map = {}
         for e_qgraph in serializable_dict['edges']:
             e_name = e_qgraph['name']
-            edge = Edge(e_name, EdgeType(e_qgraph['edge_type']), model.get_particle(e_qgraph['particle']),
+            try:
+                props = model.get_propagator(e_qgraph['propagator'])
+            except KeyError:
+                props = None
+            edge = Edge(e_name, EdgeType(e_qgraph['edge_type']), model.get_particle(e_qgraph['particle']), props,
                         (vertex_name_to_vertex_map[e_qgraph['vertices'][0]],
                         vertex_name_to_vertex_map[e_qgraph['vertices'][1]])
                         )
@@ -592,7 +603,7 @@ class Graph(object):
 
     @staticmethod
     def from_qgraph(model: Model, qgraph_object: dict[str, Any], name: str = 'default') -> Graph:
-        """ Imports graph form a stylicized qgraph python output file. Will be deprecated when using in-house gammaloop graph generation. """
+        """ Imports graph from a stylicized qgraph python output file. Will be deprecated when using in-house gammaloop graph generation. """
 
         graph_vertices: list[Vertex] = []
         vertex_qgraph_index_to_vertex_map: dict[str, Vertex] = {}
@@ -606,7 +617,11 @@ class Graph(object):
         edge_qgraph_index_to_edge_map = {}
         qgraph_edges = list(qgraph_object['edges'].items())
         for e_qgraph_index, e_qgraph in qgraph_edges:
-            edge = Edge(e_qgraph['name'], EdgeType(e_qgraph['type']), model.get_particle_from_pdg(e_qgraph['PDG']),
+            try:
+                props = model.get_propagator(e_qgraph['propagator'])
+            except KeyError:
+                props = None
+            edge = Edge(e_qgraph['name'], EdgeType(e_qgraph['type']), model.get_particle_from_pdg(e_qgraph['PDG']), props,
                         (vertex_qgraph_index_to_vertex_map[e_qgraph['vertices'][0]],
                         vertex_qgraph_index_to_vertex_map[e_qgraph['vertices'][1]])
                         )
