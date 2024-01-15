@@ -135,12 +135,12 @@ class Propagator(object):
                 denominator = 'P(1)**2'
         elif particle.spin == 3:  # vector 2s+1=3
             if particle.is_massive():
-                numerator = f'PSlash(1,2)+{particle.mass.name}'
+                numerator = f'-Metric(1,2)+P(1)*P(2)/{particle.mass.name}**2'
                 denominator = f'P(1)**2-{particle.mass.name}**2'
             else:
                 denominator = 'P(1)**2'
                 if gauge == 'Feynman':
-                    numerator = f'-Metric(1,2)+P(1)*P(2)/{particle.mass.name}**2'
+                    numerator = '-Metric(1,2)'
                 else:
                     raise GammaLoopError(
                         f'Gauge {gauge} not implemented for vector particles')

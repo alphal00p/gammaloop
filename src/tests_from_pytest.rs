@@ -943,26 +943,50 @@ fn pytest_lbl_box() {
     graph.generate_numerator(&model, &mut sb_state, &sb_workspace);
     println!();
 
-    for v in graph
-        .vertices
-        .iter()
-        .filter(|v| v.vertex_info.get_type() == "interacton_vertex_info")
-    {
-        println!("vertex: {}", v.name);
+    // for v in graph
+    //     .vertices
+    //     .iter()
+    //     .filter(|v| v.vertex_info.get_type() == "interacton_vertex_info")
+    // {
+    //     println!("vertex: {}", v.name);
 
-        println!("From edges: ");
-        for (i, e) in v.edges.clone().iter().enumerate() {
-            println!("{} : {:?}", i, graph.edges[*e].particle.name)
-        }
-        println!("From vertex info: ");
-        if let VertexInfo::InteractonVertexInfo(s) = &v.vertex_info {
-            s.vertex_rule
-                .particles
-                .iter()
-                .enumerate()
-                .for_each(|(i, p)| println!("{} : {:?}", i, p.name));
-        }
-    }
+    //     println!("From edges: ");
+    //     for (i, e) in v.edges.clone().iter().enumerate() {
+    //         println!("{} : {:?}", i, graph.edges[*e].particle.name)
+    //     }
+    //     println!("From vertex info: ");
+    //     if let VertexInfo::InteractonVertexInfo(s) = &v.vertex_info {
+    //         s.vertex_rule
+    //             .particles
+    //             .iter()
+    //             .enumerate()
+    //             .for_each(|(i, p)| println!("{} : {:?}", i, p.name));
+    //     }
+    // }
+
+    // for e in graph.edges.iter() {
+    //     println!("edge: {}", e.name);
+    //     for v in e.vertices {
+    //         if e.is_incoming_to(v) {
+    //             println!("incoming to vertex: {}", graph.vertices[v].name);
+    //         } else {
+    //             println!("outgoing to vertex: {}", graph.vertices[v].name);
+    //         }
+    //         let i = graph.vertices[v]
+    //             .edges
+    //             .iter()
+    //             .enumerate()
+    //             .filter(|(_, &es)| es == graph.get_edge_position(&e.name).unwrap())
+    //             .map(|(i, _)| i)
+    //             .collect::<Vec<usize>>();
+
+    //         if let VertexInfo::InteractonVertexInfo(s) = &graph.vertices[v].vertex_info {
+    //             let p = &s.vertex_rule.particles[i[0]];
+    //             println!("{:?}", p.name);
+    //         }
+    //     }
+    // }
+
     println!(
         "{}",
         graph.derived_data.numerator.unwrap().printer(&sb_state)

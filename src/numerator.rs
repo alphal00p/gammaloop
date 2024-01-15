@@ -10,17 +10,26 @@ pub fn generate_numerator(graph: &Graph, model: &Model, state: &mut State, ws: &
     let vatoms: Vec<Atom> = graph
         .vertices
         .iter()
-        .flat_map(|v| v.apply_vertex_rule(state, ws))
+        .flat_map(|v| v.apply_vertex_rule(graph, state, ws))
         .collect();
     // graph
     //     .edges
     //     .iter()
     //     .filter(|e| e.edge_type == EdgeType::Virtual)
     //     .map(|e| e.particle);
+    let eatoms: Vec<Atom> = graph
+        .edges
+        .iter()
+        .map(|e| e.numerator(graph, state, ws))
+        .collect();
     let mut builder = vatoms[0].builder(state, ws);
 
     for v in vatoms[1..].iter() {
         builder = builder * v;
+    }
+
+    for e in eatoms.iter() {
+        builder = builder * e;
     }
 
     builder.into_atom()

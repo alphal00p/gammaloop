@@ -188,8 +188,51 @@ impl Edge {
         }
     }
 
-    pub fn numerator(self) -> Atom {
-        todo!()
+    pub fn is_incoming_to(&self, vertex: usize) -> bool {
+        self.vertices[1] == vertex
+    }
+
+    pub fn numerator(&self, graph: &Graph, state: &mut State, ws: &Workspace) -> Atom {
+        let mut atom = self.propagator.numerator.clone();
+
+        let pat: Pattern = Atom::new_num(1).into_pattern(state);
+        let rhs = Pattern::parse(
+            &format!("in{}", graph.edge_name_to_position.get(&self.name).unwrap()),
+            state,
+            ws,
+        )
+        .unwrap();
+
+        pat.replace_all(
+            atom.clone().as_view(),
+            &rhs,
+            state,
+            ws,
+            &HashMap::default(),
+            &mut atom,
+        );
+
+        let pat: Pattern = Atom::new_num(2).into_pattern(state);
+        let rhs = Pattern::parse(
+            &format!(
+                "out{}",
+                graph.edge_name_to_position.get(&self.name).unwrap()
+            ),
+            state,
+            ws,
+        )
+        .unwrap();
+
+        pat.replace_all(
+            atom.clone().as_view(),
+            &rhs,
+            state,
+            ws,
+            &HashMap::default(),
+            &mut atom,
+        );
+
+        atom
     }
 }
 
@@ -231,7 +274,11 @@ impl Vertex {
         }
     }
 
-    pub fn apply_vertex_rule(&self, state: &mut State, ws: &Workspace) -> Vec<Atom> {
+    pub fn is_edge_incoming(&self, edge: usize, graph: &Graph) -> bool {
+        graph.is_edge_incoming(edge, graph.get_vertex_position(&self.name).unwrap())
+    }
+
+    pub fn apply_vertex_rule(&self, graph: &Graph, state: &mut State, ws: &Workspace) -> Vec<Atom> {
         match &self.vertex_info {
             VertexInfo::ExternalVertexInfo(_) => vec![],
             VertexInfo::InteractonVertexInfo(interaction_vertex_info) => {
@@ -243,8 +290,12 @@ impl Vertex {
                         let mut atom = ls.structure.clone();
                         for (i, e) in self.edges.iter().enumerate() {
                             let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern(state);
-                            let rhs =
-                                Pattern::parse(&format!("{}i{}", self.name, e), state, ws).unwrap();
+                            let dir = if self.is_edge_incoming(*e, graph) {
+                                "in"
+                            } else {
+                                "out"
+                            };
+                            let rhs = Pattern::parse(&format!("{}{}", dir, e), state, ws).unwrap();
                             let a = atom.clone();
                             pat.replace_all(
                                 a.as_view(),
@@ -761,6 +812,10 @@ impl Graph {
         let derived_data = DerivedGraphData::load_from_path(path)?;
         self.derived_data = derived_data;
         Ok(())
+    }
+
+    pub fn is_edge_incoming(&self, edge: usize, vertex: usize) -> bool {
+        self.edges[edge].is_incoming_to(vertex)
     }
 }
 
