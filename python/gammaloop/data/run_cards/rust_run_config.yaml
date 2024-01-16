@@ -1,6 +1,7 @@
 General:
   debug: 0
   use_ltd: false
+  discrete_sample_graphs: false
 Integrand:
   type: gamma_loop
 Kinematics:
@@ -17,16 +18,16 @@ Kinematics:
 Parameterization:
   mode: spherical
   mapping: linear
-  b: 1.0
+  b: 10.0
 Integrator:
-  n_bins: 0
+  n_bins: 16
   bin_number_evolution: null
-  min_samples_for_update: 0
-  n_start: 0
+  min_samples_for_update: 100
+  n_start: 1000000
   n_increase: 0
-  n_max: 0
+  n_max: 1000000000
   integrated_phase: real
-  learning_rate: 0.0
+  learning_rate: 1.5
   train_on_avg: false
   show_max_wgt_info: false
   max_prob_ratio: 0.0
@@ -36,16 +37,20 @@ Stability:
   rotation_axis: x
   levels:
   - precision: Double
-    required_precision_for_re: 1e-15
-    required_precision_for_im: 1e-15
+    required_precision_for_re: 1e-5
+    required_precision_for_im: 1e-5
     escalate_for_large_weight_threshold: 0.9
     accepted_radius_in_x_range:
     - 0.0
     - 0.9
   - precision: Quad
-    required_precision_for_re: 1e-15
-    required_precision_for_im: 1e-15
+    required_precision_for_re: 1e-5
+    required_precision_for_im: 1e-5
     escalate_for_large_weight_threshold: -1.0
     accepted_radius_in_x_range:
     - 0.0
     - 1.0
+multi_channeling:
+  enabled: false
+  discrete_sampling: false
+  alpha: 1.0

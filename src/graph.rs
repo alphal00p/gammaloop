@@ -421,27 +421,8 @@ impl Graph {
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
     ) -> Vec<T> {
-        self.loop_momentum_basis
-            .edge_signatures
-            .iter()
-            .map(|sig| compute_momentum(sig, loop_moms, external_moms))
-            .zip(self.edges.iter())
-            .map(|(emr_mom, edge)| match edge.edge_type {
-                EdgeType::Virtual => {
-                    if let Some(mass_value) = edge.particle.mass.value {
-                        if mass_value.im != 0. {
-                            panic!("Complex masses not yet supported in gammaLoop")
-                        }
-                        let energy_squared = emr_mom.spatial_squared()
-                            + Into::<T>::into(mass_value.re * mass_value.re);
-                        energy_squared.sqrt()
-                    } else {
-                        emr_mom.spatial_distance()
-                    }
-                }
-                _ => emr_mom.t,
-            })
-            .collect()
+        let lmb_sepcification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
+        self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_sepcification)
     }
 
     #[inline]
@@ -449,13 +430,16 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
-        lmb_idx: usize,
+        lmb_specification: LoopMomentumBasisSpecification,
     ) -> Vec<T> {
-        let lmb = self
-            .derived_data
-            .loop_momentum_bases
-            .as_ref()
-            .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[lmb_idx];
+        let lmb = match lmb_specification {
+            LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
+                .derived_data
+                .loop_momentum_bases
+                .as_ref()
+                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[lmb_idx],
+            LoopMomentumBasisSpecification::Literal(basis) => basis,
+        };
 
         lmb.edge_signatures
             .iter()
@@ -485,14 +469,8 @@ impl Graph {
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
     ) -> T {
-        let all_energies = self.compute_onshell_energies(loop_moms, external_moms);
-
-        self.edges
-            .iter()
-            .zip(all_energies.iter())
-            .filter(|(e, _)| e.edge_type == EdgeType::Virtual)
-            .map(|(_, val)| Into::<T>::into(2.) * val)
-            .fold(Into::<T>::into(1.), |acc, x| acc * x)
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
+        self.compute_energy_product_in_lmb(loop_moms, external_moms, lmb_specification)
     }
 
     #[inline]
@@ -500,9 +478,10 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
-        lmb_idx: usize,
+        lmb_specification: LoopMomentumBasisSpecification,
     ) -> T {
-        let all_energies = self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_idx);
+        let all_energies =
+            self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_specification);
 
         self.edges
             .iter()
@@ -681,7 +660,17 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         independent_external_momenta: &[LorentzVector<T>],
+        lmb_specification: &LoopMomentumBasisSpecification,
     ) -> Vec<T> {
+        let lmb = match lmb_specification {
+            LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
+                .derived_data
+                .loop_momentum_bases
+                .as_ref()
+                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*lmb_idx],
+            LoopMomentumBasisSpecification::Literal(basis) => basis,
+        };
+
         let mut energy_cache = vec![T::zero(); self.edges.len()];
         // some gymnastics to account for the sign of outgoing momenta
 
@@ -714,7 +703,7 @@ impl Graph {
                 EdgeType::Virtual => {
                     if let Some(mass_value) = edge.particle.mass.value {
                         let energy_squared = compute_momentum(
-                            &self.loop_momentum_basis.edge_signatures[index],
+                            &lmb.edge_signatures[index],
                             loop_moms,
                             independent_external_momenta,
                         )
@@ -723,7 +712,7 @@ impl Graph {
                         energy_squared.sqrt()
                     } else {
                         compute_momentum(
-                            &self.loop_momentum_basis.edge_signatures[index],
+                            &lmb.edge_signatures[index],
                             loop_moms,
                             independent_external_momenta,
                         )
@@ -742,23 +731,34 @@ impl Graph {
     }
 
     #[inline]
-    pub fn evaluate_cff_expression<T: FloatLike>(
+    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &self,
         loop_moms: &[LorentzVector<T>],
-        independent_external_momenta: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        lmb_specification: &LoopMomentumBasisSpecification,
     ) -> Complex<T> {
         let loop_number = self.loop_momentum_basis.basis.len();
-        let internal_vertex_numer = self.vertices.len() - self.external_connections.len();
+        let internal_vertex_number = self.vertices.len() - self.external_connections.len();
 
         let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32)
-            * Complex::new(-T::one(), T::zero()).powi(internal_vertex_numer as i32 - 1);
+            * Complex::new(-T::one(), T::zero()).powi(internal_vertex_number as i32 - 1);
 
         // here numerator evaluation can be weaved into the summation
         prefactor
             * self
-                .evaluate_cff_orientations(loop_moms, independent_external_momenta)
+                .evaluate_cff_orientations(loop_moms, external_moms, lmb_specification)
                 .into_iter()
                 .sum::<T>()
+    }
+
+    #[inline]
+    pub fn evaluate_cff_expression<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+    ) -> Complex<T> {
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
+        self.evaluate_cff_expression_in_lmb(loop_moms, external_moms, &lmb_specification)
     }
 
     pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
@@ -891,4 +891,10 @@ impl LoopMomentumBasis {
 pub struct SerializableLoopMomentumBasis {
     pub basis: Vec<usize>,
     pub edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,
+}
+
+// helper enum for different ways of specifying an lmb to compute stuff in.
+pub enum LoopMomentumBasisSpecification<'a> {
+    Literal(&'a LoopMomentumBasis),
+    FromList(usize),
 }

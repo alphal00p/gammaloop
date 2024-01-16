@@ -1,14 +1,11 @@
-use crate::gammaloop_integrand::{
-    GammaLoopIntegrand, GammaLoopIntegrandType, GammaloopIntegrandTerm,
-};
+use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{Graph, SerializableGraph};
 use crate::model::Model;
-use crate::utils::*;
+use crate::{utils::*, Settings};
 use bincode;
 use color_eyre::{Help, Report};
 #[allow(unused_imports)]
 use eyre::{eyre, Context};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -278,6 +275,7 @@ pub struct SerializableAmplitudeGraph {
     pub fs_cut_id: usize,
     pub amplitude_side: Side,
     pub graph: SerializableGraph,
+    pub multi_channeling_channels: Vec<usize>, // empty list defaults to all channels if multi_channeling is enabled
 }
 
 impl SerializableAmplitudeGraph {
@@ -288,6 +286,7 @@ impl SerializableAmplitudeGraph {
             fs_cut_id: amplitude_graph.fs_cut_id,
             amplitude_side: amplitude_graph.amplitude_side.clone(),
             graph: SerializableGraph::from_graph(&amplitude_graph.graph),
+            multi_channeling_channels: amplitude_graph.multi_channeling_channels.clone(),
         }
     }
 }
@@ -299,6 +298,7 @@ pub struct AmplitudeGraph {
     pub fs_cut_id: usize,
     pub amplitude_side: Side,
     pub graph: Graph,
+    pub multi_channeling_channels: Vec<usize>,
 }
 
 impl AmplitudeGraph {
@@ -312,11 +312,8 @@ impl AmplitudeGraph {
             fs_cut_id: amplitude_graph.fs_cut_id,
             amplitude_side: amplitude_graph.amplitude_side.clone(),
             graph: Graph::from_serializable_graph(model, &amplitude_graph.graph),
+            multi_channeling_channels: amplitude_graph.multi_channeling_channels.clone(),
         }
-    }
-
-    pub fn create_amplitude_integrand_term(&self) -> GammaloopIntegrandTerm {
-        GammaloopIntegrandTerm::from_single_graph(self.graph.clone())
     }
 }
 
@@ -546,12 +543,6 @@ impl Amplitude {
         &self,
         path_to_settings: &Path,
     ) -> Result<GammaLoopIntegrand, Report> {
-        let terms = self
-            .amplitude_graphs
-            .iter()
-            .map(|amplitude_graph| amplitude_graph.create_amplitude_integrand_term())
-            .collect_vec();
-
         let settings_string = fs::read_to_string(path_to_settings)
             .wrap_err_with(|| {
                 format!(
@@ -561,14 +552,13 @@ impl Amplitude {
             })
             .suggestion("does the path exist?")?;
 
-        let settings = serde_yaml::from_str(&settings_string)
+        let settings: Settings = serde_yaml::from_str(&settings_string)
             .wrap_err("Could not parse settings yaml content")
             .suggestion("Is it a correct yaml file")?;
 
-        Ok(GammaLoopIntegrand::from_terms(
-            terms,
-            GammaLoopIntegrandType::Amplitude,
-            settings,
+        Ok(GammaLoopIntegrand::amplitude_integrand_constructor(
+            self.clone(),
+            settings.clone(),
         ))
     }
 }

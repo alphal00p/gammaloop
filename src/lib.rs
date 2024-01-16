@@ -105,6 +105,7 @@ pub enum ParameterizationMapping {
 pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
+    pub discrete_sample_graphs: bool,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize)]
@@ -182,6 +183,8 @@ pub struct Settings {
     #[serde(rename = "Stability")]
     #[serde(default = "StabilitySettings::default")]
     pub stability: StabilitySettings,
+    #[serde(rename = "multi_channeling")]
+    pub multi_channeling: MultiChannelingSettings,
 }
 
 impl Settings {
@@ -310,4 +313,11 @@ impl Default for Externals {
     fn default() -> Self {
         Externals::Constant(vec![[0.0; 4]; 15])
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MultiChannelingSettings {
+    pub enabled: bool,
+    pub discrete_sampling: bool, // if true, use discrete sampling over channels
+    pub alpha: f64,
 }
