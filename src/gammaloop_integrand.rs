@@ -1,7 +1,7 @@
 use core::panic;
 use std::time::Duration;
 
-use crate::cross_section::{Amplitude, AmplitudeGraph, SuperGraph};
+use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
 use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
@@ -72,6 +72,7 @@ impl Statistics {
         }
     }
 
+    #[allow(unused)]
     fn merge(&self, other: &Self) -> Self {
         Self {
             max_re_eval: self.max_re_eval.abs().max(other.max_re_eval.abs()),
@@ -299,15 +300,6 @@ fn evaluate<T: GraphIntegrand, F: FloatLike>(
             .map(|g| g.evaluate(channel_id, loop_moms, external_moms, settings))
             .sum(),
     }
-}
-#[inline]
-fn compute_energy_product<T: GraphIntegrand, F: FloatLike>(
-    graph_integrand: &T,
-    loop_moms: &[LorentzVector<F>],
-    external_moms: &[LorentzVector<F>],
-) -> F {
-    let graph = graph_integrand.get_graph();
-    graph.compute_energy_product(loop_moms, external_moms)
 }
 
 fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> Grid<f64> {
@@ -561,9 +553,9 @@ impl HasIntegrand for GammaLoopIntegrand {
     fn update_results(&mut self, _iter: usize) {}
 }
 
-#[allow(clippy::too_many_arguments)]
 impl GammaLoopIntegrand {
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_at_prec(
         &self,
         graph_id: Option<usize>,
@@ -840,6 +832,17 @@ impl GammaLoopIntegrand {
         Self {
             settings,
             graph_integrands: GraphIntegrands::Amplitude(amplitude.amplitude_graphs),
+            statistics: Statistics::new(),
+        }
+    }
+
+    pub fn cross_section_integrand_constructor(
+        cross_section: CrossSection,
+        settings: Settings,
+    ) -> Self {
+        Self {
+            settings,
+            graph_integrands: GraphIntegrands::CrossSection(cross_section.supergraphs),
             statistics: Statistics::new(),
         }
     }
