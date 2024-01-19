@@ -3,7 +3,10 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use crate::{graph::Graph, model::Model};
+use crate::{
+    graph::{EdgeType, Graph},
+    model::Model,
+};
 
 pub fn generate_numerator(graph: &Graph, model: &Model, state: &mut State, ws: &Workspace) -> Atom {
     let _ = model;
@@ -20,6 +23,7 @@ pub fn generate_numerator(graph: &Graph, model: &Model, state: &mut State, ws: &
     let eatoms: Vec<Atom> = graph
         .edges
         .iter()
+        .filter(|e| e.edge_type == EdgeType::Virtual)
         .map(|e| e.numerator(graph, state, ws))
         .collect();
     let mut builder = vatoms[0].builder(state, ws);
