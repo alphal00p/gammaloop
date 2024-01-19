@@ -1,183 +1,419 @@
+use num::Complex;
 use std::collections::BTreeMap;
 use symbolica::{
-    representations::{number::Number, AsAtomView, Atom, FunctionBuilder, Identifier},
-    state::{State, Workspace},
+    representations::{
+        default::Linear, number::Number, AsAtomView, Atom, FunctionBuilder, Identifier,
+    },
+    state::{ResettableBuffer, State, Workspace},
 };
 
 use super::{
-    ContractableWithDense, ContractableWithSparse, DenseTensor, Expr, HasTensorStructure,
-    SparseTensor, TensorStructure, VecSlotExtension,
+    DenseTensor, Expr, HasTensorStructure, SmallestUpgrade, SparseTensor, TensorStructure,
+    VecSlotExtension,
 };
 
-impl<'a> ContractableWithDense<Expr<'a>> for SparseTensor<Expr<'a>> {
-    fn contract_with_dense(&self, other: &DenseTensor<Expr<'a>>) -> Option<DenseTensor<Expr<'a>>> {
-        if let Some((i, j)) = self.match_index(other) {
-            let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let state = self.iter().next().unwrap().1.state;
-            let workspace = self.iter().next().unwrap().1.workspace;
-            let zero = workspace.new_num(0);
+pub trait SmallestUpgradeSymbolic<T> {
+    type LCMS<'a>;
+    fn upgrade_sym<'a>(self, ws: &'a Workspace, state: &'a State) -> Option<Self::LCMS<'a>>;
+}
 
-            let neutral_summand = zero.builder(state, workspace);
-            let mut result_data = vec![neutral_summand; final_structure.size()];
-            let metric = self.structure()[i].representation.negative();
-
-            for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
-                for (index_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = final_structure
-                        .flat_index(
-                            &index_a[..i]
-                                .iter()
-                                .chain(&index_a[i + 1..])
-                                .chain(&index_b[..j])
-                                .chain(&index_b[j + 1..])
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap();
-                    for (i, k) in nonzeros.iter().enumerate() {
-                        if metric[*k] {
-                            result_data[result_index] =
-                                -(fiber_a[i].clone() * fiber_b[*k]) + &result_data[result_index];
-                        } else {
-                            result_data[result_index] =
-                                (fiber_a[i].clone() * fiber_b[*k]) + &result_data[result_index];
-                        }
-                    }
-                }
-            }
-
-            let result = DenseTensor {
-                data: result_data,
-                structure: final_structure,
-            };
-
-            if result.traces().is_empty() {
-                return Some(result);
-            } else {
-                return Some(result.internal_contract());
-            }
-        }
-        None
+impl<'a> SmallestUpgrade<f64> for Expr<'a> {
+    type LCM = Expr<'a>;
+    fn upgrade(self) -> Self::LCM {
+        self
     }
 }
 
-impl<'a> ContractableWithDense<Expr<'a>> for DenseTensor<Expr<'a>> {
-    fn contract_with_dense(&self, other: &DenseTensor<Expr<'a>>) -> Option<DenseTensor<Expr<'a>>> {
-        if let Some((i, j)) = self.match_index(other) {
-            let dimension_of_contraction = self.shape()[i];
-            let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let state = self.iter().next().unwrap().1.state;
-            let workspace = self.iter().next().unwrap().1.workspace;
-            let zero = workspace.new_num(0);
-            let neutral_summand = zero.builder(state, workspace);
-            let mut result_data = vec![neutral_summand; final_structure.size()];
-            let metric = self.structure()[i].representation.negative();
-
-            for (index_a, fiber_a) in self.iter_fibers(i) {
-                for (index_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = final_structure
-                        .flat_index(
-                            &index_a[..i]
-                                .iter()
-                                .chain(&index_a[i + 1..])
-                                .chain(&index_b[..j])
-                                .chain(&index_b[j + 1..])
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap();
-                    for i in 0..dimension_of_contraction {
-                        if metric[i] {
-                            result_data[result_index] -= &(fiber_a[i].clone() * fiber_b[i]);
-                        } else {
-                            result_data[result_index] += &(fiber_a[i].clone() * fiber_b[i]);
-                        }
-                    }
-                }
-            }
-
-            let result = DenseTensor {
-                data: result_data,
-                structure: final_structure,
-            };
-
-            if result.traces().is_empty() {
-                return Some(result);
-            } else {
-                return Some(result.internal_contract());
-            }
-        }
-        None
+impl<'a> SmallestUpgrade<Complex<f64>> for Expr<'a> {
+    type LCM = Expr<'a>;
+    fn upgrade(self) -> Self::LCM {
+        self
     }
 }
 
-impl<'a> ContractableWithSparse<Expr<'a>> for DenseTensor<Expr<'a>> {
-    fn contract_with_sparse(
-        &self,
-        other: &SparseTensor<Expr<'a>>,
-    ) -> Option<DenseTensor<Expr<'a>>> {
-        other.contract_with_dense(self)
+impl SmallestUpgrade<f64> for Atom {
+    type LCM = Atom;
+    fn upgrade(self) -> Self::LCM {
+        self
     }
 }
 
-impl<'a> ContractableWithSparse<Expr<'a>> for SparseTensor<Expr<'a>> {
-    fn contract_with_sparse(
-        &self,
-        other: &SparseTensor<Expr<'a>>,
-    ) -> Option<SparseTensor<Expr<'a>>> {
-        if let Some((i, j)) = self.match_index(other) {
-            let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let state = self.iter().next().unwrap().1.state;
-            let workspace = self.iter().next().unwrap().1.workspace;
-            let zero = workspace.new_num(0);
-            let neutral_summand = zero.builder(state, workspace);
-            let mut result_data = BTreeMap::new();
-            let metric = self.structure()[i].representation.negative();
-
-            for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
-                for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = index_a[..i]
-                        .iter()
-                        .chain(&index_a[i + 1..])
-                        .chain(&index_b[..j])
-                        .chain(&index_b[j + 1..])
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    let mut value = neutral_summand.clone();
-                    let mut nonzero = false;
-                    for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
-                        nonzeros_b.binary_search(&x).ok().map(|j| (i, j, x)) // Only store the positions
-                    }) {
-                        // Adjust indices for fetching from the other tensor
-                        if metric[x] {
-                            value -= &(fiber_a[i].clone() * fiber_b[j]);
-                        } else {
-                            value += &(fiber_a[i].clone() * fiber_b[j]);
-                        }
-
-                        nonzero = true;
-                    }
-
-                    if nonzero && value.as_atom_view() != zero.as_atom_view() {
-                        result_data.insert(result_index, value);
-                    }
-                }
-            }
-
-            let result = SparseTensor {
-                elements: result_data,
-                structure: final_structure,
-            };
-
-            if result.traces().is_empty() {
-                return Some(result);
-            } else {
-                return Some(result.internal_contract());
-            }
-        }
-        None
+impl SmallestUpgrade<Complex<f64>> for Atom {
+    type LCM = Atom;
+    fn upgrade(self) -> Self::LCM {
+        self
     }
 }
+
+impl<T, U> SmallestUpgradeSymbolic<T> for U
+where
+    U: SmallestUpgrade<T>,
+    T: SmallestUpgrade<U, LCM = U::LCM>,
+{
+    type LCMS<'a> = U::LCM;
+    fn upgrade_sym<'a>(self, _ws: &'a Workspace, _state: &'a State) -> Option<Self::LCMS<'a>> {
+        Some(self.upgrade())
+    }
+}
+
+// impl<T> SmallestUpgradeSymbolic<T> for T {
+//     type LCM = T;
+//     fn upgrade_sym(self, ws: &Workspace, state: &State) -> Option<Self::LCM> {
+//         Some(self)
+//     }
+// }
+
+// impl SmallestUpgradeSymbolic<f64> for Complex<f64> {
+//     type LCM = Complex<f64>;
+//     fn upgrade_sym(self, ws: &Workspace, state: &State) -> Option<Self::LCM> {
+//         Some(self)
+//     }
+// }
+
+// impl SmallestUpgradeSymbolic<Complex<f64>> for f64 {
+//     type LCM = Complex<f64>;
+//     fn upgrade_sym(self, ws: &Workspace, state: &State) -> Option<Self::LCM> {
+//         Some(Complex::new(self, 0.0))
+//     }
+// }
+
+// impl<T> SmallestUpgradeSymbolic<T> for Atom {
+//     type LCM = Atom;
+//     fn upgrade_sym(self, ws: &Workspace, state: &State) -> Option<Self::LCM> {
+//         Some(self)
+//     }
+// }
+
+impl SmallestUpgradeSymbolic<Atom> for f64 {
+    type LCMS<'a> = Atom;
+    fn upgrade_sym<'a>(self, ws: &'a Workspace, _state: &'a State) -> Option<Self::LCMS<'a>> {
+        let rugrat = rug::Rational::from_f64(self)?;
+        let natrat = symbolica::rings::rational::Rational::from_large(rugrat);
+        let symrat = Atom::new_from_view(&ws.new_num(Number::from(natrat)).as_view());
+
+        Some(symrat)
+    }
+}
+
+impl SmallestUpgradeSymbolic<Atom> for num::Complex<f64> {
+    type LCMS<'a> = Atom;
+    fn upgrade_sym<'a>(self, ws: &'a Workspace, state: &'a State) -> Option<Self::LCMS<'a>> {
+        return Some(Atom::new_from_view(
+            &SmallestUpgradeSymbolic::<Expr>::upgrade_sym(self, ws, state)?.as_atom_view(),
+        ));
+    }
+}
+
+impl<'a> SmallestUpgradeSymbolic<Atom> for Expr<'a> {
+    type LCMS<'b> = Expr<'a>;
+    fn upgrade_sym<'b>(self, _ws: &'b Workspace, _state: &'b State) -> Option<Self::LCMS<'b>> {
+        Some(self)
+    }
+}
+
+// impl<'a, T> SmallestUpgradeSymbolic<T> for Expr<'a> {
+//     type LCM = Expr<'a>;
+//     fn upgrade_sym(self, ws: &Workspace, state: &State) -> Option<Self::LCM> {
+//         Some(self)
+//     }
+// }
+
+impl<'a> SmallestUpgradeSymbolic<Expr<'a>> for f64 {
+    type LCMS<'b> = Expr<'b>;
+    fn upgrade_sym<'b>(self, ws: &'b Workspace, state: &'b State) -> Option<Self::LCMS<'b>> {
+        let a: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state).unwrap();
+        Some(a.builder(state, ws))
+    }
+}
+
+impl<'a> SmallestUpgradeSymbolic<Expr<'a>> for num::Complex<f64> {
+    type LCMS<'b> = Expr<'b>;
+    fn upgrade_sym<'c>(self, ws: &'c Workspace, state: &'c State) -> Option<Self::LCMS<'c>> {
+        let real = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self.re, ws, state)?;
+        let imag = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self.im, ws, state)?;
+        let i = Atom::new_var(State::I);
+        let symrat = (i.builder(state, ws) * &imag) + &real;
+
+        Some(symrat)
+    }
+}
+
+impl<'a> SmallestUpgradeSymbolic<Expr<'a>> for Atom {
+    type LCMS<'b> = Atom;
+    fn upgrade_sym<'c>(self, ws: &'c Workspace, state: &'c State) -> Option<Self::LCMS<'c>> {
+        Some(self)
+    }
+}
+
+trait SymbolicMul<T> {
+    type Output<'a>;
+    fn mul_sym<'a>(self, other: T, ws: &'a Workspace, state: &'a State)
+        -> Option<Self::Output<'a>>;
+}
+
+impl<T> SymbolicMul<T> for T
+where
+    T: std::ops::Mul<T>,
+{
+    type Output<'b> = T::Output;
+    fn mul_sym<'b>(
+        self,
+        other: T,
+        _ws: &'b Workspace,
+        _state: &'b State,
+    ) -> Option<Self::Output<'b>> {
+        Some(self * other)
+    }
+}
+
+// impl<'a> SymbolicMul<f64> for Expr<'a> {
+//     type Output<'b> = Expr<'a>;
+//     fn mul_sym<'b>(
+//         self,
+//         other: f64,
+//         ws: &'b Workspace,
+//         state: &'b State,
+//     ) -> Option<Self::Output<'b>> {
+//         let other: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(other, ws, state)?;
+//         Some(self * &other)
+//     }
+// }
+
+// impl<'a> SymbolicMul<Expr<'a>> for f64 {
+//     type Output<'b> = Expr<'b>;
+//     fn mul_sym<'b>(
+//         self,
+//         other: Expr<'b>,
+//         ws: &'b Workspace,
+//         state: &'b State,
+//     ) -> Option<Self::Output<'b>> {
+//         let atomself: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state)?;
+//         Some(other * &atomself)
+//     }
+// }
+
+impl SymbolicMul<Atom> for f64 {
+    type Output<'a> = Atom;
+    fn mul_sym<'a>(
+        self,
+        other: Atom,
+        ws: &'a Workspace,
+        state: &'a State,
+    ) -> Option<Self::Output<'a>> {
+        let atomself: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state)?;
+        let mut out: Atom<Linear> = Atom::new();
+        other.mul(state, ws, &atomself, &mut out);
+        Some(out)
+    }
+}
+
+impl SymbolicMul<f64> for Atom {
+    type Output<'a> = Atom;
+    fn mul_sym<'a>(
+        self,
+        other: f64,
+        ws: &'a Workspace,
+        state: &'a State,
+    ) -> Option<Self::Output<'a>> {
+        let otheratom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(other, ws, state)?;
+        let mut out = Atom::new();
+        self.mul(state, ws, &otheratom, &mut out);
+        Some(out)
+    }
+}
+
+// pub fn mul_sym<'a, T, U>(
+//     right: T,
+//     left: U,
+//     ws: &'a Workspace,
+//     state: &'a State,
+// ) -> Option<U::LCMS<'a>>
+// where
+//     T: SmallestUpgradeSymbolic<U>,
+//     U: SmallestUpgradeSymbolic<T>,
+//     U::LCMS<'a>: std::ops::Mul<T::LCMS<'a>, Output = U::LCMS<'a>>,
+// {
+//     let right = right.upgrade_sym(ws, state)?;
+//     let left = left.upgrade_sym(ws, state)?;
+//     Some(left * right)
+// }
+
+// impl<'a> SmallestUpgrade<Expr<'a>> for f64 {
+//     type Output = Expr<'a>;
+//     fn upgrade(self) -> Self::Output {
+//         Atom::new_num(self)
+//     }
+// }
+
+// impl<'a> ContractableWithDense<Expr<'a>> for SparseTensor<Expr<'a>> {
+//     fn contract_with_dense(&self, other: &DenseTensor<Expr<'a>>) -> Option<DenseTensor<Expr<'a>>> {
+//         if let Some((i, j)) = self.match_index(other) {
+//             let final_structure = self.structure().merge_at(other.structure(), (i, j));
+//             let state = self.iter().next().unwrap().1.state;
+//             let workspace = self.iter().next().unwrap().1.workspace;
+//             let zero = workspace.new_num(0);
+
+//             let neutral_summand = zero.builder(state, workspace);
+//             let mut result_data = vec![neutral_summand; final_structure.size()];
+//             let metric = self.structure()[i].representation.negative();
+
+//             for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
+//                 for (index_b, fiber_b) in other.iter_fibers(j) {
+//                     let result_index = final_structure
+//                         .flat_index(
+//                             &index_a[..i]
+//                                 .iter()
+//                                 .chain(&index_a[i + 1..])
+//                                 .chain(&index_b[..j])
+//                                 .chain(&index_b[j + 1..])
+//                                 .cloned()
+//                                 .collect::<Vec<_>>(),
+//                         )
+//                         .unwrap();
+//                     for (i, k) in nonzeros.iter().enumerate() {
+//                         if metric[*k] {
+//                             result_data[result_index] =
+//                                 -(fiber_a[i].clone() * fiber_b[*k]) + &result_data[result_index];
+//                         } else {
+//                             result_data[result_index] =
+//                                 (fiber_a[i].clone() * fiber_b[*k]) + &result_data[result_index];
+//                         }
+//                     }
+//                 }
+//             }
+
+//             let result = DenseTensor {
+//                 data: result_data,
+//                 structure: final_structure,
+//             };
+
+//             if result.traces().is_empty() {
+//                 return Some(result);
+//             } else {
+//                 return Some(result.internal_contract());
+//             }
+//         }
+//         None
+//     }
+// }
+
+// impl<'a> ContractableWithDense<Expr<'a>> for DenseTensor<Expr<'a>> {
+//     fn contract_with_dense(&self, other: &DenseTensor<Expr<'a>>) -> Option<DenseTensor<Expr<'a>>> {
+//         if let Some((i, j)) = self.match_index(other) {
+//             let dimension_of_contraction = self.shape()[i];
+//             let final_structure = self.structure().merge_at(other.structure(), (i, j));
+//             let state = self.iter().next().unwrap().1.state;
+//             let workspace = self.iter().next().unwrap().1.workspace;
+//             let zero = workspace.new_num(0);
+//             let neutral_summand = zero.builder(state, workspace);
+//             let mut result_data = vec![neutral_summand; final_structure.size()];
+//             let metric = self.structure()[i].representation.negative();
+
+//             for (index_a, fiber_a) in self.iter_fibers(i) {
+//                 for (index_b, fiber_b) in other.iter_fibers(j) {
+//                     let result_index = final_structure
+//                         .flat_index(
+//                             &index_a[..i]
+//                                 .iter()
+//                                 .chain(&index_a[i + 1..])
+//                                 .chain(&index_b[..j])
+//                                 .chain(&index_b[j + 1..])
+//                                 .cloned()
+//                                 .collect::<Vec<_>>(),
+//                         )
+//                         .unwrap();
+//                     for i in 0..dimension_of_contraction {
+//                         if metric[i] {
+//                             result_data[result_index] -= &(fiber_a[i].clone() * fiber_b[i]);
+//                         } else {
+//                             result_data[result_index] += &(fiber_a[i].clone() * fiber_b[i]);
+//                         }
+//                     }
+//                 }
+//             }
+
+//             let result = DenseTensor {
+//                 data: result_data,
+//                 structure: final_structure,
+//             };
+
+//             if result.traces().is_empty() {
+//                 return Some(result);
+//             } else {
+//                 return Some(result.internal_contract());
+//             }
+//         }
+//         None
+//     }
+// }
+
+// impl<'a> ContractableWithSparse<Expr<'a>> for DenseTensor<Expr<'a>> {
+//     fn contract_with_sparse(
+//         &self,
+//         other: &SparseTensor<Expr<'a>>,
+//     ) -> Option<DenseTensor<Expr<'a>>> {
+//         other.contract_with_dense(self)
+//     }
+// }
+
+// impl<'a> ContractableWithSparse<Expr<'a>> for SparseTensor<Expr<'a>> {
+//     fn contract_with_sparse(
+//         &self,
+//         other: &SparseTensor<Expr<'a>>,
+//     ) -> Option<SparseTensor<Expr<'a>>> {
+//         if let Some((i, j)) = self.match_index(other) {
+//             let final_structure = self.structure().merge_at(other.structure(), (i, j));
+//             let state = self.iter().next().unwrap().1.state;
+//             let workspace = self.iter().next().unwrap().1.workspace;
+//             let zero = workspace.new_num(0);
+//             let neutral_summand = zero.builder(state, workspace);
+//             let mut result_data = BTreeMap::new();
+//             let metric = self.structure()[i].representation.negative();
+
+//             for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
+//                 for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
+//                     let result_index = index_a[..i]
+//                         .iter()
+//                         .chain(&index_a[i + 1..])
+//                         .chain(&index_b[..j])
+//                         .chain(&index_b[j + 1..])
+//                         .cloned()
+//                         .collect::<Vec<_>>();
+//                     let mut value = neutral_summand.clone();
+//                     let mut nonzero = false;
+//                     for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
+//                         nonzeros_b.binary_search(&x).ok().map(|j| (i, j, x)) // Only store the positions
+//                     }) {
+//                         // Adjust indices for fetching from the other tensor
+//                         if metric[x] {
+//                             value -= &(fiber_a[i].clone() * fiber_b[j]);
+//                         } else {
+//                             value += &(fiber_a[i].clone() * fiber_b[j]);
+//                         }
+
+//                         nonzero = true;
+//                     }
+
+//                     if nonzero && value.as_atom_view() != zero.as_atom_view() {
+//                         result_data.insert(result_index, value);
+//                     }
+//                 }
+//             }
+
+//             let result = SparseTensor {
+//                 elements: result_data,
+//                 structure: final_structure,
+//             };
+
+//             if result.traces().is_empty() {
+//                 return Some(result);
+//             } else {
+//                 return Some(result.internal_contract());
+//             }
+//         }
+//         None
+//     }
+// }
 
 pub trait ConvertableToSymbolic {
     fn to_symbolic<'a>(&self, ws: &'a Workspace, state: &'a State) -> Option<Atom>;

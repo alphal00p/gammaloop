@@ -1,4 +1,5 @@
 use enum_dispatch::enum_dispatch;
+use num::Complex;
 use std::{borrow::Cow, collections::BTreeMap};
 
 use super::{
@@ -227,11 +228,6 @@ impl<T> SparseTensor<T> {
         }
     }
 }
-trait NumericTensor<T> {}
-
-impl<T> NumericTensor<T> for DenseTensor<T> {}
-
-impl<T> NumericTensor<T> for SparseTensor<T> {}
 
 #[enum_dispatch(HasTensorStructure)]
 pub enum NumTensor<T> {
@@ -239,18 +235,15 @@ pub enum NumTensor<T> {
     Sparse(SparseTensor<T>),
 }
 
-// impl<T> NumTensor<T>
-// where
-//     T: Default
-//         + Clone
-//         + std::ops::AddAssign
-//         + std::ops::SubAssign
-//         + std::ops::Mul<Output = T>
-//         + Copy
-//         + std::cmp::PartialEq
-//         + std::fmt::Debug,
-// {
-//     pub fn contract(&self, other: &Self) -> Option<Self> {
+// trait UpcastableTo<T> {}
+
+// impl UpcastableTo<Complex<f64>> for f64 {}
+
+// impl<T> NumTensor<T> {
+//     pub fn contract<U>(&self, other: &NumTensor<U>) -> Option<Self>
+//     where
+//         U: UpcastableTo<T>,
+//     {
 //         match (self, other) {
 //             (NumTensor::Dense(s), NumTensor::Dense(o)) => {
 //                 s.contract_with_dense(o).map(NumTensor::Dense)

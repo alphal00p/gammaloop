@@ -1,3 +1,5 @@
+use num::Complex;
+
 use super::*;
 use std::ops::Neg;
 impl<T> DenseTensor<T>
@@ -76,189 +78,294 @@ where
 //     ) -> Option<C>;
 // }
 
-pub trait ContractableWithDense<T> {
-    fn contract_with_dense(&self, other: &DenseTensor<T>) -> Option<DenseTensor<T>>;
+pub trait Upgradable {}
+impl Upgradable for f64 {}
+impl Upgradable for Complex<f64> {}
+pub trait SmallestUpgrade<T> {
+    type LCM;
+    fn upgrade(self) -> Self::LCM;
 }
 
-pub trait ContractableWithSparse<T> {
-    fn contract_with_sparse(&self, other: &SparseTensor<T>) -> Option<Self>
-    where
-        Self: std::marker::Sized;
+// impl SmallestUpgrade<A> for B {
+//     type LCM = B;
+// }
+
+impl<T> SmallestUpgrade<T> for T {
+    type LCM = T;
+    fn upgrade(self) -> Self::LCM {
+        self
+    }
 }
-macro_rules! contract_with_dense_impl {
-    ($t:ty,$u:ty) => {
-        impl ContractableWithDense<$t> for SparseTensor<$u> {
-            fn contract_with_dense(&self, other: &DenseTensor<$t>) -> Option<DenseTensor<$t>> {
-                if let Some((i, j)) = self.match_index(other) {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
-                    let mut result_data = vec![<$t>::default(); final_structure.size()];
 
-                    let metric = self.structure()[i].representation.negative();
-
-                    for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
-                        for (index_b, fiber_b) in other.iter_fibers(j) {
-                            let result_index = final_structure
-                                .flat_index(
-                                    &index_a[..i]
-                                        .iter()
-                                        .chain(&index_a[i + 1..])
-                                        .chain(&index_b[..j])
-                                        .chain(&index_b[j + 1..])
-                                        .cloned()
-                                        .collect::<Vec<_>>(),
-                                )
-                                .unwrap();
-                            for (i, k) in nonzeros.iter().enumerate() {
-                                // Adjust indices for fetching from the other tensor
-                                if metric[*k] {
-                                    result_data[result_index] -= (*fiber_a[i] * *fiber_b[*k]);
-                                } else {
-                                    result_data[result_index] += *fiber_a[i] * *fiber_b[*k];
-                                }
-                            }
-                        }
-                    }
-
-                    let result = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    if result.traces().is_empty() {
-                        return Some(result);
-                    } else {
-                        return Some(result.internal_contract());
-                    }
-                }
-                None
-            }
-        }
-        impl ContractableWithDense<$t> for DenseTensor<$u> {
-            fn contract_with_dense(&self, other: &DenseTensor<$t>) -> Option<DenseTensor<$t>> {
-                if let Some((i, j)) = self.match_index(other) {
-                    // println!("{},{}", i, j);
-                    let self_shape = self.shape();
-
-                    let dimension_of_contraction = self_shape[i];
-                    let metric = self.structure()[i].representation.negative();
-
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
-
-                    // Initialize result tensor with default values
-                    let mut result_data = vec![<$t>::default(); final_structure.size()];
-
-                    for (index_a, fiber_a) in self.iter_fibers(i) {
-                        for (index_b, fiber_b) in other.iter_fibers(j) {
-                            let result_index = final_structure
-                                .flat_index(
-                                    &index_a[..i]
-                                        .iter()
-                                        .chain(&index_a[i + 1..])
-                                        .chain(&index_b[..j])
-                                        .chain(&index_b[j + 1..])
-                                        .cloned()
-                                        .collect::<Vec<_>>(),
-                                )
-                                .unwrap();
-
-                            for k in 0..dimension_of_contraction {
-                                // Adjust indices for fetching from the other tensor
-                                if metric[k] {
-                                    result_data[result_index] -= *fiber_a[k] * *fiber_b[k];
-                                } else {
-                                    result_data[result_index] += *fiber_a[k] * *fiber_b[k];
-                                }
-                            }
-                        }
-                    }
-
-                    let result = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    if result.traces().is_empty() {
-                        return Some(result);
-                    } else {
-                        return Some(result.internal_contract());
-                    }
-                }
-                None
-            }
-        }
-    };
+impl SmallestUpgrade<f64> for Complex<f64> {
+    type LCM = Complex<f64>;
+    fn upgrade(self) -> Self::LCM {
+        self
+    }
 }
-// contract_with_dense_impl!(
-//     AtomBuilder<'_, BufferHandle<'_, Atom>>,
-//     AtomBuilder<'_, BufferHandle<'_, Atom>>
-// );
-contract_with_dense_impl!(f64, f64);
-contract_with_dense_impl!(num::Complex<f64>, num::Complex<f64>);
-contract_with_dense_impl!(num::Complex<f64>, f64);
 
-macro_rules! contract_with_sparse_impl {
-    ($t:ty,$u:ty) => {
-        impl ContractableWithSparse<$u> for SparseTensor<$t> {
-            fn contract_with_sparse(&self, other: &SparseTensor<$u>) -> Option<Self> {
-                if let Some((i, j)) = self.match_index(other) {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
-                    let mut result_data = BTreeMap::new();
+impl SmallestUpgrade<Complex<f64>> for f64 {
+    type LCM = Complex<f64>;
+    fn upgrade(self) -> Self::LCM {
+        Complex::new(self, 0.0)
+    }
+}
 
-                    let metric = self.structure()[i].representation.negative();
+// pub fn mul<'a, 'b, T, U>(right: &'a T, left: &'b U) -> <&'b U as SmallestUpgrade<&'b T>>::LCM
+// where
+//     &'b U: SmallestUpgrade<&'b T>,
+//     &'a T: SmallestUpgrade<&'b U, LCM = <&'b U as SmallestUpgrade<&'b T>>::LCM>,
+//     <&'b U as SmallestUpgrade<&'b T>>::LCM: std::ops::Mul<
+//         <&'b U as SmallestUpgrade<&'b T>>::LCM,
+//         Output = <&'b U as SmallestUpgrade<&'b T>>::LCM,
+//     >,
+// {
+//     left.upgrade() * right.upgrade()
+// }
 
-                    for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
-                        for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
-                            let result_index = index_a[..i]
+pub fn mul<T, U>(right: T, left: U) -> U::LCM
+where
+    U: SmallestUpgrade<T>,
+    T: SmallestUpgrade<U>,
+    U::LCM: std::ops::Mul<T::LCM, Output = U::LCM>,
+{
+    left.upgrade() * right.upgrade()
+}
+pub trait Contract<T> {
+    type LCM;
+    fn contract(&self, other: &T) -> Option<Self::LCM>;
+}
+
+impl<T, U> Contract<DenseTensor<T>> for DenseTensor<U>
+where
+    T: SmallestUpgrade<U> + Copy,
+    U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
+    T::LCM: std::ops::AddAssign<T::LCM>
+        + std::ops::SubAssign<T::LCM>
+        + for<'a> std::ops::AddAssign<&'a T::LCM>
+        + for<'b> std::ops::SubAssign<&'b T::LCM>
+        + std::fmt::Debug
+        + Neg<Output = T::LCM>
+        + Default
+        + Clone
+        + std::ops::Mul<T::LCM, Output = T::LCM>,
+{
+    type LCM = DenseTensor<T::LCM>;
+    fn contract(&self, other: &DenseTensor<T>) -> Option<Self::LCM> {
+        if let Some((i, j)) = self.match_index(other) {
+            // println!("{},{}", i, j);
+            let self_shape = self.shape();
+
+            let dimension_of_contraction = self_shape[i];
+            let metric = self.structure()[i].representation.negative();
+
+            let final_structure = self.structure().merge_at(other.structure(), (i, j));
+
+            // Initialize result tensor with default values
+            let mut result_data = vec![T::LCM::default(); final_structure.size()];
+
+            for (index_a, fiber_a) in self.iter_fibers(i) {
+                for (index_b, fiber_b) in other.iter_fibers(j) {
+                    let result_index = final_structure
+                        .flat_index(
+                            &index_a[..i]
                                 .iter()
                                 .chain(&index_a[i + 1..])
                                 .chain(&index_b[..j])
                                 .chain(&index_b[j + 1..])
                                 .cloned()
-                                .collect::<Vec<_>>();
+                                .collect::<Vec<_>>(),
+                        )
+                        .unwrap();
 
-                            let mut value = <$t>::default();
-                            let mut nonzero = false;
-                            for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
-                                nonzeros_b.binary_search(&x).ok().map(|j| (i, j, x)) // Only store the positions
-                            }) {
-                                // Adjust indices for fetching from the other tensor
-                                if metric[x] {
-                                    value -= *fiber_a[i] * *fiber_b[j];
-                                } else {
-                                    value += *fiber_a[i] * *fiber_b[j];
-                                }
-
-                                nonzero = true;
-                            }
-
-                            if nonzero && value != <$t>::default() {
-                                result_data.insert(result_index, value);
-                            }
+                    for k in 0..dimension_of_contraction {
+                        // Adjust indices for fetching from the other tensor
+                        if metric[k] {
+                            result_data[result_index] -= mul(*fiber_a[k], *fiber_b[k]);
+                        } else {
+                            result_data[result_index] += mul(*fiber_a[k], *fiber_b[k]);
                         }
                     }
-
-                    let result = SparseTensor {
-                        elements: result_data,
-                        structure: final_structure,
-                    };
-
-                    if result.traces().is_empty() {
-                        return Some(result);
-                    } else {
-                        return Some(result.internal_contract());
-                    }
                 }
-                None
+            }
+
+            let result = DenseTensor {
+                data: result_data,
+                structure: final_structure,
+            };
+
+            if result.traces().is_empty() {
+                return Some(result);
+            } else {
+                return Some(result.internal_contract());
             }
         }
-        impl ContractableWithSparse<$u> for DenseTensor<$t> {
-            fn contract_with_sparse(&self, other: &SparseTensor<$u>) -> Option<Self> {
-                other.contract_with_dense(self)
-            }
-        }
-    };
+        None
+    }
 }
 
-contract_with_sparse_impl!(f64, f64);
-contract_with_sparse_impl!(num::Complex<f64>, num::Complex<f64>);
-contract_with_sparse_impl!(num::Complex<f64>, f64);
+impl<T, U> Contract<DenseTensor<T>> for SparseTensor<U>
+where
+    T: SmallestUpgrade<U> + Copy,
+    U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
+    T::LCM: std::ops::AddAssign<T::LCM>
+        + std::ops::SubAssign<T::LCM>
+        + for<'a> std::ops::AddAssign<&'a T::LCM>
+        + for<'b> std::ops::SubAssign<&'b T::LCM>
+        + std::fmt::Debug
+        + Neg<Output = T::LCM>
+        + Default
+        + Clone
+        + std::ops::Mul<T::LCM, Output = T::LCM>,
+{
+    type LCM = DenseTensor<T::LCM>;
+    fn contract(&self, other: &DenseTensor<T>) -> Option<Self::LCM> {
+        // println!("Contracting SparseTensor DenseTensor");
+        if let Some((i, j)) = self.match_index(other) {
+            let final_structure = self.structure().merge_at(other.structure(), (i, j));
+            let mut result_data = vec![<T::LCM>::default(); final_structure.size()];
+
+            let metric = self.structure()[i].representation.negative();
+
+            for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
+                for (index_b, fiber_b) in other.iter_fibers(j) {
+                    let result_index = final_structure
+                        .flat_index(
+                            &index_a[..i]
+                                .iter()
+                                .chain(&index_a[i + 1..])
+                                .chain(&index_b[..j])
+                                .chain(&index_b[j + 1..])
+                                .cloned()
+                                .collect::<Vec<_>>(),
+                        )
+                        .unwrap();
+                    for (i, k) in nonzeros.iter().enumerate() {
+                        // Adjust indices for fetching from the other tensor
+                        if metric[*k] {
+                            result_data[result_index] -= mul(*fiber_a[i], *fiber_b[*k]);
+                        } else {
+                            result_data[result_index] += mul(*fiber_a[i], *fiber_b[*k]);
+                        }
+                    }
+                }
+            }
+
+            let result = DenseTensor {
+                data: result_data,
+                structure: final_structure,
+            };
+
+            if result.traces().is_empty() {
+                return Some(result);
+            } else {
+                return Some(result.internal_contract());
+            }
+        }
+        None
+    }
+}
+
+impl<T, U> Contract<SparseTensor<T>> for SparseTensor<U>
+where
+    T: SmallestUpgrade<U> + Copy,
+    U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
+    T::LCM: std::ops::AddAssign<T::LCM>
+        + std::ops::SubAssign<T::LCM>
+        + for<'a> std::ops::AddAssign<&'a T::LCM>
+        + for<'b> std::ops::SubAssign<&'b T::LCM>
+        + std::fmt::Debug
+        + Neg<Output = T::LCM>
+        + std::cmp::PartialOrd
+        + Default
+        + Clone
+        + std::ops::Mul<T::LCM, Output = T::LCM>,
+{
+    type LCM = SparseTensor<T::LCM>;
+    fn contract(&self, other: &SparseTensor<T>) -> Option<Self::LCM> {
+        // println!("Contracting SparseTensor SparseTensor");
+        if let Some((i, j)) = self.match_index(other) {
+            let final_structure = self.structure().merge_at(other.structure(), (i, j));
+            let mut result_data = BTreeMap::new();
+
+            let metric = self.structure()[i].representation.negative();
+
+            for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
+                for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
+                    let result_index = index_a[..i]
+                        .iter()
+                        .chain(&index_a[i + 1..])
+                        .chain(&index_b[..j])
+                        .chain(&index_b[j + 1..])
+                        .cloned()
+                        .collect::<Vec<_>>();
+
+                    let mut value = <T::LCM>::default();
+                    let mut nonzero = false;
+                    for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
+                        nonzeros_b.binary_search(&x).ok().map(|j| (i, j, x)) // Only store the positions
+                    }) {
+                        // Adjust indices for fetching from the other tensor
+                        if metric[x] {
+                            value -= mul(*fiber_a[i], *fiber_b[j]);
+                        } else {
+                            value += mul(*fiber_a[i], *fiber_b[j]);
+                        }
+
+                        nonzero = true;
+                    }
+
+                    if nonzero && value != <T::LCM>::default() {
+                        result_data.insert(result_index, value);
+                    }
+                }
+            }
+
+            let result = SparseTensor {
+                elements: result_data,
+                structure: final_structure,
+            };
+
+            if result.traces().is_empty() {
+                return Some(result);
+            } else {
+                return Some(result.internal_contract());
+            }
+        }
+        None
+    }
+}
+
+impl<T, U> Contract<SparseTensor<T>> for DenseTensor<U>
+where
+    T: SmallestUpgrade<U> + Copy,
+    U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
+    T::LCM: std::ops::AddAssign<T::LCM>
+        + std::ops::SubAssign<T::LCM>
+        + for<'a> std::ops::AddAssign<&'a T::LCM>
+        + for<'b> std::ops::SubAssign<&'b T::LCM>
+        + std::fmt::Debug
+        + Neg<Output = T::LCM>
+        + Default
+        + Clone
+        + std::ops::Mul<T::LCM, Output = T::LCM>,
+{
+    type LCM = DenseTensor<T::LCM>;
+    fn contract(&self, other: &SparseTensor<T>) -> Option<Self::LCM> {
+        other.contract(self)
+    }
+}
+
+enum UpgradableType {
+    F64(f64),
+    Complex(Complex<f64>),
+}
+
+enum ContractableTensor {
+    Dense(DenseTensor<UpgradableType>),
+    Sparse(SparseTensor<UpgradableType>),
+}
+
+struct TensorNetwork {
+    tensors: Vec<ContractableTensor>,
+}
