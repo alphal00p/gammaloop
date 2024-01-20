@@ -1,5 +1,5 @@
 use num::Complex;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, process::Output};
 use symbolica::{
     representations::{
         default::Linear, number::Number, AsAtomView, Atom, FunctionBuilder, Identifier,
@@ -95,6 +95,17 @@ impl SmallestUpgradeSymbolic<Atom> for f64 {
     }
 }
 
+impl SmallestUpgradeSymbolic<Atom> for &f64 {
+    type LCMS<'a> = Atom;
+    fn upgrade_sym<'a>(self, ws: &'a Workspace, _state: &'a State) -> Option<Self::LCMS<'a>> {
+        let rugrat = rug::Rational::from_f64(*self)?;
+        let natrat = symbolica::rings::rational::Rational::from_large(rugrat);
+        let symrat = Atom::new_from_view(&ws.new_num(Number::from(natrat)).as_view());
+
+        Some(symrat)
+    }
+}
+
 impl SmallestUpgradeSymbolic<Atom> for num::Complex<f64> {
     type LCMS<'a> = Atom;
     fn upgrade_sym<'a>(self, ws: &'a Workspace, state: &'a State) -> Option<Self::LCMS<'a>> {
@@ -126,6 +137,14 @@ impl<'a> SmallestUpgradeSymbolic<Expr<'a>> for f64 {
     }
 }
 
+impl<'a> SmallestUpgradeSymbolic<Expr<'a>> for &f64 {
+    type LCMS<'b> = Expr<'b>;
+    fn upgrade_sym<'b>(self, ws: &'b Workspace, state: &'b State) -> Option<Self::LCMS<'b>> {
+        let a: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state).unwrap();
+        Some(a.builder(state, ws))
+    }
+}
+
 impl<'a> SmallestUpgradeSymbolic<Expr<'a>> for num::Complex<f64> {
     type LCMS<'b> = Expr<'b>;
     fn upgrade_sym<'c>(self, ws: &'c Workspace, state: &'c State) -> Option<Self::LCMS<'c>> {
@@ -145,26 +164,26 @@ impl<'a> SmallestUpgradeSymbolic<Expr<'a>> for Atom {
     }
 }
 
-trait SymbolicMul<T> {
-    type Output<'a>;
-    fn mul_sym<'a>(self, other: T, ws: &'a Workspace, state: &'a State)
-        -> Option<Self::Output<'a>>;
-}
+// trait SymbolicMul<T> {
+//     type Output<'a>;
+//     fn mul_sym<'a>(self, other: T, ws: &'a Workspace, state: &'a State)
+//         -> Option<Self::Output<'a>>;
+// }
 
-impl<T> SymbolicMul<T> for T
-where
-    T: std::ops::Mul<T>,
-{
-    type Output<'b> = T::Output;
-    fn mul_sym<'b>(
-        self,
-        other: T,
-        _ws: &'b Workspace,
-        _state: &'b State,
-    ) -> Option<Self::Output<'b>> {
-        Some(self * other)
-    }
-}
+// impl<T> SymbolicMul<T> for T
+// where
+//     T: std::ops::Mul<T>,
+// {
+//     type Output<'b> = T::Output;
+//     fn mul_sym<'b>(
+//         self,
+//         other: T,
+//         _ws: &'b Workspace,
+//         _state: &'b State,
+//     ) -> Option<Self::Output<'b>> {
+//         Some(self * other)
+//     }
+// }
 
 // impl<'a> SymbolicMul<f64> for Expr<'a> {
 //     type Output<'b> = Expr<'a>;
@@ -192,14 +211,64 @@ where
 //     }
 // }
 
+// impl SymbolicMul<Atom> for f64 {
+//     type Output<'a> = Atom;
+//     fn mul_sym<'a>(
+//         self,
+//         other: Atom,
+//         ws: &'a Workspace,
+//         state: &'a State,
+//     ) -> Option<Self::Output<'a>> {
+//         let atomself: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state)?;
+//         let mut out: Atom<Linear> = Atom::new();
+//         other.mul(state, ws, &atomself, &mut out);
+//         Some(out)
+//     }
+// }
+
+// impl SymbolicMul<f64> for Atom {
+//     type Output<'a> = Atom;
+//     fn mul_sym<'a>(
+//         self,
+//         other: f64,
+//         ws: &'a Workspace,
+//         state: &'a State,
+//     ) -> Option<Self::Output<'a>> {
+//         let otheratom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(other, ws, state)?;
+//         let mut out = Atom::new();
+//         self.mul(state, ws, &otheratom, &mut out);
+//         Some(out)
+//     }
+// }
+
+trait SymbolicMul<T> {
+    type Output;
+    fn mul_sym<'b>(&self, other: &T, ws: &'b Workspace, state: &'b State) -> Option<Self::Output>;
+}
+
+impl<T, Out> SymbolicMul<T> for T
+where
+    for<'a> &'a T: std::ops::Mul<&'a T, Output = Out>,
+{
+    type Output = Out;
+    fn mul_sym<'c>(
+        &self,
+        other: &T,
+        _ws: &'c Workspace,
+        _state: &'c State,
+    ) -> Option<Self::Output> {
+        Some(self * other)
+    }
+}
+
 impl SymbolicMul<Atom> for f64 {
-    type Output<'a> = Atom;
+    type Output = Atom;
     fn mul_sym<'a>(
-        self,
-        other: Atom,
+        &self,
+        other: &Atom,
         ws: &'a Workspace,
         state: &'a State,
-    ) -> Option<Self::Output<'a>> {
+    ) -> Option<Self::Output> {
         let atomself: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state)?;
         let mut out: Atom<Linear> = Atom::new();
         other.mul(state, ws, &atomself, &mut out);
@@ -208,19 +277,177 @@ impl SymbolicMul<Atom> for f64 {
 }
 
 impl SymbolicMul<f64> for Atom {
-    type Output<'a> = Atom;
+    type Output = Atom;
     fn mul_sym<'a>(
-        self,
-        other: f64,
+        &self,
+        other: &f64,
         ws: &'a Workspace,
         state: &'a State,
-    ) -> Option<Self::Output<'a>> {
+    ) -> Option<Self::Output> {
         let otheratom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(other, ws, state)?;
         let mut out = Atom::new();
         self.mul(state, ws, &otheratom, &mut out);
         Some(out)
     }
 }
+
+trait SymbolicAdd<T> {
+    type Output;
+    fn add_sym<'b>(&self, other: &T, ws: &'b Workspace, state: &'b State) -> Option<Self::Output>;
+}
+
+impl<T, Out> SymbolicAdd<T> for T
+where
+    for<'a> &'a T: std::ops::Add<&'a T, Output = Out>,
+{
+    type Output = Out;
+    fn add_sym<'c>(
+        &self,
+        other: &T,
+        _ws: &'c Workspace,
+        _state: &'c State,
+    ) -> Option<Self::Output> {
+        Some(self + other)
+    }
+}
+
+impl SymbolicAdd<Atom> for f64 {
+    type Output = Atom;
+    fn add_sym<'a>(
+        &self,
+        other: &Atom,
+        ws: &'a Workspace,
+        state: &'a State,
+    ) -> Option<Self::Output> {
+        let atomself: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state)?;
+        let mut out: Atom<Linear> = Atom::new();
+        other.add(state, ws, &atomself, &mut out);
+        Some(out)
+    }
+}
+
+impl SymbolicAdd<f64> for Atom {
+    type Output = Atom;
+    fn add_sym<'a>(
+        &self,
+        other: &f64,
+        ws: &'a Workspace,
+        state: &'a State,
+    ) -> Option<Self::Output> {
+        let otheratom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(other, ws, state)?;
+        let mut out = Atom::new();
+        self.add(state, ws, &otheratom, &mut out);
+        Some(out)
+    }
+}
+
+trait SymbolicSub<T> {
+    type Output;
+    fn sub_sym<'b>(&self, other: &T, ws: &'b Workspace, state: &'b State) -> Option<Self::Output>;
+}
+
+impl<T, Out> SymbolicSub<T> for T
+where
+    for<'a> &'a T: std::ops::Sub<&'a T, Output = Out>,
+{
+    type Output = Out;
+    fn sub_sym<'c>(
+        &self,
+        other: &T,
+        _ws: &'c Workspace,
+        _state: &'c State,
+    ) -> Option<Self::Output> {
+        Some(self - other)
+    }
+}
+
+impl SymbolicSub<Atom> for f64 {
+    type Output = Atom;
+    fn sub_sym<'a>(
+        &self,
+        other: &Atom,
+        ws: &'a Workspace,
+        state: &'a State,
+    ) -> Option<Self::Output> {
+        let atomself: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state)?;
+        let mut negother: Atom<Linear> = Atom::new();
+        other.neg(state, ws, &mut negother);
+        let mut out = Atom::new();
+        atomself.add(state, ws, &negother, &mut out);
+        Some(out)
+    }
+}
+
+impl SymbolicSub<f64> for Atom {
+    type Output = Atom;
+    fn sub_sym<'a>(
+        &self,
+        other: &f64,
+        ws: &'a Workspace,
+        state: &'a State,
+    ) -> Option<Self::Output> {
+        let otheratom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(other, ws, state)?;
+        let mut negother: Atom<Linear> = Atom::new();
+        otheratom.neg(state, ws, &mut negother);
+        let mut out = Atom::new();
+        self.add(state, ws, &negother, &mut out);
+        Some(out)
+    }
+}
+// trait SymbolicSub<T> {
+//     type Output;
+//     fn sub_sym<'a>(self, other: T, ws: &'a Workspace, state: &'a State)
+//         -> Option<Self::Output<'a>>;
+// }
+
+// impl<T> SymbolicSub<T> for T
+// where
+//     T: std::ops::Sub<T>,
+// {
+//     type Output<'b> = T::Output;
+//     fn sub_sym<'b>(
+//         self,
+//         other: T,
+//         _ws: &'b Workspace,
+//         _state: &'b State,
+//     ) -> Option<Self::Output<'b>> {
+//         Some(self - other)
+//     }
+// }
+
+// impl SymbolicSub<Atom> for f64 {
+//     type Output<'a> = Atom;
+//     fn sub_sym<'a>(
+//         self,
+//         other: Atom,
+//         ws: &'a Workspace,
+//         state: &'a State,
+//     ) -> Option<Self::Output<'a>> {
+//         let atomself: Atom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(self, ws, state)?;
+//         let mut negother: Atom<Linear> = Atom::new();
+//         other.neg(state, ws, &mut negother);
+//         let mut out = Atom::new();
+//         atomself.add(state, ws, &negother, &mut out);
+//         Some(out)
+//     }
+// }
+
+// impl SymbolicSub<f64> for Atom {
+//     type Output<'a> = Atom;
+//     fn sub_sym<'a>(
+//         self,
+//         other: f64,
+//         ws: &'a Workspace,
+//         state: &'a State,
+//     ) -> Option<Self::Output<'a>> {
+//         let otheratom = SmallestUpgradeSymbolic::<Atom>::upgrade_sym(other, ws, state)?;
+//         let mut negother: Atom<Linear> = Atom::new();
+//         otheratom.neg(state, ws, &mut negother);
+//         let mut out = Atom::new();
+//         self.add(state, ws, &negother, &mut out);
+//         Some(out)
+//     }
+// }
 
 // pub fn mul_sym<'a, T, U>(
 //     right: T,
@@ -244,6 +471,106 @@ impl SymbolicMul<f64> for Atom {
 //         Atom::new_num(self)
 //     }
 // }
+
+trait SymbolicZero {
+    fn zero(state: &State, ws: &Workspace) -> Self;
+}
+
+// impl<T> SymbolicZero for T
+// where
+//     T: num::traits::Zero,
+// {
+//     fn zero(_state: &State, _ws: &Workspace) -> Self {
+//         Self::zero()
+//     }
+// }
+
+impl SymbolicZero for f64 {
+    fn zero(_state: &State, _ws: &Workspace) -> Self {
+        0.
+    }
+}
+
+impl SymbolicZero for Atom {
+    fn zero(_state: &State, _ws: &Workspace) -> Self {
+        Atom::new_num(0)
+    }
+}
+
+pub trait SymbolicContract<T> {
+    type LCM;
+    fn contract_sym(&self, other: &T, ws: &Workspace, state: &State) -> Option<Self::LCM>;
+}
+
+impl<T, U, Out> SymbolicContract<DenseTensor<T>> for DenseTensor<U>
+where
+    U: SymbolicAdd<T, Output = Out> + SymbolicMul<T, Output = Out> + SymbolicSub<T, Output = Out>,
+    Out: SymbolicZero
+        + Clone
+        + SymbolicAdd<Out, Output = Out>
+        + SymbolicSub<Out, Output = Out>
+        + std::fmt::Debug
+        + for<'a> std::ops::AddAssign<&'a Out>
+        + std::ops::Neg<Output = Out>
+        + for<'b> std::ops::SubAssign<&'b Out>,
+{
+    type LCM = DenseTensor<Out>;
+    fn contract_sym(
+        &self,
+        other: &DenseTensor<T>,
+        ws: &Workspace,
+        state: &State,
+    ) -> Option<Self::LCM> {
+        if let Some((i, j)) = self.match_index(other) {
+            let dimension_of_contraction = self.shape()[i];
+            let final_structure = self.structure().merge_at(other.structure(), (i, j));
+            let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+            let metric = self.structure()[i].representation.negative();
+            for (index_a, fiber_a) in self.iter_fibers(i) {
+                for (index_b, fiber_b) in other.iter_fibers(j) {
+                    let result_index = final_structure
+                        .flat_index(
+                            &index_a[..i]
+                                .iter()
+                                .chain(&index_a[i + 1..])
+                                .chain(&index_b[..j])
+                                .chain(&index_b[j + 1..])
+                                .cloned()
+                                .collect::<Vec<_>>(),
+                        )
+                        .unwrap();
+                    for i in 0..dimension_of_contraction {
+                        if metric[i] {
+                            result_data[result_index] = result_data[result_index].sub_sym(
+                                &fiber_a[i].mul_sym(fiber_b[i], ws, state)?,
+                                ws,
+                                state,
+                            )?;
+                        } else {
+                            result_data[result_index] = result_data[result_index].add_sym(
+                                &fiber_a[i].mul_sym(fiber_b[i], ws, state)?,
+                                ws,
+                                state,
+                            )?;
+                        }
+                    }
+                }
+            }
+
+            let result = DenseTensor {
+                data: result_data,
+                structure: final_structure,
+            };
+
+            if result.traces().is_empty() {
+                return Some(result);
+            } else {
+                return Some(result.internal_contract());
+            }
+        }
+        None
+    }
+}
 
 // impl<'a> ContractableWithDense<Expr<'a>> for SparseTensor<Expr<'a>> {
 //     fn contract_with_dense(&self, other: &DenseTensor<Expr<'a>>) -> Option<DenseTensor<Expr<'a>>> {
