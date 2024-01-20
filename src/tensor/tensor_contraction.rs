@@ -78,39 +78,6 @@ where
 //     ) -> Option<C>;
 // }
 
-pub trait Upgradable {}
-impl Upgradable for f64 {}
-impl Upgradable for Complex<f64> {}
-pub trait SmallestUpgrade<T> {
-    type LCM;
-    fn upgrade(self) -> Self::LCM;
-}
-
-// impl SmallestUpgrade<A> for B {
-//     type LCM = B;
-// }
-
-impl<T> SmallestUpgrade<T> for T {
-    type LCM = T;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
-
-impl SmallestUpgrade<f64> for Complex<f64> {
-    type LCM = Complex<f64>;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
-
-impl SmallestUpgrade<Complex<f64>> for f64 {
-    type LCM = Complex<f64>;
-    fn upgrade(self) -> Self::LCM {
-        Complex::new(self, 0.0)
-    }
-}
-
 // pub fn mul<'a, 'b, T, U>(right: &'a T, left: &'b U) -> <&'b U as SmallestUpgrade<&'b T>>::LCM
 // where
 //     &'b U: SmallestUpgrade<&'b T>,

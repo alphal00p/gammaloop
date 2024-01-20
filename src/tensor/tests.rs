@@ -77,12 +77,11 @@ fn contract_densor() {
 #[test]
 fn mixed_tensor_contraction() {
     let im = Complex::new(1.5, 1.25);
-    let data_a = [(vec![0, 0], 1.0 * im), (vec![1, 1], 2.0 * im)];
+    let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
 
     let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
 
-    let a: SparseTensor<Complex<f64>> =
-        SparseTensor::from_data(&data_a, structur_a.clone()).unwrap();
+    let a = SparseTensor::from_data(&data_a, structur_a.clone()).unwrap();
 
     let structur_b = TensorStructure::from_integers(&[2, 4], &[2, 2]);
 
@@ -103,8 +102,7 @@ fn mixed_tensor_contraction() {
     let b = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
 
     let f = a.contract(&b).unwrap();
-
-    // println!("{:?}", f);
+    assert_eq!(f.data, [1.0 * im, 2.0 * im, 6.0 * im, 8.0 * im]);
 }
 #[test]
 fn contract_spensor() {
