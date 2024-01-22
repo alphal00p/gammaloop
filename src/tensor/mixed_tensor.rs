@@ -17,33 +17,33 @@ pub trait SmallestUpgradeSymbolic<T> {
     fn upgrade_sym<'a>(self, ws: &'a Workspace, state: &'a State) -> Option<Self::LCMS<'a>>;
 }
 
-impl<'a> SmallestUpgrade<f64> for Expr<'a> {
-    type LCM = Expr<'a>;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
+// impl<'a> SmallestUpgrade<f64> for Expr<'a> {
+//     type LCM = Expr<'a>;
+//     fn upgrade(self) -> Self::LCM {
+//         self
+//     }
+// }
 
-impl<'a> SmallestUpgrade<Complex<f64>> for Expr<'a> {
-    type LCM = Expr<'a>;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
+// impl<'a> SmallestUpgrade<Complex<f64>> for Expr<'a> {
+//     type LCM = Expr<'a>;
+//     fn upgrade(self) -> Self::LCM {
+//         self
+//     }
+// }
 
-impl SmallestUpgrade<f64> for Atom {
-    type LCM = Atom;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
+// impl SmallestUpgrade<f64> for Atom {
+//     type LCM = Atom;
+//     fn upgrade(self) -> Self::LCM {
+//         self
+//     }
+// }
 
-impl SmallestUpgrade<Complex<f64>> for Atom {
-    type LCM = Atom;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
+// impl SmallestUpgrade<Complex<f64>> for Atom {
+//     type LCM = Atom;
+//     fn upgrade(self) -> Self::LCM {
+//         self
+//     }
+// }
 
 impl<T, U> SmallestUpgradeSymbolic<T> for U
 where

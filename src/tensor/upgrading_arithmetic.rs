@@ -1,8 +1,8 @@
 use num::Complex;
 
-pub trait Upgradable {}
-impl Upgradable for f64 {}
-impl Upgradable for Complex<f64> {}
+// pub struct Up<T> {
+//     up: T,
+// }
 pub trait SmallestUpgrade<T> {
     type LCM;
     fn upgrade(self) -> Self::LCM;
@@ -12,13 +12,13 @@ pub trait SmallestUpgrade<T> {
 //     type LCM = B;
 // }
 
-// impl<T, U> SmallestUpgrade<T> for U
+// impl<T, U> SmallestUpgrade<Up<T>> for Up<U>
 // where
-//     U: Into<T>,
+//     T: From<U>,
 // {
 //     type LCM = T;
 //     fn upgrade(self) -> Self::LCM {
-//         self.into()
+//         T::from(self.up)
 //     }
 // }
 
@@ -28,6 +28,16 @@ impl<T> SmallestUpgrade<T> for T {
         self
     }
 }
+
+// impl<T, U> SmallestUpgrade<T> for U
+// where
+//     T: SmallestUpgrade<U, LCM = U>,
+// {
+//     type LCM = U;
+//     fn upgrade(self) -> Self::LCM {
+//         self
+//     }
+// }
 impl SmallestUpgrade<f64> for Complex<f64> {
     type LCM = Complex<f64>;
     fn upgrade(self) -> Self::LCM {
@@ -77,7 +87,7 @@ impl<'a> SmallestUpgrade<Complex<f64>> for &'a f64 {
     }
 }
 
-impl<'a> SmallestUpgrade<&Complex<f64>> for f64 {
+impl SmallestUpgrade<&Complex<f64>> for f64 {
     type LCM = Complex<f64>;
     fn upgrade(self) -> Self::LCM {
         Complex::new(self, 0.0)
