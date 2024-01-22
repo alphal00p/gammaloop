@@ -1,7 +1,8 @@
+use hyperdual::Zero;
 use num::Complex;
 
 use super::*;
-use std::ops::Neg;
+use std::{ops::Neg, process::Output};
 impl<T> DenseTensor<T>
 where
     T: for<'a> std::ops::AddAssign<&'a T>
@@ -90,34 +91,41 @@ where
 //     left.upgrade() * right.upgrade()
 // }
 
-pub fn mul<T, U>(right: T, left: U) -> U::LCM
-where
-    U: SmallestUpgrade<T>,
-    T: SmallestUpgrade<U>,
-    U::LCM: std::ops::Mul<T::LCM, Output = U::LCM>,
-{
-    left.upgrade() * right.upgrade()
-}
+// pub fn mul<T, U>(right: T, left: U) -> U::LCM
+// where
+//     U: SmallestUpgrade<T>,
+//     T: SmallestUpgrade<U>,
+//     U::LCM: std::ops::Mul<T::LCM, Output = U::LCM>,
+// {
+//     left.upgrade() * right.upgrade()
+// }
 pub trait Contract<T> {
     type LCM;
     fn contract(&self, other: &T) -> Option<Self::LCM>;
 }
 
-impl<T, U> Contract<DenseTensor<T>> for DenseTensor<U>
+impl<T, U, Out> Contract<DenseTensor<T>> for DenseTensor<U>
 where
-    T: SmallestUpgrade<U> + Copy,
-    U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
-    T::LCM: std::ops::AddAssign<T::LCM>
-        + std::ops::SubAssign<T::LCM>
-        + for<'a> std::ops::AddAssign<&'a T::LCM>
-        + for<'b> std::ops::SubAssign<&'b T::LCM>
-        + std::fmt::Debug
-        + Neg<Output = T::LCM>
-        + Default
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
+    Out: std::ops::AddAssign<Out>
+        + std::ops::SubAssign<Out>
+        + Neg<Output = Out>
         + Clone
-        + std::ops::Mul<T::LCM, Output = T::LCM>,
+        + num::traits::Zero
+        + for<'a> std::ops::AddAssign<&'a Out>
+        + for<'b> std::ops::SubAssign<&'b Out>
+        + std::fmt::Debug,
+    // T::LCM: std::ops::AddAssign<T::LCM>
+    //     + std::ops::SubAssign<T::LCM>
+    //     + for<'a> std::ops::AddAssign<&'a T::LCM>
+    //     + for<'b> std::ops::SubAssign<&'b T::LCM>
+    //     + std::fmt::Debug
+    //     + Neg<Output = T::LCM>
+    //     + Default
+    //     + Clone
+    //     + std::ops::Mul<T::LCM, Output = T::LCM>,
 {
-    type LCM = DenseTensor<T::LCM>;
+    type LCM = DenseTensor<Out>;
     fn contract(&self, other: &DenseTensor<T>) -> Option<Self::LCM> {
         if let Some((i, j)) = self.match_index(other) {
             // println!("{},{}", i, j);
@@ -129,7 +137,7 @@ where
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
 
             // Initialize result tensor with default values
-            let mut result_data = vec![T::LCM::default(); final_structure.size()];
+            let mut result_data = vec![Out::zero(); final_structure.size()];
 
             for (index_a, fiber_a) in self.iter_fibers(i) {
                 for (index_b, fiber_b) in other.iter_fibers(j) {
@@ -148,9 +156,9 @@ where
                     for k in 0..dimension_of_contraction {
                         // Adjust indices for fetching from the other tensor
                         if metric[k] {
-                            result_data[result_index] -= mul(*fiber_a[k], *fiber_b[k]);
+                            result_data[result_index] -= fiber_a[k] * fiber_b[k];
                         } else {
-                            result_data[result_index] += mul(*fiber_a[k], *fiber_b[k]);
+                            result_data[result_index] += fiber_a[k] * fiber_b[k];
                         }
                     }
                 }
@@ -171,26 +179,35 @@ where
     }
 }
 
-impl<T, U> Contract<DenseTensor<T>> for SparseTensor<U>
+impl<T, U, Out> Contract<DenseTensor<T>> for SparseTensor<U>
 where
-    T: SmallestUpgrade<U> + Copy,
-    U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
-    T::LCM: std::ops::AddAssign<T::LCM>
-        + std::ops::SubAssign<T::LCM>
-        + for<'a> std::ops::AddAssign<&'a T::LCM>
-        + for<'b> std::ops::SubAssign<&'b T::LCM>
-        + std::fmt::Debug
-        + Neg<Output = T::LCM>
-        + Default
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
+    Out: std::ops::AddAssign<Out>
+        + std::ops::SubAssign<Out>
+        + Neg<Output = Out>
         + Clone
-        + std::ops::Mul<T::LCM, Output = T::LCM>,
+        + num::traits::Zero
+        + for<'a> std::ops::AddAssign<&'a Out>
+        + for<'b> std::ops::SubAssign<&'b Out>
+        + std::fmt::Debug,
+    // T: SmallestUpgrade<U> + Copy,
+    // U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
+    // T::LCM: std::ops::AddAssign<T::LCM>
+    //     + std::ops::SubAssign<T::LCM>
+    //     + for<'a> std::ops::AddAssign<&'a T::LCM>
+    //     + for<'b> std::ops::SubAssign<&'b T::LCM>
+    //     + std::fmt::Debug
+    //     + Neg<Output = T::LCM>
+    //     + Default
+    //     + Clone
+    //     + std::ops::Mul<T::LCM, Output = T::LCM>,
 {
-    type LCM = DenseTensor<T::LCM>;
+    type LCM = DenseTensor<Out>;
     fn contract(&self, other: &DenseTensor<T>) -> Option<Self::LCM> {
         // println!("Contracting SparseTensor DenseTensor");
         if let Some((i, j)) = self.match_index(other) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let mut result_data = vec![<T::LCM>::default(); final_structure.size()];
+            let mut result_data = vec![Out::zero(); final_structure.size()];
 
             let metric = self.structure()[i].representation.negative();
 
@@ -210,9 +227,9 @@ where
                     for (i, k) in nonzeros.iter().enumerate() {
                         // Adjust indices for fetching from the other tensor
                         if metric[*k] {
-                            result_data[result_index] -= mul(*fiber_a[i], *fiber_b[*k]);
+                            result_data[result_index] -= fiber_a[i] * fiber_b[*k];
                         } else {
-                            result_data[result_index] += mul(*fiber_a[i], *fiber_b[*k]);
+                            result_data[result_index] += fiber_a[i] * fiber_b[*k];
                         }
                     }
                 }
@@ -233,22 +250,32 @@ where
     }
 }
 
-impl<T, U> Contract<SparseTensor<T>> for SparseTensor<U>
+impl<T, U, Out> Contract<SparseTensor<T>> for SparseTensor<U>
 where
-    T: SmallestUpgrade<U> + Copy,
-    U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
-    T::LCM: std::ops::AddAssign<T::LCM>
-        + std::ops::SubAssign<T::LCM>
-        + for<'a> std::ops::AddAssign<&'a T::LCM>
-        + for<'b> std::ops::SubAssign<&'b T::LCM>
-        + std::fmt::Debug
-        + Neg<Output = T::LCM>
-        + std::cmp::PartialOrd
-        + Default
+    // T: SmallestUpgrade<U> + Copy,
+    // U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
+    // T::LCM: std::ops::AddAssign<T::LCM>
+    //     + std::ops::SubAssign<T::LCM>
+    //     + for<'a> std::ops::AddAssign<&'a T::LCM>
+    //     + for<'b> std::ops::SubAssign<&'b T::LCM>
+    //     + std::fmt::Debug
+    //     + Neg<Output = T::LCM>
+    //     + std::cmp::PartialOrd
+    //     + Default
+    //     + Clone
+    //     + std::ops::Mul<T::LCM, Output = T::LCM>,
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
+    Out: std::ops::AddAssign<Out>
+        + std::ops::SubAssign<Out>
+        + Neg<Output = Out>
         + Clone
-        + std::ops::Mul<T::LCM, Output = T::LCM>,
+        + num::traits::Zero
+        + for<'a> std::ops::AddAssign<&'a Out>
+        + for<'b> std::ops::SubAssign<&'b Out>
+        + std::fmt::Debug
+        + std::cmp::PartialEq,
 {
-    type LCM = SparseTensor<T::LCM>;
+    type LCM = SparseTensor<Out>;
     fn contract(&self, other: &SparseTensor<T>) -> Option<Self::LCM> {
         // println!("Contracting SparseTensor SparseTensor");
         if let Some((i, j)) = self.match_index(other) {
@@ -267,22 +294,22 @@ where
                         .cloned()
                         .collect::<Vec<_>>();
 
-                    let mut value = <T::LCM>::default();
+                    let mut value = Out::zero();
                     let mut nonzero = false;
                     for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
                         nonzeros_b.binary_search(&x).ok().map(|j| (i, j, x)) // Only store the positions
                     }) {
                         // Adjust indices for fetching from the other tensor
                         if metric[x] {
-                            value -= mul(*fiber_a[i], *fiber_b[j]);
+                            value -= fiber_a[i] * fiber_b[j];
                         } else {
-                            value += mul(*fiber_a[i], *fiber_b[j]);
+                            value += fiber_a[i] * fiber_b[j];
                         }
 
                         nonzero = true;
                     }
 
-                    if nonzero && value != <T::LCM>::default() {
+                    if nonzero && value != Out::zero() {
                         result_data.insert(result_index, value);
                     }
                 }
@@ -303,21 +330,30 @@ where
     }
 }
 
-impl<T, U> Contract<SparseTensor<T>> for DenseTensor<U>
+impl<T, U, Out> Contract<SparseTensor<T>> for DenseTensor<U>
 where
-    T: SmallestUpgrade<U> + Copy,
-    U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
-    T::LCM: std::ops::AddAssign<T::LCM>
-        + std::ops::SubAssign<T::LCM>
-        + for<'a> std::ops::AddAssign<&'a T::LCM>
-        + for<'b> std::ops::SubAssign<&'b T::LCM>
-        + std::fmt::Debug
-        + Neg<Output = T::LCM>
-        + Default
+    // T: SmallestUpgrade<U> + Copy,
+    // U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
+    // T::LCM: std::ops::AddAssign<T::LCM>
+    //     + std::ops::SubAssign<T::LCM>
+    //     + for<'a> std::ops::AddAssign<&'a T::LCM>
+    //     + for<'b> std::ops::SubAssign<&'b T::LCM>
+    //     + std::fmt::Debug
+    //     + Neg<Output = T::LCM>
+    //     + Default
+    //     + Clone
+    //     + std::ops::Mul<T::LCM, Output = T::LCM>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = Out>,
+    Out: std::ops::AddAssign<Out>
+        + std::ops::SubAssign<Out>
+        + Neg<Output = Out>
         + Clone
-        + std::ops::Mul<T::LCM, Output = T::LCM>,
+        + num::traits::Zero
+        + for<'a> std::ops::AddAssign<&'a Out>
+        + for<'b> std::ops::SubAssign<&'b Out>
+        + std::fmt::Debug,
 {
-    type LCM = DenseTensor<T::LCM>;
+    type LCM = DenseTensor<Out>;
     fn contract(&self, other: &SparseTensor<T>) -> Option<Self::LCM> {
         other.contract(self)
     }

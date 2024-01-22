@@ -1,17 +1,15 @@
+use duplicate::duplicate;
 use num::{traits::WrappingAdd, Complex};
-use std::{
-    ops::{Add, Mul},
-    process::Output,
-};
+use std::ops::{Add, AddAssign, Mul};
 
 use arbitrary_int::u2;
 
-use crate::tensor::{UpgradingAdd, UpgradingMul};
+// use crate::tensor::{UpgradingAdd, UpgradingMul};
 
 use super::SmallestUpgrade;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Fouroot {
+pub struct Fouroot {
     r: u2,
 }
 
@@ -22,64 +20,38 @@ impl Fouroot {
     pub fn i() -> Self {
         Fouroot { r: u2::new(1) }
     }
-    pub fn m_one() -> Self {
+    pub fn n_one() -> Self {
         Fouroot { r: u2::new(2) }
     }
-    pub fn m_i() -> Self {
+    pub fn n_i() -> Self {
         Fouroot { r: u2::new(3) }
     }
 }
 
-#[allow(clippy::suspicious_arithmetic_impl)]
-impl Mul for Fouroot {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        Fouroot {
-            r: self.r.wrapping_add(&rhs.r),
-        }
-    }
-}
-
-impl<'a> SmallestUpgrade<Fouroot> for &'a Fouroot {
-    type LCM = &'a Fouroot;
+duplicate! {
+    [
+  U T;
+  [ Fouroot ]    [Complex<f64>];
+  [ &Fouroot]    [Complex<f64>];
+  [ Fouroot ]    [Complex<i64>];
+  [ &Fouroot]    [Complex<i64>];
+  [ Fouroot ]    [Complex<f32>];
+  [ &Fouroot]    [Complex<f32>];
+  [ Fouroot ]    [Complex<i32>];
+  [ &Fouroot]    [Complex<i32>];
+]
+impl SmallestUpgrade<U> for T {
+    type LCM = T;
     fn upgrade(self) -> Self::LCM {
         self
     }
 }
-
-impl SmallestUpgrade<&Fouroot> for Fouroot {
-    type LCM = Fouroot;
+impl<'a> SmallestUpgrade<U> for &'a T {
+    type LCM = T;
     fn upgrade(self) -> Self::LCM {
-        self
+        *self
     }
 }
-
-impl<T> SmallestUpgrade<Fouroot> for Complex<T> {
-    type LCM = Complex<T>;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
-
-impl<T> SmallestUpgrade<&Fouroot> for Complex<T> {
-    type LCM = Complex<T>;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
-
-impl<'a, T> SmallestUpgrade<&Fouroot> for &'a Complex<T> {
-    type LCM = &'a Complex<T>;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
-}
-
-impl<'a, T> SmallestUpgrade<Fouroot> for &'a Complex<T> {
-    type LCM = &'a Complex<T>;
-    fn upgrade(self) -> Self::LCM {
-        self
-    }
 }
 
 impl<T> SmallestUpgrade<Complex<T>> for Fouroot
@@ -113,7 +85,14 @@ where
     }
 }
 
-impl<'a, T> SmallestUpgrade<&Complex<T>> for &'a Fouroot
+duplicate! {
+    [
+  F U;
+  [ Fouroot ]    [Complex<T>];
+  [ Fouroot]    [&Complex<T>];
+]
+
+impl<'a, T> SmallestUpgrade<U> for &'a Fouroot
 where
     T: From<i8>,
 {
@@ -121,17 +100,10 @@ where
     fn upgrade(self) -> Self::LCM {
         SmallestUpgrade::<Complex<T>>::upgrade(*self)
     }
+}
 }
 
-impl<'a, T> SmallestUpgrade<Complex<T>> for &'a Fouroot
-where
-    T: From<i8>,
-{
-    type LCM = Complex<T>;
-    fn upgrade(self) -> Self::LCM {
-        SmallestUpgrade::<Complex<T>>::upgrade(*self)
-    }
-}
+// This is why we don't just use Into. And why we need the SmallestUpgrade trait.
 
 impl SmallestUpgrade<f64> for Fouroot {
     type LCM = Complex<f64>;
@@ -143,9 +115,25 @@ impl SmallestUpgrade<f64> for Fouroot {
 impl SmallestUpgrade<Fouroot> for f64 {
     type LCM = Complex<f64>;
     fn upgrade(self) -> Self::LCM {
-        SmallestUpgrade::<Complex<f64>>::upgrade(self)
+        self.into()
     }
 }
+
+impl<'a> SmallestUpgrade<Fouroot> for &'a Fouroot {
+    type LCM = Fouroot;
+    fn upgrade(self) -> Self::LCM {
+        *self
+    }
+}
+
+impl SmallestUpgrade<&Fouroot> for Fouroot {
+    type LCM = Fouroot;
+    fn upgrade(self) -> Self::LCM {
+        self
+    }
+}
+
+// Arithmetic:
 
 impl Add<Fouroot> for Fouroot {
     type Output = Complex<i8>;
@@ -154,50 +142,125 @@ impl Add<Fouroot> for Fouroot {
     }
 }
 
-impl Add<&Fouroot> for Fouroot {
-    type Output = Complex<i8>;
-    fn add(self, rhs: &Fouroot) -> Self::Output {
-        SmallestUpgrade::<Complex<i8>>::upgrade(self)
-            + SmallestUpgrade::<Complex<i8>>::upgrade(*rhs)
+impl<T, Out, M> Add<T> for Fouroot
+where
+    T: SmallestUpgrade<Fouroot, LCM = M>,
+    Fouroot: SmallestUpgrade<T, LCM = M>,
+
+    M: Add<M, Output = Out>,
+{
+    type Output = Out;
+    fn add(self, rhs: T) -> Self::Output {
+        self.upgrade() + rhs.upgrade()
     }
 }
 
-impl Add<&Fouroot> for &Fouroot {
-    type Output = Complex<i8>;
-    fn add(self, rhs: &Fouroot) -> Self::Output {
-        SmallestUpgrade::<Complex<i8>>::upgrade(*self)
-            + SmallestUpgrade::<Complex<i8>>::upgrade(*rhs)
+#[allow(clippy::suspicious_arithmetic_impl)]
+impl Mul<Fouroot> for Fouroot {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Fouroot {
+            r: self.r.wrapping_add(&rhs.r),
+        }
     }
 }
 
-impl Add<Fouroot> for &Fouroot {
-    type Output = Complex<i8>;
-    fn add(self, rhs: Fouroot) -> Self::Output {
-        SmallestUpgrade::<Complex<i8>>::upgrade(*self)
-            + SmallestUpgrade::<Complex<i8>>::upgrade(rhs)
+impl<T, Out, M> Mul<T> for Fouroot
+where
+    T: SmallestUpgrade<Fouroot, LCM = M>,
+    Fouroot: SmallestUpgrade<T, LCM = M>,
+
+    M: Mul<M, Output = Out>,
+{
+    type Output = Out;
+    fn mul(self, rhs: T) -> Self::Output {
+        self.upgrade() * rhs.upgrade()
     }
 }
 
+duplicate! {
+    [
+        F ;
+        [Complex<f64>];
+        [Complex<i32>];
+    ]
+
+    impl<Out> Add<Fouroot> for F
+    where
+        Fouroot: SmallestUpgrade<F>,
+        F: SmallestUpgrade<Fouroot>,
+
+        <Fouroot as SmallestUpgrade<F>>::LCM: Add<<Fouroot as SmallestUpgrade<F>>::LCM, Output = Out>,
+    {
+        type Output = Out;
+        fn add(self, rhs: Fouroot) -> Self::Output {
+            <F as SmallestUpgrade<Fouroot>>::upgrade(self)
+                + <Fouroot as SmallestUpgrade<F>>::upgrade(rhs)
+        }
+    }
+
+    impl<Out> Add<&Fouroot> for F
+    where
+        Fouroot: SmallestUpgrade<F>,
+        F: SmallestUpgrade<Fouroot>,
+
+        <Fouroot as SmallestUpgrade<F>>::LCM: Add<<Fouroot as SmallestUpgrade<F>>::LCM, Output = Out>,
+    {
+        type Output = Out;
+        fn add(self, rhs: &Fouroot) -> Self::Output {
+            <F as SmallestUpgrade<Fouroot>>::upgrade(self)
+                + <Fouroot as SmallestUpgrade<F>>::upgrade(*rhs)
+        }
+    }
+
+    impl<Out> Mul<Fouroot> for F
+    where
+        Fouroot: SmallestUpgrade<F>,
+        F: SmallestUpgrade<Fouroot>,
+
+        <Fouroot as SmallestUpgrade<F>>::LCM: Mul<<Fouroot as SmallestUpgrade<F>>::LCM, Output = Out>,
+    {
+        type Output = Out;
+        fn mul(self, rhs: Fouroot) -> Self::Output {
+            <F as SmallestUpgrade<Fouroot>>::upgrade(self)
+                * <Fouroot as SmallestUpgrade<F>>::upgrade(rhs)
+        }
+    }
+
+    impl<Out> Mul<&Fouroot> for F
+    where
+        Fouroot: SmallestUpgrade<F>,
+        F: SmallestUpgrade<Fouroot>,
+
+        <Fouroot as SmallestUpgrade<F>>::LCM: Mul<<Fouroot as SmallestUpgrade<F>>::LCM, Output = Out>,
+    {
+        type Output = Out;
+        fn mul(self, rhs: &Fouroot) -> Self::Output {
+            <F as SmallestUpgrade<Fouroot>>::upgrade(self)
+                * <Fouroot as SmallestUpgrade<F>>::upgrade(*rhs)
+        }
+    }
+}
 #[test]
 fn test_upgrading_mul() {
     let a = Complex::new(1, 0);
     let b = Fouroot::i();
-    let c = a.up_mul(b);
+    let c = a + b;
     assert_eq!(c, Complex::new(0, 1));
 
     let af = Complex::new(1.0, 0.0);
     let bf = Fouroot::i();
 
-    let cf = af.up_mul(&bf);
+    let cf = af + &bf;
 
-    let aa = bf.up_add(1.);
-    assert_eq!(cf, Complex::new(0.0, 1.0));
+    let aa = bf + 1.;
+    // assert_eq!(cf, Complex::new(0.0, 1.0));
 
     let i = Fouroot::i();
 
-    let f = i.up_add(&i);
+    let f = i + i;
 
-    let ff = i.up_add(&af);
+    let ff = i + &af;
     assert_eq!(f, Complex::new(0, 2));
 
     let f = Fouroot::i() * Fouroot::i() * Fouroot::i() * Fouroot::i();

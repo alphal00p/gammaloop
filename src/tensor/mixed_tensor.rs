@@ -45,16 +45,16 @@ pub trait SmallestUpgradeSymbolic<T> {
 //     }
 // }
 
-impl<T, U> SmallestUpgradeSymbolic<T> for U
-where
-    U: SmallestUpgrade<T>,
-    T: SmallestUpgrade<U, LCM = U::LCM>,
-{
-    type LCMS<'a> = U::LCM;
-    fn upgrade_sym<'a>(self, _ws: &'a Workspace, _state: &'a State) -> Option<Self::LCMS<'a>> {
-        Some(self.upgrade())
-    }
-}
+// impl<T, U> SmallestUpgradeSymbolic<T> for U
+// where
+//     U: SmallestUpgrade<T>,
+//     T: SmallestUpgrade<U, LCM = U::LCM>,
+// {
+//     type LCMS<'a> = U::LCM;
+//     fn upgrade_sym<'a>(self, _ws: &'a Workspace, _state: &'a State) -> Option<Self::LCMS<'a>> {
+//         Some(self.upgrade())
+//     }
+// }
 
 // impl<T> SmallestUpgradeSymbolic<T> for T {
 //     type LCM = T;

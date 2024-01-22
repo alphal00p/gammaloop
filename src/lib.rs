@@ -1,5 +1,5 @@
 #![cfg_attr(feature = "fail-on-warnings", deny(warnings))]
-
+// #![feature(min_specialization)]
 pub mod api;
 pub mod cff;
 pub mod cli_functions;

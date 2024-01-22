@@ -1,5 +1,5 @@
 use super::{
-    Representation, Representation::Euclidean, Representation::Lorentz, SparseTensor,
+    Fouroot, Representation, Representation::Euclidean, Representation::Lorentz, SparseTensor,
     TensorStructure, VecSlotExtension,
 };
 use num::{Complex, Float, One, Zero};
@@ -41,20 +41,17 @@ where
 }
 
 #[allow(dead_code)]
-pub fn gamma<T>(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<T>>
-where
-    T: One + Zero + std::ops::Neg<Output = T> + Copy,
-{
+pub fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<i8>> {
     // Gamma(1,2,3) Dirac matrix (γ^μ1)_s2_s3
     let structure = TensorStructure::from_idxsing(
         &[indices.0, indices.1, minkindex],
         &[Euclidean(4), Euclidean(4), Lorentz(4)],
     );
 
-    let c1 = Complex::<T>::new(T::one(), T::zero());
-    let cn1 = Complex::<T>::new(-T::one(), T::zero());
-    let ci = Complex::<T>::new(T::zero(), T::one());
-    let cni = Complex::<T>::new(T::zero(), -T::one());
+    let c1 = Complex::<i8>::new(1, 0);
+    let cn1 = Complex::<i8>::new(-1, 0);
+    let ci = Complex::<i8>::new(0, 1);
+    let cni = Complex::<i8>::new(0, -1);
 
     let mut gamma = SparseTensor::empty(structure);
 
