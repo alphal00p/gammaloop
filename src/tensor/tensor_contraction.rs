@@ -10,10 +10,14 @@ use petgraph::{
     visit::{EdgeRef, IntoEdges},
     Graph, Undirected,
 };
+use symbolica::state::{State, Workspace};
+
+use self::mixed_tensor::SymbolicContract;
 
 use super::*;
 use std::{
     borrow::Borrow,
+    fmt::Debug,
     ops::{Mul, Neg},
     process::Output,
 };
@@ -533,19 +537,42 @@ impl Contract<NumTensors> for NumTensors {
 // //     tensors: Vec<ContractableTensor>,
 // // }
 
-pub struct TensorNetwork {
-    graph: Graph<NumTensors, Slot, Undirected>,
+pub struct TensorNetwork<T> {
+    graph: Graph<T, Slot, Undirected>,
 }
 
-impl TensorNetwork {
-    pub fn new(tensors: Vec<NumTensors>) -> Self {
+impl<T> TensorNetwork<T> {
+    fn edge_to_min_degree_node(&self) -> Option<EdgeIndex> {
+        let mut max_degree = 0;
+        let mut min_degree = usize::MAX;
+        let mut edge_to_min_degree_node = None;
+        for node in self.graph.node_indices() {
+            if self.graph.edges(node).count() > max_degree {
+                max_degree = self.graph.edges(node).count();
+            }
+            if self.graph.edges(node).count() < min_degree {
+                min_degree = self.graph.edges(node).count();
+                if min_degree > 0 {
+                    edge_to_min_degree_node = Some(self.graph.edges(node).next().unwrap().id());
+                }
+            }
+        }
+        edge_to_min_degree_node
+    }
+}
+
+impl<T> TensorNetwork<T>
+where
+    T: HasTensorStructure,
+{
+    pub fn new(tensors: Vec<T>) -> Self {
         TensorNetwork {
             graph: Self::generate_network_graph(tensors),
         }
     }
 
-    fn generate_network_graph(tensors: Vec<NumTensors>) -> Graph<NumTensors, Slot, Undirected> {
-        let mut graph = Graph::<NumTensors, Slot, Undirected>::new_undirected();
+    fn generate_network_graph(tensors: Vec<T>) -> Graph<T, Slot, Undirected> {
+        let mut graph = Graph::<T, Slot, Undirected>::new_undirected();
 
         for tensor in tensors {
             graph.add_node(tensor);
@@ -564,18 +591,7 @@ impl TensorNetwork {
         graph
     }
 
-    fn contract_edge(&mut self, edge_idx: EdgeIndex) {
-        let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();
-
-        let ai = self.graph.node_weight(a).unwrap();
-        let bi = self.graph.node_weight(b).unwrap();
-
-        let f = ai.contract(bi).unwrap();
-
-        self.merge_nodes(a, b, f);
-    }
-
-    fn merge_nodes(&mut self, a: NodeIndex, b: NodeIndex, weight: NumTensors) {
+    fn merge_nodes(&mut self, a: NodeIndex, b: NodeIndex, weight: T) {
         let neighsa = self.graph.neighbors(a).count();
         let neighsb = self.graph.neighbors(b).count();
 
@@ -602,7 +618,23 @@ impl TensorNetwork {
 
         self.graph.remove_node(d);
     }
+}
+impl<T> TensorNetwork<T>
+where
+    T: Clone,
+{
+    pub fn result(&self) -> T {
+        self.graph
+            .node_weight(self.graph.node_indices().next().unwrap())
+            .unwrap()
+            .clone()
+    }
+}
 
+impl<T> TensorNetwork<T>
+where
+    T: Debug + HasTensorStructure,
+{
     pub fn dot(&self) -> String {
         format!(
             "{:?}",
@@ -614,33 +646,48 @@ impl TensorNetwork {
             )
         )
     }
+}
 
+impl<T> TensorNetwork<T>
+where
+    T: Contract<T, LCM = T>,
+{
+    fn contract_edge(&mut self, edge_idx: EdgeIndex) {
+        let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();
+
+        let ai = self.graph.node_weight(a).unwrap();
+        let bi = self.graph.node_weight(b).unwrap();
+
+        let f = ai.contract(bi).unwrap();
+
+        self.merge_nodes(a, b, f);
+    }
     pub fn contract(&mut self) {
-        let mut max_degree = 0;
-        let mut min_degree = usize::MAX;
-        let mut edge_to_min_degree_node = None;
-        for node in self.graph.node_indices() {
-            if self.graph.edges(node).count() > max_degree {
-                max_degree = self.graph.edges(node).count();
-            }
-            if self.graph.edges(node).count() < min_degree {
-                min_degree = self.graph.edges(node).count();
-                if min_degree > 0 {
-                    edge_to_min_degree_node = Some(self.graph.edges(node).next().unwrap().id());
-                }
-            }
-        }
-
-        if let Some(e) = edge_to_min_degree_node {
+        if let Some(e) = self.edge_to_min_degree_node() {
             self.contract_edge(e);
             self.contract();
         }
     }
+}
 
-    pub fn result(&self) -> NumTensors {
-        self.graph
-            .node_weight(self.graph.node_indices().next().unwrap())
-            .unwrap()
-            .clone()
+impl<T> TensorNetwork<T>
+where
+    T: HasTensorStructure + SymbolicContract<T, LCM = T>,
+{
+    fn contract_edge_sym(&mut self, edge_idx: EdgeIndex, state: &State, ws: &Workspace) {
+        let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();
+
+        let ai = self.graph.node_weight(a).unwrap();
+        let bi = self.graph.node_weight(b).unwrap();
+
+        let f = ai.contract_sym(bi, state, ws).unwrap();
+
+        self.merge_nodes(a, b, f);
+    }
+    pub fn contract_sym(&mut self, state: &State, ws: &Workspace) {
+        if let Some(e) = self.edge_to_min_degree_node() {
+            self.contract_edge_sym(e, state, ws);
+            self.contract_sym(state, ws)
+        }
     }
 }

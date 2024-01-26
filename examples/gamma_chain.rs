@@ -6,6 +6,7 @@ use tabled::object::Combination;
 use wide::f64x4;
 
 use _gammaloop::tensor::{
+    mixed_tensor::MixedTensors,
     ufo_spin_tensors::{gamma, sigma},
     AbstractIndex, Contract, DenseTensor, Expr, HasTensorStructure, NumTensors,
     Representation::Lorentz,
@@ -20,7 +21,7 @@ use symbolica::{
         evaluate::{BorrowedHornerScheme, InstructionSetPrinter},
         polynomial::MultivariatePolynomial,
     },
-    representations::{Atom, Identifier},
+    representations::{default::Linear, Atom, Identifier},
     rings::rational::RationalField,
     state::{State, Workspace},
 };
@@ -191,10 +192,14 @@ fn gamma_chain(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
     result
 }
 
-fn gamma_net(minkindices: &[i32], vbar: [Complex64; 4], u: [Complex64; 4]) -> TensorNetwork {
+fn gamma_net(
+    minkindices: &[i32],
+    vbar: [Complex64; 4],
+    u: [Complex64; 4],
+) -> TensorNetwork<MixedTensors> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result: Vec<NumTensors> = vec![eucl_four_vector(contracting_index, vbar).into()];
+    let mut result: Vec<MixedTensors> = vec![eucl_four_vector(contracting_index, vbar).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1;
@@ -386,7 +391,7 @@ fn main() {
 
     // println!("P {:?}", p11);
 
-    let spacings: [i32; 2] = [4, 4];
+    let spacings: [i32; 2] = [40, 40];
     let mut start = 1;
     let mut ranges = Vec::new();
 
@@ -438,9 +443,11 @@ fn main() {
     );
 
     let mut chain = gamma_net(&vec, vbar, u);
+    let mut state = State::new();
+    let ws: Workspace<Linear> = Workspace::new();
     // println!("{}", chain.dot());
     let start = Instant::now();
-    chain.contract();
+    chain.contract_sym(&state, &ws);
     let duration = start.elapsed();
     println!(
         "Benchmark net {:?} gammas, size in {:?}",
@@ -474,9 +481,6 @@ fn main() {
     let duration = start.elapsed();
 
     // println!("{:?} in {:?}", chain, duration);
-
-    // let mut state = State::new();
-    // let ws = Workspace::new();
 
     // let start = Instant::now();
     // // let chain = symbolic_chain(&vec, &ws, &mut state);

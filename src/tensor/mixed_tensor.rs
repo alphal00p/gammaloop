@@ -1,4 +1,6 @@
 use ahash::AHashMap;
+use enum_dispatch::enum_dispatch;
+use hyperdual::Num;
 use num::Complex;
 use rustc_hash::FxHashMap;
 use std::{collections::HashMap, process::Output};
@@ -10,9 +12,9 @@ use symbolica::{
 };
 
 use super::{
-    DenseTensor, Expr, HasTensorStructure, SmallestUpgrade, SparseTensor, SymbolicAdd,
-    SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg, SymbolicSub, SymbolicSubAssign,
-    SymbolicZero, TensorSkeleton, VecSlotExtension,
+    ConcreteIndex, Contract, DenseTensor, Expr, HasTensorStructure, NumTensor, SmallestUpgrade,
+    SparseTensor, SymbolicAdd, SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg,
+    SymbolicSub, SymbolicSubAssign, SymbolicZero, TensorSkeleton, VecSlotExtension,
 };
 
 pub trait SymbolicInternalContract {
@@ -75,7 +77,7 @@ where
 
 pub trait SymbolicContract<T> {
     type LCM;
-    fn contract_sym(&self, other: &T, ws: &Workspace, state: &State) -> Option<Self::LCM>;
+    fn contract_sym(&self, other: &T, state: &State, ws: &Workspace) -> Option<Self::LCM>;
 }
 
 impl<T, U, Out> SymbolicContract<DenseTensor<T>> for DenseTensor<U>
@@ -95,8 +97,8 @@ where
     fn contract_sym(
         &self,
         other: &DenseTensor<T>,
-        ws: &Workspace,
         state: &State,
+        ws: &Workspace,
     ) -> Option<Self::LCM> {
         if let Some((i, j)) = self.match_index(other) {
             let dimension_of_contraction = self.shape()[i];
@@ -166,8 +168,8 @@ where
     fn contract_sym(
         &self,
         other: &DenseTensor<T>,
-        ws: &Workspace,
         state: &State,
+        ws: &Workspace,
     ) -> Option<Self::LCM> {
         if let Some((i, j)) = self.match_index(other) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
@@ -225,10 +227,9 @@ where
     for<'a, 'b> &'a U: SymbolicAdd<&'b T, Output = Out>
         + SymbolicMul<&'b T, Output = Out>
         + SymbolicSub<&'b T, Output = Out>,
+    for<'a, 'b> &'a Out: SymbolicAdd<&'b Out, Output = Out> + SymbolicSub<&'b Out, Output = Out>,
     Out: SymbolicZero
         + Clone
-        + SymbolicAdd<Out, Output = Out>
-        + SymbolicSub<Out, Output = Out>
         + std::fmt::Debug
         + for<'a> SymbolicAddAssign<&'a Out>
         + SymbolicNeg
@@ -238,8 +239,8 @@ where
     fn contract_sym(
         &self,
         other: &SparseTensor<T>,
-        ws: &Workspace,
         state: &State,
+        ws: &Workspace,
     ) -> Option<Self::LCM> {
         if let Some((i, j)) = self.match_index(other) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
@@ -262,13 +263,13 @@ where
                         nonzero = true;
                         if metric[x] {
                             value = value.sub_sym(
-                                fiber_a[i].mul_sym(fiber_b[j], ws, state)?,
+                                &fiber_a[i].mul_sym(fiber_b[j], ws, state)?,
                                 ws,
                                 state,
                             )?;
                         } else {
                             value = value.add_sym(
-                                fiber_a[i].mul_sym(fiber_b[j], ws, state)?,
+                                &fiber_a[i].mul_sym(fiber_b[j], ws, state)?,
                                 ws,
                                 state,
                             )?;
@@ -317,10 +318,10 @@ where
     fn contract_sym(
         &self,
         other: &SparseTensor<T>,
-        ws: &Workspace,
         state: &State,
+        ws: &Workspace,
     ) -> Option<Self::LCM> {
-        other.contract_sym(self, ws, state)
+        other.contract_sym(self, state, ws)
     }
 }
 
@@ -533,5 +534,129 @@ where
             );
         }
         result
+    }
+}
+
+impl<T, U, Out> SymbolicContract<NumTensor<T>> for NumTensor<U>
+where
+    for<'a, 'b> &'a U: SymbolicAdd<&'b T, Output = Out>
+        + SymbolicMul<&'b T, Output = Out>
+        + SymbolicSub<&'b T, Output = Out>,
+    for<'a, 'b> &'a T: SymbolicAdd<&'b U, Output = Out>
+        + SymbolicMul<&'b U, Output = Out>
+        + SymbolicSub<&'b U, Output = Out>,
+    for<'a, 'b> &'a Out: SymbolicAdd<&'b Out, Output = Out> + SymbolicSub<&'b Out, Output = Out>,
+    Out: SymbolicZero
+        + Clone
+        + std::fmt::Debug
+        + for<'a> SymbolicAddAssign<&'a Out>
+        + SymbolicNeg
+        + for<'b> SymbolicSubAssign<&'b Out>,
+{
+    type LCM = NumTensor<Out>;
+    fn contract_sym(
+        &self,
+        other: &NumTensor<T>,
+        state: &State,
+        ws: &Workspace,
+    ) -> Option<Self::LCM> {
+        match (self, other) {
+            (NumTensor::Dense(s), NumTensor::Dense(o)) => {
+                Some(NumTensor::Dense(s.contract_sym(o, state, ws)?))
+            }
+            (NumTensor::Dense(s), NumTensor::Sparse(o)) => {
+                Some(NumTensor::Dense(o.contract_sym(s, state, ws)?))
+            }
+            (NumTensor::Sparse(s), NumTensor::Dense(o)) => {
+                Some(NumTensor::Dense(s.contract_sym(o, state, ws)?))
+            }
+            (NumTensor::Sparse(s), NumTensor::Sparse(o)) => {
+                Some(NumTensor::Sparse(s.contract_sym(o, state, ws)?))
+            }
+        }
+    }
+}
+
+#[enum_dispatch(HasTensorStructure)]
+#[derive(Debug, Clone)]
+pub enum MixedTensors {
+    Float(NumTensor<f64>),
+    Complex(NumTensor<Complex<f64>>),
+    Symbolic(NumTensor<Atom>),
+}
+
+impl From<DenseTensor<f64>> for MixedTensors {
+    fn from(other: DenseTensor<f64>) -> Self {
+        MixedTensors::Float(NumTensor::Dense(other))
+    }
+}
+
+impl From<SparseTensor<f64>> for MixedTensors {
+    fn from(other: SparseTensor<f64>) -> Self {
+        MixedTensors::Float(NumTensor::Sparse(other))
+    }
+}
+
+impl From<DenseTensor<Complex<f64>>> for MixedTensors {
+    fn from(other: DenseTensor<Complex<f64>>) -> Self {
+        MixedTensors::Complex(NumTensor::Dense(other))
+    }
+}
+
+impl From<SparseTensor<Complex<f64>>> for MixedTensors {
+    fn from(other: SparseTensor<Complex<f64>>) -> Self {
+        MixedTensors::Complex(NumTensor::Sparse(other))
+    }
+}
+
+impl From<DenseTensor<Atom>> for MixedTensors {
+    fn from(other: DenseTensor<Atom>) -> Self {
+        MixedTensors::Symbolic(NumTensor::Dense(other))
+    }
+}
+
+impl From<SparseTensor<Atom>> for MixedTensors {
+    fn from(other: SparseTensor<Atom>) -> Self {
+        MixedTensors::Symbolic(NumTensor::Sparse(other))
+    }
+}
+
+impl SymbolicContract<MixedTensors> for MixedTensors {
+    type LCM = MixedTensors;
+    fn contract_sym(
+        &self,
+        other: &MixedTensors,
+        state: &State,
+        ws: &Workspace,
+    ) -> Option<Self::LCM> {
+        match (self, other) {
+            (MixedTensors::Float(s), MixedTensors::Float(o)) => {
+                Some(MixedTensors::Float(s.contract_sym(o, state, ws)?))
+            }
+            (MixedTensors::Float(s), MixedTensors::Complex(o)) => {
+                Some(MixedTensors::Complex(s.contract_sym(o, state, ws)?))
+            }
+            (MixedTensors::Float(s), MixedTensors::Symbolic(o)) => {
+                Some(MixedTensors::Symbolic(s.contract_sym(o, state, ws)?))
+            }
+            (MixedTensors::Complex(s), MixedTensors::Float(o)) => {
+                Some(MixedTensors::Complex(s.contract_sym(o, state, ws)?))
+            }
+            (MixedTensors::Complex(s), MixedTensors::Complex(o)) => {
+                Some(MixedTensors::Complex(s.contract_sym(o, state, ws)?))
+            }
+            (MixedTensors::Complex(s), MixedTensors::Symbolic(o)) => {
+                Some(MixedTensors::Symbolic(s.contract_sym(o, state, ws)?))
+            }
+            (MixedTensors::Symbolic(s), MixedTensors::Float(o)) => {
+                Some(MixedTensors::Symbolic(s.contract_sym(o, state, ws)?))
+            }
+            (MixedTensors::Symbolic(s), MixedTensors::Complex(o)) => {
+                Some(MixedTensors::Symbolic(s.contract_sym(o, state, ws)?))
+            }
+            (MixedTensors::Symbolic(s), MixedTensors::Symbolic(o)) => {
+                Some(MixedTensors::Symbolic(s.contract_sym(o, state, ws)?))
+            }
+        }
     }
 }

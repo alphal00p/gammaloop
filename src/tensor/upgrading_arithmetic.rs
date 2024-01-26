@@ -237,6 +237,7 @@ duplicate! {[
   [ f64]            [ f64]          [ f64];
   [ Complex<f64>]   [Complex<f64>]  [Complex<f64>];
   [ f64]            [Complex<f64>]  [Complex<f64>];
+  [ Complex<f64>]   [f64]           [Complex<f64>];
 ]
 
 impl<'a> SymbolicMul<&U> for &'a T{
@@ -300,10 +301,18 @@ impl<'a> SymbolicSub<&Atom> for &'a Atom {
     }
 }
 
+forward_ref_binop!(impl SymbolicSub, sub_sym for Atom, Atom, Atom);
+
 duplicate! {
     [ num;
     [f64] ;
     [Complex<f64>] ;]
+
+    impl SymbolicNeg for num{
+        fn neg_sym(self, _ws: &Workspace, _state: &State) -> Self {
+            -self
+        }
+    }
 
     impl SymbolicAddAssign<num> for num{
         fn add_assign_sym(&mut self, rhs: num, _ws: &Workspace, _state: &State) {
@@ -365,6 +374,40 @@ duplicate! {
 
     forward_ref_binop! {impl SymbolicAdd, add_sym for Atom, num, Atom}
 
+    impl<'a> SymbolicSub<&Atom> for &'a num{
+        type Output = Atom;
+        fn sub_sym(self, rhs: &Atom, ws: &Workspace, state: &State) -> Option<Self::Output> {
+            self.into_sym(ws, state)?.sub_sym(rhs, ws, state)
+        }
+    }
+
+    forward_ref_binop! {impl SymbolicSub, sub_sym for num, Atom, Atom}
+
+    impl<'a> SymbolicSub<&num> for &'a Atom{
+        type Output = Atom;
+        fn sub_sym(self, rhs: &num, ws: &Workspace, state: &State) -> Option<Self::Output> {
+            SymbolicSub::<&Atom>::sub_sym(rhs,self, ws, state)
+        }
+    }
+
+    forward_ref_binop! {impl SymbolicSub, sub_sym for Atom, num, Atom}
+
+}
+
+#[test]
+fn symbolic() {
+    let mut state = State::new();
+    let ws: Workspace = Workspace::new();
+
+    let a = Atom::parse("c", &mut state, &ws).unwrap();
+    let b = Atom::parse("d", &mut state, &ws).unwrap();
+    let c = a.add_sym(&b, &ws, &state).unwrap();
+    let d = c.add_sym(4., &ws, &state).unwrap();
+
+    let e = (4.).add_sym(4., &ws, &state);
+    let f = Complex::new(2., 3.).add_sym(4., &ws, &state);
+    let g = Complex::new(2., 3.).add_sym(Complex::new(2., 3.), &ws, &state);
+    let h = (3.).add_sym(Complex::new(1., 2.), &ws, &state);
 }
 
 // impl<T, U> SmallestUpgrade<Up<T>> for Up<U>
