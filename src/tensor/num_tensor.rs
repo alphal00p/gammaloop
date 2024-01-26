@@ -44,6 +44,10 @@ impl<T> SparseTensor<T> {
         self.elements.insert(indices.to_vec(), value);
         Ok(())
     }
+
+    pub fn density(&self) -> f64 {
+        f64::from(self.elements.len() as u32) / f64::from(self.size() as u32)
+    }
 }
 
 impl<T> SparseTensor<T>

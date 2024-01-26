@@ -5,10 +5,15 @@ use wide::f64x4;
 
 use _gammaloop::tensor::{
     ufo_spin_tensors::{gamma, sigma},
+<<<<<<< Updated upstream
     AbstractIndex, Contract, DenseTensor, Expr,
+=======
+    AbstractIndex, ContractableWithDense, ContractableWithSparse, DenseTensor, Expr,
+    HasTensorStructure,
+>>>>>>> Stashed changes
     Representation::Lorentz,
     Representation::{self, Euclidean},
-    TensorStructure, VecSlotExtension,
+    SparseTensor, TensorStructure, VecSlotExtension,
 };
 
 use num::complex::Complex64;
@@ -122,6 +127,7 @@ fn benchmark_chain(
         .contract(&eucl_four_vector(contracting_index, u))
         .unwrap()
 }
+<<<<<<< Updated upstream
 // #[allow(dead_code)]
 // fn symbolic_chain_function<'a>(
 //     minkindices: &[i32],
@@ -132,6 +138,48 @@ fn benchmark_chain(
 //     let id = state.get_or_insert_fn("p", None).unwrap();
 //     let vbar = labeled_eucl_four_vector("vbar", contracting_index, ws, state).builder(state, ws);
 //     let mut result = vbar;
+=======
+
+fn gamma_chain(minkindices: &[i32]) -> SparseTensor<Complex64> {
+    let mut i = 0;
+    let mut contracting_index = 0;
+    let mink = minkindices[0];
+    let mut result = gamma(
+        usize::try_from(mink).unwrap(),
+        (contracting_index, contracting_index + 1),
+    );
+    for m in minkindices[1..].iter() {
+        contracting_index += 1;
+        if *m > 0 {
+            i += 1;
+            let gamma = gamma(
+                usize::try_from(*m).unwrap(),
+                (contracting_index, contracting_index + 1),
+            );
+            result = gamma.contract_with_sparse(&result).unwrap();
+        } else {
+            result = gamma(
+                usize::try_from(m.neg()).unwrap(),
+                (contracting_index, contracting_index + 1),
+            )
+            .contract_with_sparse(&result)
+            .unwrap();
+        }
+    }
+    result
+}
+
+#[allow(dead_code)]
+fn symbolic_chain_function<'a>(
+    minkindices: &[i32],
+    ws: &'a Workspace,
+    state: &'a mut State,
+) -> DenseTensor<Expr<'a>> {
+    let mut contracting_index = 0;
+    let id = state.get_or_insert_fn("p", None).unwrap();
+    let vbar = labeled_eucl_four_vector("vbar", contracting_index, ws, state).builder(state, ws);
+    let mut result = vbar;
+>>>>>>> Stashed changes
 
 //     // for (i, m) in minkindices.iter().filter(|&x| *x > 0).enumerate() {
 //     //     let p = labeled_mink_four_vector(&format!("p{}", i), ws, state);
@@ -202,6 +250,7 @@ fn benchmark_chain(
 //                 .unwrap()
 //                 .finish();
 
+<<<<<<< Updated upstream
 //             i += 1;
 //         } else {
 //             result = gamma(
@@ -216,6 +265,22 @@ fn benchmark_chain(
 //         contracting_index += 1;
 //     }
 //     let u = labeled_eucl_four_vector("u", contracting_index, ws, state);
+=======
+            i += 1;
+        } else {
+            result = gamma(
+                usize::try_from(m.neg()).unwrap() * 100,
+                (contracting_index, contracting_index + 1),
+            )
+            .to_symbolic_builder(ws, state)
+            .contract_with_dense(&result.builder(state, ws))
+            .unwrap()
+            .finish();
+        }
+        contracting_index += 1;
+    }
+    let u = labeled_eucl_four_vector("u", contracting_index, ws, state);
+>>>>>>> Stashed changes
 
 //     result
 //         .builder(state, ws)
@@ -271,7 +336,7 @@ fn main() {
 
     // println!("P {:?}", p11);
 
-    let spacings: [i32; 2] = [4, 5];
+    let spacings: [i32; 2] = [4, 2];
     let mut start = 1;
     let mut ranges = Vec::new();
 
@@ -286,6 +351,7 @@ fn main() {
     let chain = benchmark_chain(&vec, vbar, u);
     let duration = start.elapsed();
 
+<<<<<<< Updated upstream
     println!("{:?} in {:?}", chain, duration);
 
     // let mut state = State::new();
@@ -364,6 +430,115 @@ fn main() {
     // let o_f64x4 = o.convert::<f64x4>();
     // let mut evaluator = o_f64x4.evaluator();
 
+=======
+    println!("Normal in {:?}", duration);
+
+    let vec = (1..=3).collect::<Vec<_>>();
+    let start = Instant::now();
+    let chain = gamma_chain(&vec);
+    let duration = start.elapsed();
+
+    println!(
+        "Just {:?} gammas, size {:?} with density {:?} in {:?}",
+        vec.len(),
+        chain.size(),
+        chain.density(),
+        duration
+    );
+
+    for (i, c) in chain.iter() {
+        if *c == Complex64::new(0., 0.) {
+            print!("hi")
+        }
+        if *c == Complex64::new(-0., 0.) {
+            print!("hello")
+        }
+        if *c == Complex64::new(-0., -0.) {
+            print!("hello")
+        }
+        if *c == Complex64::new(0., -0.) {
+            print!("hello")
+        }
+        print!("{}", c.re);
+    }
+
+    // let mut state = State::new();
+    // let ws = Workspace::new();
+
+    // let start = Instant::now();
+    // let chain = symbolic_chain(&vec, &ws, &mut state);
+    // let duration = start.elapsed();
+
+    // // println!("{:?} in {:?}", chain, duration);
+    // let mut out = ws.new_atom();
+    // let s = chain.finish().data.remove(0);
+
+    // s.as_view().expand(&ws, &state, &mut out);
+
+    // println!("{}", out.printer(&state));
+
+    // let poly: MultivariatePolynomial<_, u8> = out
+    //     .as_view()
+    //     .to_polynomial(&RationalField::new(), None)
+    //     .unwrap();
+
+    // let (h, _ops, scheme) = poly.optimize_horner_scheme(4000);
+    // let mut i = h.to_instr(poly.nvars);
+
+    // println!(
+    //     "Number of operations={}, with scheme={:?}",
+    //     BorrowedHornerScheme::from(&h).op_count_cse(),
+    //     scheme,
+    // );
+
+    // i.fuse_operations();
+
+    // for _ in 0..100_000 {
+    //     if !i.common_pair_elimination() {
+    //         break;
+    //     }
+    //     i.fuse_operations();
+    // }
+
+    // let op_count = i.op_count();
+    // let o = i.to_output(poly.var_map.as_ref().unwrap().to_vec(), true);
+    // let o_f64 = o.convert::<f64>();
+
+    // println!("Writing output to evaluate.cpp");
+    // std::fs::write(
+    //     "evaluate.cpp",
+    //     format!(
+    //         "{}",
+    //         InstructionSetPrinter {
+    //             instr: &o,
+    //             state: &state,
+    //             mode: symbolica::poly::evaluate::InstructionSetMode::CPP(
+    //                 symbolica::poly::evaluate::InstructionSetModeCPPSettings {
+    //                     write_header_and_test: true,
+    //                     always_pass_output_array: false,
+    //                 }
+    //             )
+    //         }
+    //     ),
+    // )
+    // .unwrap();
+
+    // let mut evaluator = o_f64.evaluator();
+
+    // let start = Instant::now();
+    // assert!(!evaluator
+    //     .evaluate(&(0..poly.nvars).map(|x| x as f64 + 1.).collect::<Vec<_>>())
+    //     .is_empty());
+    // let duration = start.elapsed();
+
+    // println!("Final number of operations={}", op_count);
+    // println!("Evaluation = {:?}", duration);
+
+    // // evaluate with simd
+    // let o_f64x4 = o.convert::<f64x4>();
+    // let mut evaluator = o_f64x4.evaluator();
+
+>>>>>>> Stashed changes
     // println!(
     //     "Evaluation with simd = {:?}",
     //     evaluator.evaluate(
