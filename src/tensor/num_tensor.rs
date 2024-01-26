@@ -1,36 +1,36 @@
-use enum_dispatch::enum_dispatch;
-use num::Complex;
-use std::{borrow::Cow, collections::BTreeMap};
-
 use super::{
-    AbstractIndex, ConcreteIndex, Dimension, HasTensorStructure, Slot, TensorStructure,
+    AbstractIndex, ConcreteIndex, Dimension, HasTensorStructure, Slot, TensorSkeleton,
     VecSlotExtension,
 };
-
+use ahash::AHashMap;
+use enum_dispatch::enum_dispatch;
+use num::Complex;
+use rustc_hash::FxHashMap;
+use std::{borrow::Cow, collections::BTreeMap};
 #[derive(Debug, Clone)]
 pub struct SparseTensor<T> {
-    pub elements: BTreeMap<Vec<ConcreteIndex>, T>,
-    pub structure: Vec<Slot>,
+    pub elements: AHashMap<Vec<ConcreteIndex>, T>,
+    pub structure: TensorSkeleton,
 }
 
 impl<T> HasTensorStructure for SparseTensor<T> {
-    fn structure(&self) -> &Vec<Slot> {
+    fn structure(&self) -> &TensorSkeleton {
         &self.structure
     }
 }
 
 impl<T> SparseTensor<T> {
-    pub fn empty(structure: TensorStructure) -> Self {
+    pub fn empty(structure: TensorSkeleton) -> Self {
         SparseTensor {
-            elements: BTreeMap::new(),
+            elements: AHashMap::new(),
             structure,
         }
     }
 
-    pub fn empty_from_integers(indices: &[AbstractIndex], dims: &[Dimension]) -> Self {
-        let structure = TensorStructure::from_integers(indices, dims);
+    pub fn empty_from_integers(slots: &[(AbstractIndex, Dimension)], name: &str) -> Self {
+        let structure = TensorSkeleton::from_integers(slots, name);
         SparseTensor {
-            elements: BTreeMap::new(),
+            elements: AHashMap::new(),
             structure,
         }
     }
@@ -47,6 +47,17 @@ impl<T> SparseTensor<T> {
 
     pub fn density(&self) -> f64 {
         f64::from(self.elements.len() as u32) / f64::from(self.size() as u32)
+    }
+
+    pub fn to_dense(&self) -> DenseTensor<T>
+    where
+        T: Clone + Default,
+    {
+        let mut dense = DenseTensor::default(self.structure.clone());
+        for (indices, value) in &self.elements {
+            dense.set(indices, value.clone());
+        }
+        dense
     }
 }
 
@@ -71,11 +82,11 @@ where
 {
     pub fn from_data(
         data: &[(Vec<ConcreteIndex>, T)],
-        structure: TensorStructure,
+        structure: TensorSkeleton,
     ) -> Result<Self, String> {
-        let mut dimensions = vec![0; structure.len()];
+        let mut dimensions = vec![0; structure.order()];
         for (index, _) in data {
-            if index.len() != structure.len() {
+            if index.len() != structure.order() {
                 return Err("Mismatched order".to_string());
             }
             for (i, &idx) in index.iter().enumerate() {
@@ -85,7 +96,7 @@ where
             }
         }
         Ok(SparseTensor {
-            elements: BTreeMap::from_iter(data.iter().cloned()),
+            elements: AHashMap::from_iter(data.iter().cloned()),
             structure,
         })
     }
@@ -114,17 +125,17 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub struct DenseTensor<T> {
     pub data: Vec<T>,
-    pub structure: TensorStructure,
+    pub structure: TensorSkeleton,
 }
 
 impl<T> HasTensorStructure for DenseTensor<T> {
-    fn structure(&self) -> &TensorStructure {
+    fn structure(&self) -> &TensorSkeleton {
         &self.structure
     }
 }
 
 impl<T: Default + Clone> DenseTensor<T> {
-    pub fn default(structure: TensorStructure) -> Self {
+    pub fn default(structure: TensorSkeleton) -> Self {
         let length = if structure.is_scalar() {
             1
         } else {
@@ -136,14 +147,14 @@ impl<T: Default + Clone> DenseTensor<T> {
         }
     }
 
-    pub fn default_from_integers(indices: &[AbstractIndex], dims: &[usize]) -> Self {
-        let structure = TensorStructure::from_integers(indices, dims);
+    pub fn default_from_integers(slots: &[(AbstractIndex, Dimension)], name: &str) -> Self {
+        let structure = TensorSkeleton::from_integers(slots, name);
         DenseTensor::default(structure)
     }
 }
 
 impl<T: Clone> DenseTensor<T> {
-    pub fn from_data(data: &[T], structure: TensorStructure) -> Result<Self, String> {
+    pub fn from_data(data: &[T], structure: TensorSkeleton) -> Result<Self, String> {
         if data.len() != structure.size() && !(data.len() == 1 && structure.is_scalar()) {
             return Err("Data length does not match shape".to_string());
         }
@@ -153,7 +164,7 @@ impl<T: Clone> DenseTensor<T> {
         })
     }
 
-    pub fn from_data_coerced(data: &[T], structure: TensorStructure) -> Result<Self, String> {
+    pub fn from_data_coerced(data: &[T], structure: TensorSkeleton) -> Result<Self, String> {
         if data.len() < structure.size() {
             return Err("Data length is too small".to_string());
         }
@@ -187,6 +198,19 @@ impl<T> DenseTensor<T> {
         } else {
             None
         }
+    }
+
+    pub fn to_sparse(&self) -> SparseTensor<T>
+    where
+        T: Clone + Default + PartialEq,
+    {
+        let mut sparse = SparseTensor::empty(self.structure.clone());
+        for (i, value) in self.iter() {
+            if *value != T::default() {
+                sparse.set(&i, value.clone());
+            }
+        }
+        sparse
     }
 }
 // why no specialization? :(
@@ -234,9 +258,41 @@ impl<T> SparseTensor<T> {
 }
 
 #[enum_dispatch(HasTensorStructure)]
+#[derive(Debug, Clone)]
 pub enum NumTensor<T> {
     Dense(DenseTensor<T>),
     Sparse(SparseTensor<T>),
+}
+
+#[enum_dispatch(HasTensorStructure)]
+#[derive(Debug, Clone)]
+pub enum NumTensors {
+    Float(NumTensor<f64>),
+    Complex(NumTensor<Complex<f64>>),
+}
+
+impl From<DenseTensor<f64>> for NumTensors {
+    fn from(other: DenseTensor<f64>) -> Self {
+        NumTensors::Float(NumTensor::Dense(other))
+    }
+}
+
+impl From<SparseTensor<f64>> for NumTensors {
+    fn from(other: SparseTensor<f64>) -> Self {
+        NumTensors::Float(NumTensor::Sparse(other))
+    }
+}
+
+impl From<DenseTensor<Complex<f64>>> for NumTensors {
+    fn from(other: DenseTensor<Complex<f64>>) -> Self {
+        NumTensors::Complex(NumTensor::Dense(other))
+    }
+}
+
+impl From<SparseTensor<Complex<f64>>> for NumTensors {
+    fn from(other: SparseTensor<Complex<f64>>) -> Self {
+        NumTensors::Complex(NumTensor::Sparse(other))
+    }
 }
 
 // trait UpcastableTo<T> {}

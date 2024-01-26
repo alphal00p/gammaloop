@@ -1,4 +1,9 @@
 use enum_dispatch::enum_dispatch;
+use itertools::Itertools;
+use std::fmt::Debug;
+use std::ops::Index;
+use std::ops::Range;
+use std::path::Display;
 use symbolica::representations::{AsAtomView, Atom, FunctionBuilder, Identifier};
 use symbolica::state::{State, Workspace};
 
@@ -85,6 +90,15 @@ impl From<Representation> for Dimension {
     }
 }
 
+impl std::fmt::Display for Representation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Representation::Euclidean(value) => write!(f, "e{}", value),
+            Representation::Lorentz(value) => write!(f, "l{}", value),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Slot {
     index: AbstractIndex,
@@ -123,7 +137,340 @@ impl Slot {
     }
 }
 
+impl std::fmt::Display for Slot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.index, self.representation)
+    }
+}
+
 pub type TensorStructure = Vec<Slot>;
+#[derive(Clone, PartialEq, Debug)]
+pub struct TensorSkeleton {
+    internal: TensorStructure,
+    external: TensorStructure,
+    names: Vec<(String, Range<usize>)>,
+}
+
+impl TensorSkeleton {
+    pub fn from_idxsing(slots: &[(AbstractIndex, Representation)], name: &str) -> Self {
+        let structure: Vec<Slot> = slots
+            .iter()
+            .map(|(index, representation)| Slot::from((*index, *representation)))
+            .collect();
+        let mut name_map = Vec::new();
+        name_map.push((name.to_string(), 0..structure.len()));
+        TensorSkeleton {
+            internal: structure.clone(),
+            external: structure,
+            names: name_map,
+        }
+    }
+    pub fn from_integers(slots: &[(AbstractIndex, Dimension)], name: &str) -> Self {
+        let slots: Vec<(AbstractIndex, Representation)> = slots
+            .iter()
+            .map(|(index, dim)| (*index, Representation::Euclidean(*dim)))
+            .collect();
+        Self::from_idxsing(&slots, name)
+    }
+
+    pub fn match_index(&self, other: &Self) -> Option<(usize, usize)> {
+        for (i, slot_a) in self.external.iter().enumerate().rev() {
+            for (j, slot_b) in other.external.iter().enumerate() {
+                if slot_a == slot_b {
+                    return Some((i, j));
+                }
+            }
+        }
+        None
+    }
+
+    fn traces(&self) -> Vec<[usize; 2]> {
+        let mut positions = HashMap::new();
+
+        // Track the positions of each element
+        for (index, &value) in self.external.iter().enumerate() {
+            positions.entry(value).or_insert_with(Vec::new).push(index);
+        }
+
+        // Collect only the positions of repeated elements
+        positions
+            .into_iter()
+            .filter_map(|(_, indices)| {
+                if indices.len() == 2 {
+                    Some([indices[0], indices[1]])
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
+        let mut slots_b = other.external.clone();
+        let mut slots_a = self.external.clone();
+
+        slots_a.remove(positions.0);
+        slots_b.remove(positions.1);
+
+        let mut slots_a_int = self.internal.clone();
+        let mut slots_b_int = other.internal.clone();
+        slots_a_int.append(&mut slots_b_int);
+
+        let mut other_names = other.names.clone();
+        other_names.iter_mut().for_each(|(_, range)| {
+            range.start += self.internal.len();
+            range.end += self.internal.len();
+        });
+        let mut names = self.names.clone();
+        names.append(&mut other_names);
+        slots_a.append(&mut slots_b);
+        TensorSkeleton {
+            internal: slots_a_int,
+            external: slots_a,
+            names,
+        }
+    }
+
+    pub fn shape(&self) -> Vec<Dimension> {
+        self.external
+            .iter()
+            .map(|slot| &slot.representation)
+            .collect()
+    }
+
+    pub fn order(&self) -> usize {
+        //total valence (or misnamed : rank)
+        self.external.len()
+    }
+
+    pub fn same_external(&self, other: &Self) -> bool {
+        let set1: HashSet<_> = self.external.iter().collect();
+        let set2: HashSet<_> = other.external.iter().collect();
+        set1 == set2
+    }
+
+    pub fn same_content(&self, other: &Self) -> bool {
+        let set1: HashSet<_> = self.internal.iter().collect();
+        let set2: HashSet<_> = other.internal.iter().collect();
+        set1 == set2
+        // TODO: check names
+    }
+
+    pub fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>> {
+        if self.external.len() != other.external.len() {
+            return None;
+        }
+
+        let mut index_map = HashMap::new();
+        for (i, item) in other.external.iter().enumerate() {
+            index_map.entry(item).or_insert_with(Vec::new).push(i);
+        }
+
+        let mut permutation = Vec::with_capacity(self.external.len());
+        let mut used_indices = HashSet::new();
+        for item in self.external.iter() {
+            if let Some(indices) = index_map.get_mut(item) {
+                // Find an index that hasn't been used yet
+                if let Some(&index) = indices.iter().find(|&&i| !used_indices.contains(&i)) {
+                    permutation.push(index);
+                    used_indices.insert(index);
+                } else {
+                    // No available index for this item
+                    return None;
+                }
+            } else {
+                // Item not found in other
+                return None;
+            }
+        }
+
+        Some(permutation)
+    }
+
+    pub fn strides_column_major(&self) -> Vec<usize> {
+        let mut strides: Vec<usize> = vec![1; self.order()];
+
+        if self.order() == 0 {
+            return strides;
+        }
+
+        for i in 0..self.order() - 1 {
+            strides[i + 1] = strides[i] * usize::from(self.external[i].representation);
+        }
+
+        strides
+    }
+
+    pub fn strides_row_major(&self) -> Vec<usize> {
+        let mut strides = vec![1; self.order()];
+        if self.order() == 0 {
+            return strides;
+        }
+
+        for i in (0..self.order() - 1).rev() {
+            strides[i] = strides[i + 1] * usize::from(self.external[i + 1].representation);
+        }
+
+        strides
+    }
+
+    pub fn strides(&self) -> Vec<usize> {
+        self.strides_row_major()
+    }
+
+    pub fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String> {
+        if indices.len() != self.order() {
+            return Err("Mismatched order".to_string());
+        }
+
+        for (i, &dim_len) in self
+            .external
+            .iter()
+            .map(|slot| &slot.representation)
+            .enumerate()
+        {
+            if indices[i] >= usize::from(dim_len) {
+                return Err(format!(
+                    "Index {} out of bounds for dimension {} of size {}",
+                    indices[i],
+                    i,
+                    usize::from(dim_len)
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String> {
+        let strides = self.strides();
+        self.verify_indices(indices)?;
+
+        let mut idx = 0;
+        for (i, &index) in indices.iter().enumerate() {
+            idx += index * strides[i];
+        }
+        Ok(idx)
+    }
+
+    pub fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String> {
+        let mut indices = vec![];
+        let mut index = flat_index;
+        for &stride in self.strides().iter() {
+            indices.push(index / stride);
+            index %= stride;
+        }
+        if flat_index < self.size() {
+            Ok(indices)
+        } else {
+            Err(format!("Index {} out of bounds", flat_index))
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        self.shape().iter().product()
+    }
+
+    pub fn index_iter(&self) -> TensorStructureIndexIterator {
+        TensorStructureIndexIterator::new(&self.external)
+    }
+
+    pub fn to_symbolic(&self, label: Identifier, ws: &Workspace, state: &mut State) -> Atom {
+        let atoms = self
+            .external
+            .iter()
+            .map(|slot| slot.to_symbolic(ws, state))
+            .collect::<Vec<_>>();
+
+        let mut value_builder = FunctionBuilder::new(label, state, ws);
+        for atom in atoms {
+            value_builder = value_builder.add_arg(atom.as_atom_view());
+        }
+        value_builder.finish().into_atom()
+    }
+
+    pub fn is_scalar(&self) -> bool {
+        self.order() == 0
+    }
+
+    pub fn get_ith_metric(&self, i: usize) -> Option<Vec<bool>> {
+        Some(self.external.get(i)?.representation.negative())
+    }
+
+    pub fn independentize_internal(&mut self, other: &Self) {
+        let internal_set: HashSet<Slot> = self
+            .internal
+            .clone()
+            .into_iter()
+            .filter(|s| self.external.contains(s))
+            .collect();
+
+        let other_set: HashSet<Slot> = other.internal.clone().into_iter().collect();
+
+        let mut replacement_value = internal_set
+            .union(&other_set)
+            .map(|s| s.index)
+            .max()
+            .unwrap_or(0)
+            + 1;
+
+        for item in self.internal.iter_mut() {
+            if other_set.contains(item) {
+                item.index = replacement_value;
+                replacement_value += 1;
+            }
+        }
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        let mut other_names = other.names.clone();
+        other_names.iter_mut().for_each(|(_, range)| {
+            range.start += self.internal.len();
+            range.end += self.internal.len();
+        });
+        self.names.extend(other_names);
+        self.external.append(&mut other.external.clone());
+        self.trace_out();
+        self.independentize_internal(other);
+        self.internal.append(&mut other.internal.clone());
+    }
+
+    fn trace_out(&mut self) {
+        self.external = self.external.clone().into_iter().unique().collect();
+    }
+
+    pub fn trace(&mut self, i: usize, j: usize) {
+        if i < j {
+            self.trace(j, i);
+            return;
+        }
+        let a = self.external.remove(i);
+        let b = self.external.remove(j);
+        assert_eq!(a, b);
+    }
+}
+
+impl std::fmt::Display for TensorSkeleton {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut string = String::new();
+        for (name, range) in self.names.iter() {
+            string.push_str(&format!("{}(", name));
+            for slot in self.internal[range.clone()].iter() {
+                string.push_str(&format!("{},", slot));
+            }
+            string.pop();
+            string.push(')');
+        }
+        write!(f, "{}", string)
+    }
+}
+
+impl Index<usize> for TensorSkeleton {
+    type Output = Slot;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.external[index]
+    }
+}
 
 pub trait VecSlotExtension {
     fn from_idxsing(indices: &[AbstractIndex], dims: &[Representation]) -> Self;
@@ -353,7 +700,7 @@ impl VecSlotExtension for TensorStructure {
 
 #[enum_dispatch]
 pub trait HasTensorStructure {
-    fn structure(&self) -> &Vec<Slot>;
+    fn structure(&self) -> &TensorSkeleton;
     // inline
     fn order(&self) -> usize {
         self.structure().order()
@@ -393,5 +740,15 @@ pub trait HasTensorStructure {
 
     fn is_scalar(&self) -> bool {
         self.structure().is_scalar()
+    }
+
+    fn get_ith_metric(&self, i: usize) -> Option<Vec<bool>> {
+        self.structure().get_ith_metric(i)
+    }
+}
+
+impl std::fmt::Debug for dyn HasTensorStructure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self.structure())
     }
 }

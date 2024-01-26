@@ -3,34 +3,34 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use super::{Expr, HasTensorStructure, TensorStructure, VecSlotExtension};
+use super::{Expr, HasTensorStructure, TensorSkeleton, TensorStructure, VecSlotExtension};
 
 #[derive(Debug)]
 pub struct SymbolicTensor {
-    structure: TensorStructure,
+    structure: TensorSkeleton,
     expression: Atom,
 }
 #[derive(Debug)]
 pub struct SymbolicTensorBuilder<'a> {
-    structure: TensorStructure,
+    structure: TensorSkeleton,
     expression: Expr<'a>,
 }
 
 impl HasTensorStructure for SymbolicTensor {
-    fn structure(&self) -> &TensorStructure {
+    fn structure(&self) -> &TensorSkeleton {
         &self.structure
     }
 }
 
 impl<'a> HasTensorStructure for SymbolicTensorBuilder<'a> {
-    fn structure(&self) -> &TensorStructure {
+    fn structure(&self) -> &TensorSkeleton {
         &self.structure
     }
 }
 
 impl<'a> SymbolicTensorBuilder<'a> {
     pub fn new(
-        structure: TensorStructure,
+        structure: TensorSkeleton,
         label: Identifier,
         ws: &'a Workspace,
         state: &'a mut State,
@@ -70,16 +70,18 @@ impl<'a> SymbolicTensorBuilder<'a> {
         if let Some((i, j)) = self.match_index(other) {
             self.structure = self.structure().merge_at(other.structure(), (i, j));
         } else {
-            self.structure.append(&mut other.structure().clone());
+            self.structure.merge(&mut other.structure().clone());
         }
         self.expression = self.expression * other.get_atom().as_view();
         self
     }
+
+    fn internal_contract(&mut self) {}
 }
 
 impl SymbolicTensor {
     pub fn new(
-        structure: TensorStructure,
+        structure: TensorSkeleton,
         label: Identifier,
         ws: &Workspace,
         state: &mut State,

@@ -60,6 +60,8 @@ rug = "1.22.0"
 wide = "0.7.13"
 arbitrary-int = { version = "1.2.6", features = ["num-traits"] }
 duplicate = "1.0.0"
+rustc-hash = "1.1.0"
+petgraph = "0.6.4"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

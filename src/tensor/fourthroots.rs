@@ -1,6 +1,6 @@
 use duplicate::duplicate;
 use num::{traits::WrappingAdd, Complex};
-use std::ops::{Add, AddAssign, Mul};
+use std::ops::{Add, Mul};
 
 use arbitrary_int::u2;
 
@@ -246,21 +246,21 @@ fn test_upgrading_mul() {
     let a = Complex::new(1, 0);
     let b = Fouroot::i();
     let c = a + b;
-    assert_eq!(c, Complex::new(0, 1));
+    assert_eq!(c, Complex::new(1, 1));
 
     let af = Complex::new(1.0, 0.0);
     let bf = Fouroot::i();
 
-    let cf = af + &bf;
+    let _cf = af + bf;
 
-    let aa = bf + 1.;
+    let _aa = bf + 1.;
     // assert_eq!(cf, Complex::new(0.0, 1.0));
 
     let i = Fouroot::i();
 
     let f = i + i;
 
-    let ff = i + &af;
+    let _ff = i + af;
     assert_eq!(f, Complex::new(0, 2));
 
     let f = Fouroot::i() * Fouroot::i() * Fouroot::i() * Fouroot::i();

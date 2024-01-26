@@ -1,8 +1,9 @@
 use super::{
-    Fouroot, Representation, Representation::Euclidean, Representation::Lorentz, SparseTensor,
-    TensorStructure, VecSlotExtension,
+    DenseTensor, Fouroot, Representation, Representation::Euclidean, Representation::Lorentz,
+    SparseTensor, TensorSkeleton, TensorStructure, VecSlotExtension,
 };
 use num::{Complex, Float, One, Zero};
+use serde::de::IntoDeserializer;
 
 #[allow(dead_code)]
 pub fn identity<T>(indices: (usize, usize), signature: Representation) -> SparseTensor<Complex<T>>
@@ -10,7 +11,8 @@ where
     T: One + Zero,
 {
     //TODO: make it just swap indices
-    let structure = TensorStructure::from_idxsing(&[indices.0, indices.1], &[signature, signature]);
+    let structure =
+        TensorSkeleton::from_idxsing(&[(indices.0, signature), (indices.1, signature)], "id");
     let mut identity = SparseTensor::empty(structure);
     for i in 0..signature.into() {
         identity
@@ -30,6 +32,17 @@ where
     identity(indices, signature)
 }
 
+pub fn mink_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
+where
+    T: Clone,
+{
+    DenseTensor::from_data(
+        &p,
+        TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p"),
+    )
+    .unwrap()
+}
+
 #[allow(dead_code)]
 pub fn euclidean_identity<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
 where
@@ -41,17 +54,21 @@ where
 }
 
 #[allow(dead_code)]
-pub fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<i8>> {
+pub fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<f64>> {
     // Gamma(1,2,3) Dirac matrix (γ^μ1)_s2_s3
-    let structure = TensorStructure::from_idxsing(
-        &[indices.0, indices.1, minkindex],
-        &[Euclidean(4), Euclidean(4), Lorentz(4)],
+    let structure = TensorSkeleton::from_idxsing(
+        &[
+            (indices.0, Euclidean(4)),
+            (indices.1, Euclidean(4)),
+            (minkindex, Lorentz(4)),
+        ],
+        "γ",
     );
 
-    let c1 = Complex::<i8>::new(1, 0);
-    let cn1 = Complex::<i8>::new(-1, 0);
-    let ci = Complex::<i8>::new(0, 1);
-    let cni = Complex::<i8>::new(0, -1);
+    let c1 = Complex::<f64>::new(1.into(), 0.into());
+    let cn1 = Complex::<f64>::new((-1).into(), 0.into());
+    let ci = Complex::<f64>::new(0.into(), 1.into());
+    let cni = Complex::<f64>::new(0.into(), (-1).into());
 
     let mut gamma = SparseTensor::empty(structure);
 
@@ -77,15 +94,17 @@ pub fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<
     gamma.set(&[2, 0, 3], cn1).unwrap();
     gamma.set(&[3, 1, 3], c1).unwrap();
 
-    gamma
+    gamma //.to_dense()
 }
 
 pub fn gamma5<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
 where
     T: One + Zero + Copy,
 {
-    let structure =
-        TensorStructure::from_idxsing(&[indices.0, indices.1], &[Euclidean(4), Euclidean(4)]);
+    let structure = TensorSkeleton::from_idxsing(
+        &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
+        "γ5",
+    );
 
     let c1 = Complex::<T>::new(T::one(), T::zero());
 
@@ -104,8 +123,10 @@ where
     T: Float,
 {
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
-    let structure =
-        TensorStructure::from_idxsing(&[indices.0, indices.1], &[Euclidean(4), Euclidean(4)]);
+    let structure = TensorSkeleton::from_idxsing(
+        &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
+        "ProjM",
+    );
 
     let chalf = Complex::<T>::new(T::from(0.5).unwrap(), T::zero());
     let cnhalf = Complex::<T>::new(T::from(-0.5).unwrap(), T::zero());
@@ -130,8 +151,10 @@ where
     T: Float,
 {
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
-    let structure =
-        TensorStructure::from_idxsing(&[indices.0, indices.1], &[Euclidean(4), Euclidean(4)]);
+    let structure = TensorSkeleton::from_idxsing(
+        &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
+        "ProjP",
+    );
 
     let chalf = Complex::<T>::new(T::from(0.5).unwrap(), T::zero());
 
@@ -154,9 +177,14 @@ pub fn sigma<T>(indices: (usize, usize), minkdices: (usize, usize)) -> SparseTen
 where
     T: One + Zero + std::ops::Neg<Output = T> + Copy,
 {
-    let structure = TensorStructure::from_idxsing(
-        &[indices.0, indices.1, minkdices.0, minkdices.1],
-        &[Euclidean(4), Euclidean(4), Lorentz(4), Lorentz(4)],
+    let structure = TensorSkeleton::from_idxsing(
+        &[
+            (indices.0, Euclidean(4)),
+            (indices.1, Euclidean(4)),
+            (minkdices.0, Lorentz(4)),
+            (minkdices.1, Lorentz(4)),
+        ],
+        "σ",
     );
 
     let c1 = Complex::<T>::new(T::one(), T::zero());

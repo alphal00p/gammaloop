@@ -1,4 +1,3 @@
-use std::{collections::BTreeMap, ops::Bound::Included};
 pub mod tensor_structure;
 use symbolica::{
     representations::{Atom, AtomBuilder},

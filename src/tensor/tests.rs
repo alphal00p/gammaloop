@@ -1,19 +1,35 @@
 use std::collections::BTreeMap;
 
 use crate::tensor::{
-    Contract, DenseTensor, HasTensorStructure, SparseTensor, TensorStructure, VecSlotExtension,
+    Contract, DenseTensor, HasTensorStructure, Representation::Lorentz, SparseTensor,
+    TensorStructure, VecSlotExtension,
 };
+use ahash::AHashMap;
 use num::Complex;
 use symbolica::{
     representations::Atom,
     state::{State, Workspace},
 };
 
-use super::symbolic_tensor::SymbolicTensor;
+use super::{
+    symbolic_tensor::SymbolicTensor, ufo_spin_tensors, NumTensor, NumTensors, TensorNetwork,
+    TensorSkeleton,
+};
+
+fn mink_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
+where
+    T: Clone,
+{
+    DenseTensor::from_data(
+        &p,
+        TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p"),
+    )
+    .unwrap()
+}
 
 #[test]
 fn indexflatten() {
-    let a = TensorStructure::from_integers(&[1, 2, 3], &[3, 4, 5]);
+    let a = TensorSkeleton::from_integers(&[(1, 3), (2, 4), (3, 5)], "a");
 
     let idx = vec![1, 2, 3];
     let flatidx = a.flat_index(&idx).unwrap();
@@ -25,8 +41,30 @@ fn indexflatten() {
 }
 
 #[test]
+fn trace() {
+    let structura = TensorSkeleton::from_integers(&[(1, 5), (1, 5)], "a");
+    let a = SparseTensor::from_data(
+        &[
+            (vec![0, 0], 1.0),
+            (vec![1, 1], 2.0),
+            (vec![1, 2], 4.),
+            (vec![2, 1], 3.),
+            (vec![2, 2], 5.),
+            (vec![3, 3], 6.),
+            (vec![4, 4], 7.),
+        ],
+        structura,
+    )
+    .unwrap();
+    let f = a.internal_contract();
+
+    println!("{:?}", f);
+    
+}
+
+#[test]
 fn construct_dense_tensor() {
-    let a = TensorStructure::from_integers(&[1, 2, 3], &[2, 3, 4]);
+    let a = TensorSkeleton::from_integers(&[(1, 2), (2, 3), (3, 4)], "a");
 
     let data = vec![1.0; a.size()];
     super::DenseTensor::from_data(&data, a).unwrap();
@@ -34,7 +72,7 @@ fn construct_dense_tensor() {
 
 #[test]
 fn construct_sparse_tensor() -> Result<(), String> {
-    let structure = TensorStructure::from_integers(&[1, 2, 3], &[2, 3, 4]);
+    let structure = TensorSkeleton::from_integers(&[(1, 2), (2, 3), (3, 4)], "a");
 
     let mut a: SparseTensor<usize> = SparseTensor::empty(structure);
     a.set(&[1, 2, 1], 1)?;
@@ -46,7 +84,7 @@ fn construct_sparse_tensor() -> Result<(), String> {
 
 #[test]
 fn dense_tensor_shape() {
-    let a = TensorStructure::from_integers(&[1, 2, 3], &[2, 3, 4]);
+    let a = TensorSkeleton::from_integers(&[(1, 2), (2, 3), (3, 4)], "a");
 
     let data = vec![1.0; a.size()];
     let a = super::DenseTensor::from_data(&data, a).unwrap();
@@ -55,16 +93,16 @@ fn dense_tensor_shape() {
 
 #[test]
 fn contract_densor() {
-    let structur_a = TensorStructure::from_integers(&[1, 3], &[2, 2]);
-    let structur_b = TensorStructure::from_integers(&[3, 4], &[2, 2]);
+    let structur_a = TensorSkeleton::from_integers(&[(1, 2), (3, 2)], "a");
+    let structur_b = TensorSkeleton::from_integers(&[(3, 2), (4, 2)], "b");
 
     let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
     let b = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
     let f = a.contract(&b).unwrap();
     assert_eq!(f.data, [7.0, 10.0, 15.0, 22.0]);
 
-    let structur_a = TensorStructure::from_integers(&[1, 3], &[2, 2]);
-    let structur_b = TensorStructure::from_integers(&[3, 4], &[2, 2]);
+    let structur_a = TensorSkeleton::from_integers(&[(1, 2), (3, 2)], "a");
+    let structur_b = TensorSkeleton::from_integers(&[(3, 2), (4, 2)], "b");
 
     let im = Complex::new(0.0, 1.0);
     let re = Complex::new(1.0, 0.0);
@@ -74,16 +112,40 @@ fn contract_densor() {
 
     assert_eq!(f.data, [-7.0 * re, -10.0 * re, -15.0 * re, -22.0 * re]);
 }
+
+#[test]
+fn dense_to_sparse() {
+    let structur_a = TensorSkeleton::from_integers(&[(1, 2), (3, 2)], "a");
+    let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
+    let b = a.to_sparse();
+    let c = b.to_dense();
+    assert_eq!(a, c);
+}
+
+#[test]
+fn gamma() {
+    let g1 = ufo_spin_tensors::gamma(0, (0, 1));
+    let g2 = ufo_spin_tensors::gamma(1, (1, 2));
+    let g3 = ufo_spin_tensors::gamma(2, (2, 0));
+
+    let c = g1.contract(&g2).unwrap().contract(&g3).unwrap();
+    println!("{:?}", c);
+
+    let d = ufo_spin_tensors::gamma(0, (0, 0)).internal_contract();
+
+    println!("{:?}", d);
+}
+
 #[test]
 fn mixed_tensor_contraction() {
     let im = Complex::new(1.5, 1.25);
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
 
-    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+    let structur_a = TensorSkeleton::from_integers(&[(2, 2), (1, 2)], "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a.clone()).unwrap();
 
-    let structur_b = TensorStructure::from_integers(&[2, 4], &[2, 2]);
+    let structur_b = TensorSkeleton::from_integers(&[(2, 2), (4, 2)], "b");
 
     let b = DenseTensor::from_data(
         &[1.0 * im, 2.0 * im, 3.0 * im, 4.0 * im],
@@ -104,21 +166,48 @@ fn mixed_tensor_contraction() {
     let f = a.contract(&b).unwrap();
     assert_eq!(f.data, [1.0 * im, 2.0 * im, 6.0 * im, 8.0 * im]);
 }
+
+#[test]
+fn tensor_net() {
+    let a: NumTensors = ufo_spin_tensors::gamma(1, (2, 3)).into();
+    let b: NumTensors = ufo_spin_tensors::gamma(2, (3, 4)).into();
+    let c: NumTensors = ufo_spin_tensors::gamma(3, (4, 2)).into();
+    let p: NumTensors = mink_four_vector(2, [2., 3., 2., 1.]).into();
+    let q: NumTensors = mink_four_vector(3, [2., 3., 2., 1.]).into();
+
+    let mut n = TensorNetwork::new(vec![a, b, c, p, q]);
+
+    println!("{}", n.dot());
+
+    n.contract();
+
+    println!("{}", n.dot());
+}
+
+#[test]
+fn sparsedensedensesparse() {
+    let a: NumTensors = ufo_spin_tensors::gamma(1, (2, 3)).into();
+    let p: NumTensors = mink_four_vector(1, [2., 3., 2., 1.]).into();
+
+    println!("{:?}", a.contract(&p).unwrap());
+    println!("{:?}", p.contract(&a).unwrap());
+}
+
 #[test]
 fn contract_spensor() {
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
-    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+    let structur_a = TensorSkeleton::from_integers(&[(2, 2), (1, 2)], "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
-    let structur_b = TensorStructure::from_integers(&[1, 3], &[2, 2]);
+    let structur_b = TensorSkeleton::from_integers(&[(1, 2), (3, 2)], "b");
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
     let f = a.contract(&b).unwrap();
 
-    let result = BTreeMap::from([(vec![0, 1], 2.0), (vec![1, 0], 2.0)]);
+    let result = AHashMap::from([(vec![0, 1], 2.0), (vec![1, 0], 2.0)]);
 
     assert_eq!(f.elements, result)
 }
@@ -126,18 +215,18 @@ fn contract_spensor() {
 #[test]
 fn sparse_addition() {
     let data_a = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
-    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+    let structur_a = TensorSkeleton::from_integers(&[(2, 2), (1, 2)], "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
-    let structur_b = TensorStructure::from_integers(&[1, 2], &[2, 2]);
+    let structur_b = TensorSkeleton::from_integers(&[(1, 2), (2, 2)], "b");
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
     let f = a + b;
 
-    let result = BTreeMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
+    let result = AHashMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
 
     assert_eq!(f.elements, result)
 }
@@ -145,19 +234,19 @@ fn sparse_addition() {
 #[test]
 fn sparse_sub() {
     let data_a = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
-    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+    let structur_a = TensorSkeleton::from_integers(&[(2, 2), (1, 2)], "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 3.0)];
 
-    let structur_b = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+    let structur_b = TensorSkeleton::from_integers(&[(2, 2), (1, 2)], "a");
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
     let f = a - b;
 
-    let result = BTreeMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
+    let result = AHashMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
     assert_eq!(f.elements, result);
     // println!("{:?}", f);
 }
@@ -166,12 +255,12 @@ fn sparse_sub() {
 fn contract_densor_with_spensor() {
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
 
-    let structur_a = TensorStructure::from_integers(&[2, 1], &[2, 2]);
+    let structur_a = TensorSkeleton::from_integers(&[(2, 2), (1, 2)], "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [1.0, 2.0, 3.0, 4.0];
-    let structur_b = TensorStructure::from_integers(&[1, 4], &[2, 2]);
+    let structur_b = TensorSkeleton::from_integers(&[(1, 2), (4, 2)], "b");
 
     let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
 
@@ -184,7 +273,7 @@ fn contract_densor_with_spensor() {
 // fn symbolic_zeros() {
 //     let mut state = State::new();
 //     let ws = Workspace::new();
-//     let structure = TensorStructure::from_integers(&[1, 3], &[2, 2]);
+//     let structure = TensorSkeleton::from_integers(&[(1, 2), (3, 2)], "a");
 
 //     let sym_zeros = DenseTensor::symbolic_zeros(structure.clone());
 
@@ -205,7 +294,7 @@ fn convert_sym() {
             .map(|x| Complex::from(*x))
             .collect::<Vec<_>>(),
     );
-    let structur_b = TensorStructure::from_integers(&[1, 4], &[2, 3]);
+    let structur_b = TensorSkeleton::from_integers(&[(1, 2), (4, 3)], "b");
     let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
 
     let symb = b.to_symbolic(&ws, &mut state);
@@ -264,7 +353,7 @@ fn convert_sym() {
 
 #[test]
 fn empty_densor() {
-    let empty_structure = TensorStructure::from_integers(&[], &[]);
+    let empty_structure = TensorSkeleton::from_integers(&[], "");
 
     let empty: DenseTensor<f64> = DenseTensor::default(empty_structure);
 
@@ -276,9 +365,9 @@ fn symbolic_contract() {
     let mut state = State::new();
     let ws = Workspace::new();
 
-    let structura = TensorStructure::from_integers(&[1, 4], &[2, 3]);
+    let structura = TensorSkeleton::from_integers(&[(1, 2), (4, 3)], "a");
 
-    let structurb = TensorStructure::from_integers(&[3, 2], &[2, 3]);
+    let structurb = TensorSkeleton::from_integers(&[(3, 2), (2, 3)], "b");
 
     let labela = state.get_or_insert_fn("T", None).unwrap();
     let labelb = state.get_or_insert_fn("P", None).unwrap();

@@ -248,6 +248,10 @@ impl Contract<NumTensors> for NumTensors {
 }
 
 fn main() {
+    let dense_a = Dense { data: A {} };
+    let dense_b = Dense { data: B {} };
+    let sparse_a = Sparse { data: A {} };
+    let sparse_b = Sparse { data: B {} };
     // let dense_b = NumTensors::DenseB(Dense { data: B {} });
 
     // let dense_a = NumTensors::DenseA(Dense { data: A {} });
