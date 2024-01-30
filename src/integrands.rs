@@ -116,8 +116,12 @@ impl UnitSurfaceIntegrand {
         settings: Settings,
         integrand_settings: UnitSurfaceSettings,
     ) -> UnitSurfaceIntegrand {
-        let n_dim =
-            utils::get_n_dim_for_n_loop_momenta(&settings, integrand_settings.n_3d_momenta, true);
+        let n_dim = utils::get_n_dim_for_n_loop_momenta(
+            &settings,
+            integrand_settings.n_3d_momenta,
+            true,
+            None,
+        );
         let surface = utils::compute_surface_and_volume(
             integrand_settings.n_3d_momenta * 3 - 1,
             settings.kinematics.e_cm,
@@ -224,8 +228,12 @@ pub struct UnitVolumeIntegrand {
 #[allow(unused)]
 impl UnitVolumeIntegrand {
     pub fn new(settings: Settings, integrand_settings: UnitVolumeSettings) -> UnitVolumeIntegrand {
-        let n_dim =
-            utils::get_n_dim_for_n_loop_momenta(&settings, integrand_settings.n_3d_momenta, false);
+        let n_dim = utils::get_n_dim_for_n_loop_momenta(
+            &settings,
+            integrand_settings.n_3d_momenta,
+            false,
+            None,
+        );
         let volume = utils::compute_surface_and_volume(
             integrand_settings.n_3d_momenta * 3,
             settings.kinematics.e_cm,

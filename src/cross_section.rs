@@ -503,6 +503,7 @@ impl Amplitude {
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
             amplitude_graph.graph.generate_cff();
             amplitude_graph.graph.generate_ltd();
+            amplitude_graph.graph.generate_tropical_subgraph_table();
         }
 
         // Then dumped the new yaml representation of the amplitude now containing all that additional information

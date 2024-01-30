@@ -2,6 +2,7 @@ use crate::{
     cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model,
+    tropical::{self, SerializableTropicalSubgraphTable, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
 };
 use ahash::RandomState;
@@ -408,8 +409,27 @@ impl Graph {
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
     ) -> Vec<LorentzVector<T>> {
-        self.loop_momentum_basis
-            .edge_signatures
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
+        self.compute_emr_in_lmb(loop_moms, external_moms, &lmb_specification)
+    }
+
+    #[inline]
+    pub fn compute_emr_in_lmb<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        lmb_specification: &LoopMomentumBasisSpecification,
+    ) -> Vec<LorentzVector<T>> {
+        let lmb = match lmb_specification {
+            LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
+                .derived_data
+                .loop_momentum_bases
+                .as_ref()
+                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*lmb_idx],
+            LoopMomentumBasisSpecification::Literal(basis) => basis,
+        };
+
+        lmb.edge_signatures
             .iter()
             .map(|sig| compute_momentum(sig, loop_moms, external_moms))
             .collect()
@@ -638,6 +658,36 @@ impl Graph {
         self.derived_data.cff_expression = Some(generate_cff_expression(self).unwrap());
     }
 
+    pub fn generate_tropical_subgraph_table(&mut self) {
+        let num_virtual_edges = self
+            .edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Virtual)
+            .count();
+
+        let num_loops = self.loop_momentum_basis.basis.len();
+
+        let default_weight = 0.5;
+        let dod = num_virtual_edges as f64 * default_weight - (tropical::D * num_loops) as f64 / 2.;
+        let minimum_dod = 1.0;
+
+        let weight = if dod < minimum_dod {
+            (minimum_dod + (tropical::D * num_loops) as f64 / 2.) / num_virtual_edges as f64
+        } else {
+            default_weight
+        };
+
+        let weight_guess = vec![weight; num_virtual_edges];
+
+        let table = TropicalSubgraphTable::generate_from_graph(self, &weight_guess);
+
+        if let Ok(table) = table {
+            self.derived_data.tropical_subgraph_table = Some(table);
+        } else {
+            warn!("Tropical subgraph table generation failed 🥥");
+        }
+    }
+
     #[inline]
     pub fn evaluate_ltd_expression<T: FloatLike>(
         &self,
@@ -653,6 +703,25 @@ impl Graph {
                 external_moms,
                 self,
             )
+    }
+
+    #[inline]
+    pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        lmb_specification: &LoopMomentumBasisSpecification,
+    ) -> Complex<T> {
+        let loop_number = self.loop_momentum_basis.basis.len();
+        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32);
+
+        prefactor
+            * self
+                .derived_data
+                .ltd_expression
+                .as_ref()
+                .unwrap()
+                .evaluate_in_lmb(loop_moms, external_moms, self, lmb_specification)
     }
 
     #[inline]
@@ -762,7 +831,7 @@ impl Graph {
     }
 
     pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
-        let derived_data = DerivedGraphData::load_from_path(path)?;
+        let derived_data = DerivedGraphData::load_from_path(path, &self.loop_momentum_basis)?;
         self.derived_data = derived_data;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
@@ -786,6 +855,7 @@ pub struct DerivedGraphData {
     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
+    pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
 }
 
 impl DerivedGraphData {
@@ -794,6 +864,7 @@ impl DerivedGraphData {
             loop_momentum_bases: None,
             cff_expression: None,
             ltd_expression: None,
+            tropical_subgraph_table: None,
         }
     }
 
@@ -805,10 +876,17 @@ impl DerivedGraphData {
                 .map(|lmbs| lmbs.iter().map(|lmb| lmb.to_serializable()).collect_vec()),
             cff_expression: self.cff_expression.clone().map(|cff| cff.to_serializable()),
             ltd_expression: self.ltd_expression.clone().map(|ltd| ltd.to_serializable()),
+            tropical_subgraph_table: self
+                .tropical_subgraph_table
+                .clone()
+                .map(|table| table.to_serializable()),
         }
     }
 
-    pub fn from_serializable(serializable: SerializableDerivedGraphData) -> Self {
+    pub fn from_serializable(
+        serializable: SerializableDerivedGraphData,
+        lmb: &LoopMomentumBasis,
+    ) -> Self {
         DerivedGraphData {
             loop_momentum_bases: serializable.loop_momentum_bases.map(|lmbs| {
                 lmbs.iter()
@@ -821,15 +899,18 @@ impl DerivedGraphData {
             ltd_expression: serializable
                 .ltd_expression
                 .map(LTDExpression::from_serializable),
+            tropical_subgraph_table: serializable
+                .tropical_subgraph_table
+                .map(|table| TropicalSubgraphTable::from_serializable(table, lmb)),
         }
     }
 
-    pub fn load_from_path(path: &Path) -> Result<Self, Report> {
+    pub fn load_from_path(path: &Path, lmb: &LoopMomentumBasis) -> Result<Self, Report> {
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
                 let derived_data: SerializableDerivedGraphData =
                     bincode::deserialize(&derived_data_bytes)?;
-                Ok(Self::from_serializable(derived_data))
+                Ok(Self::from_serializable(derived_data, lmb))
             }
             Err(_) => {
                 warn!("no derived data found");
@@ -863,6 +944,7 @@ pub struct SerializableDerivedGraphData {
     pub loop_momentum_bases: Option<Vec<SerializableLoopMomentumBasis>>,
     pub cff_expression: Option<SerializableCFFExpression>,
     pub ltd_expression: Option<SerializableLTDExpression>,
+    pub tropical_subgraph_table: Option<SerializableTropicalSubgraphTable>,
 }
 
 #[derive(Debug, Clone)]

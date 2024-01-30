@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    graph::{EdgeType, Graph},
+    graph::{EdgeType, Graph, LoopMomentumBasisSpecification},
     utils::{compute_momentum, FloatLike},
 };
 use itertools::Itertools;
@@ -502,6 +502,21 @@ impl LTDExpression {
         graph: &Graph,
     ) -> T {
         let emr = graph.compute_emr(loop_moms, external_moms);
+
+        self.terms
+            .iter()
+            .map(|term| term.evaluate(external_moms, &emr, graph))
+            .sum()
+    }
+
+    pub fn evaluate_in_lmb<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        graph: &Graph,
+        lmb_specification: &LoopMomentumBasisSpecification,
+    ) -> T {
+        let emr = graph.compute_emr_in_lmb(loop_moms, external_moms, lmb_specification);
 
         self.terms
             .iter()

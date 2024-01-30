@@ -112,8 +112,11 @@ where
                 IntegratedPhase::Imag => &f[1],
                 IntegratedPhase::Both => unimplemented!(),
             };
-            grid.add_training_sample(s, *sel_f).unwrap();
-            integral.add_sample(*sel_f * s.get_weight(), Some(s));
+            if let Err(err) = grid.add_training_sample(s, *sel_f) {
+                warn!("WARNING: {}", err)
+            } else {
+                integral.add_sample(*sel_f * s.get_weight(), Some(s));
+            }
         }
 
         grid.update(settings.integrator.learning_rate);

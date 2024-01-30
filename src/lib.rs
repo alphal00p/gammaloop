@@ -10,12 +10,14 @@ pub mod h_function_test;
 pub mod inspect;
 pub mod integrands;
 pub mod integrate;
+pub mod linalg;
 pub mod ltd;
 pub mod model;
 pub mod observables;
 pub mod tensor;
 pub mod tests;
 pub mod tests_from_pytest;
+pub mod tropical;
 pub mod utils;
 
 use color_eyre::{Help, Report};
@@ -105,7 +107,6 @@ pub enum ParameterizationMapping {
 pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
-    pub discrete_sample_graphs: bool,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize)]
@@ -183,8 +184,8 @@ pub struct Settings {
     #[serde(rename = "Stability")]
     #[serde(default = "StabilitySettings::default")]
     pub stability: StabilitySettings,
-    #[serde(rename = "multi_channeling")]
-    pub multi_channeling: MultiChannelingSettings,
+    #[serde(rename = "sampling")]
+    pub sampling: SamplingSettings,
 }
 
 impl Settings {
@@ -315,9 +316,32 @@ impl Default for Externals {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub enum SamplingSettings {
+    #[default]
+    #[serde(rename = "default")]
+    Default,
+    #[serde(rename = "multi_channeling")]
+    MultiChanneling(MultiChannelingSettings),
+    #[serde(rename = "discrete_graph_sampling")]
+    DiscreteGraphs(DiscreteGraphSamplingSettings),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct MultiChannelingSettings {
-    pub enabled: bool,
-    pub discrete_sampling: bool, // if true, use discrete sampling over channels
     pub alpha: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(tag = "type")]
+pub enum DiscreteGraphSamplingSettings {
+    #[default]
+    #[serde(rename = "default")]
+    Default,
+    #[serde(rename = "multi_channeling")]
+    MultiChanneling(MultiChannelingSettings),
+    #[serde(rename = "discrete_multi_channeling")]
+    DiscreteMultiChanneling(MultiChannelingSettings),
+    #[serde(rename = "tropical")]
+    TropicalSampling,
 }

@@ -1,3 +1,4 @@
+use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use colored::Colorize;
 use hyperdual::Hyperdual;
@@ -887,7 +888,19 @@ pub fn get_n_dim_for_n_loop_momenta(
     settings: &Settings,
     n_loop_momenta: usize,
     force_radius: bool,
+    n_edges: Option<usize>, // for tropical parameterization, we need to know the number of edges
 ) -> usize {
+    if settings.sampling
+        == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
+    {
+        let tropical_part = 2 * n_edges.unwrap() - 1;
+        let d_l = 3 * n_loop_momenta;
+        return if d_l % 2 == 1 {
+            tropical_part + d_l + 1
+        } else {
+            tropical_part + d_l
+        };
+    }
     match settings.parameterization.mode {
         ParameterizationMode::HyperSphericalFlat => {
             // Because we use Box-Muller, we need to have an even number of angular dimensions
@@ -1067,6 +1080,11 @@ pub fn global_inv_parameterize<T: FloatLike>(
     settings: &Settings,
     force_radius: bool,
 ) -> (Vec<T>, T) {
+    if settings.sampling
+        == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
+    {
+        panic!("Trying to inverse parameterize a tropical parametrization.")
+    }
     match settings.parameterization.mode {
         ParameterizationMode::HyperSpherical => {
             let e_cm = e_cm_squared.sqrt() * Into::<T>::into(settings.parameterization.shifts[0].0);
@@ -1505,6 +1523,9 @@ pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
     let mut x_n = x0;
     for _ in 0..n_iter {
         let r = x_n.powf(a - 1.0) * (-x_n).exp() / gamma_a;
+        if x_n <= 0. {
+            x_n = 1.0e-16;
+        }
         let t_n = if p <= 0.5 {
             (gamma_lr(a, x_n) - p) / r
         } else {
