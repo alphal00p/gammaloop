@@ -14,8 +14,6 @@ repository = "https://github.com/alphal00p/gammaloop"
 [profile.dev-optim]
 inherits = "dev"
 opt-level = 2
-
-[profile.release]
 #lto=true
 
 [dependencies]
@@ -62,6 +60,7 @@ arbitrary-int = { version = "1.2.6", features = ["num-traits"] }
 duplicate = "1.0.0"
 rustc-hash = "1.1.0"
 petgraph = "0.6.4"
+enum-try-as-inner = "0.1.1"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

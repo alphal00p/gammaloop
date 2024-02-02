@@ -1,31 +1,26 @@
 // Gamma chain example
 
 use num::Complex;
-use std::{default, ops::Neg, time::Instant};
-use tabled::object::Combination;
-use wide::f64x4;
+use std::{collections::HashMap, fmt::format, ops::Neg, time::Instant};
 
 use _gammaloop::tensor::{
     mixed_tensor::MixedTensors,
-    ufo_spin_tensors::{gamma, sigma},
-    AbstractIndex, Contract, DenseTensor, Expr, HasTensorStructure, NumTensors,
+    ufo_spin_tensors::{gamma, param_euclidean_four_vector, param_mink_four_vector},
+    AbstractIndex, Contract, DenseTensor, Expr, HasTensorData, HasTensorStructure, NumTensors,
+    Representation::Euclidean,
     Representation::Lorentz,
-    Representation::{self, Euclidean},
-    SparseTensor, TensorNetwork, TensorSkeleton, TensorStructure, VecSlotExtension,
+    SparseTensor, TensorNetwork, TensorSkeleton,
 };
 
 use num::complex::Complex64;
 use num::traits::{Num, ToPrimitive};
 use symbolica::{
-    poly::{
-        evaluate::{BorrowedHornerScheme, InstructionSetPrinter},
-        polynomial::MultivariatePolynomial,
-    },
+    printer::{AtomPrinter, PrintOptions},
     representations::{default::Linear, Atom, Identifier},
-    rings::rational::RationalField,
     state::{State, Workspace},
 };
 
+#[allow(dead_code)]
 fn pslash(indices: (usize, usize), p: &[Complex64; 4]) -> DenseTensor<Complex64> {
     let minkindex = indices.0 + indices.1;
 
@@ -38,6 +33,7 @@ fn mink_four_vector<T: std::clone::Clone>(index: usize, p: &[T; 4]) -> DenseTens
     DenseTensor::from_data(p, TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p")).unwrap()
 }
 
+#[allow(dead_code)]
 fn labeled_mink_four_vector(
     label: &str,
     index: AbstractIndex,
@@ -62,6 +58,7 @@ fn numbered_labeled_mink_four_vector<'a>(
     DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
 }
 
+#[allow(dead_code)]
 fn eucl_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
 where
     T: Num + std::default::Default + std::clone::Clone,
@@ -73,6 +70,7 @@ where
     .unwrap()
 }
 
+#[allow(dead_code)]
 fn labeled_eucl_four_vector(
     label: &str,
     index: AbstractIndex,
@@ -84,7 +82,6 @@ fn labeled_eucl_four_vector(
 }
 
 #[allow(dead_code)]
-
 fn numbered_labeled_eucl_four_vector<'a>(
     label: Identifier,
     number: usize,
@@ -96,6 +93,7 @@ fn numbered_labeled_eucl_four_vector<'a>(
     DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
 }
 
+#[allow(dead_code)]
 fn benchmark_chain(
     minkindices: &[i32],
     vbar: [Complex64; 4],
@@ -140,8 +138,8 @@ fn benchmark_chain(
 //     let vbar = labeled_eucl_four_vector("vbar", contracting_index, ws, state).builder(state, ws);
 //     let mut result = vbar;
 
+#[allow(dead_code)]
 fn gamma_trace(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
-    let mut i = 0;
     let mink = minkindices[0];
     let mut result = gamma(usize::try_from(mink).unwrap(), (0, 1));
     let mut contracting_index = 1;
@@ -156,7 +154,6 @@ fn gamma_trace(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
         };
 
         if *m > 0 {
-            i += 1;
             let gamma = gamma(usize::try_from(*m).unwrap(), (ui, uj));
             result = gamma.contract(&result).unwrap();
         } else {
@@ -168,8 +165,8 @@ fn gamma_trace(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
     result
 }
 
+#[allow(dead_code)]
 fn gamma_chain(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
-    let mut i = 0;
     let mink = minkindices[0];
     let mut result = gamma(usize::try_from(mink).unwrap(), (0, 1));
     let mut contracting_index = 1;
@@ -180,7 +177,6 @@ fn gamma_chain(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
         let uj = contracting_index;
 
         if *m > 0 {
-            i += 1;
             let gamma = gamma(usize::try_from(*m).unwrap(), (ui, uj));
             result = gamma.contract(&result).unwrap();
         } else {
@@ -192,14 +188,15 @@ fn gamma_chain(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
     result
 }
 
+#[allow(dead_code)]
 fn gamma_net(
     minkindices: &[i32],
     vbar: [Complex64; 4],
     u: [Complex64; 4],
-) -> TensorNetwork<MixedTensors> {
+) -> TensorNetwork<NumTensors> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result: Vec<MixedTensors> = vec![eucl_four_vector(contracting_index, vbar).into()];
+    let mut result: Vec<NumTensors> = vec![eucl_four_vector(contracting_index, vbar).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1;
@@ -222,6 +219,7 @@ fn gamma_net(
     TensorNetwork::new(result)
 }
 
+#[allow(dead_code)]
 fn defered_chain(
     minkindices: &[i32],
     gamma_chain: &SparseTensor<Complex<f64>>,
@@ -233,7 +231,7 @@ fn defered_chain(
     result = result
         .contract(&eucl_four_vector(minkindices.len(), u))
         .unwrap();
-    let mut contracting_index = 1;
+
     let mut i = 0;
     for m in minkindices {
         if *m > 0 {
@@ -247,10 +245,41 @@ fn defered_chain(
             let pmu = mink_four_vector(usize::try_from(*m).unwrap(), &p);
             result = pmu.contract(&result).unwrap();
         }
-        contracting_index += 1;
     }
     result
 }
+
+#[allow(dead_code)]
+fn gamma_net_param(
+    minkindices: &[i32],
+    state: &mut State,
+    ws: &Workspace,
+) -> TensorNetwork<MixedTensors> {
+    let mut i = 0;
+    let mut contracting_index = 0;
+    let mut result: Vec<MixedTensors> =
+        vec![param_euclidean_four_vector(contracting_index, "vbar", state, ws).into()];
+    for m in minkindices {
+        let ui = contracting_index;
+        contracting_index += 1;
+        let uj = contracting_index;
+        if *m > 0 {
+            let pname = format!("p{}", i);
+            i += 1;
+            result.push(
+                param_mink_four_vector(usize::try_from(*m).unwrap(), &pname, state, ws).into(),
+            );
+            result.push(gamma(usize::try_from(*m).unwrap(), (ui, uj)).into());
+        } else {
+            result.push(gamma(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj)).into());
+        }
+    }
+    result.push(param_euclidean_four_vector(contracting_index, "u", state, ws).into());
+    TensorNetwork::new(result)
+}
+
+fn dump_c_with_func(levels: Vec<Vec<(Identifier, Vec<Atom>)>>) {}
+fn dump_c(levels: Vec<Vec<HashMap<Identifier, Vec<Atom>>>>) {}
 
 // #[allow(dead_code)]
 // fn symbolic_chain_function<'a>(
@@ -355,43 +384,13 @@ fn defered_chain(
 
 #[allow(unused_variables)]
 fn main() {
-    let start = Instant::now();
-
-    let s = sigma::<f64>((1, 2), (3, 3));
-    let duration = start.elapsed();
-    println!("{:?} in {:?}", s, duration);
-    // let p = [Complex64::new(1.0, 0.0); 4];
-    // let p1 = pslash((1, 2), p);
-
-    // let trg = gamma(1, (2, 2)).internal_contract();
-
     let one = Complex64::new(1.0, 0.0);
     let zero = Complex64::new(0.0, 0.0);
 
-    // let gammamu = gamma(1, (2, 3))
-    //     .contract(&identity((3, 4), Euclidean(4)))
-    //     .unwrap();
-
-    // // println!("{:?}", gammamu);
-
-    // let gammunu = gamma(1, (4, 5))
-    //     .contract(&identity((5, 6), Euclidean(4)))
-    //     .unwrap();
-
-    // println!("{:?}", gammamu.contract(&gammunu).unwrap());
-
     let vbar = [one * 3.0, one * 3.1, one * 3.2, one * 3.3];
     let u = [one * 4.0, one * 4.1, one * 4.2, one * 4.3];
-    // let a = eucl_four_vector(1, vbar);
-    // let b = eucl_four_vector(1, u);
-    // println!("{:?}", a.contract(&b));
 
-    // let p11 = pslash((1, 2), [one, zero, zero, zero])
-    //     .contract(&pslash((2, 1), [one, zero, zero, zero]));
-
-    // println!("P {:?}", p11);
-
-    let spacings: [i32; 2] = [40, 40];
+    let spacings: [i32; 2] = [20, 24];
     let mut start = 1;
     let mut ranges = Vec::new();
 
@@ -404,60 +403,395 @@ fn main() {
 
     println!("{:?}", vec);
 
-    println!("Normal in {:?}", duration);
+    // // let vec = (1..=3).collect::<Vec<_>>();
+    // // let start = Instant::now();
+    // // let chain = gamma_chain(&vec); //, vbar, u);
+    // // let duration = start.elapsed();
 
-    // let vec = (1..=3).collect::<Vec<_>>();
-    // let start = Instant::now();
-    // let chain = gamma_chain(&vec); //, vbar, u);
-    // let duration = start.elapsed();
+    // // println!(
+    // //     "Gamma chain {:?} gammas, size {:?}  in {:?}",
+    // //     vec.len(),
+    // //     chain.size(),
+    // //     duration
+    // // );
 
-    // println!(
-    //     "Gamma chain {:?} gammas, size {:?}  in {:?}",
-    //     vec.len(),
-    //     chain.size(),
-    //     duration
-    // );
+    // // let start = Instant::now();
+    // // let chain = defered_chain(&vec, &chain, vbar, u);
+    // // let duration = start.elapsed();
 
-    // let start = Instant::now();
-    // let chain = defered_chain(&vec, &chain, vbar, u);
-    // let duration = start.elapsed();
+    // // println!(
+    // //     "Defered pslash with {:?} gammas, size {:?}  in {:?}, gives {:?}",
+    // //     vec.len(),
+    // //     chain.size(),
+    // //     duration,
+    // //     chain.data,
+    // // );
 
-    // println!(
-    //     "Defered pslash with {:?} gammas, size {:?}  in {:?}, gives {:?}",
-    //     vec.len(),
-    //     chain.size(),
-    //     duration,
-    //     chain.data,
-    // );
-
-    let start = Instant::now();
-    let chain = benchmark_chain(&vec, vbar, u);
-    let duration = start.elapsed();
-
-    println!(
-        "Benchmark chain {:?} gammas, size {:?}  in {:?}, gives {:?}",
-        vec.len(),
-        chain.size(),
-        duration,
-        chain.data,
-    );
+    let startfull = Instant::now();
 
     let mut chain = gamma_net(&vec, vbar, u);
-    let mut state = State::new();
-    let ws: Workspace<Linear> = Workspace::new();
-    // println!("{}", chain.dot());
     let start = Instant::now();
-    chain.contract_sym(&state, &ws);
+    chain.contract();
     let duration = start.elapsed();
+    let durationfull = startfull.elapsed();
+
     println!(
-        "Benchmark net {:?} gammas, size in {:?}",
+        "Gamma net with {} gammas, fully numeric, takes {:?} for the contraction, and {:?} with initialization",
         vec.len(),
         duration,
+        durationfull
+    );
+    println!(
+        "Result: {:?}",
+        chain.result().try_as_complex().unwrap().data()
     );
 
-    print!("{:?}", chain.result());
+    // let mut chain = gamma_net(&vec, vbar, u);
+    let mut state = State::new();
+    let ws: Workspace<Linear> = Workspace::new();
 
-    println!("{}", chain.result().structure());
+    let atom = Atom::parse("A+P", &mut state, &ws).unwrap();
+
+    let printops = PrintOptions {
+        terms_on_new_line: false,
+        color_top_level_sum: false,
+        color_builtin_functions: false,
+        print_finite_field: false,
+        explicit_rational_polynomial: false,
+        multiplication_operator: '*',
+        square_brackets_for_function: false,
+        number_thousands_separator: None,
+        num_exp_as_superscript: false,
+        latex: false,
+    };
+    let print = AtomPrinter::new_with_options(atom.as_view(), printops, &state);
+
+    let satom = format!("{}", print);
+    let natom = Atom::parse(&satom, &mut state, &ws).unwrap();
+
+    println!("Print {}", natom.printer(&state));
+    // // println!("{}", chain.dot());
+    // let start = Instant::now();
+    // chain.contract_sym(&state, &ws);
+    // let duration = start.elapsed();
+    // println!(
+    //     "Benchmark net {:?} gammas, size in {:?}",
+    //     vec.len(),
+    //     duration,
+    // );
+
+    // println!("{:?}", chain.result().is_scalar());
+
+    // println!("{}", chain.result().structure());
+
+    // let mut chain_param = gamma_net_param(&vec, &mut state, &ws);
+
+    // println!("{}", chain_param.dot());
+    // let start = Instant::now();
+    // chain_param.contract_sym_depth(5, &state, &ws);
+    // let duration = start.elapsed();
+    // // println!(
+    // //     "Benchmark net param {:?} gammas, size in {:?}",
+    // //     vec.len(),
+    // //     duration,
+    // // );
+    // println!("{}", chain_param.dot());
+
+    // println!("{:?}", chain_param.result().is_scalar());
+
+    // println!("{}", chain_param.result().structure());
+
+    let mut chain_param = gamma_net_param(&vec, &mut state, &ws);
+
+    println!("{}", chain_param.dot());
+    let params: Vec<Atom> = chain_param
+        .clone()
+        .to_symbolic_tensor_vec()
+        .into_iter()
+        .flat_map(|x| x.data())
+        .collect();
+
+    let paramstr = params
+        .iter()
+        .map(|a| {
+            format!(
+                "{}",
+                AtomPrinter::new_with_options(a.as_view(), printops, &state)
+            )
+        })
+        .collect::<Vec<_>>();
+
+    serde_yaml::to_writer(std::fs::File::create("params.yaml").unwrap(), &paramstr).unwrap();
+
+    let paramstr: Vec<String> =
+        serde_yaml::from_reader(std::fs::File::open("params.yaml").unwrap()).unwrap();
+
+    let params: Vec<Atom> = paramstr
+        .iter()
+        .map(|x| Atom::parse(x, &mut state, &ws).unwrap())
+        .collect();
+
+    for p in params {
+        print!("{}", p.printer(&state));
+    }
+
+    chain_param.contract_sym_depth(9, &state, &ws);
+
+    let mut shadow = chain_param.symbolic_shadow("S", &mut state, &ws);
+    println!("{}", chain_param.dot());
+    let a: Vec<(String, Vec<String>)> = chain_param
+        .clone()
+        .to_symbolic_tensor_vec()
+        .into_iter()
+        .map(|x| {
+            (
+                x.global_name().unwrap().to_string(),
+                x.data()
+                    .into_iter()
+                    .map(|x| {
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(x.as_view(), printops, &state)
+                        )
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+
+    let amap = chain_param
+        .to_symbolic_tensor_vec()
+        .into_iter()
+        .map(|x| x.symhashmap(x.global_name().unwrap(), &mut state, &ws))
+        .collect::<Vec<_>>();
+
+    let amapstr = amap
+        .iter()
+        .map(|x| {
+            let mut a = HashMap::new();
+            for (k, v) in x.iter() {
+                a.insert(
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(k.as_view(), printops, &state)
+                    ),
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(v.as_view(), printops, &state)
+                    ),
+                );
+            }
+            a
+        })
+        .collect::<Vec<_>>();
+
+    println!("{}", shadow.dot());
+    let start = Instant::now();
+    shadow.contract_sym_depth(10, &state, &ws);
+    let duration = start.elapsed();
+
+    // println!(
+    //     "Shadow net param {:?} gammas, size in {:?}",
+    //     vec.len(),
+    //     duration,
+    // );
+
+    let mut shadow2 = shadow.symbolic_shadow("T", &mut state, &ws);
+    println!("{}", shadow.dot());
+    let b: Vec<(String, Vec<String>)> = shadow
+        .clone()
+        .to_symbolic_tensor_vec()
+        .into_iter()
+        .map(|x| {
+            (
+                x.global_name().unwrap().to_string(),
+                x.data()
+                    .into_iter()
+                    .map(|x| {
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(x.as_view(), printops, &state)
+                        )
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+
+    let bmap = shadow
+        .to_symbolic_tensor_vec()
+        .into_iter()
+        .map(|x| x.symhashmap(x.global_name().unwrap(), &mut state, &ws))
+        .collect::<Vec<_>>();
+
+    let bmapstr = bmap
+        .iter()
+        .map(|x| {
+            let mut a = HashMap::new();
+            for (k, v) in x.iter() {
+                a.insert(
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(k.as_view(), printops, &state)
+                    ),
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(v.as_view(), printops, &state)
+                    ),
+                );
+            }
+            a
+        })
+        .collect::<Vec<_>>();
+
+    println!("{}", shadow2.dot());
+    let start = Instant::now();
+    shadow2.contract_sym_depth(10, &state, &ws);
+    let duration = start.elapsed();
+
+    // println!(
+    //     "Shadow2 net param {:?} gammas, size in {:?}",
+    //     vec.len(),
+    //     duration,
+    // );
+
+    shadow2.name("U");
+    println!("{}", shadow2.dot());
+
+    let c: Vec<(String, Vec<Atom>)> = shadow2
+        .clone()
+        .to_symbolic_tensor_vec()
+        .into_iter()
+        .map(|x| (x.global_name().unwrap().to_string(), x.data()))
+        .collect();
+
+    let e: Vec<(String, Vec<String>)> = shadow2
+        .clone()
+        .to_symbolic_tensor_vec()
+        .into_iter()
+        .map(|x| {
+            (
+                x.global_name().unwrap().to_string(),
+                x.data()
+                    .into_iter()
+                    .map(|x| {
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(x.as_view(), printops, &state)
+                        )
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+
+    let cmap = shadow2
+        .to_symbolic_tensor_vec()
+        .into_iter()
+        .map(|x| x.symhashmap(x.global_name().unwrap(), &mut state, &ws))
+        .collect::<Vec<_>>();
+
+    let cmapstr = cmap
+        .iter()
+        .map(|x| {
+            let mut a = HashMap::new();
+            for (k, v) in x.iter() {
+                a.insert(
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(k.as_view(), printops, &state)
+                    ),
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(v.as_view(), printops, &state)
+                    ),
+                );
+            }
+            a
+        })
+        .collect::<Vec<_>>();
+
+    let d = e
+        .iter()
+        .map(|(s, v)| {
+            (
+                s,
+                v.iter()
+                    .map(|x| {
+                        println!("Hi: {}", x);
+                        Atom::parse(x, &mut state, &ws).unwrap()
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    println!("{:?}", e);
+
+    // for (s, v) in d.iter() {
+    //     for x in v.iter() {
+    //         println!("{}", x.printer(&state));
+    //     }
+    // }
+
+    for (s, v) in c.iter() {
+        for x in v.iter() {
+            println!("{}", x.printer(&state));
+        }
+    }
+
+    let out: Vec<Vec<(String, Vec<String>)>> = vec![a, b, e];
+    let outmap: Vec<Vec<HashMap<String, String>>> = vec![amapstr, bmapstr, cmapstr];
+
+    serde_yaml::to_writer(std::fs::File::create("outmap.yaml").unwrap(), &outmap).unwrap();
+
+    serde_yaml::to_writer(std::fs::File::create("out.yaml").unwrap(), &out).unwrap();
+
+    let from_file: Vec<Vec<(String, Vec<String>)>> =
+        serde_yaml::from_reader(std::fs::File::open("out.yaml").unwrap()).unwrap();
+
+    let from_file_map: Vec<Vec<HashMap<String, String>>> =
+        serde_yaml::from_reader(std::fs::File::open("outmap.yaml").unwrap()).unwrap();
+
+    let levelsmap = from_file_map
+        .iter()
+        .map(|x| {
+            x.iter()
+                .map(|x| {
+                    let mut a = HashMap::new();
+                    for (k, v) in x.iter() {
+                        a.insert(
+                            Atom::parse(k, &mut state, &ws).unwrap(),
+                            Atom::parse(v, &mut state, &ws).unwrap(),
+                        );
+                    }
+                    a
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    let levels: Vec<Vec<(Identifier, Vec<Atom>)>> = from_file
+        .iter()
+        .map(|x| {
+            x.iter()
+                .map(|(s, v)| {
+                    (
+                        state.get_or_insert_fn(s, None).unwrap(),
+                        v.iter()
+                            .map(|x| Atom::parse(x, &mut state, &ws).unwrap())
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    dump_c_with_func(levels);
+
+    // println!("{:?}", shadow.result().is_scalar());
+
+    // println!("{:?}", shadow.result());
 
     // println!("{:?}", chain.result());
     // for (i, c) in chain.iter() {
