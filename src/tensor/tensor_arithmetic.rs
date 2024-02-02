@@ -53,7 +53,7 @@ where
                 .get_with_defaults(&permuted_indices)
                 .unwrap()
                 .into_owned();
-            result.set(indices, self_value + *value).unwrap();
+            result.set(&indices, self_value + *value).unwrap();
         }
 
         result
@@ -80,7 +80,7 @@ where
             let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self.get(&permuted_indices).unwrap();
-            result.set(indices, *self_value + *value);
+            result.set(&indices, *self_value + *value);
         }
         result
     }
@@ -144,7 +144,7 @@ where
                 .get_with_defaults(&permuted_indices)
                 .unwrap()
                 .into_owned();
-            result.set(indices, self_value - *value).unwrap();
+            result.set(&indices, self_value - *value).unwrap();
         }
 
         result
@@ -170,7 +170,7 @@ where
             let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let self_value = self.get(&permuted_indices).unwrap();
-            result.set(indices, *self_value - *value);
+            result.set(&indices, *self_value - *value);
         }
         result
     }
@@ -213,7 +213,7 @@ where
         let mut result = self.clone();
 
         for (indices, value) in self.iter() {
-            result.set(indices, other * *value).unwrap();
+            result.set(&indices, other * *value).unwrap();
         }
         result
     }

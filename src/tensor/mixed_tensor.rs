@@ -1,7 +1,7 @@
 use crate::tensor::IntoId;
-use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
+use indexmap::IndexMap;
 use num::Complex;
 use smartstring::alias::String;
 use symbolica::{
@@ -9,6 +9,10 @@ use symbolica::{
     state::{State, Workspace},
 };
 
+use rustc_hash::FxHasher;
+type FxIndexMap<K, V> = IndexMap<K, V, FxHasher>;
+use nohash_hasher::BuildNoHashHasher;
+type NHIndexMap<K, V> = IndexMap<K, V, BuildNoHashHasher<K>>;
 use super::{
     ConcreteIndex, DenseTensor, Expr, HasTensorStructure, NumTensor, SparseTensor, SymbolicAdd,
     SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg, SymbolicSub, SymbolicSubAssign,
@@ -107,19 +111,9 @@ where
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
             let metric = self.structure()[i].representation.negative();
-            for (index_a, fiber_a) in self.iter_fibers(i) {
-                for (index_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = final_structure
-                        .flat_index(
-                            &index_a[..i]
-                                .iter()
-                                .chain(&index_a[i + 1..])
-                                .chain(&index_b[..j])
-                                .chain(&index_b[j + 1..])
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap();
+            let mut result_index = 0;
+            for fiber_a in self.iter_fibers(i) {
+                for fiber_b in other.iter_fibers(j) {
                     for i in 0..dimension_of_contraction {
                         if metric[i] {
                             result_data[result_index] = result_data[result_index].sub_sym(
@@ -135,6 +129,7 @@ where
                             )?;
                         }
                     }
+                    result_index += 1;
                 }
             }
 
@@ -166,6 +161,7 @@ where
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
     I: Clone,
+    U: Clone,
 {
     type LCM = DenseTensor<Out, I>;
     fn contract_sym(
@@ -178,19 +174,10 @@ where
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
             let metric = self.get_ith_metric(i).unwrap();
-            for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
-                for (index_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = final_structure
-                        .flat_index(
-                            &index_a[..i]
-                                .iter()
-                                .chain(&index_a[i + 1..])
-                                .chain(&index_b[..j])
-                                .chain(&index_b[j + 1..])
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap();
+            let mut result_index = 0;
+            for (skipped, nonzeros, fiber_a) in self.iter_fibers(i) {
+                result_index += skipped;
+                for fiber_b in other.iter_fibers(j) {
                     for (i, k) in nonzeros.iter().enumerate() {
                         if metric[*k] {
                             result_data[result_index] = result_data[result_index].sub_sym(
@@ -206,6 +193,7 @@ where
                             )?;
                         }
                     }
+                    result_index += 1;
                 }
             }
 
@@ -238,6 +226,8 @@ where
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
     I: Clone,
+    T: Clone,
+    U: Clone,
 {
     type LCM = SparseTensor<Out, I>;
     fn contract_sym(
@@ -248,17 +238,19 @@ where
     ) -> Option<Self::LCM> {
         if let Some((i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let mut result_data = AHashMap::new();
+            let mut result_data = NHIndexMap::default();
             let metric = self.get_ith_metric(i).unwrap();
-            for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
-                for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = index_a[..i]
-                        .iter()
-                        .chain(&index_a[i + 1..])
-                        .chain(&index_b[..j])
-                        .chain(&index_b[j + 1..])
-                        .cloned()
-                        .collect::<Vec<_>>();
+            let one = 1;
+            let stride_other = *final_structure
+                .strides()
+                .get(self.structure().order() - 2)
+                .unwrap_or(&one);
+
+            let mut result_index = 0;
+            for (skipped_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
+                result_index += skipped_a;
+                for (skipped_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
+                    result_index += skipped_b * stride_other;
                     let mut value = Out::zero(state, ws);
                     let mut nonzero = false;
                     for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
@@ -285,6 +277,7 @@ where
                     {
                         result_data.insert(result_index, value);
                     }
+                    result_index += 1;
                 }
             }
 
@@ -318,6 +311,7 @@ where
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
     I: Clone,
+    T: Clone,
 {
     type LCM = DenseTensor<Out, I>;
     fn contract_sym(
@@ -337,7 +331,7 @@ where
     pub fn builder<'a>(&self, state: &'a State, ws: &'a Workspace) -> SparseTensor<Expr<'a>, I> {
         let mut result = SparseTensor::empty(self.structure.clone());
         for (index, value) in self.iter() {
-            result.set(index, value.builder(state, ws)).unwrap();
+            result.set(&index, value.builder(state, ws)).unwrap();
         }
         result
     }
@@ -397,7 +391,7 @@ where
     ) -> SparseTensor<Atom, I> {
         let mut result = SparseTensor::empty(self.structure.clone());
         for (index, value) in self.iter() {
-            let _ = result.set(index, value.into_sym(ws, state).unwrap());
+            let _ = result.set(&index, value.into_sym(ws, state).unwrap());
         }
         result
     }
@@ -409,7 +403,10 @@ where
     ) -> SparseTensor<Expr<'a>, I> {
         let mut result = SparseTensor::empty(self.structure.clone());
         for (index, value) in self.iter() {
-            let _ = result.set(index, value.into_sym(ws, state).unwrap().builder(state, ws));
+            let _ = result.set(
+                &index,
+                value.into_sym(ws, state).unwrap().builder(state, ws),
+            );
         }
         result
     }
@@ -563,6 +560,8 @@ where
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
     I: Clone,
+    T: Clone,
+    U: Clone,
 {
     type LCM = NumTensor<Out, I>;
     fn contract_sym(

@@ -31,34 +31,41 @@ impl<'a> TensorStructureIndexIterator<'a> {
     }
 }
 
-pub struct SparseTensorIterator<'a, T> {
-    iter: std::collections::hash_map::Iter<'a, Vec<ConcreteIndex>, T>,
+pub struct SparseTensorIterator<'a, T, N> {
+    iter: indexmap::map::Iter<'a, usize, T>,
+    structure: &'a TensorSkeleton<N>,
 }
 
-impl<'a, T> SparseTensorIterator<'a, T> {
-    fn new<I>(tensor: &'a SparseTensor<T, I>) -> Self {
+impl<'a, T, N> SparseTensorIterator<'a, T, N> {
+    fn new(tensor: &'a SparseTensor<T, N>) -> Self {
         SparseTensorIterator {
             iter: tensor.elements.iter(),
+            structure: &tensor.structure,
         }
     }
 }
 
-impl<'a, T> Iterator for SparseTensorIterator<'a, T> {
-    type Item = (&'a Vec<ConcreteIndex>, &'a T);
+impl<'a, T, N> Iterator for SparseTensorIterator<'a, T, N> {
+    type Item = (Vec<ConcreteIndex>, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+        if let Some((k, v)) = self.iter.next() {
+            let indices = self.structure.expanded_index(*k).unwrap();
+            Some((indices, v))
+        } else {
+            None
+        }
     }
 }
 
-impl<'a, T, I> IntoIterator for &'a SparseTensor<T, I> {
-    type Item = (&'a Vec<ConcreteIndex>, &'a T);
-    type IntoIter = SparseTensorIterator<'a, T>;
+// impl<'a, T, I> IntoIterator for &'a SparseTensor<T, I> {
+//     type Item = (&'a Vec<ConcreteIndex>, &'a T);
+//     type IntoIter = SparseTensorIterator<'a, T>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        SparseTensorIterator::new(self)
-    }
-}
+//     fn into_iter(self) -> Self::IntoIter {
+//         SparseTensorIterator::new(self)
+//     }
+// }
 
 pub struct SparseTensorTraceIterator<'a, T, I> {
     tensor: &'a SparseTensor<T, I>,
@@ -143,13 +150,13 @@ where
             sign = signint;
         }
 
-        let value = (*self.tensor.elements.get(&indices).unwrap()).clone(); //Should now be safe to unwrap
+        let value = (*self.tensor.get(&indices).unwrap()).clone(); //Should now be safe to unwrap
         let mut trace = if *sign { value.neg() } else { value };
 
         for (i, sign) in iter {
             indices[self.trace_indices[0]] = i;
             indices[self.trace_indices[1]] = i;
-            if let Some(value) = self.tensor.elements.get(&indices) {
+            if let Ok(value) = self.tensor.get(&indices) {
                 if *sign {
                     trace -= value;
                 } else {
@@ -234,6 +241,7 @@ impl<'a, 'b, T, I> SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
 impl<'a, 'b, T, I> Iterator for SparseTensorSymbolicTraceIterator<'a, 'b, T, I>
 where
     T: for<'c> SymbolicAddAssign<&'c T> + for<'d> SymbolicSubAssign<&'d T> + SymbolicNeg + Clone,
+    I: Clone,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -262,7 +270,7 @@ where
             sign = signint;
         }
 
-        let value = (*self.tensor.elements.get(&indices).unwrap()).clone(); //Should now be safe to unwrap
+        let value = (*self.tensor.get(&indices).unwrap()).clone(); //Should now be safe to unwrap
         let mut trace = if *sign {
             value.neg_sym(self.ws, self.state)
         } else {
@@ -272,7 +280,7 @@ where
         for (i, sign) in iter {
             indices[self.trace_indices[0]] = i;
             indices[self.trace_indices[1]] = i;
-            if let Some(value) = self.tensor.elements.get(&indices) {
+            if let Ok(value) = self.tensor.get(&indices) {
                 if *sign {
                     trace.sub_assign_sym(value, self.ws, self.state);
                 } else {
@@ -300,54 +308,86 @@ where
 pub struct SparseTensorFiberIterator<'a, T, I> {
     tensor: &'a SparseTensor<T, I>,
     fiber_index: usize,
-    current_indices: Vec<ConcreteIndex>,
-    done: bool,
+    fiber_stride: usize,
+    fiber_dimension: usize,
+    left_stride: Option<usize>,
+    right_stride: Option<usize>,
+    skipped: usize,
+    max: usize,
 }
 
 impl<'a, T, I> SparseTensorFiberIterator<'a, T, I> {
-    fn new(tensor: &'a SparseTensor<T, I>, fiber_index: usize) -> Self {
-        assert!(fiber_index < tensor.order(), "Invalid fiber index");
+    fn new(tensor: &'a SparseTensor<T, I>, fiber_position: usize) -> Self {
+        assert!(fiber_position < tensor.order(), "Invalid fiber index");
+
+        let fiber_stride = tensor.strides()[fiber_position];
+        let left_stride = tensor.strides().get(fiber_position - 1).map(|x| *x);
+        let right_stride = tensor.strides().get(fiber_position + 1).map(|x| *x);
+        let max = tensor.size() - fiber_stride * (tensor.shape()[fiber_position] - 1);
+        let fiber_dimension = tensor.shape()[fiber_position];
 
         SparseTensorFiberIterator {
             tensor,
-            fiber_index,
-            current_indices: vec![0; tensor.order()],
-            done: false,
+            fiber_index: 0,
+            fiber_stride,
+            fiber_dimension,
+            left_stride,
+            right_stride,
+            skipped: 0,
+            max,
         }
     }
 
-    fn increment_indices(&mut self) -> bool {
-        for (i, index) in self
-            .current_indices
-            .iter_mut()
-            .enumerate()
-            .rev()
-            .filter(|(pos, _)| *pos != self.fiber_index)
-        {
-            *index += 1;
-            // If the index goes beyond the shape boundary, wrap around to 0
-            if index >= &mut self.tensor.shape()[i] {
-                *index = 0;
-                continue; // carry over to the next dimension
+    fn update_linear_start(&mut self) {
+        match (self.left_stride, self.right_stride) {
+            (Some(l), Some(r)) => {
+                self.fiber_index += 1;
+                if self.fiber_index % self.fiber_stride == 0 {
+                    self.fiber_index += l - self.fiber_stride;
+                }
             }
-            return true; // We've successfully found the next combination
+            (Some(l), None) => {
+                self.fiber_index += l;
+            }
+            (None, Some(r)) => {
+                self.fiber_index += 1;
+            }
+            (None, None) => {
+                self.fiber_index += 1;
+            }
         }
-        false // No more combinations left
     }
+
+    // fn increment_indices(&mut self) -> bool {
+    //     for (i, index) in self
+    //         .current_indices
+    //         .iter_mut()
+    //         .enumerate()
+    //         .rev()
+    //         .filter(|(pos, _)| *pos != self.fiber_index)
+    //     {
+    //         *index += 1;
+    //         // If the index goes beyond the shape boundary, wrap around to 0
+    //         if index >= &mut self.tensor.shape()[i] {
+    //             *index = 0;
+    //             continue; // carry over to the next dimension
+    //         }
+    //         return true; // We've successfully found the next combination
+    //     }
+    //     false // No more combinations left
+    // }
 }
 
-impl<'a, T, I> Iterator for SparseTensorFiberIterator<'a, T, I> {
-    type Item = (Vec<ConcreteIndex>, Vec<usize>, Vec<&'a T>);
+impl<'a, T, I> Iterator for SparseTensorFiberIterator<'a, T, I>
+where
+    T: Clone,
+    I: Clone,
+{
+    type Item = (usize, Vec<usize>, Vec<&'a T>);
     fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
+        if self.fiber_index >= self.max {
             return None;
         }
-        let mut lower_bound = self.current_indices.clone();
-        let mut upper_bound = self.current_indices.clone();
-
-        // Set the range for the varying dimension to cover all indices
-        lower_bound[self.fiber_index] = 0;
-        upper_bound[self.fiber_index] = self.tensor.shape()[self.fiber_index];
 
         // let range = self
         //     .tensor
@@ -371,25 +411,25 @@ impl<'a, T, I> Iterator for SparseTensorFiberIterator<'a, T, I> {
         //     values.push(value);
         // }
 
-        for i in 0..self.tensor.shape()[self.fiber_index] {
-            lower_bound[self.fiber_index] = i;
-            if self.tensor.elements.contains_key(&lower_bound) {
+        for i in 0..self.fiber_dimension {
+            if let Some(v) = self
+                .tensor
+                .elements
+                .get(&(self.fiber_index + i * self.fiber_stride))
+            {
                 nonzeros.push(i);
-                values.push(self.tensor.elements.get(&lower_bound).unwrap());
+                values.push(v);
             }
         }
-
-        // The upper bound of the range (exclusive)
-
-        // Prepare a vector to hold the combined values
-        let fiber_indices = self.current_indices.clone();
-
-        self.done = !self.increment_indices();
+        self.update_linear_start();
 
         // Check if there are any elements in the range
         if !values.is_empty() {
-            Some((fiber_indices, nonzeros, values))
+            let skipped = self.skipped;
+            self.skipped = 0;
+            Some((skipped, nonzeros, values))
         } else {
+            self.skipped += 1;
             self.next()
         }
     }
@@ -404,7 +444,7 @@ impl<T, I> SparseTensor<T, I> {
         SparseTensorTraceIterator::new(self, trace_indices)
     }
 
-    pub fn iter(&self) -> SparseTensorIterator<T> {
+    pub fn iter(&self) -> SparseTensorIterator<T, I> {
         SparseTensorIterator::new(self)
     }
 
@@ -727,11 +767,16 @@ where
 
 pub struct DenseTensorFiberIterator<'a, T, I> {
     tensor: &'a DenseTensor<T, I>,
-    strides: Vec<usize>,
+    fiber_stride: usize,
+    left_stride: Option<usize>,
+    right_stride: Option<usize>,
+    fiber_indices: Vec<usize>,
     fixedindex: usize,
     linear_start: usize,
     current_fiber: usize,
     total_fibers: usize,
+    max: usize,
+    done: bool,
 }
 
 impl<'a, T, I> DenseTensorFiberIterator<'a, T, I> {
@@ -740,48 +785,52 @@ impl<'a, T, I> DenseTensorFiberIterator<'a, T, I> {
 
         let fiber_length = tensor.shape()[fixedindex];
         let total_fibers = tensor.size() / fiber_length;
-        let strides = tensor.strides();
+        let fiber_stride = tensor.strides()[fixedindex];
+        let left_stride = tensor.strides().get(fixedindex - 1).map(|x| *x);
+        let right_stride = tensor.strides().get(fixedindex + 1).map(|x| *x);
+        let max = tensor.size() - fiber_stride * (fiber_length - 1);
 
         DenseTensorFiberIterator {
             tensor,
-            strides,
+            fiber_stride,
+            left_stride,
+            right_stride,
+            fiber_indices: vec![0; tensor.order()],
             fixedindex,
             linear_start: 0,
             current_fiber: 0,
             total_fibers,
+            max,
+            done: 0 == max,
         }
     }
 
     fn update_linear_start(&mut self) {
-        let mut expanded_index = self
-            .tensor
-            .expanded_index(self.linear_start)
-            .unwrap()
-            .clone();
-
-        for (i, index) in expanded_index
-            .iter_mut()
-            .enumerate()
-            .rev()
-            .filter(|(pos, _)| *pos != self.fixedindex)
-        {
-            *index += 1;
-            // If the index goes beyond the shape boundary, wrap around to 0
-            if index >= &mut self.tensor.shape()[i] {
-                *index = 0;
-                continue; // carry over to the next dimension
+        match (self.left_stride, self.right_stride) {
+            (Some(l), Some(r)) => {
+                self.linear_start += 1;
+                if self.linear_start % self.fiber_stride == 0 {
+                    self.linear_start += l - self.fiber_stride;
+                }
             }
-            break; // We've successfully foun+155 m / -164 md the next combination
+            (Some(l), None) => {
+                self.linear_start += l;
+            }
+            (None, Some(r)) => {
+                self.linear_start += 1;
+            }
+            (None, None) => {
+                self.linear_start += 1;
+            }
         }
-        self.linear_start = self.tensor.flat_index(&expanded_index).unwrap();
     }
 }
 
 impl<'a, T, I> Iterator for DenseTensorFiberIterator<'a, T, I> {
-    type Item = (Vec<ConcreteIndex>, Vec<&'a T>);
+    type Item = Vec<&'a T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_fiber >= self.total_fibers {
+        if self.done {
             return None;
         }
 
@@ -789,18 +838,17 @@ impl<'a, T, I> Iterator for DenseTensorFiberIterator<'a, T, I> {
 
         let mut fiberdata = Vec::with_capacity(self.tensor.shape()[self.fixedindex]);
 
-        let fiberindices = self.tensor.expanded_index(self.linear_start).unwrap();
-
         for i in 0..self.tensor.shape()[self.fixedindex] {
-            let linear_index = self.linear_start + i * self.strides[self.fixedindex];
+            let linear_index = self.linear_start + i * self.fiber_stride;
             fiberdata.push(self.tensor.get_linear(linear_index).unwrap());
         }
 
         self.update_linear_start();
-        self.current_fiber += 1;
+        self.done = self.linear_start >= self.max;
+
         // Determine end index for the current fiber
 
-        Some((fiberindices, fiberdata))
+        Some(fiberdata)
     }
 }
 

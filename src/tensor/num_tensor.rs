@@ -1,8 +1,8 @@
 use super::{AbstractIndex, ConcreteIndex, Dimension, HasTensorStructure, TensorSkeleton};
 use crate::tensor::IntoId;
-use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
+use indexmap::IndexMap;
 use num::Complex;
 use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
@@ -11,9 +11,12 @@ use symbolica::{
     representations::{Identifier, Num},
     state::{State, Workspace},
 };
+
+use nohash_hasher::BuildNoHashHasher;
+type NHIndexMap<K, V> = IndexMap<K, V, BuildNoHashHasher<K>>;
 #[derive(Debug, Clone)]
 pub struct SparseTensor<T, I = String> {
-    pub elements: AHashMap<Vec<ConcreteIndex>, T>,
+    pub elements: NHIndexMap<usize, T>,
     pub structure: TensorSkeleton<I>,
 }
 
@@ -31,7 +34,7 @@ impl<T, I> HasTensorStructure for SparseTensor<T, I> {
 impl<T, I> SparseTensor<T, I> {
     pub fn empty(structure: TensorSkeleton<I>) -> Self {
         SparseTensor {
-            elements: AHashMap::new(),
+            elements: NHIndexMap::default(),
             structure,
         }
     }
@@ -42,18 +45,29 @@ impl<T, I> SparseTensor<T, I> {
     {
         let structure = TensorSkeleton::<I>::from_integers(slots, name);
         SparseTensor {
-            elements: AHashMap::new(),
+            elements: NHIndexMap::default(),
             structure,
         }
     }
 
     pub fn is_empty_at(&self, indices: &[ConcreteIndex]) -> bool {
-        !self.elements.contains_key(indices)
+        !self
+            .elements
+            .contains_key(&self.flat_index(indices).unwrap())
     }
 
     pub fn set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
-        self.elements.insert(indices.to_vec(), value);
+        self.elements
+            .insert(self.flat_index(indices).unwrap(), value);
+        Ok(())
+    }
+
+    pub fn set_flat(&mut self, index: usize, value: T) -> Result<(), String> {
+        if index >= self.size() {
+            return Err("Index out of bounds".into());
+        }
+        self.elements.insert(index, value);
         Ok(())
     }
 
@@ -70,7 +84,7 @@ impl<T, I> SparseTensor<T, I> {
     {
         let mut dense = DenseTensor::default(self.structure.clone());
         for (indices, value) in &self.elements {
-            dense.set(indices, value.clone());
+            dense.set_flat(*indices, value.clone());
         }
         dense
     }
@@ -83,10 +97,11 @@ where
     pub fn smart_set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         if value == T::default() {
-            _ = self.elements.remove(indices);
+            _ = self.elements.remove(&self.flat_index(indices).unwrap());
             return Ok(());
         }
-        self.elements.insert(indices.to_vec(), value);
+        self.elements
+            .insert(self.flat_index(indices).unwrap(), value);
         Ok(())
     }
 }
@@ -110,8 +125,13 @@ where
                 }
             }
         }
+        let mut elements = NHIndexMap::default();
+        for (index, value) in data {
+            elements.insert(structure.flat_index(index).unwrap(), value.clone());
+        }
+
         Ok(SparseTensor {
-            elements: AHashMap::from_iter(data.iter().cloned()),
+            elements,
             structure,
         })
     }
@@ -119,22 +139,27 @@ where
 
 impl<T, I> SparseTensor<T, I>
 where
-    T: Clone + Default,
+    T: Clone,
     I: Clone,
 {
     pub fn get(&self, indices: &[ConcreteIndex]) -> Result<&T, String> {
         self.verify_indices(indices)?;
         self.elements
-            .get(indices)
+            .get(&self.flat_index(indices).unwrap())
             .ok_or("No elements at that spot".into())
     }
-    pub fn get_with_defaults(&self, indices: &[ConcreteIndex]) -> Result<Cow<T>, String> {
+    pub fn get_with_defaults(&self, indices: &[ConcreteIndex]) -> Result<Cow<T>, String>
+    where
+        T: Default,
+    {
         self.verify_indices(indices)?;
         // if the index is in the bTree return the value, else return default, lazily allocating the default
-        Ok(match self.elements.get(indices) {
-            Some(value) => Cow::Borrowed(value),
-            None => Cow::Owned(T::default()),
-        })
+        Ok(
+            match self.elements.get(&self.flat_index(indices).unwrap()) {
+                Some(value) => Cow::Borrowed(value),
+                None => Cow::Owned(T::default()),
+            },
+        )
     }
 }
 
@@ -206,6 +231,12 @@ impl<T, I> DenseTensor<T, I> {
         let idx = self.flat_index(indices);
         if let Ok(i) = idx {
             self.data[i] = value;
+        }
+    }
+
+    pub fn set_flat(&mut self, index: usize, value: T) {
+        if index < self.size() {
+            self.data[index] = value;
         }
     }
 
@@ -296,7 +327,7 @@ pub trait HasTensorData<T> {
 
     fn indices(&self) -> Vec<Vec<ConcreteIndex>>;
 
-    fn hashmap(&self) -> AHashMap<Vec<ConcreteIndex>, T>;
+    fn hashmap(&self) -> IndexMap<Vec<ConcreteIndex>, T>;
 
     fn symhashmap(&self, id: Identifier, state: &mut State, ws: &Workspace) -> HashMap<Atom, T>;
 }
@@ -317,8 +348,8 @@ where
         indices
     }
 
-    fn hashmap(&self) -> AHashMap<Vec<ConcreteIndex>, T> {
-        let mut hashmap = AHashMap::new();
+    fn hashmap(&self) -> IndexMap<Vec<ConcreteIndex>, T> {
+        let mut hashmap = IndexMap::new();
         for (k, v) in self.iter() {
             hashmap.insert(k.clone(), v.clone());
         }
@@ -344,18 +375,28 @@ where
     }
 
     fn indices(&self) -> Vec<Vec<ConcreteIndex>> {
-        self.elements.keys().cloned().collect()
+        self.elements
+            .keys()
+            .map(|k| self.expanded_index(*k).unwrap())
+            .collect()
     }
 
-    fn hashmap(&self) -> AHashMap<Vec<ConcreteIndex>, T> {
-        self.elements.clone()
+    fn hashmap(&self) -> IndexMap<Vec<ConcreteIndex>, T> {
+        let mut hashmap = IndexMap::new();
+        for (k, v) in self.iter() {
+            hashmap.insert(k.clone(), v.clone());
+        }
+        hashmap
     }
 
     fn symhashmap(&self, id: Identifier, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
         let mut hashmap = HashMap::new();
 
         for (k, v) in self.elements.iter() {
-            hashmap.insert(self.atomic_expanded_label_id(&k, id, state, ws), v.clone());
+            hashmap.insert(
+                self.atomic_expanded_label_id(&self.expanded_index(*k).unwrap(), id, state, ws),
+                v.clone(),
+            );
         }
         hashmap
     }
@@ -405,7 +446,7 @@ where
         }
     }
 
-    fn hashmap(&self) -> AHashMap<Vec<ConcreteIndex>, T> {
+    fn hashmap(&self) -> IndexMap<Vec<ConcreteIndex>, T> {
         match self {
             NumTensor::Dense(d) => d.hashmap(),
             NumTensor::Sparse(s) => s.hashmap(),

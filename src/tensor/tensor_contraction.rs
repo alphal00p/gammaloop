@@ -1,4 +1,4 @@
-use ahash::AHashMap;
+use indexmap::IndexMap;
 
 use itertools::Itertools;
 
@@ -16,6 +16,8 @@ use symbolica::{
 };
 
 use crate::HasIntegrand;
+use nohash_hasher::BuildNoHashHasher;
+type NHIndexMap<K, V> = IndexMap<K, V, BuildNoHashHasher<K>>;
 
 use self::mixed_tensor::{MixedTensor, MixedTensors, SymbolicContract};
 
@@ -128,16 +130,7 @@ where
         + for<'a> std::ops::AddAssign<&'a Out>
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug,
-
-    I: Clone, // T::LCM: std::ops::AddAssign<T::LCM>
-              //     + std::ops::SubAssign<T::LCM>
-              //     + for<'a> std::ops::AddAssign<&'a T::LCM>
-              //     + for<'b> std::ops::SubAssign<&'b T::LCM>
-              //     + std::fmt::Debug
-              //     + Neg<Output = T::LCM>
-              //     + Default
-              //     + Clone
-              //     + std::ops::Mul<T::LCM, Output = T::LCM>,
+    I: Clone,
 {
     type LCM = DenseTensor<Out, I>;
     fn contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
@@ -152,20 +145,21 @@ where
 
             // Initialize result tensor with default values
             let mut result_data = vec![Out::zero(); final_structure.size()];
+            let mut result_index = 0;
 
-            for (index_a, fiber_a) in self.iter_fibers(i) {
-                for (index_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = final_structure
-                        .flat_index(
-                            &index_a[..i]
-                                .iter()
-                                .chain(&index_a[i + 1..])
-                                .chain(&index_b[..j])
-                                .chain(&index_b[j + 1..])
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap();
+            for fiber_a in self.iter_fibers(i) {
+                for fiber_b in other.iter_fibers(j) {
+                    // final_structure
+                    //     .flat_index(
+                    //         &index_a[..i]
+                    //             .iter()
+                    //             .chain(&index_a[i + 1..])
+                    //             .chain(&index_b[..j])
+                    //             .chain(&index_b[j + 1..])
+                    //             .cloned()
+                    //             .collect::<Vec<_>>(),
+                    //     )
+                    //     .unwrap();
 
                     for k in 0..dimension_of_contraction {
                         // Adjust indices for fetching from the other tensor
@@ -175,6 +169,7 @@ where
                             result_data[result_index] += fiber_a[k] * fiber_b[k];
                         }
                     }
+                    result_index += 1;
                 }
             }
 
@@ -205,17 +200,7 @@ where
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug,
     I: Clone,
-    // T: SmallestUpgrade<U> + Copy,
-    // U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
-    // T::LCM: std::ops::AddAssign<T::LCM>
-    //     + std::ops::SubAssign<T::LCM>
-    //     + for<'a> std::ops::AddAssign<&'a T::LCM>
-    //     + for<'b> std::ops::SubAssign<&'b T::LCM>
-    //     + std::fmt::Debug
-    //     + Neg<Output = T::LCM>
-    //     + Default
-    //     + Clone
-    //     + std::ops::Mul<T::LCM, Output = T::LCM>,
+    U: Clone,
 {
     type LCM = DenseTensor<Out, I>;
     fn contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
@@ -225,20 +210,11 @@ where
             let mut result_data = vec![Out::zero(); final_structure.size()];
 
             let metric = self.get_ith_metric(i).unwrap();
+            let mut result_index = 0;
 
-            for (index_a, nonzeros, fiber_a) in self.iter_fibers(i) {
-                for (index_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = final_structure
-                        .flat_index(
-                            &index_a[..i]
-                                .iter()
-                                .chain(&index_a[i + 1..])
-                                .chain(&index_b[..j])
-                                .chain(&index_b[j + 1..])
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap();
+            for (skipped, nonzeros, fiber_a) in self.iter_fibers(i) {
+                result_index += skipped;
+                for fiber_b in other.iter_fibers(j) {
                     for (i, k) in nonzeros.iter().enumerate() {
                         // Adjust indices for fetching from the other tensor
                         if metric[*k] {
@@ -247,6 +223,7 @@ where
                             result_data[result_index] += fiber_a[i] * fiber_b[*k];
                         }
                     }
+                    result_index += 1;
                 }
             }
 
@@ -291,26 +268,28 @@ where
         + std::fmt::Debug
         + std::cmp::PartialEq,
     I: Clone,
+    U: Clone,
+    T: Clone,
 {
     type LCM = SparseTensor<Out, I>;
     fn contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
         // println!("Contracting SparseTensor SparseTensor");
         if let Some((i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let mut result_data = AHashMap::new();
+            let mut result_data = NHIndexMap::default();
+            let one = 1;
+            let stride_other = *final_structure
+                .strides()
+                .get(self.structure().order() - 2)
+                .unwrap_or(&one);
 
             let metric = self.get_ith_metric(i).unwrap();
+            let mut result_index = 0;
 
-            for (index_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
-                for (index_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
-                    let result_index = index_a[..i]
-                        .iter()
-                        .chain(&index_a[i + 1..])
-                        .chain(&index_b[..j])
-                        .chain(&index_b[j + 1..])
-                        .cloned()
-                        .collect::<Vec<_>>();
-
+            for (skipped_a, nonzeros_a, fiber_a) in self.iter_fibers(i) {
+                result_index += skipped_a;
+                for (skipped_b, nonzeros_b, fiber_b) in other.iter_fibers(j) {
+                    result_index += skipped_b * stride_other;
                     let mut value = Out::zero();
                     let mut nonzero = false;
                     for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
@@ -329,6 +308,7 @@ where
                     if nonzero && value != Out::zero() {
                         result_data.insert(result_index, value);
                     }
+                    result_index += 1;
                 }
             }
 
@@ -370,6 +350,7 @@ where
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug,
     I: Clone,
+    T: Clone,
 {
     type LCM = DenseTensor<Out, I>;
     fn contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
@@ -378,24 +359,20 @@ where
             // final structure is the structure of self appended with the structure of other, with the contracted indices removed
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
 
+            let one = 1;
+            let stride_other = *final_structure
+                .strides()
+                .get(self.structure().order() - 2)
+                .unwrap_or(&one);
             let mut result_data = vec![Out::zero(); final_structure.size()];
 
             let metric = other.get_ith_metric(j).unwrap();
+            let mut result_index = 0;
 
-            for (index_a, fiber_a) in self.iter_fibers(i) {
-                for (index_b, nonzeros, fiber_b) in other.iter_fibers(j) {
+            for fiber_a in self.iter_fibers(i) {
+                for (skipped, nonzeros, fiber_b) in other.iter_fibers(j) {
                     //nonzeros is the indices of the non-zero elements of the other tensor
-                    let result_index = final_structure
-                        .flat_index(
-                            &index_a[..i]
-                                .iter()
-                                .chain(&index_a[i + 1..])
-                                .chain(&index_b[..j])
-                                .chain(&index_b[j + 1..])
-                                .cloned()
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap();
+                    result_index += skipped * stride_other;
 
                     for (i, k) in nonzeros.iter().enumerate() {
                         // Adjust indices for fetching from the other tensor
@@ -405,6 +382,7 @@ where
                             result_data[result_index] += fiber_a[*k] * fiber_b[i];
                         }
                     }
+                    result_index += 1;
                 }
             }
 
@@ -437,6 +415,8 @@ where
         + std::fmt::Debug
         + std::cmp::PartialEq,
     I: Clone,
+    T: Clone,
+    U: Clone,
 {
     type LCM = NumTensor<Out, I>;
     fn contract(&self, other: &NumTensor<T, I>) -> Option<NumTensor<Out, I>> {
