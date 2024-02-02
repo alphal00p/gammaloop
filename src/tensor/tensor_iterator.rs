@@ -1,5 +1,6 @@
 use std::ops::{AddAssign, Neg, SubAssign};
 
+use serde_yaml::mapping::Iter;
 use symbolica::state::{State, Workspace};
 
 use super::*;
@@ -32,7 +33,7 @@ impl<'a> TensorStructureIndexIterator<'a> {
 }
 
 pub struct SparseTensorIterator<'a, T, N> {
-    iter: indexmap::map::Iter<'a, usize, T>,
+    iter: intmap::iter::Iter<'a, u64, T>,
     structure: &'a TensorSkeleton<N>,
 }
 
@@ -50,7 +51,7 @@ impl<'a, T, N> Iterator for SparseTensorIterator<'a, T, N> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((k, v)) = self.iter.next() {
-            let indices = self.structure.expanded_index(*k).unwrap();
+            let indices = self.structure.expanded_index(*k as usize).unwrap();
             Some((indices, v))
         } else {
             None
@@ -415,7 +416,7 @@ where
             if let Some(v) = self
                 .tensor
                 .elements
-                .get(&(self.fiber_index + i * self.fiber_stride))
+                .get((self.fiber_index + i * self.fiber_stride) as u64)
             {
                 nonzeros.push(i);
                 values.push(v);

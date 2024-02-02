@@ -14,9 +14,10 @@ use symbolica::{
 
 use nohash_hasher::BuildNoHashHasher;
 type NHIndexMap<K, V> = IndexMap<K, V, BuildNoHashHasher<K>>;
+use intmap::IntMap;
 #[derive(Debug, Clone)]
 pub struct SparseTensor<T, I = String> {
-    pub elements: NHIndexMap<usize, T>,
+    pub elements: IntMap<T>,
     pub structure: TensorSkeleton<I>,
 }
 
@@ -34,7 +35,7 @@ impl<T, I> HasTensorStructure for SparseTensor<T, I> {
 impl<T, I> SparseTensor<T, I> {
     pub fn empty(structure: TensorSkeleton<I>) -> Self {
         SparseTensor {
-            elements: NHIndexMap::default(),
+            elements: IntMap::default(),
             structure,
         }
     }
@@ -45,7 +46,7 @@ impl<T, I> SparseTensor<T, I> {
     {
         let structure = TensorSkeleton::<I>::from_integers(slots, name);
         SparseTensor {
-            elements: NHIndexMap::default(),
+            elements: IntMap::default(),
             structure,
         }
     }
@@ -53,13 +54,13 @@ impl<T, I> SparseTensor<T, I> {
     pub fn is_empty_at(&self, indices: &[ConcreteIndex]) -> bool {
         !self
             .elements
-            .contains_key(&self.flat_index(indices).unwrap())
+            .contains_key(self.flat_index(indices).unwrap() as u64)
     }
 
     pub fn set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         self.elements
-            .insert(self.flat_index(indices).unwrap(), value);
+            .insert(self.flat_index(indices).unwrap() as u64, value);
         Ok(())
     }
 
@@ -67,7 +68,7 @@ impl<T, I> SparseTensor<T, I> {
         if index >= self.size() {
             return Err("Index out of bounds".into());
         }
-        self.elements.insert(index, value);
+        self.elements.insert(index as u64, value);
         Ok(())
     }
 
@@ -83,8 +84,8 @@ impl<T, I> SparseTensor<T, I> {
         I: Clone,
     {
         let mut dense = DenseTensor::default(self.structure.clone());
-        for (indices, value) in &self.elements {
-            dense.set_flat(*indices, value.clone());
+        for (indices, value) in self.elements.iter() {
+            dense.set_flat(*indices as usize, value.clone());
         }
         dense
     }
@@ -97,11 +98,13 @@ where
     pub fn smart_set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         if value == T::default() {
-            _ = self.elements.remove(&self.flat_index(indices).unwrap());
+            _ = self
+                .elements
+                .remove(self.flat_index(indices).unwrap() as u64);
             return Ok(());
         }
         self.elements
-            .insert(self.flat_index(indices).unwrap(), value);
+            .insert(self.flat_index(indices).unwrap() as u64, value);
         Ok(())
     }
 }
@@ -125,9 +128,9 @@ where
                 }
             }
         }
-        let mut elements = NHIndexMap::default();
+        let mut elements = IntMap::default();
         for (index, value) in data {
-            elements.insert(structure.flat_index(index).unwrap(), value.clone());
+            elements.insert(structure.flat_index(index).unwrap() as u64, value.clone());
         }
 
         Ok(SparseTensor {
@@ -145,7 +148,7 @@ where
     pub fn get(&self, indices: &[ConcreteIndex]) -> Result<&T, String> {
         self.verify_indices(indices)?;
         self.elements
-            .get(&self.flat_index(indices).unwrap())
+            .get(self.flat_index(indices).unwrap() as u64)
             .ok_or("No elements at that spot".into())
     }
     pub fn get_with_defaults(&self, indices: &[ConcreteIndex]) -> Result<Cow<T>, String>
@@ -155,7 +158,7 @@ where
         self.verify_indices(indices)?;
         // if the index is in the bTree return the value, else return default, lazily allocating the default
         Ok(
-            match self.elements.get(&self.flat_index(indices).unwrap()) {
+            match self.elements.get(self.flat_index(indices).unwrap() as u64) {
                 Some(value) => Cow::Borrowed(value),
                 None => Cow::Owned(T::default()),
             },
@@ -377,7 +380,7 @@ where
     fn indices(&self) -> Vec<Vec<ConcreteIndex>> {
         self.elements
             .keys()
-            .map(|k| self.expanded_index(*k).unwrap())
+            .map(|k| self.expanded_index(*k as usize).unwrap())
             .collect()
     }
 
@@ -394,7 +397,12 @@ where
 
         for (k, v) in self.elements.iter() {
             hashmap.insert(
-                self.atomic_expanded_label_id(&self.expanded_index(*k).unwrap(), id, state, ws),
+                self.atomic_expanded_label_id(
+                    &self.expanded_index(*k as usize).unwrap(),
+                    id,
+                    state,
+                    ws,
+                ),
                 v.clone(),
             );
         }

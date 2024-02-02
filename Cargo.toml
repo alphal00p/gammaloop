@@ -70,6 +70,7 @@ petgraph = "0.6.4"
 enum-try-as-inner = "0.1.1"
 indexmap = "2.2.2"
 nohash-hasher = "0.2.0"
+intmap = { git = "https://github.com/lcnbr/rust-intmap" }
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

@@ -18,6 +18,7 @@ use super::{
     SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg, SymbolicSub, SymbolicSubAssign,
     SymbolicZero, TensorSkeleton,
 };
+use intmap::IntMap;
 
 pub trait SymbolicInternalContract {
     fn internal_contract_sym(&self, ws: &Workspace, state: &State) -> Self;
@@ -238,7 +239,7 @@ where
     ) -> Option<Self::LCM> {
         if let Some((i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let mut result_data = NHIndexMap::default();
+            let mut result_data = IntMap::default();
             let metric = self.get_ith_metric(i).unwrap();
             let one = 1;
             let stride_other = *final_structure
@@ -275,7 +276,7 @@ where
                     if nonzero
                     // && value.as_atom_view() != zero.as_atom_view() TODO impl generic
                     {
-                        result_data.insert(result_index, value);
+                        result_data.insert(result_index as u64, value);
                     }
                     result_index += 1;
                 }

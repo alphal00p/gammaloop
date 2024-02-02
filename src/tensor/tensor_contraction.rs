@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
 
+use intmap::IntMap;
 use itertools::Itertools;
 
 use petgraph::{
@@ -276,7 +277,7 @@ where
         // println!("Contracting SparseTensor SparseTensor");
         if let Some((i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let mut result_data = NHIndexMap::default();
+            let mut result_data = IntMap::default();
             let one = 1;
             let stride_other = *final_structure
                 .strides()
@@ -306,7 +307,7 @@ where
                     }
 
                     if nonzero && value != Out::zero() {
-                        result_data.insert(result_index, value);
+                        result_data.insert(result_index as u64, value);
                     }
                     result_index += 1;
                 }

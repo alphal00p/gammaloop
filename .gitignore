@@ -24,6 +24,11 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+out.yaml
+outmap.yaml
+params.yaml
+perf.data
 # logos
 logos/
 

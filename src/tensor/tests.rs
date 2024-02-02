@@ -154,7 +154,7 @@ fn mixed_tensor_contraction() {
 
     let f = b.contract(&a).unwrap();
 
-    assert_eq!(f.data, [1.0 * im, 2.0 * im, 6.0 * im, 8.0 * im]);
+    assert_eq!(f.data, [1.0 * im, 6.0 * im, 2.0 * im, 8.0 * im]);
 
     let data_a = [(vec![0, 0], 1.0 * im), (vec![1, 1], 2.0 * im)];
 
