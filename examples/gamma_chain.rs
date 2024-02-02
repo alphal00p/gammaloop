@@ -1,12 +1,21 @@
 // Gamma chain example
 
 use num::Complex;
-use std::{collections::HashMap, fmt::format, ops::Neg, time::Instant};
+use std::{
+    collections::HashMap,
+    fmt::{format, Debug},
+    ops::{AddAssign, DivAssign, Mul, MulAssign, Neg, RemAssign, SubAssign},
+    time::Instant,
+};
 
 use _gammaloop::tensor::{
-    mixed_tensor::MixedTensors,
-    ufo_spin_tensors::{gamma, param_euclidean_four_vector, param_mink_four_vector},
-    AbstractIndex, Contract, DenseTensor, Expr, HasTensorData, HasTensorStructure, NumTensors,
+    mixed_tensor::{MixedTensor, MixedTensors},
+    ufo_spin_tensors::{
+        euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
+        mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
+    },
+    AbstractIndex, Contract, DenseTensor, Expr, HasTensorData, HasTensorStructure, IntoId,
+    NumTensors,
     Representation::Euclidean,
     Representation::Lorentz,
     SparseTensor, TensorNetwork, TensorSkeleton,
@@ -21,16 +30,23 @@ use symbolica::{
 };
 
 #[allow(dead_code)]
-fn pslash(indices: (usize, usize), p: &[Complex64; 4]) -> DenseTensor<Complex64> {
+fn pslash<T>(indices: (usize, usize), p: &[Complex<T>; 4]) -> DenseTensor<Complex<T>>
+where
+    T: Num
+        + std::default::Default
+        + Copy
+        + Neg<Output = T>
+        + Debug
+        + AddAssign
+        + SubAssign
+        + MulAssign
+        + DivAssign
+        + RemAssign,
+{
     let minkindex = indices.0 + indices.1;
 
-    let p: DenseTensor<num::Complex<f64>> = mink_four_vector(minkindex, p);
-    gamma(minkindex, indices).contract(&p).unwrap()
-}
-
-#[allow(dead_code)]
-fn mink_four_vector<T: std::clone::Clone>(index: usize, p: &[T; 4]) -> DenseTensor<T> {
-    DenseTensor::from_data(p, TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p")).unwrap()
+    let p: DenseTensor<num::Complex<T>> = mink_four_vector(minkindex, p);
+    p.contract(&gamma(minkindex, indices)).unwrap()
 }
 
 #[allow(dead_code)]
@@ -40,7 +56,7 @@ fn labeled_mink_four_vector(
     ws: &Workspace,
     state: &mut State,
 ) -> DenseTensor<Atom> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p");
+    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".to_string());
 
     DenseTensor::symbolic_labels(label, structure, ws, state)
     // .try_into()
@@ -54,20 +70,8 @@ fn numbered_labeled_mink_four_vector<'a>(
     state: &'a State,
     ws: &'a Workspace,
 ) -> DenseTensor<Expr<'a>> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p");
+    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".to_string());
     DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
-}
-
-#[allow(dead_code)]
-fn eucl_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
-where
-    T: Num + std::default::Default + std::clone::Clone,
-{
-    DenseTensor::from_data(
-        &p,
-        TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x"),
-    )
-    .unwrap()
 }
 
 #[allow(dead_code)]
@@ -77,7 +81,7 @@ fn labeled_eucl_four_vector(
     ws: &Workspace,
     state: &mut State,
 ) -> DenseTensor<Atom> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x");
+    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x".to_string());
     DenseTensor::symbolic_labels(label, structure, ws, state)
 }
 
@@ -89,7 +93,7 @@ fn numbered_labeled_eucl_four_vector<'a>(
     state: &'a State,
     ws: &'a Workspace,
 ) -> DenseTensor<Expr<'a>> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x");
+    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x".to_string());
     DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
 }
 
@@ -101,7 +105,7 @@ fn benchmark_chain(
 ) -> DenseTensor<Complex64> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result = eucl_four_vector(contracting_index, vbar);
+    let mut result = euclidean_four_vector(contracting_index, &vbar);
     for m in minkindices {
         if *m > 0 {
             let p = [
@@ -114,7 +118,7 @@ fn benchmark_chain(
             let pslash = pslash((contracting_index, contracting_index + 1), &p);
             result = pslash.contract(&result).unwrap();
         } else {
-            result = gamma(
+            result = gamma::<f64>(
                 usize::try_from(m.neg()).unwrap(),
                 (contracting_index, contracting_index + 1),
             )
@@ -124,7 +128,7 @@ fn benchmark_chain(
         contracting_index += 1;
     }
     result
-        .contract(&eucl_four_vector(contracting_index, u))
+        .contract(&euclidean_four_vector(contracting_index, &u))
         .unwrap()
 }
 // #[allow(dead_code)]
@@ -139,7 +143,19 @@ fn benchmark_chain(
 //     let mut result = vbar;
 
 #[allow(dead_code)]
-fn gamma_trace(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
+fn gamma_trace<T>(minkindices: &[i32]) -> SparseTensor<Complex<T>>
+where
+    T: Num
+        + std::default::Default
+        + Copy
+        + Neg<Output = T>
+        + Debug
+        + AddAssign
+        + SubAssign
+        + MulAssign
+        + DivAssign
+        + RemAssign,
+{
     let mink = minkindices[0];
     let mut result = gamma(usize::try_from(mink).unwrap(), (0, 1));
     let mut contracting_index = 1;
@@ -154,10 +170,10 @@ fn gamma_trace(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
         };
 
         if *m > 0 {
-            let gamma = gamma(usize::try_from(*m).unwrap(), (ui, uj));
+            let gamma: SparseTensor<Complex<T>> = gamma(usize::try_from(*m).unwrap(), (ui, uj));
             result = gamma.contract(&result).unwrap();
         } else {
-            result = gamma(usize::try_from(m.neg()).unwrap(), (ui, uj))
+            result = gamma::<T>(usize::try_from(m.neg()).unwrap(), (ui, uj))
                 .contract(&result)
                 .unwrap();
         }
@@ -166,7 +182,19 @@ fn gamma_trace(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
 }
 
 #[allow(dead_code)]
-fn gamma_chain(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
+fn gamma_chain<T>(minkindices: &[i32]) -> SparseTensor<Complex<T>>
+where
+    T: Num
+        + Copy
+        + Neg<Output = T>
+        + Debug
+        + AddAssign
+        + SubAssign
+        + MulAssign
+        + DivAssign
+        + RemAssign
+        + Default,
+{
     let mink = minkindices[0];
     let mut result = gamma(usize::try_from(mink).unwrap(), (0, 1));
     let mut contracting_index = 1;
@@ -177,10 +205,10 @@ fn gamma_chain(minkindices: &[i32]) -> SparseTensor<Complex<f64>> {
         let uj = contracting_index;
 
         if *m > 0 {
-            let gamma = gamma(usize::try_from(*m).unwrap(), (ui, uj));
+            let gamma: SparseTensor<Complex<T>> = gamma(usize::try_from(*m).unwrap(), (ui, uj));
             result = gamma.contract(&result).unwrap();
         } else {
-            result = gamma(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj))
+            result = gamma::<T>(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj))
                 .contract(&result)
                 .unwrap();
         }
@@ -193,10 +221,12 @@ fn gamma_net(
     minkindices: &[i32],
     vbar: [Complex64; 4],
     u: [Complex64; 4],
-) -> TensorNetwork<NumTensors> {
+    state: &mut State,
+) -> TensorNetwork<NumTensors<Identifier>> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result: Vec<NumTensors> = vec![eucl_four_vector(contracting_index, vbar).into()];
+    let mut result: Vec<NumTensors<Identifier>> =
+        vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1;
@@ -209,13 +239,14 @@ fn gamma_net(
                 Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
-            result.push(mink_four_vector(usize::try_from(*m).unwrap(), &p).into());
-            result.push(gamma(usize::try_from(*m).unwrap(), (ui, uj)).into());
+            result.push(mink_four_vector_sym(usize::try_from(*m).unwrap(), &p, state).into());
+            result.push(gammasym(usize::try_from(*m).unwrap(), (ui, uj), state).into());
         } else {
-            result.push(gamma(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj)).into());
+            result
+                .push(gammasym(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj), state).into());
         }
     }
-    result.push(eucl_four_vector(contracting_index, u).into());
+    result.push(euclidean_four_vector_sym(contracting_index, &u, state).into());
     TensorNetwork::new(result)
 }
 
@@ -226,10 +257,10 @@ fn defered_chain(
     vbar: [Complex64; 4],
     u: [Complex64; 4],
 ) -> DenseTensor<Complex<f64>> {
-    let mut result = eucl_four_vector(0, vbar);
+    let mut result = euclidean_four_vector(0, &vbar);
     result = gamma_chain.contract(&result).unwrap();
     result = result
-        .contract(&eucl_four_vector(minkindices.len(), u))
+        .contract(&euclidean_four_vector(minkindices.len(), &u))
         .unwrap();
 
     let mut i = 0;
@@ -254,27 +285,31 @@ fn gamma_net_param(
     minkindices: &[i32],
     state: &mut State,
     ws: &Workspace,
-) -> TensorNetwork<MixedTensors> {
+) -> TensorNetwork<MixedTensor<Identifier>> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result: Vec<MixedTensors> =
-        vec![param_euclidean_four_vector(contracting_index, "vbar", state, ws).into()];
+    let mut result: Vec<MixedTensor<Identifier>> =
+        vec![
+            param_euclidean_four_vector(contracting_index, "vbar".into_id(state), state, ws).into(),
+        ];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1;
         let uj = contracting_index;
         if *m > 0 {
-            let pname = format!("p{}", i);
+            let pname = format!("p{}", i).into_id(state);
             i += 1;
             result.push(
-                param_mink_four_vector(usize::try_from(*m).unwrap(), &pname, state, ws).into(),
+                param_mink_four_vector(usize::try_from(*m).unwrap(), pname, state, ws).into(),
             );
-            result.push(gamma(usize::try_from(*m).unwrap(), (ui, uj)).into());
+            result.push(gammasym(usize::try_from(*m).unwrap(), (ui, uj), state).into());
         } else {
-            result.push(gamma(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj)).into());
+            result
+                .push(gammasym(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj), state).into());
         }
     }
-    result.push(param_euclidean_four_vector(contracting_index, "u", state, ws).into());
+    result
+        .push(param_euclidean_four_vector(contracting_index, "u".into_id(state), state, ws).into());
     TensorNetwork::new(result)
 }
 
@@ -428,8 +463,9 @@ fn main() {
     // // );
 
     let startfull = Instant::now();
+    let mut state = State::new();
 
-    let mut chain = gamma_net(&vec, vbar, u);
+    let mut chain = gamma_net(&vec, vbar, u, &mut state);
     let start = Instant::now();
     chain.contract();
     let duration = start.elapsed();
@@ -447,7 +483,6 @@ fn main() {
     );
 
     // let mut chain = gamma_net(&vec, vbar, u);
-    let mut state = State::new();
     let ws: Workspace<Linear> = Workspace::new();
 
     let atom = Atom::parse("A+P", &mut state, &ws).unwrap();
@@ -503,7 +538,7 @@ fn main() {
 
     let mut chain_param = gamma_net_param(&vec, &mut state, &ws);
 
-    println!("{}", chain_param.dot());
+    println!("{}", chain_param.dotsym(&state));
     let params: Vec<Atom> = chain_param
         .clone()
         .to_symbolic_tensor_vec()
@@ -538,14 +573,14 @@ fn main() {
     chain_param.contract_sym_depth(9, &state, &ws);
 
     let mut shadow = chain_param.symbolic_shadow("S", &mut state, &ws);
-    println!("{}", chain_param.dot());
+    println!("{}", chain_param.dotsym(&state));
     let a: Vec<(String, Vec<String>)> = chain_param
         .clone()
         .to_symbolic_tensor_vec()
         .into_iter()
         .map(|x| {
             (
-                x.global_name().unwrap().to_string(),
+                state.get_name(*x.global_name().unwrap()).to_string(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -562,7 +597,7 @@ fn main() {
     let amap = chain_param
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| x.symhashmap(x.global_name().unwrap(), &mut state, &ws))
+        .map(|x| x.symhashmap(*x.global_name().unwrap(), &mut state, &ws))
         .collect::<Vec<_>>();
 
     let amapstr = amap
@@ -585,7 +620,7 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    println!("{}", shadow.dot());
+    println!("{}", shadow.dotsym(&state));
     let start = Instant::now();
     shadow.contract_sym_depth(10, &state, &ws);
     let duration = start.elapsed();
@@ -597,14 +632,14 @@ fn main() {
     // );
 
     let mut shadow2 = shadow.symbolic_shadow("T", &mut state, &ws);
-    println!("{}", shadow.dot());
+    println!("{}", shadow.dotsym(&state));
     let b: Vec<(String, Vec<String>)> = shadow
         .clone()
         .to_symbolic_tensor_vec()
         .into_iter()
         .map(|x| {
             (
-                x.global_name().unwrap().to_string(),
+                state.get_name(*x.global_name().unwrap()).to_string(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -621,7 +656,7 @@ fn main() {
     let bmap = shadow
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| x.symhashmap(x.global_name().unwrap(), &mut state, &ws))
+        .map(|x| x.symhashmap(*x.global_name().unwrap(), &mut state, &ws))
         .collect::<Vec<_>>();
 
     let bmapstr = bmap
@@ -644,7 +679,7 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    println!("{}", shadow2.dot());
+    println!("{}", shadow2.dotsym(&state));
     let start = Instant::now();
     shadow2.contract_sym_depth(10, &state, &ws);
     let duration = start.elapsed();
@@ -655,14 +690,19 @@ fn main() {
     //     duration,
     // );
 
-    shadow2.name("U");
-    println!("{}", shadow2.dot());
+    shadow2.namesym("U", &mut state);
+    println!("{}", shadow2.dotsym(&state));
 
     let c: Vec<(String, Vec<Atom>)> = shadow2
         .clone()
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| (x.global_name().unwrap().to_string(), x.data()))
+        .map(|x| {
+            (
+                state.get_name(*x.global_name().unwrap()).to_string(),
+                x.data(),
+            )
+        })
         .collect();
 
     let e: Vec<(String, Vec<String>)> = shadow2
@@ -671,7 +711,7 @@ fn main() {
         .into_iter()
         .map(|x| {
             (
-                x.global_name().unwrap().to_string(),
+                state.get_name(*x.global_name().unwrap()).to_string(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -688,7 +728,7 @@ fn main() {
     let cmap = shadow2
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| x.symhashmap(x.global_name().unwrap(), &mut state, &ws))
+        .map(|x| x.symhashmap(*x.global_name().unwrap(), &mut state, &ws))
         .collect::<Vec<_>>();
 
     let cmapstr = cmap
