@@ -16,6 +16,13 @@ inherits = "dev"
 opt-level = 2
 #lto=true
 
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "gamma_net"
+harness = false
+
 [dependencies]
 # You may need bleeding edge changes
 symbolica = { git = "https://github.com/alphal00p/symbolica" }
