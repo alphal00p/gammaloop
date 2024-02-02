@@ -20,6 +20,7 @@ use crate::HasIntegrand;
 use self::mixed_tensor::{MixedTensor, MixedTensors, SymbolicContract};
 
 use super::*;
+use smartstring::alias::String;
 use std::{
     fmt::{Debug, Display},
     ops::Neg,
@@ -713,10 +714,11 @@ where
             Dot::with_attr_getters(
                 &self.graph,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, e| { format!("label=\"{}\"", e.weight()) },
-                &|_, n| { format!("label=\"{}\"", n.1.structure()) }
+                &|_, e| { format!("label=\"{}\"", e.weight()).into() },
+                &|_, n| { format!("label=\"{}\"", n.1.structure()).into() }
             )
         )
+        .into()
     }
 }
 
@@ -730,10 +732,11 @@ where
             Dot::with_attr_getters(
                 &self.graph,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, e| { format!("label=\"{}\"", e.weight()) },
-                &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)) }
+                &|_, e| { format!("label=\"{}\"", e.weight()).into() },
+                &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)).into() }
             )
         )
+        .into()
     }
 }
 
@@ -779,7 +782,7 @@ where
                 .node_weight_mut(n)
                 .unwrap()
                 .mut_structure()
-                .set_global_name(format!("{}{}", name, n.index()));
+                .set_global_name(format!("{}{}", name, n.index()).into());
         });
     }
 }

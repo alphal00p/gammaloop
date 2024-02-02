@@ -4,13 +4,13 @@ use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
 use num::Complex;
+use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
 use symbolica::{
     representations::Atom,
     representations::{Identifier, Num},
     state::{State, Workspace},
 };
-
 #[derive(Debug, Clone)]
 pub struct SparseTensor<T, I = String> {
     pub elements: AHashMap<Vec<ConcreteIndex>, T>,
@@ -102,7 +102,7 @@ where
         let mut dimensions = vec![0; structure.order()];
         for (index, _) in data {
             if index.len() != structure.order() {
-                return Err("Mismatched order".to_string());
+                return Err("Mismatched order".into());
             }
             for (i, &idx) in index.iter().enumerate() {
                 if idx >= dimensions[i] {
@@ -126,7 +126,7 @@ where
         self.verify_indices(indices)?;
         self.elements
             .get(indices)
-            .ok_or("No elements at that spot".to_string())
+            .ok_or("No elements at that spot".into())
     }
     pub fn get_with_defaults(&self, indices: &[ConcreteIndex]) -> Result<Cow<T>, String> {
         self.verify_indices(indices)?;
@@ -179,7 +179,7 @@ impl<T: Default + Clone, I> DenseTensor<T, I> {
 impl<T: Clone, I> DenseTensor<T, I> {
     pub fn from_data(data: &[T], structure: TensorSkeleton<I>) -> Result<Self, String> {
         if data.len() != structure.size() && !(data.len() == 1 && structure.is_scalar()) {
-            return Err("Data length does not match shape".to_string());
+            return Err("Data length does not match shape".into());
         }
         Ok(DenseTensor {
             data: data.to_vec(),
@@ -189,7 +189,7 @@ impl<T: Clone, I> DenseTensor<T, I> {
 
     pub fn from_data_coerced(data: &[T], structure: TensorSkeleton<I>) -> Result<Self, String> {
         if data.len() < structure.size() {
-            return Err("Data length is too small".to_string());
+            return Err("Data length is too small".into());
         }
         let mut data = data.to_vec();
         if structure.is_scalar() {

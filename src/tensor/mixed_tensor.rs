@@ -3,7 +3,7 @@ use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
 use num::Complex;
-
+use smartstring::alias::String;
 use symbolica::{
     representations::{AsAtomView, Atom, FunctionBuilder, Identifier},
     state::{State, Workspace},
@@ -447,7 +447,7 @@ impl<'a, I> DenseTensor<Expr<'a>, I> {
         for index in structure.index_iter() {
             let indices_str = index
                 .into_iter()
-                .map(|index| index.to_string())
+                .map(|index| index.to_string().into())
                 .collect::<Vec<String>>()
                 .join("_");
 

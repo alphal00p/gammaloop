@@ -1,6 +1,7 @@
 // Gamma chain example
 
 use num::Complex;
+use smartstring::alias::String;
 use std::{
     collections::HashMap,
     fmt::{format, Debug},
@@ -56,7 +57,7 @@ fn labeled_mink_four_vector(
     ws: &Workspace,
     state: &mut State,
 ) -> DenseTensor<Atom> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".to_string());
+    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".into());
 
     DenseTensor::symbolic_labels(label, structure, ws, state)
     // .try_into()
@@ -70,7 +71,7 @@ fn numbered_labeled_mink_four_vector<'a>(
     state: &'a State,
     ws: &'a Workspace,
 ) -> DenseTensor<Expr<'a>> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".to_string());
+    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".into());
     DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
 }
 
@@ -81,7 +82,7 @@ fn labeled_eucl_four_vector(
     ws: &Workspace,
     state: &mut State,
 ) -> DenseTensor<Atom> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x".to_string());
+    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x".into());
     DenseTensor::symbolic_labels(label, structure, ws, state)
 }
 
@@ -93,7 +94,7 @@ fn numbered_labeled_eucl_four_vector<'a>(
     state: &'a State,
     ws: &'a Workspace,
 ) -> DenseTensor<Expr<'a>> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x".to_string());
+    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x".into());
     DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
 }
 
@@ -574,13 +575,13 @@ fn main() {
 
     let mut shadow = chain_param.symbolic_shadow("S", &mut state, &ws);
     println!("{}", chain_param.dotsym(&state));
-    let a: Vec<(String, Vec<String>)> = chain_param
+    let a = chain_param
         .clone()
         .to_symbolic_tensor_vec()
         .into_iter()
         .map(|x| {
             (
-                state.get_name(*x.global_name().unwrap()).to_string(),
+                state.get_name(*x.global_name().unwrap()).clone(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -588,6 +589,7 @@ fn main() {
                             "{}",
                             AtomPrinter::new_with_options(x.as_view(), printops, &state)
                         )
+                        .into()
                     })
                     .collect(),
             )
@@ -609,11 +611,13 @@ fn main() {
                     format!(
                         "{}",
                         AtomPrinter::new_with_options(k.as_view(), printops, &state)
-                    ),
+                    )
+                    .into(),
                     format!(
                         "{}",
                         AtomPrinter::new_with_options(v.as_view(), printops, &state)
-                    ),
+                    )
+                    .into(),
                 );
             }
             a
@@ -639,7 +643,7 @@ fn main() {
         .into_iter()
         .map(|x| {
             (
-                state.get_name(*x.global_name().unwrap()).to_string(),
+                state.get_name(*x.global_name().unwrap()).clone(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -647,6 +651,7 @@ fn main() {
                             "{}",
                             AtomPrinter::new_with_options(x.as_view(), printops, &state)
                         )
+                        .into()
                     })
                     .collect(),
             )
@@ -668,11 +673,13 @@ fn main() {
                     format!(
                         "{}",
                         AtomPrinter::new_with_options(k.as_view(), printops, &state)
-                    ),
+                    )
+                    .into(),
                     format!(
                         "{}",
                         AtomPrinter::new_with_options(v.as_view(), printops, &state)
-                    ),
+                    )
+                    .into(),
                 );
             }
             a
@@ -697,12 +704,7 @@ fn main() {
         .clone()
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| {
-            (
-                state.get_name(*x.global_name().unwrap()).to_string(),
-                x.data(),
-            )
-        })
+        .map(|x| (state.get_name(*x.global_name().unwrap()).clone(), x.data()))
         .collect();
 
     let e: Vec<(String, Vec<String>)> = shadow2
@@ -711,7 +713,7 @@ fn main() {
         .into_iter()
         .map(|x| {
             (
-                state.get_name(*x.global_name().unwrap()).to_string(),
+                state.get_name(*x.global_name().unwrap()).clone(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -719,6 +721,7 @@ fn main() {
                             "{}",
                             AtomPrinter::new_with_options(x.as_view(), printops, &state)
                         )
+                        .into()
                     })
                     .collect(),
             )
@@ -740,11 +743,13 @@ fn main() {
                     format!(
                         "{}",
                         AtomPrinter::new_with_options(k.as_view(), printops, &state)
-                    ),
+                    )
+                    .into(),
                     format!(
                         "{}",
                         AtomPrinter::new_with_options(v.as_view(), printops, &state)
-                    ),
+                    )
+                    .into(),
                 );
             }
             a

@@ -13,6 +13,7 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use super::DenseTensor;
 use super::TensorStructureIndexIterator;
+use smartstring::alias::String;
 /// usize is used as label/id for index of tensor
 pub type AbstractIndex = usize;
 /// usize is used as a Dimension
@@ -294,7 +295,7 @@ impl<N> TensorSkeleton<N> {
     /// Verifies that the list of indices provided are valid for the tensor
     pub fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String> {
         if indices.len() != self.order() {
-            return Err("Mismatched order".to_string());
+            return Err("Mismatched order".into());
         }
 
         for (i, &dim_len) in self
@@ -309,7 +310,8 @@ impl<N> TensorSkeleton<N> {
                     indices[i],
                     i,
                     usize::from(dim_len)
-                ));
+                )
+                .into());
             }
         }
         Ok(())
@@ -338,7 +340,7 @@ impl<N> TensorSkeleton<N> {
         if flat_index < self.size() {
             Ok(indices)
         } else {
-            Err(format!("Index {} out of bounds", flat_index))
+            Err(format!("Index {} out of bounds", flat_index).into())
         }
     }
 
@@ -836,7 +838,7 @@ impl VecSlotExtension for TensorStructure {
 
     fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String> {
         if indices.len() != self.order() {
-            return Err("Mismatched order".to_string());
+            return Err("Mismatched order".into());
         }
 
         for (i, &dim_len) in self.iter().map(|slot| &slot.representation).enumerate() {
@@ -846,7 +848,8 @@ impl VecSlotExtension for TensorStructure {
                     indices[i],
                     i,
                     usize::from(dim_len)
-                ));
+                )
+                .into());
             }
         }
         Ok(())
@@ -873,7 +876,7 @@ impl VecSlotExtension for TensorStructure {
         if flat_index < self.size() {
             Ok(indices)
         } else {
-            Err(format!("Index {} out of bounds", flat_index))
+            Err(format!("Index {} out of bounds", flat_index).into())
         }
     }
 

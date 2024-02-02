@@ -3,6 +3,7 @@ use crate::tensor::{
 };
 use ahash::AHashMap;
 use num::Complex;
+use smartstring::alias::String;
 use symbolica::{
     representations::Atom,
     state::{State, Workspace},
@@ -18,7 +19,7 @@ where
 {
     DenseTensor::from_data(
         &p,
-        TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".to_string()),
+        TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".into()),
     )
     .unwrap()
 }
@@ -67,7 +68,7 @@ fn construct_dense_tensor() {
 
 #[test]
 fn construct_sparse_tensor() -> Result<(), String> {
-    let structure = TensorSkeleton::from_integers(&[(1, 2), (2, 3), (3, 4)], "a".to_string());
+    let structure = TensorSkeleton::from_integers(&[(1, 2), (2, 3), (3, 4)], "a".into());
 
     let mut a: SparseTensor<usize> = SparseTensor::empty(structure);
     a.set(&[1, 2, 1], 1)?;
@@ -348,7 +349,7 @@ fn convert_sym() {
 
 #[test]
 fn empty_densor() {
-    let empty_structure = TensorSkeleton::from_integers(&[], "".to_string());
+    let empty_structure = TensorSkeleton::from_integers(&[], "".into());
 
     let empty: DenseTensor<f64> = DenseTensor::default(empty_structure);
 
@@ -360,9 +361,9 @@ fn symbolic_contract() {
     let mut state = State::new();
     let ws = Workspace::new();
 
-    let structura = TensorSkeleton::from_integers(&[(1, 2), (4, 3)], "a".to_string());
+    let structura = TensorSkeleton::from_integers(&[(1, 2), (4, 3)], "a".into());
 
-    let structurb = TensorSkeleton::from_integers(&[(3, 2), (2, 3)], "b".to_string());
+    let structurb = TensorSkeleton::from_integers(&[(3, 2), (2, 3)], "b".into());
 
     let labela = state.get_or_insert_fn("T", None).unwrap();
     let labelb = state.get_or_insert_fn("P", None).unwrap();

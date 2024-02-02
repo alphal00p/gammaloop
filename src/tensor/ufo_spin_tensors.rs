@@ -3,6 +3,7 @@ use super::{
     SparseTensor, TensorSkeleton,
 };
 use num::{Complex, Float, One, Zero};
+use smartstring::alias::String;
 
 use symbolica::{
     representations::{Atom, Identifier},
@@ -17,7 +18,7 @@ where
     //TODO: make it just swap indices
     let structure = TensorSkeleton::from_idxsing(
         &[(indices.0, signature), (indices.1, signature)],
-        "id".to_string(),
+        "id".into(),
     );
     let mut identity = SparseTensor::empty(structure);
     for i in 0..signature.into() {
@@ -44,7 +45,7 @@ where
 {
     DenseTensor::from_data(
         p,
-        TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".to_string()),
+        TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".into()),
     )
     .unwrap()
 }
@@ -73,7 +74,7 @@ where
 {
     DenseTensor::from_data(
         p,
-        TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "p".to_string()),
+        TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "p".into()),
     )
     .unwrap()
 }
@@ -146,7 +147,7 @@ where
             (indices.1, Euclidean(4)),
             (minkindex, Lorentz(4)),
         ],
-        "γ".to_string(),
+        "γ".into(),
     );
 
     gamma_data(structure)
@@ -213,7 +214,7 @@ where
 {
     let structure = TensorSkeleton::from_idxsing(
         &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
-        "γ5".to_string(),
+        "γ5".into(),
     );
 
     gamma5_data(structure)
@@ -261,7 +262,7 @@ where
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
     let structure = TensorSkeleton::from_idxsing(
         &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
-        "ProjM".to_string(),
+        "ProjM".into(),
     );
 
     proj_m_data(structure)
@@ -316,7 +317,7 @@ where
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
     let structure = TensorSkeleton::from_idxsing(
         &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
-        "ProjP".to_string(),
+        "ProjP".into(),
     );
 
     proj_p_data(structure)
@@ -374,7 +375,7 @@ where
             (minkdices.0, Lorentz(4)),
             (minkdices.1, Lorentz(4)),
         ],
-        "σ".to_string(),
+        "σ".into(),
     );
 
     sigma_data(structure)

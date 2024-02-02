@@ -1,9 +1,9 @@
+use super::{Expr, HasTensorStructure, TensorSkeleton};
+use smartstring::alias::String;
 use symbolica::{
     representations::{AsAtomView, Atom, Identifier},
     state::{State, Workspace},
 };
-
-use super::{Expr, HasTensorStructure, TensorSkeleton};
 
 #[derive(Debug)]
 pub struct SymbolicTensor {
