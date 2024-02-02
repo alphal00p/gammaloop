@@ -1,5 +1,5 @@
 use duplicate::duplicate;
-use duplicate::duplicate_item;
+
 use num::Complex;
 use symbolica::representations::default::Linear;
 use symbolica::representations::AsAtomView;
@@ -402,12 +402,12 @@ fn symbolic() {
     let a = Atom::parse("c", &mut state, &ws).unwrap();
     let b = Atom::parse("d", &mut state, &ws).unwrap();
     let c = a.add_sym(&b, &ws, &state).unwrap();
-    let d = c.add_sym(4., &ws, &state).unwrap();
+    let _d = c.add_sym(4., &ws, &state).unwrap();
 
-    let e = (4.).add_sym(4., &ws, &state);
-    let f = Complex::new(2., 3.).add_sym(4., &ws, &state);
-    let g = Complex::new(2., 3.).add_sym(Complex::new(2., 3.), &ws, &state);
-    let h = (3.).add_sym(Complex::new(1., 2.), &ws, &state);
+    let _e = (4.).add_sym(4., &ws, &state);
+    let _f = Complex::new(2., 3.).add_sym(4., &ws, &state);
+    let _g = Complex::new(2., 3.).add_sym(Complex::new(2., 3.), &ws, &state);
+    let _h = (3.).add_sym(Complex::new(1., 2.), &ws, &state);
 }
 
 // impl<T, U> SmallestUpgrade<Up<T>> for Up<U>

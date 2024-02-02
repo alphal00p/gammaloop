@@ -1,36 +1,40 @@
 use ahash::AHashMap;
-use enum_dispatch::enum_dispatch;
-use hyperdual::Zero;
-use num::Complex;
+
+use itertools::Itertools;
+
 use petgraph::{
     dot::{Config, Dot},
-    graph::Edge,
     graph::EdgeIndex,
+    graph::Graph,
     graph::NodeIndex,
-    visit::{EdgeRef, IntoEdges},
-    Graph, Undirected,
+    visit::EdgeRef,
+    Undirected,
 };
-use symbolica::state::{State, Workspace};
+use symbolica::{
+    representations::{Identifier, Num},
+    state::{State, Workspace},
+};
 
-use self::mixed_tensor::SymbolicContract;
+use crate::HasIntegrand;
+
+use self::mixed_tensor::{MixedTensor, MixedTensors, SymbolicContract};
 
 use super::*;
 use std::{
-    borrow::Borrow,
-    fmt::Debug,
-    ops::{Mul, Neg},
-    process::Output,
+    fmt::{Debug, Display},
+    ops::Neg,
 };
-impl<T> DenseTensor<T>
+impl<T, I> DenseTensor<T, I>
 where
     T: for<'a> std::ops::AddAssign<&'a T>
         + for<'b> std::ops::SubAssign<&'b T>
         + Neg<Output = T>
         + Clone
         + std::fmt::Debug,
+    I: Clone,
 {
     pub fn internal_contract(&self) -> Self {
-        let mut result = self.clone();
+        let mut result: DenseTensor<T, I> = self.clone();
         for trace in self.traces() {
             let mut new_structure = self.structure().clone();
             new_structure.trace(trace[0], trace[1]);
@@ -45,7 +49,7 @@ where
     }
 }
 
-impl<T> SparseTensor<T>
+impl<T, I> SparseTensor<T, I>
 where
     T: for<'a> std::ops::AddAssign<&'a T>
         + for<'b> std::ops::SubAssign<&'b T>
@@ -53,6 +57,7 @@ where
         + Clone
         + Default
         + PartialEq,
+    I: Clone,
 {
     pub fn internal_contract(&self) -> Self {
         let trace = self.traces()[0];
@@ -106,12 +111,12 @@ where
 // {
 //     left.upgrade() * right.upgrade()
 // }
-pub trait Contract<T>: HasTensorStructure {
+pub trait Contract<T> {
     type LCM;
     fn contract(&self, other: &T) -> Option<Self::LCM>;
 }
 
-impl<T, U, Out> Contract<DenseTensor<T>> for DenseTensor<U>
+impl<T, U, Out, I> Contract<DenseTensor<T, I>> for DenseTensor<U, I>
 where
     for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
     Out: std::ops::AddAssign<Out>
@@ -122,19 +127,20 @@ where
         + for<'a> std::ops::AddAssign<&'a Out>
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug,
-    // T::LCM: std::ops::AddAssign<T::LCM>
-    //     + std::ops::SubAssign<T::LCM>
-    //     + for<'a> std::ops::AddAssign<&'a T::LCM>
-    //     + for<'b> std::ops::SubAssign<&'b T::LCM>
-    //     + std::fmt::Debug
-    //     + Neg<Output = T::LCM>
-    //     + Default
-    //     + Clone
-    //     + std::ops::Mul<T::LCM, Output = T::LCM>,
+
+    I: Clone, // T::LCM: std::ops::AddAssign<T::LCM>
+              //     + std::ops::SubAssign<T::LCM>
+              //     + for<'a> std::ops::AddAssign<&'a T::LCM>
+              //     + for<'b> std::ops::SubAssign<&'b T::LCM>
+              //     + std::fmt::Debug
+              //     + Neg<Output = T::LCM>
+              //     + Default
+              //     + Clone
+              //     + std::ops::Mul<T::LCM, Output = T::LCM>,
 {
-    type LCM = DenseTensor<Out>;
-    fn contract(&self, other: &DenseTensor<T>) -> Option<Self::LCM> {
-        if let Some((i, j)) = self.match_index(other) {
+    type LCM = DenseTensor<Out, I>;
+    fn contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
+        if let Some((i, j)) = self.structure().match_index(other.structure()) {
             // println!("{},{}", i, j);
             let self_shape = self.shape();
 
@@ -171,7 +177,7 @@ where
                 }
             }
 
-            let result = DenseTensor {
+            let result: DenseTensor<Out, I> = DenseTensor {
                 data: result_data,
                 structure: final_structure,
             };
@@ -186,7 +192,7 @@ where
     }
 }
 
-impl<T, U, Out> Contract<DenseTensor<T>> for SparseTensor<U>
+impl<T, U, I, Out> Contract<DenseTensor<T, I>> for SparseTensor<U, I>
 where
     for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
     Out: std::ops::AddAssign<Out>
@@ -197,6 +203,7 @@ where
         + for<'a> std::ops::AddAssign<&'a Out>
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug,
+    I: Clone,
     // T: SmallestUpgrade<U> + Copy,
     // U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
     // T::LCM: std::ops::AddAssign<T::LCM>
@@ -209,10 +216,10 @@ where
     //     + Clone
     //     + std::ops::Mul<T::LCM, Output = T::LCM>,
 {
-    type LCM = DenseTensor<Out>;
-    fn contract(&self, other: &DenseTensor<T>) -> Option<Self::LCM> {
+    type LCM = DenseTensor<Out, I>;
+    fn contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
         // println!("Contracting SparseTensor DenseTensor");
-        if let Some((i, j)) = self.match_index(other) {
+        if let Some((i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = vec![Out::zero(); final_structure.size()];
 
@@ -257,7 +264,7 @@ where
     }
 }
 
-impl<T, U, Out> Contract<SparseTensor<T>> for SparseTensor<U>
+impl<T, U, Out, I> Contract<SparseTensor<T, I>> for SparseTensor<U, I>
 where
     // T: SmallestUpgrade<U> + Copy,
     // U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
@@ -282,11 +289,12 @@ where
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug
         + std::cmp::PartialEq,
+    I: Clone,
 {
-    type LCM = SparseTensor<Out>;
-    fn contract(&self, other: &SparseTensor<T>) -> Option<Self::LCM> {
+    type LCM = SparseTensor<Out, I>;
+    fn contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
         // println!("Contracting SparseTensor SparseTensor");
-        if let Some((i, j)) = self.match_index(other) {
+        if let Some((i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = AHashMap::new();
 
@@ -338,7 +346,7 @@ where
     }
 }
 
-impl<T, U, Out> Contract<SparseTensor<T>> for DenseTensor<U>
+impl<T, U, Out, I> Contract<SparseTensor<T, I>> for DenseTensor<U, I>
 where
     // T: SmallestUpgrade<U> + Copy,
     // U: SmallestUpgrade<T, LCM = T::LCM> + Copy,
@@ -360,11 +368,12 @@ where
         + for<'a> std::ops::AddAssign<&'a Out>
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug,
+    I: Clone,
 {
-    type LCM = DenseTensor<Out>;
-    fn contract(&self, other: &SparseTensor<T>) -> Option<Self::LCM> {
+    type LCM = DenseTensor<Out, I>;
+    fn contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
         // self is dense U, other is sparse T
-        if let Some((i, j)) = self.match_index(other) {
+        if let Some((i, j)) = self.structure().match_index(other.structure()) {
             // final structure is the structure of self appended with the structure of other, with the contracted indices removed
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
 
@@ -413,7 +422,7 @@ where
     }
 }
 
-impl<T, U, Out> Contract<NumTensor<T>> for NumTensor<U>
+impl<T, U, I, Out> Contract<NumTensor<T, I>> for NumTensor<U, I>
 where
     for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
     Out: std::ops::AddAssign<Out>
@@ -426,9 +435,10 @@ where
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug
         + std::cmp::PartialEq,
+    I: Clone,
 {
-    type LCM = NumTensor<Out>;
-    fn contract(&self, other: &NumTensor<T>) -> Option<NumTensor<Out>> {
+    type LCM = NumTensor<Out, I>;
+    fn contract(&self, other: &NumTensor<T, I>) -> Option<NumTensor<Out, I>> {
         match (self, other) {
             (NumTensor::Dense(s), NumTensor::Dense(o)) => Some(NumTensor::Dense(s.contract(o)?)),
             (NumTensor::Dense(s), NumTensor::Sparse(o)) => Some(NumTensor::Dense(s.contract(o)?)),
@@ -438,9 +448,12 @@ where
     }
 }
 
-impl Contract<NumTensors> for NumTensors {
-    type LCM = NumTensors;
-    fn contract(&self, other: &NumTensors) -> Option<Self::LCM> {
+impl<I> Contract<NumTensors<I>> for NumTensors<I>
+where
+    I: Clone,
+{
+    type LCM = NumTensors<I>;
+    fn contract(&self, other: &NumTensors<I>) -> Option<Self::LCM> {
         match (self, other) {
             (NumTensors::Float(a), NumTensors::Float(b)) => Some(NumTensors::Float(a.contract(b)?)),
             (NumTensors::Float(a), NumTensors::Complex(b)) => {
@@ -536,7 +549,7 @@ impl Contract<NumTensors> for NumTensors {
 // // struct TensorNetwork {
 // //     tensors: Vec<ContractableTensor>,
 // // }
-
+#[derive(Debug, Clone)]
 pub struct TensorNetwork<T> {
     graph: Graph<T, Slot, Undirected>,
 }
@@ -559,8 +572,31 @@ impl<T> TensorNetwork<T> {
         }
         edge_to_min_degree_node
     }
+
+    pub fn to_vec(self) -> Vec<T> {
+        self.graph
+            .into_nodes_edges()
+            .0
+            .into_iter()
+            .map(|n| n.weight)
+            .collect()
+    }
 }
 
+impl<N> TensorNetwork<MixedTensor<N>>
+where
+    N: Debug,
+{
+    pub fn to_symbolic_tensor_vec(self) -> Vec<NumTensor<Atom, N>> {
+        self.graph
+            .into_nodes_edges()
+            .0
+            .into_iter()
+            .filter(|n| n.weight.is_symbolic())
+            .map(|n| n.weight.try_into_symbolic().unwrap())
+            .collect()
+    }
+}
 impl<T> TensorNetwork<T>
 where
     T: HasTensorStructure,
@@ -579,11 +615,11 @@ where
         }
 
         for (ni, n) in graph.node_indices().enumerate() {
-            for (mi, m) in graph.node_indices().enumerate().filter(|(i, _)| *i > ni) {
+            for (_, m) in graph.node_indices().enumerate().filter(|(i, _)| *i > ni) {
                 let a = graph.node_weight(n).unwrap();
                 let b = graph.node_weight(m).unwrap();
 
-                if let Some((i, j)) = a.match_index(b) {
+                if let Some((i, _)) = a.structure().match_index(b.structure()) {
                     graph.add_edge(n, m, a.structure()[i]);
                 }
             }
@@ -618,6 +654,42 @@ where
 
         self.graph.remove_node(d);
     }
+
+    pub fn edge_to_min_degree_node_with_depth(&self, depth: usize) -> Option<EdgeIndex> {
+        let mut min_degree = usize::MAX;
+        let mut edge_to_min_degree_node = None;
+        for edge in self
+            .graph
+            .edge_indices()
+            .filter(|&e| {
+                let (nl, nr) = self.graph.edge_endpoints(e).unwrap();
+                self.graph.node_weight(nl).unwrap().contractions_num()
+                    + self.graph.node_weight(nr).unwrap().contractions_num()
+                    < depth
+            })
+            .sorted_by(|&e1, &e2| {
+                let (nl1, nr1) = self.graph.edge_endpoints(e1).unwrap();
+                let (nl2, nr2) = self.graph.edge_endpoints(e2).unwrap();
+                (self.graph.node_weight(nl1).unwrap().contractions_num()
+                    + self.graph.node_weight(nr1).unwrap().contractions_num())
+                .cmp(
+                    &(self.graph.node_weight(nl2).unwrap().contractions_num()
+                        + self.graph.node_weight(nr2).unwrap().contractions_num()),
+                )
+            })
+        {
+            let (nl, nr) = self.graph.edge_endpoints(edge).unwrap();
+            let degrees = self.graph.edges(nl).count() + self.graph.edges(nr).count();
+            if degrees < min_degree {
+                min_degree = degrees;
+
+                if min_degree > 0 {
+                    edge_to_min_degree_node = Some(edge);
+                }
+            }
+        }
+        edge_to_min_degree_node
+    }
 }
 impl<T> TensorNetwork<T>
 where
@@ -633,7 +705,7 @@ where
 
 impl<T> TensorNetwork<T>
 where
-    T: Debug + HasTensorStructure,
+    T: Debug + HasTensorStructure<Name = String>,
 {
     pub fn dot(&self) -> String {
         format!(
@@ -641,8 +713,8 @@ where
             Dot::with_attr_getters(
                 &self.graph,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, e| { format!("{}", e.weight()) },
-                &|_, n| { format!("{}", n.1.structure()) }
+                &|_, e| { format!("label=\"{}\"", e.weight()) },
+                &|_, n| { format!("label=\"{}\"", n.1.structure()) }
             )
         )
     }
@@ -650,7 +722,91 @@ where
 
 impl<T> TensorNetwork<T>
 where
+    T: Debug + HasTensorStructure<Name = Identifier>,
+{
+    pub fn dotsym(&self, state: &State) -> String {
+        format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.graph,
+                &[Config::EdgeNoLabel, Config::NodeNoLabel],
+                &|_, e| { format!("label=\"{}\"", e.weight()) },
+                &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)) }
+            )
+        )
+    }
+}
+
+impl<T> TensorNetwork<T>
+where
+    T: HasTensorStructure<Name = Identifier> + Clone,
+{
+    pub fn symbolic_shadow(
+        &mut self,
+        name: &str,
+        state: &mut State,
+        ws: &Workspace,
+    ) -> TensorNetwork<MixedTensors> {
+        self.graph.node_indices().for_each(|n| {
+            self.graph
+                .node_weight_mut(n)
+                .unwrap()
+                .mut_structure()
+                .set_global_name(
+                    state
+                        .get_or_insert_fn(format!("{}{}", name, n.index()), None)
+                        .unwrap(),
+                );
+        });
+        let g: Graph<MixedTensors, Slot, Undirected> = Graph::map(
+            &self.graph,
+            |_, nw| {
+                MixedTensor::<Identifier>::from(nw.structure().clone().to_dense(state, ws).unwrap())
+            },
+            |_, &w| w,
+        );
+        TensorNetwork { graph: g }
+    }
+}
+
+impl<T> TensorNetwork<T>
+where
+    T: HasTensorStructure<Name = String>,
+{
+    pub fn name(&mut self, name: T::Name) {
+        self.graph.node_indices().for_each(|n| {
+            self.graph
+                .node_weight_mut(n)
+                .unwrap()
+                .mut_structure()
+                .set_global_name(format!("{}{}", name, n.index()));
+        });
+    }
+}
+
+impl<T> TensorNetwork<T>
+where
+    T: HasTensorStructure<Name = Identifier>,
+{
+    pub fn namesym(&mut self, name: &str, state: &mut State) {
+        self.graph.node_indices().for_each(|n| {
+            self.graph
+                .node_weight_mut(n)
+                .unwrap()
+                .mut_structure()
+                .set_global_name(
+                    state
+                        .get_or_insert_fn(format!("{}{}", name, n.index()), None)
+                        .unwrap(),
+                );
+        });
+    }
+}
+
+impl<T> TensorNetwork<T>
+where
     T: Contract<T, LCM = T>,
+    T: HasTensorStructure,
 {
     fn contract_edge(&mut self, edge_idx: EdgeIndex) {
         let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();
@@ -672,7 +828,7 @@ where
 
 impl<T> TensorNetwork<T>
 where
-    T: HasTensorStructure + SymbolicContract<T, LCM = T>,
+    T: HasTensorStructure + SymbolicContract<T, LCM = T> + Debug,
 {
     fn contract_edge_sym(&mut self, edge_idx: EdgeIndex, state: &State, ws: &Workspace) {
         let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();
@@ -688,6 +844,12 @@ where
         if let Some(e) = self.edge_to_min_degree_node() {
             self.contract_edge_sym(e, state, ws);
             self.contract_sym(state, ws)
+        }
+    }
+    pub fn contract_sym_depth(&mut self, depth: usize, state: &State, ws: &Workspace) {
+        if let Some(e) = self.edge_to_min_degree_node_with_depth(depth) {
+            self.contract_edge_sym(e, state, ws);
+            self.contract_sym_depth(depth, state, ws)
         }
     }
 }

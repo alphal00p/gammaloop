@@ -36,7 +36,7 @@ pub struct SparseTensorIterator<'a, T> {
 }
 
 impl<'a, T> SparseTensorIterator<'a, T> {
-    fn new(tensor: &'a SparseTensor<T>) -> Self {
+    fn new<I>(tensor: &'a SparseTensor<T, I>) -> Self {
         SparseTensorIterator {
             iter: tensor.elements.iter(),
         }
@@ -51,7 +51,7 @@ impl<'a, T> Iterator for SparseTensorIterator<'a, T> {
     }
 }
 
-impl<'a, T> IntoIterator for &'a SparseTensor<T> {
+impl<'a, T, I> IntoIterator for &'a SparseTensor<T, I> {
     type Item = (&'a Vec<ConcreteIndex>, &'a T);
     type IntoIter = SparseTensorIterator<'a, T>;
 
@@ -60,15 +60,15 @@ impl<'a, T> IntoIterator for &'a SparseTensor<T> {
     }
 }
 
-pub struct SparseTensorTraceIterator<'a, T> {
-    tensor: &'a SparseTensor<T>,
+pub struct SparseTensorTraceIterator<'a, T, I> {
+    tensor: &'a SparseTensor<T, I>,
     trace_indices: [usize; 2],
     current_indices: Vec<ConcreteIndex>,
     done: bool,
 }
 
-impl<'a, T> SparseTensorTraceIterator<'a, T> {
-    fn new(tensor: &'a SparseTensor<T>, trace_indices: [usize; 2]) -> Self {
+impl<'a, T, I> SparseTensorTraceIterator<'a, T, I> {
+    fn new(tensor: &'a SparseTensor<T, I>, trace_indices: [usize; 2]) -> Self {
         //trace positions must point to the same dimension
         assert!(
             trace_indices
@@ -108,12 +108,13 @@ impl<'a, T> SparseTensorTraceIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for SparseTensorTraceIterator<'a, T>
+impl<'a, T, I> Iterator for SparseTensorTraceIterator<'a, T, I>
 where
     T: for<'c> std::ops::AddAssign<&'c T>
         + for<'b> std::ops::SubAssign<&'b T>
         + std::ops::Neg<Output = T>
         + Clone,
+    I: Clone,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -173,8 +174,8 @@ where
     }
 }
 
-pub struct SparseTensorSymbolicTraceIterator<'a, 'b, T> {
-    tensor: &'a SparseTensor<T>,
+pub struct SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
+    tensor: &'a SparseTensor<T, I>,
     trace_indices: [usize; 2],
     current_indices: Vec<ConcreteIndex>,
     done: bool,
@@ -182,9 +183,9 @@ pub struct SparseTensorSymbolicTraceIterator<'a, 'b, T> {
     ws: &'b Workspace,
 }
 
-impl<'a, 'b, T> SparseTensorSymbolicTraceIterator<'a, 'b, T> {
+impl<'a, 'b, T, I> SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
     fn new(
-        tensor: &'a SparseTensor<T>,
+        tensor: &'a SparseTensor<T, I>,
         trace_indices: [usize; 2],
         state: &'b State,
         ws: &'b Workspace,
@@ -230,7 +231,7 @@ impl<'a, 'b, T> SparseTensorSymbolicTraceIterator<'a, 'b, T> {
     }
 }
 
-impl<'a, 'b, T> Iterator for SparseTensorSymbolicTraceIterator<'a, 'b, T>
+impl<'a, 'b, T, I> Iterator for SparseTensorSymbolicTraceIterator<'a, 'b, T, I>
 where
     T: for<'c> SymbolicAddAssign<&'c T> + for<'d> SymbolicSubAssign<&'d T> + SymbolicNeg + Clone,
 {
@@ -296,15 +297,15 @@ where
     }
 }
 
-pub struct SparseTensorFiberIterator<'a, T> {
-    tensor: &'a SparseTensor<T>,
+pub struct SparseTensorFiberIterator<'a, T, I> {
+    tensor: &'a SparseTensor<T, I>,
     fiber_index: usize,
     current_indices: Vec<ConcreteIndex>,
     done: bool,
 }
 
-impl<'a, T> SparseTensorFiberIterator<'a, T> {
-    fn new(tensor: &'a SparseTensor<T>, fiber_index: usize) -> Self {
+impl<'a, T, I> SparseTensorFiberIterator<'a, T, I> {
+    fn new(tensor: &'a SparseTensor<T, I>, fiber_index: usize) -> Self {
         assert!(fiber_index < tensor.order(), "Invalid fiber index");
 
         SparseTensorFiberIterator {
@@ -335,7 +336,7 @@ impl<'a, T> SparseTensorFiberIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for SparseTensorFiberIterator<'a, T> {
+impl<'a, T, I> Iterator for SparseTensorFiberIterator<'a, T, I> {
     type Item = (Vec<ConcreteIndex>, Vec<usize>, Vec<&'a T>);
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
@@ -394,12 +395,12 @@ impl<'a, T> Iterator for SparseTensorFiberIterator<'a, T> {
     }
 }
 
-impl<T> SparseTensor<T> {
-    pub fn iter_fibers(&self, fiber_index: usize) -> SparseTensorFiberIterator<T> {
+impl<T, I> SparseTensor<T, I> {
+    pub fn iter_fibers(&self, fiber_index: usize) -> SparseTensorFiberIterator<T, I> {
         SparseTensorFiberIterator::new(self, fiber_index)
     }
 
-    pub fn iter_trace(&self, trace_indices: [usize; 2]) -> SparseTensorTraceIterator<T> {
+    pub fn iter_trace(&self, trace_indices: [usize; 2]) -> SparseTensorTraceIterator<T, I> {
         SparseTensorTraceIterator::new(self, trace_indices)
     }
 
@@ -412,18 +413,18 @@ impl<T> SparseTensor<T> {
         trace_indices: [usize; 2],
         state: &'b State,
         ws: &'b Workspace,
-    ) -> SparseTensorSymbolicTraceIterator<'a, 'b, T> {
+    ) -> SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
         SparseTensorSymbolicTraceIterator::new(self, trace_indices, state, ws)
     }
 }
 
-pub struct DenseTensorIterator<'a, T> {
-    tensor: &'a DenseTensor<T>,
+pub struct DenseTensorIterator<'a, T, I> {
+    tensor: &'a DenseTensor<T, I>,
     current_flat_index: usize,
 }
 
-impl<'a, T> DenseTensorIterator<'a, T> {
-    fn new(tensor: &'a DenseTensor<T>) -> Self {
+impl<'a, T, I> DenseTensorIterator<'a, T, I> {
+    fn new(tensor: &'a DenseTensor<T, I>) -> Self {
         DenseTensorIterator {
             tensor,
             current_flat_index: 0,
@@ -431,7 +432,7 @@ impl<'a, T> DenseTensorIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for DenseTensorIterator<'a, T> {
+impl<'a, T, I> Iterator for DenseTensorIterator<'a, T, I> {
     type Item = (Vec<ConcreteIndex>, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -447,31 +448,31 @@ impl<'a, T> Iterator for DenseTensorIterator<'a, T> {
     }
 }
 
-impl<'a, T> IntoIterator for &'a DenseTensor<T> {
+impl<'a, T, I> IntoIterator for &'a DenseTensor<T, I> {
     type Item = (Vec<ConcreteIndex>, &'a T);
-    type IntoIter = DenseTensorIterator<'a, T>;
+    type IntoIter = DenseTensorIterator<'a, T, I>;
 
     fn into_iter(self) -> Self::IntoIter {
         DenseTensorIterator::new(self)
     }
 }
 
-impl<T> IntoIterator for DenseTensor<T> {
+impl<T, I> IntoIterator for DenseTensor<T, I> {
     type Item = (Vec<ConcreteIndex>, T);
-    type IntoIter = DenseTensorIntoIterator<T>;
+    type IntoIter = DenseTensorIntoIterator<T, I>;
 
     fn into_iter(self) -> Self::IntoIter {
         DenseTensorIntoIterator::new(self)
     }
 }
 
-pub struct DenseTensorIntoIterator<T> {
-    tensor: DenseTensor<T>,
+pub struct DenseTensorIntoIterator<T, I> {
+    tensor: DenseTensor<T, I>,
     current_flat_index: usize,
 }
 
-impl<T> DenseTensorIntoIterator<T> {
-    fn new(tensor: DenseTensor<T>) -> Self {
+impl<T, I> DenseTensorIntoIterator<T, I> {
+    fn new(tensor: DenseTensor<T, I>) -> Self {
         DenseTensorIntoIterator {
             tensor,
             current_flat_index: 0,
@@ -479,7 +480,7 @@ impl<T> DenseTensorIntoIterator<T> {
     }
 }
 
-impl<T> Iterator for DenseTensorIntoIterator<T> {
+impl<T, I> Iterator for DenseTensorIntoIterator<T, I> {
     type Item = (Vec<ConcreteIndex>, T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -496,15 +497,15 @@ impl<T> Iterator for DenseTensorIntoIterator<T> {
     }
 }
 
-pub struct DenseTensorTraceIterator<'a, T> {
-    tensor: &'a DenseTensor<T>,
+pub struct DenseTensorTraceIterator<'a, T, I> {
+    tensor: &'a DenseTensor<T, I>,
     trace_indices: [usize; 2],
     current_indices: Vec<ConcreteIndex>,
     done: bool,
 }
 
-impl<'a, T> DenseTensorTraceIterator<'a, T> {
-    fn new(tensor: &'a DenseTensor<T>, trace_indices: [usize; 2]) -> Self {
+impl<'a, T, I> DenseTensorTraceIterator<'a, T, I> {
+    fn new(tensor: &'a DenseTensor<T, I>, trace_indices: [usize; 2]) -> Self {
         assert!(trace_indices.len() >= 2, "Invalid trace indices");
         //trace positions must point to the same dimension
         assert!(
@@ -544,7 +545,7 @@ impl<'a, T> DenseTensorTraceIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for DenseTensorTraceIterator<'a, T>
+impl<'a, T, I> Iterator for DenseTensorTraceIterator<'a, T, I>
 where
     T: for<'c> AddAssign<&'c T>
         + for<'b> SubAssign<&'b T>
@@ -603,8 +604,8 @@ where
     }
 }
 
-pub struct DenseTensorSymbolicTraceIterator<'a, 'b, T> {
-    tensor: &'a DenseTensor<T>,
+pub struct DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
+    tensor: &'a DenseTensor<T, I>,
     trace_indices: [usize; 2],
     current_indices: Vec<ConcreteIndex>,
     done: bool,
@@ -612,9 +613,9 @@ pub struct DenseTensorSymbolicTraceIterator<'a, 'b, T> {
     ws: &'b Workspace,
 }
 
-impl<'a, 'b, T> DenseTensorSymbolicTraceIterator<'a, 'b, T> {
+impl<'a, 'b, T, I> DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
     fn new(
-        tensor: &'a DenseTensor<T>,
+        tensor: &'a DenseTensor<T, I>,
         trace_indices: [usize; 2],
         state: &'b State,
         ws: &'b Workspace,
@@ -660,7 +661,7 @@ impl<'a, 'b, T> DenseTensorSymbolicTraceIterator<'a, 'b, T> {
     }
 }
 
-impl<'a, 'b, T> Iterator for DenseTensorSymbolicTraceIterator<'a, 'b, T>
+impl<'a, 'b, T, I> Iterator for DenseTensorSymbolicTraceIterator<'a, 'b, T, I>
 where
     T: Clone
         + for<'c> SymbolicAddAssign<&'c T>
@@ -724,8 +725,8 @@ where
     }
 }
 
-pub struct DenseTensorFiberIterator<'a, T> {
-    tensor: &'a DenseTensor<T>,
+pub struct DenseTensorFiberIterator<'a, T, I> {
+    tensor: &'a DenseTensor<T, I>,
     strides: Vec<usize>,
     fixedindex: usize,
     linear_start: usize,
@@ -733,8 +734,8 @@ pub struct DenseTensorFiberIterator<'a, T> {
     total_fibers: usize,
 }
 
-impl<'a, T> DenseTensorFiberIterator<'a, T> {
-    fn new(tensor: &'a DenseTensor<T>, fixedindex: usize) -> Self {
+impl<'a, T, I> DenseTensorFiberIterator<'a, T, I> {
+    fn new(tensor: &'a DenseTensor<T, I>, fixedindex: usize) -> Self {
         assert!(fixedindex < tensor.order(), "Invalid fixedindex");
 
         let fiber_length = tensor.shape()[fixedindex];
@@ -776,7 +777,7 @@ impl<'a, T> DenseTensorFiberIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for DenseTensorFiberIterator<'a, T> {
+impl<'a, T, I> Iterator for DenseTensorFiberIterator<'a, T, I> {
     type Item = (Vec<ConcreteIndex>, Vec<&'a T>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -803,18 +804,18 @@ impl<'a, T> Iterator for DenseTensorFiberIterator<'a, T> {
     }
 }
 
-impl<T> DenseTensor<T> {
+impl<T, I> DenseTensor<T, I> {
     // ... [Other methods] ...
 
-    pub fn iter(&self) -> DenseTensorIterator<T> {
+    pub fn iter(&self) -> DenseTensorIterator<T, I> {
         DenseTensorIterator::new(self)
     }
 
-    pub fn iter_fibers(&self, fixedindex: usize) -> DenseTensorFiberIterator<T> {
+    pub fn iter_fibers(&self, fixedindex: usize) -> DenseTensorFiberIterator<T, I> {
         DenseTensorFiberIterator::new(self, fixedindex)
     }
 
-    pub fn iter_trace(&self, trace_indices: [usize; 2]) -> DenseTensorTraceIterator<T> {
+    pub fn iter_trace(&self, trace_indices: [usize; 2]) -> DenseTensorTraceIterator<T, I> {
         DenseTensorTraceIterator::new(self, trace_indices)
     }
 
@@ -823,7 +824,7 @@ impl<T> DenseTensor<T> {
         trace_indices: [usize; 2],
         state: &'b State,
         ws: &'b Workspace,
-    ) -> DenseTensorSymbolicTraceIterator<'a, 'b, T> {
+    ) -> DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
         DenseTensorSymbolicTraceIterator::new(self, trace_indices, state, ws)
     }
 }

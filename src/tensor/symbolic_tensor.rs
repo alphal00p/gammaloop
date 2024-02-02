@@ -3,34 +3,42 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use super::{Expr, HasTensorStructure, TensorSkeleton, TensorStructure, VecSlotExtension};
+use super::{Expr, HasTensorStructure, TensorSkeleton};
 
 #[derive(Debug)]
 pub struct SymbolicTensor {
-    structure: TensorSkeleton,
+    structure: TensorSkeleton<String>,
     expression: Atom,
 }
 #[derive(Debug)]
 pub struct SymbolicTensorBuilder<'a> {
-    structure: TensorSkeleton,
+    structure: TensorSkeleton<String>,
     expression: Expr<'a>,
 }
 
 impl HasTensorStructure for SymbolicTensor {
-    fn structure(&self) -> &TensorSkeleton {
+    type Name = String;
+    fn structure(&self) -> &TensorSkeleton<String> {
         &self.structure
+    }
+    fn mut_structure(&mut self) -> &mut TensorSkeleton<String> {
+        &mut self.structure
     }
 }
 
 impl<'a> HasTensorStructure for SymbolicTensorBuilder<'a> {
-    fn structure(&self) -> &TensorSkeleton {
+    type Name = String;
+    fn structure(&self) -> &TensorSkeleton<String> {
         &self.structure
+    }
+    fn mut_structure(&mut self) -> &mut TensorSkeleton<String> {
+        &mut self.structure
     }
 }
 
 impl<'a> SymbolicTensorBuilder<'a> {
     pub fn new(
-        structure: TensorSkeleton,
+        structure: TensorSkeleton<String>,
         label: Identifier,
         ws: &'a Workspace,
         state: &'a mut State,
@@ -67,21 +75,22 @@ impl<'a> SymbolicTensorBuilder<'a> {
     // }
 
     pub fn contract(mut self, other: &SymbolicTensor) -> SymbolicTensorBuilder<'a> {
-        if let Some((i, j)) = self.match_index(other) {
+        if let Some((i, j)) = self.structure().match_index(other.structure()) {
             self.structure = self.structure().merge_at(other.structure(), (i, j));
         } else {
-            self.structure.merge(&mut other.structure().clone());
+            self.structure.merge(&other.structure().clone());
         }
         self.expression = self.expression * other.get_atom().as_view();
         self
     }
 
+    #[allow(dead_code)]
     fn internal_contract(&mut self) {}
 }
 
 impl SymbolicTensor {
     pub fn new(
-        structure: TensorSkeleton,
+        structure: TensorSkeleton<String>,
         label: Identifier,
         ws: &Workspace,
         state: &mut State,

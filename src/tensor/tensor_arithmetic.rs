@@ -1,15 +1,17 @@
 use crate::tensor::ConcreteIndex;
 
-use super::{DenseTensor, HasTensorStructure, SparseTensor, VecSlotExtension};
+use super::{DenseTensor, HasTensorStructure, SparseTensor};
 use num::traits::Num;
 use std::ops::{Add, Mul, Sub};
 
-impl<T> Add<DenseTensor<T>> for DenseTensor<T>
+impl<T, I> Add<DenseTensor<T, I>> for DenseTensor<T, I>
 where
     T: Num + Clone + Copy,
+
+    I: Clone,
 {
-    type Output = DenseTensor<T>;
-    fn add(self, other: DenseTensor<T>) -> DenseTensor<T> {
+    type Output = DenseTensor<T, I>;
+    fn add(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
         assert!(self.structure().same_content(other.structure()));
 
         let permutation = self
@@ -29,12 +31,13 @@ where
     }
 }
 
-impl<T> Add<SparseTensor<T>> for SparseTensor<T>
+impl<T, I> Add<SparseTensor<T, I>> for SparseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
+    I: Clone,
 {
-    type Output = SparseTensor<T>;
-    fn add(self, other: SparseTensor<T>) -> SparseTensor<T> {
+    type Output = SparseTensor<T, I>;
+    fn add(self, other: SparseTensor<T, I>) -> SparseTensor<T, I> {
         assert!(self.structure().same_content(other.structure()));
         let permutation = self
             .structure()
@@ -57,12 +60,13 @@ where
     }
 }
 
-impl<T> Add<SparseTensor<T>> for DenseTensor<T>
+impl<T, I> Add<SparseTensor<T, I>> for DenseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
+    I: Clone,
 {
-    type Output = DenseTensor<T>;
-    fn add(self, other: SparseTensor<T>) -> DenseTensor<T> {
+    type Output = DenseTensor<T, I>;
+    fn add(self, other: SparseTensor<T, I>) -> DenseTensor<T, I> {
         assert!(self.structure().same_content(other.structure()));
 
         let permutation = self
@@ -82,22 +86,24 @@ where
     }
 }
 
-impl<T> Add<DenseTensor<T>> for SparseTensor<T>
+impl<T, I> Add<DenseTensor<T, I>> for SparseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
+    I: Clone,
 {
-    type Output = DenseTensor<T>;
-    fn add(self, other: DenseTensor<T>) -> DenseTensor<T> {
+    type Output = DenseTensor<T, I>;
+    fn add(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
         other + self
     }
 }
 
-impl<T> Sub<DenseTensor<T>> for DenseTensor<T>
+impl<T, I> Sub<DenseTensor<T, I>> for DenseTensor<T, I>
 where
     T: Num + Clone + Copy,
+    I: Clone,
 {
-    type Output = DenseTensor<T>;
-    fn sub(self, other: DenseTensor<T>) -> DenseTensor<T> {
+    type Output = DenseTensor<T, I>;
+    fn sub(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
         assert!(self.structure().same_content(other.structure()));
         let permutation = self
             .structure()
@@ -116,12 +122,13 @@ where
     }
 }
 
-impl<T> Sub<SparseTensor<T>> for SparseTensor<T>
+impl<T, I> Sub<SparseTensor<T, I>> for SparseTensor<T, I>
 where
     T: Num + Default + Copy,
+    I: Clone,
 {
-    type Output = SparseTensor<T>;
-    fn sub(self, other: SparseTensor<T>) -> SparseTensor<T> {
+    type Output = SparseTensor<T, I>;
+    fn sub(self, other: SparseTensor<T, I>) -> SparseTensor<T, I> {
         assert!(self.structure().same_content(other.structure()));
         let permutation = self
             .structure()
@@ -144,12 +151,13 @@ where
     }
 }
 
-impl<T> Sub<SparseTensor<T>> for DenseTensor<T>
+impl<T, I> Sub<SparseTensor<T, I>> for DenseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
+    I: Clone,
 {
-    type Output = DenseTensor<T>;
-    fn sub(self, other: SparseTensor<T>) -> DenseTensor<T> {
+    type Output = DenseTensor<T, I>;
+    fn sub(self, other: SparseTensor<T, I>) -> DenseTensor<T, I> {
         assert!(self.structure().same_content(other.structure()));
         let permutation = self
             .structure()
@@ -168,22 +176,24 @@ where
     }
 }
 
-impl<T> Sub<DenseTensor<T>> for SparseTensor<T>
+impl<T, I> Sub<DenseTensor<T, I>> for SparseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
+    I: Clone,
 {
-    type Output = DenseTensor<T>;
-    fn sub(self, other: DenseTensor<T>) -> DenseTensor<T> {
+    type Output = DenseTensor<T, I>;
+    fn sub(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
         other - self
     }
 }
 
-impl<T> Mul<T> for DenseTensor<T>
+impl<T, I> Mul<T> for DenseTensor<T, I>
 where
     T: Num + Clone + Copy,
+    I: Clone,
 {
-    type Output = DenseTensor<T>;
-    fn mul(self, other: T) -> DenseTensor<T> {
+    type Output = DenseTensor<T, I>;
+    fn mul(self, other: T) -> DenseTensor<T, I> {
         let mut result = self.clone();
 
         for (indices, value) in self.iter() {
@@ -193,11 +203,12 @@ where
     }
 }
 
-impl<T> Mul<T> for SparseTensor<T>
+impl<T, I> Mul<T> for SparseTensor<T, I>
 where
     T: Num + Copy + Default,
+    I: Clone,
 {
-    type Output = SparseTensor<T>;
+    type Output = SparseTensor<T, I>;
     fn mul(self, other: T) -> Self::Output {
         let mut result = self.clone();
 

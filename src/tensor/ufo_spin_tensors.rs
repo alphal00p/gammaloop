@@ -1,9 +1,13 @@
 use super::{
-    DenseTensor, Fouroot, Representation, Representation::Euclidean, Representation::Lorentz,
-    SparseTensor, TensorSkeleton, TensorStructure, VecSlotExtension,
+    DenseTensor, IntoId, Representation, Representation::Euclidean, Representation::Lorentz,
+    SparseTensor, TensorSkeleton,
 };
 use num::{Complex, Float, One, Zero};
-use serde::de::IntoDeserializer;
+
+use symbolica::{
+    representations::{Atom, Identifier},
+    state::Workspace,
+};
 
 #[allow(dead_code)]
 pub fn identity<T>(indices: (usize, usize), signature: Representation) -> SparseTensor<Complex<T>>
@@ -11,8 +15,10 @@ where
     T: One + Zero,
 {
     //TODO: make it just swap indices
-    let structure =
-        TensorSkeleton::from_idxsing(&[(indices.0, signature), (indices.1, signature)], "id");
+    let structure = TensorSkeleton::from_idxsing(
+        &[(indices.0, signature), (indices.1, signature)],
+        "id".to_string(),
+    );
     let mut identity = SparseTensor::empty(structure);
     for i in 0..signature.into() {
         identity
@@ -32,15 +38,90 @@ where
     identity(indices, signature)
 }
 
-pub fn mink_four_vector<T>(index: usize, p: [T; 4]) -> DenseTensor<T>
+pub fn mink_four_vector<T>(index: usize, p: &[T; 4]) -> DenseTensor<T>
 where
     T: Clone,
 {
     DenseTensor::from_data(
-        &p,
-        TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p"),
+        p,
+        TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".to_string()),
     )
     .unwrap()
+}
+
+pub fn mink_four_vector_sym<T>(
+    index: usize,
+    p: &[T; 4],
+    state: &mut symbolica::state::State,
+) -> DenseTensor<T, Identifier>
+where
+    T: Clone,
+{
+    DenseTensor::from_data(
+        p,
+        TensorSkeleton::from_idxsing(
+            &[(index, Lorentz(4))],
+            state.get_or_insert_fn("p", None).unwrap(),
+        ),
+    )
+    .unwrap()
+}
+
+pub fn euclidean_four_vector<T>(index: usize, p: &[T; 4]) -> DenseTensor<T>
+where
+    T: Clone,
+{
+    DenseTensor::from_data(
+        p,
+        TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "p".to_string()),
+    )
+    .unwrap()
+}
+
+pub fn euclidean_four_vector_sym<T>(
+    index: usize,
+    p: &[T; 4],
+    state: &mut symbolica::state::State,
+) -> DenseTensor<T, Identifier>
+where
+    T: Clone,
+{
+    DenseTensor::from_data(
+        p,
+        TensorSkeleton::from_idxsing(
+            &[(index, Euclidean(4))],
+            state.get_or_insert_fn("p", None).unwrap(),
+        ),
+    )
+    .unwrap()
+}
+
+pub fn param_mink_four_vector<N>(
+    index: usize,
+    name: N,
+    state: &mut symbolica::state::State,
+    ws: &Workspace,
+) -> DenseTensor<Atom, N>
+where
+    N: Clone + IntoId,
+{
+    TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], name)
+        .to_dense(state, ws)
+        .unwrap()
+}
+
+pub fn param_euclidean_four_vector<N>(
+    index: usize,
+    name: N,
+    state: &mut symbolica::state::State,
+    ws: &Workspace,
+) -> DenseTensor<Atom, N>
+where
+    N: Clone + IntoId,
+{
+    TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], name)
+        .to_dense(state, ws)
+        .unwrap()
 }
 
 #[allow(dead_code)]
@@ -54,7 +135,10 @@ where
 }
 
 #[allow(dead_code)]
-pub fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<f64>> {
+pub fn gamma<T>(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<T>>
+where
+    T: One + Zero + Copy + std::ops::Neg<Output = T>,
+{
     // Gamma(1,2,3) Dirac matrix (γ^μ1)_s2_s3
     let structure = TensorSkeleton::from_idxsing(
         &[
@@ -62,14 +146,40 @@ pub fn gamma(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<
             (indices.1, Euclidean(4)),
             (minkindex, Lorentz(4)),
         ],
-        "γ",
+        "γ".to_string(),
     );
 
-    let c1 = Complex::<f64>::new(1.into(), 0.into());
-    let cn1 = Complex::<f64>::new((-1).into(), 0.into());
-    let ci = Complex::<f64>::new(0.into(), 1.into());
-    let cni = Complex::<f64>::new(0.into(), (-1).into());
+    gamma_data(structure)
+}
 
+pub fn gammasym<T>(
+    minkindex: usize,
+    indices: (usize, usize),
+    state: &mut symbolica::state::State,
+) -> SparseTensor<Complex<T>, Identifier>
+where
+    T: One + Zero + Copy + std::ops::Neg<Output = T>,
+{
+    let structure = TensorSkeleton::from_idxsing(
+        &[
+            (indices.0, Euclidean(4)),
+            (indices.1, Euclidean(4)),
+            (minkindex, Lorentz(4)),
+        ],
+        state.get_or_insert_fn("γ", None).unwrap(),
+    );
+
+    gamma_data(structure)
+}
+
+fn gamma_data<N, T>(structure: TensorSkeleton<N>) -> SparseTensor<Complex<T>, N>
+where
+    T: One + Zero + Copy + std::ops::Neg<Output = T>,
+{
+    let c1 = Complex::<T>::new(T::one(), T::zero());
+    let cn1 = Complex::<T>::new(-T::one(), T::zero());
+    let ci = Complex::<T>::new(T::zero(), T::one());
+    let cni = Complex::<T>::new(T::zero(), -T::one());
     let mut gamma = SparseTensor::empty(structure);
 
     // dirac gamma matrices
@@ -103,9 +213,35 @@ where
 {
     let structure = TensorSkeleton::from_idxsing(
         &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
-        "γ5",
+        "γ5".to_string(),
     );
 
+    gamma5_data(structure)
+}
+
+pub fn gamma5sym<T>(
+    indices: (usize, usize),
+    state: &mut symbolica::state::State,
+) -> SparseTensor<Complex<T>, Identifier>
+where
+    T: One + Zero + Copy,
+{
+    let structure = TensorSkeleton::from_idxsing(
+        &[
+            (indices.0, Euclidean(4)),
+            (indices.1, Euclidean(4)),
+            (4, Lorentz(4)),
+        ],
+        state.get_or_insert_fn("γ5", None).unwrap(),
+    );
+
+    gamma5_data(structure)
+}
+
+fn gamma5_data<T, N>(structure: TensorSkeleton<N>) -> SparseTensor<Complex<T>, N>
+where
+    T: One + Zero + Copy,
+{
     let c1 = Complex::<T>::new(T::one(), T::zero());
 
     let mut gamma5 = SparseTensor::empty(structure);
@@ -125,9 +261,36 @@ where
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
     let structure = TensorSkeleton::from_idxsing(
         &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
-        "ProjM",
+        "ProjM".to_string(),
     );
 
+    proj_m_data(structure)
+}
+
+pub fn proj_msym<T>(
+    indices: (usize, usize),
+    state: &mut symbolica::state::State,
+) -> SparseTensor<Complex<T>, Identifier>
+where
+    T: Float,
+{
+    let structure = TensorSkeleton::from_idxsing(
+        &[
+            (indices.0, Euclidean(4)),
+            (indices.1, Euclidean(4)),
+            (4, Lorentz(4)),
+        ],
+        state.get_or_insert_fn("ProjM", None).unwrap(),
+    );
+
+    proj_m_data(structure)
+}
+
+fn proj_m_data<T, N>(structure: TensorSkeleton<N>) -> SparseTensor<Complex<T>, N>
+where
+    T: Float,
+{
+    // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
     let chalf = Complex::<T>::new(T::from(0.5).unwrap(), T::zero());
     let cnhalf = Complex::<T>::new(T::from(-0.5).unwrap(), T::zero());
 
@@ -153,9 +316,36 @@ where
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
     let structure = TensorSkeleton::from_idxsing(
         &[(indices.0, Euclidean(4)), (indices.1, Euclidean(4))],
-        "ProjP",
+        "ProjP".to_string(),
     );
 
+    proj_p_data(structure)
+}
+
+pub fn proj_psym<T>(
+    indices: (usize, usize),
+    state: &mut symbolica::state::State,
+) -> SparseTensor<Complex<T>, Identifier>
+where
+    T: Float,
+{
+    let structure = TensorSkeleton::from_idxsing(
+        &[
+            (indices.0, Euclidean(4)),
+            (indices.1, Euclidean(4)),
+            (4, Lorentz(4)),
+        ],
+        state.get_or_insert_fn("ProjP", None).unwrap(),
+    );
+
+    proj_p_data(structure)
+}
+
+pub fn proj_p_data<T, N>(structure: TensorSkeleton<N>) -> SparseTensor<Complex<T>, N>
+where
+    T: Float,
+{
+    // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
     let chalf = Complex::<T>::new(T::from(0.5).unwrap(), T::zero());
 
     let mut proj_p = SparseTensor::empty(structure);
@@ -184,9 +374,37 @@ where
             (minkdices.0, Lorentz(4)),
             (minkdices.1, Lorentz(4)),
         ],
-        "σ",
+        "σ".to_string(),
     );
 
+    sigma_data(structure)
+}
+
+pub fn sigmasym<T>(
+    indices: (usize, usize),
+    minkdices: (usize, usize),
+    state: &mut symbolica::state::State,
+) -> SparseTensor<Complex<T>, Identifier>
+where
+    T: One + Zero + std::ops::Neg<Output = T> + Copy,
+{
+    let structure = TensorSkeleton::from_idxsing(
+        &[
+            (indices.0, Euclidean(4)),
+            (indices.1, Euclidean(4)),
+            (minkdices.0, Lorentz(4)),
+            (minkdices.1, Lorentz(4)),
+        ],
+        state.get_or_insert_fn("σ", None).unwrap(),
+    );
+
+    sigma_data(structure)
+}
+
+fn sigma_data<T, N>(structure: TensorSkeleton<N>) -> SparseTensor<Complex<T>, N>
+where
+    T: One + Zero + std::ops::Neg<Output = T> + Copy,
+{
     let c1 = Complex::<T>::new(T::one(), T::zero());
     let cn1 = Complex::<T>::new(-T::one(), T::zero());
     let ci = Complex::<T>::new(T::zero(), T::one());
