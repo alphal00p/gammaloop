@@ -1,4 +1,5 @@
 use crate::tensor::IntoId;
+use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
 use indexmap::IndexMap;
@@ -239,7 +240,7 @@ where
     ) -> Option<Self::LCM> {
         if let Some((i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let mut result_data = IntMap::default();
+            let mut result_data = AHashMap::default();
             let metric = self.get_ith_metric(i).unwrap();
             let one = 1;
             let stride_other = *final_structure
@@ -276,7 +277,7 @@ where
                     if nonzero
                     // && value.as_atom_view() != zero.as_atom_view() TODO impl generic
                     {
-                        result_data.insert(result_index as u64, value);
+                        result_data.insert(result_index, value);
                     }
                     result_index += 1;
                 }

@@ -1,9 +1,16 @@
-use std::ops::{AddAssign, Neg, SubAssign};
-
-use serde_yaml::mapping::Iter;
-use symbolica::state::{State, Workspace};
+use std::{
+    collections::BTreeSet,
+    ops::{AddAssign, Neg, SubAssign},
+};
 
 use super::*;
+use ahash::AHashMap;
+use itertools::{Itertools, TupleWindows};
+use libc::useconds_t;
+use nalgebra::point;
+use serde::de::IntoDeserializer;
+use serde_yaml::mapping::Iter;
+use symbolica::state::{State, Workspace};
 
 pub struct TensorStructureIndexIterator<'a> {
     structure: &'a TensorStructure,
@@ -32,8 +39,414 @@ impl<'a> TensorStructureIndexIterator<'a> {
     }
 }
 
+pub struct TensorSkeletonMultiFiberIterator {
+    pub varying_fiber_index: usize,
+    pub increment: usize,
+    pub fixed_strides: Vec<usize>,
+    pub shifts: Vec<usize>,
+    pub max: usize,
+}
+
+pub struct TensorSkeletonMultiFiberMetricIterator {
+    pub iterator: TensorSkeletonMultiFiberIterator,
+    pos: usize,
+    pub reps: Vec<Representation>,
+    pub indices: Vec<usize>,
+    pub has_neg: AHashMap<usize, bool>,
+}
+
+impl TensorSkeletonMultiFiberIterator {
+    pub fn new<N>(
+        skeleton: &TensorSkeleton<N>,
+        fiber_positions: &BTreeSet<usize>,
+    ) -> TensorSkeletonMultiFiberIterator {
+        let mut fiber_positions = fiber_positions.clone();
+
+        let strides = skeleton.strides();
+        let mut max = skeleton.size();
+        let dims = skeleton.shape();
+        let mut reps = skeleton.reps();
+
+        max -= 1;
+
+        for pos in fiber_positions.iter().rev() {
+            reps.remove(*pos);
+            max -= (dims[*pos] - 1) * strides[*pos];
+        }
+
+        let mut increment = 1;
+
+        for i in (0..skeleton.order()).rev() {
+            if let Some(fi) = fiber_positions.last() {
+                if *fi == i {
+                    fiber_positions.pop_last();
+                } else {
+                    increment = strides[i];
+                    break;
+                }
+            } else {
+                increment = strides[i];
+                break;
+            }
+        }
+
+        for i in 0..skeleton.order() {
+            if let Some(fi) = fiber_positions.first() {
+                if *fi == i {
+                    fiber_positions.pop_first();
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        let mut fixed_strides = Vec::with_capacity(fiber_positions.len());
+        let mut shifts = Vec::with_capacity(fiber_positions.len());
+
+        if let Some(l) = fiber_positions.last() {
+            fixed_strides.push(strides[*l]);
+        }
+
+        for pos in fiber_positions
+            .iter()
+            .rev()
+            .tuple_windows()
+            .filter(|(p1, p2)| *p1 - *p2 > 1)
+        {
+            fixed_strides.push(strides[*pos.0]);
+            shifts.push(strides[*pos.1 - 1]);
+        }
+
+        if let Some(f) = fiber_positions.first() {
+            shifts.push(strides[f - 1]);
+        }
+
+        TensorSkeletonMultiFiberIterator {
+            varying_fiber_index: 0,
+            increment,
+            fixed_strides,
+            shifts,
+            max,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.varying_fiber_index = 0;
+    }
+}
+
+impl Iterator for TensorSkeletonMultiFiberIterator {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.varying_fiber_index > self.max {
+            return None;
+        }
+        let ret = self.varying_fiber_index;
+
+        self.varying_fiber_index += self.increment;
+        for (i, s) in self.fixed_strides.iter().enumerate() {
+            if self.varying_fiber_index % s == 0 {
+                self.varying_fiber_index += self.shifts[i] - s;
+            }
+        }
+
+        Some(ret)
+    }
+}
+
+impl TensorSkeletonMultiFiberMetricIterator {
+    pub fn new<N>(
+        skeleton: &TensorSkeleton<N>,
+        fiber_positions: &BTreeSet<usize>,
+    ) -> TensorSkeletonMultiFiberMetricIterator {
+        let mut filter = vec![false; skeleton.order()];
+
+        for f in fiber_positions {
+            filter[*f] = true;
+        }
+        let iterator = TensorSkeletonMultiFiberIterator::new(skeleton, fiber_positions);
+
+        let mut f = filter.iter();
+        let mut reps = skeleton.reps();
+        reps.retain(|_| !*f.next().unwrap());
+        let indices = vec![0; reps.len()];
+
+        TensorSkeletonMultiFiberMetricIterator {
+            iterator,
+            reps,
+            indices,
+            has_neg: AHashMap::new(),
+            pos: 0,
+        }
+    }
+
+    fn increment_indices(&mut self) {
+        let mut carry = true;
+        for (i, r) in self.indices.iter_mut().rev().zip(self.reps.iter().rev()) {
+            if carry {
+                *i += 1;
+                carry = *i == usize::from(r);
+                *i %= usize::from(r);
+            }
+        }
+    }
+
+    fn has_neg(&mut self, i: usize) -> bool {
+        if let Some(neg) = self.has_neg.get(&i) {
+            return *neg;
+        }
+        let mut neg = false;
+        for (i, r) in self.indices.iter().zip(self.reps.iter()) {
+            neg ^= r.is_neg(*i);
+        }
+        self.has_neg.insert(i, neg);
+        neg
+    }
+
+    pub fn reset(&mut self) {
+        self.iterator.reset();
+        self.indices = vec![0; self.reps.len()];
+        self.pos = 0;
+    }
+}
+
+impl Iterator for TensorSkeletonMultiFiberMetricIterator {
+    type Item = (usize, usize, bool);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(i) = self.iterator.next() {
+            let pos = self.pos;
+            self.pos += 1;
+            let neg = self.has_neg(i);
+            self.increment_indices();
+            Some((pos, i, neg))
+        } else {
+            None
+        }
+    }
+}
+
+#[test]
+fn construct() {
+    let a = TensorSkeleton::from_idxsing(
+        &[
+            (1, Representation::Euclidean(2)), //0
+            (3, Representation::Euclidean(2)), //1     inc
+            (33, Representation::Lorentz(4)),  //2
+            (23, Representation::Lorentz(3)),  //3
+            (22, Representation::Lorentz(3)),  //4     inc
+            (35, Representation::Lorentz(3)),  //5
+            (42, Representation::Lorentz(3)),  //6     inc
+        ],
+        "t",
+    );
+
+    let fixed = BTreeSet::from([1, 2, 3, 4, 5, 6]);
+
+    let mut free = BTreeSet::from_iter(0..a.order());
+
+    free = &free - &fixed;
+
+    let t = TensorSkeletonMultiFiberIterator::new(&a, &fixed);
+    let tt = TensorSkeletonMultiFiberMetricIterator::new(&a, &fixed);
+    // println!("{:?}", a.strides());
+    // println!("{:?}", a.strides_column_major());
+    // println!("{:?}", t.fixed_strides);
+    // println!("{:?}", t.shifts);
+    // println!("{:?}", a.expanded_index(t.max));
+    println!("{:?}", t.increment);
+    // println!("{:?}", a.order());
+
+    println!("{:?}", a.expanded_index(t.max));
+
+    let reps = a.reps();
+
+    for f in tt {
+        println!("{:?},{:?}", a.expanded_index(f.1), f.2);
+    }
+    for f in t {
+        print!("{:?}", a.expanded_index(f));
+        let e = a.expanded_index(f).unwrap();
+        let mut neg = false;
+        for (i, r) in free.iter().map(|i| (e[*i], reps[*i])) {
+            neg = neg ^ r.is_neg(i);
+        }
+        println!(" is neg? {}", neg);
+    }
+}
+
+pub struct TensorMultiFiberMetricIterator<'a, T, N>
+where
+    T: HasTensorStructure<Name = N>,
+{
+    tensor: &'a T,
+    fiber_iter: TensorSkeletonMultiFiberMetricIterator,
+    free_iter: TensorSkeletonMultiFiberIterator,
+    skipped: usize,
+}
+
+impl<'a, T, N> TensorMultiFiberMetricIterator<'a, T, N>
+where
+    T: HasTensorStructure<Name = N>,
+{
+    pub fn new(tensor: &'a T, fiber_positions: &BTreeSet<usize>) -> Self {
+        let free = BTreeSet::from_iter(0..tensor.order());
+
+        TensorMultiFiberMetricIterator {
+            tensor,
+            fiber_iter: TensorSkeletonMultiFiberMetricIterator::new(
+                tensor.structure(),
+                &(&free - fiber_positions),
+            ),
+            free_iter: TensorSkeletonMultiFiberIterator::new(tensor.structure(), fiber_positions),
+            skipped: 0,
+        }
+    }
+}
+
+impl<'a, T, N> Iterator for TensorMultiFiberMetricIterator<'a, SparseTensor<T, N>, N>
+where
+    N: Clone,
+{
+    type Item = (usize, Vec<ConcreteIndex>, Vec<(&'a T, bool)>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(i) = self.free_iter.next() {
+            let mut out = Vec::new();
+            let mut nonzeros = Vec::new();
+            for (pos, ind, met) in self.fiber_iter.by_ref() {
+                if let Some(v) = self.tensor.get_linear(ind + i) {
+                    out.push((v, met));
+                    nonzeros.push(pos);
+                }
+            }
+            self.fiber_iter.reset();
+            if !out.is_empty() {
+                let skipped = self.skipped;
+                self.skipped = 0;
+                Some((skipped, nonzeros, out))
+            } else {
+                self.skipped += 1;
+                self.next()
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T, N> Iterator for TensorMultiFiberMetricIterator<'a, DenseTensor<T, N>, N>
+where
+    N: Clone,
+{
+    type Item = Vec<(&'a T, bool)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(i) = self.free_iter.next() {
+            let mut out = Vec::new();
+            for (_, ind, met) in self.fiber_iter.by_ref() {
+                if let Some(v) = self.tensor.get_linear(ind + i) {
+                    out.push((v, met));
+                }
+            }
+            self.fiber_iter.reset();
+            if out.is_empty() {
+                return self.next();
+            }
+            Some(out)
+        } else {
+            None
+        }
+    }
+}
+
+pub struct TensorMultiFiberIterator<'a, T, N>
+where
+    T: HasTensorStructure<Name = N>,
+{
+    tensor: &'a T,
+    fiber_iter: TensorSkeletonMultiFiberIterator,
+    free_iter: TensorSkeletonMultiFiberIterator,
+    skipped: usize,
+}
+
+impl<'a, T, N> TensorMultiFiberIterator<'a, T, N>
+where
+    T: HasTensorStructure<Name = N>,
+{
+    pub fn new(tensor: &'a T, fiber_positions: &BTreeSet<usize>) -> Self {
+        let free = BTreeSet::from_iter(0..tensor.order());
+
+        TensorMultiFiberIterator {
+            tensor,
+            fiber_iter: TensorSkeletonMultiFiberIterator::new(
+                tensor.structure(),
+                &(&free - fiber_positions),
+            ),
+            free_iter: TensorSkeletonMultiFiberIterator::new(tensor.structure(), fiber_positions),
+            skipped: 0,
+        }
+    }
+}
+
+impl<'a, T, N> Iterator for TensorMultiFiberIterator<'a, SparseTensor<T, N>, N>
+where
+    N: Clone,
+{
+    type Item = (usize, Vec<ConcreteIndex>, Vec<&'a T>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(i) = self.free_iter.next() {
+            let mut out = Vec::new();
+            let mut nonzeros = Vec::new();
+            for (pos, ind) in self.fiber_iter.by_ref().enumerate() {
+                if let Some(v) = self.tensor.get_linear(ind + i) {
+                    out.push(v);
+                    nonzeros.push(pos);
+                }
+            }
+            self.fiber_iter.reset();
+            if !out.is_empty() {
+                let skipped = self.skipped;
+                self.skipped = 0;
+                Some((skipped, nonzeros, out))
+            } else {
+                self.skipped += 1;
+                self.next()
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T, N> Iterator for TensorMultiFiberIterator<'a, DenseTensor<T, N>, N>
+where
+    N: Clone,
+{
+    type Item = Vec<&'a T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(i) = self.free_iter.next() {
+            let mut out = Vec::new();
+            for ind in self.fiber_iter.by_ref() {
+                if let Some(v) = self.tensor.get_linear(ind + i) {
+                    out.push(v);
+                }
+            }
+            self.fiber_iter.reset();
+            Some(out)
+        } else {
+            None
+        }
+    }
+}
+
 pub struct SparseTensorIterator<'a, T, N> {
-    iter: intmap::iter::Iter<'a, u64, T>,
+    iter: std::collections::hash_map::Iter<'a, usize, T>,
     structure: &'a TensorSkeleton<N>,
 }
 
@@ -416,7 +829,7 @@ where
             if let Some(v) = self
                 .tensor
                 .elements
-                .get((self.fiber_index + i * self.fiber_stride) as u64)
+                .get(&(self.fiber_index + i * self.fiber_stride))
             {
                 nonzeros.push(i);
                 values.push(v);
@@ -456,6 +869,67 @@ impl<T, I> SparseTensor<T, I> {
         ws: &'b Workspace,
     ) -> SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
         SparseTensorSymbolicTraceIterator::new(self, trace_indices, state, ws)
+    }
+
+    pub fn iter_multi_fibers_metric(
+        &self,
+        fiber_positions: &BTreeSet<usize>,
+    ) -> TensorMultiFiberMetricIterator<Self, I> {
+        TensorMultiFiberMetricIterator::new(self, fiber_positions)
+    }
+
+    pub fn iter_multi_fibers(
+        &self,
+        fiber_positions: &BTreeSet<usize>,
+    ) -> TensorMultiFiberIterator<Self, I> {
+        TensorMultiFiberIterator::new(self, fiber_positions)
+    }
+}
+
+pub struct DenseTensorMultiFiberMetricIterator<'a, T, I> {
+    tensor: &'a DenseTensor<T, I>,
+    fiber_iter: TensorSkeletonMultiFiberMetricIterator,
+    free_iter: TensorSkeletonMultiFiberIterator,
+}
+
+impl<'a, T, I> DenseTensorMultiFiberMetricIterator<'a, T, I> {
+    pub fn new(tensor: &'a DenseTensor<T, I>, fiber_positions: &BTreeSet<usize>) -> Self {
+        let free = BTreeSet::from_iter(0..tensor.order());
+
+        DenseTensorMultiFiberMetricIterator {
+            tensor,
+            fiber_iter: TensorSkeletonMultiFiberMetricIterator::new(
+                tensor.structure(),
+                &(&free - fiber_positions),
+            ),
+            free_iter: TensorSkeletonMultiFiberIterator::new(tensor.structure(), fiber_positions),
+        }
+    }
+}
+
+impl<'a, T, N> Iterator for DenseTensorMultiFiberMetricIterator<'a, T, N>
+where
+    T: Clone,
+    N: Clone,
+{
+    type Item = (usize, Vec<(T, bool)>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(i) = self.free_iter.next() {
+            let mut out = Vec::new();
+            for (_, ind, met) in self.fiber_iter.by_ref() {
+                if let Some(v) = self.tensor.get_linear(ind) {
+                    out.push((v.clone(), met));
+                }
+            }
+            self.fiber_iter.reset();
+            if out.is_empty() {
+                return self.next();
+            }
+            Some((i, out))
+        } else {
+            None
+        }
     }
 }
 
@@ -875,5 +1349,19 @@ impl<T, I> DenseTensor<T, I> {
         ws: &'b Workspace,
     ) -> DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
         DenseTensorSymbolicTraceIterator::new(self, trace_indices, state, ws)
+    }
+
+    pub fn iter_multi_fibers_metric(
+        &self,
+        fiber_positions: &BTreeSet<usize>,
+    ) -> TensorMultiFiberMetricIterator<Self, I> {
+        TensorMultiFiberMetricIterator::new(self, fiber_positions)
+    }
+
+    pub fn iter_multi_fibers(
+        &self,
+        fiber_positions: &BTreeSet<usize>,
+    ) -> TensorMultiFiberIterator<Self, I> {
+        TensorMultiFiberIterator::new(self, fiber_positions)
     }
 }

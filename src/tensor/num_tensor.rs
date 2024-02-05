@@ -1,5 +1,6 @@
 use super::{AbstractIndex, ConcreteIndex, Dimension, HasTensorStructure, TensorSkeleton};
 use crate::tensor::IntoId;
+use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
 use indexmap::IndexMap;
@@ -17,7 +18,7 @@ type NHIndexMap<K, V> = IndexMap<K, V, BuildNoHashHasher<K>>;
 use intmap::IntMap;
 #[derive(Debug, Clone)]
 pub struct SparseTensor<T, I = String> {
-    pub elements: IntMap<T>,
+    pub elements: AHashMap<usize, T>,
     pub structure: TensorSkeleton<I>,
 }
 
@@ -35,7 +36,7 @@ impl<T, I> HasTensorStructure for SparseTensor<T, I> {
 impl<T, I> SparseTensor<T, I> {
     pub fn empty(structure: TensorSkeleton<I>) -> Self {
         SparseTensor {
-            elements: IntMap::default(),
+            elements: AHashMap::default(),
             structure,
         }
     }
@@ -46,7 +47,7 @@ impl<T, I> SparseTensor<T, I> {
     {
         let structure = TensorSkeleton::<I>::from_integers(slots, name);
         SparseTensor {
-            elements: IntMap::default(),
+            elements: AHashMap::default(),
             structure,
         }
     }
@@ -54,13 +55,13 @@ impl<T, I> SparseTensor<T, I> {
     pub fn is_empty_at(&self, indices: &[ConcreteIndex]) -> bool {
         !self
             .elements
-            .contains_key(self.flat_index(indices).unwrap() as u64)
+            .contains_key(&self.flat_index(indices).unwrap())
     }
 
     pub fn set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         self.elements
-            .insert(self.flat_index(indices).unwrap() as u64, value);
+            .insert(self.flat_index(indices).unwrap(), value);
         Ok(())
     }
 
@@ -68,7 +69,7 @@ impl<T, I> SparseTensor<T, I> {
         if index >= self.size() {
             return Err("Index out of bounds".into());
         }
-        self.elements.insert(index as u64, value);
+        self.elements.insert(index, value);
         Ok(())
     }
 
@@ -98,13 +99,11 @@ where
     pub fn smart_set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         if value == T::default() {
-            _ = self
-                .elements
-                .remove(self.flat_index(indices).unwrap() as u64);
+            _ = self.elements.remove(&self.flat_index(indices).unwrap());
             return Ok(());
         }
         self.elements
-            .insert(self.flat_index(indices).unwrap() as u64, value);
+            .insert(self.flat_index(indices).unwrap(), value);
         Ok(())
     }
 }
@@ -128,15 +127,21 @@ where
                 }
             }
         }
-        let mut elements = IntMap::default();
+        let mut elements = AHashMap::default();
         for (index, value) in data {
-            elements.insert(structure.flat_index(index).unwrap() as u64, value.clone());
+            elements.insert(structure.flat_index(index).unwrap(), value.clone());
         }
 
         Ok(SparseTensor {
             elements,
             structure,
         })
+    }
+}
+
+impl<T, I> SparseTensor<T, I> {
+    pub fn get_linear(&self, index: usize) -> Option<&T> {
+        self.elements.get(&index)
     }
 }
 
@@ -148,7 +153,7 @@ where
     pub fn get(&self, indices: &[ConcreteIndex]) -> Result<&T, String> {
         self.verify_indices(indices)?;
         self.elements
-            .get(self.flat_index(indices).unwrap() as u64)
+            .get(&self.flat_index(indices).unwrap())
             .ok_or("No elements at that spot".into())
     }
     pub fn get_with_defaults(&self, indices: &[ConcreteIndex]) -> Result<Cow<T>, String>
@@ -158,7 +163,7 @@ where
         self.verify_indices(indices)?;
         // if the index is in the bTree return the value, else return default, lazily allocating the default
         Ok(
-            match self.elements.get(self.flat_index(indices).unwrap() as u64) {
+            match self.elements.get(&self.flat_index(indices).unwrap()) {
                 Some(value) => Cow::Borrowed(value),
                 None => Cow::Owned(T::default()),
             },

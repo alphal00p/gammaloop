@@ -1,6 +1,7 @@
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::ops::Index;
 use std::ops::Range;
@@ -36,6 +37,13 @@ impl Representation {
             Representation::Lorentz(value) => std::iter::once(false)
                 .chain(std::iter::repeat(true).take(*value - 1))
                 .collect::<Vec<_>>(),
+        }
+    }
+
+    pub fn is_neg(&self, i: usize) -> bool {
+        match self {
+            Representation::Lorentz(_) => i > 0,
+            _ => false,
         }
     }
 
@@ -174,6 +182,24 @@ impl<N> TensorSkeleton<N> {
         None
     }
 
+    pub fn match_indices(&self, other: &Self) -> Option<(BTreeSet<usize>, BTreeSet<usize>)> {
+        let mut self_matches = BTreeSet::new();
+        let mut other_matches = BTreeSet::new();
+        for (i, slot_a) in self.external.iter().enumerate().rev() {
+            for (j, slot_b) in other.external.iter().enumerate() {
+                if slot_a == slot_b {
+                    self_matches.insert(i);
+                    other_matches.insert(j);
+                }
+            }
+        }
+        if self_matches.is_empty() {
+            None
+        } else {
+            Some((self_matches, other_matches))
+        }
+    }
+
     /// Identify the repeated slots in the external index list
     fn traces(&self) -> Vec<[usize; 2]> {
         let mut positions = HashMap::new();
@@ -201,6 +227,13 @@ impl<N> TensorSkeleton<N> {
         self.external
             .iter()
             .map(|slot| &slot.representation)
+            .collect()
+    }
+
+    pub fn reps(&self) -> Vec<Representation> {
+        self.external
+            .iter()
+            .map(|slot| slot.representation)
             .collect()
     }
 
@@ -393,7 +426,24 @@ impl<N> TensorSkeleton<N> {
 
     /// remove the repeated indices in the external index list
     fn trace_out(&mut self) {
-        self.external = self.external.clone().into_iter().unique().collect();
+        let mut positions = HashMap::new();
+
+        // Track the positions of each element
+        for (index, &value) in self.external.iter().enumerate() {
+            positions.entry(value).or_insert_with(Vec::new).push(index);
+        }
+        // Collect only the positions of non- repeated elements
+
+        self.external = positions
+            .into_iter()
+            .filter_map(|(value, indices)| {
+                if indices.len() == 1 {
+                    Some(value)
+                } else {
+                    None
+                }
+            })
+            .collect();
     }
 
     /// remove the given indices from the external index list

@@ -1,3 +1,4 @@
+use ahash::AHashMap;
 use indexmap::IndexMap;
 
 use intmap::IntMap;
@@ -131,43 +132,30 @@ where
         + for<'a> std::ops::AddAssign<&'a Out>
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug,
-    I: Clone,
+    I: Clone + Debug,
+    T: Debug,
+    U: Debug,
 {
     type LCM = DenseTensor<Out, I>;
     fn contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
-        if let Some((i, j)) = self.structure().match_index(other.structure()) {
-            // println!("{},{}", i, j);
-            let self_shape = self.shape();
-
-            let dimension_of_contraction = self_shape[i];
-            let metric = self.get_ith_metric(i).unwrap();
-
-            let final_structure = self.structure().merge_at(other.structure(), (i, j));
+        if let Some((self_matches, other_matches)) =
+            self.structure().match_indices(other.structure())
+        {
+            let mut final_structure = self.structure().clone();
+            final_structure.merge(other.structure());
 
             // Initialize result tensor with default values
             let mut result_data = vec![Out::zero(); final_structure.size()];
             let mut result_index = 0;
 
-            for fiber_a in self.iter_fibers(i) {
-                for fiber_b in other.iter_fibers(j) {
-                    // final_structure
-                    //     .flat_index(
-                    //         &index_a[..i]
-                    //             .iter()
-                    //             .chain(&index_a[i + 1..])
-                    //             .chain(&index_b[..j])
-                    //             .chain(&index_b[j + 1..])
-                    //             .cloned()
-                    //             .collect::<Vec<_>>(),
-                    //     )
-                    //     .unwrap();
-
-                    for k in 0..dimension_of_contraction {
+            for fiber_a in self.iter_multi_fibers(&self_matches) {
+                for fiber_b in other.iter_multi_fibers_metric(&other_matches) {
+                    for k in 0..fiber_a.len() {
                         // Adjust indices for fetching from the other tensor
-                        if metric[k] {
-                            result_data[result_index] -= fiber_a[k] * fiber_b[k];
+                        if fiber_b[k].1 {
+                            result_data[result_index] -= fiber_a[k] * fiber_b[k].0;
                         } else {
-                            result_data[result_index] += fiber_a[k] * fiber_b[k];
+                            result_data[result_index] += fiber_a[k] * fiber_b[k].0;
                         }
                     }
                     result_index += 1;
@@ -277,7 +265,7 @@ where
         // println!("Contracting SparseTensor SparseTensor");
         if let Some((i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
-            let mut result_data = IntMap::default();
+            let mut result_data = AHashMap::default();
             let one = 1;
             let stride_other = *final_structure
                 .strides()
@@ -307,7 +295,7 @@ where
                     }
 
                     if nonzero && value != Out::zero() {
-                        result_data.insert(result_index as u64, value);
+                        result_data.insert(result_index, value);
                     }
                     result_index += 1;
                 }
@@ -415,9 +403,9 @@ where
         + for<'b> std::ops::SubAssign<&'b Out>
         + std::fmt::Debug
         + std::cmp::PartialEq,
-    I: Clone,
-    T: Clone,
-    U: Clone,
+    I: Clone + Debug,
+    T: Clone + Debug,
+    U: Clone + Debug,
 {
     type LCM = NumTensor<Out, I>;
     fn contract(&self, other: &NumTensor<T, I>) -> Option<NumTensor<Out, I>> {
@@ -432,7 +420,7 @@ where
 
 impl<I> Contract<NumTensors<I>> for NumTensors<I>
 where
-    I: Clone,
+    I: Clone + Debug,
 {
     type LCM = NumTensors<I>;
     fn contract(&self, other: &NumTensors<I>) -> Option<Self::LCM> {

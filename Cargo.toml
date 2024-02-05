@@ -51,7 +51,7 @@ colored = "*"
 yaml-rust = "0.4"
 libc = "0.2.0"
 statrs = "0.16.0"
-smallvec = "1.7"
+smallvec = { version = "1.7", features = ["const_generics"] }
 itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
 ahash = "*"
