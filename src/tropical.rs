@@ -576,7 +576,6 @@ impl TropicalSubgraphTable {
 
 pub mod tropical_parameterization {
     use color_eyre::Report;
-    use core::panic;
 
     use itertools::{izip, Itertools};
     use lorentz_vector::LorentzVector;
@@ -696,12 +695,102 @@ pub mod tropical_parameterization {
             .inv(),
         );
 
-        if debug > 1 {
+        if debug > 2 {
             println!("scaling: {}", scaling);
             println!("u_trop before scaling: {}", u_trop);
             println!("xi_trop before scaling: {}", xi_trop);
             println!("v_trop before scaling: {}", v_trop);
         }
+
+        x_vec.iter_mut().for_each(|x| *x *= scaling);
+        u_trop = T::one();
+        v_trop = T::one();
+
+        PermatuhedralSamplingResult {
+            x: x_vec,
+            u_trop,
+            v_trop,
+        }
+    }
+
+    // in this algorithm we first generate the edge ordering, then we generate the feynman parameters
+    fn _adapted_permatuhedral_sampling<T: FloatLike>(
+        tropical_subgraph_table: &TropicalSubgraphTable,
+        rng: &mut MimicRng<T>,
+        edge_rng: &[T],
+        _debug: usize,
+    ) -> PermatuhedralSamplingResult<T> {
+        let mut graph = tropical_subgraph_table
+            .tropical_graph
+            .get_full_subgraph_id();
+
+        let mut graph_ordering = Vec::with_capacity(graph.num_edges + 1);
+        graph_ordering.push((graph, None));
+
+        while !graph.is_empty() {
+            let (edge, graph_without_edge) = if graph.has_one_edge() {
+                let edge = graph.contains_edges()[0];
+                let graph_without_edge = graph.pop_edge(&edge);
+                (edge, graph_without_edge)
+            } else {
+                tropical_subgraph_table
+                    .sample_edge(rng.get_random_number(Some("sample_edge")), &graph)
+            };
+
+            graph_ordering.push((graph_without_edge, Some(edge)));
+            graph = graph_without_edge;
+        }
+
+        let mut kappa = T::one();
+        let mut x_vec = vec![T::zero(); tropical_subgraph_table.tropical_graph.topology.len()];
+        let mut u_trop = T::one();
+        let mut v_trop = T::one();
+
+        for i in 1..(graph.num_edges + 1) {
+            let (graph, _) = graph_ordering[i - 1];
+            if let (graph_without_edge, Some(edge)) = graph_ordering[i] {
+                x_vec[edge] = kappa;
+
+                if tropical_subgraph_table.table[graph.id].mass_momentum_spanning
+                    && !tropical_subgraph_table.table[graph_without_edge.id].mass_momentum_spanning
+                {
+                    v_trop = x_vec[edge];
+                }
+
+                if tropical_subgraph_table.table[graph_without_edge.id].loop_number
+                    < tropical_subgraph_table.table[graph.id].loop_number
+                {
+                    u_trop *= x_vec[edge];
+                }
+
+                if graph_without_edge.is_empty() {
+                    break;
+                }
+
+                let graph_without_edge_dod =
+                    tropical_subgraph_table.table[graph_without_edge.id].generalized_dod;
+
+                let next_edge = graph_ordering[i + 1].1.unwrap();
+                let xi = edge_rng[next_edge];
+                kappa *= xi.powf(Into::<T>::into(graph_without_edge_dod).inv());
+            } else {
+                unreachable!()
+            }
+        }
+
+        let xi_trop = u_trop * v_trop;
+
+        // perform rescaling for numerical stability
+        let target = u_trop.powf(Into::<T>::into(-(D as f64 / 2.0)))
+            * (u_trop / xi_trop).powf(Into::<T>::into(tropical_subgraph_table.tropical_graph.dod));
+
+        let loop_number = tropical_subgraph_table.table.last().unwrap().loop_number;
+        let scaling = target.powf(
+            Into::<T>::into(
+                D as f64 / 2.0 * loop_number as f64 + tropical_subgraph_table.tropical_graph.dod,
+            )
+            .inv(),
+        );
 
         x_vec.iter_mut().for_each(|x| *x *= scaling);
         u_trop = T::one();
@@ -720,8 +809,12 @@ pub mod tropical_parameterization {
         graph: &Graph,
         debug: usize,
     ) -> Result<(Vec<LorentzVector<T>>, T), Report> {
-        let mut rng = MimicRng::new(x_space_point);
         let tropical_subgraph_table = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
+        let signature_matrix = &tropical_subgraph_table.tropical_graph.signature_matrix;
+        let _num_edges = signature_matrix.nrows();
+        let num_loops = signature_matrix.ncols();
+
+        let mut rng = MimicRng::new(x_space_point);
 
         // perhaps this data should be stored in some cache in the integrand.
         let (edge_masses, edge_shifts): (Vec<T>, Vec<LorentzVector<T>>) = tropical_subgraph_table
@@ -768,7 +861,6 @@ pub mod tropical_parameterization {
         }
 
         let permatuhedral_result = permatuhedral_sampling(tropical_subgraph_table, &mut rng, debug);
-        let signature_matrix = &tropical_subgraph_table.tropical_graph.signature_matrix;
 
         if debug > 1 {
             println!("feynman parameters: {:?}", permatuhedral_result.x);
@@ -776,9 +868,6 @@ pub mod tropical_parameterization {
             println!("v_trop: {}", permatuhedral_result.v_trop);
             println!("signature matrix: {:?}", signature_matrix);
         }
-
-        let _num_edges = signature_matrix.nrows();
-        let num_loops = signature_matrix.ncols();
 
         let l_matrix = compute_l_matrix(&permatuhedral_result.x, signature_matrix);
         let decomposed_l_matrix = l_matrix.decompose_for_tropical()?;
@@ -850,17 +939,8 @@ pub mod tropical_parameterization {
             println!("jacobian: {}", jacobian);
             println!("tokens: {:?}", rng.tokens);
         }
-        if jacobian.is_nan() {
-            panic!("jacobian is nan");
-        }
 
-        let final_loop_momenta = if jacobian == T::zero() {
-            vec![LorentzVector::new(); num_loops]
-        } else {
-            loop_momenta
-        };
-
-        Ok((final_loop_momenta, jacobian))
+        Ok((loop_momenta, jacobian))
     }
 
     #[inline]
@@ -1034,16 +1114,9 @@ pub mod tropical_parameterization {
         num_loops: usize,
         debug: usize,
     ) -> T {
-        // need to put a guard here for nan values
-        let polynomial_ratio = {
-            let mut temp = (v_trop / v)
-                .powf(Into::<T>::into(tropical_subgraph_table.tropical_graph.dod))
-                * (u_trop / u).powf(Into::<T>::into(D as f64 / 2.0));
-            if temp.is_nan() {
-                temp = T::zero();
-            }
-            temp
-        };
+        let polynomial_ratio = (v_trop / v)
+            .powf(Into::<T>::into(tropical_subgraph_table.tropical_graph.dod))
+            * (u_trop / u).powf(Into::<T>::into(D as f64 / 2.0));
 
         let i_trop = Into::<T>::into(tropical_subgraph_table.table.last().unwrap().j_function);
 
@@ -1069,16 +1142,12 @@ pub mod tropical_parameterization {
         // we divide by (2pi)^L later, tropcial sampling already contains a part of this, so we undo that here.
         let pi_power = Into::<T>::into(std::f64::consts::PI.powf((D * num_loops) as f64 / 2.0));
 
-        // this is a bit of a hack, but it works
-        let factors_2 = tropical_subgraph_table
-            .tropical_graph
-            .topology
-            .iter()
-            .fold(T::one(), |acc, x| {
-                acc * Into::<T>::into(2f64.powf(2f64 * x.weight))
-            });
+        // we include the factor of 2^E here, so we don't need to include it in the evaluate function
+        let num_edges = tropical_subgraph_table.tropical_graph.topology.len();
+        let two_to_the_e: usize = 1 << num_edges;
 
-        i_trop * gamma_omega / denom * polynomial_ratio * pi_power / factors_2
+        i_trop * gamma_omega / denom * polynomial_ratio * pi_power
+            / Into::<T>::into(two_to_the_e as f64)
     }
 }
 

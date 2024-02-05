@@ -1,7 +1,12 @@
+use std::time::Duration;
+
+use crate::evaluation_result::EvaluationMetaData;
+use crate::evaluation_result::EvaluationResult;
 use crate::integrands::*;
 use crate::utils;
 use crate::utils::FloatLike;
 use crate::ParameterizationMapping;
+use crate::Precision;
 use crate::Settings;
 use num::Complex;
 use num_traits::ToPrimitive;
@@ -34,9 +39,12 @@ impl HFunctionTestIntegrand {
         }
     }
 
-    fn evaluate_sample_generic<T: FloatLike>(&self, xs: &[T]) -> Complex<T> {
+    fn evaluate_sample_generic<T: FloatLike>(&self, xs: &[T]) -> (Complex<T>, Duration, Duration) {
         let e_cm = Into::<T>::into(self.settings.kinematics.e_cm);
         let mut jac = T::one();
+
+        let parameterization_start = std::time::Instant::now();
+
         let t = match self.settings.parameterization.mapping {
             ParameterizationMapping::Log => {
                 // r = e_cm * ln(1 + b*x/(1-x))
@@ -56,9 +64,17 @@ impl HFunctionTestIntegrand {
             }
         };
 
-        let h = utils::h(t, None, None, &self.integrand_settings.h_function);
+        let parameterization_time = parameterization_start.elapsed();
 
-        Complex::new(h * jac, T::zero())
+        let evaluation_time = std::time::Instant::now();
+        let h = utils::h(t, None, None, &self.integrand_settings.h_function);
+        let evaluation_time = evaluation_time.elapsed();
+
+        (
+            Complex::new(h * jac, T::zero()),
+            parameterization_time,
+            evaluation_time,
+        )
     }
 }
 
@@ -79,12 +95,13 @@ impl HasIntegrand for HFunctionTestIntegrand {
     }
 
     fn evaluate_sample(
-        &mut self,
+        &self,
         sample: &Sample<f64>,
         wgt: f64,
         iter: usize,
         use_f128: bool,
-    ) -> Complex<f64> {
+        _max_eval: f64,
+    ) -> EvaluationResult {
         let xs = match sample {
             Sample::Continuous(_w, v) => v,
             _ => panic!("Wrong sample type"),
@@ -105,29 +122,57 @@ impl HasIntegrand for HFunctionTestIntegrand {
         }
 
         // TODO implement stability check
+        let (integration_result, parameterization_timing, evaluation_timing, precision) =
+            if use_f128 {
+                let sample_xs_f128 = sample_xs
+                    .iter()
+                    .map(|x| Into::<f128::f128>::into(*x))
+                    .collect::<Vec<_>>();
+                if self.settings.general.debug > 1 {
+                    println!(
+                        "f128 Upcasted x-space sample : ( {} )",
+                        sample_xs_f128
+                            .iter()
+                            .map(|&x| format!("{:+e}", x))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                let (res, parameterization_timing, evaluation_timing) =
+                    self.evaluate_sample_generic(sample_xs_f128.as_slice());
+                (
+                    Complex::new(
+                        f128::f128::to_f64(&res.re).unwrap(),
+                        f128::f128::to_f64(&res.im).unwrap(),
+                    ),
+                    parameterization_timing,
+                    evaluation_timing,
+                    Precision::Quad,
+                )
+            } else {
+                let (res, parameterization_timing, evaluation_timing) =
+                    self.evaluate_sample_generic(sample_xs.as_slice());
 
-        if use_f128 {
-            let sample_xs_f128 = sample_xs
-                .iter()
-                .map(|x| Into::<f128::f128>::into(*x))
-                .collect::<Vec<_>>();
-            if self.settings.general.debug > 1 {
-                println!(
-                    "f128 Upcasted x-space sample : ( {} )",
-                    sample_xs_f128
-                        .iter()
-                        .map(|&x| format!("{:+e}", x))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-            }
-            let res = self.evaluate_sample_generic(sample_xs_f128.as_slice());
-            Complex::new(
-                f128::f128::to_f64(&res.re).unwrap(),
-                f128::f128::to_f64(&res.im).unwrap(),
-            )
-        } else {
-            return self.evaluate_sample_generic(sample_xs.as_slice());
+                (
+                    res,
+                    parameterization_timing,
+                    evaluation_timing,
+                    Precision::Double,
+                )
+            };
+
+        let evaluation_metadata = EvaluationMetaData {
+            rep3d_evaluation_time: evaluation_timing,
+            parameterization_time: parameterization_timing,
+            relative_instability_error: Complex::new(0.0, 0.0),
+            highest_precision: precision,
+        };
+
+        EvaluationResult {
+            integrand_result: integration_result,
+            integrator_weight: wgt,
+            event_buffer: vec![],
+            evaluation_metadata,
         }
     }
 }

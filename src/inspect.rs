@@ -67,7 +67,9 @@ pub fn inspect(
         }
     };
 
-    let eval = integrand.evaluate_sample(&sample, 0., 1, use_f128);
+    let eval_result = integrand.evaluate_sample(&sample, 0., 1, use_f128, 0.0);
+    let eval = eval_result.integrand_result;
+
     info!(
         "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
         format!(

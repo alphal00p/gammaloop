@@ -1,7 +1,11 @@
 use colored::Colorize;
+use itertools::Itertools;
 use symbolica::numerical_integration::{Grid, Sample, StatisticsAccumulator};
 
+use crate::evaluation_result::EvaluationResult;
+use crate::evaluation_result::MetaDataStatistics;
 use crate::integrands::HasIntegrand;
+use crate::observables::Event;
 use crate::utils;
 use crate::Integrand;
 use crate::Settings;
@@ -50,7 +54,7 @@ where
 
     let mut samples = vec![Sample::new(); settings.integrator.n_start];
     let mut f_evals = vec![vec![0.; N_INTEGRAND_ACCUMULATORS]; settings.integrator.n_start];
-    let mut integral = StatisticsAccumulator::new();
+    let mut integral: StatisticsAccumulator<f64> = StatisticsAccumulator::new();
     let mut all_integrals = vec![StatisticsAccumulator::new(); N_INTEGRAND_ACCUMULATORS];
 
     let mut rng = rand::thread_rng();
@@ -94,15 +98,26 @@ where
         // the number of points per core for all cores but the last, which may have fewer
         let nvec_per_core = (cur_points - 1) / cores + 1;
 
+        let current_max_eval = integral
+            .max_eval_positive
+            .abs()
+            .max(integral.max_eval_negative.abs());
+
         user_data.integrand[..cores]
             .par_iter_mut()
             .zip(f_evals.par_chunks_mut(nvec_per_core))
             .zip(samples.par_chunks(nvec_per_core))
             .for_each(|((integrand_f, ff), xi)| {
                 for (f_evals_i, s) in ff.iter_mut().zip(xi.iter()) {
-                    let fc = integrand_f.evaluate_sample(s, s.get_weight(), iter, false);
-                    f_evals_i[0] = fc.re;
-                    f_evals_i[1] = fc.im;
+                    let fc = integrand_f.evaluate_sample(
+                        s,
+                        s.get_weight(),
+                        iter,
+                        false,
+                        current_max_eval,
+                    );
+                    f_evals_i[0] = fc.integrand_result.re;
+                    f_evals_i[1] = fc.integrand_result.im;
                 }
             });
 
@@ -406,4 +421,253 @@ where
             .map(|res| res.chi_sq)
             .collect::<Vec<_>>(),
     }
+}
+
+pub fn batch_integrate(integrand: &Integrand, input: BatchIntegrateInput) -> BatchResult {
+    let samples_generated_locally = matches!(
+        &input.samples,
+        BatchInput::Grid {
+            grid: _,
+            num_points: _
+        }
+    );
+
+    match input.samples {
+        BatchInput::SampleList { samples } => {
+            let (evaluation_results, metadata_statistics) = evaluate_sample_list(
+                integrand,
+                samples,
+                input.num_cores,
+                input.iter,
+                input.max_eval,
+            );
+
+            let integrand_output = generate_integrand_output(
+                integrand,
+                &evaluation_results,
+                samples,
+                input.integrand_output_settings,
+                input.settings.integrator.integrated_phase,
+                samples_generated_locally,
+            );
+
+            let event_output = generate_event_output(
+                evaluation_results,
+                input.event_output_settings,
+                input.settings,
+            );
+
+            BatchResult {
+                statistics: metadata_statistics,
+                integrand_data: integrand_output,
+                event_data: event_output,
+            }
+        }
+        BatchInput::Grid {
+            mut grid,
+            num_points,
+        } => {
+            // generate samples, then evalute them
+            let mut rng = rand::thread_rng();
+            let samples = (0..num_points)
+                .map(|_| {
+                    let mut sample = Sample::new();
+                    grid.sample(&mut rng, &mut sample);
+                    sample
+                })
+                .collect_vec();
+
+            let (evaluation_results, metadata_statistics) = evaluate_sample_list(
+                integrand,
+                &samples,
+                input.num_cores,
+                input.iter,
+                input.max_eval,
+            );
+
+            let integrand_output = generate_integrand_output(
+                integrand,
+                &evaluation_results,
+                &samples,
+                input.integrand_output_settings,
+                input.settings.integrator.integrated_phase,
+                samples_generated_locally,
+            );
+
+            let event_output = generate_event_output(
+                evaluation_results,
+                input.event_output_settings,
+                input.settings,
+            );
+
+            BatchResult {
+                statistics: metadata_statistics,
+                integrand_data: integrand_output,
+                event_data: event_output,
+            }
+        }
+    }
+}
+
+fn generate_integrand_output(
+    integrand: &Integrand,
+    evaluation_results: &[EvaluationResult],
+    samples: &[Sample<f64>],
+    integrand_output_settings: IntegralOutputSettings,
+    integrated_phase: IntegratedPhase,
+    samples_generated_locally: bool,
+) -> BatchIntegrateOutput {
+    match integrand_output_settings {
+        IntegralOutputSettings::Default => {
+            let integrand_values = evaluation_results
+                .iter()
+                .map(|result| result.integrand_result)
+                .collect();
+
+            // if the points are generated by the grid, we need to pass them back to the master node if they are not being learned locally
+            // In general, this combination of settings will probably not be used.
+            let samples = if samples_generated_locally {
+                Some(samples.to_vec())
+            } else {
+                None
+            };
+
+            BatchIntegrateOutput::Default(integrand_values, samples)
+        }
+        IntegralOutputSettings::Accumulator => {
+            let mut real_accumulator = StatisticsAccumulator::new();
+            let mut imag_accumulator = StatisticsAccumulator::new();
+            let mut grid = integrand.create_grid();
+
+            for (result, sample) in evaluation_results.iter().zip(samples.iter()) {
+                real_accumulator.add_sample(
+                    result.integrand_result.re * sample.get_weight(),
+                    Some(sample),
+                );
+                imag_accumulator.add_sample(
+                    result.integrand_result.im * sample.get_weight(),
+                    Some(sample),
+                );
+
+                match integrated_phase {
+                    IntegratedPhase::Real => {
+                        grid.add_training_sample(sample, result.integrand_result.re)
+                            .unwrap();
+                    }
+                    IntegratedPhase::Imag => {
+                        grid.add_training_sample(sample, result.integrand_result.im)
+                            .unwrap();
+                    }
+                    IntegratedPhase::Both => {
+                        unimplemented!()
+                    }
+                }
+            }
+
+            BatchIntegrateOutput::Accumulator((real_accumulator, imag_accumulator), grid)
+        }
+    }
+}
+
+fn generate_event_output(
+    evaluation_results: Vec<EvaluationResult>,
+    event_output_settings: EventOutputSettings,
+    _settings: &Settings,
+) -> EventOutput {
+    match event_output_settings {
+        EventOutputSettings::None => EventOutput::None,
+        EventOutputSettings::EventList => {
+            let event_list = evaluation_results
+                .into_iter()
+                .flat_map(|result| result.event_buffer) // the clone is necessary for the case where we return an accumulator +
+                .collect();
+            EventOutput::EventList { events: event_list }
+        }
+        EventOutputSettings::Histogram => todo!(), // process events using the observables
+    }
+}
+
+// core function of the batch_integrate function, used by all versions of IO
+fn evaluate_sample_list(
+    integrand: &Integrand,
+    samples: &[Sample<f64>],
+    num_cores: usize,
+    iter: usize,
+    max_eval: f64,
+) -> (Vec<EvaluationResult>, MetaDataStatistics) {
+    let list_size = samples.len();
+    let nvec_per_core = (list_size - 1) / num_cores + 1;
+
+    let sample_chunks = samples.par_chunks(nvec_per_core);
+    let mut evaluation_results_per_core = Vec::with_capacity(num_cores);
+
+    sample_chunks
+        .map(|chunk| {
+            let cor_evals = chunk
+                .iter()
+                .map(|sample| {
+                    integrand.evaluate_sample(sample, sample.get_weight(), iter, false, max_eval)
+                })
+                .collect_vec();
+
+            cor_evals
+        })
+        .collect_into_vec(&mut evaluation_results_per_core);
+
+    let evaluation_results = evaluation_results_per_core
+        .into_iter()
+        .flatten()
+        .collect_vec();
+
+    let meta_data_statistics = MetaDataStatistics::from_evaluation_results(&evaluation_results);
+
+    (evaluation_results, meta_data_statistics)
+}
+
+pub enum BatchInput<'a> {
+    SampleList { samples: &'a [Sample<f64>] },
+    Grid { grid: Grid<f64>, num_points: usize },
+}
+
+pub enum BatchIntegrateOutput {
+    Default(Vec<Complex<f64>>, Option<Vec<Sample<f64>>>),
+    Accumulator(
+        (StatisticsAccumulator<f64>, StatisticsAccumulator<f64>),
+        Grid<f64>,
+    ),
+}
+
+pub enum EventOutput {
+    None,
+    EventList { events: Vec<Event> },
+    Histogram { histograms: Vec<()> }, // placeholder for the actual histograms
+}
+
+pub struct BatchResult {
+    pub statistics: MetaDataStatistics,
+    pub integrand_data: BatchIntegrateOutput,
+    pub event_data: EventOutput,
+}
+
+pub struct BatchIntegrateInput<'a> {
+    // global run info:
+    pub max_eval: f64,
+    pub iter: usize,
+    pub settings: &'a Settings,
+    // input data:
+    pub samples: BatchInput<'a>,
+    pub integrand_output_settings: IntegralOutputSettings,
+    pub event_output_settings: EventOutputSettings,
+    pub num_cores: usize,
+}
+
+pub enum IntegralOutputSettings {
+    Default,
+    Accumulator,
+}
+
+pub enum EventOutputSettings {
+    None,
+    EventList,
+    Histogram,
 }

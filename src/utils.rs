@@ -13,6 +13,7 @@ use smartstring::{LazyCompact, SmartString};
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::ops::Neg;
+use std::time::Duration;
 
 #[allow(unused_imports)]
 use log::{debug, info};
@@ -1680,4 +1681,18 @@ pub fn format_for_compare_digits(x: f64, y: f64) -> (String, String) {
     let string_y = string_vec.iter().map(|(_, y)| y).join("");
 
     (string_x, string_y)
+}
+
+#[allow(unused)]
+pub fn format_evaluation_time(time: Duration) -> String {
+    let time_secs = time.as_secs_f64();
+    if time_secs < 1e-6 {
+        format!("{} ns", time.as_nanos())
+    } else if time_secs < 1e-3 {
+        format!("{} µs", time.as_micros())
+    } else if time_secs < 1.0 {
+        format!("{} ms", time.as_millis())
+    } else {
+        format!("{} s", time.as_secs())
+    }
 }

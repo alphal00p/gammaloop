@@ -211,7 +211,7 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
             format!("{}", settings.hard_coded_integrand).green(),
             format!("{}", n_samples).blue()
         );
-        let mut integrand = integrand_factory(&settings);
+        let integrand = integrand_factory(&settings);
         let now = Instant::now();
         for _i in 1..n_samples {
             integrand.evaluate_sample(
@@ -224,6 +224,7 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
                 1.,
                 1,
                 false,
+                0.0,
             );
         }
         let total_time = now.elapsed().as_secs_f64();

@@ -2,6 +2,7 @@ use core::panic;
 use std::time::Duration;
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
+use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
@@ -18,101 +19,6 @@ use lorentz_vector::LorentzVector;
 use num::Complex;
 use num_traits::{Inv, Zero};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
-
-#[derive(Debug, Copy, Clone)]
-pub struct Statistics {
-    max_re_eval: f64,
-    max_im_eval: f64,
-    num_f32_evals: usize,
-    num_f64_evals: usize,
-    num_f128_evals: usize,
-    num_arb_evals: usize,
-    total_time_in_f32: Duration,
-    total_time_in_f64: Duration,
-    total_time_in_f128: Duration,
-    total_time_in_arb: Duration,
-    num_f32_unstable: usize,
-    num_f64_unstable: usize,
-    num_f128_unstable: usize,
-    num_arb_unstable: usize,
-}
-
-impl Statistics {
-    fn update(&mut self, result: Complex<f64>, duration: Duration, stable: bool, prec: Precision) {
-        self.max_re_eval = self.max_re_eval.abs().max(result.re.abs());
-        self.max_im_eval = self.max_im_eval.abs().max(result.im.abs());
-
-        match prec {
-            Precision::Single => {
-                self.num_f32_evals += 1;
-                self.total_time_in_f32 += duration;
-                if !stable {
-                    self.num_f32_unstable += 1;
-                }
-            }
-            Precision::Double => {
-                self.num_f64_evals += 1;
-                self.total_time_in_f64 += duration;
-                if !stable {
-                    self.num_f64_unstable += 1;
-                }
-            }
-            Precision::Quad => {
-                self.num_f128_evals += 1;
-                self.total_time_in_f128 += duration;
-                if !stable {
-                    self.num_f128_unstable += 1;
-                }
-            }
-            Precision::Arb(_) => {
-                self.num_arb_evals += 1;
-                self.total_time_in_arb += duration;
-                if !stable {
-                    self.num_arb_unstable += 1;
-                }
-            }
-        }
-    }
-
-    #[allow(unused)]
-    fn merge(&self, other: &Self) -> Self {
-        Self {
-            max_re_eval: self.max_re_eval.abs().max(other.max_re_eval.abs()),
-            max_im_eval: self.max_im_eval.abs().max(other.max_im_eval.abs()),
-            num_f32_evals: self.num_f32_evals + other.num_f32_evals,
-            num_f64_evals: self.num_f64_evals + other.num_f64_evals,
-            num_f128_evals: self.num_f128_evals + other.num_f128_evals,
-            num_arb_evals: self.num_arb_evals + other.num_arb_evals,
-            total_time_in_f32: self.total_time_in_f32 + other.total_time_in_f32,
-            total_time_in_f64: self.total_time_in_f64 + other.total_time_in_f64,
-            total_time_in_f128: self.total_time_in_f128 + other.total_time_in_f128,
-            total_time_in_arb: self.total_time_in_arb + other.total_time_in_arb,
-            num_f32_unstable: self.num_f32_unstable + other.num_f32_unstable,
-            num_f64_unstable: self.num_f64_unstable + other.num_f64_unstable,
-            num_f128_unstable: self.num_f128_unstable + other.num_f128_unstable,
-            num_arb_unstable: self.num_arb_unstable + other.num_arb_unstable,
-        }
-    }
-
-    fn new() -> Self {
-        Self {
-            max_re_eval: 0.,
-            max_im_eval: 0.,
-            num_f32_evals: 0,
-            num_f64_evals: 0,
-            num_f128_evals: 0,
-            num_arb_evals: 0,
-            total_time_in_f32: Duration::ZERO,
-            total_time_in_f64: Duration::ZERO,
-            total_time_in_f128: Duration::ZERO,
-            total_time_in_arb: Duration::ZERO,
-            num_f32_unstable: 0,
-            num_f64_unstable: 0,
-            num_f128_unstable: 0,
-            num_arb_unstable: 0,
-        }
-    }
-}
 
 // trait to capture the common behaviour of amplitudes and cross sections
 trait GraphIntegrand {
@@ -292,23 +198,35 @@ impl GraphIntegrand for AmplitudeGraph {
                 .evaluate_cff_expression(&sample.loop_moms, &sample.external_moms)
         };
 
-        let energy_product = self
+        let onshell_energies = self
             .get_graph()
-            .compute_energy_product(&sample.loop_moms, &sample.external_moms);
-        // hacky way to do this for now
-        let nu: f64 = self
+            .compute_onshell_energies(&sample.loop_moms, &sample.external_moms);
+
+        let virtual_energies = self
+            .get_graph()
+            .edges
+            .iter()
+            .zip(onshell_energies.iter())
+            .filter(|(edge, _)| edge.edge_type == EdgeType::Virtual)
+            .map(|(_, energy)| energy);
+
+        let weight_iterator = self
             .get_graph()
             .derived_data
             .tropical_subgraph_table
             .as_ref()
             .unwrap()
             .tropical_graph
-            .topology[0]
-            .weight;
+            .topology
+            .iter()
+            .map(|edge| edge.weight);
 
-        let power = Into::<T>::into(2. * nu - 1.);
+        let energy_product = virtual_energies
+            .zip(weight_iterator)
+            .map(|(energy, weight)| energy.powf(Into::<T>::into(2. * weight - 1.)))
+            .fold(T::one(), |acc, x| acc * x); // should we put Product and Sum in FloatLike?
 
-        rep3d * energy_product.powf(power)
+        rep3d * energy_product
     }
 }
 
@@ -463,7 +381,6 @@ enum GraphIntegrands {
 pub struct GammaLoopIntegrand {
     pub settings: Settings,
     graph_integrands: GraphIntegrands,
-    pub statistics: Statistics,
 }
 
 impl GraphIntegrands {
@@ -510,12 +427,13 @@ impl HasIntegrand for GammaLoopIntegrand {
 
     #[allow(unused_variables)]
     fn evaluate_sample(
-        &mut self,
+        &self,
         sample: &symbolica::numerical_integration::Sample<f64>,
         wgt: f64,
         iter: usize,
         use_f128: bool,
-    ) -> num::Complex<f64> {
+        max_eval: f64,
+    ) -> EvaluationResult {
         // setup the evaluation of the integrand in the different stability levels
         let mut results_of_stability_levels =
             Vec::with_capacity(self.settings.stability.levels.len());
@@ -523,7 +441,9 @@ impl HasIntegrand for GammaLoopIntegrand {
         // create an iterator containing the information for evaluation at each stability level
         let stability_iterator = self.create_stability_iterator(use_f128);
 
+        let before_parameterization = std::time::Instant::now();
         let sample_point = self.parameterize(sample);
+        let parameterization_time = before_parameterization.elapsed();
 
         // rotate the momenta for the stability tests.
         let rotation_method = self.settings.stability.rotation_axis.rotation_function();
@@ -544,6 +464,7 @@ impl HasIntegrand for GammaLoopIntegrand {
                 rotated_result,
                 stability_level,
                 self.settings.integrator.integrated_phase,
+                max_eval,
             );
 
             results_of_stability_levels.push((
@@ -580,7 +501,6 @@ impl HasIntegrand for GammaLoopIntegrand {
         );
 
         let res = most_reliable_result * sample_point.get_default_sample().jacobian;
-        self.statistics.update(res, *duration, *stable, *precision);
 
         // 1 / (2 pi )^L
         let prefactor = self.compute_2pi_factor().inv();
@@ -637,7 +557,21 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!("\t{}: {:+e}", "result".yellow(), res * prefactor);
         }
 
-        res * prefactor
+        let evaluation_metadata = EvaluationMetaData {
+            rep3d_evaluation_time: *duration,
+            parameterization_time,
+            relative_instability_error: Complex::new(0., 0.),
+            highest_precision: *precision,
+        };
+
+        let integrand_result = res * prefactor;
+
+        EvaluationResult {
+            integrand_result,
+            integrator_weight: wgt,
+            event_buffer: vec![],
+            evaluation_metadata,
+        }
     }
 
     fn get_event_manager_mut(&mut self) -> &mut crate::observables::EventManager {
@@ -883,6 +817,7 @@ impl GammaLoopIntegrand {
         rotated_result: Complex<f64>,
         stability_settings: &StabilityLevelSetting,
         integrated_phase: IntegratedPhase,
+        max_eval: f64,
     ) -> (Complex<f64>, bool) {
         let average = (result + rotated_result) / 2.;
 
@@ -892,18 +827,8 @@ impl GammaLoopIntegrand {
             average_for_comparison,
             max_wgt_for_comparison,
         ) = match integrated_phase {
-            IntegratedPhase::Real => (
-                result.re,
-                rotated_result.re,
-                average.re,
-                self.statistics.max_re_eval,
-            ),
-            IntegratedPhase::Imag => (
-                result.im,
-                rotated_result.im,
-                average.im,
-                self.statistics.max_im_eval,
-            ),
+            IntegratedPhase::Real => (result.re, rotated_result.re, average.re, max_eval),
+            IntegratedPhase::Imag => (result.im, rotated_result.im, average.im, max_eval),
             IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
         };
 
@@ -915,7 +840,9 @@ impl GammaLoopIntegrand {
 
         let stable = error < stability_settings.required_precision_for_re;
 
-        let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0. {
+        let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
+            && max_wgt_for_comparison != 0.
+        {
             average_for_comparison.abs()
                 < stability_settings.escalate_for_large_weight_threshold
                     * max_wgt_for_comparison.abs()
@@ -939,7 +866,6 @@ impl GammaLoopIntegrand {
         Self {
             settings,
             graph_integrands: GraphIntegrands::Amplitude(amplitude.amplitude_graphs),
-            statistics: Statistics::new(),
         }
     }
 
@@ -950,7 +876,6 @@ impl GammaLoopIntegrand {
         Self {
             settings,
             graph_integrands: GraphIntegrands::CrossSection(cross_section.supergraphs),
-            statistics: Statistics::new(),
         }
     }
 }

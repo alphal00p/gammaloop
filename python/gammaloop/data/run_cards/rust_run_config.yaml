@@ -1,7 +1,6 @@
 General:
   debug: 0
   use_ltd: false
-  discrete_sample_graphs: false
 Integrand:
   type: gamma_loop
 Kinematics:
@@ -50,7 +49,4 @@ Stability:
     accepted_radius_in_x_range:
     - 0.0
     - 1.0
-multi_channeling:
-  enabled: false
-  discrete_sampling: false
-  alpha: 1.0
+sampling: !default
