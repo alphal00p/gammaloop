@@ -1,10 +1,15 @@
+use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::ops::Index;
 use std::ops::Range;
+
+use permutation::sort;
+use permutation::Permutation;
 
 use symbolica::representations::{AsAtomView, Atom, FunctionBuilder, Identifier};
 use symbolica::state::{State, Workspace};
@@ -40,6 +45,7 @@ impl Representation {
         }
     }
 
+    #[inline]
     pub fn is_neg(&self, i: usize) -> bool {
         match self {
             Representation::Lorentz(_) => i > 0,
@@ -158,7 +164,7 @@ pub type TensorStructure = Vec<Slot>;
 #[derive(Clone, PartialEq, Debug)]
 pub struct TensorSkeleton<N> {
     internal: TensorStructure,
-    external: TensorStructure,
+    pub external: TensorStructure,
     pub names: HashMap<Range<usize>, N>, //ideally this is a named partion.. maybe a btreemap<usize, N>, and the range is from previous to next
     pub global_name: Option<N>,
 }
@@ -172,31 +178,45 @@ impl<N> TensorSkeleton<N> {
 
     /// Given two TensorSkeletons, returns the index of the first matching slot in each external index list
     pub fn match_index(&self, other: &Self) -> Option<(usize, usize)> {
-        for (i, slot_a) in self.external.iter().enumerate().rev() {
-            for (j, slot_b) in other.external.iter().enumerate() {
-                if slot_a == slot_b {
-                    return Some((i, j));
-                }
+        let posmap =
+            AHashMap::from_iter(self.external.iter().enumerate().map(|(i, slot)| (slot, i)));
+
+        for (j, slot) in other.external.iter().enumerate() {
+            if let Some(&i) = posmap.get(slot) {
+                return Some((i, j));
             }
         }
+
         None
     }
 
-    pub fn match_indices(&self, other: &Self) -> Option<(BTreeSet<usize>, BTreeSet<usize>)> {
-        let mut self_matches = BTreeSet::new();
-        let mut other_matches = BTreeSet::new();
-        for (i, slot_a) in self.external.iter().enumerate().rev() {
-            for (j, slot_b) in other.external.iter().enumerate() {
-                if slot_a == slot_b {
-                    self_matches.insert(i);
-                    other_matches.insert(j);
+    pub fn match_indices(&self, other: &Self) -> Option<(bool, Permutation, Vec<bool>, Vec<bool>)> {
+        let mut self_matches = vec![false; self.order()];
+        let mut perm = Vec::new();
+        let mut found_match = false;
+        let mut row = false;
+        let mut other_matches = vec![false; other.order()];
+
+        let posmap =
+            AHashMap::from_iter(self.external.iter().enumerate().map(|(i, slot)| (slot, i)));
+
+        for (j, slot_other) in other.external.iter().enumerate() {
+            if let Some(&i) = posmap.get(slot_other) {
+                self_matches[i] = true;
+                other_matches[j] = true;
+                if !found_match {
+                    row = i >= j;
                 }
+                found_match = true;
+                perm.push(i);
             }
         }
-        if self_matches.is_empty() {
-            None
+
+        let p: Permutation = permutation::sort(&mut perm);
+        if found_match {
+            Some((row, p, self_matches, other_matches))
         } else {
-            Some((self_matches, other_matches))
+            None
         }
     }
 
@@ -426,7 +446,7 @@ impl<N> TensorSkeleton<N> {
 
     /// remove the repeated indices in the external index list
     fn trace_out(&mut self) {
-        let mut positions = HashMap::new();
+        let mut positions = IndexMap::new();
 
         // Track the positions of each element
         for (index, &value) in self.external.iter().enumerate() {
@@ -464,10 +484,7 @@ impl<N> TensorSkeleton<N> {
 
     /// get the global name of the tensor
     pub fn global_name(&self) -> Option<&N> {
-        match self.global_name {
-            Some(ref name) => Some(name),
-            None => None,
-        }
+        self.global_name.as_ref()
     }
 
     /// set the global name of the tensor

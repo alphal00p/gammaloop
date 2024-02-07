@@ -71,6 +71,7 @@ enum-try-as-inner = "0.1.1"
 indexmap = "2.2.2"
 nohash-hasher = "0.2.0"
 intmap = { git = "https://github.com/lcnbr/rust-intmap" }
+permutation = "0.4.1"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -84,11 +85,11 @@ pyo3-build-config = "*"
 crate-type = ["cdylib", "lib"]
 name = "_gammaloop"
 required-features = ["python_api"]
-
+bench = false
 [[bin]]
 name = "cli"
 required-features = ["binary"]
-
+bench = false
 [features]
 extension-module = ["pyo3/extension-module"]
 default = ["python_api"]

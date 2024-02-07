@@ -1,5 +1,7 @@
 use crate::tensor::{
-    Contract, DenseTensor, HasTensorStructure, Representation::Lorentz, SparseTensor,
+    Contract, DenseTensor, HasTensorData, HasTensorStructure, NumTensor,
+    Representation::{self, Lorentz},
+    SparseTensor,
 };
 use indexmap::IndexMap;
 use num::Complex;
@@ -92,8 +94,20 @@ fn dense_tensor_shape() {
 
 #[test]
 fn contract_densor() {
-    let structur_a = TensorSkeleton::from_integers(&[(1, 2), (3, 2)], "a");
-    let structur_b = TensorSkeleton::from_integers(&[(3, 2), (4, 2)], "b");
+    let structur_a = TensorSkeleton::from_idxsing(
+        &[
+            (3, Representation::Euclidean(2)),
+            (1, Representation::Euclidean(2)),
+        ],
+        "a",
+    );
+    let structur_b = TensorSkeleton::from_idxsing(
+        &[
+            (2, Representation::Euclidean(2)),
+            (3, Representation::Euclidean(2)),
+        ],
+        "b",
+    );
 
     let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
     let b = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
@@ -113,6 +127,29 @@ fn contract_densor() {
 }
 
 #[test]
+fn multi_index_contract() {
+    let structur_a = TensorSkeleton::from_idxsing(
+        &[
+            (3, Representation::Lorentz(2)),
+            (1, Representation::Lorentz(2)),
+        ],
+        "a",
+    );
+    let structur_b = TensorSkeleton::from_idxsing(
+        &[
+            (1, Representation::Lorentz(2)),
+            (3, Representation::Lorentz(2)),
+        ],
+        "b",
+    );
+
+    let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
+    let b = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
+    let f = a.contract(&b).unwrap();
+    println!("{:?}", f.data);
+}
+
+#[test]
 fn dense_to_sparse() {
     let structur_a = TensorSkeleton::from_integers(&[(1, 2), (3, 2)], "a");
     let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
@@ -123,16 +160,49 @@ fn dense_to_sparse() {
 
 #[test]
 fn gamma() {
-    let g1 = ufo_spin_tensors::gamma::<f32>(0, (0, 1));
-    let g2 = ufo_spin_tensors::gamma::<f32>(1, (1, 2));
-    let g3 = ufo_spin_tensors::gamma::<f32>(2, (2, 0));
+    let g1 = ufo_spin_tensors::gamma::<f64>(0, (0, 1));
+    let g2 = ufo_spin_tensors::gamma::<f64>(1, (1, 2));
+    let g3 = ufo_spin_tensors::gamma::<f64>(2, (2, 0));
 
     let c = g1.contract(&g2).unwrap().contract(&g3).unwrap();
-    println!("{:?}", c);
+    println!("Sparse: {:?}", c.data());
 
+    let g1d: NumTensors = g1.to_dense().into();
+    let g2d: NumTensors = g2.to_dense().into();
+    let g3d: NumTensors = g3.into();
+
+    let cdense: NumTensors = g1d.contract(&g2d).unwrap().contract(&g3d).unwrap();
+
+    println!("{:?}", cdense.try_as_complex().unwrap().data());
     let d = ufo_spin_tensors::gamma::<f32>(0, (0, 0)).internal_contract();
 
-    println!("{:?}", d);
+    println!("{:?}", d.data());
+}
+
+#[test]
+fn matches() {
+    let structur_a = TensorSkeleton::from_idxsing(
+        &[
+            (3, Representation::Lorentz(2)),
+            (2, Representation::Lorentz(3)),
+            (2, Representation::Euclidean(2)),
+            (1, Representation::Lorentz(2)),
+        ],
+        "a",
+    );
+    let structur_b = TensorSkeleton::from_idxsing(
+        &[
+            (1, Representation::Lorentz(2)),
+            (3, Representation::Lorentz(2)),
+            (2, Representation::Lorentz(2)),
+            (1, Representation::Euclidean(2)),
+        ],
+        "b",
+    );
+
+    let a = structur_a.match_index(&structur_b);
+
+    println!("{:?}", a);
 }
 
 #[test]
@@ -154,7 +224,7 @@ fn mixed_tensor_contraction() {
 
     let f = b.contract(&a).unwrap();
 
-    assert_eq!(f.data, [1.0 * im, 6.0 * im, 2.0 * im, 8.0 * im]);
+    assert_eq!(f.data, [1.0 * im, 2.0 * im, 6.0 * im, 8.0 * im]);
 
     let data_a = [(vec![0, 0], 1.0 * im), (vec![1, 1], 2.0 * im)];
 

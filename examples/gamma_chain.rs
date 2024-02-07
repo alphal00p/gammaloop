@@ -31,25 +31,24 @@ use symbolica::{
 };
 
 #[allow(dead_code)]
-fn pslash<T>(indices: (usize, usize), p: &[Complex<T>; 4]) -> DenseTensor<Complex<T>>
-where
-    T: Num
-        + std::default::Default
-        + Copy
-        + Neg<Output = T>
-        + Debug
-        + AddAssign
-        + SubAssign
-        + MulAssign
-        + DivAssign
-        + RemAssign,
-{
-    let minkindex = indices.0 + indices.1;
+// fn pslash<T>(indices: (usize, usize), p: &[Complex<T>; 4]) -> DenseTensor<Complex<T>>
+// where
+//     T: Num
+//         + std::default::Default
+//         + Copy
+//         + Neg<Output = T>
+//         + Debug
+//         + AddAssign
+//         + SubAssign
+//         + MulAssign
+//         + DivAssign
+//         + RemAssign,
+// {
+//     let minkindex = indices.0 + indices.1;
 
-    let p: DenseTensor<num::Complex<T>> = mink_four_vector(minkindex, p);
-    p.contract(&gamma(minkindex, indices)).unwrap()
-}
-
+//     let p: DenseTensor<num::Complex<T>> = mink_four_vector(minkindex, p);
+//     p.contract(&gamma::<T>::(minkindex, indices)).unwrap()
+// }
 #[allow(dead_code)]
 fn labeled_mink_four_vector(
     label: &str,
@@ -98,41 +97,41 @@ fn numbered_labeled_eucl_four_vector<'a>(
     DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
 }
 
-#[allow(dead_code)]
-fn benchmark_chain(
-    minkindices: &[i32],
-    vbar: [Complex64; 4],
-    u: [Complex64; 4],
-) -> DenseTensor<Complex64> {
-    let mut i = 0;
-    let mut contracting_index = 0;
-    let mut result = euclidean_four_vector(contracting_index, &vbar);
-    for m in minkindices {
-        if *m > 0 {
-            let p = [
-                Complex64::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
-            ];
-            i += 1;
-            let pslash = pslash((contracting_index, contracting_index + 1), &p);
-            result = pslash.contract(&result).unwrap();
-        } else {
-            result = gamma::<f64>(
-                usize::try_from(m.neg()).unwrap(),
-                (contracting_index, contracting_index + 1),
-            )
-            .contract(&result)
-            .unwrap();
-        }
-        contracting_index += 1;
-    }
-    result
-        .contract(&euclidean_four_vector(contracting_index, &u))
-        .unwrap()
-}
 // #[allow(dead_code)]
+// fn benchmark_chain(
+//     minkindices: &[i32],
+//     vbar: [Complex64; 4],
+//     u: [Complex64; 4],
+// ) -> DenseTensor<Complex64> {
+//     let mut i = 0;
+//     let mut contracting_index = 0;
+//     let mut result = euclidean_four_vector(contracting_index, &vbar);
+//     for m in minkindices {
+//         if *m > 0 {
+//             let p = [
+//                 Complex64::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
+//                 Complex64::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
+//                 Complex64::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
+//                 Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
+//             ];
+//             i += 1;
+//             let pslash = pslash((contracting_index, contracting_index + 1), &p);
+//             result = pslash.contract(&result).unwrap();
+//         } else {
+//             result = gamma::<f64>(
+//                 usize::try_from(m.neg()).unwrap(),
+//                 (contracting_index, contracting_index + 1),
+//             )
+//             .contract(&result)
+//             .unwrap();
+//         }
+//         contracting_index += 1;
+//     }
+//     result
+//         .contract(&euclidean_four_vector(contracting_index, &u))
+//         .unwrap()
+// }
+// // #[allow(dead_code)]
 // fn symbolic_chain_function<'a>(
 //     minkindices: &[i32],
 //     ws: &'a Workspace,
