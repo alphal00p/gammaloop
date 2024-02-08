@@ -92,7 +92,7 @@ fn indices(n: i32, m: i32) -> Vec<i32> {
 fn criterion_benchmark(c: &mut Criterion) {
     let mut state = State::new();
     let one = Complex64::new(1.0, 0.0);
-    let zero = Complex64::new(0.0, 0.0);
+    let _zero = Complex64::new(0.0, 0.0);
 
     let vbar = [one * 3.0, one * 3.1, one * 3.2, one * 3.3];
     let u = [one * 4.0, one * 4.1, one * 4.2, one * 4.3];

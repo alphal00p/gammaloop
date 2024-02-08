@@ -302,7 +302,7 @@ where
 
                     let stride = *final_structure
                         .strides()
-                        .get(i.checked_sub(1).unwrap_or(0))
+                        .get(i.saturating_sub(1))
                         .unwrap_or(&1);
 
                     for (skipped_a, nonzeros_a, fiber_a) in self_iter.by_ref() {
@@ -365,7 +365,7 @@ where
                             let mut value = Out::zero();
                             let mut nonzero = false;
 
-                            for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
+                            for (i, j, _x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
                                 nonzeros_b
                                     .binary_search(&self_iter.map[x])
                                     .ok()
@@ -434,7 +434,7 @@ where
 
                     let stride = *final_structure
                         .strides()
-                        .get(i.checked_sub(1).unwrap_or(0))
+                        .get(i.saturating_sub(1))
                         .unwrap_or(&1);
 
                     for fiber_a in self_iter.by_ref() {
@@ -475,7 +475,7 @@ where
                     };
                     let stride = *final_structure
                         .strides()
-                        .get(i.checked_sub(1).unwrap_or(0))
+                        .get(i.saturating_sub(1))
                         .unwrap_or(&one);
 
                     let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
@@ -727,8 +727,8 @@ where
             Dot::with_attr_getters(
                 &self.graph,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, e| { format!("label=\"{}\"", e.weight()).into() },
-                &|_, n| { format!("label=\"{}\"", n.1.structure()).into() }
+                &|_, e| { format!("label=\"{}\"", e.weight()) },
+                &|_, n| { format!("label=\"{}\"", n.1.structure()) }
             )
         )
         .into()
@@ -745,8 +745,8 @@ where
             Dot::with_attr_getters(
                 &self.graph,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, e| { format!("label=\"{}\"", e.weight()).into() },
-                &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)).into() }
+                &|_, e| { format!("label=\"{}\"", e.weight()) },
+                &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)) }
             )
         )
         .into()

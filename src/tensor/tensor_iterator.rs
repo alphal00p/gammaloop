@@ -1,17 +1,10 @@
-use std::{
-    collections::BTreeSet,
-    ops::{AddAssign, Neg, SubAssign},
-};
+use std::ops::{AddAssign, Neg, SubAssign};
 
 use super::*;
-use ahash::{AHashMap, AHashSet};
-use itertools::{Itertools, TupleWindows};
-use libc::useconds_t;
-use nalgebra::point;
+use ahash::AHashSet;
+
 use permutation::Permutation;
-use rayon::range;
-use serde::de::IntoDeserializer;
-use serde_yaml::mapping::Iter;
+
 use symbolica::state::{State, Workspace};
 pub struct TensorStructureIndexIterator<'a> {
     structure: &'a TensorStructure,
@@ -316,7 +309,7 @@ impl TensorSkeletonMultiFiberMetricIterator {
         let mut f = fiber_positions.iter();
         let mut reps = skeleton.reps();
         reps.retain(|_| !*f.next().unwrap());
-        let capacity = reps.iter().map(|r| usize::from(r)).product();
+        let capacity = reps.iter().map(usize::from).product();
         let indices = vec![0; reps.len()];
         // println!("Reps : {:?}", reps);
 
@@ -340,7 +333,7 @@ impl TensorSkeletonMultiFiberMetricIterator {
         let mut f = fiber_positions.iter();
         let mut reps = skeleton.reps();
         reps.retain(|_| *f.next().unwrap());
-        let capacity = reps.iter().map(|r| usize::from(r)).product();
+        let capacity = reps.iter().map(usize::from).product();
         let indices = vec![0; reps.len()];
         // println!("Reps : {:?}", reps);
         (
@@ -500,7 +493,7 @@ fn construct() {
 
     println!("{:?}", a.expanded_index(t.max));
 
-    let reps = a.reps();
+    let _reps = a.reps();
 
     // for f in tt {
     //     println!("{:?},{:?}", a.expanded_index(f.1), f.2);
@@ -815,7 +808,7 @@ impl<'a, T, N> Iterator for SparseTensorIterator<'a, T, N> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((k, v)) = self.iter.next() {
-            let indices = self.structure.expanded_index(*k as usize).unwrap();
+            let indices = self.structure.expanded_index(*k).unwrap();
             Some((indices, v))
         } else {
             None
@@ -1086,8 +1079,8 @@ impl<'a, T, I> SparseTensorFiberIterator<'a, T, I> {
         assert!(fiber_position < tensor.order(), "Invalid fiber index");
 
         let fiber_stride = tensor.strides()[fiber_position];
-        let left_stride = tensor.strides().get(fiber_position - 1).map(|x| *x);
-        let right_stride = tensor.strides().get(fiber_position + 1).map(|x| *x);
+        let left_stride = tensor.strides().get(fiber_position - 1).copied();
+        let right_stride = tensor.strides().get(fiber_position + 1).copied();
         let max = tensor.size() - fiber_stride * (tensor.shape()[fiber_position] - 1);
         let fiber_dimension = tensor.shape()[fiber_position];
 
@@ -1105,7 +1098,7 @@ impl<'a, T, I> SparseTensorFiberIterator<'a, T, I> {
 
     fn update_linear_start(&mut self) {
         match (self.left_stride, self.right_stride) {
-            (Some(l), Some(r)) => {
+            (Some(l), Some(_r)) => {
                 self.fiber_index += 1;
                 if self.fiber_index % self.fiber_stride == 0 {
                     self.fiber_index += l - self.fiber_stride;
@@ -1114,7 +1107,7 @@ impl<'a, T, I> SparseTensorFiberIterator<'a, T, I> {
             (Some(l), None) => {
                 self.fiber_index += l;
             }
-            (None, Some(r)) => {
+            (None, Some(_r)) => {
                 self.fiber_index += 1;
             }
             (None, None) => {
@@ -1546,102 +1539,11 @@ where
     }
 }
 
-pub struct DenseTensorFiberIterator<'a, T, I> {
-    tensor: &'a DenseTensor<T, I>,
-    fiber_stride: usize,
-    left_stride: Option<usize>,
-    right_stride: Option<usize>,
-    fiber_indices: Vec<usize>,
-    fixedindex: usize,
-    linear_start: usize,
-    current_fiber: usize,
-    total_fibers: usize,
-    max: usize,
-    done: bool,
-}
-
-impl<'a, T, I> DenseTensorFiberIterator<'a, T, I> {
-    fn new(tensor: &'a DenseTensor<T, I>, fixedindex: usize) -> Self {
-        assert!(fixedindex < tensor.order(), "Invalid fixedindex");
-
-        let fiber_length = tensor.shape()[fixedindex];
-        let total_fibers = tensor.size() / fiber_length;
-        let fiber_stride = tensor.strides()[fixedindex];
-        let left_stride = tensor.strides().get(fixedindex - 1).map(|x| *x);
-        let right_stride = tensor.strides().get(fixedindex + 1).map(|x| *x);
-        let max = tensor.size() - fiber_stride * (fiber_length - 1);
-
-        DenseTensorFiberIterator {
-            tensor,
-            fiber_stride,
-            left_stride,
-            right_stride,
-            fiber_indices: vec![0; tensor.order()],
-            fixedindex,
-            linear_start: 0,
-            current_fiber: 0,
-            total_fibers,
-            max,
-            done: 0 == max,
-        }
-    }
-
-    fn update_linear_start(&mut self) {
-        match (self.left_stride, self.right_stride) {
-            (Some(l), Some(r)) => {
-                self.linear_start += 1;
-                if self.linear_start % self.fiber_stride == 0 {
-                    self.linear_start += l - self.fiber_stride;
-                }
-            }
-            (Some(l), None) => {
-                self.linear_start += l;
-            }
-            (None, Some(r)) => {
-                self.linear_start += 1;
-            }
-            (None, None) => {
-                self.linear_start += 1;
-            }
-        }
-    }
-}
-
-impl<'a, T, I> Iterator for DenseTensorFiberIterator<'a, T, I> {
-    type Item = Vec<&'a T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        // Determine start index for the current fiber
-
-        let mut fiberdata = Vec::with_capacity(self.tensor.shape()[self.fixedindex]);
-
-        for i in 0..self.tensor.shape()[self.fixedindex] {
-            let linear_index = self.linear_start + i * self.fiber_stride;
-            fiberdata.push(self.tensor.get_linear(linear_index).unwrap());
-        }
-
-        self.update_linear_start();
-        self.done = self.linear_start >= self.max;
-
-        // Determine end index for the current fiber
-
-        Some(fiberdata)
-    }
-}
-
 impl<T, I> DenseTensor<T, I> {
     // ... [Other methods] ...
 
     pub fn iter(&self) -> DenseTensorIterator<T, I> {
         DenseTensorIterator::new(self)
-    }
-
-    pub fn iter_fibers(&self, fixedindex: usize) -> DenseTensorFiberIterator<T, I> {
-        DenseTensorFiberIterator::new(self, fixedindex)
     }
 
     pub fn iter_fiber(&self, fixedindex: usize) -> TensorFiberIterator<Self, I> {

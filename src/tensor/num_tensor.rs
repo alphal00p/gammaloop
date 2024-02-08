@@ -12,9 +12,6 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use nohash_hasher::BuildNoHashHasher;
-type NHIndexMap<K, V> = IndexMap<K, V, BuildNoHashHasher<K>>;
-use intmap::IntMap;
 #[derive(Debug, Clone)]
 pub struct SparseTensor<T, I = String> {
     pub elements: AHashMap<usize, T>,
@@ -85,7 +82,7 @@ impl<T, I> SparseTensor<T, I> {
     {
         let mut dense = DenseTensor::default(self.structure.clone());
         for (indices, value) in self.elements.iter() {
-            dense.set_flat(*indices as usize, value.clone());
+            dense.set_flat(*indices, value.clone());
         }
         dense
     }
@@ -317,11 +314,7 @@ where
     where
         U: for<'a> From<&'a T>,
     {
-        let elements = self
-            .elements
-            .iter()
-            .map(|(k, v)| (k.clone(), v.into()))
-            .collect();
+        let elements = self.elements.iter().map(|(k, v)| (*k, v.into())).collect();
         SparseTensor {
             elements,
             structure: self.structure.clone(),
@@ -384,7 +377,7 @@ where
     fn indices(&self) -> Vec<Vec<ConcreteIndex>> {
         self.elements
             .keys()
-            .map(|k| self.expanded_index(*k as usize).unwrap())
+            .map(|k| self.expanded_index(*k).unwrap())
             .collect()
     }
 
@@ -401,12 +394,7 @@ where
 
         for (k, v) in self.elements.iter() {
             hashmap.insert(
-                self.atomic_expanded_label_id(
-                    &self.expanded_index(*k as usize).unwrap(),
-                    id,
-                    state,
-                    ws,
-                ),
+                self.atomic_expanded_label_id(&self.expanded_index(*k).unwrap(), id, state, ws),
                 v.clone(),
             );
         }

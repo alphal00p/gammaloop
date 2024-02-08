@@ -313,7 +313,7 @@ fn gamma_net_param(
     TensorNetwork::new(result)
 }
 
-fn dump_c_with_func(levels: Vec<Vec<(Identifier, Vec<Atom>)>>) {}
+fn dump_c_with_func(_levels: Vec<Vec<(Identifier, Vec<Atom>)>>) {}
 
 // fn dump_c(levels: Vec<Vec<HashMap<Identifier, Vec<Atom>>>>) {}
 

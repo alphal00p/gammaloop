@@ -1,14 +1,14 @@
 use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use indexmap::IndexMap;
-use itertools::Itertools;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
+
+
+
 use std::fmt::Debug;
 use std::ops::Index;
 use std::ops::Range;
 
-use permutation::sort;
+
 use permutation::Permutation;
 
 use symbolica::representations::{AsAtomView, Atom, FunctionBuilder, Identifier};
@@ -212,7 +212,7 @@ impl<N> TensorSkeleton<N> {
             }
         }
 
-        if perm.len() > 0 {
+        if !perm.is_empty() {
             let p: Permutation = permutation::sort(&mut perm);
             Some((p, self_matches, other_matches))
         } else {

@@ -1,5 +1,5 @@
 use crate::tensor::{
-    Contract, DenseTensor, HasTensorData, HasTensorStructure, NumTensor,
+    Contract, DenseTensor, HasTensorData, HasTensorStructure,
     Representation::{self, Lorentz},
     SparseTensor,
 };
@@ -10,9 +10,6 @@ use symbolica::{
     representations::Atom,
     state::{State, Workspace},
 };
-
-use rustc_hash::FxHasher;
-type FxIndexMap<K, V> = IndexMap<K, V, FxHasher>;
 
 use super::{
     symbolic_tensor::SymbolicTensor, ufo_spin_tensors, NumTensors, TensorNetwork, TensorSkeleton,
@@ -274,9 +271,9 @@ fn contract_spensor() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let f = a.contract(&b).unwrap();
+    let _f = a.contract(&b).unwrap();
 
-    let result = IndexMap::from([(vec![0, 1], 2.0), (vec![1, 0], 2.0)]);
+    let _result = IndexMap::from([(vec![0, 1], 2.0), (vec![1, 0], 2.0)]);
 
     // assert_eq!(f.elements, result)
 }
@@ -293,9 +290,9 @@ fn sparse_addition() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let f = a + b;
+    let _f = a + b;
 
-    let result = IndexMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
+    let _result = IndexMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
 
     // assert_eq!(f.elements, result)
 }
@@ -313,9 +310,9 @@ fn sparse_sub() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let f = a - b;
+    let _f = a - b;
 
-    let result = IndexMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
+    let _result = IndexMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
     // assert_eq!(f.elements, result);
     // println!("{:?}", f);
 }

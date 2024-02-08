@@ -3,7 +3,7 @@ use super::{
     SparseTensor, TensorSkeleton,
 };
 use num::{Complex, Float, One, Zero};
-use smartstring::alias::String;
+
 
 use symbolica::{
     representations::{Atom, Identifier},

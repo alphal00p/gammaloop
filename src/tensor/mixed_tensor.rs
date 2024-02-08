@@ -406,7 +406,7 @@ where
 
                     let stride = *final_structure
                         .strides()
-                        .get(i.checked_sub(1).unwrap_or(0))
+                        .get(i.saturating_sub(1))
                         .unwrap_or(&1);
 
                     for (skipped_a, nonzeros_a, fiber_a) in self_iter.by_ref() {
@@ -562,7 +562,7 @@ where
 
                     let stride = *final_structure
                         .strides()
-                        .get(i.checked_sub(1).unwrap_or(0))
+                        .get(i.saturating_sub(1))
                         .unwrap_or(&1);
 
                     for fiber_a in self_iter.by_ref() {
@@ -611,7 +611,7 @@ where
                     };
                     let stride = *final_structure
                         .strides()
-                        .get(i.checked_sub(1).unwrap_or(0))
+                        .get(i.saturating_sub(1))
                         .unwrap_or(&one);
 
                     let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
