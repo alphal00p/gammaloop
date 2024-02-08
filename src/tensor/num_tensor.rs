@@ -1,5 +1,4 @@
 use super::{AbstractIndex, ConcreteIndex, Dimension, HasTensorStructure, TensorSkeleton};
-use crate::tensor::IntoId;
 use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
@@ -9,7 +8,7 @@ use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
 use symbolica::{
     representations::Atom,
-    representations::{Identifier, Num},
+    representations::Identifier,
     state::{State, Workspace},
 };
 

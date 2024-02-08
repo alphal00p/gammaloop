@@ -420,7 +420,6 @@ where
     type LCM = DenseTensor<Out, I>;
     fn contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
         // self is dense U, other is sparse T
-
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {

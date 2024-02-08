@@ -8,8 +8,7 @@ use _gammaloop::tensor::{
     NumTensors, TensorNetwork,
 };
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use libc::group;
+use criterion::{criterion_group, criterion_main, Criterion};
 use num::{complex::Complex64, ToPrimitive};
 use smartstring::alias::String;
 use symbolica::{representations::Identifier, state::State};

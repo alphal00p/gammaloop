@@ -4,13 +4,13 @@ use num::Complex;
 use smartstring::alias::String;
 use std::{
     collections::HashMap,
-    fmt::{format, Debug},
-    ops::{AddAssign, DivAssign, Mul, MulAssign, Neg, RemAssign, SubAssign},
+    fmt::Debug,
+    ops::{AddAssign, DivAssign, MulAssign, Neg, RemAssign, SubAssign},
     time::Instant,
 };
 
 use _gammaloop::tensor::{
-    mixed_tensor::{MixedTensor, MixedTensors},
+    mixed_tensor::MixedTensor,
     ufo_spin_tensors::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
@@ -314,7 +314,8 @@ fn gamma_net_param(
 }
 
 fn dump_c_with_func(levels: Vec<Vec<(Identifier, Vec<Atom>)>>) {}
-fn dump_c(levels: Vec<Vec<HashMap<Identifier, Vec<Atom>>>>) {}
+
+// fn dump_c(levels: Vec<Vec<HashMap<Identifier, Vec<Atom>>>>) {}
 
 // #[allow(dead_code)]
 // fn symbolic_chain_function<'a>(
