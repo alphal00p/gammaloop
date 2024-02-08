@@ -75,7 +75,7 @@ impl<'a> SymbolicTensorBuilder<'a> {
     // }
 
     pub fn contract(mut self, other: &SymbolicTensor) -> SymbolicTensorBuilder<'a> {
-        if let Some((i, j)) = self.structure().match_index(other.structure()) {
+        if let Some((_, i, j)) = self.structure().match_index(other.structure()) {
             self.structure = self.structure().merge_at(other.structure(), (i, j));
         } else {
             self.structure.merge(&other.structure().clone());

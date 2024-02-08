@@ -177,24 +177,28 @@ impl<N> TensorSkeleton<N> {
     }
 
     /// Given two TensorSkeletons, returns the index of the first matching slot in each external index list
-    pub fn match_index(&self, other: &Self) -> Option<(usize, usize)> {
+    pub fn match_index(&self, other: &Self) -> Option<(bool, usize, usize)> {
         let posmap =
             AHashMap::from_iter(self.external.iter().enumerate().map(|(i, slot)| (slot, i)));
 
+        let mut first_pair: Option<(usize, usize)> = None;
+
         for (j, slot) in other.external.iter().enumerate() {
             if let Some(&i) = posmap.get(slot) {
-                return Some((i, j));
+                if let Some((i, j)) = first_pair {
+                    // Found a second match, return early with false indicating non-unique match
+                    return Some((false, i, j));
+                }
+                first_pair = Some((i, j));
             }
         }
 
-        None
+        first_pair.map(|(i, j)| (true, i, j)) // Maps the found pair to Some with true indicating a unique match, or None if no match was found
     }
 
-    pub fn match_indices(&self, other: &Self) -> Option<(bool, Permutation, Vec<bool>, Vec<bool>)> {
+    pub fn match_indices(&self, other: &Self) -> Option<(Permutation, Vec<bool>, Vec<bool>)> {
         let mut self_matches = vec![false; self.order()];
         let mut perm = Vec::new();
-        let mut found_match = false;
-        let mut row = false;
         let mut other_matches = vec![false; other.order()];
 
         let posmap =
@@ -204,17 +208,13 @@ impl<N> TensorSkeleton<N> {
             if let Some(&i) = posmap.get(slot_other) {
                 self_matches[i] = true;
                 other_matches[j] = true;
-                if !found_match {
-                    row = i >= j;
-                }
-                found_match = true;
                 perm.push(i);
             }
         }
 
-        let p: Permutation = permutation::sort(&mut perm);
-        if found_match {
-            Some((row, p, self_matches, other_matches))
+        if perm.len() > 0 {
+            let p: Permutation = permutation::sort(&mut perm);
+            Some((p, self_matches, other_matches))
         } else {
             None
         }

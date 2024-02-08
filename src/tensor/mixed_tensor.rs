@@ -108,7 +108,7 @@ where
         state: &State,
         ws: &Workspace,
     ) -> Option<Self::LCM> {
-        if let Some((i, j)) = self.structure().match_index(other.structure()) {
+        if let Some((_, i, j)) = self.structure().match_index(other.structure()) {
             let dimension_of_contraction = self.shape()[i];
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
@@ -172,7 +172,7 @@ where
         state: &State,
         ws: &Workspace,
     ) -> Option<Self::LCM> {
-        if let Some((i, j)) = self.structure().match_index(other.structure()) {
+        if let Some((_, i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
             let metric = self.get_ith_metric(i).unwrap();
@@ -238,7 +238,7 @@ where
         state: &State,
         ws: &Workspace,
     ) -> Option<Self::LCM> {
-        if let Some((i, j)) = self.structure().match_index(other.structure()) {
+        if let Some((_, i, j)) = self.structure().match_index(other.structure()) {
             let final_structure = self.structure().merge_at(other.structure(), (i, j));
             let mut result_data = AHashMap::default();
             let metric = self.get_ith_metric(i).unwrap();
