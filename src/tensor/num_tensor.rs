@@ -1,6 +1,6 @@
 use super::{
     atomic_expanded_label_id, AbstractIndex, ConcreteIndex, Dimension, HasTensorSkeleton,
-    HasTensorStructure, Slot, TensorSkeleton, TensorStructure,
+    HasTensorStructure, TensorSkeleton, TensorStructure,
 };
 use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;

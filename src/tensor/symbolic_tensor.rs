@@ -1,5 +1,5 @@
 use super::{
-    Expr, HasTensorSkeleton, HasTensorStructure, MutTensorStructure, Slot, TensorSkeleton,
+    Expr, HasTensorSkeleton, HasTensorStructure, MutTensorStructure, TensorSkeleton,
     TensorStructure,
 };
 use smartstring::alias::String;

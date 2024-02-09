@@ -9,7 +9,7 @@ use symbolica::{
 };
 
 use super::{
-    DenseTensor, Expr, HasTensorSkeleton, HasTensorStructure, MutTensorStructure, NumTensor, Slot,
+    DenseTensor, Expr, HasTensorSkeleton, HasTensorStructure, MutTensorStructure, NumTensor,
     SparseTensor, SymbolicAdd, SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg,
     SymbolicSub, SymbolicSubAssign, SymbolicZero, TensorSkeleton, TensorStructure,
 };
