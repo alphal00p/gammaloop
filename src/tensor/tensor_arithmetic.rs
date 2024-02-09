@@ -1,6 +1,6 @@
 use crate::tensor::ConcreteIndex;
 
-use super::{DenseTensor, HasTensorStructure, SparseTensor};
+use super::{DenseTensor, HasTensorStructure, SparseTensor, TensorStructure};
 use num::traits::Num;
 use std::ops::{Add, Mul, Sub};
 
@@ -12,7 +12,7 @@ where
 {
     type Output = DenseTensor<T, I>;
     fn add(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
-        assert!(self.structure().same_content(other.structure()));
+        assert!(self.structure().same_external(other.structure()));
 
         let permutation = self
             .structure()
@@ -38,7 +38,7 @@ where
 {
     type Output = SparseTensor<T, I>;
     fn add(self, other: SparseTensor<T, I>) -> SparseTensor<T, I> {
-        assert!(self.structure().same_content(other.structure()));
+        assert!(self.structure().same_external(other.structure()));
         let permutation = self
             .structure()
             .find_permutation(other.structure())
@@ -67,7 +67,7 @@ where
 {
     type Output = DenseTensor<T, I>;
     fn add(self, other: SparseTensor<T, I>) -> DenseTensor<T, I> {
-        assert!(self.structure().same_content(other.structure()));
+        assert!(self.structure().same_external(other.structure()));
 
         let permutation = self
             .structure()
@@ -104,7 +104,7 @@ where
 {
     type Output = DenseTensor<T, I>;
     fn sub(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
-        assert!(self.structure().same_content(other.structure()));
+        assert!(self.structure().same_external(other.structure()));
         let permutation = self
             .structure()
             .find_permutation(other.structure())
@@ -129,7 +129,7 @@ where
 {
     type Output = SparseTensor<T, I>;
     fn sub(self, other: SparseTensor<T, I>) -> SparseTensor<T, I> {
-        assert!(self.structure().same_content(other.structure()));
+        assert!(self.structure().same_external(other.structure()));
         let permutation = self
             .structure()
             .find_permutation(other.structure())
@@ -158,7 +158,7 @@ where
 {
     type Output = DenseTensor<T, I>;
     fn sub(self, other: SparseTensor<T, I>) -> DenseTensor<T, I> {
-        assert!(self.structure().same_content(other.structure()));
+        assert!(self.structure().same_external(other.structure()));
         let permutation = self
             .structure()
             .find_permutation(other.structure())

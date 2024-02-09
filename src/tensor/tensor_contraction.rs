@@ -31,7 +31,7 @@ where
     pub fn internal_contract(&self) -> Self {
         let mut result: DenseTensor<T, I> = self.clone();
         for trace in self.traces() {
-            let mut new_structure = self.structure().clone();
+            let mut new_structure = self.skeleton().clone();
             new_structure.trace(trace[0], trace[1]);
 
             let mut new_result = DenseTensor::from_data_coerced(&self.data, new_structure).unwrap();
@@ -58,7 +58,7 @@ where
         let trace = self.traces()[0];
 
         // println!("trace {:?}", trace);
-        let mut new_structure = self.structure().clone();
+        let mut new_structure = self.skeleton().clone();
         new_structure.trace(trace[0], trace[1]);
 
         let mut new_result = SparseTensor::empty(new_structure);
@@ -99,7 +99,7 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
                     let mut result_data = vec![Out::zero(); final_structure.size()];
                     let mut result_index = 0;
 
@@ -133,8 +133,8 @@ where
                     let (permutation, self_matches, other_matches) =
                         self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut final_structure = self.structure().clone();
-                    final_structure.merge(other.structure());
+                    let mut final_structure = self.skeleton().clone();
+                    final_structure.merge(other.skeleton());
 
                     // Initialize result tensor with default values
                     let mut result_data = vec![Out::zero(); final_structure.size()];
@@ -192,7 +192,7 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
                     let mut result_data = vec![Out::zero(); final_structure.size()];
                     let mut result_index = 0;
 
@@ -227,8 +227,8 @@ where
                     let (permutation, self_matches, other_matches) =
                         self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut final_structure = self.structure().clone();
-                    final_structure.merge(other.structure());
+                    let mut final_structure = self.skeleton().clone();
+                    final_structure.merge(other.skeleton());
 
                     let mut result_data = vec![Out::zero(); final_structure.size()];
                     let mut result_index = 0;
@@ -291,7 +291,7 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
                     let mut result_data = AHashMap::default();
                     let mut result_index = 0;
 
@@ -341,8 +341,8 @@ where
                     let (permutation, self_matches, other_matches) =
                         self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut final_structure = self.structure().clone();
-                    final_structure.merge(other.structure());
+                    let mut final_structure = self.skeleton().clone();
+                    final_structure.merge(other.skeleton());
                     let mut result_data = AHashMap::default();
                     let one = if let Some(o) = final_structure.strides().first() {
                         *o
@@ -423,7 +423,7 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
                     let mut result_data = vec![Out::zero(); final_structure.size()];
                     let mut result_index = 0;
 
@@ -462,8 +462,8 @@ where
                     let (permutation, self_matches, other_matches) =
                         self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut final_structure = self.structure().clone();
-                    final_structure.merge(other.structure());
+                    let mut final_structure = self.skeleton().clone();
+                    final_structure.merge(other.skeleton());
 
                     let mut result_data = vec![Out::zero(); final_structure.size()];
                     let mut result_index = 0;
@@ -613,7 +613,7 @@ where
 }
 impl<T> TensorNetwork<T>
 where
-    T: HasTensorStructure,
+    T: HasTensorSkeleton,
 {
     pub fn new(tensors: Vec<T>) -> Self {
         TensorNetwork {
@@ -633,7 +633,7 @@ where
                 let a = graph.node_weight(n).unwrap();
                 let b = graph.node_weight(m).unwrap();
 
-                if let Some((_, i, _)) = a.structure().match_index(b.structure()) {
+                if let Some((_, i, _)) = a.match_index(b) {
                     graph.add_edge(n, m, a.structure()[i]);
                 }
             }
@@ -719,7 +719,7 @@ where
 
 impl<T> TensorNetwork<T>
 where
-    T: Debug + HasTensorStructure<Name = String>,
+    T: Debug + HasTensorSkeleton<Name = String>,
 {
     pub fn dot(&self) -> String {
         format!(
@@ -728,7 +728,7 @@ where
                 &self.graph,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
                 &|_, e| { format!("label=\"{}\"", e.weight()) },
-                &|_, n| { format!("label=\"{}\"", n.1.structure()) }
+                &|_, n| { format!("label=\"{}\"", n.1.skeleton()) }
             )
         )
         .into()
@@ -737,7 +737,7 @@ where
 
 impl<T> TensorNetwork<T>
 where
-    T: Debug + HasTensorStructure<Name = Identifier>,
+    T: Debug + HasTensorSkeleton<Name = Identifier>,
 {
     pub fn dotsym(&self, state: &State) -> String {
         format!(
@@ -746,7 +746,7 @@ where
                 &self.graph,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
                 &|_, e| { format!("label=\"{}\"", e.weight()) },
-                &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)) }
+                &|_, n| { format!("label=\"{}\"", n.1.skeleton().to_string(state)) }
             )
         )
         .into()
@@ -755,7 +755,7 @@ where
 
 impl<T> TensorNetwork<T>
 where
-    T: HasTensorStructure<Name = Identifier> + Clone,
+    T: HasTensorSkeleton<Name = Identifier> + Clone,
 {
     pub fn symbolic_shadow(
         &mut self,
@@ -767,7 +767,7 @@ where
             self.graph
                 .node_weight_mut(n)
                 .unwrap()
-                .mut_structure()
+                .mut_skeleton()
                 .set_global_name(
                     state
                         .get_or_insert_fn(format!("{}{}", name, n.index()), None)
@@ -777,7 +777,7 @@ where
         let g: Graph<MixedTensors, Slot, Undirected> = Graph::map(
             &self.graph,
             |_, nw| {
-                MixedTensor::<Identifier>::from(nw.structure().clone().to_dense(state, ws).unwrap())
+                MixedTensor::<Identifier>::from(nw.skeleton().clone().to_dense(state, ws).unwrap())
             },
             |_, &w| w,
         );
@@ -787,14 +787,14 @@ where
 
 impl<T> TensorNetwork<T>
 where
-    T: HasTensorStructure<Name = String>,
+    T: HasTensorSkeleton<Name = String>,
 {
     pub fn name(&mut self, name: T::Name) {
         self.graph.node_indices().for_each(|n| {
             self.graph
                 .node_weight_mut(n)
                 .unwrap()
-                .mut_structure()
+                .mut_skeleton()
                 .set_global_name(format!("{}{}", name, n.index()).into());
         });
     }
@@ -802,14 +802,14 @@ where
 
 impl<T> TensorNetwork<T>
 where
-    T: HasTensorStructure<Name = Identifier>,
+    T: HasTensorSkeleton<Name = Identifier>,
 {
     pub fn namesym(&mut self, name: &str, state: &mut State) {
         self.graph.node_indices().for_each(|n| {
             self.graph
                 .node_weight_mut(n)
                 .unwrap()
-                .mut_structure()
+                .mut_skeleton()
                 .set_global_name(
                     state
                         .get_or_insert_fn(format!("{}{}", name, n.index()), None)
@@ -822,7 +822,7 @@ where
 impl<T> TensorNetwork<T>
 where
     T: Contract<T, LCM = T>,
-    T: HasTensorStructure,
+    T: HasTensorSkeleton,
 {
     fn contract_edge(&mut self, edge_idx: EdgeIndex) {
         let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();
@@ -844,7 +844,7 @@ where
 
 impl<T> TensorNetwork<T>
 where
-    T: HasTensorStructure + SymbolicContract<T, LCM = T> + Debug,
+    T: HasTensorSkeleton + SymbolicContract<T, LCM = T> + Debug,
 {
     fn contract_edge_sym(&mut self, edge_idx: EdgeIndex, state: &State, ws: &Workspace) {
         let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();

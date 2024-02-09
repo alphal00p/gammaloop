@@ -1,7 +1,7 @@
 use crate::tensor::{
     Contract, DenseTensor, HasTensorData, HasTensorStructure,
     Representation::{self, Lorentz},
-    SparseTensor,
+    SparseTensor, TensorStructure,
 };
 use indexmap::IndexMap;
 use num::Complex;

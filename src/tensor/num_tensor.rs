@@ -1,4 +1,7 @@
-use super::{AbstractIndex, ConcreteIndex, Dimension, HasTensorStructure, TensorSkeleton};
+use super::{
+    atomic_expanded_label_id, AbstractIndex, ConcreteIndex, Dimension, HasTensorSkeleton,
+    HasTensorStructure, Slot, TensorSkeleton, TensorStructure,
+};
 use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
@@ -18,13 +21,13 @@ pub struct SparseTensor<T, I = String> {
     pub structure: TensorSkeleton<I>,
 }
 
-impl<T, I> HasTensorStructure for SparseTensor<T, I> {
+impl<T, I> HasTensorSkeleton for SparseTensor<T, I> {
     type Name = I;
-    fn structure(&self) -> &TensorSkeleton<I> {
+    fn skeleton(&self) -> &TensorSkeleton<I> {
         &self.structure
     }
 
-    fn mut_structure(&mut self) -> &mut TensorSkeleton<I> {
+    fn mut_skeleton(&mut self) -> &mut TensorSkeleton<I> {
         &mut self.structure
     }
 }
@@ -173,12 +176,12 @@ pub struct DenseTensor<T, I = String> {
     pub structure: TensorSkeleton<I>,
 }
 
-impl<T, I> HasTensorStructure for DenseTensor<T, I> {
+impl<T, I> HasTensorSkeleton for DenseTensor<T, I> {
     type Name = I;
-    fn structure(&self) -> &TensorSkeleton<I> {
+    fn skeleton(&self) -> &TensorSkeleton<I> {
         &self.structure
     }
-    fn mut_structure(&mut self) -> &mut TensorSkeleton<I> {
+    fn mut_skeleton(&mut self) -> &mut TensorSkeleton<I> {
         &mut self.structure
     }
 }
@@ -360,7 +363,7 @@ where
         let mut hashmap = HashMap::new();
 
         for (k, v) in self.iter() {
-            hashmap.insert(self.atomic_expanded_label_id(&k, id, state, ws), v.clone());
+            hashmap.insert(atomic_expanded_label_id(&k, id, state, ws), v.clone());
         }
         hashmap
     }
@@ -394,7 +397,7 @@ where
 
         for (k, v) in self.elements.iter() {
             hashmap.insert(
-                self.atomic_expanded_label_id(&self.expanded_index(*k).unwrap(), id, state, ws),
+                atomic_expanded_label_id(&self.expanded_index(*k).unwrap(), id, state, ws),
                 v.clone(),
             );
         }
@@ -408,22 +411,22 @@ pub enum NumTensor<U, T> {
     Sparse(SparseTensor<U, T>),
 }
 
-impl<T, I> HasTensorStructure for NumTensor<T, I>
+impl<T, I> HasTensorSkeleton for NumTensor<T, I>
 where
     I: Clone,
 {
     type Name = I;
-    fn structure(&self) -> &TensorSkeleton<I> {
+    fn skeleton(&self) -> &TensorSkeleton<I> {
         match self {
-            NumTensor::Dense(d) => d.structure(),
-            NumTensor::Sparse(s) => s.structure(),
+            NumTensor::Dense(d) => d.skeleton(),
+            NumTensor::Sparse(s) => s.skeleton(),
         }
     }
 
-    fn mut_structure(&mut self) -> &mut TensorSkeleton<I> {
+    fn mut_skeleton(&mut self) -> &mut TensorSkeleton<I> {
         match self {
-            NumTensor::Dense(d) => d.mut_structure(),
-            NumTensor::Sparse(s) => s.mut_structure(),
+            NumTensor::Dense(d) => d.mut_skeleton(),
+            NumTensor::Sparse(s) => s.mut_skeleton(),
         }
     }
 }
@@ -468,22 +471,22 @@ pub enum NumTensors<T = String> {
     Complex(NumTensor<Complex<f64>, T>),
 }
 
-impl<T> HasTensorStructure for NumTensors<T>
+impl<T> HasTensorSkeleton for NumTensors<T>
 where
     T: Clone,
 {
     type Name = T;
-    fn structure(&self) -> &TensorSkeleton<T> {
+    fn skeleton(&self) -> &TensorSkeleton<T> {
         match self {
-            NumTensors::Float(f) => f.structure(),
-            NumTensors::Complex(c) => c.structure(),
+            NumTensors::Float(f) => f.skeleton(),
+            NumTensors::Complex(c) => c.skeleton(),
         }
     }
 
-    fn mut_structure(&mut self) -> &mut TensorSkeleton<T> {
+    fn mut_skeleton(&mut self) -> &mut TensorSkeleton<T> {
         match self {
-            NumTensors::Float(f) => f.mut_structure(),
-            NumTensors::Complex(c) => c.mut_structure(),
+            NumTensors::Float(f) => f.mut_skeleton(),
+            NumTensors::Complex(c) => c.mut_skeleton(),
         }
     }
 }
@@ -511,29 +514,3 @@ impl<T> From<SparseTensor<Complex<f64>, T>> for NumTensors<T> {
         NumTensors::Complex(NumTensor::Sparse(other))
     }
 }
-
-// trait UpcastableTo<T> {}
-
-// impl UpcastableTo<Complex<f64>> for f64 {}
-
-// impl<T> NumTensor<T> {
-//     pub fn contract<U>(&self, other: &NumTensor<U>) -> Option<Self>
-//     where
-//         U: UpcastableTo<T>,
-//     {
-//         match (self, other) {
-//             (NumTensor::Dense(s), NumTensor::Dense(o)) => {
-//                 s.contract_with_dense(o).map(NumTensor::Dense)
-//             }
-//             (NumTensor::Dense(s), NumTensor::Sparse(o)) => {
-//                 s.contract_with_sparse(o).map(NumTensor::Dense)
-//             }
-//             (NumTensor::Sparse(s), NumTensor::Dense(o)) => {
-//                 s.contract_with_dense(o).map(NumTensor::Dense)
-//             }
-//             (NumTensor::Sparse(s), NumTensor::Sparse(o)) => {
-//                 s.contract_with_sparse(o).map(NumTensor::Sparse)
-//             }
-//         }
-//     }
-// }

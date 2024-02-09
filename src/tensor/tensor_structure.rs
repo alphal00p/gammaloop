@@ -2,12 +2,9 @@ use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use indexmap::IndexMap;
 
-
-
 use std::fmt::Debug;
 use std::ops::Index;
 use std::ops::Range;
-
 
 use permutation::Permutation;
 
@@ -160,30 +157,29 @@ impl std::fmt::Display for Slot {
     }
 }
 
-pub type TensorStructure = Vec<Slot>;
 #[derive(Clone, PartialEq, Debug)]
 pub struct TensorSkeleton<N> {
-    internal: TensorStructure,
-    pub external: TensorStructure,
-    pub names: HashMap<Range<usize>, N>, //ideally this is a named partion.. maybe a btreemap<usize, N>, and the range is from previous to next
+    internal: Vec<Slot>,
+    pub external: Vec<Slot>,
+    pub names: AHashMap<Range<usize>, N>, //ideally this is a named partion.. maybe a btreemap<usize, N>, and the range is from previous to next
     pub global_name: Option<N>,
 }
 
-impl<N> TensorSkeleton<N> {
-    /// Since each time we contract, we merge the name maps, the amount of contractions, is the size of the name map
-    /// This function returns the number of contractions thus computed
-    pub fn contractions_num(&self) -> usize {
-        self.names.len()
-    }
+pub trait TensorStructure {
+    fn external_structure(&self) -> &[Slot];
 
-    /// Given two TensorSkeletons, returns the index of the first matching slot in each external index list
-    pub fn match_index(&self, other: &Self) -> Option<(bool, usize, usize)> {
-        let posmap =
-            AHashMap::from_iter(self.external.iter().enumerate().map(|(i, slot)| (slot, i)));
+    /// Given two TensorStructures, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match
+    fn match_index(&self, other: &Self) -> Option<(bool, usize, usize)> {
+        let posmap = AHashMap::from_iter(
+            self.external_structure()
+                .iter()
+                .enumerate()
+                .map(|(i, slot)| (slot, i)),
+        );
 
         let mut first_pair: Option<(usize, usize)> = None;
 
-        for (j, slot) in other.external.iter().enumerate() {
+        for (j, slot) in other.external_structure().iter().enumerate() {
             if let Some(&i) = posmap.get(slot) {
                 if let Some((i, j)) = first_pair {
                     // Found a second match, return early with false indicating non-unique match
@@ -196,15 +192,20 @@ impl<N> TensorSkeleton<N> {
         first_pair.map(|(i, j)| (true, i, j)) // Maps the found pair to Some with true indicating a unique match, or None if no match was found
     }
 
-    pub fn match_indices(&self, other: &Self) -> Option<(Permutation, Vec<bool>, Vec<bool>)> {
+    /// Given two TensorStructures, returns the index of the first matching slot in each external index list
+    fn match_indices(&self, other: &Self) -> Option<(Permutation, Vec<bool>, Vec<bool>)> {
         let mut self_matches = vec![false; self.order()];
         let mut perm = Vec::new();
         let mut other_matches = vec![false; other.order()];
 
-        let posmap =
-            AHashMap::from_iter(self.external.iter().enumerate().map(|(i, slot)| (slot, i)));
+        let posmap = AHashMap::from_iter(
+            self.external_structure()
+                .iter()
+                .enumerate()
+                .map(|(i, slot)| (slot, i)),
+        );
 
-        for (j, slot_other) in other.external.iter().enumerate() {
+        for (j, slot_other) in other.external_structure().iter().enumerate() {
             if let Some(&i) = posmap.get(slot_other) {
                 self_matches[i] = true;
                 other_matches[j] = true;
@@ -219,13 +220,12 @@ impl<N> TensorSkeleton<N> {
             None
         }
     }
-
     /// Identify the repeated slots in the external index list
     fn traces(&self) -> Vec<[usize; 2]> {
         let mut positions = HashMap::new();
 
         // Track the positions of each element
-        for (index, &value) in self.external.iter().enumerate() {
+        for (index, &value) in self.external_structure().iter().enumerate() {
             positions.entry(value).or_insert_with(Vec::new).push(index);
         }
 
@@ -243,15 +243,15 @@ impl<N> TensorSkeleton<N> {
     }
 
     /// yields the (outwards facing) shape of the tensor as a list of dimensions
-    pub fn shape(&self) -> Vec<Dimension> {
-        self.external
+    fn shape(&self) -> Vec<Dimension> {
+        self.external_structure()
             .iter()
             .map(|slot| &slot.representation)
             .collect()
     }
 
-    pub fn reps(&self) -> Vec<Representation> {
-        self.external
+    fn reps(&self) -> Vec<Representation> {
+        self.external_structure()
             .iter()
             .map(|slot| slot.representation)
             .collect()
@@ -259,40 +259,32 @@ impl<N> TensorSkeleton<N> {
 
     /// yields the order/total valence of the tensor, i.e. the number of indices
     /// (or misnamed : rank)
-    pub fn order(&self) -> usize {
+    fn order(&self) -> usize {
         //total valence (or misnamed : rank)
-        self.external.len()
+        self.external_structure().len()
     }
 
     /// checks if externally, the two tensors are the same
-    pub fn same_external(&self, other: &Self) -> bool {
-        let set1: HashSet<_> = self.external.iter().collect();
-        let set2: HashSet<_> = other.external.iter().collect();
+    fn same_external(&self, other: &Self) -> bool {
+        let set1: HashSet<_> = self.external_structure().iter().collect();
+        let set2: HashSet<_> = other.external_structure().iter().collect();
         set1 == set2
-    }
-
-    /// checks if internally, the two tensors are the same. This implies that the external indices are the same
-    pub fn same_content(&self, other: &Self) -> bool {
-        let set1: HashSet<_> = self.internal.iter().collect();
-        let set2: HashSet<_> = other.internal.iter().collect();
-        set1 == set2
-        // TODO: check names
     }
 
     /// find the permutation of the external indices that would make the two tensors the same
-    pub fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>> {
-        if self.external.len() != other.external.len() {
+    fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>> {
+        if self.external_structure().len() != other.external_structure().len() {
             return None;
         }
 
         let mut index_map = HashMap::new();
-        for (i, item) in other.external.iter().enumerate() {
+        for (i, item) in other.external_structure().iter().enumerate() {
             index_map.entry(item).or_insert_with(Vec::new).push(i);
         }
 
-        let mut permutation = Vec::with_capacity(self.external.len());
+        let mut permutation = Vec::with_capacity(self.external_structure().len());
         let mut used_indices = HashSet::new();
-        for item in self.external.iter() {
+        for item in self.external_structure().iter() {
             if let Some(indices) = index_map.get_mut(item) {
                 // Find an index that hasn't been used yet
                 if let Some(&index) = indices.iter().find(|&&i| !used_indices.contains(&i)) {
@@ -312,7 +304,7 @@ impl<N> TensorSkeleton<N> {
     }
 
     /// yields the strides of the tensor in column major order
-    pub fn strides_column_major(&self) -> Vec<usize> {
+    fn strides_column_major(&self) -> Vec<usize> {
         let mut strides: Vec<usize> = vec![1; self.order()];
 
         if self.order() == 0 {
@@ -320,39 +312,40 @@ impl<N> TensorSkeleton<N> {
         }
 
         for i in 0..self.order() - 1 {
-            strides[i + 1] = strides[i] * usize::from(self.external[i].representation);
+            strides[i + 1] = strides[i] * usize::from(self.external_structure()[i].representation);
         }
 
         strides
     }
 
     /// yields the strides of the tensor in row major order
-    pub fn strides_row_major(&self) -> Vec<usize> {
+    fn strides_row_major(&self) -> Vec<usize> {
         let mut strides = vec![1; self.order()];
         if self.order() == 0 {
             return strides;
         }
 
         for i in (0..self.order() - 1).rev() {
-            strides[i] = strides[i + 1] * usize::from(self.external[i + 1].representation);
+            strides[i] =
+                strides[i + 1] * usize::from(self.external_structure()[i + 1].representation);
         }
 
         strides
     }
 
     /// By default, the strides are row major
-    pub fn strides(&self) -> Vec<usize> {
+    fn strides(&self) -> Vec<usize> {
         self.strides_row_major()
     }
 
     /// Verifies that the list of indices provided are valid for the tensor
-    pub fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String> {
+    fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String> {
         if indices.len() != self.order() {
             return Err("Mismatched order".into());
         }
 
         for (i, &dim_len) in self
-            .external
+            .external_structure()
             .iter()
             .map(|slot| &slot.representation)
             .enumerate()
@@ -371,7 +364,7 @@ impl<N> TensorSkeleton<N> {
     }
 
     /// yields the flat index of the tensor given a list of indices
-    pub fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String> {
+    fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String> {
         let strides = self.strides();
         self.verify_indices(indices)?;
 
@@ -383,7 +376,7 @@ impl<N> TensorSkeleton<N> {
     }
 
     /// yields the expanded index of the tensor given a flat index
-    pub fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String> {
+    fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String> {
         let mut indices = vec![];
         let mut index = flat_index;
         for &stride in self.strides().iter() {
@@ -397,24 +390,245 @@ impl<N> TensorSkeleton<N> {
         }
     }
 
-    /// yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor
-    pub fn size(&self) -> usize {
-        self.shape().iter().product()
-    }
-
     /// yields an iterator over the indices of the tensor
-    pub fn index_iter(&self) -> TensorStructureIndexIterator {
-        TensorStructureIndexIterator::new(&self.external)
+    fn index_iter(&self) -> TensorStructureIndexIterator {
+        TensorStructureIndexIterator::new(self.external_structure())
     }
 
     /// if the tensor has no (external) indices, it is a scalar
-    pub fn is_scalar(&self) -> bool {
+    fn is_scalar(&self) -> bool {
         self.order() == 0
     }
 
     /// get the metric along the i-th index
-    pub fn get_ith_metric(&self, i: usize) -> Option<Vec<bool>> {
-        Some(self.external.get(i)?.representation.negative())
+    fn get_ith_metric(&self, i: usize) -> Option<Vec<bool>> {
+        Some(self.external_structure().get(i)?.representation.negative())
+    }
+
+    /// yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor
+    fn size(&self) -> usize {
+        self.shape().iter().product()
+    }
+}
+
+pub fn atomic_expanded_label<I: IntoId>(
+    indices: &[ConcreteIndex],
+    name: I,
+    state: &mut State,
+    ws: &Workspace,
+) -> Atom {
+    let id = name.into_id(state);
+    atomic_expanded_label_id(indices, id, state, ws)
+}
+
+pub fn atomic_flat_label<I: IntoId>(
+    index: usize,
+    name: I,
+    state: &mut State,
+    ws: &Workspace,
+) -> Atom {
+    let id = name.into_id(state);
+    atomic_flat_label_id(index, id, state, ws)
+}
+
+pub fn atomic_flat_label_id(
+    index: usize,
+    id: Identifier,
+    state: &mut State,
+    ws: &Workspace,
+) -> Atom {
+    let mut value_builder = FunctionBuilder::new(id, state, ws);
+    value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
+    value_builder.finish().into_atom()
+}
+
+pub fn atomic_expanded_label_id(
+    indices: &[ConcreteIndex],
+    id: Identifier,
+    state: &mut State,
+    ws: &Workspace,
+) -> Atom {
+    let mut value_builder = FunctionBuilder::new(id, state, ws);
+    for &index in indices {
+        value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
+    }
+    value_builder.finish().into_atom()
+}
+
+impl TensorStructure for [Slot] {
+    fn external_structure(&self) -> &[Slot] {
+        self
+    }
+}
+
+impl<'a> TensorStructure for &'a [Slot] {
+    fn external_structure(&self) -> &[Slot] {
+        self
+    }
+}
+
+impl TensorStructure for Vec<Slot> {
+    fn external_structure(&self) -> &[Slot] {
+        self
+    }
+}
+pub trait MutTensorStructure {
+    fn trace(&mut self, i: usize, j: usize);
+
+    fn trace_out(&mut self);
+
+    fn merge(&mut self, other: &Self);
+
+    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self;
+}
+
+impl MutTensorStructure for Vec<Slot> {
+    fn trace(&mut self, i: usize, j: usize) {
+        if i < j {
+            self.trace(j, i);
+            return;
+        }
+        let a = self.remove(i);
+        let b = self.remove(j);
+        assert_eq!(a, b);
+    }
+
+    fn trace_out(&mut self) {
+        let mut positions = IndexMap::new();
+
+        // Track the positions of each element
+        for (index, &value) in self.iter().enumerate() {
+            positions.entry(value).or_insert_with(Vec::new).push(index);
+        }
+        // Collect only the positions of non- repeated elements
+
+        *self = positions
+            .into_iter()
+            .filter_map(|(value, indices)| {
+                if indices.len() == 1 {
+                    Some(value)
+                } else {
+                    None
+                }
+            })
+            .collect();
+    }
+
+    fn merge(&mut self, other: &Self) {
+        self.append(&mut other.clone());
+        self.trace_out();
+    }
+
+    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
+        let mut slots_b = other.clone();
+        let mut slots_a = self.clone();
+
+        slots_a.remove(positions.0);
+        slots_b.remove(positions.1);
+
+        slots_a.append(&mut slots_b);
+        slots_a
+    }
+}
+
+impl<N> TensorStructure for TensorSkeleton<N> {
+    fn external_structure(&self) -> &[Slot] {
+        &self.external
+    }
+}
+
+impl<N> MutTensorStructure for TensorSkeleton<N>
+where
+    N: Clone,
+{
+    /// remove the repeated indices in the external index list
+    fn trace_out(&mut self) {
+        let mut positions = IndexMap::new();
+
+        // Track the positions of each element
+        for (index, &value) in self.external.iter().enumerate() {
+            positions.entry(value).or_insert_with(Vec::new).push(index);
+        }
+        // Collect only the positions of non- repeated elements
+
+        self.external = positions
+            .into_iter()
+            .filter_map(|(value, indices)| {
+                if indices.len() == 1 {
+                    Some(value)
+                } else {
+                    None
+                }
+            })
+            .collect();
+    }
+
+    /// remove the given indices from the external index list
+    fn trace(&mut self, i: usize, j: usize) {
+        if i < j {
+            self.trace(j, i);
+            return;
+        }
+        let a = self.external.remove(i);
+        let b = self.external.remove(j);
+        assert_eq!(a, b);
+    }
+
+    /// essentially contract.
+    fn merge(&mut self, other: &Self) {
+        let shift = self.internal.len();
+        for (range, name) in other.names.iter() {
+            self.names
+                .insert((range.start + shift)..(range.end + shift), name.clone());
+        }
+        self.external.append(&mut other.external.clone());
+        self.trace_out();
+        self.independentize_internal(other);
+        self.internal.append(&mut other.internal.clone());
+    }
+
+    /// Merge two TensorSkeletons at the given positions of the external index list. Ideally the internal index list should be independentized before merging
+    /// This is essentially a contraction of only one index. The name maps are merged, and shifted accordingly. The global name is lost, since the resulting tensor is composite
+    /// The global name can be set again with the set_global_name function
+    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
+        let mut slots_b = other.external.clone();
+        let mut slots_a = self.external.clone();
+
+        slots_a.remove(positions.0);
+        slots_b.remove(positions.1);
+
+        let mut slots_a_int = self.internal.clone();
+        let mut slots_b_int = other.internal.clone();
+        slots_a_int.append(&mut slots_b_int);
+
+        let mut names = self.names.clone();
+        let shift = self.internal.len();
+        for (range, name) in other.names.iter() {
+            names.insert((range.start + shift)..(range.end + shift), name.clone());
+        }
+        slots_a.append(&mut slots_b);
+        TensorSkeleton {
+            internal: slots_a_int,
+            external: slots_a,
+            names,
+            global_name: None,
+        }
+    }
+}
+
+impl<N> TensorSkeleton<N> {
+    /// Since each time we contract, we merge the name maps, the amount of contractions, is the size of the name map
+    /// This function returns the number of contractions thus computed
+    pub fn contractions_num(&self) -> usize {
+        self.names.len()
+    }
+
+    /// checks if internally, the two tensors are the same. This implies that the external indices are the same
+    pub fn same_content(&self, other: &Self) -> bool {
+        let set1: HashSet<_> = self.internal.iter().collect();
+        let set2: HashSet<_> = other.internal.iter().collect();
+        set1 == set2
+        // TODO: check names
     }
 
     /// make the indices in the internal index list of self independent from the indices in the internal index list of other
@@ -444,39 +658,6 @@ impl<N> TensorSkeleton<N> {
         }
     }
 
-    /// remove the repeated indices in the external index list
-    fn trace_out(&mut self) {
-        let mut positions = IndexMap::new();
-
-        // Track the positions of each element
-        for (index, &value) in self.external.iter().enumerate() {
-            positions.entry(value).or_insert_with(Vec::new).push(index);
-        }
-        // Collect only the positions of non- repeated elements
-
-        self.external = positions
-            .into_iter()
-            .filter_map(|(value, indices)| {
-                if indices.len() == 1 {
-                    Some(value)
-                } else {
-                    None
-                }
-            })
-            .collect();
-    }
-
-    /// remove the given indices from the external index list
-    pub fn trace(&mut self, i: usize, j: usize) {
-        if i < j {
-            self.trace(j, i);
-            return;
-        }
-        let a = self.external.remove(i);
-        let b = self.external.remove(j);
-        assert_eq!(a, b);
-    }
-
     /// If the tensor has internal structure, some contraction or trace has been performed. It is then a composite tensor, and the outwards facing indices are not the same as the internal indices
     pub fn is_composite(&self) -> bool {
         self.internal.len() != self.external.len()
@@ -490,54 +671,6 @@ impl<N> TensorSkeleton<N> {
     /// set the global name of the tensor
     pub fn set_global_name(&mut self, name: N) {
         self.global_name = Some(name);
-    }
-
-    pub fn atomic_expanded_label<I: IntoId>(
-        &self,
-        indices: &[ConcreteIndex],
-        name: I,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Atom {
-        let id = name.into_id(state);
-        self.atomic_expanded_label_id(indices, id, state, ws)
-    }
-
-    pub fn atomic_flat_label<I: IntoId>(
-        &self,
-        index: usize,
-        name: I,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Atom {
-        let id = name.into_id(state);
-        self.atomic_flat_label_id(index, id, state, ws)
-    }
-
-    pub fn atomic_flat_label_id(
-        &self,
-        index: usize,
-        id: Identifier,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Atom {
-        let mut value_builder = FunctionBuilder::new(id, state, ws);
-        value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
-        value_builder.finish().into_atom()
-    }
-
-    pub fn atomic_expanded_label_id(
-        &self,
-        indices: &[ConcreteIndex],
-        id: Identifier,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Atom {
-        let mut value_builder = FunctionBuilder::new(id, state, ws);
-        for &index in indices {
-            value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
-        }
-        value_builder.finish().into_atom()
     }
 }
 
@@ -560,53 +693,13 @@ where
             .map(|(index, representation)| Slot::from((*index, *representation)))
             .collect();
 
-        let name_map = HashMap::from([(0..structure.len(), name.clone())]);
+        let name_map = AHashMap::from([(0..structure.len(), name.clone())]);
 
         TensorSkeleton {
             internal: structure.clone(),
             external: structure,
             names: name_map,
             global_name: Some(name),
-        }
-    }
-    /// essentially contract.
-    pub fn merge(&mut self, other: &Self) {
-        let shift = self.internal.len();
-        for (range, name) in other.names.iter() {
-            self.names
-                .insert((range.start + shift)..(range.end + shift), name.clone());
-        }
-        self.external.append(&mut other.external.clone());
-        self.trace_out();
-        self.independentize_internal(other);
-        self.internal.append(&mut other.internal.clone());
-    }
-
-    /// Merge two TensorSkeletons at the given positions of the external index list. Ideally the internal index list should be independentized before merging
-    /// This is essentially a contraction of only one index. The name maps are merged, and shifted accordingly. The global name is lost, since the resulting tensor is composite
-    /// The global name can be set again with the set_global_name function
-    pub fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
-        let mut slots_b = other.external.clone();
-        let mut slots_a = self.external.clone();
-
-        slots_a.remove(positions.0);
-        slots_b.remove(positions.1);
-
-        let mut slots_a_int = self.internal.clone();
-        let mut slots_b_int = other.internal.clone();
-        slots_a_int.append(&mut slots_b_int);
-
-        let mut names = self.names.clone();
-        let shift = self.internal.len();
-        for (range, name) in other.names.iter() {
-            names.insert((range.start + shift)..(range.end + shift), name.clone());
-        }
-        slots_a.append(&mut slots_b);
-        TensorSkeleton {
-            internal: slots_a_int,
-            external: slots_a,
-            names,
-            global_name: None,
         }
     }
 }
@@ -662,11 +755,11 @@ where
         let f_id = name.clone().into_id(state);
         let mut data = vec![];
         for index in self.index_iter() {
-            data.push(self.atomic_expanded_label_id(&index, f_id, state, ws));
+            data.push(atomic_expanded_label_id(&index, f_id, state, ws));
         }
 
         self.internal = self.external.clone();
-        self.names = HashMap::new();
+        self.names = AHashMap::new();
         self.names.insert(0..self.internal.len(), name);
         DenseTensor {
             data,
@@ -742,245 +835,60 @@ impl<T> Index<usize> for TensorSkeleton<T> {
     }
 }
 
-pub trait VecSlotExtension {
-    fn from_idxsing(indices: &[AbstractIndex], dims: &[Representation]) -> Self;
-    fn from_integers(indices: &[AbstractIndex], dims: &[Dimension]) -> Self;
-    fn match_index(&self, other: &Self) -> Option<(usize, usize)>;
-    fn traces(&self) -> Vec<[usize; 2]>;
-    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self;
-    fn shape(&self) -> Vec<Dimension>;
-    fn order(&self) -> usize;
-    fn same_content(&self, other: &Self) -> bool;
-    fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>>;
-    fn strides_row_major(&self) -> Vec<usize>;
-    fn strides_column_major(&self) -> Vec<usize>;
-    fn strides(&self) -> Vec<usize>;
-    fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String>;
-    fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String>;
-    fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String>;
-    fn size(&self) -> usize;
-    fn index_iter(&self) -> TensorStructureIndexIterator;
-    fn to_symbolic(&self, label: Identifier, ws: &Workspace, state: &mut State) -> Atom;
-    fn is_scalar(&self) -> bool {
-        self.order() == 0
+pub trait HasTensorSkeleton {
+    type Name;
+
+    fn skeleton(&self) -> &TensorSkeleton<Self::Name>;
+    fn mut_skeleton(&mut self) -> &mut TensorSkeleton<Self::Name>;
+
+    fn is_composite(&self) -> bool {
+        self.skeleton().is_composite()
+    }
+
+    fn contractions_num(&self) -> usize {
+        self.skeleton().contractions_num()
+    }
+
+    fn global_name(&self) -> Option<&Self::Name> {
+        self.skeleton().global_name()
     }
 }
 
-impl VecSlotExtension for TensorStructure {
-    fn from_idxsing(indices: &[AbstractIndex], signatures: &[Representation]) -> Self {
-        indices
-            .iter()
-            .zip(signatures.iter())
-            .map(|(&index, &dim)| Slot::from((index, dim)))
-            .collect()
-    }
-
-    fn same_content(&self, other: &Self) -> bool {
-        let set1: HashSet<_> = self.iter().collect();
-        let set2: HashSet<_> = other.iter().collect();
-        set1 == set2
-    }
-
-    fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>> {
-        if self.len() != other.len() {
-            return None;
-        }
-
-        let mut index_map = HashMap::new();
-        for (i, item) in other.iter().enumerate() {
-            index_map.entry(item).or_insert_with(Vec::new).push(i);
-        }
-
-        let mut permutation = Vec::with_capacity(self.len());
-        let mut used_indices = HashSet::new();
-        for item in self {
-            if let Some(indices) = index_map.get_mut(item) {
-                // Find an index that hasn't been used yet
-                if let Some(&index) = indices.iter().find(|&&i| !used_indices.contains(&i)) {
-                    permutation.push(index);
-                    used_indices.insert(index);
-                } else {
-                    // No available index for this item
-                    return None;
-                }
-            } else {
-                // Item not found in other
-                return None;
-            }
-        }
-
-        Some(permutation)
-    }
-
-    fn from_integers(indices: &[AbstractIndex], dims: &[Dimension]) -> Self {
-        indices
-            .iter()
-            .zip(dims.iter())
-            .map(|(&index, &dim)| Slot::from((index, Representation::Euclidean(dim))))
-            .collect()
-    }
-
-    fn match_index(&self, other: &Self) -> Option<(usize, usize)> {
-        for (i, slot_a) in self.iter().enumerate().rev() {
-            for (j, slot_b) in other.iter().enumerate() {
-                if slot_a == slot_b {
-                    return Some((i, j));
-                }
-            }
-        }
-        None
-    }
-
-    fn traces(&self) -> Vec<[usize; 2]> {
-        let mut positions = HashMap::new();
-
-        // Track the positions of each element
-        for (index, &value) in self.iter().enumerate() {
-            positions.entry(value).or_insert_with(Vec::new).push(index);
-        }
-
-        // Collect only the positions of repeated elements
-        positions
-            .into_iter()
-            .filter_map(|(_, indices)| {
-                if indices.len() == 2 {
-                    Some([indices[0], indices[1]])
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
-        let mut slots_b = other.clone();
-        let mut slots_a = self.clone();
-
-        slots_a.remove(positions.0);
-        slots_b.remove(positions.1);
-
-        slots_a.append(&mut slots_b);
-        slots_a
-    }
-
-    fn shape(&self) -> Vec<Dimension> {
-        self.iter().map(|slot| &slot.representation).collect()
-    }
-
-    fn order(&self) -> usize {
-        //total valence (or misnamed : rank)
-        self.len()
-    }
-
-    fn strides_column_major(&self) -> Vec<usize> {
-        let mut strides: Vec<usize> = vec![1; self.order()];
-
-        if self.order() == 0 {
-            return strides;
-        }
-
-        for i in 0..self.order() - 1 {
-            strides[i + 1] = strides[i] * usize::from(self[i].representation);
-        }
-
-        strides
-    }
-
-    fn strides_row_major(&self) -> Vec<usize> {
-        let mut strides = vec![1; self.order()];
-        if self.order() == 0 {
-            return strides;
-        }
-
-        for i in (0..self.order() - 1).rev() {
-            strides[i] = strides[i + 1] * usize::from(self[i + 1].representation);
-        }
-
-        strides
-    }
-
-    fn strides(&self) -> Vec<usize> {
-        self.strides_row_major()
-    }
-
-    fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String> {
-        if indices.len() != self.order() {
-            return Err("Mismatched order".into());
-        }
-
-        for (i, &dim_len) in self.iter().map(|slot| &slot.representation).enumerate() {
-            if indices[i] >= usize::from(dim_len) {
-                return Err(format!(
-                    "Index {} out of bounds for dimension {} of size {}",
-                    indices[i],
-                    i,
-                    usize::from(dim_len)
-                )
-                .into());
-            }
-        }
-        Ok(())
-    }
-
-    fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String> {
-        let strides = self.strides();
-        self.verify_indices(indices)?;
-
-        let mut idx = 0;
-        for (i, &index) in indices.iter().enumerate() {
-            idx += index * strides[i];
-        }
-        Ok(idx)
-    }
-
-    fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String> {
-        let mut indices = vec![];
-        let mut index = flat_index;
-        for &stride in self.strides().iter() {
-            indices.push(index / stride);
-            index %= stride;
-        }
-        if flat_index < self.size() {
-            Ok(indices)
-        } else {
-            Err(format!("Index {} out of bounds", flat_index).into())
-        }
-    }
-
-    fn size(&self) -> usize {
-        self.shape().iter().product()
-    }
-
-    fn index_iter(&self) -> TensorStructureIndexIterator {
-        TensorStructureIndexIterator::new(self)
-    }
-
-    fn to_symbolic(&self, label: Identifier, ws: &Workspace, state: &mut State) -> Atom {
-        let atoms = self
-            .iter()
-            .map(|slot| slot.to_symbolic(ws, state))
-            .collect::<Vec<_>>();
-
-        let mut value_builder = FunctionBuilder::new(label, state, ws);
-        for atom in atoms {
-            value_builder = value_builder.add_arg(atom.as_atom_view());
-        }
-        value_builder.finish().into_atom()
+impl<T> HasTensorStructure for T
+where
+    T: HasTensorSkeleton,
+{
+    fn structure(&self) -> &[Slot] {
+        self.skeleton().external_structure()
     }
 }
 
 #[enum_dispatch]
 pub trait HasTensorStructure {
-    type Name;
-    fn mut_structure(&mut self) -> &mut TensorSkeleton<Self::Name>;
-    fn structure(&self) -> &TensorSkeleton<Self::Name>;
+    // fn mut_structure(&mut self) -> &mut TensorSkeleton<Self::Name>;
+    fn structure(&self) -> &[Slot];
+
+    fn match_index(&self, other: &dyn HasTensorStructure) -> Option<(bool, usize, usize)> {
+        self.structure().match_index(other.structure())
+    }
+
+    fn match_indices(
+        &self,
+        other: &dyn HasTensorStructure,
+    ) -> Option<(Permutation, Vec<bool>, Vec<bool>)> {
+        self.structure().match_indices(other.structure())
+    }
+
+    fn find_permutation(&self, other: &dyn HasTensorStructure) -> Option<Vec<ConcreteIndex>> {
+        self.structure().find_permutation(other.structure())
+    }
+
+    fn same_external(&self, other: &dyn HasTensorStructure) -> bool {
+        self.structure().same_external(other.structure())
+    }
     // inline
     fn order(&self) -> usize {
         self.structure().order()
-    }
-
-    fn contractions_num(&self) -> usize {
-        self.structure().contractions_num()
     }
 
     fn shape(&self) -> Vec<usize> {
@@ -1017,55 +925,5 @@ pub trait HasTensorStructure {
 
     fn get_ith_metric(&self, i: usize) -> Option<Vec<bool>> {
         self.structure().get_ith_metric(i)
-    }
-
-    fn is_composite(&self) -> bool {
-        self.structure().is_composite()
-    }
-
-    fn global_name(&self) -> Option<&Self::Name> {
-        self.structure().global_name()
-    }
-
-    fn atomic_expanded_label<I: IntoId>(
-        &self,
-        indices: &[ConcreteIndex],
-        name: I,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Atom {
-        self.structure()
-            .atomic_expanded_label(indices, name, state, ws)
-    }
-
-    fn atomic_flat_label<I: IntoId>(
-        &self,
-        index: usize,
-        name: I,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Atom {
-        self.structure().atomic_flat_label(index, name, state, ws)
-    }
-
-    fn atomic_flat_label_id(
-        &self,
-        index: usize,
-        id: Identifier,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Atom {
-        self.structure().atomic_flat_label_id(index, id, state, ws)
-    }
-
-    fn atomic_expanded_label_id(
-        &self,
-        indices: &[ConcreteIndex],
-        id: Identifier,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Atom {
-        self.structure()
-            .atomic_expanded_label_id(indices, id, state, ws)
     }
 }

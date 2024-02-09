@@ -1,4 +1,7 @@
-use super::{Expr, HasTensorStructure, TensorSkeleton};
+use super::{
+    Expr, HasTensorSkeleton, HasTensorStructure, MutTensorStructure, Slot, TensorSkeleton,
+    TensorStructure,
+};
 use smartstring::alias::String;
 use symbolica::{
     representations::{AsAtomView, Atom, Identifier},
@@ -7,31 +10,31 @@ use symbolica::{
 
 #[derive(Debug)]
 pub struct SymbolicTensor {
-    structure: TensorSkeleton<String>,
+    pub structure: TensorSkeleton<String>,
     expression: Atom,
 }
 #[derive(Debug)]
 pub struct SymbolicTensorBuilder<'a> {
-    structure: TensorSkeleton<String>,
+    pub structure: TensorSkeleton<String>,
     expression: Expr<'a>,
 }
 
-impl HasTensorStructure for SymbolicTensor {
+impl HasTensorSkeleton for SymbolicTensor {
     type Name = String;
-    fn structure(&self) -> &TensorSkeleton<String> {
+    fn skeleton(&self) -> &TensorSkeleton<Self::Name> {
         &self.structure
     }
-    fn mut_structure(&mut self) -> &mut TensorSkeleton<String> {
+    fn mut_skeleton(&mut self) -> &mut TensorSkeleton<Self::Name> {
         &mut self.structure
     }
 }
 
-impl<'a> HasTensorStructure for SymbolicTensorBuilder<'a> {
+impl<'a> HasTensorSkeleton for SymbolicTensorBuilder<'a> {
     type Name = String;
-    fn structure(&self) -> &TensorSkeleton<String> {
+    fn skeleton(&self) -> &TensorSkeleton<Self::Name> {
         &self.structure
     }
-    fn mut_structure(&mut self) -> &mut TensorSkeleton<String> {
+    fn mut_skeleton(&mut self) -> &mut TensorSkeleton<Self::Name> {
         &mut self.structure
     }
 }
@@ -75,10 +78,10 @@ impl<'a> SymbolicTensorBuilder<'a> {
     // }
 
     pub fn contract(mut self, other: &SymbolicTensor) -> SymbolicTensorBuilder<'a> {
-        if let Some((_, i, j)) = self.structure().match_index(other.structure()) {
-            self.structure = self.structure().merge_at(other.structure(), (i, j));
+        if let Some((_, i, j)) = self.structure.match_index(&other.structure) {
+            self.structure = self.structure.merge_at(&other.structure, (i, j));
         } else {
-            self.structure.merge(&other.structure().clone());
+            self.structure.merge(&other.structure.clone());
         }
         self.expression = self.expression * other.get_atom().as_view();
         self

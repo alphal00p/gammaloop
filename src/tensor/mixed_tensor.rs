@@ -9,9 +9,9 @@ use symbolica::{
 };
 
 use super::{
-    DenseTensor, Expr, HasTensorStructure, NumTensor, SparseTensor, SymbolicAdd, SymbolicAddAssign,
-    SymbolicInto, SymbolicMul, SymbolicNeg, SymbolicSub, SymbolicSubAssign, SymbolicZero,
-    TensorSkeleton,
+    DenseTensor, Expr, HasTensorSkeleton, HasTensorStructure, MutTensorStructure, NumTensor, Slot,
+    SparseTensor, SymbolicAdd, SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg,
+    SymbolicSub, SymbolicSubAssign, SymbolicZero, TensorSkeleton, TensorStructure,
 };
 
 pub trait SymbolicInternalContract {
@@ -30,7 +30,7 @@ where
     fn internal_contract_sym(&self, ws: &Workspace, state: &State) -> Self {
         let mut result: DenseTensor<T, I> = self.clone();
         for trace in self.traces() {
-            let mut new_structure = self.structure().clone();
+            let mut new_structure = self.skeleton().clone();
             new_structure.trace(trace[0], trace[1]);
 
             let mut new_result: DenseTensor<T, I> =
@@ -57,7 +57,7 @@ where
         let trace = self.traces()[0];
 
         // println!("trace {:?}", trace);
-        let mut new_structure = self.structure().clone();
+        let mut new_structure = self.skeleton().clone();
         new_structure.trace(trace[0], trace[1]);
 
         let mut new_result = SparseTensor::empty(new_structure);
@@ -106,7 +106,7 @@ where
     ) -> Option<Self::LCM> {
         //     if let Some((_, i, j)) = self.structure().match_index(other.structure()) {
         //         let dimension_of_contraction = self.shape()[i];
-        //         let final_structure = self.structure().merge_at(other.structure(), (i, j));
+        //         let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
         //         let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
         //         let metric = self.structure()[i].representation.negative();
         //         let mut result_index = 0;
@@ -147,7 +147,7 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
@@ -189,8 +189,8 @@ where
                     let (permutation, self_matches, other_matches) =
                         self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut final_structure = self.structure().clone();
-                    final_structure.merge(other.structure());
+                    let mut final_structure = self.skeleton().clone();
+                    final_structure.merge(other.skeleton());
 
                     // Initialize result tensor with default values
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
@@ -269,7 +269,7 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let metric = self.get_ith_metric(i).unwrap();
                     let mut result_index = 0;
@@ -311,8 +311,8 @@ where
                     let (permutation, self_matches, other_matches) =
                         self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut final_structure = self.structure().clone();
-                    final_structure.merge(other.structure());
+                    let mut final_structure = self.skeleton().clone();
+                    final_structure.merge(other.skeleton());
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
@@ -395,7 +395,7 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
                     let mut result_data = AHashMap::default();
                     let mut result_index = 0;
 
@@ -454,8 +454,8 @@ where
                     let (permutation, self_matches, other_matches) =
                         self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut final_structure = self.structure().clone();
-                    final_structure.merge(other.structure());
+                    let mut final_structure = self.skeleton().clone();
+                    final_structure.merge(other.skeleton());
                     let mut result_data = AHashMap::default();
                     let one = if let Some(o) = final_structure.strides().first() {
                         *o
@@ -551,7 +551,7 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure().merge_at(other.structure(), (i, j));
+                    let final_structure = self.skeleton().merge_at(other.skeleton(), (i, j));
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
@@ -598,8 +598,8 @@ where
                     let (permutation, self_matches, other_matches) =
                         self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut final_structure = self.structure().clone();
-                    final_structure.merge(other.structure());
+                    let mut final_structure = self.skeleton().clone();
+                    final_structure.merge(other.skeleton());
 
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
@@ -942,24 +942,24 @@ pub enum MixedTensor<T> {
     Symbolic(NumTensor<Atom, T>),
 }
 
-impl<I> HasTensorStructure for MixedTensor<I>
+impl<I> HasTensorSkeleton for MixedTensor<I>
 where
     I: Clone,
 {
     type Name = I;
-    fn structure(&self) -> &TensorSkeleton<Self::Name> {
+    fn skeleton(&self) -> &TensorSkeleton<Self::Name> {
         match self {
-            MixedTensor::Float(t) => t.structure(),
-            MixedTensor::Complex(t) => t.structure(),
-            MixedTensor::Symbolic(t) => t.structure(),
+            MixedTensor::Float(t) => t.skeleton(),
+            MixedTensor::Complex(t) => t.skeleton(),
+            MixedTensor::Symbolic(t) => t.skeleton(),
         }
     }
 
-    fn mut_structure(&mut self) -> &mut TensorSkeleton<Self::Name> {
+    fn mut_skeleton(&mut self) -> &mut TensorSkeleton<Self::Name> {
         match self {
-            MixedTensor::Float(t) => t.mut_structure(),
-            MixedTensor::Complex(t) => t.mut_structure(),
-            MixedTensor::Symbolic(t) => t.mut_structure(),
+            MixedTensor::Float(t) => t.mut_skeleton(),
+            MixedTensor::Complex(t) => t.mut_skeleton(),
+            MixedTensor::Symbolic(t) => t.mut_skeleton(),
         }
     }
 }

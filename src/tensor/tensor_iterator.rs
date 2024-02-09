@@ -7,7 +7,7 @@ use permutation::Permutation;
 
 use symbolica::state::{State, Workspace};
 pub struct TensorStructureIndexIterator<'a> {
-    structure: &'a TensorStructure,
+    structure: &'a [Slot],
     current_flat_index: usize,
 }
 
@@ -25,7 +25,7 @@ impl<'a> Iterator for TensorStructureIndexIterator<'a> {
 }
 
 impl<'a> TensorStructureIndexIterator<'a> {
-    pub fn new(structure: &'a TensorStructure) -> Self {
+    pub fn new(structure: &'a [Slot]) -> Self {
         TensorStructureIndexIterator {
             structure,
             current_flat_index: 0,
@@ -42,7 +42,10 @@ pub struct TensorSkeletonFiberIterator {
 }
 
 impl TensorSkeletonFiberIterator {
-    pub fn new<N>(skeleton: &TensorSkeleton<N>, fiber_position: usize) -> Self {
+    pub fn new<S>(skeleton: &S, fiber_position: usize) -> Self
+    where
+        S: TensorStructure,
+    {
         assert!(fiber_position < skeleton.order(), "Invalid fiber index");
 
         let strides = skeleton.strides();
@@ -117,10 +120,10 @@ pub struct TensorSkeletonMultiFiberMetricIterator {
 }
 
 impl TensorSkeletonMultiFiberIterator {
-    pub fn new<N>(
-        skeleton: &TensorSkeleton<N>,
-        fiber_positions: &[bool],
-    ) -> TensorSkeletonMultiFiberIterator {
+    pub fn new<N>(skeleton: &N, fiber_positions: &[bool]) -> TensorSkeletonMultiFiberIterator
+    where
+        N: TensorStructure,
+    {
         let strides = skeleton.strides();
         let dims = skeleton.shape();
         let order = skeleton.order();
@@ -172,10 +175,10 @@ impl TensorSkeletonMultiFiberIterator {
         }
     }
 
-    pub fn new_conjugate<N>(
-        skeleton: &TensorSkeleton<N>,
-        fiber_positions: &[bool],
-    ) -> (Self, Self) {
+    pub fn new_conjugate<N>(skeleton: &N, fiber_positions: &[bool]) -> (Self, Self)
+    where
+        N: TensorStructure,
+    {
         let strides = skeleton.strides();
         let dims = skeleton.shape();
         let order = skeleton.order();
@@ -297,10 +300,13 @@ impl Iterator for TensorSkeletonMultiFiberIterator {
 
 impl TensorSkeletonMultiFiberMetricIterator {
     pub fn new<N>(
-        skeleton: &TensorSkeleton<N>,
+        skeleton: &N,
         fiber_positions: &[bool],
         permutation: Permutation,
-    ) -> TensorSkeletonMultiFiberMetricIterator {
+    ) -> TensorSkeletonMultiFiberMetricIterator
+    where
+        N: TensorStructure,
+    {
         // for f in fiber_positions {
         //     filter[*f] = true;
         // }
@@ -325,10 +331,13 @@ impl TensorSkeletonMultiFiberMetricIterator {
     }
 
     pub fn new_conjugates<N>(
-        skeleton: &TensorSkeleton<N>,
+        skeleton: &N,
         fiber_positions: &[bool],
         permutation: Permutation,
-    ) -> (Self, TensorSkeletonMultiFiberIterator) {
+    ) -> (Self, TensorSkeletonMultiFiberIterator)
+    where
+        N: TensorStructure,
+    {
         let iters = TensorSkeletonMultiFiberIterator::new_conjugate(skeleton, fiber_positions);
         let mut f = fiber_positions.iter();
         let mut reps = skeleton.reps();
@@ -500,9 +509,9 @@ fn construct() {
     // }
 }
 
-pub struct TensorFiberIterator<'a, T, N>
+pub struct TensorFiberIterator<'a, T>
 where
-    T: HasTensorStructure<Name = N>,
+    T: HasTensorStructure,
 {
     tensor: &'a T,
     fiber_iter: TensorSkeletonFiberIterator,
@@ -511,12 +520,12 @@ where
     increment: usize,
 }
 
-impl<'a, T, N> TensorFiberIterator<'a, T, N>
+impl<'a, T> TensorFiberIterator<'a, T>
 where
-    T: HasTensorStructure<Name = N>,
+    T: HasTensorStructure,
 {
     pub fn new(tensor: &'a T, fiber_position: usize) -> Self {
-        let fiber_iter = TensorSkeletonFiberIterator::new(tensor.structure(), fiber_position);
+        let fiber_iter = TensorSkeletonFiberIterator::new(&tensor.structure(), fiber_position);
         let increment = tensor.strides()[fiber_position];
 
         TensorFiberIterator {
@@ -534,7 +543,7 @@ where
     }
 }
 
-impl<'a, T, N> Iterator for TensorFiberIterator<'a, SparseTensor<T, N>, N>
+impl<'a, T, N> Iterator for TensorFiberIterator<'a, SparseTensor<T, N>>
 where
     N: Clone,
 {
@@ -564,7 +573,7 @@ where
     }
 }
 
-impl<'a, T, N> Iterator for TensorFiberIterator<'a, DenseTensor<T, N>, N>
+impl<'a, T, N> Iterator for TensorFiberIterator<'a, DenseTensor<T, N>>
 where
     N: Clone,
 {
@@ -586,9 +595,9 @@ where
     }
 }
 
-pub struct TensorMultiFiberMetricIterator<'a, T, N>
+pub struct TensorMultiFiberMetricIterator<'a, T>
 where
-    T: HasTensorStructure<Name = N>,
+    T: HasTensorStructure,
 {
     tensor: &'a T,
     fiber_iter: TensorSkeletonMultiFiberMetricIterator,
@@ -598,13 +607,13 @@ where
     capacity: usize,
 }
 
-impl<'a, T, N> TensorMultiFiberMetricIterator<'a, T, N>
+impl<'a, T> TensorMultiFiberMetricIterator<'a, T>
 where
-    T: HasTensorStructure<Name = N>,
+    T: HasTensorStructure,
 {
     pub fn new(tensor: &'a T, fiber_positions: &[bool], permutation: Permutation) -> Self {
         let iters = TensorSkeletonMultiFiberMetricIterator::new_conjugates(
-            tensor.structure(),
+            &tensor.structure(),
             fiber_positions,
             permutation,
         );
@@ -637,7 +646,7 @@ where
     }
 }
 
-impl<'a, T, N> Iterator for TensorMultiFiberMetricIterator<'a, SparseTensor<T, N>, N>
+impl<'a, T, N> Iterator for TensorMultiFiberMetricIterator<'a, SparseTensor<T, N>>
 where
     N: Clone,
 {
@@ -673,7 +682,7 @@ where
     }
 }
 
-impl<'a, T, N> Iterator for TensorMultiFiberMetricIterator<'a, DenseTensor<T, N>, N>
+impl<'a, T, N> Iterator for TensorMultiFiberMetricIterator<'a, DenseTensor<T, N>>
 where
     N: Clone,
 {
@@ -704,9 +713,9 @@ where
     }
 }
 
-pub struct TensorMultiFiberIterator<'a, T, N>
+pub struct TensorMultiFiberIterator<'a, T>
 where
-    T: HasTensorStructure<Name = N>,
+    T: HasTensorStructure,
 {
     tensor: &'a T,
     fiber_iter: TensorSkeletonMultiFiberIterator,
@@ -714,13 +723,13 @@ where
     skipped: usize,
 }
 
-impl<'a, T, N> TensorMultiFiberIterator<'a, T, N>
+impl<'a, T> TensorMultiFiberIterator<'a, T>
 where
-    T: HasTensorStructure<Name = N>,
+    T: HasTensorStructure,
 {
     pub fn new(tensor: &'a T, fiber_positions: &[bool]) -> Self {
         let iters =
-            TensorSkeletonMultiFiberIterator::new_conjugate(tensor.structure(), fiber_positions);
+            TensorSkeletonMultiFiberIterator::new_conjugate(&tensor.structure(), fiber_positions);
         TensorMultiFiberIterator {
             tensor,
             fiber_iter: iters.0,
@@ -736,7 +745,7 @@ where
     }
 }
 
-impl<'a, T, N> Iterator for TensorMultiFiberIterator<'a, SparseTensor<T, N>, N>
+impl<'a, T, N> Iterator for TensorMultiFiberIterator<'a, SparseTensor<T, N>>
 where
     N: Clone,
 {
@@ -767,7 +776,7 @@ where
     }
 }
 
-impl<'a, T, N> Iterator for TensorMultiFiberIterator<'a, DenseTensor<T, N>, N>
+impl<'a, T, N> Iterator for TensorMultiFiberIterator<'a, DenseTensor<T, N>>
 where
     N: Clone,
 {
@@ -1198,7 +1207,7 @@ impl<T, I> SparseTensor<T, I> {
         SparseTensorFiberIterator::new(self, fiber_index)
     }
 
-    pub fn iter_fiber(&self, fiber_index: usize) -> TensorFiberIterator<Self, I> {
+    pub fn iter_fiber(&self, fiber_index: usize) -> TensorFiberIterator<Self> {
         TensorFiberIterator::new(self, fiber_index)
     }
 
@@ -1223,11 +1232,11 @@ impl<T, I> SparseTensor<T, I> {
         &self,
         fiber_positions: &[bool],
         permutation: Permutation,
-    ) -> TensorMultiFiberMetricIterator<Self, I> {
+    ) -> TensorMultiFiberMetricIterator<Self> {
         TensorMultiFiberMetricIterator::new(self, fiber_positions, permutation)
     }
 
-    pub fn iter_multi_fibers(&self, fiber_positions: &[bool]) -> TensorMultiFiberIterator<Self, I> {
+    pub fn iter_multi_fibers(&self, fiber_positions: &[bool]) -> TensorMultiFiberIterator<Self> {
         TensorMultiFiberIterator::new(self, fiber_positions)
     }
 }
@@ -1546,7 +1555,7 @@ impl<T, I> DenseTensor<T, I> {
         DenseTensorIterator::new(self)
     }
 
-    pub fn iter_fiber(&self, fixedindex: usize) -> TensorFiberIterator<Self, I> {
+    pub fn iter_fiber(&self, fixedindex: usize) -> TensorFiberIterator<Self> {
         TensorFiberIterator::new(self, fixedindex)
     }
 
@@ -1567,11 +1576,11 @@ impl<T, I> DenseTensor<T, I> {
         &self,
         fiber_positions: &[bool],
         permutation: Permutation,
-    ) -> TensorMultiFiberMetricIterator<Self, I> {
+    ) -> TensorMultiFiberMetricIterator<Self> {
         TensorMultiFiberMetricIterator::new(self, fiber_positions, permutation)
     }
 
-    pub fn iter_multi_fibers(&self, fiber_positions: &[bool]) -> TensorMultiFiberIterator<Self, I> {
+    pub fn iter_multi_fibers(&self, fiber_positions: &[bool]) -> TensorMultiFiberIterator<Self> {
         TensorMultiFiberIterator::new(self, fiber_positions)
     }
 }
