@@ -5,7 +5,6 @@ use indexmap::IndexMap;
 use smartstring::LazyCompact;
 use smartstring::SmartString;
 use std::fmt::Debug;
-use std::ops::Index;
 use std::ops::Range;
 
 use permutation::Permutation;
@@ -677,7 +676,7 @@ impl NamedStructure {
 /// A trait for a structure that has a name
 pub trait HasName {
     type Name;
-    fn name<'a>(&self) -> Option<&Self::Name>;
+    fn name(&self) -> Option<&Self::Name>;
     fn set_name(&mut self, name: &Self::Name);
 }
 

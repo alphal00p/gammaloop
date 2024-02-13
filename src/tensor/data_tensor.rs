@@ -1,7 +1,4 @@
-use super::{
-    atomic_expanded_label_id, ConcreteIndex, HasName,
-    Slot, TensorStructure, TracksCount,
-};
+use super::{atomic_expanded_label_id, ConcreteIndex, HasName, Slot, TensorStructure, TracksCount};
 use ahash::AHashMap;
 use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
@@ -204,7 +201,7 @@ where
     {
         let mut dense = DenseTensor::zero(self.structure.clone());
         for (indices, value) in self.elements.iter() {
-            dense.set_flat(*indices, value.clone());
+            let _ = dense.set_flat(*indices, value.clone());
         }
         dense
     }

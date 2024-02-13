@@ -41,7 +41,7 @@ where
 
             let mut new_result = DenseTensor::from_data_coerced(&self.data, new_structure).unwrap();
             for (idx, t) in result.iter_trace(trace) {
-                new_result.set(&idx, t);
+                new_result.set(&idx, t).unwrap();
             }
             result = new_result;
         }

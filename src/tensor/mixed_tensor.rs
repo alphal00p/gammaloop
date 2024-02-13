@@ -36,7 +36,7 @@ where
             let mut new_result: DenseTensor<T, I> =
                 DenseTensor::from_data_coerced(&self.data, new_structure).unwrap();
             for (idx, t) in result.iter_symbolic_trace(trace, state, ws) {
-                new_result.set(&idx, t);
+                let _ = new_result.set(&idx, t);
             }
             result = new_result;
         }
@@ -752,7 +752,7 @@ where
     ) -> DenseTensor<Atom, I> {
         let mut result = DenseTensor::symbolic_zeros(self.structure.clone());
         for (index, value) in self.iter() {
-            result.set(&index, value.into_sym(ws, state).unwrap());
+            let _ = result.set(&index, value.into_sym(ws, state).unwrap());
         }
         result
     }

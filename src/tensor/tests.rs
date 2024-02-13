@@ -431,7 +431,7 @@ fn symbolic_contract() {
 
     let a = SymbolicTensor::from_named(&structura, &mut state, &ws).unwrap();
     let b = SymbolicTensor::from_named(&structurb, &mut state, &ws).unwrap();
-    let f = a.contract_sym(&b, &mut state, &ws).unwrap();
+    let f = a.contract_sym(&b, &state, &ws).unwrap();
 
     // println!("{:?}", f);
     assert_eq!(
