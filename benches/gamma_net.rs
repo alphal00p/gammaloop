@@ -5,7 +5,7 @@ use _gammaloop::tensor::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym,
     },
-    NumTensors, TensorNetwork,
+    HistoryStructure, NumTensor, TensorNetwork,
 };
 
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -17,10 +17,10 @@ fn gamma_net_sym(
     vbar: [Complex64; 4],
     u: [Complex64; 4],
     state: &mut State,
-) -> TensorNetwork<NumTensors<Identifier>> {
+) -> TensorNetwork<NumTensor<HistoryStructure<Identifier>>> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result: Vec<NumTensors<Identifier>> =
+    let mut result: Vec<NumTensor<HistoryStructure<Identifier>>> =
         vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
     for m in minkindices {
         let ui = contracting_index;
@@ -49,11 +49,10 @@ fn gamma_net(
     minkindices: &[i32],
     vbar: [Complex64; 4],
     u: [Complex64; 4],
-) -> TensorNetwork<NumTensors<String>> {
+) -> TensorNetwork<NumTensor> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result: Vec<NumTensors<String>> =
-        vec![euclidean_four_vector(contracting_index, &vbar).into()];
+    let mut result: Vec<NumTensor> = vec![euclidean_four_vector(contracting_index, &vbar).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1;

@@ -446,7 +446,7 @@ impl Iterator for TensorSkeletonMultiFiberMetricIterator {
 
 #[test]
 fn construct() {
-    let a = TensorSkeleton::from_idxsing(
+    let a = HistoryStructure::new(
         &[
             (1, Representation::Euclidean(2)), //0
             (3, Representation::Euclidean(2)), //1     inc
@@ -511,7 +511,7 @@ fn construct() {
 
 pub struct TensorFiberIterator<'a, T>
 where
-    T: HasTensorStructure,
+    T: TensorStructure,
 {
     tensor: &'a T,
     fiber_iter: TensorSkeletonFiberIterator,
@@ -522,10 +522,11 @@ where
 
 impl<'a, T> TensorFiberIterator<'a, T>
 where
-    T: HasTensorStructure,
+    T: TensorStructure,
 {
     pub fn new(tensor: &'a T, fiber_position: usize) -> Self {
-        let fiber_iter = TensorSkeletonFiberIterator::new(&tensor.structure(), fiber_position);
+        let fiber_iter =
+            TensorSkeletonFiberIterator::new(&tensor.external_structure(), fiber_position);
         let increment = tensor.strides()[fiber_position];
 
         TensorFiberIterator {
@@ -545,7 +546,7 @@ where
 
 impl<'a, T, N> Iterator for TensorFiberIterator<'a, SparseTensor<T, N>>
 where
-    N: Clone,
+    N: TensorStructure,
 {
     type Item = (usize, Vec<ConcreteIndex>, Vec<&'a T>);
 
@@ -575,7 +576,7 @@ where
 
 impl<'a, T, N> Iterator for TensorFiberIterator<'a, DenseTensor<T, N>>
 where
-    N: Clone,
+    N: TensorStructure,
 {
     type Item = Vec<&'a T>;
 
@@ -597,7 +598,7 @@ where
 
 pub struct TensorMultiFiberMetricIterator<'a, T>
 where
-    T: HasTensorStructure,
+    T: TensorStructure,
 {
     tensor: &'a T,
     fiber_iter: TensorSkeletonMultiFiberMetricIterator,
@@ -609,11 +610,11 @@ where
 
 impl<'a, T> TensorMultiFiberMetricIterator<'a, T>
 where
-    T: HasTensorStructure,
+    T: TensorStructure,
 {
     pub fn new(tensor: &'a T, fiber_positions: &[bool], permutation: Permutation) -> Self {
         let iters = TensorSkeletonMultiFiberMetricIterator::new_conjugates(
-            &tensor.structure(),
+            &tensor.external_structure(),
             fiber_positions,
             permutation,
         );
@@ -648,7 +649,7 @@ where
 
 impl<'a, T, N> Iterator for TensorMultiFiberMetricIterator<'a, SparseTensor<T, N>>
 where
-    N: Clone,
+    N: TensorStructure,
 {
     type Item = (usize, Vec<ConcreteIndex>, Vec<(&'a T, bool)>);
 
@@ -684,7 +685,7 @@ where
 
 impl<'a, T, N> Iterator for TensorMultiFiberMetricIterator<'a, DenseTensor<T, N>>
 where
-    N: Clone,
+    N: TensorStructure,
 {
     type Item = Vec<(&'a T, bool)>;
 
@@ -715,7 +716,7 @@ where
 
 pub struct TensorMultiFiberIterator<'a, T>
 where
-    T: HasTensorStructure,
+    T: TensorStructure,
 {
     tensor: &'a T,
     fiber_iter: TensorSkeletonMultiFiberIterator,
@@ -725,11 +726,13 @@ where
 
 impl<'a, T> TensorMultiFiberIterator<'a, T>
 where
-    T: HasTensorStructure,
+    T: TensorStructure,
 {
     pub fn new(tensor: &'a T, fiber_positions: &[bool]) -> Self {
-        let iters =
-            TensorSkeletonMultiFiberIterator::new_conjugate(&tensor.structure(), fiber_positions);
+        let iters = TensorSkeletonMultiFiberIterator::new_conjugate(
+            &tensor.external_structure(),
+            fiber_positions,
+        );
         TensorMultiFiberIterator {
             tensor,
             fiber_iter: iters.0,
@@ -747,7 +750,7 @@ where
 
 impl<'a, T, N> Iterator for TensorMultiFiberIterator<'a, SparseTensor<T, N>>
 where
-    N: Clone,
+    N: TensorStructure,
 {
     type Item = (usize, Vec<ConcreteIndex>, Vec<&'a T>);
 
@@ -778,7 +781,7 @@ where
 
 impl<'a, T, N> Iterator for TensorMultiFiberIterator<'a, DenseTensor<T, N>>
 where
-    N: Clone,
+    N: TensorStructure,
 {
     type Item = Vec<&'a T>;
 
@@ -800,7 +803,7 @@ where
 
 pub struct SparseTensorIterator<'a, T, N> {
     iter: std::collections::hash_map::Iter<'a, usize, T>,
-    structure: &'a TensorSkeleton<N>,
+    structure: &'a N,
 }
 
 impl<'a, T, N> SparseTensorIterator<'a, T, N> {
@@ -812,7 +815,10 @@ impl<'a, T, N> SparseTensorIterator<'a, T, N> {
     }
 }
 
-impl<'a, T, N> Iterator for SparseTensorIterator<'a, T, N> {
+impl<'a, T, N> Iterator for SparseTensorIterator<'a, T, N>
+where
+    N: TensorStructure,
+{
     type Item = (Vec<ConcreteIndex>, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -841,16 +847,19 @@ pub struct SparseTensorTraceIterator<'a, T, I> {
     done: bool,
 }
 
-impl<'a, T, I> SparseTensorTraceIterator<'a, T, I> {
+impl<'a, T, I> SparseTensorTraceIterator<'a, T, I>
+where
+    I: TensorStructure,
+{
     fn new(tensor: &'a SparseTensor<T, I>, trace_indices: [usize; 2]) -> Self {
         //trace positions must point to the same dimension
         assert!(
             trace_indices
                 .iter()
-                .map(|&pos| tensor.structure()[pos].representation)
+                .map(|&pos| tensor.external_structure()[pos].representation)
                 .collect::<Vec<_>>()
                 .iter()
-                .all(|&sig| sig == tensor.structure()[trace_indices[0]].representation),
+                .all(|&sig| sig == tensor.external_structure()[trace_indices[0]].representation),
             "Trace indices must point to the same dimension"
         );
         SparseTensorTraceIterator {
@@ -888,7 +897,7 @@ where
         + for<'b> std::ops::SubAssign<&'b T>
         + std::ops::Neg<Output = T>
         + Clone,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -896,7 +905,8 @@ where
             return None;
         }
 
-        let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
+        let trace_dimension =
+            self.tensor.external_structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
         let mut iter = trace_sign.iter().enumerate();
         let mut indices = self.current_indices.clone();
@@ -957,7 +967,10 @@ pub struct SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
     ws: &'b Workspace,
 }
 
-impl<'a, 'b, T, I> SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
+impl<'a, 'b, T, I> SparseTensorSymbolicTraceIterator<'a, 'b, T, I>
+where
+    I: TensorStructure,
+{
     fn new(
         tensor: &'a SparseTensor<T, I>,
         trace_indices: [usize; 2],
@@ -968,10 +981,10 @@ impl<'a, 'b, T, I> SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
         assert!(
             trace_indices
                 .iter()
-                .map(|&pos| tensor.structure()[pos].representation)
+                .map(|&pos| tensor.external_structure()[pos].representation)
                 .collect::<Vec<_>>()
                 .iter()
-                .all(|&sig| sig == tensor.structure()[trace_indices[0]].representation),
+                .all(|&sig| sig == tensor.external_structure()[trace_indices[0]].representation),
             "Trace indices must point to the same dimension"
         );
         SparseTensorSymbolicTraceIterator {
@@ -1008,7 +1021,7 @@ impl<'a, 'b, T, I> SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
 impl<'a, 'b, T, I> Iterator for SparseTensorSymbolicTraceIterator<'a, 'b, T, I>
 where
     T: for<'c> SymbolicAddAssign<&'c T> + for<'d> SymbolicSubAssign<&'d T> + SymbolicNeg + Clone,
-    I: Clone,
+    I: Clone + TensorStructure,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -1016,7 +1029,8 @@ where
             return None;
         }
 
-        let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
+        let trace_dimension =
+            self.tensor.external_structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
         let mut iter = trace_sign.iter().enumerate();
         let mut indices = self.current_indices.clone();
@@ -1083,7 +1097,10 @@ pub struct SparseTensorFiberIterator<'a, T, I> {
     max: usize,
 }
 
-impl<'a, T, I> SparseTensorFiberIterator<'a, T, I> {
+impl<'a, T, I> SparseTensorFiberIterator<'a, T, I>
+where
+    I: TensorStructure,
+{
     fn new(tensor: &'a SparseTensor<T, I>, fiber_position: usize) -> Self {
         assert!(fiber_position < tensor.order(), "Invalid fiber index");
 
@@ -1148,7 +1165,7 @@ impl<'a, T, I> SparseTensorFiberIterator<'a, T, I> {
 impl<'a, T, I> Iterator for SparseTensorFiberIterator<'a, T, I>
 where
     T: Clone,
-    I: Clone,
+    I: Clone + TensorStructure,
 {
     type Item = (usize, Vec<usize>, Vec<&'a T>);
     fn next(&mut self) -> Option<Self::Item> {
@@ -1202,7 +1219,10 @@ where
     }
 }
 
-impl<T, I> SparseTensor<T, I> {
+impl<T, I> SparseTensor<T, I>
+where
+    I: TensorStructure,
+{
     pub fn iter_fibers(&self, fiber_index: usize) -> SparseTensorFiberIterator<T, I> {
         SparseTensorFiberIterator::new(self, fiber_index)
     }
@@ -1255,7 +1275,10 @@ impl<'a, T, I> DenseTensorIterator<'a, T, I> {
     }
 }
 
-impl<'a, T, I> Iterator for DenseTensorIterator<'a, T, I> {
+impl<'a, T, I> Iterator for DenseTensorIterator<'a, T, I>
+where
+    I: TensorStructure,
+{
     type Item = (Vec<ConcreteIndex>, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1271,7 +1294,10 @@ impl<'a, T, I> Iterator for DenseTensorIterator<'a, T, I> {
     }
 }
 
-impl<'a, T, I> IntoIterator for &'a DenseTensor<T, I> {
+impl<'a, T, I> IntoIterator for &'a DenseTensor<T, I>
+where
+    I: TensorStructure,
+{
     type Item = (Vec<ConcreteIndex>, &'a T);
     type IntoIter = DenseTensorIterator<'a, T, I>;
 
@@ -1280,7 +1306,10 @@ impl<'a, T, I> IntoIterator for &'a DenseTensor<T, I> {
     }
 }
 
-impl<T, I> IntoIterator for DenseTensor<T, I> {
+impl<T, I> IntoIterator for DenseTensor<T, I>
+where
+    I: TensorStructure,
+{
     type Item = (Vec<ConcreteIndex>, T);
     type IntoIter = DenseTensorIntoIterator<T, I>;
 
@@ -1303,7 +1332,10 @@ impl<T, I> DenseTensorIntoIterator<T, I> {
     }
 }
 
-impl<T, I> Iterator for DenseTensorIntoIterator<T, I> {
+impl<T, I> Iterator for DenseTensorIntoIterator<T, I>
+where
+    I: TensorStructure,
+{
     type Item = (Vec<ConcreteIndex>, T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1327,17 +1359,20 @@ pub struct DenseTensorTraceIterator<'a, T, I> {
     done: bool,
 }
 
-impl<'a, T, I> DenseTensorTraceIterator<'a, T, I> {
+impl<'a, T, I> DenseTensorTraceIterator<'a, T, I>
+where
+    I: TensorStructure,
+{
     fn new(tensor: &'a DenseTensor<T, I>, trace_indices: [usize; 2]) -> Self {
         assert!(trace_indices.len() >= 2, "Invalid trace indices");
         //trace positions must point to the same dimension
         assert!(
             trace_indices
                 .iter()
-                .map(|&pos| tensor.structure()[pos].representation)
+                .map(|&pos| tensor.external_structure()[pos].representation)
                 .collect::<Vec<_>>()
                 .iter()
-                .all(|&sig| sig == tensor.structure()[trace_indices[0]].representation),
+                .all(|&sig| sig == tensor.external_structure()[trace_indices[0]].representation),
             "Trace indices must point to the same dimension"
         );
         DenseTensorTraceIterator {
@@ -1375,6 +1410,7 @@ where
         + Neg<Output = T>
         + Clone
         + std::fmt::Debug,
+    I: TensorStructure,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -1382,7 +1418,8 @@ where
             return None;
         }
 
-        let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
+        let trace_dimension =
+            self.tensor.external_structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
 
         let mut iter = trace_sign.iter().enumerate();
@@ -1402,7 +1439,7 @@ where
                 indices[pos] = i;
             }
 
-            if let Some(value) = self.tensor.get(&indices) {
+            if let Ok(value) = self.tensor.get(&indices) {
                 if *sign {
                     trace -= value;
                 } else {
@@ -1436,7 +1473,10 @@ pub struct DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
     ws: &'b Workspace,
 }
 
-impl<'a, 'b, T, I> DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
+impl<'a, 'b, T, I> DenseTensorSymbolicTraceIterator<'a, 'b, T, I>
+where
+    I: TensorStructure,
+{
     fn new(
         tensor: &'a DenseTensor<T, I>,
         trace_indices: [usize; 2],
@@ -1448,10 +1488,10 @@ impl<'a, 'b, T, I> DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
         assert!(
             trace_indices
                 .iter()
-                .map(|&pos| tensor.structure()[pos].representation)
+                .map(|&pos| tensor.external_structure()[pos].representation)
                 .collect::<Vec<_>>()
                 .iter()
-                .all(|&sig| sig == tensor.structure()[trace_indices[0]].representation),
+                .all(|&sig| sig == tensor.external_structure()[trace_indices[0]].representation),
             "Trace indices must point to the same dimension"
         );
         DenseTensorSymbolicTraceIterator {
@@ -1492,6 +1532,7 @@ where
         + SymbolicNeg
         + Clone
         + std::fmt::Debug,
+    I: TensorStructure,
 {
     type Item = (Vec<ConcreteIndex>, T);
     fn next(&mut self) -> Option<Self::Item> {
@@ -1499,7 +1540,8 @@ where
             return None;
         }
 
-        let trace_dimension = self.tensor.structure()[self.trace_indices[0]].representation;
+        let trace_dimension =
+            self.tensor.external_structure()[self.trace_indices[0]].representation;
         let trace_sign = trace_dimension.negative();
 
         let mut iter = trace_sign.iter().enumerate();
@@ -1523,7 +1565,7 @@ where
                 indices[pos] = i;
             }
 
-            if let Some(value) = self.tensor.get(&indices) {
+            if let Ok(value) = self.tensor.get(&indices) {
                 if *sign {
                     trace.sub_assign_sym(value, self.ws, self.state);
                 } else {
@@ -1548,9 +1590,10 @@ where
     }
 }
 
-impl<T, I> DenseTensor<T, I> {
-    // ... [Other methods] ...
-
+impl<T, I> DenseTensor<T, I>
+where
+    I: TensorStructure,
+{
     pub fn iter(&self) -> DenseTensorIterator<T, I> {
         DenseTensorIterator::new(self)
     }

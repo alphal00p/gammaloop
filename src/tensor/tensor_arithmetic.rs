@@ -1,6 +1,6 @@
-use crate::tensor::ConcreteIndex;
+use crate::tensor::{ConcreteIndex, GetTensorData, SetTensorData};
 
-use super::{DenseTensor, HasTensorStructure, SparseTensor, TensorStructure};
+use super::{DenseTensor, SparseTensor, TensorStructure};
 use num::traits::Num;
 use std::ops::{Add, Mul, Sub};
 
@@ -8,7 +8,7 @@ impl<T, I> Add<DenseTensor<T, I>> for DenseTensor<T, I>
 where
     T: Num + Clone + Copy,
 
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = DenseTensor<T, I>;
     fn add(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
@@ -34,7 +34,7 @@ where
 impl<T, I> Add<SparseTensor<T, I>> for SparseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = SparseTensor<T, I>;
     fn add(self, other: SparseTensor<T, I>) -> SparseTensor<T, I> {
@@ -49,10 +49,7 @@ where
         for (indices, value) in other.iter() {
             let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
-            let self_value = self
-                .get_with_defaults(&permuted_indices)
-                .unwrap()
-                .into_owned();
+            let self_value = self.smart_get(&permuted_indices).unwrap().into_owned();
             result.set(&indices, self_value + *value).unwrap();
         }
 
@@ -63,7 +60,7 @@ where
 impl<T, I> Add<SparseTensor<T, I>> for DenseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = DenseTensor<T, I>;
     fn add(self, other: SparseTensor<T, I>) -> DenseTensor<T, I> {
@@ -89,7 +86,7 @@ where
 impl<T, I> Add<DenseTensor<T, I>> for SparseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = DenseTensor<T, I>;
     fn add(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
@@ -100,7 +97,7 @@ where
 impl<T, I> Sub<DenseTensor<T, I>> for DenseTensor<T, I>
 where
     T: Num + Clone + Copy,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = DenseTensor<T, I>;
     fn sub(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
@@ -125,7 +122,7 @@ where
 impl<T, I> Sub<SparseTensor<T, I>> for SparseTensor<T, I>
 where
     T: Num + Default + Copy,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = SparseTensor<T, I>;
     fn sub(self, other: SparseTensor<T, I>) -> SparseTensor<T, I> {
@@ -140,10 +137,7 @@ where
         for (indices, value) in other.iter() {
             let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
-            let self_value = self
-                .get_with_defaults(&permuted_indices)
-                .unwrap()
-                .into_owned();
+            let self_value = self.smart_get(&permuted_indices).unwrap().into_owned();
             result.set(&indices, self_value - *value).unwrap();
         }
 
@@ -154,7 +148,7 @@ where
 impl<T, I> Sub<SparseTensor<T, I>> for DenseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = DenseTensor<T, I>;
     fn sub(self, other: SparseTensor<T, I>) -> DenseTensor<T, I> {
@@ -179,7 +173,7 @@ where
 impl<T, I> Sub<DenseTensor<T, I>> for SparseTensor<T, I>
 where
     T: Num + Clone + Default + Copy,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = DenseTensor<T, I>;
     fn sub(self, other: DenseTensor<T, I>) -> DenseTensor<T, I> {
@@ -190,7 +184,7 @@ where
 impl<T, I> Mul<T> for DenseTensor<T, I>
 where
     T: Num + Clone + Copy,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = DenseTensor<T, I>;
     fn mul(self, other: T) -> DenseTensor<T, I> {
@@ -206,7 +200,7 @@ where
 impl<T, I> Mul<T> for SparseTensor<T, I>
 where
     T: Num + Copy + Default,
-    I: Clone,
+    I: TensorStructure + Clone,
 {
     type Output = SparseTensor<T, I>;
     fn mul(self, other: T) -> Self::Output {

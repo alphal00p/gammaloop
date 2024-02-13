@@ -15,10 +15,10 @@ use _gammaloop::tensor::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
     },
-    AbstractIndex, Contract, DenseTensor, Expr, HasTensorData, HasTensorSkeleton, IntoId, NumTensors,
-    Representation::Euclidean,
-    Representation::Lorentz,
-    SparseTensor, TensorNetwork, TensorSkeleton,
+    AbstractIndex, Contract, DenseTensor, Expr, HasName, HasTensorData, HistoryStructure, IntoId,
+    NumTensor,
+    Representation::{Euclidean, Lorentz},
+    SparseTensor, TensorNetwork,
 };
 
 use num::complex::Complex64;
@@ -48,53 +48,6 @@ use symbolica::{
 //     let p: DenseTensor<num::Complex<T>> = mink_four_vector(minkindex, p);
 //     p.contract(&gamma::<T>::(minkindex, indices)).unwrap()
 // }
-#[allow(dead_code)]
-fn labeled_mink_four_vector(
-    label: &str,
-    index: AbstractIndex,
-    ws: &Workspace,
-    state: &mut State,
-) -> DenseTensor<Atom> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".into());
-
-    DenseTensor::symbolic_labels(label, structure, ws, state)
-    // .try_into()
-    // .unwrap_or_else(|v: Vec<_>| panic!("Expected a Vec of length 4 but it was {}", v.len()))
-}
-#[allow(dead_code)]
-fn numbered_labeled_mink_four_vector<'a>(
-    label: Identifier,
-    number: usize,
-    index: AbstractIndex,
-    state: &'a State,
-    ws: &'a Workspace,
-) -> DenseTensor<Expr<'a>> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Lorentz(4))], "p".into());
-    DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
-}
-
-#[allow(dead_code)]
-fn labeled_eucl_four_vector(
-    label: &str,
-    index: AbstractIndex,
-    ws: &Workspace,
-    state: &mut State,
-) -> DenseTensor<Atom> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x".into());
-    DenseTensor::symbolic_labels(label, structure, ws, state)
-}
-
-#[allow(dead_code)]
-fn numbered_labeled_eucl_four_vector<'a>(
-    label: Identifier,
-    number: usize,
-    index: AbstractIndex,
-    state: &'a State,
-    ws: &'a Workspace,
-) -> DenseTensor<Expr<'a>> {
-    let structure = TensorSkeleton::from_idxsing(&[(index, Euclidean(4))], "x".into());
-    DenseTensor::numbered_labeled_builder(number, label, structure, ws, state)
-}
 
 // #[allow(dead_code)]
 // fn benchmark_chain(
@@ -140,7 +93,6 @@ fn numbered_labeled_eucl_four_vector<'a>(
 //     let id = state.get_or_insert_fn("p", None).unwrap();
 //     let vbar = labeled_eucl_four_vector("vbar", contracting_index, ws, state).builder(state, ws);
 //     let mut result = vbar;
-
 #[allow(dead_code)]
 fn gamma_trace<T>(minkindices: &[i32]) -> SparseTensor<Complex<T>>
 where
@@ -221,10 +173,10 @@ fn gamma_net(
     vbar: [Complex64; 4],
     u: [Complex64; 4],
     state: &mut State,
-) -> TensorNetwork<NumTensors<Identifier>> {
+) -> TensorNetwork<NumTensor<HistoryStructure<Identifier>>> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result: Vec<NumTensors<Identifier>> =
+    let mut result: Vec<NumTensor<HistoryStructure<Identifier>>> =
         vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
     for m in minkindices {
         let ui = contracting_index;
@@ -284,13 +236,12 @@ fn gamma_net_param(
     minkindices: &[i32],
     state: &mut State,
     ws: &Workspace,
-) -> TensorNetwork<MixedTensor<Identifier>> {
+) -> TensorNetwork<MixedTensor<HistoryStructure<Identifier>>> {
     let mut i = 0;
     let mut contracting_index = 0;
-    let mut result: Vec<MixedTensor<Identifier>> =
-        vec![
-            param_euclidean_four_vector(contracting_index, "vbar".into_id(state), state, ws).into(),
-        ];
+    let mut result: Vec<MixedTensor<HistoryStructure<Identifier>>> = vec![
+        param_euclidean_four_vector(contracting_index, "vbar".into_id(state), state, ws).into(),
+    ];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1;
@@ -582,7 +533,7 @@ fn main() {
         .into_iter()
         .map(|x| {
             (
-                state.get_name(*x.global_name().unwrap()).clone(),
+                state.get_name(*x.name().unwrap()).clone(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -600,7 +551,7 @@ fn main() {
     let amap = chain_param
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| x.symhashmap(*x.global_name().unwrap(), &mut state, &ws))
+        .map(|x| x.symhashmap(*x.name().unwrap(), &mut state, &ws))
         .collect::<Vec<_>>();
 
     let amapstr = amap
@@ -644,7 +595,7 @@ fn main() {
         .into_iter()
         .map(|x| {
             (
-                state.get_name(*x.global_name().unwrap()).clone(),
+                state.get_name(*x.name().unwrap()).clone(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -662,7 +613,7 @@ fn main() {
     let bmap = shadow
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| x.symhashmap(*x.global_name().unwrap(), &mut state, &ws))
+        .map(|x| x.symhashmap(*x.name().unwrap(), &mut state, &ws))
         .collect::<Vec<_>>();
 
     let bmapstr = bmap
@@ -705,7 +656,7 @@ fn main() {
         .clone()
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| (state.get_name(*x.global_name().unwrap()).clone(), x.data()))
+        .map(|x| (state.get_name(*x.name().unwrap()).clone(), x.data()))
         .collect();
 
     let e: Vec<(String, Vec<String>)> = shadow2
@@ -714,7 +665,7 @@ fn main() {
         .into_iter()
         .map(|x| {
             (
-                state.get_name(*x.global_name().unwrap()).clone(),
+                state.get_name(*x.name().unwrap()).clone(),
                 x.data()
                     .into_iter()
                     .map(|x| {
@@ -732,7 +683,7 @@ fn main() {
     let cmap = shadow2
         .to_symbolic_tensor_vec()
         .into_iter()
-        .map(|x| x.symhashmap(*x.global_name().unwrap(), &mut state, &ws))
+        .map(|x| x.symhashmap(*x.name().unwrap(), &mut state, &ws))
         .collect::<Vec<_>>();
 
     let cmapstr = cmap
