@@ -1,5 +1,5 @@
 use super::{
-    atomic_expanded_label_id, AbstractIndex, ConcreteIndex, Dimension, HasName, HistoryStructure,
+    atomic_expanded_label_id, ConcreteIndex, HasName,
     Slot, TensorStructure, TracksCount,
 };
 use ahash::AHashMap;

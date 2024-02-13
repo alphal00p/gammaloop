@@ -1,10 +1,10 @@
 use super::{
-    Expr, HasName, HistoryStructure, IntoId, Shadowable, Slot, StructureContract, SymbolicContract,
+    HasName, IntoId, Shadowable, Slot, StructureContract, SymbolicContract,
     TensorStructure,
 };
-use smartstring::alias::String;
+
 use symbolica::{
-    representations::{default::Linear, AsAtomView, Atom, Identifier},
+    representations::{default::Linear, AsAtomView, Atom},
     state::{ResettableBuffer, State, Workspace},
 };
 

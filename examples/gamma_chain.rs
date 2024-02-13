@@ -14,10 +14,8 @@ use _gammaloop::tensor::{
     ufo_spin_tensors::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
-    },
-    AbstractIndex, Contract, DenseTensor, Expr, HasName, HasTensorData, HistoryStructure, IntoId,
+    }, Contract, DenseTensor, HasName, HasTensorData, HistoryStructure, IntoId,
     NumTensor,
-    Representation::{Euclidean, Lorentz},
     SparseTensor, TensorNetwork,
 };
 

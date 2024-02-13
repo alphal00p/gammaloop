@@ -1,7 +1,7 @@
 use crate::tensor::{
     ufo_spin_tensors::mink_four_vector,
     Contract, DenseTensor, GetTensorData, HasTensorData,
-    Representation::{self, Lorentz},
+    Representation::{self},
     SparseTensor, SymbolicContract, TensorStructure,
 };
 use indexmap::IndexMap;
@@ -14,7 +14,7 @@ use symbolica::{
 
 use super::{
     symbolic_tensor::SymbolicTensor, ufo_spin_tensors, HistoryStructure, NumTensor, SetTensorData,
-    Slot, TensorNetwork,
+    Slot,
 };
 
 #[test]
@@ -229,11 +229,11 @@ fn mixed_tensor_contraction() {
 
 #[test]
 fn tensor_net() {
-    let a: NumTensor = ufo_spin_tensors::gamma(1, (2, 3)).into();
-    let b: NumTensor = ufo_spin_tensors::gamma(2, (3, 4)).into();
-    let c: NumTensor = ufo_spin_tensors::gamma(3, (4, 2)).into();
-    let p: NumTensor = mink_four_vector(2, &[2., 3., 2., 1.]).into();
-    let q: NumTensor = mink_four_vector(3, &[2., 3., 2., 1.]).into();
+    let _a: NumTensor = ufo_spin_tensors::gamma(1, (2, 3)).into();
+    let _b: NumTensor = ufo_spin_tensors::gamma(2, (3, 4)).into();
+    let _c: NumTensor = ufo_spin_tensors::gamma(3, (4, 2)).into();
+    let _p: NumTensor = mink_four_vector(2, &[2., 3., 2., 1.]).into();
+    let _q: NumTensor = mink_four_vector(3, &[2., 3., 2., 1.]).into();
 
     // let mut n = TensorNetwork::new(vec![a, b, c, p, q]);
 

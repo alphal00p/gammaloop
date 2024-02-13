@@ -10,7 +10,7 @@ use _gammaloop::tensor::{
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use num::{complex::Complex64, ToPrimitive};
-use smartstring::alias::String;
+
 use symbolica::{representations::Identifier, state::State};
 fn gamma_net_sym(
     minkindices: &[i32],

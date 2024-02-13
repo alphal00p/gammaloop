@@ -1,6 +1,6 @@
 use ahash::AHashMap;
 use duplicate::duplicate;
-use enum_dispatch::enum_dispatch;
+
 use indexmap::IndexMap;
 use smartstring::LazyCompact;
 use smartstring::SmartString;
