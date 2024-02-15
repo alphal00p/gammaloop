@@ -1,3 +1,6 @@
+use std::collections::{HashMap, HashSet};
+use yaml_rust::yaml::Hash;
+
 #[derive(Debug, Clone)]
 struct A {}
 #[derive(Debug, Clone)]

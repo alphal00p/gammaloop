@@ -8,6 +8,7 @@ use symbolica::state::ResettableBuffer;
 use symbolica::state::State;
 use symbolica::state::Workspace;
 
+/// For a given binary operation on &T and &U, we can implement the same operation on any combination of &T,T and &U,U.
 #[macro_export]
 macro_rules! forward_ref_binop {
     (impl $imp:ident, $method:ident for $t:ty, $u:ty,$out:ty) => {
@@ -86,10 +87,12 @@ pub trait SmallestUpgradeSymbolic<T> {
     fn upgrade_sym(self, ws: &Workspace, state: &State) -> Option<Self::LCMS>;
 }
 
+/// If possble turn into an Atom.
 pub trait SymbolicInto {
     fn into_sym(self, ws: &Workspace, state: &State) -> Option<Atom>;
 }
 
+/// First turns into a rational, then into an Atom.
 impl SymbolicInto for f64 {
     fn into_sym(self, ws: &Workspace, _state: &State) -> Option<Atom> {
         let rugrat = rug::Rational::from_f64(self)?;
@@ -109,6 +112,7 @@ impl SymbolicInto for &f64 {
     }
 }
 
+/// Uses f64::into_sym to turn real and imaginary parts into Atoms, then adds them together, multiplying the imaginary part by i.
 impl SymbolicInto for Complex<f64> {
     fn into_sym(self, ws: &Workspace, state: &State) -> Option<Atom> {
         let real = self.re.into_sym(ws, state)?;
@@ -126,6 +130,9 @@ impl SymbolicInto for &Complex<f64> {
     }
 }
 
+/// Smart multiplication, that automatically upgrades types when necessary.
+///
+/// Normal multiplication is used for types that support it.
 pub trait SymbolicMul<T> {
     type Output;
     fn mul_sym(self, rhs: T, ws: &Workspace, state: &State) -> Option<Self::Output>;

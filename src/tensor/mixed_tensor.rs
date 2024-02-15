@@ -104,46 +104,6 @@ where
         state: &State,
         ws: &Workspace,
     ) -> Option<Self::LCM> {
-        //     if let Some((_, i, j)) = self.structure().match_index(other.structure()) {
-        //         let dimension_of_contraction = self.shape()[i];
-        //         let final_structure = self.structure.merge_at(&other.structure, (i, j));
-        //         let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
-        //         let metric = self.external_structure()[i].representation.negative();
-        //         let mut result_index = 0;
-        //         for fiber_a in self.iter_fibers(i) {
-        //             for fiber_b in other.iter_fibers(j) {
-        //                 for i in 0..dimension_of_contraction {
-        //                     if metric[i] {
-        //                         result_data[result_index] = result_data[result_index].sub_sym(
-        //                             &fiber_a[i].mul_sym(fiber_b[i], ws, state)?,
-        //                             ws,
-        //                             state,
-        //                         )?;
-        //                     } else {
-        //                         result_data[result_index] = result_data[result_index].add_sym(
-        //                             &fiber_a[i].mul_sym(fiber_b[i], ws, state)?,
-        //                             ws,
-        //                             state,
-        //                         )?;
-        //                     }
-        //                 }
-        //                 result_index += 1;
-        //             }
-        //         }
-
-        //         let result = DenseTensor {
-        //             data: result_data,
-        //             structure: final_structure,
-        //         };
-
-        //         if result.traces().is_empty() {
-        //             return Some(result);
-        //         } else {
-        //             return Some(result.internal_contract_sym(ws, state));
-        //         }
-        //     }
-        //     None
-        // }
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
