@@ -3,7 +3,7 @@ use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
 use crate::observables::EventManager;
 use crate::utils::FloatLike;
-use crate::{utils, Precision, Settings};
+use crate::{utils, IntegratorSettings, Precision, Settings};
 use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -60,6 +60,10 @@ pub trait HasIntegrand {
     ) -> EvaluationResult;
 
     fn get_n_dim(&self) -> usize;
+
+    fn get_integrator_settings(&self) -> IntegratorSettings {
+        IntegratorSettings::default()
+    }
 
     // In case your integrand supports observable, then overload this function to combine the observables
     fn merge_results<I: HasIntegrand>(&mut self, _other: &mut I, _iter: usize) {}
@@ -175,6 +179,8 @@ impl HasIntegrand for UnitSurfaceIntegrand {
         use_f128: bool,
         max_eval: f64,
     ) -> EvaluationResult {
+        let start_evaluate_sample = std::time::Instant::now();
+
         let xs = match sample {
             Sample::Continuous(_w, v) => v,
             _ => panic!("Wrong sample type"),
@@ -220,6 +226,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
         let evaluation_time = before_evaluation.elapsed();
 
         let evaluation_metadata = EvaluationMetaData {
+            total_timing: start_evaluate_sample.elapsed(),
             rep3d_evaluation_time: evaluation_time,
             parameterization_time,
             relative_instability_error: Complex::new(0., 0.),
@@ -318,6 +325,8 @@ impl HasIntegrand for UnitVolumeIntegrand {
         use_f128: bool,
         max_eval: f64,
     ) -> EvaluationResult {
+        let start_evaluate_sample = std::time::Instant::now();
+
         let xs = match sample {
             Sample::Continuous(_w, v) => v,
             _ => panic!("Wrong sample type"),
@@ -362,6 +371,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
         let evaluation_time = before_evaluation.elapsed();
 
         let evaluation_metadata = EvaluationMetaData {
+            total_timing: start_evaluate_sample.elapsed(),
             rep3d_evaluation_time: evaluation_time,
             parameterization_time,
             relative_instability_error: Complex::new(0., 0.),

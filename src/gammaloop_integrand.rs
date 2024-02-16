@@ -1,5 +1,5 @@
 use core::panic;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
@@ -434,6 +434,8 @@ impl HasIntegrand for GammaLoopIntegrand {
         use_f128: bool,
         max_eval: f64,
     ) -> EvaluationResult {
+        let start_evaluate_sample = Instant::now();
+
         // setup the evaluation of the integrand in the different stability levels
         let mut results_of_stability_levels =
             Vec::with_capacity(self.settings.stability.levels.len());
@@ -557,14 +559,15 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!("\t{}: {:+e}", "result".yellow(), res * prefactor);
         }
 
+        let integrand_result = res * prefactor;
+
         let evaluation_metadata = EvaluationMetaData {
             rep3d_evaluation_time: *duration,
             parameterization_time,
             relative_instability_error: Complex::new(0., 0.),
             highest_precision: *precision,
+            total_timing: start_evaluate_sample.elapsed(),
         };
-
-        let integrand_result = res * prefactor;
 
         EvaluationResult {
             integrand_result,
@@ -572,6 +575,10 @@ impl HasIntegrand for GammaLoopIntegrand {
             event_buffer: vec![],
             evaluation_metadata,
         }
+    }
+
+    fn get_integrator_settings(&self) -> crate::IntegratorSettings {
+        self.settings.integrator.clone()
     }
 
     fn get_event_manager_mut(&mut self) -> &mut crate::observables::EventManager {
@@ -609,13 +616,15 @@ impl GammaLoopIntegrand {
             Precision::Double => match &self.graph_integrands {
                 GraphIntegrands::Amplitude(graph_integrands) => {
                     let result = evaluate(graph_integrands, sample_point, &self.settings);
-                    let rotated_result = evaluate(graph_integrands, sample_point, &self.settings);
+                    let rotated_result =
+                        evaluate(graph_integrands, rotated_sample_point, &self.settings);
 
                     (result, rotated_result)
                 }
                 GraphIntegrands::CrossSection(graph_integrands) => {
                     let result = evaluate(graph_integrands, sample_point, &self.settings);
-                    let rotated_result = evaluate(graph_integrands, sample_point, &self.settings);
+                    let rotated_result =
+                        evaluate(graph_integrands, rotated_sample_point, &self.settings);
 
                     (result, rotated_result)
                 }
@@ -809,7 +818,7 @@ impl GammaLoopIntegrand {
         }
     }
 
-    // compute thea average and check the accuracy of the result
+    // compute the average and check the accuracy of the result
     #[inline]
     fn stability_check(
         &self,
@@ -838,7 +847,11 @@ impl GammaLoopIntegrand {
             ((result_for_comparison - rotated_result_for_comparison) / average_for_comparison).abs()
         };
 
-        let stable = error < stability_settings.required_precision_for_re;
+        let stable = match integrated_phase {
+            IntegratedPhase::Real => error < stability_settings.required_precision_for_re,
+            IntegratedPhase::Imag => error < stability_settings.required_precision_for_im,
+            IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
+        };
 
         let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
             && max_wgt_for_comparison != 0.

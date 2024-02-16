@@ -102,6 +102,8 @@ impl HasIntegrand for HFunctionTestIntegrand {
         use_f128: bool,
         _max_eval: f64,
     ) -> EvaluationResult {
+        let start_evaluate_sample = std::time::Instant::now();
+
         let xs = match sample {
             Sample::Continuous(_w, v) => v,
             _ => panic!("Wrong sample type"),
@@ -162,6 +164,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
             };
 
         let evaluation_metadata = EvaluationMetaData {
+            total_timing: start_evaluate_sample.elapsed(),
             rep3d_evaluation_time: evaluation_timing,
             parameterization_time: parameterization_timing,
             relative_instability_error: Complex::new(0.0, 0.0),

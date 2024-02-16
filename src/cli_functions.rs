@@ -3,19 +3,25 @@ use color_eyre::Report;
 use colored::Colorize;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use symbolica::numerical_integration::Sample;
+use symbolica::{
+    numerical_integration::Sample,
+    state::{State, Workspace},
+};
 
 use crate::{
+    cross_section::Amplitude,
     inspect::inspect,
-    integrands::integrand_factory,
-    integrands::HasIntegrand,
-    integrate::{havana_integrate, UserData},
+    integrands::{integrand_factory, HasIntegrand},
+    integrate::{
+        self, havana_integrate, SerializableBatchIntegrateInput, SerializableBatchResult, UserData,
+    },
+    model::Model,
     utils::{print_banner, VERSION},
-    Settings,
+    Integrand, Settings,
 };
 use num::Complex;
-use std::str::FromStr;
-use std::time::Instant;
+use std::{fs, time::Instant};
+use std::{path::PathBuf, str::FromStr};
 
 pub fn cli(args: &Vec<String>) -> Result<(), Report> {
     let matches = App::new("gammaLoop")
@@ -127,7 +133,57 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
                         .help("Number of samples for benchmark"),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("batch")
+                .about("Evaluate a batch of points, mostly for HPC use")
+                .arg(
+                    Arg::with_name("process_file")
+                        .short("pf")
+                        .long("process_file")
+                        .required(true)
+                        .value_name("PROCESS_FILE")
+                        .help("Path to process output file"),
+                )
+                .arg(
+                    Arg::with_name("batch_input_file")
+                        .short("if")
+                        .long("batch_input_file")
+                        .required(true)
+                        .value_name("BATCH_INPUT_FILE")
+                        .help("Path to the batch input file"),
+                )
+                .arg(
+                    Arg::with_name("name")
+                        .short("n")
+                        .long("name")
+                        .required(true)
+                        .value_name("NAME")
+                        .help("Name of the amplitude to use"),
+                )
+                .arg(
+                    Arg::with_name("output_name")
+                        .short("on")
+                        .long("output_name")
+                        .required(true)
+                        .value_name("NAME")
+                        .help("Name of the output file"),
+                ),
+        )
         .get_matches_from(args);
+
+    if let Some(matches) = matches.subcommand_matches("batch") {
+        let path_to_process_output = PathBuf::from_str(matches.value_of("process_file").unwrap())?;
+        let path_to_batch_input = PathBuf::from_str(matches.value_of("batch_input_file").unwrap())?;
+        let name = matches.value_of("name").unwrap();
+        let output_name = matches.value_of("output_name").unwrap();
+
+        return batch_branch(
+            path_to_process_output,
+            path_to_batch_input,
+            name,
+            output_name,
+        );
+    }
 
     let mut settings: Settings = Settings::from_file(matches.value_of("config").unwrap())?;
 
@@ -256,5 +312,85 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
         );
         info!("");
     }
+    Ok(())
+}
+
+fn batch_branch(
+    process_output_file: PathBuf,
+    batch_input_file: PathBuf,
+    amplitude_name: &str,
+    output_name: &str,
+) -> Result<(), Report> {
+    // much of this should be moved to the main cli function
+
+    // setup symbolica for model loading
+    let mut state = State::default();
+    let workspace = Workspace::new();
+
+    // set symbolica license, works without for now
+
+    println!("settings passed by command line will be overwritten by configurations in the process output and batch input");
+
+    // load the settings
+    let path_to_settings = process_output_file.join("cards").join("run_card.yaml");
+    let settings_string = std::fs::read_to_string(path_to_settings.clone())
+        .unwrap_or_else(|err| panic!("could not load settings at {:?}: {}", path_to_settings, err));
+    let settings: Settings = serde_yaml::from_str(&settings_string)?;
+
+    // load the model, hardcoded to scalars.yaml for now
+    let path_to_model = process_output_file
+        .join("sources")
+        .join("model")
+        .join("scalars.yaml");
+    let path_to_model_string = path_to_model.to_str().unwrap().to_string();
+    let model = Model::from_file(path_to_model_string, &mut state, &workspace)?;
+
+    // load the amplitude
+    let path_to_amplitude_yaml = process_output_file
+        .join("sources")
+        .join("amplitudes")
+        .join(amplitude_name)
+        .join("amplitude.yaml");
+
+    // we should change all the file_path arguments to PathBuf or &Path
+    let path_to_amplitude_yaml_as_string = path_to_amplitude_yaml.to_str().unwrap().to_string();
+
+    // this is all very amplitude focused, will be generalized later when the structure is clearer
+    let amplitude = {
+        let mut amp = Amplitude::from_file(&model, path_to_amplitude_yaml_as_string)
+            .unwrap_or_else(|err| {
+                panic!(
+                    "could not load amplitude at {:?}: {}",
+                    path_to_amplitude_yaml, err
+                )
+            });
+
+        let derived_data_path = process_output_file
+            .join("sources")
+            .join("amplitudes")
+            .join(amplitude_name);
+
+        amp.load_derived_data(&derived_data_path)?;
+        amp
+    };
+
+    // load input data
+
+    let batch_input_bytes = std::fs::read(batch_input_file)?;
+    let serializable_batch_input =
+        bincode::deserialize::<SerializableBatchIntegrateInput>(&batch_input_bytes)?;
+    let batch_integrate_input = serializable_batch_input.into_batch_integrate_input(&settings);
+
+    // construct integrand
+    let integrand = Integrand::GammaLoopIntegrand(amplitude.generate_integrand(&path_to_settings)?);
+
+    // integrate
+    let batch_result = integrate::batch_integrate(&integrand, batch_integrate_input);
+
+    // save result
+    let serializable_batch_result = SerializableBatchResult::from_batch_result(batch_result);
+    let batch_result_bytes = bincode::serialize(&serializable_batch_result)?;
+    fs::write(output_name, batch_result_bytes)?;
+
     Ok(())
 }

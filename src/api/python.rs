@@ -3,9 +3,9 @@ use crate::{
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
     inspect,
     integrands::Integrand,
-    integrate::havana_integrate,
+    integrate::{havana_integrate, MasterNode, SerializableBatchResult},
     model::Model,
-    Settings,
+    HasIntegrand, Settings,
 };
 use ahash::HashMap;
 use git_version::git_version;
@@ -68,6 +68,7 @@ pub struct PythonWorker {
     pub cross_sections: CrossSectionList,
     pub amplitudes: AmplitudeList,
     pub integrands: HashMap<String, Integrand>,
+    pub master_node: Option<MasterNode>,
 }
 
 impl Clone for PythonWorker {
@@ -79,6 +80,7 @@ impl Clone for PythonWorker {
             cross_sections: self.cross_sections.clone(),
             amplitudes: self.amplitudes.clone(),
             integrands: self.integrands.clone(),
+            master_node: self.master_node.clone(),
         }
     }
 }
@@ -95,6 +97,7 @@ impl PythonWorker {
             cross_sections: CrossSectionList::default(),
             amplitudes: AmplitudeList::default(),
             integrands: HashMap::default(),
+            master_node: None,
         })
     }
 
@@ -387,6 +390,64 @@ impl PythonWorker {
         }
     }
 
+    pub fn load_master_node(&mut self, integrand: &str) -> PyResult<String> {
+        let selected_integrand = if let Some(selected_integrand) = self.integrands.get(integrand) {
+            selected_integrand
+        } else {
+            return Err(exceptions::PyException::new_err(format!(
+                "could not find integrand {}",
+                integrand
+            )));
+        };
+
+        let grid = selected_integrand.create_grid();
+        let integrator_settings = selected_integrand.get_integrator_settings();
+
+        let master_node = MasterNode::new(grid, integrator_settings);
+        self.master_node = Some(master_node);
+
+        Ok(format!("Initialized master grid for {}", integrand))
+    }
+
+    pub fn write_batch_input(
+        &mut self,
+        num_cores: usize,
+        num_samples: usize,
+        export_grid: bool,
+        output_accumulator: bool,
+        job_name: &str,
+    ) -> PyResult<String> {
+        let master_node = self.master_node.as_mut().unwrap();
+
+        // extract the integrated phase in a hacky way
+        match master_node
+            .write_batch_input(
+                num_cores,
+                num_samples,
+                export_grid,
+                output_accumulator,
+                job_name,
+            )
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+        {
+            Ok(_) => Ok(format!("Wrote batch input for job {}", job_name)),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn process_batch_output(&mut self, job_name: &str) -> PyResult<String> {
+        let master_node = self.master_node.as_mut().unwrap();
+
+        let output_file = std::fs::read(job_name)?;
+        let batch_result: SerializableBatchResult = bincode::deserialize(&output_file).unwrap();
+
+        master_node
+            .process_batch_output(batch_result.into_batch_result())
+            .unwrap();
+
+        Ok(format!("Processed job {}", job_name))
+    }
+
     pub fn write_default_settings(&self, path: &str) -> PyResult<String> {
         let default = Settings::default();
         let default_string = serde_yaml::to_string(&default)
@@ -398,5 +459,17 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         Ok("Wrote default settings file".to_string())
+    }
+
+    pub fn display_master_node_status(&self) {
+        if let Some(master_node) = &self.master_node {
+            master_node.display_status();
+        }
+    }
+
+    pub fn update_iter(&mut self) {
+        if let Some(master_node) = &mut self.master_node {
+            master_node.update_iter();
+        }
     }
 }
