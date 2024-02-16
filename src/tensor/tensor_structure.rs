@@ -68,6 +68,7 @@ impl Representation {
     ///
     /// assert!(agree);
     /// ```
+    #[must_use]
     pub fn negative(&self) -> Vec<bool> {
         match self {
             Self::Lorentz(value) => std::iter::once(false)
@@ -87,6 +88,7 @@ impl Representation {
     ///
     /// for example see [`Self::negative`]
     #[inline]
+    #[must_use]
     pub const fn is_neg(&self, i: usize) -> bool {
         match self {
             Self::Lorentz(_) => i > 0,
@@ -97,6 +99,7 @@ impl Representation {
     /// yields a function builder for the representation, adding a first variable: the dimension.
     ///
     /// for example see [`Slot::to_symbolic`]
+    #[allow(clippy::cast_possible_wrap)]
     pub fn to_fnbuilder<'a, 'b: 'a>(
         &'a self,
         state: &'b mut State,
@@ -113,7 +116,8 @@ impl Representation {
             Self::ColorAntiSextet(value) => (*value, state.get_or_insert_fn("CAS", None)),
         };
 
-        let mut value_builder = FunctionBuilder::new(id.unwrap(), state, ws);
+        let mut value_builder =
+            FunctionBuilder::new(id.unwrap_or_else(|_| unreachable!()), state, ws);
 
         value_builder = value_builder.add_arg(Atom::new_num(value as i64).as_atom_view());
 
@@ -259,6 +263,7 @@ impl From<(usize, usize)> for Slot {
     }
 }
 
+#[allow(clippy::cast_possible_wrap)]
 impl Slot {
     /// using the function builder of the representation add the abstract index as an argument, and finish it to an Atom.
     /// # Example
@@ -925,7 +930,7 @@ pub struct HistoryStructure<N> {
 }
 
 impl<N> HistoryStructure<N> {
-    /// Constructs a new TensorSkeleton from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
+    /// Constructs a new [`HistoryStructure`] from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
     pub fn from_integers(slots: &[(AbstractIndex, Dimension)], name: N) -> Self
     where
         N: Clone,
@@ -936,7 +941,7 @@ impl<N> HistoryStructure<N> {
             .collect();
         Self::new(&slots, name)
     }
-    /// Constructs a new TensorSkeleton from a list of tuples of indices and representations, along with a name
+    /// Constructs a new [`HistoryStructure`] from a list of tuples of indices and representations, along with a name
     pub fn new(slots: &[(AbstractIndex, Representation)], name: N) -> Self
     where
         N: Clone,
@@ -975,7 +980,7 @@ impl<N> HistoryStructure<N> {
             .unwrap_or(0)
             + 1;
 
-        for item in self.internal.iter_mut() {
+        for item in &mut self.internal {
             if other_set.contains(item) {
                 item.index = replacement_value;
                 replacement_value += 1;
@@ -1075,7 +1080,7 @@ where
     /// essentially contract.
     fn merge(&mut self, other: &Self) {
         let shift = self.internal.len();
-        for (range, name) in other.names.iter() {
+        for (range, name) in &other.names {
             self.names
                 .insert((range.start + shift)..(range.end + shift), name.clone());
         }
@@ -1085,29 +1090,29 @@ where
         self.internal.append(&mut other.internal.clone());
     }
 
-    /// Merge two TensorSkeletons at the given positions of the external index list. Ideally the internal index list should be independentized before merging
+    /// Merge two [`HistoryStructure`] at the given positions of the external index list. Ideally the internal index list should be independentized before merging
     /// This is essentially a contraction of only one index. The name maps are merged, and shifted accordingly. The global name is lost, since the resulting tensor is composite
-    /// The global name can be set again with the set_global_name function
+    /// The global name can be set again with the [`Self::set_global_name`] function
     fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
-        let mut slots_b = other.external.clone();
-        let mut slots_a = self.external.clone();
+        let mut slots_other = other.external.clone();
+        let mut slots_self: Vec<Slot> = self.external.clone();
 
-        slots_a.remove(positions.0);
-        slots_b.remove(positions.1);
+        slots_self.remove(positions.0);
+        slots_other.remove(positions.1);
 
-        let mut slots_a_int = self.internal.clone();
-        let mut slots_b_int = other.internal.clone();
-        slots_a_int.append(&mut slots_b_int);
+        let mut slots_self_int = self.internal.clone();
+        let mut slots_other_int = other.internal.clone();
+        slots_self_int.append(&mut slots_other_int);
 
         let mut names = self.names.clone();
         let shift = self.internal.len();
-        for (range, name) in other.names.iter() {
+        for (range, name) in &other.names {
             names.insert((range.start + shift)..(range.end + shift), name.clone());
         }
-        slots_a.append(&mut slots_b);
+        slots_self.append(&mut slots_other);
         HistoryStructure {
-            internal: slots_a_int,
-            external: slots_a,
+            internal: slots_self_int,
+            external: slots_self,
             names,
             global_name: None,
         }
@@ -1134,6 +1139,7 @@ pub fn atomic_flat_label<I: IntoId>(
     atomic_flat_label_id(index, id, state, ws)
 }
 
+#[allow(clippy::cast_possible_wrap)]
 pub fn atomic_flat_label_id(
     index: usize,
     id: Identifier,
@@ -1145,6 +1151,7 @@ pub fn atomic_flat_label_id(
     value_builder.finish().into_atom()
 }
 
+#[allow(clippy::cast_possible_wrap)]
 pub fn atomic_expanded_label_id(
     indices: &[ConcreteIndex],
     id: Identifier,
@@ -1261,25 +1268,26 @@ impl std::fmt::Display for N
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut string = String::new();
         if let Some(global_name) = self.name() {
-            string.push_str(&format!("{}:", global_name));
+            string.push_str(&format!("{global_name}:"));
         }
         for (range, name) in self
             .names
             .iter()
             .filter(|(r, _)| *r != &(0..self.internal.len()) || !self.is_composite())
         {
-            string.push_str(&format!("{}(", name));
-            for slot in self.internal[range.clone()].iter() {
-                string.push_str(&format!("{},", slot));
+            string.push_str(&format!("{name}("));
+            for slot in &self.internal[range.clone()] {
+                string.push_str(&format!("{slot},"));
             }
             string.pop();
             string.push(')');
         }
-        write!(f, "{}", string)
+        write!(f, "{string}")
     }
 }
 }
 impl HistoryStructure<Identifier> {
+    #[must_use]
     pub fn to_string(&self, state: &State) -> String {
         let mut string = String::new();
         if let Some(global_name) = self.name() {
@@ -1291,8 +1299,8 @@ impl HistoryStructure<Identifier> {
             .filter(|(r, _)| *r != &(0..self.internal.len()) || !self.is_composite())
         {
             string.push_str(&format!("{}(", state.get_name(*name)));
-            for slot in self.internal[range.clone()].iter() {
-                string.push_str(&format!("{},", slot));
+            for slot in &self.internal[range.clone()] {
+                string.push_str(&format!("{slot},"));
             }
             string.pop();
             string.push(')');
