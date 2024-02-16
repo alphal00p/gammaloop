@@ -1060,7 +1060,7 @@ pub fn global_parameterize<T: FloatLike>(
 
 #[allow(unused)]
 pub fn global_inv_parameterize<T: FloatLike>(
-    moms: &Vec<LorentzVector<T>>,
+    moms: &[LorentzVector<T>],
     e_cm_squared: T,
     settings: &Settings,
     force_radius: bool,
