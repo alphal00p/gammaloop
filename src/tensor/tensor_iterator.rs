@@ -1,11 +1,30 @@
+//! Iterators for tensors
+//!
+//! Iterators for tensors are used to iterate over the elements of a tensor.
+//! More specialized iterators are provided that fix a certain subset of indices, and iterate over the remaining indices.
+//! At each iteration, the iterator returns a vector of references to the elements of the tensor along the fixed indices (so called fibers).
+//!
+//! The iterators are built using the basic index iterators provided by the `TensorStructureIterator`s.
+//!
+
 use std::ops::{AddAssign, Neg, SubAssign};
 
-use super::*;
-use ahash::AHashSet;
+use crate::tensor::HistoryStructure;
+
+use super::{
+    ConcreteIndex, DenseTensor, GetTensorData, Representation, Slot, SparseTensor,
+    SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
+};
+use ahash::{AHashMap, AHashSet};
 
 use permutation::Permutation;
 
 use symbolica::state::{State, Workspace};
+
+/// An iterator over all indices of a tensor structure
+///
+/// `Item` is a flat index
+
 pub struct TensorStructureIndexIterator<'a> {
     structure: &'a [Slot],
     current_flat_index: usize,
@@ -25,6 +44,7 @@ impl<'a> Iterator for TensorStructureIndexIterator<'a> {
 }
 
 impl<'a> TensorStructureIndexIterator<'a> {
+    #[must_use]
     pub fn new(structure: &'a [Slot]) -> Self {
         TensorStructureIndexIterator {
             structure,
@@ -33,55 +53,72 @@ impl<'a> TensorStructureIndexIterator<'a> {
     }
 }
 
-pub struct TensorSkeletonFiberIterator {
+/// An iterator over all indices of a tensor structure, keeping an index fixed
+
+pub struct TensorStructureFiberIterator {
     pub varying_fiber_index: usize,
     pub increment: usize,
-    pub stride: Option<usize>,
-    pub shift: Option<usize>,
+    pub stride_shift: Option<(usize, usize)>,
     pub max: usize,
 }
 
-impl TensorSkeletonFiberIterator {
-    pub fn new<S>(skeleton: &S, fiber_position: usize) -> Self
+/// Iterates over all indices not in the fiber, and at each index, iterates over the fiber
+impl TensorStructureFiberIterator {
+    /// Create a new fiber iterator
+    ///
+    /// # Arguments
+    ///
+    /// * `structure` - The tensor structure
+    /// * `fiber_position` - The position of the fiber in the structure
+    ///
+    /// # Panics
+    ///
+    /// If the fiber index is out of bounds
+    pub fn new<S>(structure: &S, fiber_position: usize) -> Self
     where
         S: TensorStructure,
     {
-        assert!(fiber_position < skeleton.order(), "Invalid fiber index");
+        assert!(fiber_position < structure.order(), "Invalid fiber index");
 
-        let strides = skeleton.strides();
+        let strides = structure.strides();
         let fiber_stride = strides[fiber_position];
-        let dim = skeleton.shape()[fiber_position];
+        let dim = structure.shape()[fiber_position];
 
-        let max = skeleton.size() - fiber_stride * (dim - 1) - 1;
+        let max = structure.size() - fiber_stride * (dim - 1) - 1;
 
         let mut stride = None;
         let mut shift = None;
         let mut increment = 1;
 
-        if fiber_position == skeleton.order() - 1 {
-            increment = *strides.get(skeleton.order() - 2).unwrap_or(&1);
+        if fiber_position == structure.order() - 1 {
+            increment = *strides.get(structure.order() - 2).unwrap_or(&1);
         } else if fiber_position != 0 {
             shift = Some(strides[fiber_position - 1]);
             stride = Some(strides[fiber_position]);
         }
 
-        TensorSkeletonFiberIterator {
+        TensorStructureFiberIterator {
             varying_fiber_index: 0,
             increment,
-            stride,
-            shift,
+            stride_shift: stride.zip(shift),
             max,
         }
     }
 
+    /// Reset the iterator, so that it can be used again.
+    ///
+    /// This is cheaper than creating a new iterator.
     pub fn reset(&mut self) {
         self.varying_fiber_index = 0;
     }
 }
 
-impl Iterator for TensorSkeletonFiberIterator {
+impl Iterator for TensorStructureFiberIterator {
     type Item = usize;
 
+    /// Icrement the iterator
+    ///
+    /// Inrements the varying fiber index by the increment, and checks if the index is divisible by the stride, in which case it adds the shift
     fn next(&mut self) -> Option<Self::Item> {
         if self.varying_fiber_index > self.max {
             return None;
@@ -90,17 +127,84 @@ impl Iterator for TensorSkeletonFiberIterator {
 
         self.varying_fiber_index += self.increment;
 
-        if let Some(s) = self.stride {
-            if self.varying_fiber_index % s == 0 {
-                self.varying_fiber_index += self.shift.unwrap() - s;
+        if let Some((stride, shift)) = self.stride_shift {
+            if self.varying_fiber_index % stride == 0 {
+                self.varying_fiber_index += shift - stride;
             }
         }
 
         Some(ret)
     }
 }
+
+/// Iterator over all indices of a tensor structure, fixing a subset of indices
+///
+/// This version directly iterates over the expanded indices.
+///
+pub struct TensorStructureMultiFiberIteratorExpanded {
+    indices: Vec<usize>,
+    dims: Vec<usize>,
+    positions: Vec<usize>,
+    length: usize,
+    carry: bool,
+}
+
+impl TensorStructureMultiFiberIteratorExpanded {
+    pub fn new<N>(structure: &N, fiber_positions: &[bool]) -> Self
+    where
+        N: TensorStructure,
+    {
+        let positions = fiber_positions
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| if *p { None } else { Some(i) })
+            .collect();
+        let mut dims = structure.shape();
+        let mut filter = fiber_positions.iter();
+        dims.retain(|_| !*filter.next().unwrap_or_else(|| unreachable!()));
+
+        Self {
+            indices: vec![0; dims.len()],
+            dims,
+            positions,
+            length: fiber_positions.len(),
+            carry: false,
+        }
+    }
+}
+
+impl Iterator for TensorStructureMultiFiberIteratorExpanded {
+    type Item = Vec<usize>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.carry {
+            return None;
+        }
+        self.carry = true;
+
+        let mut out = vec![0; self.length];
+
+        for (i, p) in self.positions.iter().zip(self.indices.iter()) {
+            out[*i] = *p;
+        }
+
+        for (i, r) in self.indices.iter_mut().zip(self.dims.iter()).rev() {
+            if self.carry {
+                *i += 1;
+                self.carry = *i == *r;
+                *i %= *r;
+            }
+        }
+
+        Some(out)
+    }
+}
+
+/// Iterator over all indices of a tensor structure, fixing a subset of indices
+///
+/// `Item` is a flat index, corresponding to the index where the fixed indices are set to 0.
 #[derive(Debug)]
-pub struct TensorSkeletonMultiFiberIterator {
+pub struct TensorStructureMultiFiberIterator {
     pub varying_fiber_index: usize,
     pub increment: usize,
     pub fixed_strides: Vec<usize>,
@@ -108,25 +212,26 @@ pub struct TensorSkeletonMultiFiberIterator {
     pub max: usize,
 }
 
-#[derive(Debug)]
-pub struct TensorSkeletonMultiFiberMetricIterator {
-    pub iterator: TensorSkeletonMultiFiberIterator,
-    pos: usize,
-    pub reps: Vec<Representation>,
-    pub indices: Vec<usize>,
-    pub has_neg: AHashSet<usize>,
-    map: Vec<usize>,
-    permutation: Permutation,
-}
-
-impl TensorSkeletonMultiFiberIterator {
-    pub fn new<N>(skeleton: &N, fiber_positions: &[bool]) -> TensorSkeletonMultiFiberIterator
+impl TensorStructureMultiFiberIterator {
+    /// Create a new multi fiber iterator
+    ///
+    /// # Arguments
+    ///
+    /// * `structure` - The tensor structure
+    /// * `fiber_positions` - A boolean array indicating which indices are fixed
+    ///
+    /// # Algorithm
+    ///
+    /// Smartly constructs the shifts and strides for each fixed index.
+    /// It skippes over adjacent fixed indices for the strides.
+    ///
+    pub fn new<N>(structure: &N, fiber_positions: &[bool]) -> TensorStructureMultiFiberIterator
     where
         N: TensorStructure,
     {
-        let strides = skeleton.strides();
-        let dims = skeleton.shape();
-        let order = skeleton.order();
+        let strides = structure.strides();
+        let dims = structure.shape();
+        let order = structure.order();
         let mut max = 0;
 
         // max -= 1;
@@ -166,7 +271,7 @@ impl TensorSkeletonMultiFiberIterator {
             fixed_strides.pop();
         }
 
-        TensorSkeletonMultiFiberIterator {
+        TensorStructureMultiFiberIterator {
             varying_fiber_index: 0,
             increment,
             fixed_strides,
@@ -175,13 +280,24 @@ impl TensorSkeletonMultiFiberIterator {
         }
     }
 
-    pub fn new_conjugate<N>(skeleton: &N, fiber_positions: &[bool]) -> (Self, Self)
+    /// Construct a pair of multi fiber iterators, each one taking as fixed what the other takes as free.
+    ///
+    /// # Arguments
+    ///
+    /// * `structure` - The tensor structure
+    /// * `fiber_positions` - A boolean array indicating which indices are fixed for the second iterator
+    ///
+    /// # Returns
+    ///
+    /// A pair of multi fiber iterators.
+    /// The first iterator considers the true values of `fiber_positions` as free, and the second iterator considers them as fixed.
+    pub fn new_conjugate<N>(structure: &N, fiber_positions: &[bool]) -> (Self, Self)
     where
         N: TensorStructure,
     {
-        let strides = skeleton.strides();
-        let dims = skeleton.shape();
-        let order = skeleton.order();
+        let strides = structure.strides();
+        let dims = structure.shape();
+        let order = structure.order();
         let mut max = 0;
 
         // max -= 1;
@@ -253,14 +369,14 @@ impl TensorSkeletonMultiFiberIterator {
         }
 
         (
-            TensorSkeletonMultiFiberIterator {
+            TensorStructureMultiFiberIterator {
                 varying_fiber_index: 0,
                 increment: increment_conj,
                 fixed_strides: fixed_strides_conj,
                 shifts: shifts_conj,
                 max: max_conj,
             },
-            TensorSkeletonMultiFiberIterator {
+            TensorStructureMultiFiberIterator {
                 varying_fiber_index: 0,
                 increment,
                 fixed_strides,
@@ -270,12 +386,15 @@ impl TensorSkeletonMultiFiberIterator {
         )
     }
 
+    /// Reset the iterator, so that it can be used again.
+    ///
+    /// This is cheaper than creating a new iterator.
     pub fn reset(&mut self) {
         self.varying_fiber_index = 0;
     }
 }
 
-impl Iterator for TensorSkeletonMultiFiberIterator {
+impl Iterator for TensorStructureMultiFiberIterator {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -298,59 +417,92 @@ impl Iterator for TensorSkeletonMultiFiberIterator {
     }
 }
 
-impl TensorSkeletonMultiFiberMetricIterator {
+/// Iterator over all indices of a tensor structure, fixing a subset of indices.
+///
+/// This version is mostly used as the iterator over the fixed indices (considering them free), when paired with `TensorStructureMultiFiberIterator` that considers the fixed indices as truely fixed.
+///
+/// `Item` is a flat index, a count, and a boolean indicating if the metric is negative.
+/// The flat index corresponds to the index where the fixed indices are set to 0.
+///
+///
+/// It generates the indices to then compute the tensor product of the metric along the fiber.
+///
+#[derive(Debug)]
+pub struct TensorStructureMultiFiberMetricIterator {
+    pub iterator: TensorStructureMultiFiberIterator,
+    pos: usize,
+    pub reps: Vec<Representation>,
+    pub indices: Vec<usize>,
+    pub is_neg: AHashMap<usize, bool>,
+    map: Vec<usize>,
+    permutation: Permutation,
+}
+
+impl TensorStructureMultiFiberMetricIterator {
+    /// Create a new multi fiber metric iterator
+    ///
+    ///
+    ///
+    /// # Arguments
+    ///
     pub fn new<N>(
-        skeleton: &N,
+        structure: &N,
         fiber_positions: &[bool],
         permutation: Permutation,
-    ) -> TensorSkeletonMultiFiberMetricIterator
+    ) -> TensorStructureMultiFiberMetricIterator
     where
         N: TensorStructure,
     {
         // for f in fiber_positions {
         //     filter[*f] = true;
         // }
-        let iterator = TensorSkeletonMultiFiberIterator::new(skeleton, fiber_positions);
+        let iterator = TensorStructureMultiFiberIterator::new(structure, fiber_positions);
 
         let mut f = fiber_positions.iter();
-        let mut reps = skeleton.reps();
-        reps.retain(|_| !*f.next().unwrap());
+        let mut reps = structure.reps();
+        reps.retain(|_| !*f.next().unwrap_or_else(|| unreachable!()));
         let capacity = reps.iter().map(usize::from).product();
         let indices = vec![0; reps.len()];
         // println!("Reps : {:?}", reps);
 
-        TensorSkeletonMultiFiberMetricIterator {
+        TensorStructureMultiFiberMetricIterator {
             iterator,
             reps,
             indices,
-            has_neg: AHashSet::with_capacity(capacity),
+            is_neg: AHashMap::with_capacity(capacity),
             pos: 0,
             permutation,
             map: Vec::new(),
         }
     }
 
+    /// Construct a pair of multi fiber iterators.
+    ///
+    /// The first is a [`TensorStructureMultiFiberMetricIterator`], that iterates along the fiber, i.e. considers the fixed indices as free.
+    ///
+    /// The second is a [`TensorStructureMultiFiberIterator`] that considers the fixed indices as fixed, iterating over the remaining indices, not in the fiber.
+    ///
     pub fn new_conjugates<N>(
-        skeleton: &N,
+        structure: &N,
         fiber_positions: &[bool],
         permutation: Permutation,
-    ) -> (Self, TensorSkeletonMultiFiberIterator)
+    ) -> (Self, TensorStructureMultiFiberIterator)
     where
         N: TensorStructure,
     {
-        let iters = TensorSkeletonMultiFiberIterator::new_conjugate(skeleton, fiber_positions);
+        let iters = TensorStructureMultiFiberIterator::new_conjugate(structure, fiber_positions);
         let mut f = fiber_positions.iter();
-        let mut reps = skeleton.reps();
-        reps.retain(|_| *f.next().unwrap());
+        let mut reps = structure.reps();
+        reps.retain(|_| *f.next().unwrap_or_else(|| unreachable!()));
         let capacity = reps.iter().map(usize::from).product();
         let indices = vec![0; reps.len()];
         // println!("Reps : {:?}", reps);
         (
-            TensorSkeletonMultiFiberMetricIterator {
+            TensorStructureMultiFiberMetricIterator {
                 iterator: iters.0,
                 reps,
                 indices,
-                has_neg: AHashSet::with_capacity(capacity),
+                is_neg: AHashMap::with_capacity(capacity),
                 pos: 0,
                 permutation,
                 map: Vec::new(),
@@ -371,8 +523,8 @@ impl TensorSkeletonMultiFiberMetricIterator {
     }
 
     fn has_neg(&mut self, i: usize) -> bool {
-        if self.has_neg.get(&i).is_some() {
-            return true;
+        if let Some(is_neg) = self.is_neg.get(&i) {
+            return *is_neg;
         }
         let mut neg = false;
         for (i, r) in self
@@ -384,14 +536,8 @@ impl TensorSkeletonMultiFiberMetricIterator {
             neg ^= r.is_neg(*i);
         }
 
-        // let neg = self
-        //     .reps
-        //     .last()
-        //     .unwrap()
-        //     .is_neg(*self.indices.last().unwrap());
-        if neg {
-            self.has_neg.insert(i);
-        }
+        self.is_neg.insert(i, neg);
+
         neg
     }
 
@@ -427,7 +573,7 @@ impl TensorSkeletonMultiFiberMetricIterator {
     }
 }
 
-impl Iterator for TensorSkeletonMultiFiberMetricIterator {
+impl Iterator for TensorStructureMultiFiberMetricIterator {
     type Item = (usize, usize, bool);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -450,8 +596,8 @@ fn construct() {
         &[
             (1, Representation::Euclidean(2)), //0
             (3, Representation::Euclidean(2)), //1     inc
-                                               // (33, Representation::Lorentz(4)),  //2
-                                               // (23, Representation::Lorentz(3)),  //3
+            (33, Representation::Lorentz(4)),  //2
+            (23, Representation::Lorentz(3)),  //3
                                                // (22, Representation::Lorentz(3)),  //4     inc
                                                // (35, Representation::Lorentz(3)),  //5
                                                // (42, Representation::Lorentz(3)),  //6     inc
@@ -459,14 +605,16 @@ fn construct() {
         "t",
     );
 
-    let fixed = [false, true];
+    let fixed = [false, true, true, false];
     let free: Vec<bool> = fixed.iter().map(|x| !x).collect();
     let fi = 0;
 
-    let fiber = TensorSkeletonFiberIterator::new(&a, fi);
+    let fiber = TensorStructureFiberIterator::new(&a, fi);
 
-    let fiber_iter = TensorSkeletonMultiFiberIterator::new(&a, &free);
-    let mut free_iter = TensorSkeletonMultiFiberIterator::new(&a, &fixed);
+    let mut fiber_iter = TensorStructureMultiFiberIterator::new(&a, &free);
+    let mut free_iter = TensorStructureMultiFiberIterator::new(&a, &fixed);
+
+    let fiber_iter_expanded = TensorStructureMultiFiberIteratorExpanded::new(&a, &free);
 
     println!("{:?}", free_iter);
     println!("{:?}", fiber_iter);
@@ -479,18 +627,30 @@ fn construct() {
         }
     }
 
-    println!("multi fiber");
-    for f in fiber_iter {
+    println!("multi fiber conjugate");
+    for f in fiber_iter.by_ref() {
         for i in free_iter.by_ref() {
             println!("{:?}", a.expanded_index(f + i));
         }
         free_iter.reset();
     }
 
-    let iters = TensorSkeletonMultiFiberIterator::new_conjugate(&a, &fixed);
+    fiber_iter.reset();
+
+    println!("multi fiber expanded");
+
+    for f in fiber_iter_expanded {
+        println!("{:?}", f);
+    }
+
+    for f in fiber_iter.by_ref() {
+        println!("{:?}", a.expanded_index(f));
+    }
+
+    let iters = TensorStructureMultiFiberIterator::new_conjugate(&a, &fixed);
     println!("{:?}", iters.0);
     println!("{:?}", iters.1);
-    let t = TensorSkeletonMultiFiberIterator::new(&a, &fixed);
+    let t = TensorStructureMultiFiberIterator::new(&a, &fixed);
     // let tt = TensorSkeletonMultiFiberMetricIterator::new(&a, &fixed);
     println!("{:?}", a.strides());
     // println!("{:?}", a.strides_column_major());
@@ -509,12 +669,18 @@ fn construct() {
     // }
 }
 
+/// Iterator over all indices of a tensor structure, fixing an index
+///
+/// The iterator returns a vector of references to the elements of the tensor along the fixed index (so called fiber).
+///
+/// In the case of a sparse tensor, the iterator returns a vector of references to the non-zero elements of the tensor along the fixed index, and the amount of skipped indices.
+/// For the dense tensor, the iterator only returns the the vectro of references.
 pub struct TensorFiberIterator<'a, T>
 where
     T: TensorStructure,
 {
     tensor: &'a T,
-    fiber_iter: TensorSkeletonFiberIterator,
+    fiber_iter: TensorStructureFiberIterator,
     skipped: usize,
     pub fiber_dimension: usize,
     increment: usize,
@@ -524,9 +690,10 @@ impl<'a, T> TensorFiberIterator<'a, T>
 where
     T: TensorStructure,
 {
+    /// Create a new fiber iterator, from a tensor and a fixed index
     pub fn new(tensor: &'a T, fiber_position: usize) -> Self {
         let fiber_iter =
-            TensorSkeletonFiberIterator::new(&tensor.external_structure(), fiber_position);
+            TensorStructureFiberIterator::new(&tensor.external_structure(), fiber_position);
         let increment = tensor.strides()[fiber_position];
 
         TensorFiberIterator {
@@ -538,6 +705,7 @@ where
         }
     }
 
+    /// Reset the iterator, so that it can be used again.
     pub fn reset(&mut self) {
         self.fiber_iter.reset();
         self.skipped = 0;
@@ -560,13 +728,13 @@ where
                     out.push(v);
                 }
             }
-            if !out.is_empty() {
+            if out.is_empty() {
+                self.skipped += 1;
+                self.next()
+            } else {
                 let skipped = self.skipped;
                 self.skipped = 0;
                 Some((skipped, nonzeros, out))
-            } else {
-                self.skipped += 1;
-                self.next()
             }
         } else {
             None
@@ -596,13 +764,24 @@ where
     }
 }
 
+/// Iterator over all indices of a tensor, fixing a subset of indices
+///
+/// The iterator returns a vector of tuples of references to the elements of the tensor along the fixed indices (so called fibers) and bools indicating the sign of the metric.
+/// It flattens the indices of the fibers. To accomodate for a permutation of the ordering of the fixed indices, the iterator builds a map between the indices of output vector and the permuted version.
+///
+/// This map can be accessed using the `map` field of the iterator.
+///
+/// For the sparse tensor, the iterator also returns a vector of references to the non-zero elements of the tensor along the fixed indices, and the amount of skipped indices.
+/// For the dense tensor, the iterator only returns the the vector of references.
+///
+///
 pub struct TensorMultiFiberMetricIterator<'a, T>
 where
     T: TensorStructure,
 {
     tensor: &'a T,
-    fiber_iter: TensorSkeletonMultiFiberMetricIterator,
-    free_iter: TensorSkeletonMultiFiberIterator,
+    fiber_iter: TensorStructureMultiFiberMetricIterator,
+    free_iter: TensorStructureMultiFiberIterator,
     skipped: usize,
     pub map: Vec<usize>,
     capacity: usize,
@@ -612,23 +791,23 @@ impl<'a, T> TensorMultiFiberMetricIterator<'a, T>
 where
     T: TensorStructure,
 {
+    /// Create a new multi fiber metric iterator
+    ///
+    /// # Arguments
+    ///
+    /// * `tensor` - A reference to the tensor
+    /// * `fiber_positions` - A boolean array indicating which indices are fixed
+    /// * `permutation` - A permutation of the fixed indices, that matches another tensor.
     pub fn new(tensor: &'a T, fiber_positions: &[bool], permutation: Permutation) -> Self {
-        let iters = TensorSkeletonMultiFiberMetricIterator::new_conjugates(
+        let iters = TensorStructureMultiFiberMetricIterator::new_conjugates(
             &tensor.external_structure(),
             fiber_positions,
             permutation,
         );
 
-        // let free: Vec<bool> = fiber_positions.iter().map(|x| !x).collect();#
-
-        // let free: Vec<bool> = fiber_positions.iter().map(|x| !x).collect();
-
-        // let fiber_iter = TensorSkeletonMultiFiberMetricIterator::new(tensor.structure(), &free);
-        // let free_iter = TensorSkeletonMultiFiberIterator::new(tensor.structure(), fiber_positions);
-
         let mut f = fiber_positions.iter();
         let mut reps = tensor.shape();
-        reps.retain(|_| !*f.next().unwrap());
+        reps.retain(|_| !*f.next().unwrap_or_else(|| unreachable!()));
         let capacity = reps.iter().product();
         TensorMultiFiberMetricIterator {
             tensor,
@@ -640,6 +819,7 @@ where
         }
     }
 
+    /// Reset the iterator, so that it can be used again.
     pub fn reset(&mut self) {
         self.fiber_iter.reset();
         self.free_iter.reset();
@@ -669,13 +849,13 @@ where
             } else {
                 self.fiber_iter.reset();
             }
-            if !out.is_empty() {
+            if out.is_empty() {
+                self.skipped += 1;
+                self.next()
+            } else {
                 let skipped = self.skipped;
                 self.skipped = 0;
                 Some((skipped, nonzeros, out))
-            } else {
-                self.skipped += 1;
-                self.next()
             }
         } else {
             None
@@ -714,13 +894,23 @@ where
     }
 }
 
+/// Iterator over all indices of a tensor, fixing a subset of indices
+///
+/// The iterator returns a vector of references to the elements of the tensor along the fixed indices (so called fibers).
+/// It flattens the indices of the fibers. To accomodate for a permutation of the ordering of the fixed indices, the iterator builds a map between the indices of output vector and the permuted version.
+///
+/// This map can be accessed using the `map` field of the iterator.
+///
+/// For the sparse tensor, the iterator also returns a vector of references to the non-zero elements of the tensor along the fixed indices, and the amount of skipped indices.
+/// For the dense tensor, the iterator only returns the the vector of references.
+///
 pub struct TensorMultiFiberIterator<'a, T>
 where
     T: TensorStructure,
 {
     tensor: &'a T,
-    fiber_iter: TensorSkeletonMultiFiberIterator,
-    free_iter: TensorSkeletonMultiFiberIterator,
+    fiber_iter: TensorStructureMultiFiberIterator,
+    free_iter: TensorStructureMultiFiberIterator,
     skipped: usize,
 }
 
@@ -729,7 +919,7 @@ where
     T: TensorStructure,
 {
     pub fn new(tensor: &'a T, fiber_positions: &[bool]) -> Self {
-        let iters = TensorSkeletonMultiFiberIterator::new_conjugate(
+        let iters = TensorStructureMultiFiberIterator::new_conjugate(
             &tensor.external_structure(),
             fiber_positions,
         );
@@ -765,13 +955,13 @@ where
                 }
             }
             self.fiber_iter.reset();
-            if !out.is_empty() {
+            if out.is_empty() {
+                self.skipped += 1;
+                self.next()
+            } else {
                 let skipped = self.skipped;
                 self.skipped = 0;
                 Some((skipped, nonzeros, out))
-            } else {
-                self.skipped += 1;
-                self.next()
             }
         } else {
             None
@@ -801,6 +991,9 @@ where
     }
 }
 
+/// Iterator over all the elements of a sparse tensor
+///
+/// Returns the expanded indices and the element at that index
 pub struct SparseTensorIterator<'a, T, N> {
     iter: std::collections::hash_map::Iter<'a, usize, T>,
     structure: &'a N,
@@ -840,6 +1033,10 @@ where
 //     }
 // }
 
+/// Iterator over all but two indices of a sparse tensor, where the two indices are traced
+///
+/// The iterator next returns the value of the trace at the current indices, and the current indices
+
 pub struct SparseTensorTraceIterator<'a, T, I> {
     tensor: &'a SparseTensor<T, I>,
     trace_indices: [usize; 2],
@@ -851,6 +1048,16 @@ impl<'a, T, I> SparseTensorTraceIterator<'a, T, I>
 where
     I: TensorStructure,
 {
+    /// Create a new trace iterator
+    ///
+    /// # Arguments
+    ///
+    /// * `tensor` - A reference to the tensor
+    /// * `trace_indices` - The indices to be traced
+    ///
+    /// # Panics
+    ///
+    /// Panics if the trace indices do not point to the same dimension
     fn new(tensor: &'a SparseTensor<T, I>, trace_indices: [usize; 2]) -> Self {
         //trace positions must point to the same dimension
         assert!(
@@ -958,6 +1165,10 @@ where
     }
 }
 
+/// Iterator over all but two indices of a sparse tensor, where the two indices are traced symbolically (summation using symbolica)
+///
+/// The iterator next returns the value of the trace at the current indices, and the current indices
+///
 pub struct SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
     tensor: &'a SparseTensor<T, I>,
     trace_indices: [usize; 2],
@@ -971,6 +1182,14 @@ impl<'a, 'b, T, I> SparseTensorSymbolicTraceIterator<'a, 'b, T, I>
 where
     I: TensorStructure,
 {
+    /// Create a new symbolic trace iterator
+    ///
+    /// # Arguments
+    ///
+    /// * `tensor` - A reference to the tensor
+    /// * `trace_indices` - The indices to be traced
+    /// * `state` - The symbolica state
+    /// * `ws` - The symbolica workspace
     fn new(
         tensor: &'a SparseTensor<T, I>,
         trace_indices: [usize; 2],
@@ -1086,147 +1305,10 @@ where
     }
 }
 
-pub struct SparseTensorFiberIterator<'a, T, I> {
-    tensor: &'a SparseTensor<T, I>,
-    fiber_index: usize,
-    fiber_stride: usize,
-    fiber_dimension: usize,
-    left_stride: Option<usize>,
-    right_stride: Option<usize>,
-    skipped: usize,
-    max: usize,
-}
-
-impl<'a, T, I> SparseTensorFiberIterator<'a, T, I>
-where
-    I: TensorStructure,
-{
-    fn new(tensor: &'a SparseTensor<T, I>, fiber_position: usize) -> Self {
-        assert!(fiber_position < tensor.order(), "Invalid fiber index");
-
-        let fiber_stride = tensor.strides()[fiber_position];
-        let left_stride = tensor.strides().get(fiber_position - 1).copied();
-        let right_stride = tensor.strides().get(fiber_position + 1).copied();
-        let max = tensor.size() - fiber_stride * (tensor.shape()[fiber_position] - 1);
-        let fiber_dimension = tensor.shape()[fiber_position];
-
-        SparseTensorFiberIterator {
-            tensor,
-            fiber_index: 0,
-            fiber_stride,
-            fiber_dimension,
-            left_stride,
-            right_stride,
-            skipped: 0,
-            max,
-        }
-    }
-
-    fn update_linear_start(&mut self) {
-        match (self.left_stride, self.right_stride) {
-            (Some(l), Some(_r)) => {
-                self.fiber_index += 1;
-                if self.fiber_index % self.fiber_stride == 0 {
-                    self.fiber_index += l - self.fiber_stride;
-                }
-            }
-            (Some(l), None) => {
-                self.fiber_index += l;
-            }
-            (None, Some(_r)) => {
-                self.fiber_index += 1;
-            }
-            (None, None) => {
-                self.fiber_index += 1;
-            }
-        }
-    }
-
-    // fn increment_indices(&mut self) -> bool {
-    //     for (i, index) in self
-    //         .current_indices
-    //         .iter_mut()
-    //         .enumerate()
-    //         .rev()
-    //         .filter(|(pos, _)| *pos != self.fiber_index)
-    //     {
-    //         *index += 1;
-    //         // If the index goes beyond the shape boundary, wrap around to 0
-    //         if index >= &mut self.tensor.shape()[i] {
-    //             *index = 0;
-    //             continue; // carry over to the next dimension
-    //         }
-    //         return true; // We've successfully found the next combination
-    //     }
-    //     false // No more combinations left
-    // }
-}
-
-impl<'a, T, I> Iterator for SparseTensorFiberIterator<'a, T, I>
-where
-    T: Clone,
-    I: Clone + TensorStructure,
-{
-    type Item = (usize, Vec<usize>, Vec<&'a T>);
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.fiber_index >= self.max {
-            return None;
-        }
-
-        // let range = self
-        //     .tensor
-        //     .elements
-        //     .range((Included(lower_bound), Included(upper_bound)));
-
-        let mut nonzeros = Vec::new();
-
-        let mut values: Vec<&'a T> = Vec::new();
-
-        // for (indices, value) in range.filter(|(key, _)| {
-        //     // Ensure that the difference with start_key is at the same usize
-        //     for (i, index) in key.iter().enumerate() {
-        //         if self.fiber_index != i && index != &self.current_indices[i] {
-        //             return false;
-        //         }
-        //     }
-        //     true
-        // }) {
-        //     nonzeros.push(indices[self.fiber_index]);
-        //     values.push(value);
-        // }
-
-        for i in 0..self.fiber_dimension {
-            if let Some(v) = self
-                .tensor
-                .elements
-                .get(&(self.fiber_index + i * self.fiber_stride))
-            {
-                nonzeros.push(i);
-                values.push(v);
-            }
-        }
-        self.update_linear_start();
-
-        // Check if there are any elements in the range
-        if !values.is_empty() {
-            let skipped = self.skipped;
-            self.skipped = 0;
-            Some((skipped, nonzeros, values))
-        } else {
-            self.skipped += 1;
-            self.next()
-        }
-    }
-}
-
 impl<T, I> SparseTensor<T, I>
 where
     I: TensorStructure,
 {
-    pub fn iter_fibers(&self, fiber_index: usize) -> SparseTensorFiberIterator<T, I> {
-        SparseTensorFiberIterator::new(self, fiber_index)
-    }
-
     pub fn iter_fiber(&self, fiber_index: usize) -> TensorFiberIterator<Self> {
         TensorFiberIterator::new(self, fiber_index)
     }
@@ -1261,12 +1343,20 @@ where
     }
 }
 
+/// Iterator over all the elements of a dense tensor
+///
+/// Returns the expanded indices and the element at that index
 pub struct DenseTensorIterator<'a, T, I> {
     tensor: &'a DenseTensor<T, I>,
     current_flat_index: usize,
 }
 
 impl<'a, T, I> DenseTensorIterator<'a, T, I> {
+    /// Create a new dense tensor iterator
+    ///
+    /// # Arguments
+    ///
+    /// * `tensor` - A reference to the tensor
     fn new(tensor: &'a DenseTensor<T, I>) -> Self {
         DenseTensorIterator {
             tensor,
@@ -1318,6 +1408,11 @@ where
     }
 }
 
+/// An consuming iterator over the elements of a dense tensor
+///
+/// Returns the expanded indices and the element at that index
+///
+///
 pub struct DenseTensorIntoIterator<T, I> {
     tensor: DenseTensor<T, I>,
     current_flat_index: usize,
@@ -1352,6 +1447,9 @@ where
     }
 }
 
+/// Iterator over all indices of a dense tensor, keeping two indices fixed and tracing over them
+///
+/// The next method returns the value of the trace at the current indices, and the current indices
 pub struct DenseTensorTraceIterator<'a, T, I> {
     tensor: &'a DenseTensor<T, I>,
     trace_indices: [usize; 2],
@@ -1363,6 +1461,13 @@ impl<'a, T, I> DenseTensorTraceIterator<'a, T, I>
 where
     I: TensorStructure,
 {
+    /// Create a new trace iterator
+    ///
+    /// # Arguments
+    ///
+    /// * `tensor` - A reference to the tensor
+    /// * `trace_indices` - The indices to be traced
+    ///
     fn new(tensor: &'a DenseTensor<T, I>, trace_indices: [usize; 2]) -> Self {
         assert!(trace_indices.len() >= 2, "Invalid trace indices");
         //trace positions must point to the same dimension
@@ -1426,7 +1531,7 @@ where
         let mut indices = self.current_indices.clone();
         let (_, sign) = iter.next().unwrap(); //First sign
 
-        for &pos in self.trace_indices.iter() {
+        for pos in self.trace_indices {
             indices[pos] = 0;
         }
 
@@ -1435,7 +1540,7 @@ where
         let mut trace = if *sign { value.neg() } else { value };
 
         for (i, sign) in iter {
-            for &pos in self.trace_indices.iter() {
+            for pos in self.trace_indices {
                 indices[pos] = i;
             }
 
@@ -1464,6 +1569,9 @@ where
     }
 }
 
+/// Iterator over all indices of a dense tensor, keeping two indices fixed and tracing over them symbolically (summation using symbolica)
+///
+/// The next method returns the value of the trace at the current indices, and the current indices
 pub struct DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
     tensor: &'a DenseTensor<T, I>,
     trace_indices: [usize; 2],
@@ -1477,6 +1585,14 @@ impl<'a, 'b, T, I> DenseTensorSymbolicTraceIterator<'a, 'b, T, I>
 where
     I: TensorStructure,
 {
+    /// Create a new symbolic trace iterator
+    ///
+    /// # Arguments
+    ///
+    /// * `tensor` - A reference to the tensor
+    /// * `trace_indices` - The indices to be traced
+    /// * `state` - The symbolica state
+    /// * `ws` - The symbolica workspace
     fn new(
         tensor: &'a DenseTensor<T, I>,
         trace_indices: [usize; 2],
@@ -1548,7 +1664,7 @@ where
         let mut indices = self.current_indices.clone();
         let (_, sign) = iter.next().unwrap(); //First sign
 
-        for &pos in self.trace_indices.iter() {
+        for pos in self.trace_indices {
             indices[pos] = 0;
         }
 
@@ -1561,7 +1677,7 @@ where
         };
 
         for (i, sign) in iter {
-            for &pos in self.trace_indices.iter() {
+            for pos in self.trace_indices {
                 indices[pos] = i;
             }
 

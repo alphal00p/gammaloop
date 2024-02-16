@@ -1,6 +1,6 @@
 #![cfg_attr(feature = "fail-on-warnings", deny(warnings))]
 // #![deny(clippy::all)]
-// #![warn(clippy::pedantic)]
+#![warn(clippy::pedantic)]
 #![warn(clippy::all)]
 // #![warn(clippy::restriction)]
 // #![warn(clippy::nursery)]

@@ -25,7 +25,7 @@ fn indexflatten() {
     let flatidx = a.flat_index(&idx).unwrap();
     println!("{:?}", a.strides());
 
-    println!("{}", flatidx);
+    println!("{flatidx}");
     println!("{:?}", a.expanded_index(flatidx).unwrap());
     assert_eq!(idx, a.expanded_index(flatidx).unwrap());
 }
@@ -48,7 +48,7 @@ fn trace() {
     .unwrap();
     let f = a.internal_contract();
 
-    println!("{:?}", f);
+    println!("{f:?}");
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn matches() {
 
     let a = structur_a.match_index(&structur_b);
 
-    println!("{:?}", a);
+    println!("{a:?}");
 }
 
 #[test]

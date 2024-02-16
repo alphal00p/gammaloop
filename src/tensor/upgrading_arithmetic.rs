@@ -106,13 +106,14 @@ impl SymbolicInto for f64 {
     }
 }
 
+#[allow(clippy::used_underscore_binding)]
 impl SymbolicInto for &f64 {
     fn into_sym(self, ws: &Workspace, _state: &State) -> Option<Atom> {
         SymbolicInto::into_sym(*self, ws, _state)
     }
 }
 
-/// Uses f64::into_sym to turn real and imaginary parts into Atoms, then adds them together, multiplying the imaginary part by i.
+/// Uses `f64::into_sym` to turn real and imaginary parts into Atoms, then adds them together, multiplying the imaginary part by i.
 impl SymbolicInto for Complex<f64> {
     fn into_sym(self, ws: &Workspace, state: &State) -> Option<Atom> {
         let real = self.re.into_sym(ws, state)?;
@@ -174,7 +175,7 @@ pub trait SymbolicAddAssign<T> {
 
 impl SymbolicAddAssign<Atom> for Atom {
     fn add_assign_sym(&mut self, rhs: Atom, ws: &Workspace, state: &State) {
-        SymbolicAddAssign::<&Atom>::add_assign_sym(self, &rhs, ws, state)
+        SymbolicAddAssign::<&Atom>::add_assign_sym(self, &rhs, ws, state);
     }
 }
 
@@ -201,11 +202,12 @@ impl SymbolicSubAssign<&Atom> for Atom {
 }
 impl SymbolicSubAssign<Atom> for Atom {
     fn sub_assign_sym(&mut self, rhs: Atom, ws: &Workspace, state: &State) {
-        SymbolicSubAssign::<&Atom>::sub_assign_sym(self, &rhs, ws, state)
+        SymbolicSubAssign::<&Atom>::sub_assign_sym(self, &rhs, ws, state);
     }
 }
 
 pub trait SymbolicNeg {
+    #[must_use]
     fn neg_sym(self, ws: &Workspace, state: &State) -> Self;
 }
 

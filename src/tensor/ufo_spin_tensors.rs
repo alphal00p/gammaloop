@@ -11,6 +11,7 @@ use symbolica::{
 };
 
 #[allow(dead_code)]
+#[must_use]
 pub fn identity<T>(indices: (usize, usize), signature: Representation) -> SparseTensor<Complex<T>>
 where
     T: One + Zero,
@@ -24,12 +25,13 @@ where
     for i in 0..signature.into() {
         identity
             .set(&[i, i], Complex::<T>::new(T::one(), T::zero()))
-            .unwrap();
+            .unwrap_or_else(|_| unreachable!());
     }
     identity
 }
 
 #[allow(dead_code)]
+#[must_use]
 pub fn lorentz_identity<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
 where
     T: One + Zero,
@@ -43,7 +45,8 @@ pub fn mink_four_vector<T>(index: usize, p: &[T; 4]) -> DenseTensor<T>
 where
     T: Clone,
 {
-    DenseTensor::from_data(p, vec![Slot::from((index, Lorentz(4)))]).unwrap()
+    DenseTensor::from_data(p, vec![Slot::from((index, Lorentz(4)))])
+        .unwrap_or_else(|_| unreachable!())
 }
 
 pub fn mink_four_vector_sym<T>(
@@ -58,17 +61,20 @@ where
         p,
         HistoryStructure::new(
             &[(index, Lorentz(4))],
-            state.get_or_insert_fn("p", None).unwrap(),
+            state
+                .get_or_insert_fn("p", None)
+                .unwrap_or_else(|_| unreachable!()),
         ),
     )
-    .unwrap()
+    .unwrap_or_else(|_| unreachable!())
 }
 
 pub fn euclidean_four_vector<T>(index: usize, p: &[T; 4]) -> DenseTensor<T>
 where
     T: Clone,
 {
-    DenseTensor::from_data(p, vec![Slot::from((index, Euclidean(4)))]).unwrap()
+    DenseTensor::from_data(p, vec![Slot::from((index, Euclidean(4)))])
+        .unwrap_or_else(|_| unreachable!())
 }
 
 pub fn euclidean_four_vector_sym<T>(
@@ -83,10 +89,12 @@ where
         p,
         HistoryStructure::new(
             &[(index, Euclidean(4))],
-            state.get_or_insert_fn("p", None).unwrap(),
+            state
+                .get_or_insert_fn("p", None)
+                .unwrap_or_else(|_| unreachable!()),
         ),
     )
-    .unwrap()
+    .unwrap_or_else(|_| unreachable!())
 }
 
 pub fn param_mink_four_vector<N>(
@@ -100,7 +108,7 @@ where
 {
     HistoryStructure::new(&[(index, Lorentz(4))], name)
         .shadow(state, ws)
-        .unwrap()
+        .unwrap_or_else(|| unreachable!())
 }
 
 pub fn param_euclidean_four_vector<N>(
@@ -114,10 +122,11 @@ where
 {
     HistoryStructure::new(&[(index, Euclidean(4))], name)
         .shadow(state, ws)
-        .unwrap()
+        .unwrap_or_else(|| unreachable!())
 }
 
 #[allow(dead_code)]
+#[must_use]
 pub fn euclidean_identity<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
 where
     T: One + Zero,
@@ -159,12 +168,15 @@ where
             (indices.1, Euclidean(4)),
             (minkindex, Lorentz(4)),
         ],
-        state.get_or_insert_fn("γ", None).unwrap(),
+        state
+            .get_or_insert_fn("γ", None)
+            .unwrap_or_else(|_| unreachable!()),
     );
 
     gamma_data(structure)
 }
 
+#[allow(clippy::similar_names)]
 fn gamma_data<N, T>(structure: N) -> SparseTensor<Complex<T>, N>
 where
     T: One + Zero + Copy + std::ops::Neg<Output = T>,
@@ -226,7 +238,9 @@ where
             (indices.1, Euclidean(4)),
             (4, Lorentz(4)),
         ],
-        state.get_or_insert_fn("γ5", None).unwrap(),
+        state
+            .get_or_insert_fn("γ5", None)
+            .unwrap_or_else(|_| unreachable!()),
     );
 
     gamma5_data(structure)
@@ -275,12 +289,15 @@ where
             (indices.1, Euclidean(4)),
             (4, Lorentz(4)),
         ],
-        state.get_or_insert_fn("ProjM", None).unwrap(),
+        state
+            .get_or_insert_fn("ProjM", None)
+            .unwrap_or_else(|_| unreachable!()),
     );
 
     proj_m_data(structure)
 }
 
+#[allow(clippy::similar_names)]
 fn proj_m_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
     T: Float,
@@ -331,7 +348,9 @@ where
             (indices.1, Euclidean(4)),
             (4, Lorentz(4)),
         ],
-        state.get_or_insert_fn("ProjP", None).unwrap(),
+        state
+            .get_or_insert_fn("ProjP", None)
+            .unwrap_or_else(|_| unreachable!()),
     );
 
     proj_p_data(structure)
@@ -343,19 +362,35 @@ where
     N: TensorStructure,
 {
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
-    let chalf = Complex::<T>::new(T::from(0.5).unwrap(), T::zero());
+    let chalf = Complex::<T>::new(T::from(0.5).unwrap_or_else(|| unreachable!()), T::zero());
 
     let mut proj_p = SparseTensor::empty(structure);
 
-    proj_p.set(&[0, 0], chalf).unwrap();
-    proj_p.set(&[1, 1], chalf).unwrap();
-    proj_p.set(&[2, 2], chalf).unwrap();
-    proj_p.set(&[3, 3], chalf).unwrap();
+    proj_p
+        .set(&[0, 0], chalf)
+        .unwrap_or_else(|_| unreachable!());
+    proj_p
+        .set(&[1, 1], chalf)
+        .unwrap_or_else(|_| unreachable!());
+    proj_p
+        .set(&[2, 2], chalf)
+        .unwrap_or_else(|_| unreachable!());
+    proj_p
+        .set(&[3, 3], chalf)
+        .unwrap_or_else(|_| unreachable!());
 
-    proj_p.set(&[0, 2], chalf).unwrap();
-    proj_p.set(&[1, 3], chalf).unwrap();
-    proj_p.set(&[2, 0], chalf).unwrap();
-    proj_p.set(&[3, 1], chalf).unwrap();
+    proj_p
+        .set(&[0, 2], chalf)
+        .unwrap_or_else(|_| unreachable!());
+    proj_p
+        .set(&[1, 3], chalf)
+        .unwrap_or_else(|_| unreachable!());
+    proj_p
+        .set(&[2, 0], chalf)
+        .unwrap_or_else(|_| unreachable!());
+    proj_p
+        .set(&[3, 1], chalf)
+        .unwrap_or_else(|_| unreachable!());
 
     proj_p
 }
@@ -392,12 +427,15 @@ where
             (minkdices.0, Lorentz(4)),
             (minkdices.1, Lorentz(4)),
         ],
-        state.get_or_insert_fn("σ", None).unwrap(),
+        state
+            .get_or_insert_fn("σ", None)
+            .unwrap_or_else(|_| unreachable!()),
     );
 
     sigma_data(structure)
 }
 
+#[allow(clippy::similar_names)]
 fn sigma_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
     T: One + Zero + std::ops::Neg<Output = T> + Copy,

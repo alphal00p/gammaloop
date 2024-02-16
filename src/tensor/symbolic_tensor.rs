@@ -1,6 +1,5 @@
 use super::{
-    HasName, IntoId, Shadowable, Slot, StructureContract, SymbolicContract,
-    TensorStructure,
+    HasName, IntoId, Shadowable, Slot, StructureContract, SymbolicContract, TensorStructure,
 };
 
 use symbolica::{
@@ -47,6 +46,7 @@ impl SymbolicTensor {
         })
     }
 
+    #[must_use]
     pub fn get_atom(&self) -> &Atom {
         &self.expression
     }
