@@ -443,7 +443,7 @@ impl PythonWorker {
 
         master_node
             .process_batch_output(batch_result.into_batch_result())
-            .unwrap();
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         Ok(format!("Processed job {}", job_name))
     }
