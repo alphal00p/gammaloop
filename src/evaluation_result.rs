@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{observables::Event, Precision};
 
+/// The result of an evaluation of the integrand
 pub struct EvaluationResult {
     pub integrand_result: Complex<f64>,
     pub integrator_weight: f64,
@@ -12,6 +13,7 @@ pub struct EvaluationResult {
     pub evaluation_metadata: EvaluationMetaData,
 }
 
+/// Useful metadata generated during the evaluation, this may be expanded in the future to include more information
 pub struct EvaluationMetaData {
     pub total_timing: Duration,
     pub rep3d_evaluation_time: Duration,
@@ -20,6 +22,7 @@ pub struct EvaluationMetaData {
     pub highest_precision: Precision,
 }
 
+/// This struct merges the evaluation metadata of many evaluations into a single struct
 #[derive(Copy, Clone)]
 pub struct StatisticsCounter {
     pub num_evals: usize,
@@ -32,7 +35,7 @@ pub struct StatisticsCounter {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SerializableMeteDataStatistics {
+pub struct SerializableMetaDataStatistics {
     num_evals: usize,
     sum_rep3d_evaluation_time: u128,
     sum_parameterization_time: u128,
@@ -42,7 +45,7 @@ pub struct SerializableMeteDataStatistics {
     num_quadruple_precision_evals: usize,
 }
 
-impl SerializableMeteDataStatistics {
+impl SerializableMetaDataStatistics {
     pub fn from_metadata_statistics(metadata: StatisticsCounter) -> Self {
         Self {
             sum_rep3d_evaluation_time: metadata.sum_rep3d_evaluation_time.as_nanos(),
@@ -75,6 +78,7 @@ impl SerializableMeteDataStatistics {
 }
 
 impl StatisticsCounter {
+    /// Turn a slice of evaluation results into a statistics counter
     pub fn from_evaluation_results(data: &[EvaluationResult]) -> Self {
         let statistics_counter = data.iter().fold(
             StatisticsCounter::new_empty(),
@@ -102,7 +106,7 @@ impl StatisticsCounter {
         statistics_counter
     }
 
-    // this isn't completly correct if one of them is emtpy
+    /// Merge two statistics counters into a single one, but keeping the original ones unchanged
     pub fn merged(&self, other: &Self) -> Self {
         Self {
             sum_rep3d_evaluation_time: self.sum_rep3d_evaluation_time
@@ -133,6 +137,7 @@ impl StatisticsCounter {
         }
     }
 
+    /// Merge a list of statistics counters into a single one.
     pub fn merge_list(list: Vec<Self>) -> Self {
         if let Some(merged) = list.into_iter().reduce(|acc, x| acc.merged(&x)) {
             merged
@@ -141,30 +146,37 @@ impl StatisticsCounter {
         }
     }
 
+    /// Compute the average time spent in the evaluate_sample function.
     pub fn get_avg_total_timing(&self) -> Duration {
         let avg_total_timing = self.sum_total_evaluation_time.as_secs_f64() / self.num_evals as f64;
         Duration::from_secs_f64(avg_total_timing)
     }
 
+    /// Compute the average time spent in a single evaluation of the three-dimensional representation.
+    /// Note that a single evaluation contains at least two evaluations of the three-dimensional representation.
     pub fn get_avg_rep3d_timing(&self) -> Duration {
         let avg_rep3d_timing = self.sum_rep3d_evaluation_time.as_secs_f64() / self.num_evals as f64;
         Duration::from_secs_f64(avg_rep3d_timing)
     }
 
+    /// Compute the average time spent in the parameterization of the integrand. Especaially useful for monitoring the performance of tropical sampling.
     pub fn get_avg_param_timing(&self) -> Duration {
         let avg_param_timing = self.sum_parameterization_time.as_secs_f64() / self.num_evals as f64;
 
         Duration::from_secs_f64(avg_param_timing)
     }
 
+    /// Get the average relative error computed during instability checks
     pub fn get_avg_instabillity_error(&self) -> Complex<f64> {
         self.sum_relative_instability_error / self.num_evals as f64
     }
 
+    /// Get the percentage of evaluations that were done in double precision and were stable.
     pub fn get_percentage_f64(&self) -> f64 {
         self.num_double_precision_evals as f64 / self.num_evals as f64 * 100.0
     }
 
+    /// Get the percentage of evaluations that went to quadruple precision and were stable.
     pub fn get_percentage_f128(&self) -> f64 {
         self.num_quadruple_precision_evals as f64 / self.num_evals as f64 * 100.0
     }

@@ -1,3 +1,6 @@
+//! This module contains the GammaloopIntegrand struct, which represents the integrand for physical
+//! amplitudes and Local Unitarity crosssections.
+
 use core::panic;
 use std::time::{Duration, Instant};
 
@@ -20,12 +23,19 @@ use num::Complex;
 use num_traits::{Inv, Zero};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 
-// trait to capture the common behaviour of amplitudes and cross sections
+/// Trait to capture the common behaviour of amplitudes and cross sections
+/// Mainly used to expose the properties of the underlying graph in both amplitudes and cross sections
 trait GraphIntegrand {
+    /// Get the underlying graph
     fn get_graph(&self) -> &Graph;
+
+    /// Get the channels used for multi channeling
     fn get_multi_channeling_channels(&self) -> &[usize];
 
+    /// Most basic form of evaluating the 3D representation of the underlying loop integral
     fn evaluate<T: FloatLike>(&self, sample: &DefaultSample<T>, settings: &Settings) -> Complex<T>;
+
+    /// Evaluate in a single LMB-channel
     fn evaluate_channel<T: FloatLike>(
         &self,
         channel_id: usize,
@@ -33,12 +43,16 @@ trait GraphIntegrand {
         alpha: f64,
         settings: &Settings,
     ) -> Complex<T>;
+
+    /// Evaluate a sum over LMB-channels
     fn evaluate_channel_sum<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
     ) -> Complex<T>;
+
+    /// Evaluate to use when tropical sampling, raises the power of the onshell energies in front of the 3D representation according to the chosen weights.
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
@@ -281,6 +295,7 @@ impl GraphIntegrand for SuperGraph {
     }
 }
 
+/// Get the number of different loop momentum bases (number of spanning trees)
 fn get_lmb_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
     graph_integrand
         .get_graph()
@@ -295,6 +310,7 @@ fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
     graph_integrand.get_graph().loop_momentum_basis.basis.len()
 }
 
+/// Evaluate the sample correctly according to the sample type
 #[inline]
 fn evaluate<T: GraphIntegrand, F: FloatLike>(
     graph_integrands: &[T],
@@ -328,6 +344,7 @@ fn evaluate<T: GraphIntegrand, F: FloatLike>(
     }
 }
 
+/// Create a havana grid for a single graph
 fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> Grid<f64> {
     let num_loops = get_loop_count(graph_integrand);
 
@@ -371,12 +388,14 @@ fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> G
     }
 }
 
+/// Struct that represents a list of graph contirbuting to a single amplitude or cross-section.
 #[derive(Clone)]
 enum GraphIntegrands {
     Amplitude(Vec<AmplitudeGraph>),
     CrossSection(Vec<SuperGraph>),
 }
 
+/// GammaloopIntegrand contains a list of graphs and the settings.
 #[derive(Clone)]
 pub struct GammaLoopIntegrand {
     pub settings: Settings,
@@ -384,6 +403,7 @@ pub struct GammaLoopIntegrand {
 }
 
 impl GraphIntegrands {
+    /// Create a havana grid for a list of graphs
     fn create_grid(&self, settings: &Settings) -> Grid<f64> {
         match settings.sampling {
             SamplingSettings::DiscreteGraphs(_) => match self {
@@ -585,7 +605,6 @@ impl HasIntegrand for GammaLoopIntegrand {
         todo!()
     }
 
-    // this maybe needs to change to Vec<usize>
     fn get_n_dim(&self) -> usize {
         match &self.graph_integrands {
             GraphIntegrands::Amplitude(graphs) => get_loop_count(&graphs[0]) * 3,
@@ -600,6 +619,8 @@ impl HasIntegrand for GammaLoopIntegrand {
 
 impl GammaLoopIntegrand {
     #[inline]
+    /// Evaluate the 3D representation of the integrand at a concrete floating-point precision.
+    /// This function performs the evaluation twice, once for the original sample and once for the rotated sample.
     fn evaluate_at_prec(
         &self,
         sample_point: &GammaLoopSample<f64>,
@@ -662,12 +683,14 @@ impl GammaLoopIntegrand {
         (result, rotated_result, duration)
     }
 
+    /// Used to create the use_data_generator closure for havana_integrate
     pub fn user_data_generator(&self, num_cores: usize, _settings: &Settings) -> UserData {
         UserData {
             integrand: vec![Integrand::GammaLoopIntegrand(self.clone()); num_cores],
         }
     }
 
+    /// Create an iterator which specifies the stability levels to be used for the evaluation
     #[inline]
     fn create_stability_iterator(
         &self,
@@ -688,6 +711,7 @@ impl GammaLoopIntegrand {
         }
     }
 
+    /// Perform map from unit hypercube to 3-momenta
     #[inline]
     fn parameterize(&self, sample_point: &Sample<f64>) -> GammaLoopSample<f64> {
         match &self.settings.sampling {
@@ -794,6 +818,7 @@ impl GammaLoopIntegrand {
         }
     }
 
+    /// Default parametrize is basically everything except tropical sampling.
     #[inline]
     fn default_parametrize(&self, xs: &[f64]) -> DefaultSample<f64> {
         let (external_moms, pdf) = self.settings.kinematics.externals.get_externals(xs);
@@ -818,7 +843,7 @@ impl GammaLoopIntegrand {
         }
     }
 
-    // compute the average and check the accuracy of the result
+    /// Compute the average and check the accuracy of the result
     #[inline]
     fn stability_check(
         &self,
@@ -893,6 +918,7 @@ impl GammaLoopIntegrand {
     }
 }
 
+/// Sample whose structure depends on the sampling settings, and enforces these settings.
 #[derive(Debug, Clone)]
 enum GammaLoopSample<T: FloatLike> {
     Default(DefaultSample<T>),
@@ -907,6 +933,8 @@ enum GammaLoopSample<T: FloatLike> {
 }
 
 impl<T: FloatLike> GammaLoopSample<T> {
+    /// Rotation for stability checks
+    #[inline]
     fn get_rotated_sample(
         &self,
         rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
@@ -928,6 +956,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
     }
 
+    /// Cast the sample to a different precision
+    #[inline]
     fn cast_sample<T2: FloatLike + From<T>>(&self) -> GammaLoopSample<T2> {
         match self {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.cast_sample()),
@@ -944,6 +974,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
     }
 
+    /// Retrieve the default sample which is contained in all types
+    #[inline]
     fn get_default_sample(&self) -> &DefaultSample<T> {
         match self {
             GammaLoopSample::Default(sample) => sample,
@@ -953,6 +985,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
     }
 }
 
+/// Sample which contains loop momenta, external momenta and the jacobian of the parameterization.
+/// External momenta are part of the sample in order to facilitate the use of non-constant externals.
 #[derive(Debug, Clone)]
 struct DefaultSample<T: FloatLike> {
     loop_moms: Vec<LorentzVector<T>>,
@@ -962,7 +996,7 @@ struct DefaultSample<T: FloatLike> {
 
 impl<T: FloatLike> DefaultSample<T> {
     #[inline]
-    // rotation for stability checks
+    /// Rotation for stability checks
     fn get_rotated_sample(
         &self,
         rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
@@ -978,6 +1012,8 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
+    /// Cast the sample to a different precision
+    #[inline]
     fn cast_sample<T2: FloatLike + From<T>>(&self) -> DefaultSample<T2> {
         DefaultSample {
             loop_moms: self
@@ -995,7 +1031,7 @@ impl<T: FloatLike> DefaultSample<T> {
     }
 }
 
-// tropical sampling is equivalent to a default sample at this point.
+/// This sample is used when importance sampling over graphs is used.
 #[derive(Debug, Clone)]
 enum DiscreteGraphSample<T: FloatLike> {
     Default(DefaultSample<T>),
@@ -1003,6 +1039,7 @@ enum DiscreteGraphSample<T: FloatLike> {
         alpha: f64,
         sample: DefaultSample<T>,
     },
+    /// This variant is equivalent to Default, but needs to be handled differently in the evaluation.
     Tropical(DefaultSample<T>),
     DiscreteMultiChanneling {
         alpha: f64,
@@ -1012,6 +1049,8 @@ enum DiscreteGraphSample<T: FloatLike> {
 }
 
 impl<T: FloatLike> DiscreteGraphSample<T> {
+    /// Rotation for stability checks
+    #[inline]
     fn get_rotated_sample(
         &self,
         rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
@@ -1041,6 +1080,8 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         }
     }
 
+    /// Cast the sample to a different precision
+    #[inline]
     fn cast_sample<T2: FloatLike + From<T>>(&self) -> DiscreteGraphSample<T2> {
         match self {
             DiscreteGraphSample::Default(sample) => {
@@ -1067,6 +1108,8 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         }
     }
 
+    /// Retrieve the default sample which is contained in all types
+    #[inline]
     fn get_default_sample(&self) -> &DefaultSample<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample,

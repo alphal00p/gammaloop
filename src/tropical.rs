@@ -10,8 +10,10 @@ use crate::{
     utils::FloatLike,
 };
 
+/// Dimensionality of space
 pub const D: usize = 3; // we are always going to do 3-d representations, so I hardcode this.
 
+/// Simplified version of the Graph struct, used to generate the tropical subgraph table
 #[derive(Debug, Clone)]
 pub struct TropicalGraph {
     dod: f64,
@@ -64,6 +66,7 @@ impl TropicalGraph {
             signature_matrix,
         }
     }
+
     pub fn to_serializable(&self) -> SerializableTropicalGraph {
         SerializableTropicalGraph {
             dod: self.dod,
@@ -76,6 +79,7 @@ impl TropicalGraph {
         }
     }
 
+    /// Create the simplfied graph from the full Graph struct
     pub fn from_graph(graph: &Graph, tropical_edge_weights: &[f64]) -> Self {
         let dod = tropical_edge_weights.iter().sum::<f64>()
             - D as f64 / 2.0 * graph.loop_momentum_basis.basis.len() as f64;
@@ -161,9 +165,9 @@ impl TropicalGraph {
         TropicalSubGraphId::new(self.topology.len())
     }
 
-    // subgraph gamma of a parent graph G is mass-spanning if it contains all massive propagators of G
-    // and momentum-spanning if it has a connected component that contains all external vertices of G
-    // a mass-momentum-spanning subgraph is both mass-spanning and momentum-spanning
+    /// subgraph gamma of a parent graph G is mass-spanning if it contains all massive propagators of G.
+    /// and momentum-spanning if it has a connected component that contains all external vertices of G.
+    /// A mass-momentum-spanning subgraph is both mass-spanning and momentum-spanning.
     fn is_mass_momentum_spanning(&self, edges_in_subgraph: &[usize]) -> bool {
         let num_massive_edges = edges_in_subgraph
             .iter()
@@ -181,14 +185,14 @@ impl TropicalGraph {
             self.external_vertices.iter().all(|&v| {
                 edges_in_connected_subgraph
                     .iter()
-                    .any(|&i| self.topology[i].contains_vertex(&v))
+                    .any(|&i| self.topology[i].contains_vertex(v))
             })
         });
 
         is_mass_spanning && is_momentum_spanning
     }
 
-    // simple bfs to get all connected components, used to compute loop number of possible disconnected graph
+    /// Get all connected components of a graph, used to compute loop number of possible disconnected graph
     fn get_connected_components(&self, edges_in_subgraph: &[usize]) -> Vec<TropicalSubGraphId> {
         let num_edges_in_subgraph = edges_in_subgraph.len();
 
@@ -209,21 +213,21 @@ impl TropicalGraph {
         while num_edges_in_subgraph
             > connected_components
                 .iter()
-                .map(|component| component.len())
+                .map(std::collections::HashSet::len)
                 .sum::<usize>()
         {
             let neighbours = current_edges
                 .iter()
-                .flat_map(|edge_id| {
+                .flat_map(|&edge_id| {
                     self.get_neighbouring_edges_in_subgraph(edge_id, edges_in_subgraph)
                 })
                 .collect::<Vec<usize>>();
 
             let mut current_component_grown = false;
-            for neighbour in neighbours.iter() {
-                current_edges.push(*neighbour);
-                visited_edges.insert(*neighbour);
-                if current_component.insert(*neighbour) {
+            for &neighbour in &neighbours {
+                current_edges.push(neighbour);
+                visited_edges.insert(neighbour);
+                if current_component.insert(neighbour) {
                     current_component_grown = true;
                 };
             }
@@ -232,11 +236,11 @@ impl TropicalGraph {
                 connected_components.push(current_component);
                 current_component = HashSet::default();
                 current_edges.clear();
-                for edge_id in edges_in_subgraph.iter() {
-                    if !visited_edges.contains(edge_id) {
-                        current_edges.push(*edge_id);
-                        visited_edges.insert(*edge_id);
-                        current_component.insert(*edge_id);
+                for &edge_id in edges_in_subgraph {
+                    if !visited_edges.contains(&edge_id) {
+                        current_edges.push(edge_id);
+                        visited_edges.insert(edge_id);
+                        current_component.insert(edge_id);
                         break;
                     }
                 }
@@ -254,6 +258,7 @@ impl TropicalGraph {
             .collect()
     }
 
+    /// get the loop number of a potentially disconnected grraph
     fn get_loop_number(&self, edges_in_subgraph: &[usize]) -> u8 {
         if edges_in_subgraph.is_empty() {
             return 0;
@@ -267,13 +272,14 @@ impl TropicalGraph {
             .sum()
     }
 
+    /// Get the loop number of a connected graph, by Euler's formula
     fn get_loop_number_of_connected_component(&self, subgraph_id: &TropicalSubGraphId) -> u8 {
         let edges_in_connected_subgraph = subgraph_id.contains_edges();
         let mut vertices: HashSet<u8> = HashSet::default();
 
-        for edge in edges_in_connected_subgraph.iter() {
-            vertices.insert(self.topology[*edge].left);
-            vertices.insert(self.topology[*edge].right);
+        for &edge in &edges_in_connected_subgraph {
+            vertices.insert(self.topology[edge].left);
+            vertices.insert(self.topology[edge].right);
         }
 
         let num_vertices = vertices.len();
@@ -281,6 +287,7 @@ impl TropicalGraph {
         1 + num_edges as u8 - num_vertices as u8
     }
 
+    /// Sum all the weights of the edges in the subgraph
     fn compute_weight_sum(&self, edges_in_subgraph: &[usize]) -> f64 {
         edges_in_subgraph
             .iter()
@@ -288,25 +295,26 @@ impl TropicalGraph {
             .sum()
     }
 
+    /// Get all the edges that share a vertex with a given edge
     fn get_neighbouring_edges_in_subgraph(
         &self,
-        edge_id: &usize,
+        edge_id: usize,
         edges_in_subgraph: &[usize],
     ) -> Vec<usize> {
         edges_in_subgraph
             .iter()
-            .filter(|&&i| self.are_neighbours(edge_id, &i))
+            .filter(|&&i| self.are_neighbours(edge_id, i))
             .copied()
             .collect()
     }
 
-    // check if two edges share a vertex
-    fn are_neighbours(&self, edge_id_1: &usize, edge_id_2: &usize) -> bool {
-        self.topology[*edge_id_1].contains_vertex(&self.topology[*edge_id_2].left)
-            || self.topology[*edge_id_1].contains_vertex(&self.topology[*edge_id_2].right)
+    /// Check if two edges share a vertex.
+    fn are_neighbours(&self, edge_id_1: usize, edge_id_2: usize) -> bool {
+        self.topology[edge_id_1].contains_vertex(self.topology[edge_id_2].left)
+            || self.topology[edge_id_1].contains_vertex(self.topology[edge_id_2].right)
     }
 
-    // definition of the j-function for a subgraph
+    /// Definition of the j-function for a subgraph, described in the tropical sampling papers.
     fn recursive_j_function_eval(
         subgraph_id: &TropicalSubGraphId,
         table: &mut Vec<OptionTropicalSubgraphTableEntry>,
@@ -322,7 +330,7 @@ impl TropicalGraph {
             }
 
             let edges_in_subgraph = subgraph_id.contains_edges();
-            let subgraphs = edges_in_subgraph.iter().map(|e| subgraph_id.pop_edge(e));
+            let subgraphs = edges_in_subgraph.iter().map(|&e| subgraph_id.pop_edge(e));
 
             let j_function = subgraphs
                 .map(|g| {
@@ -336,6 +344,7 @@ impl TropicalGraph {
     }
 }
 
+/// The bits in the id represent whether the corresponding edge is in the subgraph
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TropicalSubGraphId {
     id: usize,
@@ -354,32 +363,38 @@ impl TropicalSubGraphId {
         Self { id, num_edges }
     }
 
-    fn pop_edge(&self, edge_id: &usize) -> Self {
+    /// remove an edge from the subgraph
+    fn pop_edge(&self, edge_id: usize) -> Self {
         Self {
-            id: self.id ^ (1 << *edge_id),
+            id: self.id ^ (1 << edge_id),
             num_edges: self.num_edges,
         }
     }
 
+    /// The 0 id as all bits set to 0, so it contains no edges and thus represents the empty graph
     fn is_empty(&self) -> bool {
         self.id == 0
     }
 
-    fn has_edge(&self, edge_id: &usize) -> bool {
-        self.id & (1 << *edge_id) != 0
+    /// Check wheter the subgraph contains a specific edge
+    fn has_edge(&self, edge_id: usize) -> bool {
+        self.id & (1 << edge_id) != 0
     }
 
+    /// Get the edges contained in the subgraph
     fn contains_edges(&self) -> Vec<usize> {
-        (0..self.num_edges).filter(|i| self.has_edge(i)).collect()
+        (0..self.num_edges).filter(|&i| self.has_edge(i)).collect()
     }
 
+    /// Check if the subgraph contains only one edge, this is a special case in the tropical sampling algorithm
     fn has_one_edge(&self) -> bool {
         self.id.count_ones() == 1
     }
 
+    /// Create a subgraph id from a list of edges
     fn from_edge_list(edge_list: &[usize], num_edges: usize) -> Self {
         let mut id = 0;
-        for edge_id in edge_list.iter() {
+        for &edge_id in edge_list {
             id |= 1 << edge_id;
         }
         Self { id, num_edges }
@@ -395,12 +410,12 @@ pub struct TropicalEdge {
 }
 
 impl TropicalEdge {
-    fn contains_vertex(&self, vertex: &u8) -> bool {
-        self.left == *vertex || self.right == *vertex
+    fn contains_vertex(&self, vertex: u8) -> bool {
+        self.left == vertex || self.right == vertex
     }
 }
 
-// helper struct for generation
+/// Helper struct for generation, to store entries before computing the value of the j_function (Which requires the value of the other quantities to be present)
 #[derive(Debug, Clone, Copy)]
 struct OptionTropicalSubgraphTableEntry {
     loop_number: Option<u8>,
@@ -419,6 +434,7 @@ impl OptionTropicalSubgraphTableEntry {
         }
     }
 
+    /// Check if all fields are set, and panic if it has failed
     fn to_entry(self) -> TropicalSubgraphTableEntry {
         TropicalSubgraphTableEntry {
             loop_number: self
@@ -437,6 +453,7 @@ impl OptionTropicalSubgraphTableEntry {
     }
 }
 
+/// Data that needs to be stored for each subgraph
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TropicalSubgraphTableEntry {
     pub loop_number: u8,
@@ -445,6 +462,7 @@ pub struct TropicalSubgraphTableEntry {
     pub generalized_dod: f64,
 }
 
+/// The list of data for all subgraphs, indexed using the TropicalSubGraphId
 #[derive(Debug, Clone)]
 pub struct TropicalSubgraphTable {
     pub table: Vec<TropicalSubgraphTableEntry>,
@@ -478,6 +496,7 @@ impl TropicalSubgraphTable {
         }
     }
 
+    /// Generate the tropical subgraph table from a graph
     pub fn generate_from_graph(
         graph: &Graph,
         tropical_edge_weights: &[f64],
@@ -529,9 +548,8 @@ impl TropicalSubgraphTable {
 
             if generalized_dod <= 0.0 && !subgraph.is_empty() && subgraph != full_subgraph_id {
                 return Err(Report::msg(format!(
-                    "Generalized DoD: {} is negative for subgraph {:?}\n
-                    loop number: {}, mass-momentum spanning: {}, weight sum: {}",
-                    generalized_dod, subgraph, loop_number, is_mass_momentum_spanning, weight_sum
+                    "Generalized DoD: {generalized_dod} is negative for subgraph {subgraph:?}\n
+                    loop number: {loop_number}, mass-momentum spanning: {is_mass_momentum_spanning}, weight sum: {weight_sum}"
                 )));
             }
 
@@ -544,12 +562,14 @@ impl TropicalSubgraphTable {
         Ok(TropicalSubgraphTable {
             table: option_subgraph_table
                 .into_iter()
-                .map(|e| e.to_entry())
+                .map(OptionTropicalSubgraphTableEntry::to_entry)
                 .collect(),
             tropical_graph: tropical_graph.clone(),
         })
     }
 
+    /// sample an edge from a subgraph, according to the relevant probability distribution, returns the edge and the subgraph without the edge for later use
+    /// Panics if the uniform random number is greater than one or the probability distribution is incorrectly normalized.
     fn sample_edge<T: FloatLike>(
         &self,
         uniform: T,
@@ -559,14 +579,14 @@ impl TropicalSubgraphTable {
         let j = Into::<T>::into(self.table[subgraph.id].j_function);
 
         let mut cum_sum = T::zero();
-        for edge in edges_in_subgraph.iter() {
+        for &edge in &edges_in_subgraph {
             let graph_without_edge = subgraph.pop_edge(edge);
             let p_e = Into::<T>::into(self.table[graph_without_edge.id].j_function)
                 / Into::<T>::into(j)
                 / Into::<T>::into(self.table[graph_without_edge.id].generalized_dod);
             cum_sum += p_e;
             if cum_sum >= uniform {
-                return (*edge, graph_without_edge);
+                return (edge, graph_without_edge);
             }
         }
 
@@ -590,6 +610,7 @@ pub mod tropical_parameterization {
 
     use super::{TropicalSubgraphTable, D};
 
+    /// Fake random number generator, perhaps it is more readable to get rid of this.
     struct MimicRng<'a, T> {
         cache: &'a [T],
         counter: usize,
@@ -621,6 +642,8 @@ pub mod tropical_parameterization {
         v_trop: T,
     }
 
+    /// This function returns the feynman parameters for a given graph and sample point, it also computes u_trop and v_trop.
+    /// A rescaling is performed for numerical stability, with this rescaling u_trop and v_trop always evaluate to 1.
     fn permatuhedral_sampling<T: FloatLike>(
         tropical_subgraph_table: &TropicalSubgraphTable,
         rng: &mut MimicRng<T>,
@@ -639,7 +662,7 @@ pub mod tropical_parameterization {
             // this saves a random variable
             let (edge, graph_without_edge) = if graph.has_one_edge() {
                 let edge = graph.contains_edges()[0];
-                let graph_without_edge = graph.pop_edge(&edge);
+                let graph_without_edge = graph.pop_edge(edge);
                 (edge, graph_without_edge)
             } else {
                 tropical_subgraph_table
@@ -676,8 +699,8 @@ pub mod tropical_parameterization {
                     "generalized_dod: {}",
                     tropical_subgraph_table.table[graph.id].generalized_dod
                 );
-                println!("xi: {}", xi);
-                println!("kappa: {}", kappa);
+                println!("xi: {xi}");
+                println!("kappa: {kappa}");
             }
         }
 
@@ -696,10 +719,10 @@ pub mod tropical_parameterization {
         );
 
         if debug > 2 {
-            println!("scaling: {}", scaling);
-            println!("u_trop before scaling: {}", u_trop);
-            println!("xi_trop before scaling: {}", xi_trop);
-            println!("v_trop before scaling: {}", v_trop);
+            println!("scaling: {scaling}");
+            println!("u_trop before scaling: {u_trop}");
+            println!("xi_trop before scaling: {xi_trop}");
+            println!("v_trop before scaling: {v_trop}");
         }
 
         x_vec.iter_mut().for_each(|x| *x *= scaling);
@@ -713,7 +736,8 @@ pub mod tropical_parameterization {
         }
     }
 
-    // in this algorithm we first generate the edge ordering, then we generate the feynman parameters
+    /// In this version the steps are reordered, perhaps useful to keep when we want to do learning on top of tropical sampling, but for now it is not used.
+    /// It has been checked that it produces the same result as the normal version.
     fn _adapted_permatuhedral_sampling<T: FloatLike>(
         tropical_subgraph_table: &TropicalSubgraphTable,
         rng: &mut MimicRng<T>,
@@ -730,7 +754,7 @@ pub mod tropical_parameterization {
         while !graph.is_empty() {
             let (edge, graph_without_edge) = if graph.has_one_edge() {
                 let edge = graph.contains_edges()[0];
-                let graph_without_edge = graph.pop_edge(&edge);
+                let graph_without_edge = graph.pop_edge(edge);
                 (edge, graph_without_edge)
             } else {
                 tropical_subgraph_table
@@ -746,7 +770,7 @@ pub mod tropical_parameterization {
         let mut u_trop = T::one();
         let mut v_trop = T::one();
 
-        for i in 1..(graph.num_edges + 1) {
+        for i in 1..=graph.num_edges {
             let (graph, _) = graph_ordering[i - 1];
             if let (graph_without_edge, Some(edge)) = graph_ordering[i] {
                 x_vec[edge] = kappa;
@@ -803,6 +827,7 @@ pub mod tropical_parameterization {
         }
     }
 
+    /// This function is called from the paramatrization stage of evaluate_sample
     pub fn generate_tropical_sample<T: FloatLike + Into<f64>>(
         x_space_point: &[T],
         external_momenta: &[LorentzVector<T>],
@@ -943,6 +968,7 @@ pub mod tropical_parameterization {
         Ok((loop_momenta, jacobian))
     }
 
+    /// Compute the L x L matrix from the feynman parameters and the signature matrix
     #[inline]
     fn compute_l_matrix<T: FloatLike>(
         x_vec: &[T],
@@ -965,6 +991,7 @@ pub mod tropical_parameterization {
         temp_l_matrix
     }
 
+    /// Sample Gaussian distributed vectors, using the Box-Muller transform
     #[inline]
     fn sample_q_vectors<T: FloatLike>(
         rng: &mut MimicRng<T>,
@@ -995,6 +1022,7 @@ pub mod tropical_parameterization {
             .collect_vec()
     }
 
+    /// Compute the vectors u, according to the formula in the notes
     #[inline]
     fn compute_u_vectors<T: FloatLike>(
         x_vec: &[T],
@@ -1013,6 +1041,7 @@ pub mod tropical_parameterization {
             .collect_vec()
     }
 
+    /// Compute the polynomial v, according to the formula in the notes
     #[inline]
     fn compute_v_polynomial<T: FloatLike>(
         x_vec: &[T],
@@ -1029,12 +1058,12 @@ pub mod tropical_parameterization {
             let mut term_1 = T::zero();
             for (&x_e, &mass, &shift) in izip!(x_vec, edge_masses, edge_shifts) {
                 let quant = x_e * (mass * mass + shift.spatial_squared());
-                println!("x_e: {}, mass: {}, shift: {}", x_e, mass, shift);
-                println!("quant: {}", quant);
+                println!("x_e: {x_e}, mass: {mass}, shift: {shift}");
+                println!("quant: {quant}");
                 term_1 += quant;
             }
 
-            println!("term_1: {}", term_1);
+            println!("term_1: {term_1}");
 
             let mut term_2 = T::zero();
             for (i, j) in (0..num_loops).cartesian_product(0..num_loops) {
@@ -1045,13 +1074,13 @@ pub mod tropical_parameterization {
                     u_vectors[j],
                     inverse_l[(i, j)]
                 );
-                println!("quant: {}", quant);
+                println!("quant: {quant}");
                 term_2 += quant;
             }
 
-            println!("term_2: {}", term_2);
+            println!("term_2: {term_2}");
             let res = term_1 - term_2;
-            println!("res: {}", res);
+            println!("res: {res}");
             res
         } else {
             let term_1 = izip!(x_vec, edge_masses, edge_shifts)
@@ -1067,6 +1096,7 @@ pub mod tropical_parameterization {
         }
     }
 
+    /// Compute the loop momenta, according to the formula in the notes
     #[inline]
     fn compute_loop_momenta<T: FloatLike>(
         v: T,
@@ -1085,10 +1115,10 @@ pub mod tropical_parameterization {
                 let mut weird_shift: LorentzVector<T> = LorentzVector::new();
                 for j in 0..num_loops {
                     let term_in_weird_shift = u_vectors[j] * l_inverse[(l, j)];
-                    println!("term in weird shift: {}", term_in_weird_shift);
+                    println!("term in weird shift: {term_in_weird_shift}");
                     weird_shift += u_vectors[j] * l_inverse[(l, j)];
                 }
-                println!("weird shift: {}", weird_shift);
+                println!("weird shift: {weird_shift}");
             }
         }
         (0..num_loops)
@@ -1104,6 +1134,8 @@ pub mod tropical_parameterization {
             .collect_vec()
     }
 
+    /// Compute the Jacobian of the tropical sampling algorithm. This does not include the factors of positive powers of E that need to
+    /// be multiplied with the three-dimensional representation. Perhaps it is more readable to include that here.
     #[inline]
     fn compute_jacobian<T: FloatLike>(
         tropical_subgraph_table: &TropicalSubgraphTable,
@@ -1121,7 +1153,7 @@ pub mod tropical_parameterization {
         let i_trop = Into::<T>::into(tropical_subgraph_table.table.last().unwrap().j_function);
 
         if debug > 1 {
-            println!("i_trop: {}", i_trop);
+            println!("i_trop: {i_trop}");
         }
 
         let gamma_omega = Into::<T>::into(gamma(tropical_subgraph_table.tropical_graph.dod));
@@ -1135,8 +1167,8 @@ pub mod tropical_parameterization {
         );
 
         if debug > 1 {
-            println!("gamma omega: {}", gamma_omega);
-            println!("gamma nu product: {}", denom);
+            println!("gamma omega: {gamma_omega}");
+            println!("gamma nu product: {denom}");
         }
 
         // we divide by (2pi)^L later, tropcial sampling already contains a part of this, so we undo that here.
@@ -1328,14 +1360,14 @@ mod tests {
             assert!(table.mass_momentum_spanning);
             assert_eq!(table.loop_number, 0);
             assert_approx_eq(table.generalized_dod, 0.84, TOLERANCE);
-            assert_approx_eq(table.j_function, 3.03030303030303, TOLERANCE);
+            assert_approx_eq(table.j_function, 3.030_303_030_303_03, TOLERANCE);
         }
 
         let final_table = subgraph_table.table[7];
         assert!(final_table.mass_momentum_spanning);
         assert_eq!(final_table.loop_number, 1);
         assert_approx_eq(final_table.generalized_dod, 0.0, TOLERANCE);
-        assert_approx_eq(final_table.j_function, 10.82251082251082, TOLERANCE);
+        assert_approx_eq(final_table.j_function, 10.822_510_822_510_82, TOLERANCE);
     }
 
     #[test]
@@ -1400,14 +1432,14 @@ mod tests {
             assert!(table.mass_momentum_spanning);
             assert_eq!(table.loop_number, 1);
             assert_approx_eq(table.generalized_dod, 0.84, TOLERANCE);
-            assert_approx_eq(table.j_function, 1.19047619047619, TOLERANCE);
+            assert_approx_eq(table.j_function, 1.190_476_190_476_19, TOLERANCE);
         }
 
         let final_table = subgraph_table.table[7];
         assert!(final_table.mass_momentum_spanning);
         assert_eq!(final_table.loop_number, 2);
         assert_approx_eq(final_table.generalized_dod, 0.0, TOLERANCE);
-        assert_approx_eq(final_table.j_function, 4.251700680272108, TOLERANCE);
+        assert_approx_eq(final_table.j_function, 4.251_700_680_272_108, TOLERANCE);
     }
 
     #[test]
@@ -1476,6 +1508,6 @@ mod tests {
 
         let i_tr = subgraph_table.table.last().unwrap().j_function;
 
-        assert_approx_eq(i_tr, 1818.3038556403471, TOLERANCE);
+        assert_approx_eq(i_tr, 1_818.303_855_640_347_1, TOLERANCE);
     }
 }

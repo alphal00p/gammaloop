@@ -1,3 +1,8 @@
+//! This module steers the integration process.
+//! It contains two main ways of integrating the integrand.
+//! The havana_integrate function is mostly used for local runs.
+//! The master node in combination with batch_integrate is for distributed runs.  
+
 use color_eyre::Report;
 use colored::Colorize;
 use itertools::Itertools;
@@ -6,7 +11,7 @@ use serde::Serialize;
 use symbolica::numerical_integration::{Grid, Sample, StatisticsAccumulator};
 
 use crate::evaluation_result::EvaluationResult;
-use crate::evaluation_result::SerializableMeteDataStatistics;
+use crate::evaluation_result::SerializableMetaDataStatistics;
 use crate::evaluation_result::StatisticsCounter;
 use crate::integrands::HasIntegrand;
 use crate::observables::Event;
@@ -27,6 +32,7 @@ use std::str::FromStr;
 use std::time::Instant;
 use tabled::{Style, Table, Tabled};
 
+/// Intended to be a copy of the integrand for each core.
 pub struct UserData {
     pub integrand: Vec<Integrand>,
 }
@@ -48,6 +54,7 @@ pub struct IntegralResult {
     pdf: String,
 }
 
+/// Integrate function used for local runs
 pub fn havana_integrate<F>(
     settings: &Settings,
     user_data_generator: F,
@@ -430,6 +437,8 @@ where
     }
 }
 
+/// Batch integrate function used for distributed runs, used by the worker nodes.
+/// Evaluates a batch of points and returns the results in a manner specified by the user.
 pub fn batch_integrate(integrand: &Integrand, input: BatchIntegrateInput) -> BatchResult {
     let samples = match input.samples {
         SampleInput::SampleList { samples } => samples,
@@ -478,6 +487,7 @@ pub fn batch_integrate(integrand: &Integrand, input: BatchIntegrateInput) -> Bat
     }
 }
 
+/// Map the evaluation result on to the right output specified by the user.
 fn generate_integrand_output(
     integrand: &Integrand,
     evaluation_results: &[EvaluationResult],
@@ -529,6 +539,7 @@ fn generate_integrand_output(
     }
 }
 
+/// Process events into histograms or event lists, as specified by the user.
 fn generate_event_output(
     evaluation_results: Vec<EvaluationResult>,
     event_output_settings: EventOutputSettings,
@@ -547,7 +558,7 @@ fn generate_event_output(
     }
 }
 
-// core function of the batch_integrate function, used by all versions of IO
+/// This function actually evaluates the list of samples in parallel.
 fn evaluate_sample_list(
     integrand: &Integrand,
     samples: &[Sample<f64>],
@@ -584,6 +595,9 @@ fn evaluate_sample_list(
     (evaluation_results, meta_data_statistics)
 }
 
+/// Different ways of passing samples to the batch_integrate function
+/// One is simply a list of samples, the other is a grid and the desired number of samples
+/// The worker then generates the samples itself.
 #[derive(Serialize, Deserialize)]
 pub enum SampleInput {
     SampleList { samples: Vec<Sample<f64>> },
@@ -639,6 +653,8 @@ impl SerializableBatchIntegrateOutput {
     }
 }
 
+/// Different ways of processing events, EventList is a list of events, Histogram does accumulation of events on the worker nodes, so the
+/// master node only has to merge the histograms.
 pub enum EventOutput {
     None,
     EventList { events: Vec<Event> },
@@ -681,6 +697,7 @@ impl SerializableEventOutput {
     }
 }
 
+/// The result of evaluating a batch of points
 pub struct BatchResult {
     pub statistics: StatisticsCounter,
     pub integrand_data: BatchIntegrateOutput,
@@ -689,7 +706,7 @@ pub struct BatchResult {
 
 #[derive(Serialize, Deserialize)]
 pub struct SerializableBatchResult {
-    pub statistics: SerializableMeteDataStatistics,
+    pub statistics: SerializableMetaDataStatistics,
     pub integrand_data: SerializableBatchIntegrateOutput,
     pub event_data: SerializableEventOutput,
 }
@@ -697,7 +714,7 @@ pub struct SerializableBatchResult {
 impl SerializableBatchResult {
     pub fn from_batch_result(result: BatchResult) -> Self {
         Self {
-            statistics: SerializableMeteDataStatistics::from_metadata_statistics(result.statistics),
+            statistics: SerializableMetaDataStatistics::from_metadata_statistics(result.statistics),
             integrand_data: SerializableBatchIntegrateOutput::from_batch_integrate_output(
                 &result.integrand_data,
             ),
@@ -714,6 +731,7 @@ impl SerializableBatchResult {
     }
 }
 
+/// Input for the batch_integrate function, created by the master node
 pub struct BatchIntegrateInput<'a> {
     // global run info:
     pub max_eval: f64,
@@ -726,12 +744,14 @@ pub struct BatchIntegrateInput<'a> {
     pub num_cores: usize,
 }
 
+/// Choose whether to output the integrand results, or a statistics accumulator
 #[derive(Serialize, Deserialize)]
 pub enum IntegralOutputSettings {
     Default,
     Accumulator,
 }
 
+/// Choose whether to output an eventlist, a histogram, or nothing
 #[derive(Serialize, Deserialize)]
 pub enum EventOutputSettings {
     None,
@@ -763,7 +783,7 @@ impl SerializableBatchIntegrateInput {
     }
 }
 
-// Master node which accumulates data from jobs
+/// Master node which accumulates data from jobs, and creates the input for jobs
 #[derive(Clone)]
 pub struct MasterNode {
     grid: Grid<f64>,
@@ -786,10 +806,12 @@ impl MasterNode {
         }
     }
 
+    /// Update the grid with the data from another grid.
     fn update_grid_with_grid(&mut self, other_grid: &Grid<f64>) -> Result<(), String> {
         self.grid.merge(other_grid)
     }
 
+    /// Update the grid with the data from a set of samples.
     fn update_grid_with_samples(
         &mut self,
         samples_points: &[Sample<f64>],
@@ -810,6 +832,7 @@ impl MasterNode {
         Ok(())
     }
 
+    /// Update the accumulators with the data from another set of accumulators.
     pub fn update_accumulators_with_accumulators(
         &mut self,
         mut real_accumulator: StatisticsAccumulator<f64>,
@@ -822,6 +845,7 @@ impl MasterNode {
             .merge_samples(&mut imaginary_accumulator);
     }
 
+    /// Update the accumulators with the data from a set of samples.
     fn update_accumuators_with_samples(
         &mut self,
         sample_points: &[Sample<f64>],
@@ -836,10 +860,12 @@ impl MasterNode {
         }
     }
 
+    /// Update the metadata statistics with the data from another set of metadata statistics.
     fn update_metadata_statistics(&mut self, statistics: StatisticsCounter) {
         self.statistics = self.statistics.merged(&statistics);
     }
 
+    /// Finish the current iteration. This should be called after all jobs have been processed.
     pub fn update_iter(&mut self) {
         self.grid.update(self.integrator_settings.learning_rate);
         self.master_accumulator_re.update_iter();
@@ -848,6 +874,7 @@ impl MasterNode {
         self.current_iter += 1;
     }
 
+    /// Write the input for a batch job to a file.
     pub fn write_batch_input(
         &mut self,
         num_cores: usize,
@@ -856,7 +883,6 @@ impl MasterNode {
         output_accumulator: bool,
         job_name: &str,
     ) -> Result<(), Report> {
-        let mut rng = rand::thread_rng();
         let integrated_phase = self.integrator_settings.integrated_phase;
 
         let max_eval = match integrated_phase {
@@ -873,6 +899,7 @@ impl MasterNode {
                 num_points: num_samples,
             }
         } else {
+            let mut rng = rand::thread_rng();
             let mut samples_temp = vec![Sample::new(); num_samples];
             for sample in samples_temp.iter_mut() {
                 self.grid.sample(&mut rng, sample);
@@ -903,6 +930,7 @@ impl MasterNode {
         Ok(())
     }
 
+    /// Process the output of a batch job.
     pub fn process_batch_output(&mut self, output: BatchResult) -> Result<(), String> {
         self.update_metadata_statistics(output.statistics);
 
@@ -927,6 +955,7 @@ impl MasterNode {
         Ok(())
     }
 
+    /// Display the current status of the integration. Usually called after each iteration.
     pub fn display_status(&self) {
         let time_ltd_formatted = format_evaluation_time(self.statistics.get_avg_rep3d_timing());
         let param_time_formatted = format_evaluation_time(self.statistics.get_avg_param_timing());
