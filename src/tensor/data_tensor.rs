@@ -31,6 +31,12 @@ pub trait HasTensorData<T> {
 /// Trait for setting the data of a tensor
 #[enum_dispatch]
 pub trait SetTensorData<T> {
+    /// Set the data at the given indices, returns an error if the indices are out of bounds
+    ///
+    /// # Errors
+    ///
+    /// Forwards the error from [`TensorStructure::verify_indices`]
+    ///
     fn set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String>;
 
     fn set_flat(&mut self, index: usize, value: T) -> Result<(), String>;
@@ -81,7 +87,7 @@ where
     fn symhashmap(&self, id: Identifier, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
         let mut hashmap = HashMap::new();
 
-        for (k, v) in self.elements.iter() {
+        for (k, v) in &self.elements {
             hashmap.insert(
                 atomic_expanded_label_id(&self.expanded_index(*k).unwrap(), id, state, ws),
                 v.clone(),

@@ -70,16 +70,16 @@ impl Representation {
     /// ```
     pub fn negative(&self) -> Vec<bool> {
         match self {
-            Representation::Lorentz(value) => std::iter::once(false)
+            Self::Lorentz(value) => std::iter::once(false)
                 .chain(std::iter::repeat(true).take(*value - 1))
                 .collect::<Vec<_>>(),
-            Representation::Euclidean(value)
-            | Representation::Spin(value)
-            | Representation::ColorAdjoint(value)
-            | Representation::ColorFundamental(value)
-            | Representation::ColorAntiFundamental(value)
-            | Representation::ColorSextet(value)
-            | Representation::ColorAntiSextet(value) => vec![false; *value],
+            Self::Euclidean(value)
+            | Self::Spin(value)
+            | Self::ColorAdjoint(value)
+            | Self::ColorFundamental(value)
+            | Self::ColorAntiFundamental(value)
+            | Self::ColorSextet(value)
+            | Self::ColorAntiSextet(value) => vec![false; *value],
         }
     }
 
@@ -87,32 +87,30 @@ impl Representation {
     ///
     /// for example see [`Self::negative`]
     #[inline]
-    pub fn is_neg(&self, i: usize) -> bool {
+    pub const fn is_neg(&self, i: usize) -> bool {
         match self {
-            Representation::Lorentz(_) => i > 0,
+            Self::Lorentz(_) => i > 0,
             _ => false,
         }
     }
 
     /// yields a function builder for the representation, adding a first variable: the dimension.
     ///
-    /// for example see [Slot::to_symbolic]
+    /// for example see [`Slot::to_symbolic`]
     pub fn to_fnbuilder<'a, 'b: 'a>(
         &'a self,
         state: &'b mut State,
         ws: &'b Workspace,
     ) -> FunctionBuilder<'a> {
         let (value, id) = match self {
-            Representation::Euclidean(value) => (*value, state.get_or_insert_fn("euc", None)),
-            Representation::Lorentz(value) => (*value, state.get_or_insert_fn("lor", None)),
-            Representation::Spin(value) => (*value, state.get_or_insert_fn("spin", None)),
-            Representation::ColorAdjoint(value) => (*value, state.get_or_insert_fn("CAdj", None)),
-            Representation::ColorFundamental(value) => (*value, state.get_or_insert_fn("CF", None)),
-            Representation::ColorAntiFundamental(value) => {
-                (*value, state.get_or_insert_fn("CAF", None))
-            }
-            Representation::ColorSextet(value) => (*value, state.get_or_insert_fn("CS", None)),
-            Representation::ColorAntiSextet(value) => (*value, state.get_or_insert_fn("CAS", None)),
+            Self::Euclidean(value) => (*value, state.get_or_insert_fn("euc", None)),
+            Self::Lorentz(value) => (*value, state.get_or_insert_fn("lor", None)),
+            Self::Spin(value) => (*value, state.get_or_insert_fn("spin", None)),
+            Self::ColorAdjoint(value) => (*value, state.get_or_insert_fn("CAdj", None)),
+            Self::ColorFundamental(value) => (*value, state.get_or_insert_fn("CF", None)),
+            Self::ColorAntiFundamental(value) => (*value, state.get_or_insert_fn("CAF", None)),
+            Self::ColorSextet(value) => (*value, state.get_or_insert_fn("CS", None)),
+            Self::ColorAntiSextet(value) => (*value, state.get_or_insert_fn("CAS", None)),
         };
 
         let mut value_builder = FunctionBuilder::new(id.unwrap(), state, ws);
@@ -143,7 +141,7 @@ impl Representation {
 
 impl From<Dimension> for Representation {
     fn from(value: Dimension) -> Self {
-        Representation::Euclidean(value)
+        Self::Euclidean(value)
     }
 }
 
@@ -188,14 +186,14 @@ impl From<Representation> for Dimension {
 impl std::fmt::Display for Representation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Representation::Euclidean(value) => write!(f, "e{}", value),
-            Representation::Lorentz(value) => write!(f, "l{}", value),
-            Representation::Spin(value) => write!(f, "s{}", value),
-            Representation::ColorAdjoint(value) => write!(f, "cad{}", value),
-            Representation::ColorFundamental(value) => write!(f, "cf{}", value),
-            Representation::ColorAntiFundamental(value) => write!(f, "caf{}", value),
-            Representation::ColorSextet(value) => write!(f, "cs{}", value),
-            Representation::ColorAntiSextet(value) => write!(f, "cas{}", value),
+            Self::Euclidean(value) => write!(f, "e{value}"),
+            Self::Lorentz(value) => write!(f, "l{value}"),
+            Self::Spin(value) => write!(f, "s{value}"),
+            Self::ColorAdjoint(value) => write!(f, "cad{value}"),
+            Self::ColorFundamental(value) => write!(f, "cf{value}"),
+            Self::ColorAntiFundamental(value) => write!(f, "caf{value}"),
+            Self::ColorSextet(value) => write!(f, "cs{value}"),
+            Self::ColorAntiSextet(value) => write!(f, "cas{value}"),
         }
     }
 }
@@ -245,7 +243,7 @@ impl Ord for Slot {
 
 impl From<(AbstractIndex, Representation)> for Slot {
     fn from(value: (AbstractIndex, Representation)) -> Self {
-        Slot {
+        Self {
             index: value.0,
             representation: value.1,
         }
@@ -254,7 +252,7 @@ impl From<(AbstractIndex, Representation)> for Slot {
 
 impl From<(usize, usize)> for Slot {
     fn from(value: (usize, usize)) -> Self {
-        Slot {
+        Self {
             index: value.0,
             representation: value.1.into(),
         }
@@ -309,14 +307,14 @@ pub trait TensorStructure {
         self.same_external(other)
     }
 
-    /// Given two TensorStructures, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match
+    /// Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match
     fn match_index(&self, other: &Self) -> Option<(bool, usize, usize)> {
-        let posmap = AHashMap::from_iter(
-            self.external_structure()
-                .iter()
-                .enumerate()
-                .map(|(i, slot)| (slot, i)),
-        );
+        let posmap = self
+            .external_structure()
+            .iter()
+            .enumerate()
+            .map(|(i, slot)| (slot, i))
+            .collect::<AHashMap<_, _>>();
 
         let mut first_pair: Option<(usize, usize)> = None;
 
@@ -333,18 +331,18 @@ pub trait TensorStructure {
         first_pair.map(|(i, j)| (true, i, j)) // Maps the found pair to Some with true indicating a unique match, or None if no match was found
     }
 
-    /// Given two TensorStructures, returns the index of the first matching slot in each external index list
+    /// Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list
     fn match_indices(&self, other: &Self) -> Option<(Permutation, Vec<bool>, Vec<bool>)> {
         let mut self_matches = vec![false; self.order()];
         let mut perm = Vec::new();
         let mut other_matches = vec![false; other.order()];
 
-        let posmap = AHashMap::from_iter(
-            self.external_structure()
-                .iter()
-                .enumerate()
-                .map(|(i, slot)| (slot, i)),
-        );
+        let posmap = self
+            .external_structure()
+            .iter()
+            .enumerate()
+            .map(|(i, slot)| (slot, i))
+            .collect::<AHashMap<_, _>>();
 
         for (j, slot_other) in other.external_structure().iter().enumerate() {
             if let Some(&i) = posmap.get(slot_other) {
@@ -354,11 +352,11 @@ pub trait TensorStructure {
             }
         }
 
-        if !perm.is_empty() {
+        if perm.is_empty() {
+            None
+        } else {
             let p: Permutation = permutation::sort(&mut perm);
             Some((p, self_matches, other_matches))
-        } else {
-            None
         }
     }
     /// Identify the repeated slots in the external index list
@@ -425,7 +423,7 @@ pub trait TensorStructure {
 
         let mut permutation = Vec::with_capacity(self.external_structure().len());
         let mut used_indices = HashSet::new();
-        for item in self.external_structure().iter() {
+        for item in self.external_structure() {
             if let Some(indices) = index_map.get_mut(item) {
                 // Find an index that hasn't been used yet
                 if let Some(&index) = indices.iter().find(|&&i| !used_indices.contains(&i)) {
@@ -480,6 +478,13 @@ pub trait TensorStructure {
     }
 
     /// Verifies that the list of indices provided are valid for the tensor
+    ///
+    /// # Errors
+    ///
+    /// `Mismatched order` = if the length of the indices is different from the order of the tensor,
+    ///
+    /// `Index out of bounds` = if the index is out of bounds for the dimension of that index   
+    ///
     fn verify_indices(&self, indices: &[ConcreteIndex]) -> Result<(), String> {
         if indices.len() != self.order() {
             return Err("Mismatched order".into());
@@ -505,6 +510,10 @@ pub trait TensorStructure {
     }
 
     /// yields the flat index of the tensor given a list of indices
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::verify_indices`]
     fn flat_index(&self, indices: &[ConcreteIndex]) -> Result<usize, String> {
         let strides = self.strides();
         self.verify_indices(indices)?;
@@ -517,17 +526,21 @@ pub trait TensorStructure {
     }
 
     /// yields the expanded index of the tensor given a flat index
+    ///
+    /// # Errors
+    ///
+    /// `Index out of bounds` = if the flat index is out of bounds for the tensor
     fn expanded_index(&self, flat_index: usize) -> Result<Vec<ConcreteIndex>, String> {
         let mut indices = vec![];
         let mut index = flat_index;
-        for &stride in self.strides().iter() {
+        for &stride in &self.strides() {
             indices.push(index / stride);
             index %= stride;
         }
         if flat_index < self.size() {
             Ok(indices)
         } else {
-            Err(format!("Index {} out of bounds", flat_index).into())
+            Err(format!("Index {flat_index} out of bounds").into())
         }
     }
 
@@ -569,7 +582,7 @@ impl<'a> TensorStructure for &'a [Slot] {
 }
 
 impl TensorStructure for Vec<Slot> {
-    type Structure = Vec<Slot>;
+    type Structure = Self;
 
     fn structure(&self) -> &Self::Structure {
         self
@@ -590,6 +603,7 @@ pub trait StructureContract {
 
     fn merge(&mut self, other: &Self);
 
+    #[must_use]
     fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self;
 }
 
@@ -644,14 +658,15 @@ impl StructureContract for Vec<Slot> {
 /// A named structure is a structure with a global name, and a list of slots
 ///
 /// It is useful when you want to shadow tensors, to nest tensor network contraction operations.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct NamedStructure {
     pub structure: Vec<Slot>,
     pub global_name: Option<SmartString<LazyCompact>>,
 }
 
 impl NamedStructure {
-    /// Constructs a new TensorSkeleton from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
+    /// Constructs a new [`NamedStructure`] from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
+    #[must_use]
     pub fn from_integers(slots: &[(AbstractIndex, Dimension)], name: &str) -> Self {
         let slots: Vec<(AbstractIndex, Representation)> = slots
             .iter()
@@ -659,14 +674,15 @@ impl NamedStructure {
             .collect();
         Self::new(&slots, name)
     }
-    /// Constructs a new TensorSkeleton from a list of tuples of indices and representations, along with a name
+    /// Constructs a new [`NamedStructure`] from a list of tuples of indices and representations, along with a name
+    #[must_use]
     pub fn new(slots: &[(AbstractIndex, Representation)], name: &str) -> Self {
         let structure: Vec<Slot> = slots
             .iter()
             .map(|(index, representation)| Slot::from((*index, *representation)))
             .collect();
 
-        NamedStructure {
+        Self {
             structure,
             global_name: Some(name.into()),
         }
@@ -691,7 +707,7 @@ impl HasName for NamedStructure {
 }
 
 impl TensorStructure for NamedStructure {
-    type Structure = NamedStructure;
+    type Structure = Self;
     fn structure(&self) -> &Self::Structure {
         self
     }
@@ -714,7 +730,7 @@ impl StructureContract for NamedStructure {
 
     /// when merging two named structures, the global name is lost
     fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
-        NamedStructure {
+        Self {
             structure: self.structure.merge_at(&other.structure, positions),
             global_name: None,
         }
@@ -728,14 +744,15 @@ impl StructureContract for NamedStructure {
 /// A contraction count structure
 ///
 /// Useful for tensor network contraction algorithm.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ContractionCountStructure {
     pub structure: Vec<Slot>,
     pub contractions: usize,
 }
 
 impl ContractionCountStructure {
-    /// Constructs a new TensorSkeleton from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
+    /// Constructs a new [`ContractionCountStructure`] from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
+    #[must_use]
     pub fn from_integers(slots: &[(AbstractIndex, Dimension)]) -> Self {
         let slots: Vec<(AbstractIndex, Representation)> = slots
             .iter()
@@ -743,14 +760,15 @@ impl ContractionCountStructure {
             .collect();
         Self::new(&slots)
     }
-    /// Constructs a new TensorSkeleton from a list of tuples of indices and representations, along with a name
+    /// Constructs a new [`ContractionCountStructure`] from a list of tuples of indices and representations, along with a name
+    #[must_use]
     pub fn new(slots: &[(AbstractIndex, Representation)]) -> Self {
         let structure: Vec<Slot> = slots
             .iter()
             .map(|(index, representation)| Slot::from((*index, *representation)))
             .collect();
 
-        ContractionCountStructure {
+        Self {
             structure,
             contractions: 0,
         }
@@ -795,7 +813,7 @@ impl StructureContract for ContractionCountStructure {
     }
 
     fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
-        ContractionCountStructure {
+        Self {
             structure: self.structure.merge_at(&other.structure, positions),
             contractions: self.contractions + other.contractions,
         }
@@ -807,7 +825,7 @@ impl StructureContract for ContractionCountStructure {
 }
 
 /// A structure to enable smart shadowing of tensors in a tensor network contraction algorithm.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SmartShadowStructure {
     pub structure: Vec<Slot>,
     pub contractions: usize,
@@ -815,7 +833,8 @@ pub struct SmartShadowStructure {
 }
 
 impl SmartShadowStructure {
-    /// Constructs a new TensorSkeleton from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
+    /// Constructs a new [`SmartShadow`] from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
+    #[must_use]
     pub fn from_integers(slots: &[(AbstractIndex, Dimension)], name: &str) -> Self {
         let slots: Vec<(AbstractIndex, Representation)> = slots
             .iter()
@@ -823,7 +842,8 @@ impl SmartShadowStructure {
             .collect();
         Self::new(&slots, name)
     }
-    /// Constructs a new TensorSkeleton from a list of tuples of indices and representations, along with a name
+    /// Constructs a new [`SmartShadow`] from a list of tuples of indices and representations, along with a name
+    #[must_use]
     pub fn new(slots: &[(AbstractIndex, Representation)], name: &str) -> Self {
         let structure: Vec<Slot> = slots
             .iter()
