@@ -216,13 +216,20 @@ impl GraphIntegrand for AmplitudeGraph {
             .get_graph()
             .compute_onshell_energies(&sample.loop_moms, &sample.external_moms);
 
-        let virtual_energies = self
+        let virtual_loop_energies = self
             .get_graph()
             .edges
             .iter()
             .zip(onshell_energies.iter())
-            .filter(|(edge, _)| edge.edge_type == EdgeType::Virtual)
-            .map(|(_, energy)| energy);
+            .enumerate()
+            .filter(|(index, (edge, _))| {
+                edge.edge_type == EdgeType::Virtual
+                    && self.get_graph().loop_momentum_basis.edge_signatures[*index]
+                        .0
+                        .iter()
+                        .any(|x| *x != 0)
+            })
+            .map(|(_, (_, energy))| energy);
 
         let weight_iterator = self
             .get_graph()
@@ -235,12 +242,30 @@ impl GraphIntegrand for AmplitudeGraph {
             .iter()
             .map(|edge| edge.weight);
 
-        let energy_product = virtual_energies
+        let energy_product = virtual_loop_energies
             .zip(weight_iterator)
             .map(|(energy, weight)| energy.powf(Into::<T>::into(2. * weight - 1.)))
             .fold(T::one(), |acc, x| acc * x); // should we put Product and Sum in FloatLike?
 
-        rep3d * energy_product
+        let tree_like_energies = self
+            .get_graph()
+            .edges
+            .iter()
+            .zip(onshell_energies.iter())
+            .enumerate()
+            .filter(|(index, (edge, _))| {
+                edge.edge_type == EdgeType::Virtual
+                    && self.get_graph().loop_momentum_basis.edge_signatures[*index]
+                        .0
+                        .iter()
+                        .all(|x| *x == 0)
+            })
+            .map(|(_, (_, energy))| energy);
+
+        let tree_product =
+            tree_like_energies.fold(T::one(), |acc, x| acc * Into::<T>::into(2.) * x);
+
+        rep3d * energy_product / tree_product
     }
 }
 

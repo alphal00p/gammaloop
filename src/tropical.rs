@@ -91,7 +91,7 @@ impl TropicalGraph {
         let mut num_massive_edges = 0;
         let mut _inverse_edge_map = vec![None; graph.edges.len()];
 
-        for (tropical_edge_index, edge) in graph.get_virtual_edges_iterator().enumerate() {
+        for (tropical_edge_index, edge) in graph.get_loop_edges_iterator().enumerate() {
             let tropical_edge = TropicalEdge {
                 edge_id: tropical_edge_index,
                 left: edge.vertices[0] as u8,
@@ -117,12 +117,15 @@ impl TropicalGraph {
             _inverse_edge_map[edge_position_in_parent_graph] = Some(tropical_edge_index);
         }
 
+        // collect external edges, and tree-level virtual edges
+        let mut edges_to_be_considered_for_externals = Vec::new();
+
         for edge in graph
             .edges
             .iter()
             .filter(|e| e.edge_type == EdgeType::Incoming)
         {
-            external_vertices.push(edge.vertices[1] as u8);
+            edges_to_be_considered_for_externals.push(edge);
         }
 
         for edge in graph
@@ -130,7 +133,29 @@ impl TropicalGraph {
             .iter()
             .filter(|e| e.edge_type == EdgeType::Outgoing)
         {
-            external_vertices.push(edge.vertices[0] as u8);
+            edges_to_be_considered_for_externals.push(edge);
+        }
+
+        for edge in graph.get_tree_level_edges_iterator() {
+            edges_to_be_considered_for_externals.push(edge);
+        }
+
+        // collect these vertices in a hashset
+        let mut external_vertices_pool = HashSet::default();
+        for edge in edges_to_be_considered_for_externals {
+            external_vertices_pool.insert(edge.vertices[0]);
+            external_vertices_pool.insert(edge.vertices[1]);
+        }
+
+        // if an edge contains a vertex in the external vertex pool, this vertex must be labeled as external for the tropical sampling.
+        for edge in &topology {
+            if external_vertices_pool.contains(&(edge.left as usize)) {
+                external_vertices.push(edge.left);
+            }
+
+            if external_vertices_pool.contains(&(edge.right as usize)) {
+                external_vertices.push(edge.right);
+            }
         }
 
         let edge_number = topology.len();
@@ -1169,7 +1194,7 @@ pub mod tropical_parameterization {
         // we divide by (2pi)^L later, tropcial sampling already contains a part of this, so we undo that here.
         let pi_power = Into::<T>::into(std::f64::consts::PI.powf((D * num_loops) as f64 / 2.0));
 
-        // we include the factor of 2^E here, so we don't need to include it in the evaluate function
+        // we include the factor of 2^E here, so we don't need to include it in the evaluate function, we still need to add it for the tree -like edges
         let num_edges = tropical_subgraph_table.tropical_graph.topology.len();
         let two_to_the_e: usize = 1 << num_edges;
 
