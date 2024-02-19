@@ -72,6 +72,7 @@ indexmap = "2.2.2"
 nohash-hasher = "0.2.0"
 intmap = { git = "https://github.com/lcnbr/rust-intmap" }
 permutation = "0.4.1"
+slotmap = { version = "1.0.7", features = ["serde"] }
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

@@ -1,14 +1,17 @@
 use ahash::AHashMap;
+use bincode::de;
 use itertools::Itertools;
 
+use num::traits::Inv;
 use petgraph::{
     dot::{Config, Dot},
-    graph::EdgeIndex,
-    graph::Graph,
-    graph::NodeIndex,
+    graph::{EdgeIndex, Graph, NodeIndex},
     visit::EdgeRef,
+    Direction::Outgoing,
     Undirected,
 };
+
+use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
 use symbolica::{
     representations::Identifier,
     state::{State, Workspace},
@@ -17,7 +20,11 @@ use symbolica::{
 use self::mixed_tensor::{MixedTensor, MixedTensors, SymbolicContract};
 use self::tensor_structure::HistoryStructure;
 
-use super::*;
+use super::{
+    mixed_tensor, tensor_structure, Atom, DataTensor, DenseTensor, GetTensorData, HasName,
+    HasTensorData, NumTensor, SetTensorData, Shadowable, Slot, SparseTensor, StructureContract,
+    SymbolicZero, TensorStructure, TracksCount,
+};
 use smartstring::alias::String;
 use std::{
     fmt::{Debug, Display},
@@ -33,15 +40,19 @@ where
         + std::fmt::Debug,
     I: TensorStructure + Clone + StructureContract,
 {
+    #[must_use]
+
+    /// Contract the tensor with itself, i.e. trace over all matching indices.
     pub fn internal_contract(&self) -> Self {
         let mut result: DenseTensor<T, I> = self.clone();
         for trace in self.traces() {
             let mut new_structure = self.structure.clone();
             new_structure.trace(trace[0], trace[1]);
 
-            let mut new_result = DenseTensor::from_data_coerced(&self.data, new_structure).unwrap();
+            let mut new_result = DenseTensor::from_data_coerced(&self.data, new_structure)
+                .unwrap_or_else(|_| unreachable!());
             for (idx, t) in result.iter_trace(trace) {
-                new_result.set(&idx, t).unwrap();
+                new_result.set(&idx, t).unwrap_or_else(|_| unreachable!());
             }
             result = new_result;
         }
@@ -59,6 +70,8 @@ where
         + PartialEq,
     I: TensorStructure + Clone + StructureContract,
 {
+    #[must_use]
+    /// Contract the tensor with itself, i.e. trace over all matching indices.
     pub fn internal_contract(&self) -> Self {
         let trace = self.traces()[0];
 
@@ -68,7 +81,7 @@ where
 
         let mut new_result = SparseTensor::empty(new_structure);
         for (idx, t) in self.iter_trace(trace).filter(|(_, t)| *t != T::default()) {
-            new_result.set(&idx, t).unwrap();
+            new_result.set(&idx, t).unwrap_or_else(|_| unreachable!());
         }
 
         if new_result.traces().is_empty() {
@@ -133,45 +146,43 @@ where
                     };
 
                     return Some(result);
-                } else {
-                    // println!("SparseTensor DenseTensor");
-                    let (permutation, self_matches, other_matches) =
-                        self.structure().match_indices(other.structure()).unwrap();
-
-                    let mut final_structure = self.structure.clone();
-                    final_structure.merge(&other.structure);
-
-                    // Initialize result tensor with default values
-                    let mut result_data = vec![Out::zero(); final_structure.size()];
-                    let mut result_index = 0;
-                    let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
-
-                    let mut other_iter = other.iter_multi_fibers(&other_matches);
-                    while let Some(fiber_a) = selfiter.next() {
-                        for fiber_b in other_iter.by_ref() {
-                            for k in 0..fiber_a.len() {
-                                if fiber_a[k].1 {
-                                    result_data[result_index] -=
-                                        fiber_b[selfiter.map[k]] * fiber_a[k].0;
-                                } else {
-                                    result_data[result_index] +=
-                                        fiber_b[selfiter.map[k]] * fiber_a[k].0;
-                                }
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
-                    }
-                    let result: DenseTensor<Out, I> = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    return Some(result);
                 }
-            } else {
-                return other.contract(self);
+                // println!("SparseTensor DenseTensor");
+                let (permutation, self_matches, other_matches) =
+                    self.structure().match_indices(other.structure()).unwrap();
+
+                let mut final_structure = self.structure.clone();
+                final_structure.merge(&other.structure);
+
+                // Initialize result tensor with default values
+                let mut result_data = vec![Out::zero(); final_structure.size()];
+                let mut result_index = 0;
+                let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
+
+                let mut other_iter = other.iter_multi_fibers(&other_matches);
+                while let Some(fiber_a) = selfiter.next() {
+                    for fiber_b in other_iter.by_ref() {
+                        for k in 0..fiber_a.len() {
+                            if fiber_a[k].1 {
+                                result_data[result_index] -=
+                                    fiber_b[selfiter.map[k]] * fiber_a[k].0;
+                            } else {
+                                result_data[result_index] +=
+                                    fiber_b[selfiter.map[k]] * fiber_a[k].0;
+                            }
+                        }
+                        result_index += 1;
+                    }
+                    other_iter.reset();
+                }
+                let result: DenseTensor<Out, I> = DenseTensor {
+                    data: result_data,
+                    structure: final_structure,
+                };
+
+                return Some(result);
             }
+            return other.contract(self);
         }
         None
     }
@@ -342,66 +353,64 @@ where
                     };
 
                     return Some(result);
-                } else {
-                    let (permutation, self_matches, other_matches) =
-                        self.structure().match_indices(other.structure()).unwrap();
-
-                    let mut final_structure = self.structure.clone();
-                    final_structure.merge(&other.structure);
-                    let mut result_data = AHashMap::default();
-                    let one = if let Some(o) = final_structure.strides().first() {
-                        *o
-                    } else {
-                        1
-                    };
-                    let stride = *final_structure
-                        .strides()
-                        .get(i.checked_sub(1)?)
-                        .unwrap_or(&one);
-
-                    let mut result_index = 0;
-
-                    let mut self_iter = self.iter_multi_fibers_metric(&self_matches, permutation);
-                    let mut other_iter = other.iter_multi_fibers(&other_matches);
-                    while let Some((skipped_a, nonzeros_a, fiber_a)) = self_iter.next() {
-                        result_index += skipped_a;
-                        for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
-                            result_index += skipped_b * stride;
-                            let mut value = Out::zero();
-                            let mut nonzero = false;
-
-                            for (i, j, _x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
-                                nonzeros_b
-                                    .binary_search(&self_iter.map[x])
-                                    .ok()
-                                    .map(|j| (i, j, x))
-                            }) {
-                                if fiber_a[i].1 {
-                                    value -= fiber_a[i].0 * fiber_b[j];
-                                } else {
-                                    value += fiber_a[i].0 * fiber_b[j];
-                                }
-                                nonzero = true;
-                            }
-
-                            if nonzero && value != Out::zero() {
-                                result_data.insert(result_index, value);
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
-                    }
-
-                    let result = SparseTensor {
-                        elements: result_data,
-                        structure: final_structure,
-                    };
-
-                    return Some(result);
                 }
-            } else {
-                return other.contract(self);
+                let (permutation, self_matches, other_matches) =
+                    self.structure().match_indices(other.structure()).unwrap();
+
+                let mut final_structure = self.structure.clone();
+                final_structure.merge(&other.structure);
+                let mut result_data = AHashMap::default();
+                let one = if let Some(o) = final_structure.strides().first() {
+                    *o
+                } else {
+                    1
+                };
+                let stride = *final_structure
+                    .strides()
+                    .get(i.checked_sub(1)?)
+                    .unwrap_or(&one);
+
+                let mut result_index = 0;
+
+                let mut self_iter = self.iter_multi_fibers_metric(&self_matches, permutation);
+                let mut other_iter = other.iter_multi_fibers(&other_matches);
+                while let Some((skipped_a, nonzeros_a, fiber_a)) = self_iter.next() {
+                    result_index += skipped_a;
+                    for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
+                        result_index += skipped_b * stride;
+                        let mut value = Out::zero();
+                        let mut nonzero = false;
+
+                        for (i, j, _x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
+                            nonzeros_b
+                                .binary_search(&self_iter.map[x])
+                                .ok()
+                                .map(|j| (i, j, x))
+                        }) {
+                            if fiber_a[i].1 {
+                                value -= fiber_a[i].0 * fiber_b[j];
+                            } else {
+                                value += fiber_a[i].0 * fiber_b[j];
+                            }
+                            nonzero = true;
+                        }
+
+                        if nonzero && value != Out::zero() {
+                            result_data.insert(result_index, value);
+                        }
+                        result_index += 1;
+                    }
+                    other_iter.reset();
+                }
+
+                let result = SparseTensor {
+                    elements: result_data,
+                    structure: final_structure,
+                };
+
+                return Some(result);
             }
+            return other.contract(self);
         }
         None
     }
@@ -574,37 +583,215 @@ where
     }
 }
 
+new_key_type! {
+    pub struct NodeId;
+    pub struct HedgeId;
+}
+
+#[derive(Debug, Clone)]
+struct HalfEdgeGraph<N, E> {
+    edges: SlotMap<HedgeId, E>,
+    involution: SecondaryMap<HedgeId, HedgeId>,
+    pub nodes: SlotMap<NodeId, N>,
+    pub nodemap: SecondaryMap<HedgeId, NodeId>,
+}
+
+impl<N, E> HalfEdgeGraph<N, E> {
+    fn new() -> Self {
+        HalfEdgeGraph {
+            involution: SecondaryMap::new(),
+            nodemap: SecondaryMap::new(),
+            nodes: SlotMap::with_key(),
+            edges: SlotMap::with_key(),
+        }
+    }
+
+    fn dot(&self) -> String {
+        let mut out = "graph {".into();
+        out
+    }
+
+    fn add_node(&mut self, data: N) -> NodeId {
+        self.nodes.insert(data)
+    }
+
+    fn node_indices(&self) -> slotmap::basic::Keys<'_, NodeId, N> {
+        self.nodes.keys()
+    }
+
+    /// Add a node with a list of edget with associated data. Matches edges by equality.
+    fn add_node_with_edges(&mut self, data: N, edges: &[E]) -> NodeId
+    where
+        E: Eq + Clone,
+    {
+        let idx = self.add_node(data);
+        for e in edges {
+            let eid = self.edges.insert(e.clone());
+            for (i, other_e) in self.edges.iter() {
+                if e == other_e && self.involution[i] == i {
+                    self.involution.insert(eid, i);
+                    self.involution.insert(i, eid);
+                    self.nodemap.insert(eid, idx);
+                    break;
+                }
+            }
+        }
+
+        idx
+    }
+
+    fn merge_nodes(&mut self, a: NodeId, b: NodeId, data: N) {
+        let edges_to_contract = self.edges_between(a, b);
+        for (i, n) in &mut self.nodemap {
+            if *n == b {
+                *n = a;
+            }
+        }
+
+        self.nodes[a] = data;
+        self.nodes.remove(b);
+
+        for e in edges_to_contract {
+            self.involution.remove(e);
+        }
+    }
+
+    /// Add an internal edge between two nodes.
+    fn add_edge(&mut self, a: NodeId, b: NodeId, data: E) -> HedgeId
+    where
+        E: Clone,
+    {
+        let id_a = self.edges.insert(data.clone());
+        let id_b = self.edges.insert(data);
+        self.involution.insert(id_a, id_b);
+        self.involution.insert(id_b, id_a);
+        self.nodemap.insert(id_a, a);
+        self.nodemap.insert(id_b, b);
+        id_a
+    }
+
+    /// Add external, as a fixed point involution half edge.
+    fn add_external(&mut self, a: NodeId, data: E) -> HedgeId {
+        let id = self.edges.insert(data);
+        self.involution.insert(id, id);
+        self.nodemap.insert(id, a);
+        id
+    }
+
+    fn edges_incident(&self, node: NodeId) -> Vec<HedgeId> {
+        self.nodemap
+            .iter()
+            .filter_map(|(i, n)| if *n == node { Some(i) } else { None })
+            .collect()
+    }
+
+    fn edges_between(&self, a: NodeId, b: NodeId) -> Vec<HedgeId> {
+        self.nodemap
+            .iter()
+            .filter_map(|(i, n)| {
+                if *n == a && self.nodemap[self.involution[i]] == b {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn internal_edges_incident(&self, node: NodeId) -> Vec<HedgeId> {
+        self.nodemap
+            .iter()
+            .filter_map(|(i, n)| {
+                if *n == node && self.involution[i] != i {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn external_edges_incident(&self, node: NodeId) -> Vec<HedgeId> {
+        self.nodemap
+            .iter()
+            .filter_map(|(i, n)| {
+                if *n == node && self.involution[i] == i {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn degree(&self, node: NodeId) -> usize {
+        self.edges_incident(node).len()
+    }
+
+    fn neighbors(&self, node: NodeId) -> Vec<NodeId> {
+        self.internal_edges_incident(node)
+            .iter()
+            .filter_map(|&i| {
+                if self.nodemap[i] == node {
+                    None
+                } else {
+                    Some(self.nodemap[self.involution[i]])
+                }
+            })
+            .collect()
+    }
+
+    fn map_nodes<F, U>(&self, f: F) -> HalfEdgeGraph<U, E>
+    where
+        F: Fn(&N) -> U,
+        E: Clone,
+    {
+        let edges = self.edges.clone();
+        let involution = self.involution.clone();
+
+        let mut nodes = SlotMap::with_key();
+        let mut nodemap = SecondaryMap::new();
+
+        for n in &self.nodes {
+            let nid = nodes.insert(f(n.1));
+            for e in self.edges_incident(n.0) {
+                nodemap.insert(e, nid);
+            }
+        }
+
+        HalfEdgeGraph {
+            edges,
+            involution,
+            nodes,
+            nodemap,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TensorNetwork<T> {
-    graph: Graph<T, Slot, Undirected>,
+    graph: HalfEdgeGraph<T, Slot>,
 }
 
 impl<T> TensorNetwork<T> {
-    fn edge_to_min_degree_node(&self) -> Option<EdgeIndex> {
-        let mut max_degree = 0;
+    fn edge_to_min_degree_node(&self) -> Option<HedgeId> {
         let mut min_degree = usize::MAX;
         let mut edge_to_min_degree_node = None;
-        for node in self.graph.node_indices() {
-            if self.graph.edges(node).count() > max_degree {
-                max_degree = self.graph.edges(node).count();
-            }
-            if self.graph.edges(node).count() < min_degree {
-                min_degree = self.graph.edges(node).count();
+        for node in self.graph.nodes.keys() {
+            let out = self.graph.internal_edges_incident(node);
+            let degree = out.len();
+            if degree < min_degree {
+                min_degree = degree;
                 if min_degree > 0 {
-                    edge_to_min_degree_node = Some(self.graph.edges(node).next().unwrap().id());
+                    edge_to_min_degree_node = Some(out[0]);
                 }
             }
         }
         edge_to_min_degree_node
     }
 
-    pub fn to_vec(self) -> Vec<T> {
-        self.graph
-            .into_nodes_edges()
-            .0
-            .into_iter()
-            .map(|n| n.weight)
-            .collect()
+    pub fn to_vec(&self) -> Vec<&T> {
+        self.graph.nodes.values().collect()
     }
 }
 
@@ -612,13 +799,12 @@ impl<N> TensorNetwork<MixedTensor<N>>
 where
     N: Debug + TensorStructure,
 {
-    pub fn to_symbolic_tensor_vec(self) -> Vec<DataTensor<Atom, N>> {
+    pub fn to_symbolic_tensor_vec(mut self) -> Vec<DataTensor<Atom, N>> {
         self.graph
-            .into_nodes_edges()
-            .0
-            .into_iter()
-            .filter(|n| n.weight.is_symbolic())
-            .map(|n| n.weight.try_into_symbolic().unwrap())
+            .nodes
+            .drain()
+            .filter(|(_, n)| n.is_symbolic())
+            .map(|(_, n)| n.try_into_symbolic().unwrap())
             .collect()
     }
 }
@@ -632,87 +818,35 @@ where
         }
     }
 
-    fn generate_network_graph(tensors: Vec<T>) -> Graph<T, Slot, Undirected> {
-        let mut graph = Graph::<T, Slot, Undirected>::new_undirected();
+    fn generate_network_graph(tensors: Vec<T>) -> HalfEdgeGraph<T, Slot> {
+        let mut graph = HalfEdgeGraph::<T, Slot>::new();
 
         for tensor in tensors {
-            graph.add_node(tensor);
+            let slots = tensor.external_structure().to_vec();
+            graph.add_node_with_edges(tensor, &slots);
         }
 
-        for (ni, n) in graph.node_indices().enumerate() {
-            for (_, m) in graph.node_indices().enumerate().filter(|(i, _)| *i > ni) {
-                let a = graph.node_weight(n).unwrap();
-                let b = graph.node_weight(m).unwrap();
-
-                if let Some((_, i, _)) = a.match_index(b) {
-                    graph.add_edge(n, m, a.external_structure()[i]);
-                }
-            }
-        }
         graph
     }
 
-    fn merge_nodes(&mut self, a: NodeIndex, b: NodeIndex, weight: T) {
-        let neighsa = self.graph.neighbors(a).count();
-        let neighsb = self.graph.neighbors(b).count();
-
-        let (m, d) = if neighsa < neighsb { (b, a) } else { (a, b) };
-
-        let mut new_edges = vec![];
-
-        for e in self.graph.edges(d) {
-            let (a, b) = (e.target(), e.source());
-            let n = if a == d { b } else { a };
-            if n == m || n == d {
-                continue;
-            }
-            new_edges.push((m, n, *e.weight()));
-        }
-
-        for (a, b, w) in new_edges {
-            self.graph.add_edge(a, b, w);
-        }
-
-        if let Some(w) = self.graph.node_weight_mut(m) {
-            *w = weight;
-        }
-
-        self.graph.remove_node(d);
-    }
-
-    pub fn edge_to_min_degree_node_with_depth(&self, depth: usize) -> Option<EdgeIndex>
+    pub fn edge_to_min_degree_node_with_depth(&self, depth: usize) -> Option<HedgeId>
     where
         T: TracksCount,
     {
         let mut min_degree = usize::MAX;
         let mut edge_to_min_degree_node = None;
-        for edge in self
-            .graph
-            .edge_indices()
-            .filter(|&e| {
-                let (nl, nr) = self.graph.edge_endpoints(e).unwrap();
-                self.graph.node_weight(nl).unwrap().contractions_num()
-                    + self.graph.node_weight(nr).unwrap().contractions_num()
-                    < depth
-            })
-            .sorted_by(|&e1, &e2| {
-                let (nl1, nr1) = self.graph.edge_endpoints(e1).unwrap();
-                let (nl2, nr2) = self.graph.edge_endpoints(e2).unwrap();
-                (self.graph.node_weight(nl1).unwrap().contractions_num()
-                    + self.graph.node_weight(nr1).unwrap().contractions_num())
-                .cmp(
-                    &(self.graph.node_weight(nl2).unwrap().contractions_num()
-                        + self.graph.node_weight(nr2).unwrap().contractions_num()),
-                )
-            })
-        {
-            let (nl, nr) = self.graph.edge_endpoints(edge).unwrap();
-            let degrees = self.graph.edges(nl).count() + self.graph.edges(nr).count();
-            if degrees < min_degree {
-                min_degree = degrees;
+        for (e, n) in &self.graph.nodemap {
+            let edge_depth = self.graph.nodes[*n].contractions_num()
+                + self.graph.nodes[self.graph.nodemap[self.graph.involution[e]]].contractions_num();
 
-                if min_degree > 0 {
-                    edge_to_min_degree_node = Some(edge);
+            if edge_depth < depth {
+                let out = self.graph.internal_edges_incident(*n);
+                let degree = out.len();
+                if degree < min_degree {
+                    min_degree = degree;
+                    if min_degree > 0 {
+                        edge_to_min_degree_node = Some(out[0]);
+                    }
                 }
             }
         }
@@ -724,10 +858,7 @@ where
     T: Clone,
 {
     pub fn result(&self) -> T {
-        self.graph
-            .node_weight(self.graph.node_indices().next().unwrap())
-            .unwrap()
-            .clone()
+        self.graph.nodes.iter().next().unwrap().1.clone()
     }
 }
 
@@ -737,16 +868,17 @@ where
     T::Structure: Display,
 {
     pub fn dot(&self) -> String {
-        format!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &self.graph,
-                &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, e| { format!("label=\"{}\"", e.weight()) },
-                &|_, n| { format!("label=\"{}\"", n.1.structure()) }
-            )
-        )
-        .into()
+        // format!(
+        //     "{:?}",
+        //     Dot::with_attr_getters(
+        //         &self.graph,
+        //         &[Config::EdgeNoLabel, Config::NodeNoLabel],
+        //         &|_, e| { format!("label=\"{}\"", e.weight()) },
+        //         &|_, n| { format!("label=\"{}\"", n.1.structure()) }
+        //     )
+        // )
+        // .into()
+        self.graph.dot()
     }
 }
 
@@ -755,16 +887,17 @@ where
     T: Debug + TensorStructure<Structure = HistoryStructure<Identifier>>,
 {
     pub fn dotsym(&self, state: &State) -> String {
-        format!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &self.graph,
-                &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, e| { format!("label=\"{}\"", e.weight()) },
-                &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)) }
-            )
-        )
-        .into()
+        // format!(
+        //     "{:?}",
+        //     Dot::with_attr_getters(
+        //         &self.graph,
+        //         &[Config::EdgeNoLabel, Config::NodeNoLabel],
+        //         &|_, e| { format!("label=\"{}\"", e.weight()) },
+        //         &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)) }
+        //     )
+        // )
+        // .into()
+        self.graph.dot()
     }
 }
 
@@ -778,26 +911,45 @@ where
         state: &mut State,
         ws: &Workspace,
     ) -> TensorNetwork<MixedTensors> {
-        self.graph.node_indices().for_each(|n| {
-            self.graph
-                .node_weight_mut(n)
-                .unwrap()
-                .mut_structure()
-                .set_name(
-                    &state
-                        .get_or_insert_fn(format!("{}{}", name, n.index()), None)
-                        .unwrap(),
-                );
-        });
-        let g: Graph<MixedTensors, Slot, Undirected> = Graph::map(
-            &self.graph,
-            |_, nw| {
-                MixedTensor::<HistoryStructure<Identifier>>::from(
-                    nw.structure().clone().shadow(state, ws).unwrap(),
-                )
-            },
-            |_, &w| w,
-        );
+        for (i, n) in &mut self.graph.nodes {
+            n.mut_structure().set_name(
+                &state
+                    .get_or_insert_fn(format!("{}{}", name, i.data().as_ffi()), None)
+                    .unwrap(),
+            );
+        }
+
+        let edges = self.graph.edges.clone();
+        let involution = self.graph.involution.clone();
+
+        let mut nodes = SlotMap::with_key();
+        let mut nodemap = SecondaryMap::new();
+
+        for (i, n) in &self.graph.nodes {
+            let nid = nodes.insert(MixedTensor::<HistoryStructure<Identifier>>::from(
+                n.structure().clone().shadow(state, ws).unwrap(),
+            ));
+            for e in self.graph.edges_incident(i) {
+                nodemap.insert(e, nid);
+            }
+        }
+
+        let g = HalfEdgeGraph {
+            edges,
+            involution,
+            nodes,
+            nodemap,
+        };
+
+        // let g: Graph<MixedTensors, Slot, Undirected> = Graph::map(
+        //     &self.graph,
+        //     |_, nw| {
+        //         MixedTensor::<HistoryStructure<Identifier>>::from(
+        //             nw.structure().clone().shadow(state, ws).unwrap(),
+        //         )
+        //     },
+        //     |_, &w| w,
+        // );
         TensorNetwork { graph: g }
     }
 }
@@ -810,31 +962,24 @@ where
     where
         T::Name: From<std::string::String> + Display,
     {
-        self.graph.node_indices().for_each(|n| {
-            self.graph
-                .node_weight_mut(n)
-                .unwrap()
-                .set_name(&format!("{}{}", name, n.index()).into());
-        });
+        for (id, n) in &mut self.graph.nodes {
+            n.set_name(&format!("{}{}", name, id.data().as_ffi()).into());
+        }
     }
 }
 
 impl<T> TensorNetwork<T>
 where
-    T: TensorStructure<Structure = HistoryStructure<Identifier>>,
+    T: HasName<Name = Identifier>,
 {
     pub fn namesym(&mut self, name: &str, state: &mut State) {
-        self.graph.node_indices().for_each(|n| {
-            self.graph
-                .node_weight_mut(n)
-                .unwrap()
-                .mut_structure()
-                .set_name(
-                    &state
-                        .get_or_insert_fn(format!("{}{}", name, n.index()), None)
-                        .unwrap(),
-                );
-        });
+        for (id, n) in &mut self.graph.nodes {
+            n.set_name(
+                &state
+                    .get_or_insert_fn(format!("{}{}", name, id.data().as_ffi()), None)
+                    .unwrap(),
+            );
+        }
     }
 }
 
@@ -842,21 +987,22 @@ impl<T> TensorNetwork<T>
 where
     T: Contract<T, LCM = T> + TensorStructure,
 {
-    pub fn contract_algo(&mut self, edge_choice: fn(&TensorNetwork<T>) -> Option<EdgeIndex>) {
+    pub fn contract_algo(&mut self, edge_choice: fn(&TensorNetwork<T>) -> Option<HedgeId>) {
         if let Some(e) = edge_choice(self) {
             self.contract_edge(e);
             self.contract_algo(edge_choice);
         }
     }
-    fn contract_edge(&mut self, edge_idx: EdgeIndex) {
-        let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();
+    fn contract_edge(&mut self, edge_idx: HedgeId) {
+        let a = self.graph.nodemap[edge_idx];
+        let b = self.graph.nodemap[self.graph.involution[edge_idx]];
 
-        let ai = self.graph.node_weight(a).unwrap();
-        let bi = self.graph.node_weight(b).unwrap();
+        let ai = self.graph.nodes.get(a).unwrap();
+        let bi = self.graph.nodes.get(b).unwrap();
 
         let f = ai.contract(bi).unwrap();
 
-        self.merge_nodes(a, b, f);
+        self.graph.merge_nodes(a, b, f);
     }
 
     pub fn contract(&mut self) {
@@ -871,15 +1017,15 @@ where
         + TensorStructure<Structure = HistoryStructure<Identifier>>
         + TracksCount,
 {
-    fn contract_edge_sym(&mut self, edge_idx: EdgeIndex, state: &State, ws: &Workspace) {
-        let (a, b) = self.graph.edge_endpoints(edge_idx).unwrap();
+    fn contract_edge_sym(&mut self, edge_idx: HedgeId, state: &State, ws: &Workspace) {
+        let a = self.graph.nodemap[edge_idx];
+        let b = self.graph.nodemap[self.graph.involution[edge_idx]];
 
-        let ai = self.graph.node_weight(a).unwrap();
-        let bi = self.graph.node_weight(b).unwrap();
-
+        let ai = self.graph.nodes.get(a).unwrap();
+        let bi = self.graph.nodes.get(b).unwrap();
         let f = ai.contract_sym(bi, state, ws).unwrap();
 
-        self.merge_nodes(a, b, f);
+        self.graph.merge_nodes(a, b, f);
     }
     pub fn contract_sym(&mut self, state: &State, ws: &Workspace) {
         if let Some(e) = self.edge_to_min_degree_node() {
