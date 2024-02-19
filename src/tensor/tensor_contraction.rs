@@ -11,6 +11,7 @@ use petgraph::{
     Undirected,
 };
 
+use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
 use symbolica::{
     representations::Identifier,
@@ -588,7 +589,7 @@ new_key_type! {
     pub struct HedgeId;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct HalfEdgeGraph<N, E> {
     edges: SlotMap<HedgeId, E>,
     involution: SecondaryMap<HedgeId, HedgeId>,

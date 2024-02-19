@@ -40,7 +40,6 @@ lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = 
     "hyperdual_support",
     "f128_support",
 ] }
-num = "0.3"
 hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
 rand = "0.8"
 rayon = "1.5"
@@ -54,7 +53,6 @@ statrs = "0.16.0"
 smallvec = { version = "1.7", features = ["const_generics"] }
 itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
-ahash = "*"
 vectorize = "0.2.0"
 log = "*"
 env_logger = "*"
@@ -73,6 +71,8 @@ nohash-hasher = "0.2.0"
 intmap = { git = "https://github.com/lcnbr/rust-intmap" }
 permutation = "0.4.1"
 slotmap = { version = "1.0.7", features = ["serde"] }
+ahash = { version = "0.8.8", features = ["serde"] }
+num = { version = "0.4.1", features = ["serde"] }
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
