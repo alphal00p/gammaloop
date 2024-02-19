@@ -91,7 +91,7 @@ impl TropicalGraph {
         let mut num_massive_edges = 0;
         let mut _inverse_edge_map = vec![None; graph.edges.len()];
 
-        for (tropical_edge_index, (_, edge)) in graph.get_loop_edges_iterator().enumerate() {
+        for (tropical_edge_index, (index, edge)) in graph.get_loop_edges_iterator().enumerate() {
             let tropical_edge = TropicalEdge {
                 edge_id: tropical_edge_index,
                 left: edge.vertices[0] as u8,
@@ -112,9 +112,8 @@ impl TropicalGraph {
                 is_edge_massive.push(false);
             }
 
-            let edge_position_in_parent_graph = graph.edge_name_to_position[&edge.name];
-            edge_map.push(edge_position_in_parent_graph);
-            _inverse_edge_map[edge_position_in_parent_graph] = Some(tropical_edge_index);
+            edge_map.push(index);
+            _inverse_edge_map[index] = Some(tropical_edge_index);
         }
 
         // Candidates to be external vertices of the tree-stripped graph

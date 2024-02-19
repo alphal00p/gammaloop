@@ -659,25 +659,22 @@ impl Graph {
     }
 
     pub fn generate_tropical_subgraph_table(&mut self) {
-        let num_virtual_edges = self
-            .edges
-            .iter()
-            .filter(|e| e.edge_type == EdgeType::Virtual)
-            .count();
+        let num_virtual_loop_edges = self.get_loop_edges_iterator().count();
 
         let num_loops = self.loop_momentum_basis.basis.len();
 
         let default_weight = 0.5;
-        let dod = num_virtual_edges as f64 * default_weight - (tropical::D * num_loops) as f64 / 2.;
+        let dod =
+            num_virtual_loop_edges as f64 * default_weight - (tropical::D * num_loops) as f64 / 2.;
         let minimum_dod = 1.0;
 
         let weight = if dod < minimum_dod {
-            (minimum_dod + (tropical::D * num_loops) as f64 / 2.) / num_virtual_edges as f64
+            (minimum_dod + (tropical::D * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64
         } else {
             default_weight
         };
 
-        let weight_guess = vec![weight; num_virtual_edges];
+        let weight_guess = vec![weight; num_virtual_loop_edges];
 
         let table = TropicalSubgraphTable::generate_from_graph(self, &weight_guess);
 
