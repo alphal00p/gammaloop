@@ -91,12 +91,7 @@ impl TropicalGraph {
         let mut num_massive_edges = 0;
         let mut _inverse_edge_map = vec![None; graph.edges.len()];
 
-        for (tropical_edge_index, edge) in graph
-            .edges
-            .iter()
-            .filter(|e| e.edge_type == EdgeType::Virtual)
-            .enumerate()
-        {
+        for (tropical_edge_index, edge) in graph.get_virtual_edges_iterator().enumerate() {
             let tropical_edge = TropicalEdge {
                 edge_id: tropical_edge_index,
                 left: edge.vertices[0] as u8,

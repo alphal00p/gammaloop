@@ -554,9 +554,7 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
     info!("generating ltd expression for graph: {:?}", graph.name);
 
     let loop_line_signatures = graph
-        .edges
-        .iter()
-        .filter(|e| e.edge_type == EdgeType::Virtual)
+        .get_virtual_edges_iterator()
         .map(|e| graph.get_edge_position(&e.name).unwrap())
         .map(|e| graph.loop_momentum_basis.edge_signatures[e].0.clone())
         .collect_vec();
@@ -564,9 +562,7 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
     let loop_number = loop_line_signatures[0].len();
 
     let position_map = graph
-        .edges
-        .iter()
-        .filter(|e| e.edge_type == EdgeType::Virtual)
+        .get_virtual_edges_iterator()
         .map(|e| graph.get_edge_position(&e.name).unwrap())
         .collect_vec();
 

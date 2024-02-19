@@ -1225,9 +1225,7 @@ fn get_orientations(
     HashMap<usize, usize>,
 ) {
     let virtual_edges = graph
-        .edges
-        .iter()
-        .filter(|graph_edge| graph_edge.edge_type == EdgeType::Virtual)
+        .get_virtual_edges_iterator()
         .map(|graph_edge| graph.get_edge_position(&graph_edge.name).unwrap())
         .sorted()
         .collect_vec();

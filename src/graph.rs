@@ -847,6 +847,13 @@ impl Graph {
             self.derived_data.loop_momentum_bases.as_ref().unwrap()[position].clone();
         Ok(())
     }
+
+    #[inline]
+    pub fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = &Edge> {
+        self.edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Virtual)
+    }
 }
 
 #[allow(dead_code)]
