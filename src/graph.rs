@@ -849,44 +849,37 @@ impl Graph {
     }
 
     #[inline]
-    pub fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = &Edge> {
+    pub fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
         self.edges
             .iter()
-            .filter(|e| e.edge_type == EdgeType::Virtual)
+            .enumerate()
+            .filter(|(_, e)| e.edge_type == EdgeType::Virtual)
     }
 
     /// iterate over all edges which are part of a loop, (tree-level attachments removed)
     #[inline]
-    pub fn get_loop_edges_iterator(&self) -> impl Iterator<Item = &Edge> {
-        self.edges
-            .iter()
-            .enumerate()
-            .filter(|(index, e)| {
-                e.edge_type == EdgeType::Virtual && {
-                    self.loop_momentum_basis.edge_signatures[*index]
-                        .0
-                        .iter()
-                        .any(|x| *x != 0)
-                }
-            })
-            .map(|(_, e)| e)
+    pub fn get_loop_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
+        self.edges.iter().enumerate().filter(|(index, e)| {
+            e.edge_type == EdgeType::Virtual && {
+                self.loop_momentum_basis.edge_signatures[*index]
+                    .0
+                    .iter()
+                    .any(|x| *x != 0)
+            }
+        })
     }
 
     /// iterate over all edges which are virtual but do not carry a loop momentum.
     #[inline]
-    pub fn get_tree_level_edges_iterator(&self) -> impl Iterator<Item = &Edge> {
-        self.edges
-            .iter()
-            .enumerate()
-            .filter(|(index, e)| {
-                e.edge_type == EdgeType::Virtual && {
-                    self.loop_momentum_basis.edge_signatures[*index]
-                        .0
-                        .iter()
-                        .all(|x| *x == 0)
-                }
-            })
-            .map(|(_, e)| e)
+    pub fn get_tree_level_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
+        self.edges.iter().enumerate().filter(|(index, e)| {
+            e.edge_type == EdgeType::Virtual && {
+                self.loop_momentum_basis.edge_signatures[*index]
+                    .0
+                    .iter()
+                    .all(|x| *x == 0)
+            }
+        })
     }
 }
 
