@@ -1,9 +1,10 @@
 use std::time::Duration;
 
+use log::info;
 use num::Complex;
 use serde::{Deserialize, Serialize};
 
-use crate::{observables::Event, Precision};
+use crate::{observables::Event, utils::format_evaluation_time, Precision};
 
 /// The result of an evaluation of the integrand
 pub struct EvaluationResult {
@@ -190,5 +191,38 @@ impl StatisticsCounter {
 
     pub fn get_percentage_nan(&self) -> f64 {
         self.num_nan_evals as f64 / self.num_evals as f64 * 100.0
+    }
+
+    pub fn display_status(&self) {
+        let time_ltd_formatted = format_evaluation_time(self.get_avg_rep3d_timing());
+        let param_time_formatted = format_evaluation_time(self.get_avg_param_timing());
+        let total_time = format_evaluation_time(self.get_avg_total_timing());
+
+        info!(
+            "|  average ltd expression evaluation time: {}",
+            time_ltd_formatted
+        );
+
+        info!(
+            "|  average paramatrization time:           {}",
+            param_time_formatted
+        );
+
+        info!("|  total evaluation time:                  {}", total_time);
+
+        info!(
+            "|  evaluations in f64:                     {:.2}%",
+            self.get_percentage_f64()
+        );
+
+        info!(
+            "|  evaluations in f128:                    {:.2}%",
+            self.get_percentage_f128()
+        );
+
+        info!(
+            "|  nan evaluations:                        {:.2}%",
+            self.get_percentage_nan()
+        );
     }
 }

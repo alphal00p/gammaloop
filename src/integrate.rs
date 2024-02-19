@@ -17,7 +17,6 @@ use crate::integrands::HasIntegrand;
 use crate::observables::Event;
 use crate::observables::SerializableEvent;
 use crate::utils;
-use crate::utils::format_evaluation_time;
 use crate::Integrand;
 use crate::IntegratorSettings;
 use crate::Settings;
@@ -957,10 +956,6 @@ impl MasterNode {
 
     /// Display the current status of the integration. Usually called after each iteration.
     pub fn display_status(&self) {
-        let time_ltd_formatted = format_evaluation_time(self.statistics.get_avg_rep3d_timing());
-        let param_time_formatted = format_evaluation_time(self.statistics.get_avg_param_timing());
-        let total_time = format_evaluation_time(self.statistics.get_avg_total_timing());
-
         print_integral_result(
             &self.master_accumulator_re,
             1,
@@ -977,29 +972,7 @@ impl MasterNode {
             None,
         );
 
-        info!(
-            "|  average ltd expression evaluation time: {}",
-            time_ltd_formatted
-        );
-
-        info!("|  average paramatrization time: {}", param_time_formatted);
-
-        info!("|  total evaluation time: {}", total_time);
-
-        info!(
-            "|  evaluations in f64:  {:.2}%",
-            self.statistics.get_percentage_f64()
-        );
-
-        info!(
-            "|  evaluations in f128: {:.2}%",
-            self.statistics.get_percentage_f128()
-        );
-
-        info!(
-            "|  nan evaluations:     {:.2}%",
-            self.statistics.get_percentage_nan()
-        );
+        self.statistics.display_status();
     }
 }
 
