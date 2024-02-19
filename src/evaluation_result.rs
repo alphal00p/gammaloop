@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{observables::Event, utils::format_evaluation_time, Precision};
 
 /// The result of an evaluation of the integrand
+#[derive(Clone)]
 pub struct EvaluationResult {
     pub integrand_result: Complex<f64>,
     pub integrator_weight: f64,
@@ -14,7 +15,26 @@ pub struct EvaluationResult {
     pub evaluation_metadata: EvaluationMetaData,
 }
 
+impl EvaluationResult {
+    pub fn zero() -> Self {
+        Self {
+            integrand_result: Complex::new(0.0, 0.0),
+            integrator_weight: 0.0,
+            event_buffer: Vec::new(),
+            evaluation_metadata: EvaluationMetaData {
+                total_timing: Duration::ZERO,
+                rep3d_evaluation_time: Duration::ZERO,
+                parameterization_time: Duration::ZERO,
+                relative_instability_error: Complex::new(0.0, 0.0),
+                highest_precision: Precision::Double,
+                is_nan: false,
+            },
+        }
+    }
+}
+
 /// Useful metadata generated during the evaluation, this may be expanded in the future to include more information
+#[derive(Copy, Clone)]
 pub struct EvaluationMetaData {
     pub total_timing: Duration,
     pub rep3d_evaluation_time: Duration,
@@ -22,6 +42,19 @@ pub struct EvaluationMetaData {
     pub relative_instability_error: Complex<f64>,
     pub highest_precision: Precision,
     pub is_nan: bool,
+}
+
+impl EvaluationMetaData {
+    pub fn new_empty() -> Self {
+        Self {
+            total_timing: Duration::ZERO,
+            rep3d_evaluation_time: Duration::ZERO,
+            parameterization_time: Duration::ZERO,
+            relative_instability_error: Complex::new(0.0, 0.0),
+            highest_precision: Precision::Double,
+            is_nan: false,
+        }
+    }
 }
 
 /// This struct merges the evaluation metadata of many evaluations into a single struct

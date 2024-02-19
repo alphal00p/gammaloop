@@ -69,6 +69,8 @@ where
     let mut f_evals = vec![vec![0.; N_INTEGRAND_ACCUMULATORS]; settings.integrator.n_start];
     let mut integral: StatisticsAccumulator<f64> = StatisticsAccumulator::new();
     let mut all_integrals = vec![StatisticsAccumulator::new(); N_INTEGRAND_ACCUMULATORS];
+    let mut evaluation_results = vec![EvaluationResult::zero(); settings.integrator.n_start];
+    let mut stats = StatisticsCounter::new_empty();
 
     let mut rng = rand::thread_rng();
 
@@ -103,6 +105,7 @@ where
         let cur_points = settings.integrator.n_start + settings.integrator.n_increase * iter;
         samples.resize(cur_points, Sample::new());
         f_evals.resize(cur_points, vec![0.; N_INTEGRAND_ACCUMULATORS]);
+        evaluation_results.resize(cur_points, EvaluationResult::zero());
 
         for sample in &mut samples[..cur_points] {
             grid.sample(&mut rng, sample);
@@ -120,8 +123,11 @@ where
             .par_iter_mut()
             .zip(f_evals.par_chunks_mut(nvec_per_core))
             .zip(samples.par_chunks(nvec_per_core))
-            .for_each(|((integrand_f, ff), xi)| {
-                for (f_evals_i, s) in ff.iter_mut().zip(xi.iter()) {
+            .zip(evaluation_results.par_chunks_mut(nvec_per_core))
+            .for_each(|(((integrand_f, ff), xi), result_list)| {
+                for ((f_evals_i, s), result) in
+                    ff.iter_mut().zip(xi.iter()).zip(result_list.iter_mut())
+                {
                     let fc = integrand_f.evaluate_sample(
                         s,
                         s.get_weight(),
@@ -131,6 +137,7 @@ where
                     );
                     f_evals_i[0] = fc.integrand_result.re;
                     f_evals_i[1] = fc.integrand_result.im;
+                    *result = fc;
                 }
             });
 
@@ -146,6 +153,9 @@ where
                 integral.add_sample(*sel_f * s.get_weight(), Some(s));
             }
         }
+
+        let new_meta_data = StatisticsCounter::from_evaluation_results(&evaluation_results);
+        stats = stats.merged(&new_meta_data);
 
         grid.update(settings.integrator.learning_rate);
         integral.update_iter();
@@ -248,87 +258,6 @@ where
             .blue()
         );
 
-        fn print_integral_result(
-            itg: &StatisticsAccumulator<f64>,
-            i_itg: usize,
-            i_iter: usize,
-            tag: &str,
-            trgt: Option<f64>,
-        ) {
-            info!(
-                "|  itg #{:-3} {}: {} {} {} {} {}",
-                format!("{:<3}", i_itg),
-                format!("{:-2}", tag).blue().bold(),
-                format!("{:-19}", utils::format_uncertainty(itg.avg, itg.err))
-                    .blue()
-                    .bold(),
-                if itg.avg != 0. {
-                    if (itg.err / itg.avg).abs() > 0.01 {
-                        format!(
-                            "{:-8}",
-                            format!("{:.3}%", (itg.err / itg.avg).abs() * 100.).red()
-                        )
-                    } else {
-                        format!(
-                            "{:-8}",
-                            format!("{:.3}%", (itg.err / itg.avg).abs() * 100.).green()
-                        )
-                    }
-                } else {
-                    format!("{:-8}", "")
-                },
-                if itg.chi_sq / (i_iter as f64) > 5. {
-                    format!("{:-6.3} χ²/dof", itg.chi_sq / (i_iter as f64)).red()
-                } else {
-                    format!("{:-6.3} χ²/dof", itg.chi_sq / (i_iter as f64)).normal()
-                },
-                if i_itg == 1 {
-                    if let Some(t) = trgt {
-                        if (t - itg.avg).abs() / itg.err > 5.
-                            || (t.abs() != 0. && (t - itg.avg).abs() / t.abs() > 0.01)
-                        {
-                            format!(
-                                "Δ={:-7.3}σ, Δ={:-7.3}%",
-                                (t - itg.avg).abs() / itg.err,
-                                if t.abs() > 0. {
-                                    (t - itg.avg).abs() / t.abs() * 100.
-                                } else {
-                                    0.
-                                }
-                            )
-                            .red()
-                        } else {
-                            format!(
-                                "Δ={:-7.3}σ, Δ={:-7.3}%",
-                                (t - itg.avg).abs() / itg.err,
-                                if t.abs() > 0. {
-                                    (t - itg.avg).abs() / t.abs() * 100.
-                                } else {
-                                    0.
-                                }
-                            )
-                            .green()
-                        }
-                    } else {
-                        "".to_string().normal()
-                    }
-                } else {
-                    "".to_string().normal()
-                },
-                if itg.avg.abs() != 0. {
-                    let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
-                        / (itg.avg.abs() * (itg.processed_samples as f64));
-                    if mwi > 1. {
-                        format!("  mwi: {:-5.3}", mwi).red()
-                    } else {
-                        format!("  mwi: {:-5.3}", mwi).normal()
-                    }
-                } else {
-                    format!("  mwi: {:-5.3}", 0.).normal()
-                }
-            );
-        }
-
         for i_integrand in 0..(N_INTEGRAND_ACCUMULATORS / 2) {
             print_integral_result(
                 &all_integrals[2 * i_integrand],
@@ -411,6 +340,9 @@ where
                 }
             }
         }
+
+        stats.display_status();
+
         // now merge all statistics and observables into the first
         let (first, others) = user_data.integrand[..cores].split_at_mut(1);
         for other_itg in others {
