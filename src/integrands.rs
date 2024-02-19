@@ -223,6 +223,9 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             info!("Sampling jacobian : {:+.16e}", jac);
             info!("Final contribution: {:+.16e}", itg_wgt * jac);
         }
+
+        let is_nan = itg_wgt.is_nan();
+
         let evaluation_time = before_evaluation.elapsed();
 
         let evaluation_metadata = EvaluationMetaData {
@@ -231,6 +234,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             parameterization_time,
             relative_instability_error: Complex::new(0., 0.),
             highest_precision: Precision::Double,
+            is_nan,
         };
 
         EvaluationResult {
@@ -368,6 +372,9 @@ impl HasIntegrand for UnitVolumeIntegrand {
             info!("Sampling jacobian : {:+.16e}", jac);
             info!("Final contribution: {:+.16e}", itg_wgt * jac);
         }
+
+        let is_nan = itg_wgt.is_nan();
+
         let evaluation_time = before_evaluation.elapsed();
 
         let evaluation_metadata = EvaluationMetaData {
@@ -376,6 +383,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
             parameterization_time,
             relative_instability_error: Complex::new(0., 0.),
             highest_precision: Precision::Double,
+            is_nan,
         };
 
         EvaluationResult {

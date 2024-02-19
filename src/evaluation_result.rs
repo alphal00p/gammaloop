@@ -20,6 +20,7 @@ pub struct EvaluationMetaData {
     pub parameterization_time: Duration,
     pub relative_instability_error: Complex<f64>,
     pub highest_precision: Precision,
+    pub is_nan: bool,
 }
 
 /// This struct merges the evaluation metadata of many evaluations into a single struct
@@ -32,6 +33,7 @@ pub struct StatisticsCounter {
     sum_relative_instability_error: Complex<f64>,
     num_double_precision_evals: usize,
     num_quadruple_precision_evals: usize,
+    num_nan_evals: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -43,6 +45,7 @@ pub struct SerializableMetaDataStatistics {
     sum_relative_instability_error: (f64, f64),
     num_double_precision_evals: usize,
     num_quadruple_precision_evals: usize,
+    num_nan_evals: usize,
 }
 
 impl SerializableMetaDataStatistics {
@@ -58,6 +61,7 @@ impl SerializableMetaDataStatistics {
             num_evals: metadata.num_evals,
             num_double_precision_evals: metadata.num_double_precision_evals,
             num_quadruple_precision_evals: metadata.num_quadruple_precision_evals,
+            num_nan_evals: metadata.num_nan_evals,
         }
     }
 
@@ -73,6 +77,7 @@ impl SerializableMetaDataStatistics {
             num_evals: self.num_evals,
             num_double_precision_evals: self.num_double_precision_evals,
             num_quadruple_precision_evals: self.num_quadruple_precision_evals,
+            num_nan_evals: self.num_nan_evals,
         }
     }
 }
@@ -122,6 +127,7 @@ impl StatisticsCounter {
                 + other.num_quadruple_precision_evals),
             sum_total_evaluation_time: self.sum_total_evaluation_time
                 + other.sum_total_evaluation_time,
+            num_nan_evals: self.num_nan_evals + other.num_nan_evals,
         }
     }
 
@@ -134,6 +140,7 @@ impl StatisticsCounter {
             num_evals: 0,
             num_double_precision_evals: 0,
             num_quadruple_precision_evals: 0,
+            num_nan_evals: 0,
         }
     }
 
@@ -179,5 +186,9 @@ impl StatisticsCounter {
     /// Get the percentage of evaluations that went to quadruple precision and were stable.
     pub fn get_percentage_f128(&self) -> f64 {
         self.num_quadruple_precision_evals as f64 / self.num_evals as f64 * 100.0
+    }
+
+    pub fn get_percentage_nan(&self) -> f64 {
+        self.num_nan_evals as f64 / self.num_evals as f64 * 100.0
     }
 }

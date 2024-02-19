@@ -579,7 +579,13 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!("\t{}: {:+e}", "result".yellow(), res * prefactor);
         }
 
-        let integrand_result = res * prefactor;
+        let mut integrand_result = res * prefactor;
+
+        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan();
+
+        if is_nan {
+            integrand_result = Complex::new(0., 0.);
+        }
 
         let evaluation_metadata = EvaluationMetaData {
             rep3d_evaluation_time: *duration,
@@ -587,6 +593,7 @@ impl HasIntegrand for GammaLoopIntegrand {
             relative_instability_error: Complex::new(0., 0.),
             highest_precision: *precision,
             total_timing: start_evaluate_sample.elapsed(),
+            is_nan,
         };
 
         EvaluationResult {

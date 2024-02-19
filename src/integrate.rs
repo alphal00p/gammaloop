@@ -987,13 +987,18 @@ impl MasterNode {
         info!("|  total evaluation time: {}", total_time);
 
         info!(
-            "|  evaluations in f64:  {:2.}%",
+            "|  evaluations in f64:  {:.2}%",
             self.statistics.get_percentage_f64()
         );
 
         info!(
-            "|  evaluations in f128: {:2.}%",
+            "|  evaluations in f128: {:.2}%",
             self.statistics.get_percentage_f128()
+        );
+
+        info!(
+            "|  nan evaluations:     {:.2}%",
+            self.statistics.get_percentage_nan()
         );
     }
 }

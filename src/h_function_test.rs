@@ -163,12 +163,15 @@ impl HasIntegrand for HFunctionTestIntegrand {
                 )
             };
 
+        let is_nan = integration_result.re.is_nan() || integration_result.im.is_nan();
+
         let evaluation_metadata = EvaluationMetaData {
             total_timing: start_evaluate_sample.elapsed(),
             rep3d_evaluation_time: evaluation_timing,
             parameterization_time: parameterization_timing,
             relative_instability_error: Complex::new(0.0, 0.0),
             highest_precision: precision,
+            is_nan,
         };
 
         EvaluationResult {
