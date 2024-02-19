@@ -216,27 +216,19 @@ impl GraphIntegrand for AmplitudeGraph {
             .get_graph()
             .compute_onshell_energies(&sample.loop_moms, &sample.external_moms);
 
-        let virtual_loop_energies = self
-            .get_graph()
-            .edges
-            .iter()
-            .zip(onshell_energies.iter())
-            .enumerate()
-            .filter(|(index, (edge, _))| {
-                edge.edge_type == EdgeType::Virtual
-                    && self.get_graph().loop_momentum_basis.edge_signatures[*index]
-                        .0
-                        .iter()
-                        .any(|x| *x != 0)
-            })
-            .map(|(_, (_, energy))| energy);
-
-        let weight_iterator = self
+        let tropical_subgraph_table = self
             .get_graph()
             .derived_data
             .tropical_subgraph_table
             .as_ref()
-            .unwrap()
+            .unwrap();
+
+        let virtual_loop_energies = self
+            .get_graph()
+            .get_loop_edges_iterator()
+            .map(|(index, _)| onshell_energies[index]);
+
+        let weight_iterator = tropical_subgraph_table
             .tropical_graph
             .topology
             .iter()
@@ -249,18 +241,8 @@ impl GraphIntegrand for AmplitudeGraph {
 
         let tree_like_energies = self
             .get_graph()
-            .edges
-            .iter()
-            .zip(onshell_energies.iter())
-            .enumerate()
-            .filter(|(index, (edge, _))| {
-                edge.edge_type == EdgeType::Virtual
-                    && self.get_graph().loop_momentum_basis.edge_signatures[*index]
-                        .0
-                        .iter()
-                        .all(|x| *x == 0)
-            })
-            .map(|(_, (_, energy))| energy);
+            .get_tree_level_edges_iterator()
+            .map(|(index, _)| onshell_energies[index]);
 
         let tree_product =
             tree_like_energies.fold(T::one(), |acc, x| acc * Into::<T>::into(2.) * x);
