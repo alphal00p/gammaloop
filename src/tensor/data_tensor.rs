@@ -4,6 +4,7 @@ use enum_dispatch::enum_dispatch;
 use enum_try_as_inner::EnumTryAsInner;
 use indexmap::IndexMap;
 use num::{Complex, Zero};
+use serde::{Deserialize, Serialize};
 use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
 use symbolica::{
@@ -54,7 +55,7 @@ pub trait GetTensorData<T> {
 ///
 /// Stores data in a hashmap of usize, using ahash's hashmap.
 /// The usize key is the flattened index of the corresponding position in the dense tensor
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseTensor<T, I = Vec<Slot>> {
     pub elements: AHashMap<usize, T>,
     pub structure: I,
@@ -272,7 +273,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct DenseTensor<T, I = Vec<Slot>> {
     pub data: Vec<T>,
     pub structure: I,
@@ -523,7 +524,7 @@ where
 }
 
 /// Enum for storing either a dense or a sparse tensor, with the same structure
-#[derive(Debug, Clone, EnumTryAsInner)]
+#[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize)]
 #[enum_dispatch(HasTensorData<T>, SetTensorData<T>, GetTensorData<T>)]
 pub enum DataTensor<T: Clone, I: TensorStructure> {
     Dense(DenseTensor<T, I>),
@@ -594,7 +595,7 @@ where
 }
 
 /// Enum for a datatensor with specific numeric data type, generic on the structure type `I`
-#[derive(Debug, Clone, EnumTryAsInner)]
+#[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize)]
 #[derive_err(Debug)]
 pub enum NumTensor<T: TensorStructure = Vec<Slot>> {
     Float(DataTensor<f64, T>),
