@@ -1039,7 +1039,7 @@ impl CFFIntermediateGraph {
     fn generate_childern(
         &self,
         position_map: &HashMap<usize, usize>,
-        external_data: &HashMap<usize, usize>, // (external vertex, external edge)
+        external_data: &HashMap<usize, Vec<usize>>, // (external vertex, external edges)
         global_orientation: &Orientation,
     ) -> Result<(Option<Vec<Self>>, Esurface), Report> {
         let (vertex_to_contract_from, vertex_type) = self.get_source_or_sink()?;
@@ -1089,7 +1089,8 @@ impl CFFIntermediateGraph {
         let shift = vertex_to_contract_from
             .iter()
             .filter(|v| external_data.contains_key(&(*v as usize)))
-            .map(|v| *external_data.get(&(v as usize)).unwrap())
+            .flat_map(|v| external_data.get(&(v as usize)).unwrap())
+            .copied()
             .sorted()
             .collect_vec();
 
@@ -1287,17 +1288,38 @@ fn get_orientations(
 }
 
 pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
-    let mut external_data = HashMap::default();
+    // construct a hashmap that contains as keys all vertices that connect to external edges
+    // and as values those external edges that it connects to
+    let mut external_data: HashMap<usize, Vec<usize>> = HashMap::default();
 
     for external_edge in graph.edges.iter() {
         let edge_position = graph.get_edge_position(&external_edge.name).unwrap();
         match external_edge.edge_type {
             EdgeType::Incoming => {
-                external_data.insert(external_edge.vertices[1], edge_position);
+                if let std::collections::hash_map::Entry::Vacant(e) =
+                    external_data.entry(external_edge.vertices[1])
+                {
+                    e.insert(vec![edge_position]);
+                } else {
+                    external_data
+                        .get_mut(&external_edge.vertices[1])
+                        .unwrap_or_else(|| unreachable!())
+                        .push(edge_position);
+                }
             }
             EdgeType::Outgoing => {
-                external_data.insert(external_edge.vertices[0], edge_position);
+                if let std::collections::hash_map::Entry::Vacant(e) =
+                    external_data.entry(external_edge.vertices[0])
+                {
+                    e.insert(vec![edge_position]);
+                } else {
+                    external_data
+                        .get_mut(&external_edge.vertices[0])
+                        .unwrap_or_else(|| unreachable!())
+                        .push(edge_position);
+                }
             }
+
             EdgeType::Virtual => (),
         }
     }
@@ -1312,7 +1334,7 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
 fn generate_cff_from_orientations(
     orientations_and_graphs: Vec<(Orientation, CFFIntermediateGraph)>,
     position_map: &HashMap<usize, usize>,
-    external_data: &HashMap<usize, usize>,
+    external_data: &HashMap<usize, Vec<usize>>,
 ) -> Result<CFFExpression, Report> {
     let mut cff_expression = CFFExpression {
         terms: vec![],
@@ -1812,9 +1834,9 @@ mod tests_cff {
         let triangle = vec![(2, 0), (0, 1), (1, 2)];
         let orientations = generate_orientations_for_testing(triangle);
         let mut external_data = HashMap::default();
-        external_data.insert(0, 3);
-        external_data.insert(1, 4);
-        external_data.insert(2, 5);
+        external_data.insert(0, vec![3]);
+        external_data.insert(1, vec![4]);
+        external_data.insert(2, vec![5]);
         assert_eq!(orientations.len(), 6);
 
         let mut position_map = HashMap::default();
@@ -1881,8 +1903,8 @@ mod tests_cff {
         let double_triangle_edges = vec![(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)];
 
         let mut external_data = HashMap::default();
-        external_data.insert(0, 5);
-        external_data.insert(3, 6);
+        external_data.insert(0, vec![5]);
+        external_data.insert(3, vec![6]);
 
         let mut position_map = HashMap::default();
         for i in 0..5 {
@@ -1974,8 +1996,8 @@ mod tests_cff {
         ];
 
         let mut external_data = HashMap::default();
-        external_data.insert(0, 8);
-        external_data.insert(5, 9);
+        external_data.insert(0, vec![8]);
+        external_data.insert(5, vec![9]);
 
         let mut position_map = HashMap::default();
         for i in 0..tbt_edges.len() {
@@ -2066,10 +2088,10 @@ mod tests_cff {
         ];
 
         let mut external_data = HashMap::default();
-        external_data.insert(0, 12);
-        external_data.insert(2, 13);
-        external_data.insert(6, 14);
-        external_data.insert(8, 15);
+        external_data.insert(0, vec![12]);
+        external_data.insert(2, vec![13]);
+        external_data.insert(6, vec![14]);
+        external_data.insert(8, vec![15]);
 
         let mut position_map = HashMap::default();
         for i in 0..edges.len() {
@@ -2112,7 +2134,7 @@ mod tests_cff {
 
         let mut external_data = HashMap::default();
         for v in 0..8 {
-            external_data.insert(v, 12 + v);
+            external_data.insert(v, vec![12 + v]);
         }
 
         let mut position_map = HashMap::default();
