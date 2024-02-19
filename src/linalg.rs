@@ -5,6 +5,7 @@ use std::ops::{Add, Index, IndexMut, Mul, Sub};
 use crate::utils::FloatLike;
 
 #[derive(Debug, Clone, Default)]
+/// square symmetric matrix for use in the tropical sampling algorithm
 pub struct SquareMatrix<T> {
     data: SmallVec<[T; 36]>, // this allows us to store the L matrix on the stack for 6 loops and below
     dim: usize,
@@ -91,13 +92,16 @@ impl<'a, T: FloatLike> Sub<&'a SquareMatrix<T>> for &'a SquareMatrix<T> {
 }
 
 impl<T: FloatLike> SquareMatrix<T> {
+    #[must_use]
     pub fn new_zeros(dim: usize) -> Self {
         Self {
             data: SmallVec::from_elem(T::zero(), dim * dim),
             dim,
         }
     }
-
+    /// Performs operations on a matrix for tropical sampling
+    /// # Errors
+    /// Returns an error if the matrix is not invertible
     pub fn decompose_for_tropical(&self) -> Result<DecompositionResult<T>, Report> {
         // start cholesky decomposition
         let mut q: SquareMatrix<T> = SquareMatrix::new_zeros(self.dim);
@@ -154,8 +158,12 @@ impl<T: FloatLike> SquareMatrix<T> {
         powers_of_n.push(n_matrix);
 
         for _ in 1..max_non_zero_power_of_n {
-            let last_power_of_n = powers_of_n.last().unwrap();
-            let first_power_of_n = powers_of_n.first().unwrap();
+            let last_power_of_n = powers_of_n
+                .last()
+                .unwrap_or_else(|| unreachable!("Never empty due to push before"));
+            let first_power_of_n = powers_of_n
+                .first()
+                .unwrap_or_else(|| unreachable!("Never empty due to push before"));
             powers_of_n.push(last_power_of_n * first_power_of_n);
         }
 
