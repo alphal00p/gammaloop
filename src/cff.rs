@@ -1225,10 +1225,9 @@ fn get_orientations(
     Vec<(Orientation, CFFIntermediateGraph)>,
     HashMap<usize, usize>,
 ) {
-    // get edge position is redundant now?
     let virtual_edges = graph
         .get_virtual_edges_iterator()
-        .map(|(_, graph_edge)| graph.get_edge_position(&graph_edge.name).unwrap())
+        .map(|(index, _graph_edge)| index)
         .sorted()
         .collect_vec();
 

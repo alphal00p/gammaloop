@@ -555,15 +555,14 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
 
     let loop_line_signatures = graph
         .get_virtual_edges_iterator()
-        .map(|(_index, e)| graph.get_edge_position(&e.name).unwrap())
-        .map(|e| graph.loop_momentum_basis.edge_signatures[e].0.clone())
+        .map(|(index, _e)| graph.loop_momentum_basis.edge_signatures[index].0.clone())
         .collect_vec();
 
     let loop_number = loop_line_signatures[0].len();
 
     let position_map = graph
         .get_virtual_edges_iterator()
-        .map(|(_index, e)| graph.get_edge_position(&e.name).unwrap())
+        .map(|(index, _e)| index)
         .collect_vec();
 
     let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);
