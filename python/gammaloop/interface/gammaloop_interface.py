@@ -784,44 +784,42 @@ class GammaLoop(object):
         args = self.help_parser.parse_args(split_str_args(str_args))
         self.run(CommandList.from_string(f"{args.cmd} help"))
 
-
     hpc_parser = ArgumentParser(prog='hpc_run')
-    hpc_parser.add_argument('integrand', type=str, help="Integrand to integrate", default=None)
+    hpc_parser.add_argument('integrand', type=str,
+                            help="Integrand to integrate", default=None)
 
-
-    def do_hpc_run(self, str_args: str) -> None: 
+    def do_hpc_run(self, str_args: str) -> None:
         args = self.hpc_parser.parse_args(split_str_args(str_args))
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        #create a workspace for batch input/output files
+        # create a workspace for batch input/output files
         workspace_path = self.launched_output.joinpath("workspace")
 
         if not workspace_path.exists():
             workspace_path.mkdir()
-        
-        from hyperqueue import LocalCluster, Job # type: ignore
-        from hyperqueue.cluster import WorkerConfig #type: ignore
-        
+
+        from hyperqueue import LocalCluster, Job  # type: ignore
+        from hyperqueue.cluster import WorkerConfig  # type: ignore
+
         print("starting hpc test run")
         self.rust_worker.load_master_node(args.integrand)
-        
 
         # this will be loaded from settings, eventually with dynamic points that can increase with iterations
         n_iterations = 10
-        n_tasks = 4 
+        n_tasks = 4
         n_points_per_task = 1000000
         n_cores = 1
 
-        export_grid = True
-        output_accumulator = True
+        export_grid = False
+        output_accumulator = False
 
         # this local cluster is just for testing
         with LocalCluster() as cluster:
             cluster.start_worker()
 
-            client = cluster.client() # type: ignore 
+            client = cluster.client()  # type: ignore
 
             for _ in range(n_iterations):
                 task_names = ["task{}".format(i) for i in range(n_tasks)]
@@ -829,15 +827,18 @@ class GammaLoop(object):
 
                 for name in task_names:
                     name_path = workspace_path.joinpath(name)
-                    self.rust_worker.write_batch_input(n_cores, n_points_per_task, export_grid, output_accumulator, str(name_path)) 
-                    job.program(["bin/gammaloop_rust_cli", "batch", "--batch_input_file={}".format(str(name_path)), "--name=massless_triangle", "--process_file=triangle", "--output_name={}out".format(str(name_path))])
+                    self.rust_worker.write_batch_input(
+                        n_cores, n_points_per_task, export_grid, output_accumulator, str(name_path))
+                    job.program(["bin/gammaloop_rust_cli", "batch", "--batch_input_file={}".format(str(name_path)),
+                                "--name=massless_triangle", "--process_file=triangle", "--output_name={}out".format(str(name_path))])
 
                 submitted = client.submit(job)
                 client.wait_for_jobs([submitted])
 
                 for name in task_names:
                     name_path = workspace_path.joinpath(name)
-                    self.rust_worker.process_batch_output("{}out".format(name_path))
+                    self.rust_worker.process_batch_output(
+                        "{}out".format(name_path))
 
                 self.rust_worker.update_iter()
                 self.rust_worker.display_master_node_status()
