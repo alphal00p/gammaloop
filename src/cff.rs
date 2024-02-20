@@ -1036,7 +1036,7 @@ impl CFFIntermediateGraph {
             .collect())
     }
 
-    fn generate_childern(
+    fn generate_children(
         &self,
         position_map: &HashMap<usize, usize>,
         external_data: &HashMap<usize, Vec<usize>>, // (external vertex, external edges)
@@ -1373,7 +1373,7 @@ fn generate_cff_from_orientations(
 
                 let (option_children, esurface) =
                     node.graph
-                        .generate_childern(position_map, external_data, &orientation)?;
+                        .generate_children(position_map, external_data, &orientation)?;
 
                 if let Some(esurface_id) =
                     cff_expression.esurfaces.iter().position(|e| e == &esurface)
