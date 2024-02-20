@@ -233,7 +233,6 @@ pub struct StabilityLevelSetting {
     required_precision_for_re: f64,
     required_precision_for_im: f64,
     escalate_for_large_weight_threshold: f64,
-    accepted_radius_in_x_range: [f64; 2],
 }
 
 impl StabilityLevelSetting {
@@ -243,7 +242,6 @@ impl StabilityLevelSetting {
             required_precision_for_re: 1e-15,
             required_precision_for_im: 1e-15,
             escalate_for_large_weight_threshold: 0.9,
-            accepted_radius_in_x_range: [0.0, 0.9],
         }
     }
 
@@ -253,7 +251,6 @@ impl StabilityLevelSetting {
             required_precision_for_re: 1e-15,
             required_precision_for_im: 1e-15,
             escalate_for_large_weight_threshold: -1.0,
-            accepted_radius_in_x_range: [0.0, 1.0],
         }
     }
 }

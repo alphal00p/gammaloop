@@ -717,7 +717,6 @@ impl GammaLoopIntegrand {
                 required_precision_for_re: 1e-5,
                 required_precision_for_im: 1e-5,
                 escalate_for_large_weight_threshold: -1.,
-                accepted_radius_in_x_range: [0., 1.],
             }]
             .iter()
         } else {
