@@ -478,6 +478,9 @@ impl HasIntegrand for GammaLoopIntegrand {
         let rotation_method = self.settings.stability.rotation_axis.rotation_function();
         let rotated_sample_point = sample_point.get_rotated_sample(rotation_method);
 
+        // 1 / (2 pi )^L
+        let prefactor = self.compute_2pi_factor().inv();
+
         // iterate over the stability levels, break if the point is stable
         for stability_level in stability_iterator {
             // evaluate the integrand at the current stability level
@@ -487,13 +490,19 @@ impl HasIntegrand for GammaLoopIntegrand {
                 stability_level.precision,
             );
 
+            let (result_scaled, rotated_result_scaled) = (
+                result * sample_point.get_default_sample().jacobian * prefactor,
+                rotated_result * rotated_sample_point.get_default_sample().jacobian * prefactor,
+            );
+
             // check for the stability
             let (avg_result, stable) = self.stability_check(
-                result,
-                rotated_result,
+                result_scaled,
+                rotated_result_scaled,
                 stability_level,
                 self.settings.integrator.integrated_phase,
                 max_eval,
+                wgt,
             );
 
             results_of_stability_levels.push((
@@ -525,14 +534,9 @@ impl HasIntegrand for GammaLoopIntegrand {
             }
         }
 
-        let (most_reliable_result, stable, precision, duration) = results_of_stability_levels.last().unwrap_or_else(
+        let (res, stable, precision, duration) = results_of_stability_levels.last().unwrap_or_else(
             || panic!("No evaluation was done, perhaps the final stability level has a non-negative escalation threshold?")
         );
-
-        let res = most_reliable_result * sample_point.get_default_sample().jacobian;
-
-        // 1 / (2 pi )^L
-        let prefactor = self.compute_2pi_factor().inv();
 
         if self.settings.general.debug > 1 {
             println!("{}", "
@@ -577,16 +581,12 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!();
 
             println!("{}", "evaluation result: ".blue());
-            println!(
-                "{}: {:+e}",
-                "\tcff expression: ".yellow(),
-                most_reliable_result
-            );
+            println!("{}: {:+e}", "\tcff expression: ".yellow(), res);
 
             println!("\t{}: {:+e}", "result".yellow(), res * prefactor);
         }
 
-        let mut integrand_result = res * prefactor;
+        let mut integrand_result = *res;
 
         let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan();
 
@@ -866,6 +866,7 @@ impl GammaLoopIntegrand {
         stability_settings: &StabilityLevelSetting,
         integrated_phase: IntegratedPhase,
         max_eval: f64,
+        wgt: f64,
     ) -> (Complex<f64>, bool) {
         let average = (result + rotated_result) / 2.;
 
@@ -895,7 +896,7 @@ impl GammaLoopIntegrand {
         let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
             && max_wgt_for_comparison != 0.
         {
-            average_for_comparison.abs()
+            average_for_comparison.abs() * wgt
                 < stability_settings.escalate_for_large_weight_threshold
                     * max_wgt_for_comparison.abs()
         } else {
