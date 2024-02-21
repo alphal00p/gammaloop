@@ -733,8 +733,11 @@ class GammaLoop(object):
         if args.target is not None:
             target = (args.target[0], args.target[1])
 
+        result_output_path = self.launched_output.joinpath(
+            "runs").joinpath("run.yaml")
+
         self.rust_worker.integrate_integrand(
-            args.integrand, args.cores, target)
+            args.integrand, args.cores, str(result_output_path), target)
 
     # test_ir_limits
     test_ir_limits_parser = ArgumentParser(prog='test_ir_limits')

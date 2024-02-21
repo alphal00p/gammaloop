@@ -362,6 +362,7 @@ impl PythonWorker {
         &mut self,
         integrand: &str,
         num_cores: usize,
+        result_path: &str,
         target: Option<(f64, f64)>,
     ) -> PyResult<String> {
         match self.integrands.get_mut(integrand) {
@@ -373,11 +374,17 @@ impl PythonWorker {
                         _ => None,
                     };
 
-                    let _result = havana_integrate(
+                    let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),
                         target,
                     );
+
+                    fs::write(
+                        result_path,
+                        serde_yaml::to_string(&result)
+                            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
+                    )?;
 
                     Ok(format!("Integrated integrand {}", integrand))
                 }
