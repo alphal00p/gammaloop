@@ -28,3 +28,7 @@ class TestScalarTopologies:
 
         scalar_euclidean_integration_test(
             "ltd_topology_f", True, -0.00000526647)
+
+    def test_ltd_topology_h(self):
+        scalar_euclidean_integration_test(
+            "ltd_topology_h", False, -8.36515e-8)
