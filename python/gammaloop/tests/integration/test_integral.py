@@ -23,3 +23,8 @@ class TestScalarTopologies:
 
         scalar_euclidean_integration_test(
             "tree_triangle", True, 0.00009765455799148221 / -49)
+
+    def test_ltd_topology_f(self):
+
+        scalar_euclidean_integration_test(
+            "ltd_topology_f", True, -0.00000526647)
