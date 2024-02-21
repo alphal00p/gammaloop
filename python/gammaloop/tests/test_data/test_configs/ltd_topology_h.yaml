@@ -18,10 +18,10 @@ Integrator:
   n_bins: 16
   bin_number_evolution: null
   min_samples_for_update: 100
-  n_start: 1000000
+  n_start: 100000
   n_increase: 0
-  n_max: 1000000
-  integrated_phase: imag
+  n_max: 100000
+  integrated_phase: real
   learning_rate: 1.5
   train_on_avg: false
   show_max_wgt_info: false

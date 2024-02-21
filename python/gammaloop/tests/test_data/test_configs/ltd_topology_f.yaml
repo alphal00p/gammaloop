@@ -18,9 +18,9 @@ Integrator:
   n_bins: 16
   bin_number_evolution: null
   min_samples_for_update: 100
-  n_start: 1000000
+  n_start: 100000
   n_increase: 0
-  n_max: 1000000
+  n_max: 100000
   integrated_phase: imag
   learning_rate: 1.5
   train_on_avg: false
