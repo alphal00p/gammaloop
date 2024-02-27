@@ -191,13 +191,11 @@ where
         final_structure.merge(&other.structure);
 
         let mut result_data = vec![Out::zero(); final_structure.size()];
+        let stride = other.size();
 
-        let mut result_index = 0;
-
-        for (_, u) in self.iter_flat() {
-            for (_, t) in other.iter_flat() {
-                result_data[result_index] = u * t;
-                result_index += 1;
+        for (i, u) in self.iter_flat() {
+            for (j, t) in other.iter_flat() {
+                result_data[i * stride + j] = u * t;
             }
         }
         let result = DenseTensor {
@@ -303,10 +301,11 @@ where
             final_structure.merge(&other.structure);
 
             let mut result_data = vec![Out::zero(); final_structure.size()];
+            let stride = other.size();
 
             for (i, u) in self.iter_flat() {
                 for (j, t) in other.iter_flat() {
-                    result_data[i + j] = u * t;
+                    result_data[i * stride + j] = u * t;
                 }
             }
             let result = DenseTensor {
@@ -451,10 +450,11 @@ where
         final_structure.merge(&other.structure);
 
         let mut result_data = AHashMap::default();
+        let stride = other.size();
 
         for (i, u) in self.iter_flat() {
             for (j, t) in other.iter_flat() {
-                result_data.insert(i + j, u * t);
+                result_data.insert(i * stride + j, u * t);
             }
         }
         let result = SparseTensor {
@@ -575,10 +575,11 @@ where
             final_structure.merge(&other.structure);
 
             let mut result_data = vec![Out::zero(); final_structure.size()];
+            let stride = other.size();
 
             for (i, u) in self.iter_flat() {
                 for (j, t) in other.iter_flat() {
-                    result_data[i + j] = u * t;
+                    result_data[i * stride + j] = u * t;
                 }
             }
             let result = DenseTensor {
