@@ -1,12 +1,22 @@
-use ahash::AHashMap;
+use std::sync::Arc;
+
+use ahash::{AHashMap, HashMap, HashMapExt};
+use arbitrary_int::Number;
 use enum_try_as_inner::EnumTryAsInner;
 
 use num::Complex;
 use smartstring::alias::String;
 use symbolica::{
-    representations::{AsAtomView, Atom, FunctionBuilder, Identifier},
+    domains::{
+        float::NumericalFloatLike,
+        rational::{Rational, RationalField},
+    },
+    poly::{evaluate::InstructionEvaluator, polynomial::MultivariatePolynomial, Variable},
+    representations::{AsAtomView, Atom, AtomView, FunctionBuilder, Identifier},
     state::{State, Workspace},
 };
+
+use crate::tensor::{NamedStructure, Shadowable};
 
 use super::{
     DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData, Slot, SparseTensor,
@@ -144,61 +154,66 @@ where
                     };
 
                     return Some(result);
-                } else {
-                    // println!("SparseTensor DenseTensor");
-                    let (permutation, self_matches, other_matches) =
-                        self.structure().match_indices(other.structure()).unwrap();
-
-                    let mut final_structure = self.structure.clone();
-                    final_structure.merge(&other.structure);
-
-                    // Initialize result tensor with default values
-                    let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
-                    let mut result_index = 0;
-                    let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
-
-                    let mut other_iter = other.iter_multi_fibers(&other_matches);
-                    while let Some(fiber_a) = selfiter.next() {
-                        for fiber_b in other_iter.by_ref() {
-                            for k in 0..fiber_a.len() {
-                                if fiber_a[k].1 {
-                                    result_data[result_index] = result_data[result_index].sub_sym(
-                                        &fiber_a[k].0.mul_sym(
-                                            fiber_b[selfiter.map[k]],
-                                            ws,
-                                            state,
-                                        )?,
-                                        ws,
-                                        state,
-                                    )?;
-                                } else {
-                                    result_data[result_index] = result_data[result_index].add_sym(
-                                        &fiber_a[k].0.mul_sym(
-                                            fiber_b[selfiter.map[k]],
-                                            ws,
-                                            state,
-                                        )?,
-                                        ws,
-                                        state,
-                                    )?;
-                                }
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
-                    }
-                    let result: DenseTensor<Out, I> = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    return Some(result);
                 }
-            } else {
-                return other.contract_sym(self, state, ws);
+                // println!("SparseTensor DenseTensor");
+                let (permutation, self_matches, other_matches) =
+                    self.structure().match_indices(other.structure()).unwrap();
+
+                let mut final_structure = self.structure.clone();
+                final_structure.merge(&other.structure);
+
+                // Initialize result tensor with default values
+                let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+                let mut result_index = 0;
+                let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
+
+                let mut other_iter = other.iter_multi_fibers(&other_matches);
+                while let Some(fiber_a) = selfiter.next() {
+                    for fiber_b in other_iter.by_ref() {
+                        for k in 0..fiber_a.len() {
+                            if fiber_a[k].1 {
+                                result_data[result_index] = result_data[result_index].sub_sym(
+                                    &fiber_a[k].0.mul_sym(fiber_b[selfiter.map[k]], ws, state)?,
+                                    ws,
+                                    state,
+                                )?;
+                            } else {
+                                result_data[result_index] = result_data[result_index].add_sym(
+                                    &fiber_a[k].0.mul_sym(fiber_b[selfiter.map[k]], ws, state)?,
+                                    ws,
+                                    state,
+                                )?;
+                            }
+                        }
+                        result_index += 1;
+                    }
+                    other_iter.reset();
+                }
+                let result: DenseTensor<Out, I> = DenseTensor {
+                    data: result_data,
+                    structure: final_structure,
+                };
+
+                return Some(result);
+            }
+            return other.contract_sym(self, state, ws);
+        }
+        let mut final_structure = self.structure.clone();
+        final_structure.merge(&other.structure);
+
+        let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+
+        let stride = other.size();
+        for (i, u) in self.iter_flat() {
+            for (j, t) in other.iter_flat() {
+                result_data[i * stride + j] = u.mul_sym(t, ws, state).unwrap();
             }
         }
-        None
+        let result = DenseTensor {
+            data: result_data,
+            structure: final_structure,
+        };
+        Some(result)
     }
 }
 
@@ -320,7 +335,22 @@ where
                 other.contract_sym(self, state, ws)
             }
         } else {
-            None
+            let mut final_structure = self.structure.clone();
+            final_structure.merge(&other.structure);
+
+            let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+            let stride = other.size();
+
+            for (i, u) in self.iter_flat() {
+                for (j, t) in other.iter_flat() {
+                    result_data[i * stride + j] = u.mul_sym(t, ws, state).unwrap();
+                }
+            }
+            let result = DenseTensor {
+                data: result_data,
+                structure: final_structure,
+            };
+            Some(result)
         }
     }
 }
@@ -346,6 +376,7 @@ where
     U: Clone,
 {
     type LCM = SparseTensor<Out, I>;
+    #[allow(clippy::too_many_lines)]
     fn contract_sym(
         &self,
         other: &SparseTensor<T, I>,
@@ -410,77 +441,89 @@ where
                     };
 
                     return Some(result);
-                } else {
-                    let (permutation, self_matches, other_matches) =
-                        self.structure().match_indices(other.structure()).unwrap();
-
-                    let mut final_structure = self.structure.clone();
-                    final_structure.merge(&other.structure);
-                    let mut result_data = AHashMap::default();
-                    let one = if let Some(o) = final_structure.strides().first() {
-                        *o
-                    } else {
-                        1
-                    };
-                    let stride = *final_structure
-                        .strides()
-                        .get(i.checked_sub(1)?)
-                        .unwrap_or(&one);
-
-                    let mut result_index = 0;
-
-                    let mut self_iter = self.iter_multi_fibers_metric(&self_matches, permutation);
-                    let mut other_iter = other.iter_multi_fibers(&other_matches);
-                    while let Some((skipped_a, nonzeros_a, fiber_a)) = self_iter.next() {
-                        result_index += skipped_a;
-                        for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
-                            result_index += skipped_b * stride;
-                            let mut value = Out::zero(state, ws);
-                            let mut nonzero = false;
-
-                            for (i, j) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
-                                nonzeros_b
-                                    .binary_search(&self_iter.map[x])
-                                    .ok()
-                                    .map(|j| (i, j))
-                            }) {
-                                if fiber_a[i].1 {
-                                    value = value.sub_sym(
-                                        &fiber_a[i].0.mul_sym(fiber_b[j], ws, state)?,
-                                        ws,
-                                        state,
-                                    )?;
-                                } else {
-                                    value = value.add_sym(
-                                        &fiber_a[i].0.mul_sym(fiber_b[j], ws, state)?,
-                                        ws,
-                                        state,
-                                    )?;
-
-                                    nonzero = true;
-                                }
-                            }
-
-                            if nonzero {
-                                result_data.insert(result_index, value);
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
-                    }
-
-                    let result = SparseTensor {
-                        elements: result_data,
-                        structure: final_structure,
-                    };
-
-                    return Some(result);
                 }
-            } else {
-                return other.contract_sym(self, state, ws);
+                let (permutation, self_matches, other_matches) =
+                    self.structure().match_indices(other.structure()).unwrap();
+
+                let mut final_structure = self.structure.clone();
+                final_structure.merge(&other.structure);
+                let mut result_data = AHashMap::default();
+                let one = if let Some(o) = final_structure.strides().first() {
+                    *o
+                } else {
+                    1
+                };
+                let stride = *final_structure
+                    .strides()
+                    .get(i.checked_sub(1)?)
+                    .unwrap_or(&one);
+
+                let mut result_index = 0;
+
+                let mut self_iter = self.iter_multi_fibers_metric(&self_matches, permutation);
+                let mut other_iter = other.iter_multi_fibers(&other_matches);
+                while let Some((skipped_a, nonzeros_a, fiber_a)) = self_iter.next() {
+                    result_index += skipped_a;
+                    for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
+                        result_index += skipped_b * stride;
+                        let mut value = Out::zero(state, ws);
+                        let mut nonzero = false;
+
+                        for (i, j) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
+                            nonzeros_b
+                                .binary_search(&self_iter.map[x])
+                                .ok()
+                                .map(|j| (i, j))
+                        }) {
+                            if fiber_a[i].1 {
+                                value = value.sub_sym(
+                                    &fiber_a[i].0.mul_sym(fiber_b[j], ws, state)?,
+                                    ws,
+                                    state,
+                                )?;
+                            } else {
+                                value = value.add_sym(
+                                    &fiber_a[i].0.mul_sym(fiber_b[j], ws, state)?,
+                                    ws,
+                                    state,
+                                )?;
+
+                                nonzero = true;
+                            }
+                        }
+
+                        if nonzero {
+                            result_data.insert(result_index, value);
+                        }
+                        result_index += 1;
+                    }
+                    other_iter.reset();
+                }
+
+                let result = SparseTensor {
+                    elements: result_data,
+                    structure: final_structure,
+                };
+
+                return Some(result);
+            }
+            return other.contract_sym(self, state, ws);
+        }
+        let mut final_structure = self.structure.clone();
+        final_structure.merge(&other.structure);
+
+        let mut result_data = AHashMap::default();
+        let stride = other.size();
+        for (i, u) in self.iter_flat() {
+            for (j, t) in other.iter_flat() {
+                result_data.insert(i * stride + j, u.mul_sym(t, ws, state).unwrap());
             }
         }
-        None
+        let result = SparseTensor {
+            elements: result_data,
+            structure: final_structure,
+        };
+        Some(result)
     }
 }
 
@@ -502,6 +545,7 @@ where
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = DenseTensor<Out, I>;
+    #[allow(clippy::too_many_lines)]
     fn contract_sym(
         &self,
         other: &SparseTensor<T, I>,
@@ -618,7 +662,22 @@ where
                 other.contract_sym(self, state, ws)
             }
         } else {
-            None
+            let mut final_structure = self.structure.clone();
+            final_structure.merge(&other.structure);
+
+            let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+            let stride = other.size();
+
+            for (i, u) in self.iter_flat() {
+                for (j, t) in other.iter_flat() {
+                    result_data[i * stride + j] = u.mul_sym(t, ws, state).unwrap();
+                }
+            }
+            let result = DenseTensor {
+                data: result_data,
+                structure: final_structure,
+            };
+            Some(result)
         }
     }
 }
@@ -692,7 +751,7 @@ where
             }
             // Atom::parse(&format!("{}_{}_{}", label, indices_str, i), state, ws).unwrap();
 
-            let value = value_builder.finish().into_atom();
+            let value = Atom::new_from_view(&value_builder.finish().as_atom_view());
 
             data.push(value);
         }
@@ -775,6 +834,92 @@ pub enum MixedTensor<T: TensorStructure> {
     Float(DataTensor<f64, T>),
     Complex(DataTensor<Complex<f64>, T>),
     Symbolic(DataTensor<Atom, T>),
+}
+
+impl<I> DenseTensor<Atom, I>
+where
+    I: Clone,
+{
+    pub fn to_evaluator<'a, N>(
+        &'a self,
+        var_map: &mut HashMap<AtomView<'a>, Variable>,
+        state: &State,
+    ) -> DenseTensor<InstructionEvaluator<N>, I>
+    where
+        N: NumericalFloatLike + for<'b> std::convert::From<&'b Rational>,
+    {
+        let structure = self.structure.clone();
+        let data = self
+            .data
+            .iter()
+            .map(|x| {
+                let poly: MultivariatePolynomial<_, u8> = x
+                    .as_view()
+                    .to_polynomial_with_map(&RationalField::new(), var_map);
+
+                println!("{}", poly.printer(state));
+
+                let (h, _ops, _) = poly.optimize_horner_scheme(4000);
+                let mut i = h.to_instr(20);
+
+                i.fuse_operations();
+
+                for _ in 0..100_000 {
+                    if !i.common_pair_elimination() {
+                        break;
+                    }
+                    i.fuse_operations();
+                }
+
+                i.to_output(poly.var_map.as_ref().unwrap().to_vec(), true)
+                    .convert::<N>()
+                    .evaluator()
+            })
+            .collect::<Vec<_>>();
+
+        DenseTensor { data, structure }
+    }
+}
+
+impl<I, N> DenseTensor<InstructionEvaluator<N>, I>
+where
+    I: Clone,
+    N: NumericalFloatLike + for<'a> std::convert::From<&'a Rational> + Copy,
+{
+    pub fn evaluate(&self, param: &[N]) -> DenseTensor<N, I> {
+        let structure = self.structure.clone();
+        let data = self
+            .data
+            .iter()
+            .enumerate()
+            .map(|(i, x)| x.clone().evaluate(&[param[i]])[0])
+            .collect::<Vec<_>>();
+        DenseTensor { data, structure }
+    }
+}
+
+#[test]
+
+fn test_evaluator() {
+    let mut state = State::new();
+    let ws = Workspace::new();
+    let structure = NamedStructure::from_integers(&[(4, 5), (5, 4)], "r");
+    let p = structure.shadow(&mut state, &ws).unwrap();
+
+    let mut var_map = HashMap::new();
+    let a: DenseTensor<InstructionEvaluator<f64>, NamedStructure> =
+        p.to_evaluator(&mut var_map, &state);
+
+    for (k, v) in var_map {
+        println!("{} {:?}", k.printer(&state), v);
+    }
+
+    let b = a.evaluate(&[
+        1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0,
+        4.0, 5.0,
+    ]);
+
+    println!("{:?}", b);
 }
 
 impl<T> TensorStructure for MixedTensor<T>
