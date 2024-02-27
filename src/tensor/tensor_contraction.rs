@@ -1,18 +1,17 @@
 use ahash::AHashMap;
-use bincode::de;
 use itertools::Itertools;
 
 use num::traits::Inv;
 use petgraph::{
     dot::{Config, Dot},
-    graph::{EdgeIndex, Graph, NodeIndex},
+    graph::{self, EdgeIndex, Graph, NodeIndex},
     visit::EdgeRef,
     Direction::Outgoing,
     Undirected,
 };
 
 use serde::{Deserialize, Serialize};
-use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
+use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap, SlotMap};
 use symbolica::{
     representations::Identifier,
     state::{State, Workspace},
@@ -28,8 +27,11 @@ use super::{
 };
 use smartstring::alias::String;
 use std::{
+    collections::BTreeMap,
     fmt::{Debug, Display},
+    // intrinsics::needs_drop,
     ops::Neg,
+    result,
 };
 
 impl<T, I> DenseTensor<T, I>
@@ -185,7 +187,24 @@ where
             }
             return other.contract(self);
         }
-        None
+        let mut final_structure = self.structure.clone();
+        final_structure.merge(&other.structure);
+
+        let mut result_data = vec![Out::zero(); final_structure.size()];
+
+        let mut result_index = 0;
+
+        for (_, u) in self.iter_flat() {
+            for (_, t) in other.iter_flat() {
+                result_data[result_index] = u * t;
+                result_index += 1;
+            }
+        }
+        let result = DenseTensor {
+            data: result_data,
+            structure: final_structure,
+        };
+        Some(result)
     }
 }
 
@@ -280,7 +299,21 @@ where
                 other.contract(self)
             }
         } else {
-            None
+            let mut final_structure = self.structure.clone();
+            final_structure.merge(&other.structure);
+
+            let mut result_data = vec![Out::zero(); final_structure.size()];
+
+            for (i, u) in self.iter_flat() {
+                for (j, t) in other.iter_flat() {
+                    result_data[i + j] = u * t;
+                }
+            }
+            let result = DenseTensor {
+                data: result_data,
+                structure: final_structure,
+            };
+            Some(result)
         }
     }
 }
@@ -304,6 +337,7 @@ where
     T: Clone,
 {
     type LCM = SparseTensor<Out, I>;
+    #[allow(clippy::too_many_lines)]
     fn contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
         if let Some((single, i, j)) = self.structure.match_index(&other.structure) {
             if i >= j {
@@ -413,7 +447,21 @@ where
             }
             return other.contract(self);
         }
-        None
+        let mut final_structure = self.structure.clone();
+        final_structure.merge(&other.structure);
+
+        let mut result_data = AHashMap::default();
+
+        for (i, u) in self.iter_flat() {
+            for (j, t) in other.iter_flat() {
+                result_data.insert(i + j, u * t);
+            }
+        }
+        let result = SparseTensor {
+            elements: result_data,
+            structure: final_structure,
+        };
+        Some(result)
     }
 }
 
@@ -523,7 +571,21 @@ where
                 other.contract(self)
             }
         } else {
-            None
+            let mut final_structure = self.structure.clone();
+            final_structure.merge(&other.structure);
+
+            let mut result_data = vec![Out::zero(); final_structure.size()];
+
+            for (i, u) in self.iter_flat() {
+                for (j, t) in other.iter_flat() {
+                    result_data[i + j] = u * t;
+                }
+            }
+            let result = DenseTensor {
+                data: result_data,
+                structure: final_structure,
+            };
+            Some(result)
         }
     }
 }
@@ -590,11 +652,44 @@ new_key_type! {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct HalfEdgeGraph<N, E> {
-    edges: SlotMap<HedgeId, E>,
-    involution: SecondaryMap<HedgeId, HedgeId>,
-    pub nodes: SlotMap<NodeId, N>,
+pub struct HalfEdgeGraph<N, E> {
+    pub edges: DenseSlotMap<HedgeId, E>,
+    pub involution: SecondaryMap<HedgeId, HedgeId>,
+    pub neighbors: SecondaryMap<HedgeId, HedgeId>,
+    pub nodes: DenseSlotMap<NodeId, N>,
     pub nodemap: SecondaryMap<HedgeId, NodeId>,
+    pub reverse_nodemap: SecondaryMap<NodeId, HedgeId>,
+}
+
+struct IncidentIterator<'a> {
+    neighbors: &'a SecondaryMap<HedgeId, HedgeId>,
+    current: Option<HedgeId>,
+    start: HedgeId,
+}
+
+impl<'a> Iterator for IncidentIterator<'a> {
+    type Item = HedgeId;
+    fn next(&mut self) -> Option<HedgeId> {
+        let current = self.current?;
+
+        self.current = Some(self.neighbors[current]);
+
+        if self.current == Some(self.start) {
+            self.current = None;
+        }
+
+        Some(current)
+    }
+}
+
+impl<'a> IncidentIterator<'a> {
+    fn new<N, E>(graph: &'a HalfEdgeGraph<N, E>, initial: HedgeId) -> Self {
+        IncidentIterator {
+            neighbors: &graph.neighbors,
+            current: Some(initial),
+            start: initial,
+        }
+    }
 }
 
 impl<N, E> HalfEdgeGraph<N, E> {
@@ -602,13 +697,41 @@ impl<N, E> HalfEdgeGraph<N, E> {
         HalfEdgeGraph {
             involution: SecondaryMap::new(),
             nodemap: SecondaryMap::new(),
-            nodes: SlotMap::with_key(),
-            edges: SlotMap::with_key(),
+            neighbors: SecondaryMap::new(),
+            reverse_nodemap: SecondaryMap::new(),
+            nodes: DenseSlotMap::with_key(),
+            edges: DenseSlotMap::with_key(),
         }
     }
 
-    fn dot(&self) -> String {
-        let mut out = "graph {".into();
+    fn dot(&self) -> std::string::String {
+        let mut out = "graph {".to_string();
+        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";");
+
+        // for (i, n) in &self.nodes {
+        //     out.push_str(&format!("\n {}", i.data().as_ffi()));
+        // }
+        for (i, _) in &self.neighbors {
+            if i > self.involution[i] {
+                out.push_str(&format!(
+                    "\n {} -- {}",
+                    self.nodemap[i].data().as_ffi(),
+                    self.nodemap[self.involution[i]].data().as_ffi()
+                ));
+            } else if i == self.involution[i] {
+                out.push_str(&format!(
+                    "ext{} [shape=none, label=\"\"];",
+                    i.data().as_ffi()
+                ));
+                out.push_str(&format!(
+                    "\n {} -- ext{}",
+                    self.nodemap[i].data().as_ffi(),
+                    i.data().as_ffi()
+                ));
+            }
+        }
+
+        out += "}";
         out
     }
 
@@ -616,7 +739,7 @@ impl<N, E> HalfEdgeGraph<N, E> {
         self.nodes.insert(data)
     }
 
-    fn node_indices(&self) -> slotmap::basic::Keys<'_, NodeId, N> {
+    fn node_indices(&self) -> slotmap::dense::Keys<'_, NodeId, N> {
         self.nodes.keys()
     }
 
@@ -627,13 +750,32 @@ impl<N, E> HalfEdgeGraph<N, E> {
     {
         let idx = self.add_node(data);
         for e in edges {
-            let eid = self.edges.insert(e.clone());
-            for (i, other_e) in self.edges.iter() {
-                if e == other_e && self.involution[i] == i {
+            let mut found_match = false;
+            for (i, other_e) in &self.edges {
+                if *e == *other_e && self.involution[i] == i {
+                    found_match = true;
+                    let eid = self.edges.insert(e.clone());
                     self.involution.insert(eid, i);
                     self.involution.insert(i, eid);
                     self.nodemap.insert(eid, idx);
+                    if let Some(prev_eid) = self.reverse_nodemap.insert(idx, eid) {
+                        let next_eid = self.neighbors.insert(prev_eid, eid).unwrap();
+                        self.neighbors.insert(eid, next_eid);
+                    } else {
+                        self.neighbors.insert(eid, eid);
+                    }
                     break;
+                }
+            }
+            if !found_match {
+                let eid = self.edges.insert(e.clone());
+                self.involution.insert(eid, eid);
+                self.nodemap.insert(eid, idx);
+                if let Some(prev_eid) = self.reverse_nodemap.insert(idx, eid) {
+                    let next_eid = self.neighbors.insert(prev_eid, eid).unwrap();
+                    self.neighbors.insert(eid, next_eid);
+                } else {
+                    self.neighbors.insert(eid, eid);
                 }
             }
         }
@@ -641,20 +783,152 @@ impl<N, E> HalfEdgeGraph<N, E> {
         idx
     }
 
-    fn merge_nodes(&mut self, a: NodeId, b: NodeId, data: N) {
-        let edges_to_contract = self.edges_between(a, b);
-        for (i, n) in &mut self.nodemap {
-            if *n == b {
-                *n = a;
+    pub fn validate_neighbors(&self) -> bool {
+        for (i, n) in &self.reverse_nodemap {
+            for j in IncidentIterator::new(self, *n) {
+                if self.nodemap[j] != i {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    fn node_labels(&self) -> String
+    where
+        N: Display,
+    {
+        let mut out = String::new();
+        for (i, n) in &self.nodes {
+            out.push_str(&format!("{}[label= \"{}\"]\n", i.data().as_ffi(), n));
+        }
+        out
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn merge_nodes(&mut self, a: NodeId, b: NodeId, data: N) -> NodeId {
+        let c = self.nodes.insert(data);
+
+        // New initial edge for reverse_nodemap, that does not link to b
+        // if none is found, all incident edges are link to b and must be removed from the neighbors list
+        let mut new_initial_a = self
+            .edges_incident(a)
+            .find(|x| self.nodemap[self.involution[*x]] != b && self.involution[*x] != *x);
+
+        if new_initial_a.is_none() {
+            new_initial_a = self
+                .edges_incident(a)
+                .find(|x| self.nodemap[self.involution[*x]] != b);
+        }
+
+        let mut a_edge = new_initial_a;
+
+        if a_edge.is_none() {
+            // all edges link to b, and must be removed
+            let initial = self.reverse_nodemap[a];
+            let mut current = Some(initial);
+            loop {
+                if current.is_none() {
+                    break;
+                }
+                let next = self.neighbors.remove(current.unwrap());
+
+                if next == Some(initial) {
+                    current = None;
+                } else {
+                    current = next;
+                }
+            }
+        } else {
+            loop {
+                let mut next = self.neighbors[a_edge.unwrap()];
+
+                while self.nodemap[self.involution[next]] == b {
+                    next = self.neighbors.remove(next).unwrap();
+                }
+
+                self.nodemap.insert(a_edge.unwrap(), c);
+                self.neighbors.insert(a_edge.unwrap(), next);
+
+                if new_initial_a == Some(next) {
+                    break;
+                }
+
+                a_edge = Some(next);
             }
         }
 
-        self.nodes[a] = data;
-        self.nodes.remove(b);
+        let mut new_initial_b = self
+            .edges_incident(b)
+            .find(|x| self.nodemap[self.involution[*x]] != a && self.involution[*x] != *x);
 
-        for e in edges_to_contract {
-            self.involution.remove(e);
+        if new_initial_b.is_none() {
+            new_initial_b = self
+                .edges_incident(b)
+                .find(|x| self.nodemap[self.involution[*x]] != a);
         }
+        let mut b_edge = new_initial_b;
+
+        if b_edge.is_none() {
+            let initial = self.reverse_nodemap[b];
+            let mut current = Some(initial);
+            loop {
+                if current.is_none() {
+                    break;
+                }
+                let next = self.neighbors.remove(current.unwrap());
+
+                if next == Some(initial) {
+                    current = None;
+                } else {
+                    current = next;
+                }
+            }
+        } else {
+            loop {
+                let mut next = self.neighbors[b_edge.unwrap()];
+
+                while self.nodemap[self.involution[next]] == a {
+                    next = self.neighbors.remove(next).unwrap();
+                }
+
+                self.nodemap.insert(b_edge.unwrap(), c);
+                self.neighbors.insert(b_edge.unwrap(), next);
+
+                if new_initial_b == Some(next) {
+                    break;
+                }
+
+                b_edge = Some(next);
+            }
+        }
+
+        match (new_initial_a, new_initial_b) {
+            (Some(new_edge_a), Some(new_edge_b)) => {
+                self.reverse_nodemap.insert(c, new_edge_a);
+                self.reverse_nodemap.remove(a);
+                self.reverse_nodemap.remove(b);
+                let old_neig = self.neighbors.insert(new_edge_a, new_edge_b).unwrap();
+                self.neighbors.insert(b_edge.unwrap(), old_neig);
+            }
+            (Some(new_edge_a), None) => {
+                self.reverse_nodemap.insert(c, new_edge_a);
+                self.reverse_nodemap.remove(a);
+                self.reverse_nodemap.remove(b);
+            }
+            (None, Some(new_edge_b)) => {
+                self.reverse_nodemap.insert(c, new_edge_b);
+                self.reverse_nodemap.remove(a);
+                self.reverse_nodemap.remove(b);
+            }
+            (None, None) => {
+                self.reverse_nodemap.remove(b);
+                self.reverse_nodemap.remove(a);
+            }
+        }
+        self.nodes.remove(a);
+        self.nodes.remove(b);
+        c
     }
 
     /// Add an internal edge between two nodes.
@@ -662,13 +936,25 @@ impl<N, E> HalfEdgeGraph<N, E> {
     where
         E: Clone,
     {
-        let id_a = self.edges.insert(data.clone());
-        let id_b = self.edges.insert(data);
-        self.involution.insert(id_a, id_b);
-        self.involution.insert(id_b, id_a);
-        self.nodemap.insert(id_a, a);
-        self.nodemap.insert(id_b, b);
-        id_a
+        let hedge_id_a = self.edges.insert(data.clone());
+        let hedge_id_b = self.edges.insert(data);
+        self.involution.insert(hedge_id_a, hedge_id_b);
+        self.involution.insert(hedge_id_b, hedge_id_a);
+        self.nodemap.insert(hedge_id_a, a);
+        if let Some(prev_eid) = self.reverse_nodemap.insert(a, hedge_id_a) {
+            let next_eid = self.neighbors.insert(prev_eid, hedge_id_a).unwrap();
+            self.neighbors.insert(hedge_id_a, next_eid).unwrap();
+        } else {
+            self.neighbors.insert(hedge_id_a, hedge_id_a);
+        }
+        self.nodemap.insert(hedge_id_b, b);
+        if let Some(prev_eid) = self.reverse_nodemap.insert(b, hedge_id_b) {
+            let next_eid = self.neighbors.insert(prev_eid, hedge_id_b).unwrap();
+            self.neighbors.insert(hedge_id_b, next_eid).unwrap();
+        } else {
+            self.neighbors.insert(hedge_id_b, hedge_id_b);
+        }
+        hedge_id_a
     }
 
     /// Add external, as a fixed point involution half edge.
@@ -676,119 +962,193 @@ impl<N, E> HalfEdgeGraph<N, E> {
         let id = self.edges.insert(data);
         self.involution.insert(id, id);
         self.nodemap.insert(id, a);
+        if let Some(prev_eid) = self.reverse_nodemap.insert(a, id) {
+            let next_eid = self.neighbors.insert(prev_eid, id).unwrap();
+            self.neighbors.insert(id, next_eid).unwrap();
+        } else {
+            self.neighbors.insert(id, id);
+        }
         id
     }
 
-    fn edges_incident(&self, node: NodeId) -> Vec<HedgeId> {
-        self.nodemap
-            .iter()
-            .filter_map(|(i, n)| if *n == node { Some(i) } else { None })
-            .collect()
+    fn edges_incident(&self, node: NodeId) -> impl Iterator<Item = HedgeId> + '_ {
+        IncidentIterator::new(self, self.reverse_nodemap[node])
     }
 
-    fn edges_between(&self, a: NodeId, b: NodeId) -> Vec<HedgeId> {
-        self.nodemap
-            .iter()
-            .filter_map(|(i, n)| {
-                if *n == a && self.nodemap[self.involution[i]] == b {
-                    Some(i)
-                } else {
-                    None
-                }
-            })
-            .collect()
+    fn edges_between(&self, a: NodeId, b: NodeId) -> impl Iterator<Item = HedgeId> + '_ {
+        self.edges_incident(a)
+            .filter(move |&i| self.nodemap[self.involution[i]] == b)
     }
 
-    fn internal_edges_incident(&self, node: NodeId) -> Vec<HedgeId> {
-        self.nodemap
-            .iter()
-            .filter_map(|(i, n)| {
-                if *n == node && self.involution[i] != i {
-                    Some(i)
-                } else {
-                    None
-                }
-            })
-            .collect()
+    fn internal_edges_incident(&self, node: NodeId) -> impl Iterator<Item = HedgeId> + '_ {
+        self.edges_incident(node)
+            .filter(move |&i| self.nodemap[self.involution[i]] != node)
     }
 
-    fn external_edges_incident(&self, node: NodeId) -> Vec<HedgeId> {
-        self.nodemap
-            .iter()
-            .filter_map(|(i, n)| {
-                if *n == node && self.involution[i] == i {
-                    Some(i)
-                } else {
-                    None
-                }
-            })
-            .collect()
+    fn external_edges_incident(&self, node: NodeId) -> impl Iterator<Item = HedgeId> + '_ {
+        self.edges_incident(node)
+            .filter(move |&i| self.nodemap[self.involution[i]] == node)
     }
 
     fn degree(&self, node: NodeId) -> usize {
-        self.edges_incident(node).len()
+        self.edges_incident(node).collect::<Vec<_>>().len()
     }
 
-    fn neighbors(&self, node: NodeId) -> Vec<NodeId> {
-        self.internal_edges_incident(node)
-            .iter()
-            .filter_map(|&i| {
-                if self.nodemap[i] == node {
-                    None
-                } else {
-                    Some(self.nodemap[self.involution[i]])
-                }
-            })
-            .collect()
+    fn neighbors(&self, node: NodeId) -> impl Iterator<Item = NodeId> + '_ {
+        self.edges_incident(node)
+            .map(move |i| self.nodemap[self.involution[i]])
     }
 
-    fn map_nodes<F, U>(&self, f: F) -> HalfEdgeGraph<U, E>
-    where
-        F: Fn(&N) -> U,
-        E: Clone,
-    {
-        let edges = self.edges.clone();
-        let involution = self.involution.clone();
+    // fn map_nodes<F, U>(&self, f: F) -> HalfEdgeGraph<U, E>
+    // where
+    //     F: Fn(&N) -> U,
+    //     E: Clone,
+    // {
+    //     let edges = self.edges.clone();
+    //     let involution = self.involution.clone();
 
-        let mut nodes = SlotMap::with_key();
-        let mut nodemap = SecondaryMap::new();
+    //     let mut nodes = DenseSlotMap::with_key();
+    //     let mut nodemap = SecondaryMap::new();
 
-        for n in &self.nodes {
-            let nid = nodes.insert(f(n.1));
-            for e in self.edges_incident(n.0) {
-                nodemap.insert(e, nid);
-            }
-        }
+    //     for n in &self.nodes {
+    //         let nid = nodes.insert(f(n.1));
+    //         for e in self.edges_incident(n.0) {
+    //             nodemap.insert(e, nid);
+    //         }
+    //     }
 
-        HalfEdgeGraph {
-            edges,
-            involution,
-            nodes,
-            nodemap,
-        }
-    }
+    //     HalfEdgeGraph {
+    //         edges,
+    //         involution,
+    //         nodes,
+    //         nodemap,
+    //     }
+    // }
 }
 
-#[derive(Debug, Clone)]
+#[test]
+fn merge() {
+    let mut graph = HalfEdgeGraph::new();
+    let a = graph.add_node_with_edges(1, &[1, 2, 3, 4, 5]);
+    let b = graph.add_node_with_edges(2, &[1, 2, 6, 7, 8]);
+    let c = graph.add_node_with_edges(4, &[4, 6, 9, 10, 11]);
+
+    println!("{}", graph.dot());
+    println!("{}", graph.degree(a));
+    println!("{}", graph.degree(b));
+
+    for (i, n) in &graph.neighbors {
+        println!("{} {}", graph.edges[i], graph.edges[*n]);
+    }
+
+    let d = graph.merge_nodes(a, b, 3);
+
+    // for (i, n) in &graph.neighbors {
+    //     println!("{} {}", graph.edges[i], graph.edges[*n]);
+    // }
+
+    println!("{}", graph.dot());
+    println!("{}", graph.degree(c));
+    println!("{}", graph.neighbors.len());
+
+    let e = graph.merge_nodes(c, d, 5);
+
+    println!("{}", graph.dot());
+    println!("{}", graph.degree(e));
+    println!("{}", graph.neighbors.len());
+
+    let mut graph = HalfEdgeGraph::new();
+    let a = graph.add_node_with_edges("a", &[10, 2, 3]);
+    let b = graph.add_node_with_edges("b", &[20, 3, 4]);
+    let c = graph.add_node_with_edges("c", &[30, 4, 2]);
+    let d = graph.add_node_with_edges("d", &[20]);
+    let e = graph.add_node_with_edges("e", &[30]);
+
+    println!("Test {}", graph.dot());
+    println!("{}", graph.degree(a));
+    println!("{}", graph.degree(b));
+
+    for (i, n) in &graph.neighbors {
+        println!("{} {}", graph.edges[i], graph.edges[*n]);
+    }
+
+    let d = graph.merge_nodes(d, b, "bd");
+
+    // for (i, n) in &graph.neighbors {
+    //     println!("{} {}", graph.edges[i], graph.edges[*n]);
+    // }
+
+    println!("{}", graph.degree(c));
+    println!("{}", graph.neighbors.len());
+
+    println!("{}", graph.dot());
+
+    let e = graph.merge_nodes(c, e, "ce");
+
+    if graph.validate_neighbors() {
+        println!("valid");
+    } else {
+        println!("invalid");
+    }
+
+    println!("{}", graph.dot());
+    let f = graph.merge_nodes(d, e, "de");
+
+    if graph.validate_neighbors() {
+        println!("valid");
+    } else {
+        println!("invalid");
+    }
+
+    println!("{}", graph.dot());
+    println!("{}", graph.node_labels());
+    println!("{}", graph.degree(a));
+    println!("{}", graph.neighbors.len());
+
+    let g = graph.merge_nodes(a, f, "af");
+
+    if graph.validate_neighbors() {
+        println!("valid");
+    } else {
+        println!("invalid");
+    }
+
+    println!("{}", graph.dot());
+    println!("{}", graph.neighbors.len());
+    println!("{}", graph.degree(g));
+
+    // println!("{}", graph.degree(b));
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TensorNetwork<T> {
-    graph: HalfEdgeGraph<T, Slot>,
+    pub graph: HalfEdgeGraph<T, Slot>,
 }
 
 impl<T> TensorNetwork<T> {
     fn edge_to_min_degree_node(&self) -> Option<HedgeId> {
-        let mut min_degree = usize::MAX;
-        let mut edge_to_min_degree_node = None;
-        for node in self.graph.nodes.keys() {
-            let out = self.graph.internal_edges_incident(node);
-            let degree = out.len();
-            if degree < min_degree {
-                min_degree = degree;
-                if min_degree > 0 {
-                    edge_to_min_degree_node = Some(out[0]);
+        let mut neighs = self.graph.reverse_nodemap.clone();
+        if neighs.is_empty() {
+            return None;
+        }
+
+        loop {
+            let mut all_ext = true;
+            for (node, initial) in &mut neighs {
+                *initial = self.graph.neighbors[*initial];
+                let start = self.graph.reverse_nodemap[node];
+
+                if self.graph.involution[start] != start {
+                    all_ext = false;
+                    if *initial == start {
+                        return Some(start);
+                    }
                 }
             }
+            if all_ext {
+                return None;
+            }
         }
-        edge_to_min_degree_node
     }
 
     pub fn to_vec(&self) -> Vec<&T> {
@@ -819,6 +1179,11 @@ where
         }
     }
 
+    fn push(&mut self, tensor: T) -> NodeId {
+        let slots = tensor.external_structure().to_vec();
+        self.graph.add_node_with_edges(tensor, &slots)
+    }
+
     fn generate_network_graph(tensors: Vec<T>) -> HalfEdgeGraph<T, Slot> {
         let mut graph = HalfEdgeGraph::<T, Slot>::new();
 
@@ -841,12 +1206,11 @@ where
                 + self.graph.nodes[self.graph.nodemap[self.graph.involution[e]]].contractions_num();
 
             if edge_depth < depth {
-                let out = self.graph.internal_edges_incident(*n);
-                let degree = out.len();
+                let degree = self.graph.degree(*n);
                 if degree < min_degree {
                     min_degree = degree;
                     if min_degree > 0 {
-                        edge_to_min_degree_node = Some(out[0]);
+                        edge_to_min_degree_node = Some(self.graph.reverse_nodemap[*n]);
                     }
                 }
             }
@@ -863,12 +1227,8 @@ where
     }
 }
 
-impl<T> TensorNetwork<T>
-where
-    T: Debug + TensorStructure,
-    T::Structure: Display,
-{
-    pub fn dot(&self) -> String {
+impl<T> TensorNetwork<T> {
+    pub fn dot(&self) -> std::string::String {
         // format!(
         //     "{:?}",
         //     Dot::with_attr_getters(
@@ -887,7 +1247,7 @@ impl<T> TensorNetwork<T>
 where
     T: Debug + TensorStructure<Structure = HistoryStructure<Identifier>>,
 {
-    pub fn dotsym(&self, state: &State) -> String {
+    pub fn dotsym(&self, state: &State) -> std::string::String {
         // format!(
         //     "{:?}",
         //     Dot::with_attr_getters(
@@ -922,15 +1282,22 @@ where
 
         let edges = self.graph.edges.clone();
         let involution = self.graph.involution.clone();
+        let neighbors = self.graph.neighbors.clone();
 
-        let mut nodes = SlotMap::with_key();
+        let mut nodes = DenseSlotMap::with_key();
         let mut nodemap = SecondaryMap::new();
+        let mut reverse_nodemap = SecondaryMap::new();
 
         for (i, n) in &self.graph.nodes {
             let nid = nodes.insert(MixedTensor::<HistoryStructure<Identifier>>::from(
                 n.structure().clone().shadow(state, ws).unwrap(),
             ));
+            let mut first = true;
             for e in self.graph.edges_incident(i) {
+                if first {
+                    reverse_nodemap.insert(nid, e);
+                    first = false;
+                }
                 nodemap.insert(e, nid);
             }
         }
@@ -938,6 +1305,8 @@ where
         let g = HalfEdgeGraph {
             edges,
             involution,
+            reverse_nodemap,
+            neighbors,
             nodes,
             nodemap,
         };
@@ -991,6 +1360,7 @@ where
     pub fn contract_algo(&mut self, edge_choice: fn(&TensorNetwork<T>) -> Option<HedgeId>) {
         if let Some(e) = edge_choice(self) {
             self.contract_edge(e);
+            // println!("{}", self.dot());
             self.contract_algo(edge_choice);
         }
     }

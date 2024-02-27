@@ -1024,6 +1024,30 @@ where
     }
 }
 
+/// Iterator over all the elements of a sparse tensor
+///
+/// Returns the flat index and the element at that index
+
+pub struct SparseTensorLinearIterator<'a, T> {
+    iter: std::collections::hash_map::Iter<'a, usize, T>,
+}
+
+impl<'a, T> SparseTensorLinearIterator<'a, T> {
+    fn new<N>(tensor: &'a SparseTensor<T, N>) -> Self {
+        SparseTensorLinearIterator {
+            iter: tensor.elements.iter(),
+        }
+    }
+}
+
+impl<'a, T> Iterator for SparseTensorLinearIterator<'a, T> {
+    type Item = (usize, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(k, v)| (*k, v))
+    }
+}
+
 // impl<'a, T, I> IntoIterator for &'a SparseTensor<T, I> {
 //     type Item = (&'a Vec<ConcreteIndex>, &'a T);
 //     type IntoIter = SparseTensorIterator<'a, T>;
@@ -1321,6 +1345,10 @@ where
         SparseTensorIterator::new(self)
     }
 
+    pub fn iter_flat(&self) -> SparseTensorLinearIterator<T> {
+        SparseTensorLinearIterator::new(self)
+    }
+
     pub fn iter_symbolic_trace<'a, 'b>(
         &'a self,
         trace_indices: [usize; 2],
@@ -1381,6 +1409,38 @@ where
         } else {
             None
         }
+    }
+}
+
+/// Iterator over all the elements of a dense tensor
+///
+/// Returns the flat index and the element at that index
+
+pub struct DenseTensorLinearIterator<'a, T, I> {
+    tensor: &'a DenseTensor<T, I>,
+    current_flat_index: usize,
+}
+
+impl<'a, T, I> DenseTensorLinearIterator<'a, T, I> {
+    fn new(tensor: &'a DenseTensor<T, I>) -> Self {
+        DenseTensorLinearIterator {
+            tensor,
+            current_flat_index: 0,
+        }
+    }
+}
+
+impl<'a, T, I> Iterator for DenseTensorLinearIterator<'a, T, I>
+where
+    I: TensorStructure,
+{
+    type Item = (usize, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let value = self.tensor.get_linear(self.current_flat_index)?;
+        let index = self.current_flat_index;
+        self.current_flat_index += 1;
+        Some((index, value))
     }
 }
 
@@ -1712,6 +1772,10 @@ where
 {
     pub fn iter(&self) -> DenseTensorIterator<T, I> {
         DenseTensorIterator::new(self)
+    }
+
+    pub fn iter_flat(&self) -> DenseTensorLinearIterator<T, I> {
+        DenseTensorLinearIterator::new(self)
     }
 
     pub fn iter_fiber(&self, fixedindex: usize) -> TensorFiberIterator<Self> {
