@@ -1,5 +1,6 @@
 use super::{
-    HasName, IntoId, Shadowable, Slot, StructureContract, SymbolicContract, TensorStructure,
+    HasName, IntoId, Shadowable, Slot, StructureContract, SymbolicContract,
+    SymbolicStructureContract, TensorStructure,
 };
 
 use symbolica::{
@@ -31,6 +32,40 @@ impl TensorStructure for SymbolicTensor {
     }
     fn external_structure(&self) -> &[Slot] {
         &self.structure
+    }
+}
+
+impl SymbolicStructureContract for SymbolicTensor {
+    fn merge_at_sym(
+        &self,
+        other: &Self,
+        positions: (usize, usize),
+        state: &State,
+        ws: &Workspace,
+    ) -> Self {
+        let structure = self.structure.merge_at(&other.structure, positions);
+        let mut out: Atom<Linear> = Atom::new();
+        other.expression.mul(state, ws, &self.expression, &mut out);
+
+        SymbolicTensor {
+            structure,
+            expression: out,
+        }
+    }
+
+    fn merge_sym(&mut self, other: &Self, state: &State, ws: &Workspace) {
+        self.structure.merge(&other.structure);
+        let mut out: Atom<Linear> = Atom::new();
+        other.expression.mul(state, ws, &self.expression, &mut out);
+        self.expression = out;
+    }
+
+    fn trace_out_sym(&mut self, _state: &State, _ws: &Workspace) {
+        self.structure.trace_out();
+    }
+
+    fn trace_sym(&mut self, i: usize, j: usize, _state: &State, _ws: &Workspace) {
+        self.structure.trace(i, j);
     }
 }
 

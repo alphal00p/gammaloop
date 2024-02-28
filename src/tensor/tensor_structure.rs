@@ -2,6 +2,8 @@ use ahash::AHashMap;
 use duplicate::duplicate;
 
 use indexmap::IndexMap;
+use serde::Deserialize;
+use serde::Serialize;
 use smartstring::LazyCompact;
 use smartstring::SmartString;
 use std::fmt::Debug;
@@ -26,7 +28,7 @@ pub type Dimension = usize;
 pub type ConcreteIndex = usize;
 
 /// Enum for the Representation/Dimension of the index.
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Representation {
     /// Represents a Euclidean space of the given dimension, with metric diag(1,1,1,1,...)
     Euclidean(Dimension),
@@ -139,7 +141,7 @@ impl Representation {
     /// assert_eq!("l4",format!("{}",mink));
     /// ```
     pub fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Atom {
-        self.to_fnbuilder(state, ws).finish().into_atom()
+        Atom::new_from_view(&self.to_fnbuilder(state, ws).finish().as_atom_view())
     }
 }
 
@@ -224,7 +226,7 @@ impl std::fmt::Display for Representation {
 /// let mu = Slot::from((0,4));
 /// assert_eq!("0e4",format!("{}",mu));
 /// ```
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot {
     index: AbstractIndex,
     pub representation: Representation,
@@ -282,7 +284,7 @@ impl Slot {
     pub fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Atom {
         let mut value_builder = self.representation.to_fnbuilder(state, ws);
         value_builder = value_builder.add_arg(Atom::new_num(self.index as i64).as_atom_view());
-        value_builder.finish().into_atom()
+        Atom::new_from_view(&value_builder.finish().as_atom_view())
     }
 }
 
@@ -660,10 +662,56 @@ impl StructureContract for Vec<Slot> {
         slots_a
     }
 }
+
+/// A trait for a structure that can be traced and merged, during a contraction, maybe using symbolic state and workspace.
+
+pub trait SymbolicStructureContract {
+    fn trace_sym(&mut self, i: usize, j: usize, state: &State, ws: &Workspace);
+
+    fn trace_out_sym(&mut self, state: &State, ws: &Workspace);
+
+    fn merge_sym(&mut self, other: &Self, state: &State, ws: &Workspace);
+
+    #[must_use]
+    fn merge_at_sym(
+        &self,
+        other: &Self,
+        positions: (usize, usize),
+        state: &State,
+        ws: &Workspace,
+    ) -> Self;
+}
+
+impl<T> SymbolicStructureContract for T
+where
+    T: StructureContract,
+{
+    fn trace_sym(&mut self, i: usize, j: usize, _state: &State, _ws: &Workspace) {
+        self.trace(i, j);
+    }
+
+    fn trace_out_sym(&mut self, _state: &State, _ws: &Workspace) {
+        self.trace_out();
+    }
+
+    fn merge_sym(&mut self, other: &Self, _state: &State, _ws: &Workspace) {
+        self.merge(other);
+    }
+
+    fn merge_at_sym(
+        &self,
+        other: &Self,
+        positions: (usize, usize),
+        _state: &State,
+        _ws: &Workspace,
+    ) -> Self {
+        self.merge_at(other, positions)
+    }
+}
 /// A named structure is a structure with a global name, and a list of slots
 ///
 /// It is useful when you want to shadow tensors, to nest tensor network contraction operations.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct NamedStructure {
     pub structure: Vec<Slot>,
     pub global_name: Option<SmartString<LazyCompact>>,
@@ -749,7 +797,7 @@ impl StructureContract for NamedStructure {
 /// A contraction count structure
 ///
 /// Useful for tensor network contraction algorithm.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct ContractionCountStructure {
     pub structure: Vec<Slot>,
     pub contractions: usize,
@@ -830,7 +878,7 @@ impl StructureContract for ContractionCountStructure {
 }
 
 /// A structure to enable smart shadowing of tensors in a tensor network contraction algorithm.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct SmartShadowStructure {
     pub structure: Vec<Slot>,
     pub contractions: usize,
@@ -921,7 +969,7 @@ impl StructureContract for SmartShadowStructure {
 ///
 /// It enables keeping track of the contraction history of the tensor, mostly for debugging and display purposes.
 /// A [`SymbolicTensor`] can also be used in this way, however it needs a symbolica state and workspace during contraction.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct HistoryStructure<N> {
     internal: Vec<Slot>,
     pub external: Vec<Slot>,
@@ -1148,7 +1196,7 @@ pub fn atomic_flat_label_id(
 ) -> Atom {
     let mut value_builder = FunctionBuilder::new(id, state, ws);
     value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
-    value_builder.finish().into_atom()
+    Atom::new_from_view(&value_builder.finish().as_atom_view())
 }
 
 #[allow(clippy::cast_possible_wrap)]
@@ -1162,7 +1210,7 @@ pub fn atomic_expanded_label_id(
     for &index in indices {
         value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
     }
-    value_builder.finish().into_atom()
+    Atom::new_from_view(&value_builder.finish().as_atom_view())
 }
 pub trait IntoId {
     fn into_id(self, state: &mut State) -> Identifier;
@@ -1246,7 +1294,7 @@ pub trait Shadowable: TensorStructure {
         for atom in atoms {
             value_builder = value_builder.add_arg(atom.as_atom_view());
         }
-        value_builder.finish().into_atom()
+        Atom::new_from_view(&value_builder.finish().as_atom_view())
     }
 }
 
