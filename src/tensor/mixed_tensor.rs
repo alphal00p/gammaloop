@@ -20,8 +20,9 @@ use crate::tensor::{NamedStructure, Shadowable};
 
 use super::{
     DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData, Slot, SparseTensor,
-    StructureContract, SymbolicAdd, SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg,
-    SymbolicSub, SymbolicSubAssign, SymbolicZero, TensorStructure, TracksCount,
+    SymbolicAdd, SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg,
+    SymbolicStructureContract, SymbolicSub, SymbolicSubAssign, SymbolicZero, TensorStructure,
+    TracksCount,
 };
 
 pub trait SymbolicInternalContract {
@@ -35,13 +36,13 @@ where
         + SymbolicNeg
         + Clone
         + std::fmt::Debug,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     fn internal_contract_sym(&self, ws: &Workspace, state: &State) -> Self {
         let mut result: DenseTensor<T, I> = self.clone();
         for trace in self.traces() {
             let mut new_structure = self.structure.clone();
-            new_structure.trace(trace[0], trace[1]);
+            new_structure.trace_sym(trace[0], trace[1], state, ws);
 
             let mut new_result: DenseTensor<T, I> =
                 DenseTensor::from_data_coerced(&self.data, new_structure).unwrap();
@@ -61,14 +62,14 @@ where
         + SymbolicNeg
         + Clone
         + std::fmt::Debug,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     fn internal_contract_sym(&self, ws: &Workspace, state: &State) -> Self {
         let trace = self.traces()[0];
 
         // println!("trace {:?}", trace);
         let mut new_structure = self.structure.clone();
-        new_structure.trace(trace[0], trace[1]);
+        new_structure.trace_sym(trace[0], trace[1], state, ws);
 
         let mut new_result = SparseTensor::empty(new_structure);
         for (idx, t) in self.iter_symbolic_trace(trace, state, ws)
@@ -105,7 +106,7 @@ where
         + for<'a> SymbolicAddAssign<&'a Out>
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     type LCM = DenseTensor<Out, I>;
     fn contract_sym(
@@ -117,7 +118,9 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure.merge_at(&other.structure, (i, j));
+                    let final_structure =
+                        self.structure
+                            .merge_at_sym(&other.structure, (i, j), state, ws);
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
@@ -160,7 +163,7 @@ where
                     self.structure().match_indices(other.structure()).unwrap();
 
                 let mut final_structure = self.structure.clone();
-                final_structure.merge(&other.structure);
+                final_structure.merge_sym(&other.structure, state, ws);
 
                 // Initialize result tensor with default values
                 let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
@@ -199,7 +202,7 @@ where
             return other.contract_sym(self, state, ws);
         }
         let mut final_structure = self.structure.clone();
-        final_structure.merge(&other.structure);
+        final_structure.merge_sym(&other.structure, state, ws);
 
         let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
 
@@ -232,9 +235,10 @@ where
         + for<'a> SymbolicAddAssign<&'a Out>
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     type LCM = DenseTensor<Out, I>;
+    #[allow(clippy::too_many_lines)]
     fn contract_sym(
         &self,
         other: &DenseTensor<T, I>,
@@ -244,7 +248,9 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure.merge_at(&other.structure, (i, j));
+                    let final_structure =
+                        self.structure
+                            .merge_at_sym(&other.structure, (i, j), state, ws);
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let metric = self.get_ith_metric(i).unwrap();
                     let mut result_index = 0;
@@ -287,7 +293,7 @@ where
                         self.structure().match_indices(other.structure()).unwrap();
 
                     let mut final_structure = self.structure.clone();
-                    final_structure.merge(&other.structure);
+                    final_structure.merge_sym(&other.structure, state, ws);
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
@@ -336,7 +342,7 @@ where
             }
         } else {
             let mut final_structure = self.structure.clone();
-            final_structure.merge(&other.structure);
+            final_structure.merge_sym(&other.structure, state, ws);
 
             let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
             let stride = other.size();
@@ -371,7 +377,7 @@ where
         + for<'a> SymbolicAddAssign<&'a Out>
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
     T: Clone,
     U: Clone,
 {
@@ -386,7 +392,9 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure.merge_at(&other.structure, (i, j));
+                    let final_structure =
+                        self.structure
+                            .merge_at_sym(&other.structure, (i, j), state, ws);
                     let mut result_data = AHashMap::default();
                     let mut result_index = 0;
 
@@ -446,7 +454,7 @@ where
                     self.structure().match_indices(other.structure()).unwrap();
 
                 let mut final_structure = self.structure.clone();
-                final_structure.merge(&other.structure);
+                final_structure.merge_sym(&other.structure, state, ws);
                 let mut result_data = AHashMap::default();
                 let one = if let Some(o) = final_structure.strides().first() {
                     *o
@@ -510,7 +518,7 @@ where
             return other.contract_sym(self, state, ws);
         }
         let mut final_structure = self.structure.clone();
-        final_structure.merge(&other.structure);
+        final_structure.merge_sym(&other.structure, state, ws);
 
         let mut result_data = AHashMap::default();
         let stride = other.size();
@@ -542,7 +550,7 @@ where
         + for<'a> SymbolicAddAssign<&'a Out>
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     type LCM = DenseTensor<Out, I>;
     #[allow(clippy::too_many_lines)]
@@ -555,7 +563,9 @@ where
         if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
             if i >= j {
                 if single {
-                    let final_structure = self.structure.merge_at(&other.structure, (i, j));
+                    let final_structure =
+                        self.structure
+                            .merge_at_sym(&other.structure, (i, j), state, ws);
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
@@ -603,7 +613,7 @@ where
                         self.structure().match_indices(other.structure()).unwrap();
 
                     let mut final_structure = self.structure.clone();
-                    final_structure.merge(&other.structure);
+                    final_structure.merge_sym(&other.structure, state, ws);
 
                     let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
@@ -663,7 +673,7 @@ where
             }
         } else {
             let mut final_structure = self.structure.clone();
-            final_structure.merge(&other.structure);
+            final_structure.merge_sym(&other.structure, state, ws);
 
             let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
             let stride = other.size();
@@ -685,7 +695,7 @@ where
 impl<'a, T, I> SparseTensor<T, I>
 where
     for<'d> &'d T: SymbolicInto,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     pub fn to_symbolic<'c: 'a, 'b>(
         &'b self,
@@ -702,7 +712,7 @@ where
 
 impl<'a, I> DenseTensor<Atom, I>
 where
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     pub fn symbolic_zeros(structure: I) -> DenseTensor<Atom, I> {
         let result_data = vec![0; structure.size()];
@@ -762,7 +772,7 @@ where
 impl<'a, T, I> DenseTensor<T, I>
 where
     for<'d> &'d T: SymbolicInto,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     pub fn to_symbolic<'c: 'a, 'b>(
         &'b self,
@@ -792,7 +802,7 @@ where
         + for<'a> SymbolicAddAssign<&'a Out>
         + SymbolicNeg
         + for<'b> SymbolicSubAssign<&'b Out>,
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
     T: Clone,
     U: Clone,
 {
@@ -1046,7 +1056,7 @@ where
 
 impl<I> SymbolicContract<MixedTensor<I>> for MixedTensor<I>
 where
-    I: TensorStructure + Clone + StructureContract,
+    I: TensorStructure + Clone + SymbolicStructureContract,
 {
     type LCM = MixedTensor<I>;
     fn contract_sym(
