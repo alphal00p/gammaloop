@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, time::Instant};
+use std::{fs};
 
 use symbolica::{
     poly::evaluate::ExpressionEvaluator,

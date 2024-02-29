@@ -2,9 +2,8 @@
 
 use num::Complex;
 use slotmap::Key;
-use smartstring::alias::String;
+
 use std::{
-    collections::HashMap,
     fmt::Debug,
     ops::{AddAssign, DivAssign, MulAssign, Neg, RemAssign, SubAssign},
     time::Instant,
@@ -16,15 +15,14 @@ use _gammaloop::tensor::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
     },
-    Contract, DenseTensor, HasName, HasTensorData, HistoryStructure, IntoId, NumTensor,
+    Contract, DenseTensor, HasTensorData, HistoryStructure, IntoId, NumTensor,
     SparseTensor, TensorNetwork,
 };
 
 use num::complex::Complex64;
 use num::traits::{Num, ToPrimitive};
 use symbolica::{
-    printer::{AtomPrinter, PrintOptions},
-    representations::{default::Linear, Atom, Identifier},
+    representations::{Atom, Identifier},
     state::{State, Workspace},
 };
 
