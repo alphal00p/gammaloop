@@ -1,14 +1,44 @@
+use crate::tensor::{CADJ, CAF, CAS, CF, CS, EUC, LOR, SPIN};
+
 use super::{
     DenseTensor, HistoryStructure, IntoId,
     Representation::{self, Euclidean, Lorentz},
-    SetTensorData, Shadowable, Slot, SparseTensor, TensorStructure,
+    SetTensorData, Shadowable, Slot, SparseTensor, TensorStructure, MAX_REP,
 };
 use num::{Complex, Float, One, Zero};
 
 use symbolica::{
     representations::{Atom, Identifier},
-    state::Workspace,
+    state::{State, Workspace},
 };
+
+pub const ID: Identifier = Identifier::init(MAX_REP + 1);
+pub const GAMMA: Identifier = Identifier::init(MAX_REP + 2);
+pub const GAMMA5: Identifier = Identifier::init(MAX_REP + 3);
+pub const PROJM: Identifier = Identifier::init(MAX_REP + 4);
+pub const PROJP: Identifier = Identifier::init(MAX_REP + 5);
+pub const SIGMA: Identifier = Identifier::init(MAX_REP + 6);
+
+pub fn new_state() -> State {
+    let mut state = State::new();
+
+    assert!(EUC == state.get_or_insert_fn("euc", None).unwrap());
+    assert!(LOR == state.get_or_insert_fn("lor", None).unwrap());
+    assert!(SPIN == state.get_or_insert_fn("spin", None).unwrap());
+    assert!(CADJ == state.get_or_insert_fn("CAdj", None).unwrap());
+    assert!(CF == state.get_or_insert_fn("CF", None).unwrap());
+    assert!(CAF == state.get_or_insert_fn("CAF", None).unwrap());
+    assert!(CS == state.get_or_insert_fn("CS", None).unwrap());
+    assert!(CAS == state.get_or_insert_fn("CAS", None).unwrap());
+
+    assert!(ID == state.get_or_insert_fn("id", None).unwrap());
+    assert!(GAMMA == state.get_or_insert_fn("γ", None).unwrap());
+    assert!(GAMMA5 == state.get_or_insert_fn("γ5", None).unwrap());
+    assert!(PROJM == state.get_or_insert_fn("ProjM", None).unwrap());
+    assert!(PROJP == state.get_or_insert_fn("ProjP", None).unwrap());
+    assert!(SIGMA == state.get_or_insert_fn("σ", None).unwrap());
+    state
+}
 
 #[allow(dead_code)]
 #[must_use]
@@ -25,6 +55,39 @@ where
     for i in 0..signature.into() {
         identity
             .set(&[i, i], Complex::<T>::new(T::one(), T::zero()))
+            .unwrap_or_else(|_| unreachable!());
+    }
+    identity
+}
+
+/// Create a rank 2 identity tensor
+///
+/// # Arguments
+///
+/// * `structure` - The structure of the tensor
+///
+/// # Panics
+///
+/// * If the structure is not rank 2
+/// * If the structure has different indices
+
+pub fn identity_data<T, N>(structure: N) -> SparseTensor<T, N>
+where
+    T: One,
+    N: TensorStructure,
+{
+    assert!(structure.order() == 2, "Identity tensor must be rank 2");
+
+    assert!(
+        structure.reps()[0] == structure.reps()[1],
+        "Identity tensor must have equal indices"
+    );
+
+    let mut identity = SparseTensor::empty(structure);
+
+    for i in 0..identity.shape()[0] {
+        identity
+            .set(&[i, i], T::one())
             .unwrap_or_else(|_| unreachable!());
     }
     identity
@@ -177,7 +240,7 @@ where
 }
 
 #[allow(clippy::similar_names)]
-fn gamma_data<N, T>(structure: N) -> SparseTensor<Complex<T>, N>
+pub fn gamma_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
     T: One + Zero + Copy + std::ops::Neg<Output = T>,
     N: TensorStructure,
@@ -246,7 +309,7 @@ where
     gamma5_data(structure)
 }
 
-fn gamma5_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
+pub fn gamma5_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
     T: One + Zero + Copy,
     N: TensorStructure,
@@ -298,7 +361,7 @@ where
 }
 
 #[allow(clippy::similar_names)]
-fn proj_m_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
+pub fn proj_m_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
     T: Float,
     N: TensorStructure,
@@ -436,7 +499,7 @@ where
 }
 
 #[allow(clippy::similar_names)]
-fn sigma_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
+pub fn sigma_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
     T: One + Zero + std::ops::Neg<Output = T> + Copy,
     N: TensorStructure,
