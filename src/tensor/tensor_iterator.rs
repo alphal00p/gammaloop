@@ -15,7 +15,7 @@ use super::{
     ConcreteIndex, DenseTensor, GetTensorData, Representation, Slot, SparseTensor,
     SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
 };
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 
 use permutation::Permutation;
 

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ahash::{AHashMap, HashMap, HashMapExt};
 use arbitrary_int::Number;
 use enum_try_as_inner::EnumTryAsInner;
@@ -852,7 +850,7 @@ where
 {
     pub fn to_evaluator<'a, N>(
         &'a self,
-        var_map: &mut HashMap<AtomView<'a>, Variable>,
+        _var_map: &mut HashMap<AtomView<'a>, Variable>,
         state: &State,
     ) -> DenseTensor<InstructionEvaluator<N>, I>
     where

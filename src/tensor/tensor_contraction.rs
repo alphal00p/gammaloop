@@ -1,17 +1,8 @@
 use ahash::AHashMap;
 use itertools::Itertools;
 
-use num::traits::Inv;
-use petgraph::{
-    dot::{Config, Dot},
-    graph::{self, EdgeIndex, Graph, NodeIndex},
-    visit::EdgeRef,
-    Direction::Outgoing,
-    Undirected,
-};
-
 use serde::{Deserialize, Serialize};
-use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap, SlotMap};
+use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
 use symbolica::{
     representations::Identifier,
     state::{State, Workspace},
@@ -27,11 +18,9 @@ use super::{
 };
 use smartstring::alias::String;
 use std::{
-    collections::BTreeMap,
     fmt::{Debug, Display},
     // intrinsics::needs_drop,
     ops::Neg,
-    result,
 };
 
 impl<T, I> DenseTensor<T, I>
@@ -1260,7 +1249,7 @@ impl<T> TensorNetwork<T>
 where
     T: Debug + TensorStructure<Structure = HistoryStructure<Identifier>>,
 {
-    pub fn dotsym(&self, state: &State) -> std::string::String {
+    pub fn dotsym(&self, _state: &State) -> std::string::String {
         // format!(
         //     "{:?}",
         //     Dot::with_attr_getters(
