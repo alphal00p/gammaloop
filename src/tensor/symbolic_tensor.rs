@@ -4,7 +4,6 @@ use super::{
 };
 
 use symbolica::{
-    coefficient::CoefficientView,
     representations::{
         default::Linear, AsAtomView, Atom, AtomView, Fun, Identifier, Mul, Num, OwnedFun,
     },

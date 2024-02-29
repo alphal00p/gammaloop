@@ -3,19 +3,19 @@ use duplicate::duplicate;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use libc::VLNEXT;
+
 use serde::Deserialize;
 use serde::Serialize;
 use smartstring::LazyCompact;
 use smartstring::SmartString;
 use std::borrow::Cow;
 use std::fmt::Debug;
-use std::i32;
+
 use std::i64;
 use std::ops::Range;
 use symbolica::coefficient::CoefficientView;
-use symbolica::representations;
-use symbolica::representations::default::FnViewD;
+
+
 use symbolica::representations::default::ListIteratorD;
 use symbolica::representations::AtomView;
 use symbolica::representations::Fun;
@@ -29,7 +29,7 @@ use symbolica::state::{State, Workspace};
 use std::collections::HashSet;
 use std::{cmp::Ordering, collections::HashMap};
 
-use crate::tensor::ufo_spin_tensors::new_state;
+
 
 use super::ufo_spin_tensors;
 use super::DenseTensor;

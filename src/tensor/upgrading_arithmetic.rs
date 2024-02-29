@@ -94,7 +94,7 @@ pub trait SymbolicInto {
 
 /// First turns into a rational, then into an Atom.
 impl SymbolicInto for f64 {
-    fn into_sym(self, ws: &Workspace, _state: &State) -> Option<Atom> {
+    fn into_sym(self, _ws: &Workspace, _state: &State) -> Option<Atom> {
         let rugrat = rug::Rational::from_f64(self)?;
         let natrat = symbolica::domains::rational::Rational::from_large(rugrat);
         let symrat = Atom::new_num(symbolica::coefficient::Coefficient::from(natrat));
