@@ -1,5 +1,5 @@
 use crate::tensor::{
-    ufo_spin_tensors::mink_four_vector,
+    ufo::mink_four_vector,
     Contract, DenseTensor, GetTensorData, HasTensorData,
     Representation::{self},
     SparseTensor, SymbolicContract, TensorStructure,
@@ -13,8 +13,7 @@ use symbolica::{
 };
 
 use super::{
-    symbolic_tensor::SymbolicTensor, ufo_spin_tensors, HistoryStructure, NumTensor, SetTensorData,
-    Slot, TensorNetwork,
+    symbolic::SymbolicTensor, ufo, HistoryStructure, NumTensor, SetTensorData, Slot, TensorNetwork,
 };
 
 #[test]
@@ -151,9 +150,9 @@ fn dense_to_sparse() {
 
 #[test]
 fn gamma() {
-    let g1 = ufo_spin_tensors::gamma::<f64>(0, (0, 1));
-    let g2 = ufo_spin_tensors::gamma::<f64>(1, (1, 2));
-    let g3 = ufo_spin_tensors::gamma::<f64>(2, (2, 0));
+    let g1 = ufo::gamma::<f64>(0, (0, 1));
+    let g2 = ufo::gamma::<f64>(1, (1, 2));
+    let g3 = ufo::gamma::<f64>(2, (2, 0));
 
     let c = g1.contract(&g2).unwrap().contract(&g3).unwrap();
     println!("Sparse: {:?}", c.data());
@@ -165,7 +164,7 @@ fn gamma() {
     let cdense: NumTensor = g1d.contract(&g2d).unwrap().contract(&g3d).unwrap();
 
     println!("{:?}", cdense.try_as_complex().unwrap().data());
-    let d = ufo_spin_tensors::gamma::<f32>(0, (0, 0)).internal_contract();
+    let d = ufo::gamma::<f32>(0, (0, 0)).internal_contract();
 
     println!("{:?}", d.data());
 }
@@ -229,9 +228,9 @@ fn mixed_tensor_contraction() {
 
 #[test]
 fn tensor_net() {
-    let a: NumTensor = ufo_spin_tensors::gamma(1, (2, 3)).into();
-    let b: NumTensor = ufo_spin_tensors::gamma(2, (3, 4)).into();
-    let c: NumTensor = ufo_spin_tensors::gamma(3, (4, 2)).into();
+    let a: NumTensor = ufo::gamma(1, (2, 3)).into();
+    let b: NumTensor = ufo::gamma(2, (3, 4)).into();
+    let c: NumTensor = ufo::gamma(3, (4, 2)).into();
     let p: NumTensor = mink_four_vector(2, &[2., 3., 2., 1.]).into();
     let q: NumTensor = mink_four_vector(3, &[2., 3., 2., 1.]).into();
 
@@ -254,7 +253,7 @@ fn tensor_net() {
 
 #[test]
 fn sparsedensedensesparse() {
-    let a: NumTensor = ufo_spin_tensors::gamma(1, (2, 3)).into();
+    let a: NumTensor = ufo::gamma(1, (2, 3)).into();
     let p: NumTensor = mink_four_vector(1, &[2., 3., 2., 1.]).into();
 
     println!("{:?}", a.contract(&p).unwrap());

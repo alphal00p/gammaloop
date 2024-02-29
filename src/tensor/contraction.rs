@@ -8,13 +8,13 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use self::mixed_tensor::{MixedTensor, MixedTensors, SymbolicContract};
-use self::tensor_structure::HistoryStructure;
+use self::parametric::{MixedTensor, MixedTensors, SymbolicContract};
+use self::structure::HistoryStructure;
 
 use super::{
-    mixed_tensor, tensor_structure, Atom, DataTensor, DenseTensor, GetTensorData, HasName,
-    HasTensorData, NumTensor, SetTensorData, Shadowable, Slot, SparseTensor, StructureContract,
-    SymbolicZero, TensorStructure, TracksCount,
+    parametric, structure, Atom, DataTensor, DenseTensor, GetTensorData, HasName, HasTensorData,
+    NumTensor, SetTensorData, Shadowable, Slot, SparseTensor, StructureContract, SymbolicZero,
+    TensorStructure, TracksCount,
 };
 use smartstring::alias::String;
 use std::{

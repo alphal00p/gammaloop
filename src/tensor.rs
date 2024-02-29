@@ -4,9 +4,9 @@
 
  It includes special support for a minkowski metric, and a way to add any custom diagonal (sign based) metric.
 
- All tensor types make use of a tensor structure type, either  the minimum `Vec` of [`Slot`]s or a more complete (but slightly more computationally heavy) [`TensorSkeleton`].
+ All tensor types make use of a tensor structure type, either  the minimum `Vec` of [`Slot`]s or a more complete (but slightly more computationally heavy) [`HistoryStructure`].
  Data is then added, to make parametric, or fully numeric tensors.
- If no data is added, a TensorSkeleton behaves like a symbolic tensor, contractions amounting to appending slots, and keeping track of labels
+ If no data is added, some [`TensorStructure`]s behave like symbolic tensors: namely [`HistoryStructure`] and [`SymbolicTensor`]
 
  There are two main types of data tensors, [`DenseTensor`] and [`SparseTensor`].
  They each implement a different type of storage for data.
@@ -22,7 +22,6 @@
 
 */
 
-
 use symbolica::{
     representations::{Atom, AtomBuilder},
     state::BufferHandle,
@@ -30,35 +29,36 @@ use symbolica::{
 pub type Expr<'a> = AtomBuilder<'a, BufferHandle<'a, Atom>>;
 
 /// All tooling for tensor structures, indices and representations
-pub mod tensor_structure;
-pub use tensor_structure::*;
+pub mod structure;
+pub use structure::*;
 
 /// More ergonomic, and smart arithmatic with symbolic types
 pub mod upgrading_arithmetic;
 pub use upgrading_arithmetic::*;
 
 /// Tensors with data
-pub mod data_tensor;
-pub use data_tensor::*;
+pub mod data;
+pub use data::*;
 
 /// Parametric tensor contraction
-pub mod mixed_tensor;
-pub use mixed_tensor::*;
+pub mod parametric;
+pub use parametric::*;
 
 /// Symbolic tensors
-pub mod symbolic_tensor;
+pub mod symbolic;
+pub use symbolic::*;
 /// Iterators on fibers of tensors
-pub mod tensor_iterator;
-pub use tensor_iterator::*;
+pub mod iterators;
+pub use iterators::*;
 
 /// Tensor contraction
-pub mod tensor_contraction;
-pub use tensor_contraction::*;
+pub mod contraction;
+pub use contraction::*;
 /// Adding, subtracting, scalar multiplication of tensors
-pub mod tensor_arithmetic;
+pub mod arithmetic;
 
 /// Tensors as defined in the UFO format
-pub mod ufo_spin_tensors;
+pub mod ufo;
 
 #[cfg(test)]
 mod tests;
