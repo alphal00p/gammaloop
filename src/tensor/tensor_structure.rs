@@ -2,12 +2,24 @@ use ahash::AHashMap;
 use duplicate::duplicate;
 
 use indexmap::IndexMap;
+use itertools::Itertools;
+use libc::VLNEXT;
 use serde::Deserialize;
 use serde::Serialize;
 use smartstring::LazyCompact;
 use smartstring::SmartString;
+use std::borrow::Cow;
 use std::fmt::Debug;
+use std::i32;
+use std::i64;
 use std::ops::Range;
+use symbolica::coefficient::CoefficientView;
+use symbolica::representations;
+use symbolica::representations::default::FnViewD;
+use symbolica::representations::default::ListIteratorD;
+use symbolica::representations::AtomView;
+use symbolica::representations::Fun;
+use symbolica::representations::Num;
 
 use permutation::Permutation;
 
@@ -17,7 +29,11 @@ use symbolica::state::{State, Workspace};
 use std::collections::HashSet;
 use std::{cmp::Ordering, collections::HashMap};
 
+use crate::tensor::ufo_spin_tensors::new_state;
+
+use super::ufo_spin_tensors;
 use super::DenseTensor;
+use super::MixedTensor;
 use super::TensorStructureIndexIterator;
 use smartstring::alias::String;
 /// usize is used as label/id for index of tensor
@@ -26,6 +42,17 @@ pub type AbstractIndex = usize;
 pub type Dimension = usize;
 /// usize is used as a concrete index, i.e. the concrete usize/index of the corresponding abstract index
 pub type ConcreteIndex = usize;
+
+pub const MAX_BUILTIN: u32 = symbolica::state::State::BUILTIN_VAR_LIST.len() as u32;
+pub const EUC: Identifier = Identifier::init(MAX_BUILTIN);
+pub const LOR: Identifier = Identifier::init(MAX_BUILTIN + 1);
+pub const SPIN: Identifier = Identifier::init(MAX_BUILTIN + 2);
+pub const CADJ: Identifier = Identifier::init(MAX_BUILTIN + 3);
+pub const CF: Identifier = Identifier::init(MAX_BUILTIN + 4);
+pub const CAF: Identifier = Identifier::init(MAX_BUILTIN + 5);
+pub const CS: Identifier = Identifier::init(MAX_BUILTIN + 6);
+pub const CAS: Identifier = Identifier::init(MAX_BUILTIN + 7);
+pub const MAX_REP: u32 = MAX_BUILTIN + 7;
 
 /// Enum for the Representation/Dimension of the index.
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -230,6 +257,81 @@ impl std::fmt::Display for Representation {
 pub struct Slot {
     index: AbstractIndex,
     pub representation: Representation,
+}
+
+/// Can possibly constuct a Slot from an `AtomView`, if it is of the form: <representation>(<dimension>,<index>)
+///
+/// # Example
+///
+/// ```
+/// # use symbolica::state::{Workspace};
+/// # use _gammaloop::tensor::ufo_spin_tensors::new_state;
+/// # use _gammaloop::tensor::{Representation,Slot};
+/// # use symbolica::representations::AtomView;
+///    let mut state = new_state();
+///    let ws = Workspace::new();
+///    let mink = Representation::Lorentz(4);
+///    let mu = Slot::from((0, mink));
+///    let atom = mu.to_symbolic(&mut state, &ws);
+///    let slot = Slot::try_from(atom.as_view()).unwrap();
+///    assert_eq!(slot, mu);
+/// ```
+impl TryFrom<AtomView<'_>> for Slot {
+    type Error = &'static str;
+
+    fn try_from(value: AtomView<'_>) -> Result<Self, Self::Error> {
+        fn extract_num(iter: &mut ListIteratorD) -> Result<i64, &'static str> {
+            if let Some(a) = iter.next() {
+                if let AtomView::Num(n) = a {
+                    if let CoefficientView::Natural(n, 1) = n.get_coeff_view() {
+                        return Ok(n);
+                    }
+                    return Err("Argument is not a natural number");
+                }
+                Err("Argument is not a number")
+            } else {
+                Err("No more arguments")
+            }
+        }
+
+        let mut iter = if let AtomView::Fun(f) = value {
+            f.iter()
+        } else {
+            return Err("Not a slot, is composite");
+        };
+
+        let dim: usize = extract_num(&mut iter)?
+            .try_into()
+            .or(Err("Dimension too large"))?;
+        let index: usize = extract_num(&mut iter)?
+            .try_into()
+            .or(Err("Index too large"))?;
+
+        if extract_num(&mut iter).is_ok() {
+            return Err("Too many arguments");
+        }
+
+        let representation = if let AtomView::Fun(f) = value {
+            match f.get_name() {
+                EUC => Representation::Euclidean(dim),
+                LOR => Representation::Lorentz(dim),
+                SPIN => Representation::Spin(dim),
+                CADJ => Representation::ColorAdjoint(dim),
+                CF => Representation::ColorFundamental(dim),
+                CAF => Representation::ColorAntiFundamental(dim),
+                CS => Representation::ColorSextet(dim),
+                CAS => Representation::ColorAntiSextet(dim),
+                _ => return Err("Not a slot, isn't a representation"),
+            }
+        } else {
+            return Err("Not a slot, is composite");
+        };
+
+        Ok(Slot {
+            index,
+            representation,
+        })
+    }
 }
 
 impl PartialOrd for Slot {
@@ -570,6 +672,62 @@ pub trait TensorStructure {
     fn size(&self) -> usize {
         self.shape().iter().product()
     }
+
+    fn shadow_with(
+        self,
+        f_id: Identifier,
+        state: &mut State,
+        ws: &Workspace,
+    ) -> DenseTensor<Atom, Self::Structure>
+    where
+        Self: std::marker::Sized,
+        Self::Structure: Clone,
+    {
+        let mut data = vec![];
+        for index in self.index_iter() {
+            data.push(atomic_expanded_label_id(&index, f_id, state, ws));
+        }
+
+        DenseTensor {
+            data,
+            structure: self.structure().clone(),
+        }
+    }
+
+    fn smart_shadow_with(
+        self,
+        f_id: Identifier,
+        state: &mut State,
+        ws: &Workspace,
+    ) -> MixedTensor<Self::Structure>
+    where
+        Self: std::marker::Sized,
+        Self::Structure: Clone + TensorStructure,
+    {
+        match f_id {
+            ufo_spin_tensors::ID => {
+                ufo_spin_tensors::identity_data::<f64, Self::Structure>(self.structure().clone())
+                    .into()
+            }
+
+            ufo_spin_tensors::GAMMA => {
+                ufo_spin_tensors::gamma_data(self.structure().clone()).into()
+            }
+            ufo_spin_tensors::GAMMA5 => {
+                ufo_spin_tensors::gamma5_data(self.structure().clone()).into()
+            }
+            ufo_spin_tensors::PROJM => {
+                ufo_spin_tensors::proj_m_data(self.structure().clone()).into()
+            }
+            ufo_spin_tensors::PROJP => {
+                ufo_spin_tensors::proj_p_data(self.structure().clone()).into()
+            }
+            ufo_spin_tensors::SIGMA => {
+                ufo_spin_tensors::sigma_data(self.structure().clone()).into()
+            }
+            name => self.shadow_with(name, state, ws).into(),
+        }
+    }
 }
 
 impl<'a> TensorStructure for &'a [Slot] {
@@ -708,6 +866,63 @@ where
         self.merge_at(other, positions)
     }
 }
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct VecStructure {
+    pub structure: Vec<Slot>,
+}
+
+impl VecStructure {
+    pub fn new(structure: Vec<Slot>) -> Self {
+        Self { structure }
+    }
+}
+
+impl From<Vec<Slot>> for VecStructure {
+    fn from(structure: Vec<Slot>) -> Self {
+        Self { structure }
+    }
+}
+
+impl From<VecStructure> for Vec<Slot> {
+    fn from(structure: VecStructure) -> Self {
+        structure.structure
+    }
+}
+
+impl TensorStructure for VecStructure {
+    type Structure = VecStructure;
+    fn structure(&self) -> &Self::Structure {
+        self
+    }
+    fn mut_structure(&mut self) -> &mut Self::Structure {
+        self
+    }
+    fn external_structure(&self) -> &[Slot] {
+        &self.structure
+    }
+}
+
+impl StructureContract for VecStructure {
+    fn merge(&mut self, other: &Self) {
+        self.structure.merge(&other.structure);
+    }
+
+    fn trace_out(&mut self) {
+        self.structure.trace_out();
+    }
+
+    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
+        Self {
+            structure: self.structure.merge_at(&other.structure, positions),
+        }
+    }
+
+    fn trace(&mut self, i: usize, j: usize) {
+        self.structure.trace(i, j);
+    }
+}
+
 /// A named structure is a structure with a global name, and a list of slots
 ///
 /// It is useful when you want to shadow tensors, to nest tensor network contraction operations.
@@ -744,15 +959,19 @@ impl NamedStructure {
 
 /// A trait for a structure that has a name
 pub trait HasName {
-    type Name;
-    fn name(&self) -> Option<&Self::Name>;
+    type Name: Clone;
+    fn name(&self) -> Option<Cow<Self::Name>>;
     fn set_name(&mut self, name: &Self::Name);
 }
 
 impl HasName for NamedStructure {
     type Name = SmartString<LazyCompact>;
-    fn name(&self) -> Option<&Self::Name> {
-        self.global_name.as_ref()
+    fn name(&self) -> Option<Cow<Self::Name>> {
+        if let Some(name) = &self.global_name {
+            Some(Cow::Borrowed(name))
+        } else {
+            None
+        }
     }
     fn set_name(&mut self, name: &Self::Name) {
         self.global_name = Some(name.clone());
@@ -913,8 +1132,12 @@ impl SmartShadowStructure {
 
 impl HasName for SmartShadowStructure {
     type Name = SmartString<LazyCompact>;
-    fn name(&self) -> Option<&SmartString<LazyCompact>> {
-        self.global_name.as_ref()
+    fn name(&self) -> Option<Cow<SmartString<LazyCompact>>> {
+        if let Some(name) = &self.global_name {
+            Some(Cow::Borrowed(name))
+        } else {
+            None
+        }
     }
     fn set_name(&mut self, name: &SmartString<LazyCompact>) {
         self.global_name = Some(name.clone());
@@ -1042,8 +1265,12 @@ where
     N: Clone,
 {
     type Name = N;
-    fn name(&self) -> Option<&N> {
-        self.global_name.as_ref()
+    fn name(&self) -> Option<Cow<N>> {
+        if let Some(name) = &self.global_name {
+            Some(Cow::Borrowed(name))
+        } else {
+            None
+        }
     }
     fn set_name(&mut self, name: &N) {
         self.global_name = Some(name.clone());
@@ -1250,37 +1477,25 @@ pub trait Shadowable: TensorStructure {
         Self: std::marker::Sized + HasName<Name = <Self as Shadowable>::Name>,
         Self::Structure: Clone,
     {
-        let name = self.name()?.clone();
-        Some(self.shadow_with(name, state, ws))
+        let name = self.name()?.into_owned();
+
+        Some(self.shadow_with(name.into_id(state), state, ws))
     }
 
-    fn shadow_with(
-        self,
-        name: Self::Name,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> DenseTensor<Atom, Self::Structure>
+    fn smart_shadow(self, state: &mut State, ws: &Workspace) -> Option<MixedTensor<Self::Structure>>
     where
-        Self: std::marker::Sized,
-        Self::Structure: Clone,
+        Self: std::marker::Sized + HasName<Name = <Self as Shadowable>::Name>,
+        Self::Structure: Clone + TensorStructure,
     {
-        let f_id = name.clone().into_id(state);
-        let mut data = vec![];
-        for index in self.index_iter() {
-            data.push(atomic_expanded_label_id(&index, f_id, state, ws));
-        }
-
-        DenseTensor {
-            data,
-            structure: self.structure().clone(),
-        }
+        let name = self.name()?.into_owned();
+        Some(self.smart_shadow_with(name.into_id(state), state, ws))
     }
 
     fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Option<Atom>
     where
         Self: HasName<Name = <Self as Shadowable>::Name>,
     {
-        Some(self.to_symbolic_with(self.name()?.clone(), state, ws))
+        Some(self.to_symbolic_with(self.name()?.into_owned(), state, ws))
     }
 
     fn to_symbolic_with(&self, name: Self::Name, state: &mut State, ws: &Workspace) -> Atom {
