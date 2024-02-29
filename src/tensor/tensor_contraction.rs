@@ -1170,17 +1170,29 @@ where
             .collect()
     }
 }
-impl<T> TensorNetwork<T>
+
+impl<T> From<Vec<T>> for TensorNetwork<T>
 where
     T: TensorStructure,
 {
-    pub fn new(tensors: Vec<T>) -> Self {
+    fn from(tensors: Vec<T>) -> Self {
         TensorNetwork {
             graph: Self::generate_network_graph(tensors),
         }
     }
+}
 
-    fn push(&mut self, tensor: T) -> NodeId {
+impl<T> TensorNetwork<T>
+where
+    T: TensorStructure,
+{
+    pub fn new() -> Self {
+        TensorNetwork {
+            graph: HalfEdgeGraph::new(),
+        }
+    }
+
+    pub fn push(&mut self, tensor: T) -> NodeId {
         let slots = tensor.external_structure().to_vec();
         self.graph.add_node_with_edges(tensor, &slots)
     }
