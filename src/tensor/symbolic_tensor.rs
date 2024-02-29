@@ -1,10 +1,13 @@
 use super::{
-    HasName, IntoId, Shadowable, Slot, StructureContract, SymbolicContract,
-    SymbolicStructureContract, TensorStructure,
+    HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract, SymbolicContract,
+    SymbolicStructureContract, TensorNetwork, TensorStructure, VecStructure,
 };
 
 use symbolica::{
-    representations::{default::Linear, AsAtomView, Atom},
+    coefficient::CoefficientView,
+    representations::{
+        default::Linear, AsAtomView, Atom, AtomView, Fun, Identifier, Mul, Num, OwnedFun,
+    },
     state::{ResettableBuffer, State, Workspace},
 };
 
@@ -16,22 +19,22 @@ use symbolica::{
 /// Additionally, this can also be used as a tensor structure, that tracks the history, much like [`HistoryStructure`].
 #[derive(Debug)]
 pub struct SymbolicTensor {
-    structure: Vec<Slot>,
+    structure: VecStructure,
     expression: symbolica::representations::Atom,
 }
 
 impl TensorStructure for SymbolicTensor {
-    type Structure = Vec<Slot>;
+    type Structure = VecStructure;
 
     fn structure(&self) -> &Self::Structure {
-        &self.structure
+        self.structure.structure()
     }
 
     fn mut_structure(&mut self) -> &mut Self::Structure {
-        &mut self.structure
+        self.structure.mut_structure()
     }
     fn external_structure(&self) -> &[Slot] {
-        &self.structure
+        self.structure.external_structure()
     }
 }
 
@@ -77,7 +80,7 @@ impl SymbolicTensor {
     {
         Some(SymbolicTensor {
             expression: structure.to_symbolic(state, ws)?,
-            structure: structure.external_structure().to_vec(),
+            structure: structure.external_structure().to_vec().into(),
         })
     }
 
@@ -85,10 +88,77 @@ impl SymbolicTensor {
     pub fn get_atom(&self) -> &Atom {
         &self.expression
     }
+
+    pub fn to_mixed(self, state: &mut State, ws: &Workspace) -> MixedTensor<VecStructure> {
+        self.smart_shadow(state, ws).unwrap()
+    }
+
+    pub fn to_network(
+        self,
+        state: &mut State,
+        ws: &Workspace,
+    ) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
+        let mut network: TensorNetwork<MixedTensor<VecStructure>> = TensorNetwork::new();
+
+        if let AtomView::Mul(m) = self.expression.as_view() {
+            for atom in m.iter() {
+                if let AtomView::Fun(f) = atom {
+                    let mut structure: Vec<Slot> = vec![];
+                    let f_id = f.get_name();
+
+                    for arg in f.iter() {
+                        structure.push(arg.try_into()?);
+                    }
+                    let s: VecStructure = structure.into();
+                    network.push(s.smart_shadow_with(f_id, state, ws));
+                }
+            }
+        }
+
+        Ok(network)
+    }
 }
+
+impl TryFrom<AtomView<'_>> for VecStructure {
+    type Error = &'static str;
+    fn try_from(value: AtomView) -> Result<Self, Self::Error> {
+        let mut structure: Vec<Slot> = vec![];
+        if let AtomView::Fun(f) = value {
+            for arg in f.iter() {
+                structure.push(arg.try_into()?);
+            }
+        }
+        Ok(structure.into())
+    }
+}
+
+impl TryFrom<Atom> for SymbolicTensor {
+    type Error = &'static str;
+    fn try_from(value: Atom) -> Result<Self, Self::Error> {
+        Ok(SymbolicTensor {
+            structure: value.as_view().try_into()?,
+            expression: value,
+        })
+    }
+}
+
+impl HasName for SymbolicTensor {
+    type Name = Identifier;
+    fn name(&self) -> Option<std::borrow::Cow<Self::Name>> {
+        if let AtomView::Fun(f) = self.expression.as_view() {
+            Some(std::borrow::Cow::Owned(f.get_name()))
+        } else {
+            None
+        }
+    }
+
+    fn set_name(&mut self, _name: &Self::Name) {
+        unimplemented!("Cannot set name of a symbolic tensor")
+    }
+}
+
 /// Symbolic contraction of two symbolic tensors is just a multiplication of the atoms.
 ///
-/// This is more general than the other implementations, e.g. for Densetensor, as it also does external products (i.e. no contraction).
 impl SymbolicContract<SymbolicTensor> for SymbolicTensor {
     type LCM = SymbolicTensor;
     fn contract_sym(
@@ -97,11 +167,6 @@ impl SymbolicContract<SymbolicTensor> for SymbolicTensor {
         state: &State,
         ws: &Workspace,
     ) -> Option<Self::LCM> {
-        // if self
-        //     .external_structure()
-        //     .match_indices(&other.external_structure())
-        //     .is_some()
-        // {
         let mut out: Atom<Linear> = Atom::new();
         other.expression.mul(state, ws, &self.expression, &mut out);
 
@@ -111,7 +176,5 @@ impl SymbolicContract<SymbolicTensor> for SymbolicTensor {
             expression: out,
             structure: new_structure,
         })
-        // }
-        // None
     }
 }
