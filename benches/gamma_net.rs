@@ -42,7 +42,7 @@ fn gamma_net_sym(
         }
     }
     result.push(euclidean_four_vector_sym(contracting_index, &u, state).into());
-    TensorNetwork::new(result)
+    TensorNetwork::from(result)
 }
 
 fn gamma_net(
@@ -72,7 +72,7 @@ fn gamma_net(
         }
     }
     result.push(euclidean_four_vector(contracting_index, &u).into());
-    TensorNetwork::new(result)
+    TensorNetwork::from(result)
 }
 
 fn indices(n: i32, m: i32) -> Vec<i32> {
