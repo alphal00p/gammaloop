@@ -187,6 +187,7 @@ pub fn to_str_expression(
                 color_builtin_functions: false,
                 print_finite_field: false,
                 explicit_rational_polynomial: false,
+                symmetric_representation_for_finite_field: false,
                 number_thousands_separator: None,
                 multiplication_operator: '*',
                 square_brackets_for_function: false,
