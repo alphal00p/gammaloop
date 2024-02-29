@@ -96,11 +96,8 @@ pub trait SymbolicInto {
 impl SymbolicInto for f64 {
     fn into_sym(self, ws: &Workspace, _state: &State) -> Option<Atom> {
         let rugrat = rug::Rational::from_f64(self)?;
-        let natrat = symbolica::rings::rational::Rational::from_large(rugrat);
-        let symrat = Atom::new_from_view(
-            &ws.new_num(symbolica::representations::number::Number::from(natrat))
-                .as_view(),
-        );
+        let natrat = symbolica::domains::rational::Rational::from_large(rugrat);
+        let symrat = Atom::new_num(symbolica::coefficient::Coefficient::from(natrat));
 
         Some(symrat)
     }
@@ -121,7 +118,7 @@ impl SymbolicInto for Complex<f64> {
         let i = Atom::new_var(State::I);
         let symrat = (i.builder(state, ws) * &imag) + &real;
 
-        Some(symrat.into_atom())
+        Some(Atom::new_from_view(&symrat.as_atom_view()))
     }
 }
 
