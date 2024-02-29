@@ -28,6 +28,10 @@ MANIFEST
 out.yaml
 outmap.yaml
 params.yaml
+find-baseline.svg
+*.data
+*.old
+eval.cpp
 perf.data
 # logos
 logos/
