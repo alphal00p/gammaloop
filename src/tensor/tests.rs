@@ -14,7 +14,7 @@ use symbolica::{
 
 use super::{
     symbolic_tensor::SymbolicTensor, ufo_spin_tensors, HistoryStructure, NumTensor, SetTensorData,
-    Slot,
+    Slot, TensorNetwork,
 };
 
 #[test]
@@ -229,17 +229,25 @@ fn mixed_tensor_contraction() {
 
 #[test]
 fn tensor_net() {
-    let _a: NumTensor = ufo_spin_tensors::gamma(1, (2, 3)).into();
-    let _b: NumTensor = ufo_spin_tensors::gamma(2, (3, 4)).into();
-    let _c: NumTensor = ufo_spin_tensors::gamma(3, (4, 2)).into();
-    let _p: NumTensor = mink_four_vector(2, &[2., 3., 2., 1.]).into();
-    let _q: NumTensor = mink_four_vector(3, &[2., 3., 2., 1.]).into();
+    let a: NumTensor = ufo_spin_tensors::gamma(1, (2, 3)).into();
+    let b: NumTensor = ufo_spin_tensors::gamma(2, (3, 4)).into();
+    let c: NumTensor = ufo_spin_tensors::gamma(3, (4, 2)).into();
+    let p: NumTensor = mink_four_vector(2, &[2., 3., 2., 1.]).into();
+    let q: NumTensor = mink_four_vector(3, &[2., 3., 2., 1.]).into();
 
-    // let mut n = TensorNetwork::new(vec![a, b, c, p, q]);
+    let mut n = TensorNetwork::from(vec![a, b, c, p, q]);
 
-    // println!("{}", n.dot());
+    println!("{}", n.dot());
 
-    // n.contract();
+    if n.graph.validate_neighbors() {
+        println!("Validated")
+    } else {
+        println!("Not validated")
+    }
+
+    println!("{:?}", n.graph.neighbors.len());
+
+    n.contract();
 
     // println!("{}", n.dot());
 }

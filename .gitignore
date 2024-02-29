@@ -32,6 +32,7 @@ find-baseline.svg
 *.data
 *.old
 eval.cpp
+evaluate.cpp
 perf.data
 # logos
 logos/

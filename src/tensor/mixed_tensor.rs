@@ -865,7 +865,9 @@ where
             .map(|x| {
                 let poly: MultivariatePolynomial<_, u8> = x
                     .as_view()
-                    .to_polynomial_with_map(&RationalField::new(), var_map);
+                    .to_polynomial_with_conversion(&RationalField::new());
+
+                // x.as_view().evaluate(var_map, function_map, cache);
 
                 println!("{}", poly.printer(state));
 
@@ -968,7 +970,7 @@ where
 {
     type Name = T::Name;
 
-    fn name(&self) -> Option<&Self::Name> {
+    fn name(&self) -> Option<std::borrow::Cow<'_, <T as HasName>::Name>> {
         match self {
             MixedTensor::Float(t) => t.name(),
             MixedTensor::Complex(t) => t.name(),
