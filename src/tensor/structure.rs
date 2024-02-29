@@ -15,7 +15,6 @@ use std::i64;
 use std::ops::Range;
 use symbolica::coefficient::CoefficientView;
 
-
 use symbolica::representations::default::ListIteratorD;
 use symbolica::representations::AtomView;
 use symbolica::representations::Fun;
@@ -29,9 +28,7 @@ use symbolica::state::{State, Workspace};
 use std::collections::HashSet;
 use std::{cmp::Ordering, collections::HashMap};
 
-
-
-use super::ufo_spin_tensors;
+use super::ufo;
 use super::DenseTensor;
 use super::MixedTensor;
 use super::TensorStructureIndexIterator;
@@ -705,26 +702,13 @@ pub trait TensorStructure {
         Self::Structure: Clone + TensorStructure,
     {
         match f_id {
-            ufo_spin_tensors::ID => {
-                ufo_spin_tensors::identity_data::<f64, Self::Structure>(self.structure().clone())
-                    .into()
-            }
+            ufo::ID => ufo::identity_data::<f64, Self::Structure>(self.structure().clone()).into(),
 
-            ufo_spin_tensors::GAMMA => {
-                ufo_spin_tensors::gamma_data(self.structure().clone()).into()
-            }
-            ufo_spin_tensors::GAMMA5 => {
-                ufo_spin_tensors::gamma5_data(self.structure().clone()).into()
-            }
-            ufo_spin_tensors::PROJM => {
-                ufo_spin_tensors::proj_m_data(self.structure().clone()).into()
-            }
-            ufo_spin_tensors::PROJP => {
-                ufo_spin_tensors::proj_p_data(self.structure().clone()).into()
-            }
-            ufo_spin_tensors::SIGMA => {
-                ufo_spin_tensors::sigma_data(self.structure().clone()).into()
-            }
+            ufo::GAMMA => ufo::gamma_data(self.structure().clone()).into(),
+            ufo::GAMMA5 => ufo::gamma5_data(self.structure().clone()).into(),
+            ufo::PROJM => ufo::proj_m_data(self.structure().clone()).into(),
+            ufo::PROJP => ufo::proj_p_data(self.structure().clone()).into(),
+            ufo::SIGMA => ufo::sigma_data(self.structure().clone()).into(),
             name => self.shadow_with(name, state, ws).into(),
         }
     }

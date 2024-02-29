@@ -10,13 +10,13 @@ use std::{
 };
 
 use _gammaloop::tensor::{
-    mixed_tensor::MixedTensor,
-    ufo_spin_tensors::{
+    parametric::MixedTensor,
+    ufo::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
     },
-    Contract, DenseTensor, HasTensorData, HistoryStructure, IntoId, NumTensor,
-    SparseTensor, TensorNetwork,
+    Contract, DenseTensor, HasTensorData, HistoryStructure, IntoId, NumTensor, SparseTensor,
+    TensorNetwork,
 };
 
 use num::complex::Complex64;
