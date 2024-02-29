@@ -159,7 +159,7 @@ where
 {
     type Name = I::Name;
 
-    fn name(&self) -> Option<&Self::Name> {
+    fn name(&self) -> Option<Cow<'_, <I as HasName>::Name>> {
         self.structure.name()
     }
     fn set_name(&mut self, name: &Self::Name) {
@@ -301,7 +301,7 @@ where
 {
     type Name = I::Name;
 
-    fn name(&self) -> Option<&Self::Name> {
+    fn name(&self) -> Option<Cow<'_, <I as HasName>::Name>> {
         self.structure.name()
     }
     fn set_name(&mut self, name: &Self::Name) {
@@ -566,7 +566,7 @@ where
 {
     type Name = I::Name;
 
-    fn name(&self) -> Option<&Self::Name> {
+    fn name(&self) -> Option<Cow<'_, <I as HasName>::Name>> {
         match self {
             DataTensor::Dense(d) => d.name(),
             DataTensor::Sparse(s) => s.name(),
@@ -635,7 +635,7 @@ where
 {
     type Name = T::Name;
 
-    fn name(&self) -> Option<&Self::Name> {
+    fn name(&self) -> Option<Cow<'_, <T as HasName>::Name>> {
         match self {
             NumTensor::Float(f) => f.name(),
             NumTensor::Complex(c) => c.name(),
