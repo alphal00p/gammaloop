@@ -109,7 +109,7 @@ impl SymbolicTensor {
                         structure.push(arg.try_into()?);
                     }
                     let s: VecStructure = structure.into();
-                    network.push(s.smart_shadow_with(f_id, state, ws));
+                    network.push(s.to_explicit_rep(f_id, state, ws));
                 }
             }
         }

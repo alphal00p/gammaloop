@@ -5,7 +5,7 @@ use _gammaloop::tensor::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym,
     },
-    HistoryStructure, NumTensor, TensorNetwork,
+    AbstractIndex, HistoryStructure, NumTensor, TensorNetwork,
 };
 
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -19,12 +19,12 @@ fn gamma_net_sym(
     state: &mut State,
 ) -> TensorNetwork<NumTensor<HistoryStructure<Identifier>>> {
     let mut i = 0;
-    let mut contracting_index = 0;
+    let mut contracting_index = 0.into();
     let mut result: Vec<NumTensor<HistoryStructure<Identifier>>> =
         vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
     for m in minkindices {
         let ui = contracting_index;
-        contracting_index += 1;
+        contracting_index += 1.into();
         let uj = contracting_index;
         if *m > 0 {
             let p = [
@@ -34,11 +34,18 @@ fn gamma_net_sym(
                 Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
-            result.push(mink_four_vector_sym(usize::try_from(*m).unwrap(), &p, state).into());
-            result.push(gammasym(usize::try_from(*m).unwrap(), (ui, uj), state).into());
-        } else {
             result
-                .push(gammasym(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj), state).into());
+                .push(mink_four_vector_sym(usize::try_from(*m).unwrap().into(), &p, state).into());
+            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj), state).into());
+        } else {
+            result.push(
+                gammasym(
+                    AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
+                    (ui, uj),
+                    state,
+                )
+                .into(),
+            );
         }
     }
     result.push(euclidean_four_vector_sym(contracting_index, &u, state).into());
@@ -51,11 +58,11 @@ fn gamma_net(
     u: [Complex64; 4],
 ) -> TensorNetwork<NumTensor> {
     let mut i = 0;
-    let mut contracting_index = 0;
+    let mut contracting_index = 0.into();
     let mut result: Vec<NumTensor> = vec![euclidean_four_vector(contracting_index, &vbar).into()];
     for m in minkindices {
         let ui = contracting_index;
-        contracting_index += 1;
+        contracting_index += 1.into();
         let uj = contracting_index;
         if *m > 0 {
             let p = [
@@ -65,10 +72,16 @@ fn gamma_net(
                 Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
-            result.push(mink_four_vector(usize::try_from(*m).unwrap(), &p).into());
-            result.push(gamma(usize::try_from(*m).unwrap(), (ui, uj)).into());
+            result.push(mink_four_vector(usize::try_from(*m).unwrap().into(), &p).into());
+            result.push(gamma(usize::try_from(*m).unwrap().into(), (ui, uj)).into());
         } else {
-            result.push(gamma(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj)).into());
+            result.push(
+                gamma(
+                    AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
+                    (ui, uj),
+                )
+                .into(),
+            );
         }
     }
     result.push(euclidean_four_vector(contracting_index, &u).into());

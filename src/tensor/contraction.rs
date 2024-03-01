@@ -120,7 +120,7 @@ where
 
                     for fiber_a in self_iter.by_ref() {
                         for fiber_b in other_iter.by_ref() {
-                            for i in 0..dimension {
+                            for i in 0..dimension.into() {
                                 if metric[i] {
                                     result_data[result_index] -= fiber_a[i] * fiber_b[i];
                                 } else {

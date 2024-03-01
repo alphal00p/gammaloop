@@ -12,7 +12,7 @@ use std::ops::{AddAssign, Neg, SubAssign};
 use crate::tensor::HistoryStructure;
 
 use super::{
-    ConcreteIndex, DenseTensor, GetTensorData, Representation, Slot, SparseTensor,
+    ConcreteIndex, DenseTensor, Dimension, GetTensorData, Representation, Slot, SparseTensor,
     SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
 };
 use ahash::AHashMap;
@@ -82,7 +82,7 @@ impl TensorStructureFiberIterator {
 
         let strides = structure.strides();
         let fiber_stride = strides[fiber_position];
-        let dim = structure.shape()[fiber_position];
+        let dim: usize = structure.shape()[fiber_position].into();
 
         let max = structure.size() - fiber_stride * (dim - 1) - 1;
 
@@ -143,7 +143,7 @@ impl Iterator for TensorStructureFiberIterator {
 ///
 pub struct TensorStructureMultiFiberIteratorExpanded {
     indices: Vec<usize>,
-    dims: Vec<usize>,
+    dims: Vec<Dimension>,
     positions: Vec<usize>,
     length: usize,
     carry: bool,
@@ -191,8 +191,8 @@ impl Iterator for TensorStructureMultiFiberIteratorExpanded {
         for (i, r) in self.indices.iter_mut().zip(self.dims.iter()).rev() {
             if self.carry {
                 *i += 1;
-                self.carry = *i == *r;
-                *i %= *r;
+                self.carry = *i == usize::from(*r);
+                *i %= usize::from(*r);
             }
         }
 
@@ -257,7 +257,7 @@ impl TensorStructureMultiFiberIterator {
             }
 
             if !is_fixed {
-                max += (dims[pos] - 1) * strides[pos];
+                max += (usize::from(dims[pos]) - 1) * strides[pos];
                 if first {
                     increment = strides[pos];
                     first = false;
@@ -344,13 +344,13 @@ impl TensorStructureMultiFiberIterator {
             }
 
             if is_fixed {
-                max_conj += (dims[pos] - 1) * strides[pos];
+                max_conj += (usize::from(dims[pos]) - 1) * strides[pos];
                 if first_conj {
                     increment_conj = strides[pos];
                     first_conj = false;
                 }
             } else {
-                max += (dims[pos] - 1) * strides[pos];
+                max += (usize::from(dims[pos]) - 1) * strides[pos];
                 if first {
                     increment = strides[pos];
                     first = false;
@@ -594,13 +594,13 @@ impl Iterator for TensorStructureMultiFiberMetricIterator {
 fn construct() {
     let a = HistoryStructure::new(
         &[
-            (1, Representation::Euclidean(2)), //0
-            (3, Representation::Euclidean(2)), //1     inc
-            (33, Representation::Lorentz(4)),  //2
-            (23, Representation::Lorentz(3)),  //3
-                                               // (22, Representation::Lorentz(3)),  //4     inc
-                                               // (35, Representation::Lorentz(3)),  //5
-                                               // (42, Representation::Lorentz(3)),  //6     inc
+            (1.into(), Representation::Euclidean(2.into())), //0
+            (3.into(), Representation::Euclidean(2.into())), //1     inc
+            (33.into(), Representation::Lorentz(4.into())),  //2
+            (23.into(), Representation::Lorentz(3.into())),  //3
+                                                             // (22, Representation::Lorentz(3)),  //4     inc
+                                                             // (35, Representation::Lorentz(3)),  //5
+                                                             // (42, Representation::Lorentz(3)),  //6     inc
         ],
         "t",
     );
@@ -682,7 +682,7 @@ where
     tensor: &'a T,
     fiber_iter: TensorStructureFiberIterator,
     skipped: usize,
-    pub fiber_dimension: usize,
+    pub fiber_dimension: Dimension,
     increment: usize,
 }
 
@@ -722,7 +722,7 @@ where
         if let Some(s) = self.fiber_iter.next() {
             let mut out = Vec::new();
             let mut nonzeros = Vec::new();
-            for i in 0..self.fiber_dimension {
+            for i in 0..self.fiber_dimension.into() {
                 if let Some(v) = self.tensor.elements.get(&(s + i * self.increment)) {
                     nonzeros.push(i);
                     out.push(v);
@@ -750,8 +750,8 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(s) = self.fiber_iter.next() {
-            let mut out = Vec::with_capacity(self.fiber_dimension);
-            for i in 0..self.fiber_dimension {
+            let mut out = Vec::with_capacity(self.fiber_dimension.into());
+            for i in 0..self.fiber_dimension.into() {
                 if let Some(v) = self.tensor.get_linear(s + i * self.increment) {
                     out.push(v);
                 }
@@ -806,9 +806,9 @@ where
         );
 
         let mut f = fiber_positions.iter();
-        let mut reps = tensor.shape();
-        reps.retain(|_| !*f.next().unwrap_or_else(|| unreachable!()));
-        let capacity = reps.iter().product();
+        let mut dims = tensor.shape();
+        dims.retain(|_| !*f.next().unwrap_or_else(|| unreachable!()));
+        let capacity = dims.iter().map(|d| usize::from(*d)).product();
         TensorMultiFiberMetricIterator {
             tensor,
             map: vec![],
@@ -1112,7 +1112,7 @@ where
         {
             *index += 1;
             // If the index goes beyond the shape boundary, wrap around to 0
-            if index >= &mut self.tensor.shape()[i] {
+            if index >= &mut usize::from(self.tensor.shape()[i]) {
                 *index = 0;
                 continue; // carry over to the next dimension
             }

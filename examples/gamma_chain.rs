@@ -15,8 +15,8 @@ use _gammaloop::tensor::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
     },
-    Contract, DenseTensor, HasTensorData, HistoryStructure, IntoId, NumTensor, SparseTensor,
-    TensorNetwork,
+    AbstractIndex, Contract, DenseTensor, HasTensorData, HistoryStructure, IntoId, NumTensor,
+    SparseTensor, TensorNetwork,
 };
 
 use num::complex::Complex64;
@@ -41,7 +41,7 @@ where
         + RemAssign,
 {
     let mink = minkindices[0];
-    let mut result = gamma(usize::try_from(mink).unwrap(), (0, 1));
+    let mut result = gamma(usize::try_from(mink).unwrap().into(), (0.into(), 1.into()));
     let mut contracting_index = 1;
     for m in minkindices[1..].iter() {
         let ui = contracting_index;
@@ -54,12 +54,16 @@ where
         };
 
         if *m > 0 {
-            let gamma: SparseTensor<Complex<T>> = gamma(usize::try_from(*m).unwrap(), (ui, uj));
+            let gamma: SparseTensor<Complex<T>> =
+                gamma(usize::try_from(*m).unwrap().into(), (ui.into(), uj.into()));
             result = gamma.contract(&result).unwrap();
         } else {
-            result = gamma::<T>(usize::try_from(m.neg()).unwrap(), (ui, uj))
-                .contract(&result)
-                .unwrap();
+            result = gamma::<T>(
+                usize::try_from(m.neg()).unwrap().into(),
+                (ui.into(), uj.into()),
+            )
+            .contract(&result)
+            .unwrap();
         }
     }
     result
@@ -80,7 +84,7 @@ where
         + Default,
 {
     let mink = minkindices[0];
-    let mut result = gamma(usize::try_from(mink).unwrap(), (0, 1));
+    let mut result = gamma(usize::try_from(mink).unwrap().into(), (0.into(), 1.into()));
     let mut contracting_index = 1;
     for m in minkindices[1..].iter() {
         let ui = contracting_index;
@@ -89,12 +93,16 @@ where
         let uj = contracting_index;
 
         if *m > 0 {
-            let gamma: SparseTensor<Complex<T>> = gamma(usize::try_from(*m).unwrap(), (ui, uj));
+            let gamma: SparseTensor<Complex<T>> =
+                gamma(usize::try_from(*m).unwrap().into(), (ui.into(), uj.into()));
             result = gamma.contract(&result).unwrap();
         } else {
-            result = gamma::<T>(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj))
-                .contract(&result)
-                .unwrap();
+            result = gamma::<T>(
+                AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
+                (ui.into(), uj.into()),
+            )
+            .contract(&result)
+            .unwrap();
         }
     }
     result
@@ -108,12 +116,12 @@ fn gamma_net(
     state: &mut State,
 ) -> TensorNetwork<NumTensor<HistoryStructure<Identifier>>> {
     let mut i = 0;
-    let mut contracting_index = 0;
+    let mut contracting_index: AbstractIndex = 0.into();
     let mut result: Vec<NumTensor<HistoryStructure<Identifier>>> =
         vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
     for m in minkindices {
         let ui = contracting_index;
-        contracting_index += 1;
+        contracting_index += 1.into();
         let uj = contracting_index;
         if *m > 0 {
             let p = [
@@ -123,11 +131,25 @@ fn gamma_net(
                 Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
-            result.push(mink_four_vector_sym(usize::try_from(*m).unwrap(), &p, state).into());
-            result.push(gammasym(usize::try_from(*m).unwrap(), (ui, uj), state).into());
-        } else {
             result
-                .push(gammasym(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj), state).into());
+                .push(mink_four_vector_sym(usize::try_from(*m).unwrap().into(), &p, state).into());
+            result.push(
+                gammasym(
+                    usize::try_from(*m).unwrap().into(),
+                    (ui.into(), uj.into()),
+                    state,
+                )
+                .into(),
+            );
+        } else {
+            result.push(
+                gammasym(
+                    AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
+                    (ui.into(), uj.into()),
+                    state,
+                )
+                .into(),
+            );
         }
     }
     result.push(euclidean_four_vector_sym(contracting_index, &u, state).into());
@@ -141,10 +163,10 @@ fn defered_chain(
     vbar: [Complex64; 4],
     u: [Complex64; 4],
 ) -> DenseTensor<Complex<f64>> {
-    let mut result = euclidean_four_vector(0, &vbar);
+    let mut result = euclidean_four_vector(0.into(), &vbar);
     result = gamma_chain.contract(&result).unwrap();
     result = result
-        .contract(&euclidean_four_vector(minkindices.len(), &u))
+        .contract(&euclidean_four_vector(minkindices.len().into(), &u))
         .unwrap();
 
     let mut i = 0;
@@ -157,7 +179,7 @@ fn defered_chain(
                 Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
-            let pmu = mink_four_vector(usize::try_from(*m).unwrap(), &p);
+            let pmu = mink_four_vector(usize::try_from(*m).unwrap().into(), &p);
             result = pmu.contract(&result).unwrap();
         }
     }
@@ -171,24 +193,38 @@ fn gamma_net_param(
     ws: &Workspace,
 ) -> TensorNetwork<MixedTensor<HistoryStructure<Identifier>>> {
     let mut i = 0;
-    let mut contracting_index = 0;
+    let mut contracting_index: AbstractIndex = 0.into();
     let mut result: Vec<MixedTensor<HistoryStructure<Identifier>>> = vec![
         param_euclidean_four_vector(contracting_index, "vbar".into_id(state), state, ws).into(),
     ];
     for m in minkindices {
         let ui = contracting_index;
-        contracting_index += 1;
+        contracting_index += 1.into();
         let uj = contracting_index;
         if *m > 0 {
             let pname = format!("p{}", i).into_id(state);
             i += 1;
             result.push(
-                param_mink_four_vector(usize::try_from(*m).unwrap(), pname, state, ws).into(),
+                param_mink_four_vector(usize::try_from(*m).unwrap().into(), pname, state, ws)
+                    .into(),
             );
-            result.push(gammasym(usize::try_from(*m).unwrap(), (ui, uj), state).into());
+            result.push(
+                gammasym(
+                    usize::try_from(*m).unwrap().into(),
+                    (ui.into(), uj.into()),
+                    state,
+                )
+                .into(),
+            );
         } else {
-            result
-                .push(gammasym(usize::try_from(m.neg()).unwrap() + 10000, (ui, uj), state).into());
+            result.push(
+                gammasym(
+                    AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
+                    (ui.into(), uj.into()),
+                    state,
+                )
+                .into(),
+            );
         }
     }
     result
