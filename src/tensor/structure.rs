@@ -1,9 +1,13 @@
 use ahash::AHashMap;
 use duplicate::duplicate;
 
+use derive_more::Add;
+use derive_more::AddAssign;
+use derive_more::Display;
+use derive_more::From;
+use derive_more::Into;
 use indexmap::IndexMap;
 use itertools::Itertools;
-
 use serde::Deserialize;
 use serde::Serialize;
 use smartstring::LazyCompact;
@@ -12,6 +16,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 
 use std::i64;
+use std::ops::Deref;
 use std::ops::Range;
 use symbolica::coefficient::CoefficientView;
 
@@ -33,25 +38,88 @@ use super::DenseTensor;
 use super::MixedTensor;
 use super::TensorStructureIndexIterator;
 use smartstring::alias::String;
-/// usize is used as label/id for index of tensor
-pub type AbstractIndex = usize;
-/// usize is used as a Dimension
-pub type Dimension = usize;
-/// usize is used as a concrete index, i.e. the concrete usize/index of the corresponding abstract index
+/// A type that represents the name of an index in a tensor.
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    From,
+    Into,
+    Display,
+    Add,
+    AddAssign,
+)]
+#[display(fmt = "id{}", _0)]
+pub struct AbstractIndex(pub usize);
+
+/// A Dimension
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    From,
+    Into,
+    Add,
+    Display,
+)]
+#[into(owned, ref, ref_mut)]
+#[display(fmt = "D{}", _0)]
+pub struct Dimension(pub usize);
+
+impl PartialEq<usize> for Dimension {
+    fn eq(&self, other: &usize) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<Dimension> for usize {
+    fn eq(&self, other: &Dimension) -> bool {
+        *self == other.0
+    }
+}
+
+impl PartialOrd<usize> for Dimension {
+    fn partial_cmp(&self, other: &usize) -> Option<Ordering> {
+        self.0.partial_cmp(other)
+    }
+}
+
+impl PartialOrd<Dimension> for usize {
+    fn partial_cmp(&self, other: &Dimension) -> Option<Ordering> {
+        self.partial_cmp(&other.0)
+    }
+}
+
+/// A  concrete index, i.e. the concrete usize/index of the corresponding abstract index
+
 pub type ConcreteIndex = usize;
 
-pub const MAX_BUILTIN: u32 = symbolica::state::State::BUILTIN_VAR_LIST.len() as u32;
-pub const EUC: Identifier = Identifier::init(MAX_BUILTIN);
-pub const LOR: Identifier = Identifier::init(MAX_BUILTIN + 1);
-pub const SPIN: Identifier = Identifier::init(MAX_BUILTIN + 2);
-pub const CADJ: Identifier = Identifier::init(MAX_BUILTIN + 3);
-pub const CF: Identifier = Identifier::init(MAX_BUILTIN + 4);
-pub const CAF: Identifier = Identifier::init(MAX_BUILTIN + 5);
-pub const CS: Identifier = Identifier::init(MAX_BUILTIN + 6);
-pub const CAS: Identifier = Identifier::init(MAX_BUILTIN + 7);
-pub const MAX_REP: u32 = MAX_BUILTIN + 7;
+pub(crate) const MAX_BUILTIN: u32 = symbolica::state::State::BUILTIN_VAR_LIST.len() as u32;
+pub(crate) const EUC: Identifier = Identifier::init(MAX_BUILTIN);
+pub(crate) const LOR: Identifier = Identifier::init(MAX_BUILTIN + 1);
+pub(crate) const SPIN: Identifier = Identifier::init(MAX_BUILTIN + 2);
+pub(crate) const CADJ: Identifier = Identifier::init(MAX_BUILTIN + 3);
+pub(crate) const CF: Identifier = Identifier::init(MAX_BUILTIN + 4);
+pub(crate) const CAF: Identifier = Identifier::init(MAX_BUILTIN + 5);
+pub(crate) const CS: Identifier = Identifier::init(MAX_BUILTIN + 6);
+pub(crate) const CAS: Identifier = Identifier::init(MAX_BUILTIN + 7);
+pub(crate) const MAX_REP: u32 = MAX_BUILTIN + 7;
 
-/// Enum for the Representation/Dimension of the index.
+/// A Representation/Dimension of the index.
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Representation {
     /// Represents a Euclidean space of the given dimension, with metric diag(1,1,1,1,...)
@@ -96,9 +164,9 @@ impl Representation {
     /// ```
     #[must_use]
     pub fn negative(&self) -> Vec<bool> {
-        match self {
+        match *self {
             Self::Lorentz(value) => std::iter::once(false)
-                .chain(std::iter::repeat(true).take(*value - 1))
+                .chain(std::iter::repeat(true).take(value.0 - 1))
                 .collect::<Vec<_>>(),
             Self::Euclidean(value)
             | Self::Spin(value)
@@ -106,7 +174,7 @@ impl Representation {
             | Self::ColorFundamental(value)
             | Self::ColorAntiFundamental(value)
             | Self::ColorSextet(value)
-            | Self::ColorAntiSextet(value) => vec![false; *value],
+            | Self::ColorAntiSextet(value) => vec![false; value.into()],
         }
     }
 
@@ -131,21 +199,22 @@ impl Representation {
         state: &'b mut State,
         ws: &'b Workspace,
     ) -> FunctionBuilder<'a> {
-        let (value, id) = match self {
-            Self::Euclidean(value) => (*value, state.get_or_insert_fn("euc", None)),
-            Self::Lorentz(value) => (*value, state.get_or_insert_fn("lor", None)),
-            Self::Spin(value) => (*value, state.get_or_insert_fn("spin", None)),
-            Self::ColorAdjoint(value) => (*value, state.get_or_insert_fn("CAdj", None)),
-            Self::ColorFundamental(value) => (*value, state.get_or_insert_fn("CF", None)),
-            Self::ColorAntiFundamental(value) => (*value, state.get_or_insert_fn("CAF", None)),
-            Self::ColorSextet(value) => (*value, state.get_or_insert_fn("CS", None)),
-            Self::ColorAntiSextet(value) => (*value, state.get_or_insert_fn("CAS", None)),
+        let (value, id) = match *self {
+            Self::Euclidean(value) => (value, state.get_or_insert_fn("euc", None)),
+            Self::Lorentz(value) => (value, state.get_or_insert_fn("lor", None)),
+            Self::Spin(value) => (value, state.get_or_insert_fn("spin", None)),
+            Self::ColorAdjoint(value) => (value, state.get_or_insert_fn("CAdj", None)),
+            Self::ColorFundamental(value) => (value, state.get_or_insert_fn("CF", None)),
+            Self::ColorAntiFundamental(value) => (value, state.get_or_insert_fn("CAF", None)),
+            Self::ColorSextet(value) => (value, state.get_or_insert_fn("CS", None)),
+            Self::ColorAntiSextet(value) => (value, state.get_or_insert_fn("CAS", None)),
         };
 
         let mut value_builder =
             FunctionBuilder::new(id.unwrap_or_else(|_| unreachable!()), state, ws);
 
-        value_builder = value_builder.add_arg(Atom::new_num(value as i64).as_atom_view());
+        value_builder =
+            value_builder.add_arg(Atom::new_num(usize::from(value) as i64).as_atom_view());
 
         value_builder
     }
@@ -175,6 +244,12 @@ impl From<Dimension> for Representation {
     }
 }
 
+impl From<usize> for Representation {
+    fn from(value: usize) -> Self {
+        Self::Euclidean(value.into())
+    }
+}
+
 impl<'a> std::iter::FromIterator<&'a Representation> for Vec<Dimension> {
     fn from_iter<T: IntoIterator<Item = &'a Representation>>(iter: T) -> Self {
         iter.into_iter()
@@ -198,6 +273,12 @@ impl From<&Representation> for Dimension {
     }
 }
 
+impl From<&Representation> for usize {
+    fn from(value: &Representation) -> Self {
+        usize::from(Dimension::from(value))
+    }
+}
+
 impl From<Representation> for Dimension {
     fn from(rep: Representation) -> Self {
         match rep {
@@ -210,6 +291,12 @@ impl From<Representation> for Dimension {
             | Representation::ColorSextet(value)
             | Representation::ColorAntiSextet(value) => value,
         }
+    }
+}
+
+impl From<Representation> for usize {
+    fn from(value: Representation) -> Self {
+        usize::from(Dimension::from(value))
     }
 }
 
@@ -297,12 +384,12 @@ impl TryFrom<AtomView<'_>> for Slot {
             return Err("Not a slot, is composite");
         };
 
-        let dim: usize = extract_num(&mut iter)?
-            .try_into()
-            .or(Err("Dimension too large"))?;
-        let index: usize = extract_num(&mut iter)?
-            .try_into()
-            .or(Err("Index too large"))?;
+        let dim: Dimension = usize::try_from(extract_num(&mut iter)?)
+            .or(Err("Dimension too large"))?
+            .into();
+        let index: AbstractIndex = usize::try_from(extract_num(&mut iter)?)
+            .or(Err("Dimension too large"))?
+            .into();
 
         if extract_num(&mut iter).is_ok() {
             return Err("Too many arguments");
@@ -358,7 +445,7 @@ impl From<(AbstractIndex, Representation)> for Slot {
 impl From<(usize, usize)> for Slot {
     fn from(value: (usize, usize)) -> Self {
         Self {
-            index: value.0,
+            index: value.0.into(),
             representation: value.1.into(),
         }
     }
@@ -382,7 +469,8 @@ impl Slot {
     /// ```
     pub fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Atom {
         let mut value_builder = self.representation.to_fnbuilder(state, ws);
-        value_builder = value_builder.add_arg(Atom::new_num(self.index as i64).as_atom_view());
+        value_builder =
+            value_builder.add_arg(Atom::new_num(usize::from(self.index) as i64).as_atom_view());
         Atom::new_from_view(&value_builder.finish().as_atom_view())
     }
 }
@@ -533,7 +621,7 @@ pub trait TensorStructure {
             if let Some(indices) = index_map.get_mut(item) {
                 // Find an index that hasn't been used yet
                 if let Some(&index) = indices.iter().find(|&&i| !used_indices.contains(&i)) {
-                    permutation.push(index);
+                    permutation.push(index.into());
                     used_indices.insert(index);
                 } else {
                     // No available index for this item
@@ -667,7 +755,7 @@ pub trait TensorStructure {
 
     /// yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor
     fn size(&self) -> usize {
-        self.shape().iter().product()
+        self.shape().iter().map(|x| usize::from(*x)).product()
     }
 
     fn shadow_with(
@@ -691,7 +779,7 @@ pub trait TensorStructure {
         }
     }
 
-    fn smart_shadow_with(
+    fn to_explicit_rep(
         self,
         f_id: Identifier,
         state: &mut State,
@@ -1232,13 +1320,13 @@ impl<N> HistoryStructure<N> {
             .union(&other_set)
             .map(|s| s.index)
             .max()
-            .unwrap_or(0)
-            + 1;
+            .unwrap_or(0.into())
+            + 1.into();
 
         for item in &mut self.internal {
             if other_set.contains(item) {
                 item.index = replacement_value;
-                replacement_value += 1;
+                replacement_value += 1.into();
             }
         }
     }
@@ -1472,7 +1560,7 @@ pub trait Shadowable: TensorStructure {
         Self::Structure: Clone + TensorStructure,
     {
         let name = self.name()?.into_owned();
-        Some(self.smart_shadow_with(name.into_id(state), state, ws))
+        Some(self.to_explicit_rep(name.into_id(state), state, ws))
     }
 
     fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Option<Atom>

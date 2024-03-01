@@ -1,7 +1,7 @@
 use crate::tensor::{CADJ, CAF, CAS, CF, CS, EUC, LOR, SPIN};
 
 use super::{
-    DenseTensor, HistoryStructure, IntoId,
+    AbstractIndex, DenseTensor, HistoryStructure, IntoId,
     Representation::{self, Euclidean, Lorentz},
     SetTensorData, Shadowable, Slot, SparseTensor, TensorStructure, MAX_REP,
 };
@@ -42,7 +42,10 @@ pub fn new_state() -> State {
 
 #[allow(dead_code)]
 #[must_use]
-pub fn identity<T>(indices: (usize, usize), signature: Representation) -> SparseTensor<Complex<T>>
+pub fn identity<T>(
+    indices: (AbstractIndex, AbstractIndex),
+    signature: Representation,
+) -> SparseTensor<Complex<T>>
 where
     T: One + Zero,
 {
@@ -85,7 +88,7 @@ where
 
     let mut identity = SparseTensor::empty(structure);
 
-    for i in 0..identity.shape()[0] {
+    for i in 0..identity.shape()[0].into() {
         identity
             .set(&[i, i], T::one())
             .unwrap_or_else(|_| unreachable!());
@@ -95,25 +98,25 @@ where
 
 #[allow(dead_code)]
 #[must_use]
-pub fn lorentz_identity<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
+pub fn lorentz_identity<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
 where
     T: One + Zero,
 {
     // IdentityL(1,2) (Lorentz) Kronecker delta δ^μ1_μ1
-    let signature = Lorentz(4);
+    let signature = Lorentz(4.into());
     identity(indices, signature)
 }
 
-pub fn mink_four_vector<T>(index: usize, p: &[T; 4]) -> DenseTensor<T>
+pub fn mink_four_vector<T>(index: AbstractIndex, p: &[T; 4]) -> DenseTensor<T>
 where
     T: Clone,
 {
-    DenseTensor::from_data(p, vec![Slot::from((index, Lorentz(4)))])
+    DenseTensor::from_data(p, vec![Slot::from((index, Lorentz(4.into())))])
         .unwrap_or_else(|_| unreachable!())
 }
 
 pub fn mink_four_vector_sym<T>(
-    index: usize,
+    index: AbstractIndex,
     p: &[T; 4],
     state: &mut symbolica::state::State,
 ) -> DenseTensor<T, HistoryStructure<Identifier>>
@@ -123,7 +126,7 @@ where
     DenseTensor::from_data(
         p,
         HistoryStructure::new(
-            &[(index, Lorentz(4))],
+            &[(index, Lorentz(4.into()))],
             state
                 .get_or_insert_fn("p", None)
                 .unwrap_or_else(|_| unreachable!()),
@@ -132,16 +135,16 @@ where
     .unwrap_or_else(|_| unreachable!())
 }
 
-pub fn euclidean_four_vector<T>(index: usize, p: &[T; 4]) -> DenseTensor<T>
+pub fn euclidean_four_vector<T>(index: AbstractIndex, p: &[T; 4]) -> DenseTensor<T>
 where
     T: Clone,
 {
-    DenseTensor::from_data(p, vec![Slot::from((index, Euclidean(4)))])
+    DenseTensor::from_data(p, vec![Slot::from((index, Euclidean(4.into())))])
         .unwrap_or_else(|_| unreachable!())
 }
 
 pub fn euclidean_four_vector_sym<T>(
-    index: usize,
+    index: AbstractIndex,
     p: &[T; 4],
     state: &mut symbolica::state::State,
 ) -> DenseTensor<T, HistoryStructure<Identifier>>
@@ -151,7 +154,7 @@ where
     DenseTensor::from_data(
         p,
         HistoryStructure::new(
-            &[(index, Euclidean(4))],
+            &[(index, Euclidean(4.into()))],
             state
                 .get_or_insert_fn("p", None)
                 .unwrap_or_else(|_| unreachable!()),
@@ -161,7 +164,7 @@ where
 }
 
 pub fn param_mink_four_vector<N>(
-    index: usize,
+    index: AbstractIndex,
     name: N,
     state: &mut symbolica::state::State,
     ws: &Workspace,
@@ -169,13 +172,13 @@ pub fn param_mink_four_vector<N>(
 where
     N: Clone + IntoId,
 {
-    HistoryStructure::new(&[(index, Lorentz(4))], name)
+    HistoryStructure::new(&[(index, Lorentz(4.into()))], name)
         .shadow(state, ws)
         .unwrap_or_else(|| unreachable!())
 }
 
 pub fn param_euclidean_four_vector<N>(
-    index: usize,
+    index: AbstractIndex,
     name: N,
     state: &mut symbolica::state::State,
     ws: &Workspace,
@@ -183,32 +186,35 @@ pub fn param_euclidean_four_vector<N>(
 where
     N: Clone + IntoId,
 {
-    HistoryStructure::new(&[(index, Euclidean(4))], name)
+    HistoryStructure::new(&[(index, Euclidean(4.into()))], name)
         .shadow(state, ws)
         .unwrap_or_else(|| unreachable!())
 }
 
 #[allow(dead_code)]
 #[must_use]
-pub fn euclidean_identity<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
+pub fn euclidean_identity<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
 where
     T: One + Zero,
 {
     // Identity(1,2) (Spinorial) Kronecker delta δ_s1_s2
-    let signature = Euclidean(4);
+    let signature = Euclidean(4.into());
     identity(indices, signature)
 }
 
 #[allow(dead_code)]
-pub fn gamma<T>(minkindex: usize, indices: (usize, usize)) -> SparseTensor<Complex<T>>
+pub fn gamma<T>(
+    minkindex: AbstractIndex,
+    indices: (AbstractIndex, AbstractIndex),
+) -> SparseTensor<Complex<T>>
 where
     T: One + Zero + Copy + std::ops::Neg<Output = T>,
 {
     // Gamma(1,2,3) Dirac matrix (γ^μ1)_s2_s3
     let structure = [
-        (indices.0, Euclidean(4)),
-        (indices.1, Euclidean(4)),
-        (minkindex, Lorentz(4)),
+        (indices.0, Euclidean(4.into())),
+        (indices.1, Euclidean(4.into())),
+        (minkindex, Lorentz(4.into())),
     ]
     .into_iter()
     .map(Slot::from)
@@ -218,8 +224,8 @@ where
 }
 
 pub fn gammasym<T>(
-    minkindex: usize,
-    indices: (usize, usize),
+    minkindex: AbstractIndex,
+    indices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
 where
@@ -227,9 +233,9 @@ where
 {
     let structure = HistoryStructure::new(
         &[
-            (indices.0, Euclidean(4)),
-            (indices.1, Euclidean(4)),
-            (minkindex, Lorentz(4)),
+            (indices.0, Euclidean(4.into())),
+            (indices.1, Euclidean(4.into())),
+            (minkindex, Lorentz(4.into())),
         ],
         state
             .get_or_insert_fn("γ", None)
@@ -276,20 +282,23 @@ where
     gamma //.to_dense()
 }
 
-pub fn gamma5<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
+pub fn gamma5<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
 where
     T: One + Zero + Copy,
 {
-    let structure = [(indices.0, Euclidean(4)), (indices.1, Euclidean(4))]
-        .into_iter()
-        .map(Slot::from)
-        .collect();
+    let structure = [
+        (indices.0, Euclidean(4.into())),
+        (indices.1, Euclidean(4.into())),
+    ]
+    .into_iter()
+    .map(Slot::from)
+    .collect();
 
     gamma5_data(structure)
 }
 
 pub fn gamma5sym<T>(
-    indices: (usize, usize),
+    indices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
 where
@@ -297,9 +306,8 @@ where
 {
     let structure = HistoryStructure::new(
         &[
-            (indices.0, Euclidean(4)),
-            (indices.1, Euclidean(4)),
-            (4, Lorentz(4)),
+            (indices.0, Euclidean(4.into())),
+            (indices.1, Euclidean(4.into())),
         ],
         state
             .get_or_insert_fn("γ5", None)
@@ -326,21 +334,24 @@ where
     gamma5
 }
 
-pub fn proj_m<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
+pub fn proj_m<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
 where
     T: Float,
 {
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
-    let structure = [(indices.0, Euclidean(4)), (indices.1, Euclidean(4))]
-        .into_iter()
-        .map(Slot::from)
-        .collect();
+    let structure = [
+        (indices.0, Euclidean(4.into())),
+        (indices.1, Euclidean(4.into())),
+    ]
+    .into_iter()
+    .map(Slot::from)
+    .collect();
 
     proj_m_data(structure)
 }
 
 pub fn proj_msym<T>(
-    indices: (usize, usize),
+    indices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
 where
@@ -348,9 +359,8 @@ where
 {
     let structure = HistoryStructure::new(
         &[
-            (indices.0, Euclidean(4)),
-            (indices.1, Euclidean(4)),
-            (4, Lorentz(4)),
+            (indices.0, Euclidean(4.into())),
+            (indices.1, Euclidean(4.into())),
         ],
         state
             .get_or_insert_fn("ProjM", None)
@@ -385,21 +395,24 @@ where
     proj_m
 }
 
-pub fn proj_p<T>(indices: (usize, usize)) -> SparseTensor<Complex<T>>
+pub fn proj_p<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
 where
     T: Float,
 {
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
-    let structure = [(indices.0, Euclidean(4)), (indices.1, Euclidean(4))]
-        .into_iter()
-        .map(Slot::from)
-        .collect();
+    let structure = [
+        (indices.0, Euclidean(4.into())),
+        (indices.1, Euclidean(4.into())),
+    ]
+    .into_iter()
+    .map(Slot::from)
+    .collect();
 
     proj_p_data(structure)
 }
 
 pub fn proj_psym<T>(
-    indices: (usize, usize),
+    indices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
 where
@@ -407,9 +420,8 @@ where
 {
     let structure = HistoryStructure::new(
         &[
-            (indices.0, Euclidean(4)),
-            (indices.1, Euclidean(4)),
-            (4, Lorentz(4)),
+            (indices.0, Euclidean(4.into())),
+            (indices.1, Euclidean(4.into())),
         ],
         state
             .get_or_insert_fn("ProjP", None)
@@ -458,15 +470,18 @@ where
     proj_p
 }
 
-pub fn sigma<T>(indices: (usize, usize), minkdices: (usize, usize)) -> SparseTensor<Complex<T>>
+pub fn sigma<T>(
+    indices: (AbstractIndex, AbstractIndex),
+    minkdices: (AbstractIndex, AbstractIndex),
+) -> SparseTensor<Complex<T>>
 where
     T: One + Zero + std::ops::Neg<Output = T> + Copy,
 {
     let structure = [
-        (indices.0, Euclidean(4)),
-        (indices.1, Euclidean(4)),
-        (minkdices.0, Lorentz(4)),
-        (minkdices.1, Lorentz(4)),
+        (indices.0, Euclidean(4.into())),
+        (indices.1, Euclidean(4.into())),
+        (minkdices.0, Lorentz(4.into())),
+        (minkdices.1, Lorentz(4.into())),
     ]
     .into_iter()
     .map(Slot::from)
@@ -476,8 +491,8 @@ where
 }
 
 pub fn sigmasym<T>(
-    indices: (usize, usize),
-    minkdices: (usize, usize),
+    indices: (AbstractIndex, AbstractIndex),
+    minkdices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
 where
@@ -485,10 +500,10 @@ where
 {
     let structure = HistoryStructure::new(
         &[
-            (indices.0, Euclidean(4)),
-            (indices.1, Euclidean(4)),
-            (minkdices.0, Lorentz(4)),
-            (minkdices.1, Lorentz(4)),
+            (indices.0, Euclidean(4.into())),
+            (indices.1, Euclidean(4.into())),
+            (minkdices.0, Lorentz(4.into())),
+            (minkdices.1, Lorentz(4.into())),
         ],
         state
             .get_or_insert_fn("σ", None)

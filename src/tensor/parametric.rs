@@ -14,7 +14,7 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use crate::tensor::{NamedStructure, Shadowable};
+use crate::tensor::{AbstractIndex, Dimension, NamedStructure, Shadowable};
 
 use super::{
     DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData, Slot, SparseTensor,
@@ -129,7 +129,7 @@ where
 
                     for fiber_a in self_iter.by_ref() {
                         for fiber_b in other_iter.by_ref() {
-                            for i in 0..dimension {
+                            for i in 0..dimension.into() {
                                 if metric[i] {
                                     result_data[result_index] = result_data[result_index].sub_sym(
                                         &fiber_a[i].mul_sym(fiber_b[i], ws, state)?,
@@ -913,7 +913,13 @@ where
 fn test_evaluator() {
     let mut state = State::new();
     let ws = Workspace::new();
-    let structure = NamedStructure::from_integers(&[(4, 5), (5, 4)], "r");
+    let structure = NamedStructure::from_integers(
+        &[
+            (AbstractIndex(4), Dimension(5)),
+            (AbstractIndex(5), Dimension(4)),
+        ],
+        "r",
+    );
     let p = structure.shadow(&mut state, &ws).unwrap();
 
     let mut var_map = HashMap::new();
