@@ -4,8 +4,12 @@ use crate::tensor::{
     Representation::{self},
     SparseTensor, SymbolicContract, TensorStructure,
 };
+use ahash::{HashSet, HashSetExt};
 use indexmap::IndexMap;
+use itertools::Itertools;
 use num::Complex;
+use rand::{rngs, Rng, SeedableRng};
+use rand_xoshiro::Xoroshiro64Star;
 use smartstring::alias::String;
 use symbolica::{
     representations::Atom,
@@ -13,12 +17,64 @@ use symbolica::{
 };
 
 use super::{
-    symbolic::SymbolicTensor, ufo, HistoryStructure, NumTensor, SetTensorData, Slot, TensorNetwork,
+    structure, symbolic::SymbolicTensor, ufo, AbstractIndex, Dimension, HistoryStructure,
+    NumTensor, SetTensorData, Slot, TensorNetwork, VecStructure,
 };
+
+fn test_tensor<D, S>(structure: S, seed: u64) -> SparseTensor<D, S>
+where
+    S: TensorStructure,
+    rand::distributions::Standard: rand::distributions::Distribution<D>,
+{
+    let mut rng: Xoroshiro64Star = Xoroshiro64Star::seed_from_u64(seed);
+
+    let mut tensor = SparseTensor::empty(structure);
+
+    let density = rng.gen_range(0..tensor.size());
+
+    for _ in 0..density {
+        tensor
+            .set_flat(rng.gen_range(0..tensor.size()), rng.gen())
+            .unwrap();
+    }
+
+    tensor
+}
+
+fn test_structure(length: usize, seed: u64) -> Vec<Slot> {
+    let mut rng = Xoroshiro64Star::seed_from_u64(seed);
+    let mut s = HashSet::new();
+
+    let rank = length;
+    while s.len() < rank {
+        let rep = rng.gen_range(0..=1);
+        let dim = Dimension(rng.gen_range(1..=7));
+        let id = AbstractIndex(rng.gen_range(0..256));
+        let rep = match rep {
+            0 => Representation::Euclidean(dim),
+            _ => Representation::Lorentz(dim),
+        };
+
+        s.insert((id, rep).into());
+    }
+
+    s.into_iter().collect_vec()
+}
+
+#[test]
+fn rng_is_deterministic() {
+    let a = test_structure(2, 11);
+    let a: DenseTensor<i8> = test_tensor(a, 1).to_dense();
+
+    assert_eq!(a.data(), vec![-5, 0, -7, 0, 79, -121, -108, 0]);
+}
 
 #[test]
 fn indexflatten() {
-    let a = HistoryStructure::from_integers(&[(1, 3), (2, 4), (3, 5)], "a");
+    let a = HistoryStructure::from_integers(
+        &[(1, 3), (2, 4), (3, 5)].map(|(a, d)| (a.into(), d.into())),
+        "a",
+    );
 
     let idx = vec![1, 2, 3];
     let flatidx = a.flat_index(&idx).unwrap();
@@ -31,7 +87,8 @@ fn indexflatten() {
 
 #[test]
 fn trace() {
-    let structura = HistoryStructure::from_integers(&[(1, 5), (1, 5)], "a");
+    let structura =
+        HistoryStructure::from_integers(&[(1, 5), (1, 5)].map(|(a, d)| (a.into(), d.into())), "a");
     let a = SparseTensor::from_data(
         &[
             (vec![0, 0], 1.0),
@@ -52,7 +109,10 @@ fn trace() {
 
 #[test]
 fn construct_dense_tensor() {
-    let a = HistoryStructure::from_integers(&[(1, 2), (2, 3), (3, 4)], "a");
+    let a = HistoryStructure::from_integers(
+        &[(1, 2), (2, 3), (3, 4)].map(|(a, d)| (a.into(), d.into())),
+        "a",
+    );
 
     let data = vec![1.0; a.size()];
     super::DenseTensor::from_data(&data, a).unwrap();
@@ -75,7 +135,10 @@ fn construct_sparse_tensor() -> Result<(), String> {
 
 #[test]
 fn dense_tensor_shape() {
-    let a = HistoryStructure::from_integers(&[(1, 2), (2, 3), (3, 4)], "a");
+    let a = HistoryStructure::from_integers(
+        &[(1, 2), (2, 3), (3, 4)].map(|(a, d)| (a.into(), d.into())),
+        "a",
+    );
 
     let data = vec![1.0; a.size()];
     let a = super::DenseTensor::from_data(&data, a).unwrap();
@@ -86,15 +149,15 @@ fn dense_tensor_shape() {
 fn contract_densor() {
     let structur_a = HistoryStructure::new(
         &[
-            (3, Representation::Euclidean(2)),
-            (1, Representation::Euclidean(2)),
+            (3.into(), Representation::Euclidean(2.into())),
+            (1.into(), Representation::Euclidean(2.into())),
         ],
         "a",
     );
     let structur_b = HistoryStructure::new(
         &[
-            (2, Representation::Euclidean(2)),
-            (3, Representation::Euclidean(2)),
+            (2.into(), Representation::Euclidean(2.into())),
+            (3.into(), Representation::Euclidean(2.into())),
         ],
         "b",
     );
@@ -104,8 +167,10 @@ fn contract_densor() {
     let f = a.contract(&b).unwrap();
     assert_eq!(f.data, [7.0, 10.0, 15.0, 22.0]);
 
-    let structur_a = HistoryStructure::from_integers(&[(1, 2), (3, 2)], "a");
-    let structur_b = HistoryStructure::from_integers(&[(3, 2), (4, 2)], "b");
+    let structur_a =
+        HistoryStructure::from_integers(&[(1, 2), (3, 2)].map(|(a, d)| (a.into(), d.into())), "a");
+    let structur_b =
+        HistoryStructure::from_integers(&[(3, 2), (4, 2)].map(|(a, d)| (a.into(), d.into())), "b");
 
     let im = Complex::new(0.0, 1.0);
     let re = Complex::new(1.0, 0.0);
@@ -120,15 +185,15 @@ fn contract_densor() {
 fn multi_index_contract() {
     let structur_a = HistoryStructure::new(
         &[
-            (3, Representation::Lorentz(2)),
-            (1, Representation::Lorentz(2)),
+            (3.into(), Representation::Lorentz(2.into())),
+            (1.into(), Representation::Lorentz(2.into())),
         ],
         "a",
     );
     let structur_b = HistoryStructure::new(
         &[
-            (1, Representation::Lorentz(2)),
-            (3, Representation::Lorentz(2)),
+            (1.into(), Representation::Lorentz(2.into())),
+            (3.into(), Representation::Lorentz(2.into())),
         ],
         "b",
     );
@@ -141,7 +206,8 @@ fn multi_index_contract() {
 
 #[test]
 fn dense_to_sparse() {
-    let structur_a = HistoryStructure::from_integers(&[(1, 2), (3, 2)], "a");
+    let structur_a =
+        HistoryStructure::from_integers(&[(1, 2), (3, 2)].map(|(a, d)| (a.into(), d.into())), "a");
     let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
     let b = a.to_sparse();
     let c = b.to_dense();
@@ -150,9 +216,9 @@ fn dense_to_sparse() {
 
 #[test]
 fn gamma() {
-    let g1 = ufo::gamma::<f64>(0, (0, 1));
-    let g2 = ufo::gamma::<f64>(1, (1, 2));
-    let g3 = ufo::gamma::<f64>(2, (2, 0));
+    let g1 = ufo::gamma::<f64>(0.into(), (0.into(), 1.into()));
+    let g2 = ufo::gamma::<f64>(1.into(), (1.into(), 2.into()));
+    let g3 = ufo::gamma::<f64>(2.into(), (2.into(), 0.into()));
 
     let c = g1.contract(&g2).unwrap().contract(&g3).unwrap();
     println!("Sparse: {:?}", c.data());
@@ -164,7 +230,7 @@ fn gamma() {
     let cdense: NumTensor = g1d.contract(&g2d).unwrap().contract(&g3d).unwrap();
 
     println!("{:?}", cdense.try_as_complex().unwrap().data());
-    let d = ufo::gamma::<f32>(0, (0, 0)).internal_contract();
+    let d = ufo::gamma::<f32>(0.into(), (0.into(), 0.into())).internal_contract();
 
     println!("{:?}", d.data());
 }
@@ -173,19 +239,19 @@ fn gamma() {
 fn matches() {
     let structur_a = HistoryStructure::new(
         &[
-            (3, Representation::Lorentz(2)),
-            (2, Representation::Lorentz(3)),
-            (2, Representation::Euclidean(2)),
-            (1, Representation::Lorentz(2)),
+            (3.into(), Representation::Lorentz(2.into())),
+            (2.into(), Representation::Lorentz(3.into())),
+            (2.into(), Representation::Euclidean(2.into())),
+            (1.into(), Representation::Lorentz(2.into())),
         ],
         "a",
     );
     let structur_b = HistoryStructure::new(
         &[
-            (1, Representation::Lorentz(2)),
-            (3, Representation::Lorentz(2)),
-            (2, Representation::Lorentz(2)),
-            (1, Representation::Euclidean(2)),
+            (1.into(), Representation::Lorentz(2.into())),
+            (3.into(), Representation::Lorentz(2.into())),
+            (2.into(), Representation::Lorentz(2.into())),
+            (1.into(), Representation::Euclidean(2.into())),
         ],
         "b",
     );
@@ -200,11 +266,13 @@ fn mixed_tensor_contraction() {
     let im = Complex::new(1.5, 1.25);
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
 
-    let structur_a = HistoryStructure::from_integers(&[(2, 2), (1, 2)], "a");
+    let structur_a =
+        HistoryStructure::from_integers(&[(2, 2), (1, 2)].map(|(a, d)| (a.into(), d.into())), "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a.clone()).unwrap();
 
-    let structur_b = HistoryStructure::from_integers(&[(2, 2), (4, 2)], "b");
+    let structur_b =
+        HistoryStructure::from_integers(&[(2, 2), (4, 2)].map(|(a, d)| (a.into(), d.into())), "b");
 
     let b = DenseTensor::from_data(
         &[1.0 * im, 2.0 * im, 3.0 * im, 4.0 * im],
@@ -228,11 +296,11 @@ fn mixed_tensor_contraction() {
 
 #[test]
 fn tensor_net() {
-    let a: NumTensor = ufo::gamma(1, (2, 3)).into();
-    let b: NumTensor = ufo::gamma(2, (3, 4)).into();
-    let c: NumTensor = ufo::gamma(3, (4, 2)).into();
-    let p: NumTensor = mink_four_vector(2, &[2., 3., 2., 1.]).into();
-    let q: NumTensor = mink_four_vector(3, &[2., 3., 2., 1.]).into();
+    let a: NumTensor = ufo::gamma(1.into(), (2.into(), 3.into())).into();
+    let b: NumTensor = ufo::gamma(2.into(), (3.into(), 4.into())).into();
+    let c: NumTensor = ufo::gamma(3.into(), (4.into(), 2.into())).into();
+    let p: NumTensor = mink_four_vector(2.into(), &[2., 3., 2., 1.]).into();
+    let q: NumTensor = mink_four_vector(3.into(), &[2., 3., 2., 1.]).into();
 
     let mut n = TensorNetwork::from(vec![a, b, c, p, q]);
 
@@ -253,8 +321,8 @@ fn tensor_net() {
 
 #[test]
 fn sparsedensedensesparse() {
-    let a: NumTensor = ufo::gamma(1, (2, 3)).into();
-    let p: NumTensor = mink_four_vector(1, &[2., 3., 2., 1.]).into();
+    let a: NumTensor = ufo::gamma(1.into(), (2.into(), 3.into())).into();
+    let p: NumTensor = mink_four_vector(1.into(), &[2., 3., 2., 1.]).into();
 
     println!("{:?}", a.contract(&p).unwrap());
     println!("{:?}", p.contract(&a).unwrap());
@@ -263,12 +331,14 @@ fn sparsedensedensesparse() {
 #[test]
 fn contract_spensor() {
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
-    let structur_a = HistoryStructure::from_integers(&[(2, 2), (1, 2)], "a");
+    let structur_a =
+        HistoryStructure::from_integers(&[(2, 2), (1, 2)].map(|(a, d)| (a.into(), d.into())), "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
-    let structur_b = HistoryStructure::from_integers(&[(1, 2), (3, 2)], "b");
+    let structur_b =
+        HistoryStructure::from_integers(&[(1, 2), (3, 2)].map(|(a, d)| (a.into(), d.into())), "b");
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
@@ -282,12 +352,14 @@ fn contract_spensor() {
 #[test]
 fn sparse_addition() {
     let data_a = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
-    let structur_a = HistoryStructure::from_integers(&[(2, 2), (1, 2)], "a");
+    let structur_a =
+        HistoryStructure::from_integers(&[(2, 2), (1, 2)].map(|(a, d)| (a.into(), d.into())), "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
-    let structur_b = HistoryStructure::from_integers(&[(1, 2), (2, 2)], "b");
+    let structur_b =
+        HistoryStructure::from_integers(&[(1, 2), (2, 2)].map(|(a, d)| (a.into(), d.into())), "b");
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
@@ -301,13 +373,15 @@ fn sparse_addition() {
 #[test]
 fn sparse_sub() {
     let data_a = [(vec![1, 0], 1.0), (vec![0, 1], 2.0)];
-    let structur_a = HistoryStructure::from_integers(&[(2, 2), (1, 2)], "a");
+    let structur_a =
+        HistoryStructure::from_integers(&[(2, 2), (1, 2)].map(|(a, d)| (a.into(), d.into())), "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [(vec![1, 0], 1.0), (vec![0, 1], 3.0)];
 
-    let structur_b = HistoryStructure::from_integers(&[(2, 2), (1, 2)], "a");
+    let structur_b =
+        HistoryStructure::from_integers(&[(2, 2), (1, 2)].map(|(a, d)| (a.into(), d.into())), "a");
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
@@ -322,12 +396,14 @@ fn sparse_sub() {
 fn contract_densor_with_spensor() {
     let data_a = [(vec![0, 0], 1.0), (vec![1, 1], 2.0)];
 
-    let structur_a = HistoryStructure::from_integers(&[(2, 2), (1, 2)], "a");
+    let structur_a =
+        HistoryStructure::from_integers(&[(2, 2), (1, 2)].map(|(a, d)| (a.into(), d.into())), "a");
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let data_b = [1.0, 2.0, 3.0, 4.0];
-    let structur_b = HistoryStructure::from_integers(&[(1, 2), (4, 2)], "b");
+    let structur_b =
+        HistoryStructure::from_integers(&[(1, 2), (4, 2)].map(|(a, d)| (a.into(), d.into())), "b");
 
     let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
 
@@ -361,7 +437,8 @@ fn convert_sym() {
             .map(|x| Complex::from(*x))
             .collect::<Vec<_>>(),
     );
-    let structur_b = HistoryStructure::from_integers(&[(1, 2), (4, 3)], "b");
+    let structur_b =
+        HistoryStructure::from_integers(&[(1, 2), (4, 3)].map(|(a, d)| (a.into(), d.into())), "b");
     let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
 
     let symb = b.to_symbolic(&ws, &mut state);
@@ -432,9 +509,15 @@ fn symbolic_contract() {
     let mut state = State::new();
     let ws = Workspace::new();
 
-    let structura = HistoryStructure::from_integers(&[(1, 2), (4, 3)], "T".to_string());
+    let structura = HistoryStructure::from_integers(
+        &[(1, 2), (4, 3)].map(|(a, d)| (a.into(), d.into())),
+        "T".to_string(),
+    );
 
-    let structurb = HistoryStructure::from_integers(&[(3, 2), (2, 3)], "P".to_string());
+    let structurb = HistoryStructure::from_integers(
+        &[(3, 2), (2, 3)].map(|(a, d)| (a.into(), d.into())),
+        "P".to_string(),
+    );
 
     let a = SymbolicTensor::from_named(&structura, &mut state, &ws).unwrap();
     let b = SymbolicTensor::from_named(&structurb, &mut state, &ws).unwrap();
