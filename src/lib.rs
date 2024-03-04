@@ -141,6 +141,7 @@ pub struct IntegratorSettings {
     pub train_on_avg: bool,
     pub show_max_wgt_info: bool,
     pub max_prob_ratio: f64,
+    pub seed: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

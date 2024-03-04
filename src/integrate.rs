@@ -8,7 +8,7 @@ use colored::Colorize;
 use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
-use symbolica::numerical_integration::{Grid, Sample, StatisticsAccumulator};
+use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
 use crate::evaluation_result::EvaluationResult;
 use crate::evaluation_result::SerializableMetaDataStatistics;
@@ -72,7 +72,9 @@ where
     let mut evaluation_results = vec![EvaluationResult::zero(); settings.integrator.n_start];
     let mut stats = StatisticsCounter::new_empty();
 
-    let mut rng = rand::thread_rng();
+    let seed = settings.integrator.seed;
+    let thread_id = 0; // Samples are generated on a single core in this function.
+    let mut rng = MonteCarloRng::new(seed, thread_id);
 
     let mut user_data = user_data_generator(settings);
 
@@ -376,8 +378,10 @@ pub fn batch_integrate(integrand: &Integrand, input: BatchIntegrateInput) -> Bat
         SampleInput::Grid {
             mut grid,
             num_points,
+            seed,
+            thread_id,
         } => {
-            let mut rng = rand::thread_rng();
+            let mut rng = MonteCarloRng::new(seed, thread_id);
 
             (0..num_points)
                 .map(|_| {
@@ -531,8 +535,15 @@ fn evaluate_sample_list(
 /// The worker then generates the samples itself.
 #[derive(Serialize, Deserialize)]
 pub enum SampleInput {
-    SampleList { samples: Vec<Sample<f64>> },
-    Grid { grid: Grid<f64>, num_points: usize },
+    SampleList {
+        samples: Vec<Sample<f64>>,
+    },
+    Grid {
+        grid: Grid<f64>,
+        num_points: usize,
+        seed: u64,
+        thread_id: usize,
+    },
 }
 
 pub enum BatchIntegrateOutput {
@@ -812,7 +823,8 @@ impl MasterNode {
         num_samples: usize,
         export_grid: bool,
         output_accumulator: bool,
-        job_name: &str,
+        workspace_path: &str,
+        job_id: usize,
     ) -> Result<(), Report> {
         let integrated_phase = self.integrator_settings.integrated_phase;
 
@@ -828,6 +840,8 @@ impl MasterNode {
             SampleInput::Grid {
                 grid: self.grid.clone(),
                 num_points: num_samples,
+                seed: self.integrator_settings.seed,
+                thread_id: job_id,
             }
         } else {
             let mut rng = rand::thread_rng();
@@ -856,7 +870,10 @@ impl MasterNode {
         };
 
         let input_bytes = bincode::serialize(&input)?;
-        std::fs::write(job_name, input_bytes)?;
+        let job_name = format!("job_{}", job_id);
+        let job_path = std::path::Path::new(workspace_path).join(job_name);
+
+        std::fs::write(job_path, input_bytes)?;
 
         Ok(())
     }

@@ -1,6 +1,7 @@
 use clap::{App, Arg, SubCommand};
 use color_eyre::Report;
 use colored::Colorize;
+use eyre::eyre;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use symbolica::{
@@ -333,8 +334,7 @@ fn batch_branch(
 
     // load the settings
     let path_to_settings = process_output_file.join("cards").join("run_card.yaml");
-    let settings_string = std::fs::read_to_string(path_to_settings.clone())
-        .unwrap_or_else(|err| panic!("could not load settings at {:?}: {}", path_to_settings, err));
+    let settings_string = std::fs::read_to_string(path_to_settings.clone())?;
     let settings: Settings = serde_yaml::from_str(&settings_string)?;
 
     // load the model, hardcoded to scalars.yaml for now
@@ -342,7 +342,12 @@ fn batch_branch(
         .join("sources")
         .join("model")
         .join("scalars.yaml");
-    let path_to_model_string = path_to_model.to_str().unwrap().to_string();
+
+    let path_to_model_string = path_to_model
+        .to_str()
+        .ok_or_else(|| eyre!("could not convert path to string"))?
+        .to_string();
+
     let model = Model::from_file(path_to_model_string, &mut state, &workspace)?;
 
     // load the amplitude
@@ -357,13 +362,7 @@ fn batch_branch(
 
     // this is all very amplitude focused, will be generalized later when the structure is clearer
     let amplitude = {
-        let mut amp = Amplitude::from_file(&model, path_to_amplitude_yaml_as_string)
-            .unwrap_or_else(|err| {
-                panic!(
-                    "could not load amplitude at {:?}: {}",
-                    path_to_amplitude_yaml, err
-                )
-            });
+        let mut amp = Amplitude::from_file(&model, path_to_amplitude_yaml_as_string)?;
 
         let derived_data_path = process_output_file
             .join("sources")

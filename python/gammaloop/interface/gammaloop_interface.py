@@ -825,23 +825,28 @@ class GammaLoop(object):
             client = cluster.client()  # type: ignore
 
             for _ in range(n_iterations):
-                task_names = ["task{}".format(i) for i in range(n_tasks)]
+                task_ids = [i*(n_iterations + 1) for i in range(n_tasks)]
                 job = Job()
 
-                for name in task_names:
-                    name_path = workspace_path.joinpath(name)
+                for id in task_ids:
+                    input_file = workspace_path.joinpath(
+                        "job_{}".format(str(id)))
+
+                    output_file = workspace_path.joinpath(
+                        "job_{}_out".format(str(id)))
+
                     self.rust_worker.write_batch_input(
-                        n_cores, n_points_per_task, export_grid, output_accumulator, str(name_path))
-                    job.program(["bin/gammaloop_rust_cli", "batch", "--batch_input_file={}".format(str(name_path)),
-                                "--name=massless_triangle", "--process_file=triangle", "--output_name={}out".format(str(name_path))])
+                        n_cores, n_points_per_task, export_grid, output_accumulator, str(workspace_path), id)
+
+                    job.program(["bin/gammaloop_rust_cli", "batch", "--batch_input_file={}".format(str(input_file)),
+                                "--name=massless_triangle", "--process_file=triangle", "--output_name={}".format(str(output_file))])
 
                 submitted = client.submit(job)
                 client.wait_for_jobs([submitted])
 
-                for name in task_names:
-                    name_path = workspace_path.joinpath(name)
+                for id in task_ids:
                     self.rust_worker.process_batch_output(
-                        "{}out".format(name_path))
+                        str(workspace_path), id)
 
                 self.rust_worker.update_iter()
                 self.rust_worker.display_master_node_status()

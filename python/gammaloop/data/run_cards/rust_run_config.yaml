@@ -29,7 +29,8 @@ Integrator:
   learning_rate: 1.5
   train_on_avg: false
   show_max_wgt_info: false
-  max_prob_ratio: 0.0
+  max_prob_ratio: 0.01
+  seed: 0
 Observables: []
 Selectors: []
 Stability:

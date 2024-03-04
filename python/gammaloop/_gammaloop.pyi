@@ -75,10 +75,10 @@ class Worker:
     def load_master_node(self, integrand: str) -> None:
         """Setup a master node for the integrand given in argument."""
 
-    def write_batch_input(self, num_cores: int, num_samples: int, export_grid: bool, output_accumulator: bool, job_name: str) -> None:
+    def write_batch_input(self, num_cores: int, num_samples: int, export_grid: bool, output_accumulator: bool, workspace_path: str, job_id: int) -> None:
         """ Writes a batch input file for a integration job """
 
-    def process_batch_output(self, job_name: str) -> None:
+    def process_batch_output(self, workspace_path: str, job_id: int) -> None:
         """process the output of a job"""
 
     def display_master_node_status(self) -> None:

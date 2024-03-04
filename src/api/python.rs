@@ -422,7 +422,8 @@ impl PythonWorker {
         num_samples: usize,
         export_grid: bool,
         output_accumulator: bool,
-        job_name: &str,
+        workspace_path: &str,
+        job_id: usize,
     ) -> PyResult<String> {
         let master_node = self.master_node.as_mut().unwrap();
 
@@ -433,26 +434,34 @@ impl PythonWorker {
                 num_samples,
                 export_grid,
                 output_accumulator,
-                job_name,
+                workspace_path,
+                job_id,
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
         {
-            Ok(_) => Ok(format!("Wrote batch input for job {}", job_name)),
+            Ok(_) => Ok(format!("Wrote batch input for job {}", job_id)),
             Err(e) => Err(e),
         }
     }
 
-    pub fn process_batch_output(&mut self, job_name: &str) -> PyResult<String> {
+    pub fn process_batch_output(
+        &mut self,
+        workspace_path: &str,
+        job_id: usize,
+    ) -> PyResult<String> {
         let master_node = self.master_node.as_mut().unwrap();
 
-        let output_file = std::fs::read(job_name)?;
+        let job_out_name = format!("job_{}_out", job_id);
+        let job_out_path = Path::new(workspace_path).join(job_out_name);
+
+        let output_file = std::fs::read(job_out_path)?;
         let batch_result: SerializableBatchResult = bincode::deserialize(&output_file).unwrap();
 
         master_node
             .process_batch_output(batch_result.into_batch_result())
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-        Ok(format!("Processed job {}", job_name))
+        Ok(format!("Processed job {}", job_id))
     }
 
     pub fn write_default_settings(&self, path: &str) -> PyResult<String> {
