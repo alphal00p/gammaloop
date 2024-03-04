@@ -58,62 +58,16 @@ impl EvaluationMetaData {
 }
 
 /// This struct merges the evaluation metadata of many evaluations into a single struct
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct StatisticsCounter {
     pub num_evals: usize,
     sum_rep3d_evaluation_time: Duration,
     sum_parameterization_time: Duration,
     sum_total_evaluation_time: Duration,
-    sum_relative_instability_error: Complex<f64>,
-    num_double_precision_evals: usize,
-    num_quadruple_precision_evals: usize,
-    num_nan_evals: usize,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SerializableMetaDataStatistics {
-    num_evals: usize,
-    sum_rep3d_evaluation_time: u128,
-    sum_parameterization_time: u128,
-    sum_total_evaluation_time: u128,
     sum_relative_instability_error: (f64, f64),
     num_double_precision_evals: usize,
     num_quadruple_precision_evals: usize,
     num_nan_evals: usize,
-}
-
-impl SerializableMetaDataStatistics {
-    pub fn from_metadata_statistics(metadata: StatisticsCounter) -> Self {
-        Self {
-            sum_rep3d_evaluation_time: metadata.sum_rep3d_evaluation_time.as_nanos(),
-            sum_parameterization_time: metadata.sum_parameterization_time.as_nanos(),
-            sum_total_evaluation_time: metadata.sum_total_evaluation_time.as_nanos(),
-            sum_relative_instability_error: (
-                metadata.sum_relative_instability_error.re,
-                metadata.sum_relative_instability_error.im,
-            ),
-            num_evals: metadata.num_evals,
-            num_double_precision_evals: metadata.num_double_precision_evals,
-            num_quadruple_precision_evals: metadata.num_quadruple_precision_evals,
-            num_nan_evals: metadata.num_nan_evals,
-        }
-    }
-
-    pub fn into_metadata_statistics(self) -> StatisticsCounter {
-        StatisticsCounter {
-            sum_rep3d_evaluation_time: Duration::from_nanos(self.sum_rep3d_evaluation_time as u64), // this cast might ruin the statistics on large runs
-            sum_parameterization_time: Duration::from_nanos(self.sum_parameterization_time as u64),
-            sum_total_evaluation_time: Duration::from_nanos(self.sum_total_evaluation_time as u64),
-            sum_relative_instability_error: Complex::new(
-                self.sum_relative_instability_error.0,
-                self.sum_relative_instability_error.1,
-            ),
-            num_evals: self.num_evals,
-            num_double_precision_evals: self.num_double_precision_evals,
-            num_quadruple_precision_evals: self.num_quadruple_precision_evals,
-            num_nan_evals: self.num_nan_evals,
-        }
-    }
 }
 
 impl StatisticsCounter {
@@ -126,8 +80,10 @@ impl StatisticsCounter {
                     data_entry.evaluation_metadata.rep3d_evaluation_time;
                 accumulator.sum_parameterization_time +=
                     data_entry.evaluation_metadata.parameterization_time;
-                accumulator.sum_relative_instability_error +=
-                    data_entry.evaluation_metadata.relative_instability_error;
+                accumulator.sum_relative_instability_error.0 +=
+                    data_entry.evaluation_metadata.relative_instability_error.re;
+                accumulator.sum_relative_instability_error.1 +=
+                    data_entry.evaluation_metadata.relative_instability_error.im;
                 accumulator.sum_total_evaluation_time +=
                     data_entry.evaluation_metadata.total_timing;
 
@@ -152,8 +108,10 @@ impl StatisticsCounter {
                 + other.sum_rep3d_evaluation_time,
             sum_parameterization_time: self.sum_parameterization_time
                 + other.sum_parameterization_time,
-            sum_relative_instability_error: (self.sum_relative_instability_error
-                + other.sum_relative_instability_error),
+            sum_relative_instability_error: (
+                self.sum_relative_instability_error.0 + other.sum_relative_instability_error.0,
+                self.sum_relative_instability_error.1 + other.sum_relative_instability_error.1,
+            ),
             num_evals: self.num_evals + other.num_evals,
             num_double_precision_evals: (self.num_double_precision_evals
                 + other.num_double_precision_evals),
@@ -169,7 +127,7 @@ impl StatisticsCounter {
         Self {
             sum_rep3d_evaluation_time: Duration::ZERO,
             sum_parameterization_time: Duration::ZERO,
-            sum_relative_instability_error: Complex::new(0.0, 0.0),
+            sum_relative_instability_error: (0.0, 0.0),
             sum_total_evaluation_time: Duration::ZERO,
             num_evals: 0,
             num_double_precision_evals: 0,
@@ -208,8 +166,11 @@ impl StatisticsCounter {
     }
 
     /// Get the average relative error computed during instability checks
-    pub fn get_avg_instabillity_error(&self) -> Complex<f64> {
-        self.sum_relative_instability_error / self.num_evals as f64
+    pub fn get_avg_instabillity_error(&self) -> (f64, f64) {
+        (
+            self.sum_relative_instability_error.0 / self.num_evals as f64,
+            self.sum_relative_instability_error.1 / self.num_evals as f64,
+        )
     }
 
     /// Get the percentage of evaluations that were done in double precision and were stable.

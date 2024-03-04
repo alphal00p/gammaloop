@@ -11,7 +11,6 @@ use serde::Serialize;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
 use crate::evaluation_result::EvaluationResult;
-use crate::evaluation_result::SerializableMetaDataStatistics;
 use crate::evaluation_result::StatisticsCounter;
 use crate::integrands::HasIntegrand;
 use crate::observables::Event;
@@ -648,7 +647,7 @@ pub struct BatchResult {
 
 #[derive(Serialize, Deserialize)]
 pub struct SerializableBatchResult {
-    pub statistics: SerializableMetaDataStatistics,
+    pub statistics: StatisticsCounter,
     pub integrand_data: SerializableBatchIntegrateOutput,
     pub event_data: SerializableEventOutput,
 }
@@ -656,7 +655,7 @@ pub struct SerializableBatchResult {
 impl SerializableBatchResult {
     pub fn from_batch_result(result: BatchResult) -> Self {
         Self {
-            statistics: SerializableMetaDataStatistics::from_metadata_statistics(result.statistics),
+            statistics: result.statistics,
             integrand_data: SerializableBatchIntegrateOutput::from_batch_integrate_output(
                 &result.integrand_data,
             ),
@@ -666,7 +665,7 @@ impl SerializableBatchResult {
 
     pub fn into_batch_result(self) -> BatchResult {
         BatchResult {
-            statistics: self.statistics.into_metadata_statistics(),
+            statistics: self.statistics,
             integrand_data: self.integrand_data.into_batch_integrate_output(),
             event_data: self.event_data.into_event_output(),
         }
