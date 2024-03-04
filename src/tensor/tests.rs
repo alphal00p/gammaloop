@@ -1,11 +1,11 @@
+use std::collections::HashMap;
+
 use crate::tensor::{
-    ufo::mink_four_vector,
-    Contract, DenseTensor, GetTensorData, HasTensorData,
-    Representation::{self},
-    SparseTensor, SymbolicContract, TensorStructure,
+    ufo::mink_four_vector, Contract, DenseTensor, GetTensorData, HasTensorData, MixedTensor,
+    Representation, SparseTensor, SymbolicContract, TensorStructure,
 };
 use ahash::{HashSet, HashSetExt};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use num::Complex;
 use rand::{rngs, Rng, SeedableRng};
@@ -17,8 +17,8 @@ use symbolica::{
 };
 
 use super::{
-    structure, symbolic::SymbolicTensor, ufo, AbstractIndex, Dimension, HistoryStructure,
-    NumTensor, SetTensorData, Slot, TensorNetwork, VecStructure,
+    structure, symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension,
+    HistoryStructure, NumTensor, SetTensorData, Slot, TensorNetwork, VecStructure,
 };
 
 fn test_tensor<D, S>(structure: S, seed: u64) -> SparseTensor<D, S>
@@ -43,7 +43,7 @@ where
 
 fn test_structure(length: usize, seed: u64) -> Vec<Slot> {
     let mut rng = Xoroshiro64Star::seed_from_u64(seed);
-    let mut s = HashSet::new();
+    let mut s = IndexSet::new();
 
     let rank = length;
     while s.len() < rank {
@@ -63,25 +63,35 @@ fn test_structure(length: usize, seed: u64) -> Vec<Slot> {
 
 #[test]
 fn rng_is_deterministic() {
-    let a = test_structure(2, 11);
-    let a: DenseTensor<i8> = test_tensor(a, 1).to_dense();
+    let valid = IndexMap::from([
+        (vec![1, 0, 1], -7),
+        (vec![2, 0, 2], -106),
+        (vec![0, 1, 0], -52),
+        (vec![2, 1, 2], 4),
+        (vec![3, 1, 1], -29),
+        (vec![0, 0, 2], 88),
+        (vec![2, 0, 1], 79),
+        (vec![0, 1, 1], -69),
+        (vec![1, 1, 1], -78),
+        (vec![3, 0, 2], 55),
+        (vec![2, 0, 0], 26),
+        (vec![3, 1, 2], -64),
+        (vec![1, 0, 2], 68),
+    ]);
+    for _ in 0..10 {
+        let a = test_structure(3, 11);
 
-    assert_eq!(a.data(), vec![-5, 0, -7, 0, 79, -121, -108, 0]);
+        let a: SparseTensor<i8> = test_tensor(a, 1);
+
+        assert_eq!(a.hashmap(), valid);
+    }
 }
 
 #[test]
 fn indexflatten() {
-    let a = HistoryStructure::from_integers(
-        &[(1, 3), (2, 4), (3, 5)].map(|(a, d)| (a.into(), d.into())),
-        "a",
-    );
-
-    let idx = vec![1, 2, 3];
+    let a = test_structure(4, 31);
+    let idx = vec![1, 2, 3, 1];
     let flatidx = a.flat_index(&idx).unwrap();
-    println!("{:?}", a.strides());
-
-    println!("{flatidx}");
-    println!("{:?}", a.expanded_index(flatidx).unwrap());
     assert_eq!(idx, a.expanded_index(flatidx).unwrap());
 }
 
@@ -89,47 +99,37 @@ fn indexflatten() {
 fn trace() {
     let structura =
         HistoryStructure::from_integers(&[(1, 5), (1, 5)].map(|(a, d)| (a.into(), d.into())), "a");
-    let a = SparseTensor::from_data(
-        &[
-            (vec![0, 0], 1.0),
-            (vec![1, 1], 2.0),
-            (vec![1, 2], 4.),
-            (vec![2, 1], 3.),
-            (vec![2, 2], 5.),
-            (vec![3, 3], 6.),
-            (vec![4, 4], 7.),
-        ],
-        structura,
-    )
-    .unwrap();
+    let a = test_tensor::<i8, _>(structura, 3);
     let f = a.internal_contract();
 
-    println!("{f:?}");
+    assert!(f.is_scalar());
+    assert_eq!(f.data(), vec![79]);
 }
 
 #[test]
 fn construct_dense_tensor() {
-    let a = HistoryStructure::from_integers(
-        &[(1, 2), (2, 3), (3, 4)].map(|(a, d)| (a.into(), d.into())),
-        "a",
-    );
-
+    let a = test_structure(4, 32);
     let data = vec![1.0; a.size()];
-    super::DenseTensor::from_data(&data, a).unwrap();
+    let tensor = super::DenseTensor::from_data(&data, a).unwrap();
+    let num_tensor: NumTensor = tensor.clone().into();
+    let data_tensor: DataTensor<f64, _> = tensor.clone().into();
+    let mixed_tensor: MixedTensor<_> = tensor.clone().into();
+
+    assert_eq!(mixed_tensor.try_as_float().unwrap().data(), data);
+    assert_eq!(data_tensor.data(), data);
+    assert_eq!(num_tensor.try_as_float().unwrap().data(), data);
 }
 
 #[test]
 fn construct_sparse_tensor() -> Result<(), String> {
-    let structure = [(1, 2), (2, 3), (3, 4)]
-        .into_iter()
-        .map(Slot::from)
-        .collect();
+    let structure = test_structure(3, 11);
+    println!("{:?}", structure);
 
-    let mut a: SparseTensor<usize> = SparseTensor::empty(structure);
+    let mut a = SparseTensor::empty(structure);
     a.set(&[1, 2, 1], 1)?;
-    a.set(&[0, 2, 3], 2)?;
-    a.set(&[1, 2, 3], 3)?;
-    a.set(&[1, 0, 3], 4)?;
+    a.set(&[0, 2, 2], 2)?;
+    a.set(&[1, 2, 2], 3)?;
+    a.set(&[1, 0, 2], 4)?;
     Ok(())
 }
 
