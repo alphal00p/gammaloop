@@ -34,6 +34,7 @@ Integrator:
   train_on_avg: false
   show_max_wgt_info: false
   max_prob_ratio: 0.01
+  seed: 1337
 Observables: []
 Selectors: []
 Stability:
