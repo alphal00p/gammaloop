@@ -17,6 +17,7 @@ use num::Complex;
 #[allow(unused_imports)]
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
+use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
 
@@ -877,6 +878,53 @@ impl Graph {
                     .all(|x| *x == 0)
             }
         })
+    }
+
+    /// For a given edge, return the indices of the edges which have the same signature
+    #[inline]
+    pub fn is_edge_raised(&self, edge_index: usize) -> SmallVec<[usize; 2]> {
+        let edge_signature = &self.loop_momentum_basis.edge_signatures[edge_index];
+        let virtual_edges = self.get_virtual_edges_iterator();
+
+        virtual_edges
+            .filter(|(index, _)| {
+                self.loop_momentum_basis.edge_signatures[*index] == *edge_signature
+                    && *index != edge_index
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// Returns groups of edges which all have the same signature
+    #[inline]
+    pub fn group_edges_by_signature(&self) -> Vec<SmallVec<[usize; 3]>> {
+        let mut edges: Vec<usize> = self
+            .get_virtual_edges_iterator()
+            .map(|(index, _)| index)
+            .collect();
+
+        let mut grouped_edges = Vec::with_capacity(edges.len());
+
+        while !edges.is_empty() {
+            let current_edge = edges[0];
+
+            let mut group = smallvec![current_edge];
+            let mut index = 1;
+
+            while index < edges.len() {
+                if self.loop_momentum_basis.edge_signatures[current_edge]
+                    == self.loop_momentum_basis.edge_signatures[edges[index]]
+                {
+                    group.push(edges.remove(index));
+                } else {
+                    index += 1;
+                }
+            }
+
+            grouped_edges.push(group);
+        }
+
+        grouped_edges
     }
 }
 
