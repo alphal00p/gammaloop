@@ -152,6 +152,9 @@ mod tests_scalar_massless_triangle {
         assert_approx_eq(cff_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
         assert_approx_eq(ltd_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
         assert_approx_eq(ltd_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
+
+        let propagator_groups = graph.group_edges_by_signature();
+        assert_eq!(propagator_groups.len(), 3);
         // TODO: @Mathijs, you can put your own checks there
     }
 }

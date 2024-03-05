@@ -906,10 +906,10 @@ impl Graph {
         let mut grouped_edges = Vec::with_capacity(edges.len());
 
         while !edges.is_empty() {
-            let current_edge = edges[0];
+            let current_edge = edges.remove(0);
 
             let mut group = smallvec![current_edge];
-            let mut index = 1;
+            let mut index = 0;
 
             while index < edges.len() {
                 if self.loop_momentum_basis.edge_signatures[current_edge]
