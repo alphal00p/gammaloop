@@ -275,6 +275,9 @@ fn pytest_scalar_fishnet_2x2() {
         absolute_truth.im,
         LTD_COMPARISON_TOLERANCE,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 12);
     // TODO: @Mathijs, you can put your own checks there
 }
 
@@ -328,6 +331,9 @@ fn pytest_scalar_sunrise() {
     assert_approx_eq(ltd_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(ltd_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
     println!("ltd correct");
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 3);
 }
 
 #[test]
@@ -408,6 +414,11 @@ fn pytest_scalar_fishnet_2x3() {
         ltd_res.im.into(),
         LTD_COMPARISON_TOLERANCE,
     );
+
+    let propagator_groups = amplitude.amplitude_graphs[0]
+        .graph
+        .group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 17);
     // TODO: @Mathijs, you can put your own checks there
 }
 
@@ -486,6 +497,9 @@ fn pytest_scalar_cube() {
         ltd_res.im.into(),
         LTD_COMPARISON_TOLERANCE,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 12);
 }
 
 #[test]
@@ -536,6 +550,9 @@ fn pytest_scalar_bubble() {
     assert_approx_eq(cff_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(ltd_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(ltd_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 2);
 }
 
 #[test]
@@ -618,6 +635,9 @@ fn pytest_massless_scalar_box() {
         absolute_truth.im,
         LTD_COMPARISON_TOLERANCE,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 4);
 }
 
 #[test]
@@ -693,6 +713,9 @@ fn pytest_scalar_double_triangle() {
         absolute_truth.im,
         LTD_COMPARISON_TOLERANCE,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 5);
 }
 
 #[test]
@@ -762,6 +785,9 @@ fn pytest_scalar_mercedes() {
         absolute_truth.im,
         LTD_COMPARISON_TOLERANCE,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 6);
 }
 
 #[test]
@@ -841,6 +867,9 @@ fn pytest_scalar_triangle_box() {
         absolute_truth.im,
         LTD_COMPARISON_TOLERANCE,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 6);
 }
 
 #[test]
@@ -925,4 +954,7 @@ fn pytest_scalar_isopod() {
         absolute_truth.im,
         LTD_COMPARISON_TOLERANCE,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 9);
 }
