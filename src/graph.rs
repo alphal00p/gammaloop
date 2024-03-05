@@ -2,7 +2,7 @@ use crate::{
     cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model,
-    tropical::{self, SerializableTropicalSubgraphTable, TropicalSubgraphTable},
+    tropical::{self, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
 };
 use ahash::RandomState;
@@ -828,7 +828,7 @@ impl Graph {
     }
 
     pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
-        let derived_data = DerivedGraphData::load_from_path(path, &self.loop_momentum_basis)?;
+        let derived_data = DerivedGraphData::load_from_path(path)?;
         self.derived_data = derived_data;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
@@ -907,17 +907,11 @@ impl DerivedGraphData {
                 .map(|lmbs| lmbs.iter().map(|lmb| lmb.to_serializable()).collect_vec()),
             cff_expression: self.cff_expression.clone().map(|cff| cff.to_serializable()),
             ltd_expression: self.ltd_expression.clone().map(|ltd| ltd.to_serializable()),
-            tropical_subgraph_table: self
-                .tropical_subgraph_table
-                .clone()
-                .map(|table| table.to_serializable()),
+            tropical_subgraph_table: self.tropical_subgraph_table.clone(),
         }
     }
 
-    pub fn from_serializable(
-        serializable: SerializableDerivedGraphData,
-        lmb: &LoopMomentumBasis,
-    ) -> Self {
+    pub fn from_serializable(serializable: SerializableDerivedGraphData) -> Self {
         DerivedGraphData {
             loop_momentum_bases: serializable.loop_momentum_bases.map(|lmbs| {
                 lmbs.iter()
@@ -930,18 +924,16 @@ impl DerivedGraphData {
             ltd_expression: serializable
                 .ltd_expression
                 .map(LTDExpression::from_serializable),
-            tropical_subgraph_table: serializable
-                .tropical_subgraph_table
-                .map(|table| TropicalSubgraphTable::from_serializable(table, lmb)),
+            tropical_subgraph_table: serializable.tropical_subgraph_table,
         }
     }
 
-    pub fn load_from_path(path: &Path, lmb: &LoopMomentumBasis) -> Result<Self, Report> {
+    pub fn load_from_path(path: &Path) -> Result<Self, Report> {
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
                 let derived_data: SerializableDerivedGraphData =
                     bincode::deserialize(&derived_data_bytes)?;
-                Ok(Self::from_serializable(derived_data, lmb))
+                Ok(Self::from_serializable(derived_data))
             }
             Err(_) => {
                 warn!("no derived data found");
@@ -975,7 +967,7 @@ pub struct SerializableDerivedGraphData {
     pub loop_momentum_bases: Option<Vec<SerializableLoopMomentumBasis>>,
     pub cff_expression: Option<SerializableCFFExpression>,
     pub ltd_expression: Option<SerializableLTDExpression>,
-    pub tropical_subgraph_table: Option<SerializableTropicalSubgraphTable>,
+    pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
 }
 
 #[derive(Debug, Clone)]

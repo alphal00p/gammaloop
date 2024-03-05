@@ -1,12 +1,11 @@
 use ahash::HashSet;
 use color_eyre::Report;
 use log::info;
-use nalgebra::DMatrix;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    graph::{EdgeType, Graph, LoopMomentumBasis},
+    graph::{EdgeType, Graph},
     utils::FloatLike,
 };
 
@@ -14,7 +13,7 @@ use crate::{
 pub const D: usize = 3; // we are always going to do 3-d representations, so I hardcode this.
 
 /// Simplified version of the Graph struct, used to generate the tropical subgraph table
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TropicalGraph {
     dod: f64,
     is_edge_massive: Vec<bool>,
@@ -23,62 +22,10 @@ pub struct TropicalGraph {
     external_vertices: Vec<u8>,
     _edge_map: Vec<usize>, // maps the edges in this graph to the edges in the parent graph
     _inverse_edge_map: Vec<Option<usize>>, // maps the edges in the parent graph to the edges in this graph
-    signature_matrix: DMatrix<f64>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SerializableTropicalGraph {
-    pub dod: f64,
-    pub is_edge_massive: Vec<bool>,
-    pub topology: Vec<TropicalEdge>,
-    pub num_massive_edges: usize,
-    pub external_vertices: Vec<u8>,
-    pub _edge_map: Vec<usize>, // maps the edges in this graph to the edges in the parent graph
-    pub _inverse_edge_map: Vec<Option<usize>>, // maps the edges in the parent graph to the edges in this graph
+    signature_matrix: Vec<Vec<isize>>,
 }
 
 impl TropicalGraph {
-    pub fn from_serializable(
-        serializable: SerializableTropicalGraph,
-        parent_lmb: &LoopMomentumBasis,
-    ) -> Self {
-        let loop_number = parent_lmb.basis.len();
-        let edge_number = serializable.topology.len();
-
-        // by loading the signature matrix in this way, we can recompute it if the user changes the loop momentum basis
-
-        let mut signature_matrix = DMatrix::zeros(edge_number, loop_number);
-        for e in 0..edge_number {
-            for l in 0..loop_number {
-                signature_matrix[(e, l)] =
-                    parent_lmb.edge_signatures[serializable._edge_map[e]].0[l] as f64;
-            }
-        }
-
-        TropicalGraph {
-            dod: serializable.dod,
-            is_edge_massive: serializable.is_edge_massive,
-            topology: serializable.topology,
-            num_massive_edges: serializable.num_massive_edges,
-            external_vertices: serializable.external_vertices,
-            _edge_map: serializable._edge_map,
-            _inverse_edge_map: serializable._inverse_edge_map,
-            signature_matrix,
-        }
-    }
-
-    pub fn to_serializable(&self) -> SerializableTropicalGraph {
-        SerializableTropicalGraph {
-            dod: self.dod,
-            is_edge_massive: self.is_edge_massive.clone(),
-            topology: self.topology.clone(),
-            num_massive_edges: self.num_massive_edges,
-            external_vertices: self.external_vertices.clone(),
-            _edge_map: self._edge_map.clone(),
-            _inverse_edge_map: self._inverse_edge_map.clone(),
-        }
-    }
-
     /// Create the simplfied graph from the full Graph struct
     pub fn from_graph(graph: &Graph, tropical_edge_weights: &[f64]) -> Self {
         let dod = tropical_edge_weights.iter().sum::<f64>()
@@ -153,11 +100,11 @@ impl TropicalGraph {
         let edge_number = topology.len();
         let loop_number = graph.loop_momentum_basis.basis.len();
 
-        let mut signature_matrix = DMatrix::zeros(edge_number, loop_number);
+        let mut signature_matrix = vec![vec![0; loop_number]; edge_number];
         for e in 0..edge_number {
             for l in 0..loop_number {
-                signature_matrix[(e, l)] =
-                    graph.loop_momentum_basis.edge_signatures[edge_map[e]].0[l] as f64;
+                signature_matrix[e][l] =
+                    graph.loop_momentum_basis.edge_signatures[edge_map[e]].0[l];
             }
         }
 
@@ -475,39 +422,13 @@ pub struct TropicalSubgraphTableEntry {
 }
 
 /// The list of data for all subgraphs, indexed using the TropicalSubGraphId
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TropicalSubgraphTable {
     pub table: Vec<TropicalSubgraphTableEntry>,
     pub tropical_graph: TropicalGraph,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SerializableTropicalSubgraphTable {
-    pub table: Vec<TropicalSubgraphTableEntry>,
-    pub tropical_graph: SerializableTropicalGraph,
-}
-
 impl TropicalSubgraphTable {
-    pub fn from_serializable(
-        serializable: SerializableTropicalSubgraphTable,
-        parent_lmb: &LoopMomentumBasis,
-    ) -> Self {
-        Self {
-            table: serializable.table,
-            tropical_graph: TropicalGraph::from_serializable(
-                serializable.tropical_graph,
-                parent_lmb,
-            ),
-        }
-    }
-
-    pub fn to_serializable(&self) -> SerializableTropicalSubgraphTable {
-        SerializableTropicalSubgraphTable {
-            table: self.table.clone(),
-            tropical_graph: self.tropical_graph.to_serializable(),
-        }
-    }
-
     /// Generate the tropical subgraph table from a graph
     pub fn generate_from_graph(
         graph: &Graph,
@@ -610,7 +531,6 @@ pub mod tropical_parameterization {
 
     use itertools::{izip, Itertools};
     use lorentz_vector::LorentzVector;
-    use nalgebra::DMatrix;
     use statrs::function::gamma::gamma;
 
     use crate::{
@@ -847,8 +767,8 @@ pub mod tropical_parameterization {
     ) -> Result<(Vec<LorentzVector<T>>, T), Report> {
         let tropical_subgraph_table = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
         let signature_matrix = &tropical_subgraph_table.tropical_graph.signature_matrix;
-        let _num_edges = signature_matrix.nrows();
-        let num_loops = signature_matrix.ncols();
+        let _num_edges = signature_matrix.len();
+        let num_loops = signature_matrix[0].len();
 
         let mut rng = MimicRng::new(x_space_point);
 
@@ -983,10 +903,10 @@ pub mod tropical_parameterization {
     #[inline]
     fn compute_l_matrix<T: FloatLike>(
         x_vec: &[T],
-        signature_matrix: &DMatrix<f64>,
+        signature_matrix: &[Vec<isize>],
     ) -> SquareMatrix<T> {
-        let num_edges = signature_matrix.nrows();
-        let num_loops = signature_matrix.ncols();
+        let num_edges = signature_matrix.len();
+        let num_loops = signature_matrix[0].len();
 
         let mut temp_l_matrix = SquareMatrix::new_zeros(num_loops);
 
@@ -994,7 +914,7 @@ pub mod tropical_parameterization {
             for j in 0..num_loops {
                 for e in 0..num_edges {
                     temp_l_matrix[(i, j)] += x_vec[e]
-                        * Into::<T>::into(signature_matrix[(e, i)] * signature_matrix[(e, j)]);
+                        * Into::<T>::into((signature_matrix[e][i] * signature_matrix[e][j]) as f64);
                 }
             }
         }
@@ -1037,16 +957,16 @@ pub mod tropical_parameterization {
     #[inline]
     fn compute_u_vectors<T: FloatLike>(
         x_vec: &[T],
-        signature_marix: &DMatrix<f64>,
+        signature_marix: &[Vec<isize>],
         edge_shifts: &[LorentzVector<T>],
     ) -> Vec<LorentzVector<T>> {
-        let num_loops = signature_marix.ncols();
-        let num_edges = signature_marix.nrows();
+        let num_loops = signature_marix[0].len();
+        let num_edges = signature_marix.len();
 
         (0..num_loops)
             .map(|l| {
                 (0..num_edges).fold(LorentzVector::new(), |acc: LorentzVector<T>, e| {
-                    acc + edge_shifts[e] * x_vec[e] * Into::<T>::into(signature_marix[(e, l)])
+                    acc + edge_shifts[e] * x_vec[e] * Into::<T>::into(signature_marix[e][l] as f64)
                 })
             })
             .collect_vec()
@@ -1240,7 +1160,7 @@ mod tests {
             external_vertices: vec![0, 1, 2, 3],
             _edge_map: vec![0, 1, 2, 3],
             _inverse_edge_map: vec![], // not needed for this test
-            signature_matrix: DMatrix::zeros(4, 4), // not needed for this test
+            signature_matrix: vec![vec![0; 4]; 4], // not needed for this test
         };
 
         let components = tropical_graph.get_connected_components(&[0, 1, 2, 3]);
@@ -1290,7 +1210,7 @@ mod tests {
             external_vertices: vec![0, 1, 2, 3],
             _edge_map: vec![0, 1, 2, 3],
             _inverse_edge_map: vec![], // not needed for this test
-            signature_matrix: DMatrix::zeros(4, 4), // not needed for this test
+            signature_matrix: vec![vec![0; 4]; 4], // not needed for this test
         };
 
         let loop_number = tropical_graph1.get_loop_number(&[0, 1, 2, 3]);
@@ -1335,7 +1255,7 @@ mod tests {
             external_vertices: vec![0, 1, 2],
             _edge_map: vec![0, 1, 2],
             _inverse_edge_map: vec![], // not needed for this test
-            signature_matrix: DMatrix::zeros(3, 3), // not needed for this test
+            signature_matrix: vec![vec![0; 3]; 3], // not needed for this test
         };
 
         let subgraph_table = TropicalSubgraphTable::generate_from_tropical(&triangle_graph)
@@ -1412,7 +1332,7 @@ mod tests {
             external_vertices: vec![0, 1],
             _edge_map: vec![0, 1, 2],
             _inverse_edge_map: vec![], // not needed for this test
-            signature_matrix: DMatrix::zeros(3, 3), // not needed for this test
+            signature_matrix: vec![vec![0; 3]; 3], // not needed for this test
         };
 
         let subgraph_table = TropicalSubgraphTable::generate_from_tropical(&sunrise_graph)
@@ -1511,7 +1431,7 @@ mod tests {
             external_vertices: externals,
             _edge_map: vec![0, 1, 2, 3, 4, 5, 6, 7],
             _inverse_edge_map: vec![],
-            signature_matrix: DMatrix::zeros(3, 3),
+            signature_matrix: vec![vec![0; 3]; 3],
         };
 
         let subgraph_table = TropicalSubgraphTable::generate_from_tropical(&gr)
