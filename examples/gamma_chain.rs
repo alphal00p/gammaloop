@@ -1,7 +1,6 @@
 // Gamma chain example
 
 use num::Complex;
-use slotmap::Key;
 
 use std::{
     fmt::Debug,
@@ -133,19 +132,12 @@ fn gamma_net(
             i += 1;
             result
                 .push(mink_four_vector_sym(usize::try_from(*m).unwrap().into(), &p, state).into());
-            result.push(
-                gammasym(
-                    usize::try_from(*m).unwrap().into(),
-                    (ui.into(), uj.into()),
-                    state,
-                )
-                .into(),
-            );
+            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj), state).into());
         } else {
             result.push(
                 gammasym(
                     AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
-                    (ui.into(), uj.into()),
+                    (ui, uj),
                     state,
                 )
                 .into(),
@@ -208,19 +200,12 @@ fn gamma_net_param(
                 param_mink_four_vector(usize::try_from(*m).unwrap().into(), pname, state, ws)
                     .into(),
             );
-            result.push(
-                gammasym(
-                    usize::try_from(*m).unwrap().into(),
-                    (ui.into(), uj.into()),
-                    state,
-                )
-                .into(),
-            );
+            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj), state).into());
         } else {
             result.push(
                 gammasym(
                     AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
-                    (ui.into(), uj.into()),
+                    (ui, uj),
                     state,
                 )
                 .into(),

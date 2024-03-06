@@ -1,7 +1,5 @@
 use ahash::AHashMap;
 
-use itertools::Itertools;
-
 use num::Zero;
 
 use serde::{Deserialize, Serialize};
@@ -15,9 +13,9 @@ use self::parametric::{MixedTensor, MixedTensors, SymbolicContract};
 use self::structure::HistoryStructure;
 
 use super::{
-    parametric, structure, Atom, DataIterator, DataTensor, DenseTensor, GetTensorData, HasName,
-    HasTensorData, NumTensor, Representation, SetTensorData, Shadowable, Slot, SparseTensor,
-    StructureContract, TensorStructure, TracksCount,
+    parametric, structure, Atom, DataIterator, DataTensor, DenseTensor, HasName, HasTensorData,
+    NumTensor, Representation, SetTensorData, Shadowable, Slot, SparseTensor, StructureContract,
+    TensorStructure, TracksCount,
 };
 use smartstring::alias::String;
 use std::{
@@ -168,7 +166,7 @@ where
 
         for (i, u) in self.flat_iter() {
             for (j, t) in other.flat_iter() {
-                out.set_flat(i * stride + j, u * t);
+                let _ = out.set_flat(i * stride + j, u * t);
             }
         }
 
@@ -305,7 +303,7 @@ where
                 }
                 result_index += 1;
             }
-            other_iter.reset();
+            let _ = other_iter.reset();
         }
         let result = DenseTensor {
             data: result_data,
@@ -349,7 +347,7 @@ where
                 }
                 result_index += 1;
             }
-            other_iter.reset();
+            let _ = other_iter.reset();
         }
         let result: DenseTensor<U::Out, I> = DenseTensor {
             data: result_data,
@@ -461,13 +459,11 @@ where
         let mut other_iter = other.iter_fiber(j);
 
         let fiber_representation: Representation = self.reps()[i];
-        let mut max_skip = 0;
+
         for fiber_a in self_iter.by_ref() {
             for (skipped, nonzeros, fiber_b) in other_iter.by_ref() {
                 result_index += skipped;
-                if skipped > max_skip {
-                    max_skip = skipped;
-                }
+
                 for (i, k) in nonzeros.iter().enumerate() {
                     if fiber_representation.is_neg(*k) {
                         result_data[result_index] -= fiber_a[*k] * fiber_b[i];
@@ -478,10 +474,6 @@ where
                 result_index += 1;
             }
             result_index += other_iter.reset();
-        }
-
-        if max_skip > 0 {
-            println!("skippedDS {max_skip}");
         }
 
         let result = DenseTensor {
