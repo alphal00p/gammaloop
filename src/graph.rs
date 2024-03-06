@@ -2,6 +2,7 @@ use crate::{
     cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model,
+    subtraction::overlap::EsurfaceDerivedData,
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
 };
@@ -939,6 +940,7 @@ pub struct DerivedGraphData {
     pub ltd_expression: Option<LTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
+    pub esurface_derived_data: Option<EsurfaceDerivedData>,
 }
 
 impl DerivedGraphData {
@@ -949,6 +951,7 @@ impl DerivedGraphData {
             ltd_expression: None,
             tropical_subgraph_table: None,
             edge_groups: None,
+            esurface_derived_data: None,
         }
     }
 
@@ -967,6 +970,7 @@ impl DerivedGraphData {
                     .map(|group| group.clone().into_iter().collect())
                     .collect()
             }),
+            esurface_derived_data: self.esurface_derived_data.clone(),
         }
     }
 
@@ -987,6 +991,7 @@ impl DerivedGraphData {
             edge_groups: serializable
                 .edge_groups
                 .map(|groups| groups.into_iter().map(|group| group.into()).collect()),
+            esurface_derived_data: serializable.esurface_derived_data,
         }
     }
 
@@ -1031,6 +1036,7 @@ pub struct SerializableDerivedGraphData {
     pub ltd_expression: Option<SerializableLTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
     pub edge_groups: Option<Vec<Vec<usize>>>,
+    pub esurface_derived_data: Option<EsurfaceDerivedData>,
 }
 
 #[derive(Debug, Clone)]
