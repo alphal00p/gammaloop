@@ -896,7 +896,6 @@ impl Graph {
     }
 
     /// Returns groups of edges which all have the same signature
-    #[inline]
     pub fn group_edges_by_signature(&self) -> Vec<SmallVec<[usize; 3]>> {
         let mut edges: Vec<usize> = self
             .get_virtual_edges_iterator()
@@ -926,6 +925,10 @@ impl Graph {
 
         grouped_edges
     }
+
+    pub fn generate_edge_groups(&mut self) {
+        self.derived_data.edge_groups = Some(self.group_edges_by_signature());
+    }
 }
 
 #[allow(dead_code)]
@@ -935,6 +938,7 @@ pub struct DerivedGraphData {
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
+    pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
 }
 
 impl DerivedGraphData {
@@ -944,6 +948,7 @@ impl DerivedGraphData {
             cff_expression: None,
             ltd_expression: None,
             tropical_subgraph_table: None,
+            edge_groups: None,
         }
     }
 
@@ -956,6 +961,12 @@ impl DerivedGraphData {
             cff_expression: self.cff_expression.clone().map(|cff| cff.to_serializable()),
             ltd_expression: self.ltd_expression.clone().map(|ltd| ltd.to_serializable()),
             tropical_subgraph_table: self.tropical_subgraph_table.clone(),
+            edge_groups: self.edge_groups.clone().map(|groups| {
+                groups
+                    .iter()
+                    .map(|group| group.clone().into_iter().collect())
+                    .collect()
+            }),
         }
     }
 
@@ -973,6 +984,9 @@ impl DerivedGraphData {
                 .ltd_expression
                 .map(LTDExpression::from_serializable),
             tropical_subgraph_table: serializable.tropical_subgraph_table,
+            edge_groups: serializable
+                .edge_groups
+                .map(|groups| groups.into_iter().map(|group| group.into()).collect()),
         }
     }
 
@@ -1016,6 +1030,7 @@ pub struct SerializableDerivedGraphData {
     pub cff_expression: Option<SerializableCFFExpression>,
     pub ltd_expression: Option<SerializableLTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
+    pub edge_groups: Option<Vec<Vec<usize>>>,
 }
 
 #[derive(Debug, Clone)]
