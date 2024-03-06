@@ -15,6 +15,7 @@ pub mod linalg;
 pub mod ltd;
 pub mod model;
 pub mod observables;
+pub mod subtraction;
 pub mod tensor;
 pub mod tests;
 pub mod tests_from_pytest;

@@ -26,7 +26,7 @@ struct EsurfaceData {
 }
 
 impl EsurfaceData {
-    fn existence_condition<T: FloatLike>(&self, externals: &[LorentzVector<T>]) -> T {
+    fn existence_condition<T: FloatLike>(&self, externals: &[LorentzVector<T>]) -> (T, T) {
         let mut shift = LorentzVector::new();
 
         for (i, external) in externals.iter().enumerate() {
@@ -38,6 +38,9 @@ impl EsurfaceData {
             }
         }
 
-        shift.square() - Into::<T>::into(self.mass_sum_squared)
+        (
+            shift.t,
+            shift.square() - Into::<T>::into(self.mass_sum_squared),
+        )
     }
 }
