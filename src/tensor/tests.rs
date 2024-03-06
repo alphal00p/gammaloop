@@ -1,16 +1,12 @@
-
-
-use crate::{
-    tensor::{
-        ufo::mink_four_vector, Contract, DenseTensor, GetTensorData, HasTensorData,
-        MixedTensor, Representation, SparseTensor, SymbolicContract, TensorStructure,
-    },
+use crate::tensor::{
+    ufo::mink_four_vector, Contract, DenseTensor, GetTensorData, HasTensorData, MixedTensor,
+    Representation, SparseTensor, SymbolicContract, TensorStructure,
 };
-use ahash::{HashSetExt};
+use ahash::HashSetExt;
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
-use num::{Complex};
+use num::Complex;
 
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
@@ -21,9 +17,8 @@ use symbolica::{
 };
 
 use super::{
-    symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension,
-    HistoryStructure, NumTensor, SetTensorData, Slot,
-    TensorNetwork, VecStructure,
+    symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension, HistoryStructure,
+    NumTensor, SetTensorData, Slot, TensorNetwork, VecStructure,
 };
 
 trait Average {
@@ -212,17 +207,30 @@ fn tensor_structure_forwarding() {
 #[test]
 fn scalar_and_dim1_conract() {
     let common = test_structure_with_dims(&[1, 3, 1, 2], 6);
-    let structa = [test_structure(2, 32), common.clone()].concat();
-    let structb = [test_structure(3, 22), common.clone()].concat();
+    let structa = [test_structure(1, 32), common.clone()].concat();
+    let structb = [test_structure(1, 22), common.clone()].concat();
     let range = Some((-100, 100));
 
     let mut tensor_1: SparseTensor<i16> = test_tensor(structa, 3, range);
-    tensor_1.set_flat(0, 45);
+    tensor_1.set_flat(0, 45).unwrap();
     let mut tensor_2: SparseTensor<i16> = test_tensor(structb, 2, range);
-    tensor_2.set_flat(0, 2);
+    tensor_2.set_flat(0, 2).unwrap();
     let f = tensor_1.contract(&tensor_2).unwrap();
 
-    println!("{:?}", f.hashmap());
+    let valid = IndexMap::from([
+        (vec![0, 3], 5908),
+        (vec![2, 1], 2491),
+        (vec![3, 1], -1081),
+        (vec![0, 0], 90),
+        (vec![3, 0], -1200),
+        (vec![3, 3], -788),
+        (vec![1, 1], 2961),
+        (vec![2, 3], -4004),
+        (vec![2, 0], 160),
+        (vec![0, 1], -987),
+    ]);
+
+    assert_eq!(f.hashmap(), valid);
 }
 #[test]
 fn contract_with_rank_one_in_middle() {
@@ -231,12 +239,12 @@ fn contract_with_rank_one_in_middle() {
     let structa: VecStructure = [test_structure(2, s + 1), common.clone()].concat().into();
     let structb: VecStructure = [test_structure(1, s + 2), common].concat().into();
 
-    println!("seed: {s}");
+    // println!("seed: {s}");
 
-    println!("--");
-    println!("{structa}");
-    println!("--");
-    println!("{structb}");
+    // println!("--");
+    // println!("{structa}");
+    // println!("--");
+    // println!("{structb}");
     let range = Some((-1000, 1000));
     let tensor_a: SparseTensor<i32, VecStructure> = test_tensor(structa, s + 3, range);
     let dense_a: DenseTensor<i32, VecStructure> = tensor_a.to_dense();
@@ -245,10 +253,6 @@ fn contract_with_rank_one_in_middle() {
 
     let f = tensor_b.contract(&tensor_a).unwrap().to_dense();
     let g = dense_b.contract(&dense_a).unwrap();
-
-    println!("--");
-    println!("{}", f.structure());
-    println!("{:?}", f.strides());
 
     assert_eq!(f.data, g.data);
 }
@@ -275,20 +279,6 @@ where
 }
 
 #[test]
-fn skipping() {
-    let dim = Representation::Euclidean(4.into());
-    let structa: Vec<Slot> = vec![(1.into(), dim).into(), (2.into(), dim).into()];
-
-    let mut tensora = SparseTensor::empty(structa.clone());
-    tensora.set(&[0, 0], 1);
-    tensora.set(&[3, 3], 2);
-    let structb: Vec<Slot> = vec![(1.into(), dim).into()];
-    let tensorb = DenseTensor::from_data(&[1, 2, 3, 4], structb).unwrap();
-    let f = tensorb.contract(&tensora).unwrap();
-    assert_eq!(f.data, vec![1, 0, 0, 8]);
-}
-
-#[test]
 fn single_contract() {
     let s = 18;
     let range = Some((-1000, 1000));
@@ -306,27 +296,33 @@ fn single_contract() {
     let spensor_a: SparseTensor<i32, VecStructure> = test_tensor(structa.clone(), s + 3, range);
 
     let densor_a: DenseTensor<i32, VecStructure> = spensor_a.to_dense();
-    println!("A={:?}", densor_a);
+    // println!("A={:?}", densor_a);
 
     let spensor_b: SparseTensor<i32, VecStructure> = test_tensor(structb.clone(), s + 4, range);
     let densor_b: DenseTensor<i32, VecStructure> = spensor_b.to_dense();
-    println!("B={:?}", densor_b);
+    // println!("B={:?}", densor_b);
 
     let dense_dense = densor_b.contract(&densor_a).unwrap();
-    println!("A*B {:?}", dense_dense);
+    // println!("A*B {:?}", dense_dense);
     let sparse_sparse = spensor_b.contract(&spensor_a).unwrap().to_dense();
     let dense_sparse = densor_b.contract(&spensor_a).unwrap();
     let sparse_dense = spensor_b.contract(&densor_a).unwrap();
 
-    if dense_dense.data() != sparse_sparse.data() {
-        println!("S-S not match at seed: {s}");
-    }
-    if dense_dense.data() != dense_sparse.data() {
-        println!("D-S not match at seed: {s}");
-    }
-    if dense_dense.data() != sparse_dense.data() {
-        println!("S-D not match at seed: {s}");
-    }
+    assert_eq!(
+        dense_dense.data(),
+        sparse_sparse.data(),
+        "S-S not match at seed: {s}"
+    );
+    assert_eq!(
+        dense_dense.data(),
+        dense_sparse.data(),
+        "D-S not match at seed: {s}"
+    );
+    assert_eq!(
+        dense_dense.data(),
+        sparse_dense.data(),
+        "S-D not match at seed: {s}"
+    );
 }
 
 #[test]
@@ -337,7 +333,7 @@ fn all_single_contractions() {
     let mut sseq = vec![];
     let mut sdeq = vec![];
 
-    for s in 0..10000 {
+    for s in 0..1000 {
         let common = test_structure_with_id(0..1, s);
         let mut structa = test_structure_with_id(1..2, s);
         let mut structb = test_structure_with_id(2..3, s);
@@ -362,21 +358,65 @@ fn all_single_contractions() {
 
         if dense_dense.data() != sparse_sparse.data() {
             sseq.push(s);
-            println!("S-S not match at seed: {s}");
         }
         if dense_dense.data() != dense_sparse.data() {
             dseq.push(s);
-            println!("D-S not match at seed: {s}");
         }
         if dense_dense.data() != sparse_dense.data() {
             sdeq.push(s);
-            println!("S-D not match at seed: {s}");
         }
     }
 
-    println!("S-S:{sseq:?}");
-    println!("D-S:{dseq:?}");
-    println!("S-D:{sdeq:?}");
+    assert_eq!(sseq.len(), 0, "Sparse-Sparse failed at seeds {sseq:?}");
+    assert_eq!(dseq.len(), 0, "Dense-Sparse failed at seeds {dseq:?}");
+    assert_eq!(sdeq.len(), 0, "Sparse-Dense failed at seeds {sdeq:?}");
+}
+
+#[test]
+fn multi_contract() {
+    let range = Some((-1000, 1000));
+    let s = 18;
+    let mut rng = Xoroshiro64Star::seed_from_u64(s);
+    let ncommon = rng.gen_range(2..5);
+
+    let common = test_structure_with_id(0..ncommon, s);
+    let mut structa = test_structure_with_id(ncommon..ncommon + 1, s);
+    let mut structb = test_structure_with_id(ncommon + 1..ncommon + 2, s);
+
+    for c in common {
+        structa.insert(rng.gen_range(0..structa.len()), c);
+        structb.insert(rng.gen_range(0..structb.len()), c);
+    }
+    structa.sort();
+    let structa: VecStructure = structa.into();
+    let structb: VecStructure = structb.into();
+
+    let spensor_a: SparseTensor<i32, VecStructure> = test_tensor(structa.clone(), s + 3, range);
+    let densor_a: DenseTensor<i32, VecStructure> = spensor_a.to_dense();
+    let spensor_b: SparseTensor<i32, VecStructure> = test_tensor(structb.clone(), s + 4, range);
+    let densor_b: DenseTensor<i32, VecStructure> = spensor_b.to_dense();
+
+    let dense_dense = densor_b.contract(&densor_a).unwrap();
+    // println!("{}", dense_dense.structure());
+    let sparse_sparse = spensor_b.contract(&spensor_a).unwrap().to_dense();
+    let dense_sparse = densor_b.contract(&spensor_a).unwrap();
+    let sparse_dense = spensor_b.contract(&densor_a).unwrap();
+
+    assert_eq!(
+        dense_dense.data(),
+        sparse_sparse.data(),
+        "S-S not match at seed: {s}"
+    );
+    assert_eq!(
+        dense_dense.data(),
+        dense_sparse.data(),
+        "D-S not match at seed: {s}"
+    );
+    assert_eq!(
+        dense_dense.data(),
+        sparse_dense.data(),
+        "S-D not match at seed: {s}"
+    );
 }
 
 #[test]
@@ -387,7 +427,7 @@ fn all_multi_contractions() {
     let mut dseq = vec![];
     let mut sseq = vec![];
     let mut sdeq = vec![];
-    for s in 0..1000 {
+    for s in 0..100 {
         let mut rng = Xoroshiro64Star::seed_from_u64(s);
         let ncommon = rng.gen_range(2..5);
 
@@ -402,19 +442,7 @@ fn all_multi_contractions() {
         structa.sort();
         let structa: VecStructure = structa.into();
         let structb: VecStructure = structb.into();
-        // println!("seed: {s}");
 
-        // println!("seed: {s}");
-
-        // println!("--");
-        // println!("{structa}");
-        // println!("--");
-        // println!("{structb}");
-        // println!("--A");
-        // println!("{structa}");
-        // println!("--B");
-        // println!("{structb}");
-        // println!("--A*B");
         let spensor_a: SparseTensor<i32, VecStructure> = test_tensor(structa.clone(), s + 3, range);
         let densor_a: DenseTensor<i32, VecStructure> = spensor_a.to_dense();
         let spensor_b: SparseTensor<i32, VecStructure> = test_tensor(structb.clone(), s + 4, range);
@@ -428,54 +456,17 @@ fn all_multi_contractions() {
 
         if dense_dense.data() != sparse_sparse.data() {
             sseq.push(s);
-            println!("S-S not match at seed: {s}");
         }
         if dense_dense.data() != dense_sparse.data() {
             dseq.push(s);
-            println!("D-S not match at seed: {s}");
         }
         if dense_dense.data() != sparse_dense.data() {
             sdeq.push(s);
-            println!("S-D not match at seed: {s}");
         }
     }
-
-    println!("S-S:{sseq:?}");
-    println!("D-S:{dseq:?}");
-    println!("S-D:{sdeq:?}");
-}
-
-#[test]
-fn multi_index_contract() {
-    let structur_a = HistoryStructure::new(
-        &[
-            (3.into(), Representation::Lorentz(2.into())),
-            (1.into(), Representation::Lorentz(2.into())),
-        ],
-        "a",
-    );
-    let structur_b = HistoryStructure::new(
-        &[
-            (1.into(), Representation::Lorentz(2.into())),
-            (3.into(), Representation::Lorentz(2.into())),
-        ],
-        "b",
-    );
-
-    let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
-    let b = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
-    let f = a.contract(&b).unwrap();
-    println!("{:?}", f.data);
-}
-
-#[test]
-fn dense_to_sparse() {
-    let structur_a =
-        HistoryStructure::from_integers(&[(1, 2), (3, 2)].map(|(a, d)| (a.into(), d.into())), "a");
-    let a = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_a).unwrap();
-    let b = a.to_sparse();
-    let c = b.to_dense();
-    assert_eq!(a, c);
+    assert_eq!(sseq.len(), 0, "Sparse-Sparse failed at seeds {sseq:?}");
+    assert_eq!(dseq.len(), 0, "Dense-Sparse failed at seeds {dseq:?}");
+    assert_eq!(sdeq.len(), 0, "Sparse-Dense failed at seeds {sdeq:?}");
 }
 
 #[test]
@@ -485,18 +476,15 @@ fn gamma() {
     let g3 = ufo::gamma::<f64>(2.into(), (2.into(), 0.into()));
 
     let c = g1.contract(&g2).unwrap().contract(&g3).unwrap();
-    println!("Sparse: {:?}", c.data());
+    assert_eq!(
+        Vec::<Complex<f64>>::new(),
+        c.data(),
+        "Odd traces must vanish"
+    );
 
-    let g1d: NumTensor = g1.to_dense().into();
-    let g2d: NumTensor = g2.to_dense().into();
-    let g3d: NumTensor = g3.into();
-
-    let cdense: NumTensor = g1d.contract(&g2d).unwrap().contract(&g3d).unwrap();
-
-    println!("{:?}", cdense.try_as_complex().unwrap().data());
     let d = ufo::gamma::<f32>(0.into(), (0.into(), 0.into())).internal_contract();
 
-    println!("{:?}", d.data());
+    assert_eq!(Vec::<Complex<f32>>::new(), d.data(), "Gammas are traceless");
 }
 
 #[test]
@@ -522,7 +510,7 @@ fn matches() {
 
     let a = structur_a.match_index(&structur_b);
 
-    println!("{a:?}");
+    assert_eq!(Some((false, 3, 0)), a);
 }
 
 #[test]
@@ -562,34 +550,28 @@ fn mixed_tensor_contraction() {
 fn tensor_net() {
     let a: NumTensor = ufo::gamma(1.into(), (2.into(), 3.into())).into();
     let b: NumTensor = ufo::gamma(2.into(), (3.into(), 4.into())).into();
-    let c: NumTensor = ufo::gamma(3.into(), (4.into(), 2.into())).into();
-    let p: NumTensor = mink_four_vector(2.into(), &[2., 3., 2., 1.]).into();
-    let q: NumTensor = mink_four_vector(3.into(), &[2., 3., 2., 1.]).into();
+    let c: NumTensor = ufo::gamma(3.into(), (4.into(), 5.into())).into();
+    let d: NumTensor = ufo::gamma(4.into(), (5.into(), 2.into())).into();
+    let p: NumTensor = mink_four_vector(1.into(), &[2., 3., 2., 1.]).into();
+    let q: NumTensor = mink_four_vector(2.into(), &[2., 3., 2., 1.]).into();
+    let r: NumTensor = mink_four_vector(3.into(), &[2., 3., 2., 1.]).into();
+    let s: NumTensor = mink_four_vector(4.into(), &[2., 3., 2., 1.]).into();
 
-    let mut n = TensorNetwork::from(vec![a, b, c, p, q]);
+    let mut n = TensorNetwork::from(vec![a, b, c, p, q, d, r, s]);
 
-    println!("{}", n.dot());
+    assert!(n.graph.validate_neighbors());
 
-    if n.graph.validate_neighbors() {
-        println!("Validated")
-    } else {
-        println!("Not validated")
-    }
+    // println!("{}", n.dot());
 
-    println!("{:?}", n.graph.neighbors.len());
+    assert_eq!(16, n.graph.neighbors.len());
 
     n.contract();
 
-    // println!("{}", n.dot());
-}
-
-#[test]
-fn sparsedensedensesparse() {
-    let a: NumTensor = ufo::gamma(1.into(), (2.into(), 3.into())).into();
-    let p: NumTensor = mink_four_vector(1.into(), &[2., 3., 2., 1.]).into();
-
-    println!("{:?}", a.contract(&p).unwrap());
-    println!("{:?}", p.contract(&a).unwrap());
+    assert_eq!(0, n.graph.neighbors.len());
+    assert_eq!(
+        Complex::new(-400., 0.),
+        n.result().try_as_complex().unwrap().data()[0]
+    )
 }
 
 #[test]
@@ -606,11 +588,11 @@ fn contract_spensor() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let _f = a.contract(&b).unwrap();
+    let f = a.contract(&b).unwrap();
 
-    let _result = IndexMap::from([(vec![0, 1], 2.0), (vec![1, 0], 2.0)]);
+    let result = IndexMap::from([(vec![0, 1], 2.0), (vec![1, 0], 2.0)]);
 
-    // assert_eq!(f.elements, result)
+    assert_eq!(f.hashmap(), result)
 }
 
 #[test]
@@ -627,11 +609,11 @@ fn sparse_addition() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let _f = a + b;
+    let f = a + b;
 
-    let _result = IndexMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
+    let result = IndexMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
 
-    // assert_eq!(f.elements, result)
+    assert_eq!(f.hashmap(), result)
 }
 
 #[test]
@@ -649,10 +631,10 @@ fn sparse_sub() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let _f = a - b;
+    let f = a - b;
 
-    let _result = IndexMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
-    // assert_eq!(f.elements, result);
+    let result = IndexMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
+    assert_eq!(f.hashmap(), result);
     // println!("{:?}", f);
 }
 

@@ -1,4 +1,4 @@
-use ahash::{AHashMap, HashMap, HashMapExt};
+use ahash::{AHashMap, HashMap};
 use arbitrary_int::Number;
 use enum_try_as_inner::EnumTryAsInner;
 
@@ -920,7 +920,7 @@ fn test_evaluator() {
     );
     let p = crate::tensor::Shadowable::shadow(structure, &mut state, &ws).unwrap();
 
-    let mut var_map = HashMap::new();
+    let mut var_map = AHashMap::new();
     let a: DenseTensor<InstructionEvaluator<f64>, crate::tensor::NamedStructure> =
         p.to_evaluator(&mut var_map, &state);
 
