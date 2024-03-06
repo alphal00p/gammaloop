@@ -1,13 +1,15 @@
 use ahash::AHashMap;
-use duplicate::duplicate;
-
+use block_id::Alphabet;
+use block_id::BlockId;
 use derive_more::Add;
 use derive_more::AddAssign;
 use derive_more::Display;
 use derive_more::From;
 use derive_more::Into;
+use duplicate::duplicate;
 use indexmap::IndexMap;
 use itertools::Itertools;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Serialize;
 use smartstring::LazyCompact;
@@ -18,6 +20,8 @@ use std::fmt::Debug;
 use std::i64;
 use std::ops::Deref;
 use std::ops::Range;
+use std::path::Display;
+use std::slice::from_mut;
 use symbolica::coefficient::CoefficientView;
 
 use symbolica::representations::default::ListIteratorD;
@@ -77,7 +81,7 @@ pub struct AbstractIndex(pub usize);
     Display,
 )]
 #[into(owned, ref, ref_mut)]
-#[display(fmt = "D{}", _0)]
+#[display(fmt = "{}", _0)]
 pub struct Dimension(pub usize);
 
 impl PartialEq<usize> for Dimension {
@@ -542,7 +546,7 @@ pub trait TensorStructure {
             if let Some(&i) = posmap.get(slot_other) {
                 self_matches[i] = true;
                 other_matches[j] = true;
-                perm.push(i);
+                perm.push(j);
             }
         }
 
@@ -838,7 +842,7 @@ pub trait StructureContract {
 
     fn trace_out(&mut self);
 
-    fn merge(&mut self, other: &Self);
+    fn merge(&mut self, other: &Self) -> Option<usize>;
 
     #[must_use]
     fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self;
@@ -876,9 +880,60 @@ impl StructureContract for Vec<Slot> {
             .collect();
     }
 
-    fn merge(&mut self, other: &Self) {
-        self.append(&mut other.clone());
-        self.trace_out();
+    fn merge(&mut self, other: &Self) -> Option<usize> {
+        let mut positions = IndexMap::new();
+        let mut i = 0;
+
+        self.retain(|x| {
+            let e = positions.get(x);
+            if e.is_some() {
+                return false;
+            }
+            positions.insert(*x, (Some(i), None));
+            i += 1;
+            true
+        });
+
+        let mut first = true;
+        let mut first_other = 0;
+
+        for (index, &value) in self.iter().enumerate() {
+            positions.entry(value).or_insert((Some(index), None));
+        }
+
+        for (index, &value) in other.iter().enumerate() {
+            let e = positions.get(&value);
+            if let Some((Some(selfi), None)) = e {
+                positions.insert(value, (Some(*selfi), Some(index)));
+            } else {
+                positions.insert(value, (None, Some(index)));
+                self.push(value);
+            }
+        }
+
+        let mut i = 0;
+
+        self.retain(|x| {
+            let pos = positions.get(x).unwrap();
+            if pos.1.is_none() {
+                i += 1;
+                return true;
+            }
+            if pos.0.is_none() {
+                if first {
+                    first = false;
+                    first_other = i;
+                }
+                return true;
+            }
+            false
+        });
+
+        if first {
+            None
+        } else {
+            Some(first_other)
+        }
     }
 
     fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
@@ -962,6 +1017,29 @@ impl From<VecStructure> for Vec<Slot> {
     }
 }
 
+const IDPRINTER: Lazy<BlockId<char>> = Lazy::new(|| BlockId::new(Alphabet::alphanumeric(), 1, 1));
+
+impl std::fmt::Display for VecStructure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, item) in self.structure.iter().enumerate() {
+            if index != 0 {
+                // To avoid a newline at the start
+                write!(f, "\n")?;
+            }
+            write!(
+                f,
+                "{:<3} ({})",
+                usize::from(item.index),
+                // IDPRINTER
+                //     .encode_string(usize::from(item.index) as u64)
+                //     .unwrap(),
+                item.representation
+            )?;
+        }
+        Ok(())
+    }
+}
+
 impl TensorStructure for VecStructure {
     type Structure = VecStructure;
     fn structure(&self) -> &Self::Structure {
@@ -976,8 +1054,8 @@ impl TensorStructure for VecStructure {
 }
 
 impl StructureContract for VecStructure {
-    fn merge(&mut self, other: &Self) {
-        self.structure.merge(&other.structure);
+    fn merge(&mut self, other: &Self) -> Option<usize> {
+        self.structure.merge(&other.structure)
     }
 
     fn trace_out(&mut self) {
@@ -1064,8 +1142,8 @@ impl TensorStructure for NamedStructure {
 }
 
 impl StructureContract for NamedStructure {
-    fn merge(&mut self, other: &Self) {
-        self.structure.merge(&other.structure);
+    fn merge(&mut self, other: &Self) -> Option<usize> {
+        self.structure.merge(&other.structure)
     }
 
     fn trace_out(&mut self) {
@@ -1147,9 +1225,9 @@ impl TensorStructure for ContractionCountStructure {
 }
 
 impl StructureContract for ContractionCountStructure {
-    fn merge(&mut self, other: &Self) {
-        self.structure.merge(&other.structure);
+    fn merge(&mut self, other: &Self) -> Option<usize> {
         self.contractions += other.contractions;
+        self.structure.merge(&other.structure)
     }
 
     fn trace_out(&mut self) {
@@ -1236,9 +1314,9 @@ impl TensorStructure for SmartShadowStructure {
 }
 
 impl StructureContract for SmartShadowStructure {
-    fn merge(&mut self, other: &Self) {
-        self.structure.merge(&other.structure);
+    fn merge(&mut self, other: &Self) -> Option<usize> {
         self.contractions += other.contractions;
+        self.structure.merge(&other.structure)
     }
 
     fn trace_out(&mut self) {
@@ -1425,16 +1503,16 @@ where
     }
 
     /// essentially contract.
-    fn merge(&mut self, other: &Self) {
+    fn merge(&mut self, other: &Self) -> Option<usize> {
         let shift = self.internal.len();
         for (range, name) in &other.names {
             self.names
                 .insert((range.start + shift)..(range.end + shift), name.clone());
         }
-        self.external.append(&mut other.external.clone());
         self.trace_out();
         self.independentize_internal(other);
         self.internal.append(&mut other.internal.clone());
+        self.external.merge(&mut other.external.clone())
     }
 
     /// Merge two [`HistoryStructure`] at the given positions of the external index list. Ideally the internal index list should be independentized before merging

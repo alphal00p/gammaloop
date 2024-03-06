@@ -1,6 +1,9 @@
-use super::{atomic_expanded_label_id, ConcreteIndex, HasName, Slot, TensorStructure, TracksCount};
+use super::{
+    atomic_expanded_label_id, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot,
+    SparseTensorIterator, SparseTensorLinearIterator, TensorStructure, TracksCount,
+};
 use ahash::AHashMap;
-use enum_dispatch::enum_dispatch;
+use derive_more::From;
 use enum_try_as_inner::EnumTryAsInner;
 use indexmap::IndexMap;
 use num::{Complex, Zero};
@@ -13,42 +16,93 @@ use symbolica::{
     state::{State, Workspace},
 };
 
+pub trait DataIterator<T> {
+    type FlatIter<'a>: Iterator<Item = (usize, &'a T)>
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn flat_iter(&self) -> Self::FlatIter<'_>;
+}
+
+impl<T, I> DataIterator<T> for SparseTensor<T, I> {
+    type FlatIter<'a> = SparseTensorLinearIterator<'a, T> where  I:'a,T: 'a;
+
+    fn flat_iter(&self) -> Self::FlatIter<'_> {
+        SparseTensorLinearIterator::new(self)
+    }
+}
+
+impl<T, I: TensorStructure> DataIterator<T> for DenseTensor<T, I> {
+    type FlatIter<'a> = DenseTensorLinearIterator<'a,T,I> where  I:'a,T: 'a;
+
+    fn flat_iter(&self) -> Self::FlatIter<'_> {
+        DenseTensorLinearIterator::new(self)
+    }
+}
+
+trait Settable {
+    type SetData;
+    fn set(&mut self, index: usize, data: Self::SetData);
+}
+
+impl<T> Settable for Vec<T> {
+    type SetData = T;
+    fn set(&mut self, index: usize, data: T) {
+        self[index] = data;
+    }
+}
+
+impl<T> Settable for AHashMap<usize, T> {
+    type SetData = T;
+    fn set(&mut self, index: usize, data: T) {
+        self.insert(index, data);
+    }
+}
+
 /// Trait for getting the data of a tensor
-#[enum_dispatch]
-pub trait HasTensorData<T> {
+pub trait HasTensorData: TensorStructure {
+    type Data: Clone;
+    // type Storage: Settable<SetData = Self::Data>;
     /// Returns all the data in the tensor, withouth any structure
-    fn data(&self) -> Vec<T>;
+    fn data(&self) -> Vec<Self::Data>;
 
     /// Returns all the indices of the tensor, the order of the indices is the same as the order of the data
     fn indices(&self) -> Vec<Vec<ConcreteIndex>>;
 
     /// Returns a hashmap of the data, with the (expanded) indices as keys
-    fn hashmap(&self) -> IndexMap<Vec<ConcreteIndex>, T>;
+    fn hashmap(&self) -> IndexMap<Vec<ConcreteIndex>, Self::Data>;
 
     /// Returns a hashmap of the data, with the the shadowed indices as keys
-    fn symhashmap(&self, id: Identifier, state: &mut State, ws: &Workspace) -> HashMap<Atom, T>;
+    fn symhashmap(
+        &self,
+        id: Identifier,
+        state: &mut State,
+        ws: &Workspace,
+    ) -> HashMap<Atom, Self::Data>;
 }
 
 /// Trait for setting the data of a tensor
-#[enum_dispatch]
-pub trait SetTensorData<T> {
+pub trait SetTensorData {
+    type SetData;
     /// Set the data at the given indices, returns an error if the indices are out of bounds
     ///
     /// # Errors
     ///
     /// Forwards the error from [`TensorStructure::verify_indices`]
     ///
-    fn set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String>;
+    fn set(&mut self, indices: &[ConcreteIndex], value: Self::SetData) -> Result<(), String>;
 
-    fn set_flat(&mut self, index: usize, value: T) -> Result<(), String>;
+    fn set_flat(&mut self, index: usize, value: Self::SetData) -> Result<(), String>;
 }
 
 /// Trait for getting the data of a tensor
-#[enum_dispatch]
-pub trait GetTensorData<T> {
-    fn get(&self, indices: &[ConcreteIndex]) -> Result<&T, String>;
+pub trait GetTensorData {
+    type GetData;
 
-    fn get_linear(&self, index: usize) -> Option<&T>;
+    fn get(&self, indices: &[ConcreteIndex]) -> Result<&Self::GetData, String>;
+
+    fn get_linear(&self, index: usize) -> Option<&Self::GetData>;
 }
 
 /// Sparse data tensor, generic on storage type `T`, and structure type `I`.  
@@ -61,11 +115,14 @@ pub struct SparseTensor<T, I = Vec<Slot>> {
     pub structure: I,
 }
 
-impl<T, I> HasTensorData<T> for SparseTensor<T, I>
+impl<T, I> HasTensorData for SparseTensor<T, I>
 where
     T: Clone,
     I: TensorStructure,
 {
+    type Data = T;
+    // type Storage = AHashMap<usize, T>;
+
     fn data(&self) -> Vec<T> {
         self.elements.values().cloned().collect()
     }
@@ -98,10 +155,11 @@ where
     }
 }
 
-impl<T, I> SetTensorData<T> for SparseTensor<T, I>
+impl<T, I> SetTensorData for SparseTensor<T, I>
 where
     I: TensorStructure,
 {
+    type SetData = T;
     /// falible set method, returns an error if the indices are out of bounds.
     /// Does not check if the inserted value is zero.
     fn set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
@@ -120,10 +178,11 @@ where
         Ok(())
     }
 }
-impl<T, I> GetTensorData<T> for SparseTensor<T, I>
+impl<T, I> GetTensorData for SparseTensor<T, I>
 where
     I: TensorStructure,
 {
+    type GetData = T;
     fn get(&self, indices: &[ConcreteIndex]) -> Result<&T, String> {
         self.verify_indices(indices)?;
         self.elements
@@ -446,11 +505,12 @@ where
     }
 }
 
-impl<T, I> HasTensorData<T> for DenseTensor<T, I>
+impl<T, I> HasTensorData for DenseTensor<T, I>
 where
     T: Clone,
     I: TensorStructure,
 {
+    type Data = T;
     fn data(&self) -> Vec<T> {
         self.data.clone()
     }
@@ -481,10 +541,11 @@ where
     }
 }
 
-impl<T, I> SetTensorData<T> for DenseTensor<T, I>
+impl<T, I> SetTensorData for DenseTensor<T, I>
 where
     I: TensorStructure,
 {
+    type SetData = T;
     fn set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String> {
         self.verify_indices(indices)?;
         let idx = self.flat_index(indices);
@@ -504,10 +565,11 @@ where
     }
 }
 
-impl<T, I> GetTensorData<T> for DenseTensor<T, I>
+impl<T, I> GetTensorData for DenseTensor<T, I>
 where
     I: TensorStructure,
 {
+    type GetData = T;
     fn get_linear(&self, index: usize) -> Option<&T> {
         self.data.get(index)
     }
@@ -524,11 +586,45 @@ where
 }
 
 /// Enum for storing either a dense or a sparse tensor, with the same structure
-#[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize)]
-#[enum_dispatch(HasTensorData<T>, SetTensorData<T>, GetTensorData<T>)]
+#[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize, From)]
 pub enum DataTensor<T: Clone, I: TensorStructure> {
     Dense(DenseTensor<T, I>),
     Sparse(SparseTensor<T, I>),
+}
+
+impl<T, I> HasTensorData for DataTensor<T, I>
+where
+    I: TensorStructure,
+    T: Clone,
+{
+    type Data = T;
+    fn data(&self) -> Vec<T> {
+        match self {
+            DataTensor::Dense(d) => d.data(),
+            DataTensor::Sparse(s) => s.data(),
+        }
+    }
+
+    fn indices(&self) -> Vec<Vec<ConcreteIndex>> {
+        match self {
+            DataTensor::Dense(d) => d.indices(),
+            DataTensor::Sparse(s) => s.indices(),
+        }
+    }
+
+    fn hashmap(&self) -> IndexMap<Vec<ConcreteIndex>, T> {
+        match self {
+            DataTensor::Dense(d) => d.hashmap(),
+            DataTensor::Sparse(s) => s.hashmap(),
+        }
+    }
+
+    fn symhashmap(&self, id: Identifier, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
+        match self {
+            DataTensor::Dense(d) => d.symhashmap(id, state, ws),
+            DataTensor::Sparse(s) => s.symhashmap(id, state, ws),
+        }
+    }
 }
 
 impl<T, I> TensorStructure for DataTensor<T, I>

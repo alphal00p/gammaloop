@@ -1,6 +1,10 @@
 use ahash::AHashMap;
+use eyre::Result;
 use itertools::Itertools;
 
+use num::Zero;
+use permutation::Permutation;
+use petgraph::dot::Dot;
 use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
 use symbolica::{
@@ -12,9 +16,9 @@ use self::parametric::{MixedTensor, MixedTensors, SymbolicContract};
 use self::structure::HistoryStructure;
 
 use super::{
-    parametric, structure, Atom, DataTensor, DenseTensor, GetTensorData, HasName, HasTensorData,
-    NumTensor, SetTensorData, Shadowable, Slot, SparseTensor, StructureContract, SymbolicZero,
-    TensorStructure, TracksCount,
+    parametric, structure, Atom, DataIterator, DataTensor, DenseTensor, GetTensorData, HasName,
+    HasTensorData, NumTensor, Representation, SetTensorData, Shadowable, Slot, SparseTensor,
+    StructureContract, TensorStructure, TracksCount,
 };
 use smartstring::alias::String;
 use std::{
@@ -22,6 +26,156 @@ use std::{
     // intrinsics::needs_drop,
     ops::Neg,
 };
+
+trait LeastCommonStorage<Other: HasTensorData + SetTensorData>: HasTensorData + SetTensorData {
+    type OutStorage<LCMData>: SetTensorData<SetData = LCMData>;
+    fn least_common_storage<LCMData>(&self, other: &Other) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data: std::ops::Mul<&'b Other::Data, Output = LCMData>,
+        LCMData: num::Zero + Clone;
+
+    fn empty<LCMData>(structure: Self::Structure) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data: std::ops::Mul<&'b Other::Data, Output = LCMData>,
+        LCMData: Zero + Clone;
+}
+
+impl<T, U, I> LeastCommonStorage<DenseTensor<T, I>> for DenseTensor<U, I>
+where
+    T: Clone,
+    U: Clone,
+    I: TensorStructure + StructureContract + Clone,
+{
+    type OutStorage<LCMData> = DenseTensor<LCMData, I>;
+    fn least_common_storage<LCMData>(&self, other: &DenseTensor<T, I>) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data: std::ops::Mul<&'b T, Output = LCMData>,
+        LCMData: Zero + Clone,
+    {
+        let mut final_structure = self.structure().clone();
+        final_structure.merge(other.structure());
+        DenseTensor::zero(final_structure)
+    }
+
+    fn empty<LCMData>(structure: Self::Structure) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data:
+            std::ops::Mul<&'b <DenseTensor<T, I> as HasTensorData>::Data, Output = LCMData>,
+        LCMData: Zero + Clone,
+    {
+        DenseTensor::zero(structure)
+    }
+}
+
+impl<T, U, I> LeastCommonStorage<DenseTensor<T, I>> for SparseTensor<U, I>
+where
+    T: Clone,
+    U: Clone,
+    I: TensorStructure + StructureContract + Clone,
+{
+    type OutStorage<LCMData> = DenseTensor<LCMData, I>;
+    fn least_common_storage<LCMData>(&self, other: &DenseTensor<T, I>) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data: std::ops::Mul<&'b T, Output = LCMData>,
+        LCMData: Zero + Clone,
+    {
+        let mut final_structure = self.structure().clone();
+        final_structure.merge(other.structure());
+        DenseTensor::zero(final_structure)
+    }
+
+    fn empty<LCMData>(structure: Self::Structure) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data:
+            std::ops::Mul<&'b <DenseTensor<T, I> as HasTensorData>::Data, Output = LCMData>,
+        LCMData: Zero + Clone,
+    {
+        DenseTensor::zero(structure)
+    }
+}
+
+impl<T, U, I> LeastCommonStorage<SparseTensor<T, I>> for DenseTensor<U, I>
+where
+    T: Clone,
+    U: Clone,
+    I: TensorStructure + StructureContract + Clone,
+{
+    type OutStorage<LCMData> = DenseTensor<LCMData, I>;
+    fn least_common_storage<LCMData>(&self, other: &SparseTensor<T, I>) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data: std::ops::Mul<&'b T, Output = LCMData>,
+        LCMData: Zero + Clone,
+    {
+        let mut final_structure = self.structure().clone();
+        final_structure.merge(other.structure());
+        DenseTensor::zero(final_structure)
+    }
+
+    fn empty<LCMData>(structure: Self::Structure) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data:
+            std::ops::Mul<&'b <SparseTensor<T, I> as HasTensorData>::Data, Output = LCMData>,
+        LCMData: Zero + Clone,
+    {
+        DenseTensor::zero(structure)
+    }
+}
+
+impl<T, U, I> LeastCommonStorage<SparseTensor<T, I>> for SparseTensor<U, I>
+where
+    T: Clone,
+    U: Clone,
+    I: TensorStructure + StructureContract + Clone,
+{
+    type OutStorage<LCMData> = SparseTensor<LCMData, I>;
+    fn least_common_storage<LCMData>(&self, other: &SparseTensor<T, I>) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data: std::ops::Mul<&'b T, Output = LCMData>,
+        LCMData: Zero + Clone,
+    {
+        let mut final_structure = self.structure().clone();
+        final_structure.merge(other.structure());
+        SparseTensor::empty(final_structure)
+    }
+
+    fn empty<LCMData>(structure: Self::Structure) -> Self::OutStorage<LCMData>
+    where
+        for<'a, 'b> &'a Self::Data:
+            std::ops::Mul<&'b <SparseTensor<T, I> as HasTensorData>::Data, Output = LCMData>,
+        LCMData: Zero + Clone,
+    {
+        SparseTensor::empty(structure)
+    }
+}
+
+trait ExteriorProduct<T> {
+    type Out;
+    fn exterior_product(&self, other: &T) -> Self::Out;
+}
+
+impl<T, U, LCMData> ExteriorProduct<T> for U
+where
+    U: LeastCommonStorage<T> + DataIterator<U::Data>,
+    for<'a, 'b> &'a U::Data: std::ops::Mul<&'b T::Data, Output = LCMData>,
+    T: LeastCommonStorage<U, OutStorage<LCMData> = U::OutStorage<LCMData>> + DataIterator<T::Data>,
+    LCMData: Zero + Clone,
+{
+    type Out = U::OutStorage<LCMData>;
+
+    fn exterior_product(&self, other: &T) -> Self::Out {
+        let mut out = self.least_common_storage::<LCMData>(other);
+
+        let stride = other.size();
+
+        for (i, u) in self.flat_iter() {
+            for (j, t) in other.flat_iter() {
+                out.set_flat(i * stride + j, u * t);
+            }
+        }
+
+        out
+    }
+}
 
 impl<T, I> DenseTensor<T, I>
 where
@@ -88,495 +242,508 @@ pub trait Contract<T> {
     fn contract(&self, other: &T) -> Option<Self::LCM>;
 }
 
-impl<T, U, Out, I> Contract<DenseTensor<T, I>> for DenseTensor<U, I>
-where
-    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = Out>,
-    Out: std::ops::AddAssign<Out>
-        + std::ops::SubAssign<Out>
-        + Neg<Output = Out>
+pub trait SingleContract<T> {
+    type LCM;
+    fn single_contract(&self, other: &T, i: usize, j: usize) -> Option<Self::LCM>;
+}
+
+trait MultiContract<T> {
+    type LCM;
+    fn multi_contract(&self, other: &T) -> Option<Self::LCM>;
+}
+pub trait DotProduct<T> {
+    type Out: std::ops::AddAssign<Self::Out>
+        + std::ops::SubAssign<Self::Out>
+        + Neg<Output = Self::Out>
         + Clone
         + num::traits::Zero
-        + for<'a> std::ops::AddAssign<&'a Out>
-        + for<'b> std::ops::SubAssign<&'b Out>
-        + std::fmt::Debug,
-    I: TensorStructure + Clone + StructureContract,
-    T: Debug,
-    U: Debug,
+        + for<'a> std::ops::AddAssign<&'a Self::Out>
+        + for<'b> std::ops::SubAssign<&'b Self::Out>;
+}
+
+impl<T, U, O> DotProduct<T> for U
+where
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = O>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = O>,
+    O: std::ops::AddAssign<O>
+        + std::ops::SubAssign<O>
+        + Neg<Output = O>
+        + Clone
+        + num::traits::Zero
+        + for<'a> std::ops::AddAssign<&'a O>
+        + for<'b> std::ops::SubAssign<&'b O>,
 {
-    type LCM = DenseTensor<Out, I>;
-    fn contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
-        if let Some((single, i, j)) = self.structure.match_index(&other.structure) {
-            if i >= j {
-                if single {
-                    let final_structure = self.structure.merge_at(&other.structure, (i, j));
-                    let mut result_data = vec![Out::zero(); final_structure.size()];
-                    let mut result_index = 0;
+    type Out = O;
+}
 
-                    let mut self_iter = self.iter_fiber(i);
-                    let mut other_iter = other.iter_fiber(j);
-                    let dimension = self_iter.fiber_dimension;
-                    let metric = self.external_structure()[i].representation.negative();
+impl<T, U, I> SingleContract<DenseTensor<T, I>> for DenseTensor<U, I>
+where
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = U::Out>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = U::Out>,
+    U: DotProduct<T>,
+    I: TensorStructure + Clone + StructureContract,
+{
+    type LCM = DenseTensor<U::Out, I>;
 
-                    for fiber_a in self_iter.by_ref() {
-                        for fiber_b in other_iter.by_ref() {
-                            for i in 0..dimension.into() {
-                                if metric[i] {
-                                    result_data[result_index] -= fiber_a[i] * fiber_b[i];
-                                } else {
-                                    result_data[result_index] += fiber_a[i] * fiber_b[i];
-                                }
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
+    fn single_contract(&self, other: &DenseTensor<T, I>, i: usize, j: usize) -> Option<Self::LCM> {
+        let final_structure = self.structure.merge_at(&other.structure, (i, j));
+        let mut result_data = vec![U::Out::zero(); final_structure.size()];
+        let mut result_index = 0;
+
+        let mut self_iter = self.iter_fiber(i);
+        let mut other_iter = other.iter_fiber(j);
+
+        let fiber_representation: Representation = self.reps()[i];
+
+        for fiber_a in self_iter.by_ref() {
+            for fiber_b in other_iter.by_ref() {
+                for k in 0..usize::from(fiber_representation) {
+                    if fiber_representation.is_neg(k) {
+                        result_data[result_index] -= fiber_a[k] * fiber_b[k];
+                    } else {
+                        result_data[result_index] += fiber_a[k] * fiber_b[k];
                     }
-
-                    let result = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    return Some(result);
                 }
-                // println!("SparseTensor DenseTensor");
-                let (permutation, self_matches, other_matches) =
-                    self.structure().match_indices(other.structure()).unwrap();
-
-                let mut final_structure = self.structure.clone();
-                final_structure.merge(&other.structure);
-
-                // Initialize result tensor with default values
-                let mut result_data = vec![Out::zero(); final_structure.size()];
-                let mut result_index = 0;
-                let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
-
-                let mut other_iter = other.iter_multi_fibers(&other_matches);
-                while let Some(fiber_a) = selfiter.next() {
-                    for fiber_b in other_iter.by_ref() {
-                        for k in 0..fiber_a.len() {
-                            if fiber_a[k].1 {
-                                result_data[result_index] -=
-                                    fiber_b[selfiter.map[k]] * fiber_a[k].0;
-                            } else {
-                                result_data[result_index] +=
-                                    fiber_b[selfiter.map[k]] * fiber_a[k].0;
-                            }
-                        }
-                        result_index += 1;
-                    }
-                    other_iter.reset();
-                }
-                let result: DenseTensor<Out, I> = DenseTensor {
-                    data: result_data,
-                    structure: final_structure,
-                };
-
-                return Some(result);
+                result_index += 1;
             }
-            return other.contract(self);
-        }
-        let mut final_structure = self.structure.clone();
-        final_structure.merge(&other.structure);
-
-        let mut result_data = vec![Out::zero(); final_structure.size()];
-        let stride = other.size();
-
-        for (i, u) in self.iter_flat() {
-            for (j, t) in other.iter_flat() {
-                result_data[i * stride + j] = u * t;
-            }
+            other_iter.reset();
         }
         let result = DenseTensor {
             data: result_data,
             structure: final_structure,
         };
+
         Some(result)
     }
 }
 
-impl<T, U, I, Out> Contract<DenseTensor<T, I>> for SparseTensor<U, I>
+impl<T, U, I> MultiContract<DenseTensor<T, I>> for DenseTensor<U, I>
 where
-    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = Out>,
-    Out: std::ops::AddAssign<Out>
-        + std::ops::SubAssign<Out>
-        + Neg<Output = Out>
-        + Clone
-        + num::traits::Zero
-        + for<'a> std::ops::AddAssign<&'a Out>
-        + for<'b> std::ops::SubAssign<&'b Out>
-        + std::fmt::Debug,
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = U::Out>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = U::Out>,
+    U: DotProduct<T>,
     I: TensorStructure + Clone + StructureContract,
-    U: Clone,
 {
-    type LCM = DenseTensor<Out, I>;
-    fn contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
-        if let Some((single, i, j)) = self.structure.match_index(&other.structure) {
-            if i >= j {
-                if single {
-                    let final_structure = self.structure.merge_at(&other.structure, (i, j));
-                    let mut result_data = vec![Out::zero(); final_structure.size()];
-                    let mut result_index = 0;
+    type LCM = DenseTensor<U::Out, I>;
+    fn multi_contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
+        let (permutation, self_matches, other_matches) =
+            self.structure().match_indices(other.structure()).unwrap();
 
-                    let mut self_iter = self.iter_fiber(i);
-                    let mut other_iter = other.iter_fiber(j);
-
-                    let metric = self.external_structure()[i].representation.negative();
-
-                    for (skipped, nonzeros, fiber_a) in self_iter.by_ref() {
-                        result_index += skipped;
-                        for fiber_b in other_iter.by_ref() {
-                            for (i, k) in nonzeros.iter().enumerate() {
-                                if metric[*k] {
-                                    result_data[result_index] -= fiber_a[i] * fiber_b[*k];
-                                } else {
-                                    result_data[result_index] += fiber_a[i] * fiber_b[*k];
-                                }
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
-                    }
-
-                    let result = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    Some(result)
-                } else {
-                    // println!("SparseTensor DenseTensor");
-                    let (permutation, self_matches, other_matches) =
-                        self.structure().match_indices(other.structure()).unwrap();
-
-                    let mut final_structure = self.structure.clone();
-                    final_structure.merge(&other.structure);
-
-                    let mut result_data = vec![Out::zero(); final_structure.size()];
-                    let mut result_index = 0;
-
-                    let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
-                    let mut other_iter = other.iter_multi_fibers(&other_matches);
-
-                    while let Some((skipped, nonzeros, fiber_a)) = selfiter.next() {
-                        result_index += skipped;
-                        for fiber_b in other_iter.by_ref() {
-                            for (i, k) in nonzeros.iter().enumerate() {
-                                if fiber_a[i].1 {
-                                    result_data[result_index] -=
-                                        fiber_a[i].0 * fiber_b[selfiter.map[*k]];
-                                } else {
-                                    result_data[result_index] +=
-                                        fiber_a[i].0 * fiber_b[selfiter.map[*k]];
-                                }
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
-                    }
-                    let result = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    Some(result)
-                }
-            } else {
-                other.contract(self)
-            }
-        } else {
-            let mut final_structure = self.structure.clone();
-            final_structure.merge(&other.structure);
-
-            let mut result_data = vec![Out::zero(); final_structure.size()];
-            let stride = other.size();
-
-            for (i, u) in self.iter_flat() {
-                for (j, t) in other.iter_flat() {
-                    result_data[i * stride + j] = u * t;
-                }
-            }
-            let result = DenseTensor {
-                data: result_data,
-                structure: final_structure,
-            };
-            Some(result)
-        }
-    }
-}
-
-impl<T, U, Out, I> Contract<SparseTensor<T, I>> for SparseTensor<U, I>
-where
-    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = Out>,
-    Out: std::ops::AddAssign<Out>
-        + std::ops::SubAssign<Out>
-        + Neg<Output = Out>
-        + Clone
-        + Default
-        + num::traits::Zero
-        + for<'a> std::ops::AddAssign<&'a Out>
-        + for<'b> std::ops::SubAssign<&'b Out>
-        + std::fmt::Debug
-        + std::cmp::PartialEq,
-    I: Clone + TensorStructure + StructureContract,
-    U: Clone,
-    T: Clone,
-{
-    type LCM = SparseTensor<Out, I>;
-    #[allow(clippy::too_many_lines)]
-    fn contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
-        if let Some((single, i, j)) = self.structure.match_index(&other.structure) {
-            if i >= j {
-                if single {
-                    let final_structure = self.structure.merge_at(&other.structure, (i, j));
-                    let mut result_data = AHashMap::default();
-                    let mut result_index = 0;
-
-                    let mut self_iter = self.iter_fiber(i);
-                    let mut other_iter = other.iter_fiber(j);
-
-                    let metric = self.external_structure()[i].representation.negative();
-
-                    let stride = *final_structure
-                        .strides()
-                        .get(i.saturating_sub(1))
-                        .unwrap_or(&1);
-
-                    for (skipped_a, nonzeros_a, fiber_a) in self_iter.by_ref() {
-                        result_index += skipped_a;
-                        for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
-                            result_index += skipped_b * stride;
-                            let mut value = Out::zero();
-                            let mut nonzero = false;
-
-                            for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
-                                nonzeros_b.binary_search(&x).ok().map(|j| (i, j, x))
-                            }) {
-                                if metric[x] {
-                                    value -= fiber_a[i] * fiber_b[j];
-                                } else {
-                                    value += fiber_a[i] * fiber_b[j];
-                                }
-                                nonzero = true;
-                            }
-
-                            if nonzero && value != Out::zero() {
-                                result_data.insert(result_index, value);
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
-                    }
-
-                    let result = SparseTensor {
-                        elements: result_data,
-                        structure: final_structure,
-                    };
-
-                    return Some(result);
-                }
-                let (permutation, self_matches, other_matches) =
-                    self.structure().match_indices(other.structure()).unwrap();
-
-                let mut final_structure = self.structure.clone();
-                final_structure.merge(&other.structure);
-                let mut result_data = AHashMap::default();
-                let one = if let Some(o) = final_structure.strides().first() {
-                    *o
-                } else {
-                    1
-                };
-                let stride = *final_structure
-                    .strides()
-                    .get(i.checked_sub(1)?)
-                    .unwrap_or(&one);
-
-                let mut result_index = 0;
-
-                let mut self_iter = self.iter_multi_fibers_metric(&self_matches, permutation);
-                let mut other_iter = other.iter_multi_fibers(&other_matches);
-                while let Some((skipped_a, nonzeros_a, fiber_a)) = self_iter.next() {
-                    result_index += skipped_a;
-                    for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
-                        result_index += skipped_b * stride;
-                        let mut value = Out::zero();
-                        let mut nonzero = false;
-
-                        for (i, j, _x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
-                            nonzeros_b
-                                .binary_search(&self_iter.map[x])
-                                .ok()
-                                .map(|j| (i, j, x))
-                        }) {
-                            if fiber_a[i].1 {
-                                value -= fiber_a[i].0 * fiber_b[j];
-                            } else {
-                                value += fiber_a[i].0 * fiber_b[j];
-                            }
-                            nonzero = true;
-                        }
-
-                        if nonzero && value != Out::zero() {
-                            result_data.insert(result_index, value);
-                        }
-                        result_index += 1;
-                    }
-                    other_iter.reset();
-                }
-
-                let result = SparseTensor {
-                    elements: result_data,
-                    structure: final_structure,
-                };
-
-                return Some(result);
-            }
-            return other.contract(self);
-        }
         let mut final_structure = self.structure.clone();
         final_structure.merge(&other.structure);
 
-        let mut result_data = AHashMap::default();
-        let stride = other.size();
+        // Initialize result tensor with default values
+        let mut result_data = vec![U::Out::zero(); final_structure.size()];
+        let mut result_index = 0;
 
-        for (i, u) in self.iter_flat() {
-            for (j, t) in other.iter_flat() {
-                result_data.insert(i * stride + j, u * t);
+        let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
+
+        let mut other_iter = other.iter_multi_fibers(&other_matches);
+        while let Some(fiber_a) = selfiter.next() {
+            for fiber_b in other_iter.by_ref() {
+                for k in 0..fiber_a.len() {
+                    if fiber_a[k].1 {
+                        result_data[result_index] -= fiber_b[selfiter.map[k]] * fiber_a[k].0;
+                    } else {
+                        result_data[result_index] += fiber_b[selfiter.map[k]] * fiber_a[k].0;
+                    }
+                }
+                result_index += 1;
             }
+            other_iter.reset();
         }
+        let result: DenseTensor<U::Out, I> = DenseTensor {
+            data: result_data,
+            structure: final_structure,
+        };
+
+        Some(result)
+    }
+}
+
+impl<T, U> Contract<T> for U
+where
+    U: SingleContract<T>
+        + MultiContract<T, LCM = <U as SingleContract<T>>::LCM>
+        + ExteriorProduct<T, Out = <U as SingleContract<T>>::LCM>
+        + TensorStructure,
+    U::Structure: TensorStructure,
+    T: SingleContract<U, LCM = <U as SingleContract<T>>::LCM>
+        + MultiContract<U, LCM = <U as SingleContract<T>>::LCM>
+        + ExteriorProduct<U, Out = <U as SingleContract<T>>::LCM>
+        + TensorStructure<Structure = U::Structure>,
+{
+    type LCM = <U as SingleContract<T>>::LCM;
+    fn contract(&self, other: &T) -> Option<Self::LCM> {
+        if let Some((single, i, j)) = self.structure().match_index(other.structure()) {
+            if i >= j {
+                if single {
+                    // println!("single");
+                    return self.single_contract(other, i, j);
+                }
+                // println!("multi");
+                return self.multi_contract(other);
+            }
+            // println!("flip");
+            return other.contract(self);
+        }
+        // println!("exterior");
+        let result = self.exterior_product(other);
+        Some(result)
+    }
+}
+
+impl<T, U, I> SingleContract<DenseTensor<T, I>> for SparseTensor<U, I>
+where
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = U::Out>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = U::Out>,
+    U: DotProduct<T>,
+    I: TensorStructure + Clone + StructureContract,
+{
+    type LCM = DenseTensor<U::Out, I>;
+
+    fn single_contract(&self, other: &DenseTensor<T, I>, i: usize, j: usize) -> Option<Self::LCM> {
+        let final_structure = self.structure.merge_at(&other.structure, (i, j));
+        let mut result_data = vec![U::Out::zero(); final_structure.size()];
+        let mut result_index = 0;
+
+        let mut self_iter = self.iter_fiber(i);
+        let mut other_iter = other.iter_fiber(j);
+
+        let fiber_representation: Representation = self.reps()[i];
+
+        let pos = self.order();
+        let stride = *final_structure
+            .strides()
+            .get(pos.wrapping_sub(2))
+            .unwrap_or(&1);
+
+        for (skipped, nonzeros, fiber_a) in self_iter.by_ref() {
+            result_index += skipped * stride;
+
+            for fiber_b in other_iter.by_ref() {
+                for (i, k) in nonzeros.iter().enumerate() {
+                    if fiber_representation.is_neg(*k) {
+                        result_data[result_index] -= fiber_a[i] * fiber_b[*k];
+                    } else {
+                        result_data[result_index] += fiber_a[i] * fiber_b[*k];
+                    }
+                }
+                result_index += 1;
+            }
+
+            result_index += other_iter.reset();
+        }
+
+        let result = DenseTensor {
+            data: result_data,
+            structure: final_structure,
+        };
+
+        Some(result)
+    }
+}
+
+impl<T, U, I> SingleContract<SparseTensor<T, I>> for DenseTensor<U, I>
+where
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = U::Out>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = U::Out>,
+    U: DotProduct<T>,
+    I: TensorStructure + Clone + StructureContract,
+{
+    type LCM = DenseTensor<U::Out, I>;
+
+    fn single_contract(&self, other: &SparseTensor<T, I>, i: usize, j: usize) -> Option<Self::LCM> {
+        let final_structure = self.structure.merge_at(&other.structure, (i, j));
+        let mut result_data = vec![U::Out::zero(); final_structure.size()];
+        let mut result_index = 0;
+
+        let mut self_iter = self.iter_fiber(i);
+        let mut other_iter = other.iter_fiber(j);
+
+        let fiber_representation: Representation = self.reps()[i];
+        let mut max_skip = 0;
+        for fiber_a in self_iter.by_ref() {
+            for (skipped, nonzeros, fiber_b) in other_iter.by_ref() {
+                result_index += skipped;
+                if skipped > max_skip {
+                    max_skip = skipped;
+                }
+                for (i, k) in nonzeros.iter().enumerate() {
+                    if fiber_representation.is_neg(*k) {
+                        result_data[result_index] -= fiber_a[*k] * fiber_b[i];
+                    } else {
+                        result_data[result_index] += fiber_a[*k] * fiber_b[i];
+                    }
+                }
+                result_index += 1;
+            }
+            result_index += other_iter.reset();
+        }
+
+        if max_skip > 0 {
+            println!("skippedDS {max_skip}");
+        }
+
+        let result = DenseTensor {
+            data: result_data,
+            structure: final_structure,
+        };
+
+        Some(result)
+    }
+}
+
+impl<T, U, I> MultiContract<DenseTensor<T, I>> for SparseTensor<U, I>
+where
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = U::Out>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = U::Out>,
+    U: DotProduct<T>,
+    I: TensorStructure + Clone + StructureContract,
+{
+    type LCM = DenseTensor<U::Out, I>;
+    fn multi_contract(&self, other: &DenseTensor<T, I>) -> Option<Self::LCM> {
+        let (permutation, self_matches, other_matches) =
+            self.structure().match_indices(other.structure()).unwrap();
+
+        let mut final_structure = self.structure.clone();
+        let mergepoint = final_structure.merge(&other.structure);
+
+        // println!("mergepoint {:?}", mergepoint);
+        let stride = if let Some(pos) = mergepoint {
+            *final_structure
+                .strides()
+                .get(pos.saturating_sub(1))
+                .unwrap_or(&1)
+        } else {
+            1
+        };
+
+        let mut result_data = vec![U::Out::zero(); final_structure.size()];
+        let mut result_index = 0;
+
+        let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
+        let mut other_iter = other.iter_multi_fibers(&other_matches);
+
+        let mut max_skip = 0;
+        while let Some((skipped, nonzeros, fiber_a)) = selfiter.next() {
+            result_index += skipped * stride;
+            if skipped > max_skip {
+                max_skip = skipped;
+            }
+            for fiber_b in other_iter.by_ref() {
+                for (i, k) in nonzeros.iter().enumerate() {
+                    if fiber_a[i].1 {
+                        result_data[result_index] -= fiber_a[i].0 * fiber_b[selfiter.map[*k]];
+                    } else {
+                        result_data[result_index] += fiber_a[i].0 * fiber_b[selfiter.map[*k]];
+                    }
+                }
+                result_index += 1;
+            }
+            other_iter.reset();
+        }
+        if max_skip > 0 {
+            // println!("skippedDS {max_skip}");
+        }
+        let result = DenseTensor {
+            data: result_data,
+            structure: final_structure,
+        };
+
+        Some(result)
+    }
+}
+
+impl<T, U, I> MultiContract<SparseTensor<T, I>> for DenseTensor<U, I>
+where
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = U::Out>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = U::Out>,
+    U: DotProduct<T>,
+    I: TensorStructure + Clone + StructureContract,
+{
+    type LCM = DenseTensor<U::Out, I>;
+
+    fn multi_contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
+        let (permutation, self_matches, other_matches) =
+            self.structure().match_indices(other.structure()).unwrap();
+
+        let mut final_structure = self.structure.clone();
+        final_structure.merge(&other.structure);
+
+        let mut result_data = vec![U::Out::zero(); final_structure.size()];
+        let mut result_index = 0;
+
+        let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation.clone());
+        let mut other_iter = other.iter_multi_fibers_metric(
+            &other_matches,
+            permutation.clone().inverse().normalize(true),
+        );
+
+        let mut max_skip = 0;
+        while let Some(fiber_a) = selfiter.next() {
+            while let Some((skipped, nonzeros, fiber_b)) = other_iter.next() {
+                result_index += skipped;
+                if skipped > max_skip {
+                    max_skip = skipped;
+                }
+
+                for (i, k) in nonzeros.iter().enumerate() {
+                    if fiber_a[other_iter.map[*k]].1 {
+                        result_data[result_index] -= fiber_a[other_iter.map[*k]].0 * fiber_b[i].0;
+                    } else {
+                        result_data[result_index] += fiber_a[other_iter.map[*k]].0 * fiber_b[i].0;
+                    }
+                }
+                result_index += 1;
+            }
+            result_index += other_iter.reset();
+        }
+
+        if max_skip > 0 {
+            // println!("skippedSD {max_skip}");
+        }
+
+        let result = DenseTensor {
+            data: result_data,
+            structure: final_structure,
+        };
+
+        Some(result)
+    }
+}
+
+impl<T, U, I> SingleContract<SparseTensor<T, I>> for SparseTensor<U, I>
+where
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = U::Out>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = U::Out>,
+    U: DotProduct<T>,
+    I: TensorStructure + Clone + StructureContract,
+    U::Out: PartialEq,
+{
+    type LCM = SparseTensor<U::Out, I>;
+
+    fn single_contract(&self, other: &SparseTensor<T, I>, i: usize, j: usize) -> Option<Self::LCM> {
+        let final_structure = self.structure.merge_at(&other.structure, (i, j));
+        let mut result_data = AHashMap::default();
+        let mut result_index = 0;
+        let pos = self.order();
+
+        let mut self_iter = self.iter_fiber(i);
+        let mut other_iter = other.iter_fiber(j);
+
+        let metric = self.external_structure()[i].representation.negative();
+
+        let stride = *final_structure
+            .strides()
+            .get(pos.wrapping_sub(2))
+            .unwrap_or(&1);
+
+        for (skipped_a, nonzeros_a, fiber_a) in self_iter.by_ref() {
+            result_index += skipped_a * stride;
+            for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
+                result_index += skipped_b;
+                let mut value = U::Out::zero();
+                let mut nonzero = false;
+
+                for (i, j, x) in nonzeros_a
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &x)| nonzeros_b.binary_search(&x).ok().map(|j| (i, j, x)))
+                {
+                    if metric[x] {
+                        value -= fiber_a[i] * fiber_b[j];
+                    } else {
+                        value += fiber_a[i] * fiber_b[j];
+                    }
+                    nonzero = true;
+                }
+
+                if nonzero && value != U::Out::zero() {
+                    result_data.insert(result_index, value);
+                }
+                result_index += 1;
+            }
+            result_index += other_iter.reset();
+        }
+
         let result = SparseTensor {
             elements: result_data,
             structure: final_structure,
         };
+
         Some(result)
     }
 }
 
-impl<T, U, Out, I> Contract<SparseTensor<T, I>> for DenseTensor<U, I>
+impl<T, U, I> MultiContract<SparseTensor<T, I>> for SparseTensor<U, I>
 where
-    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = Out>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = Out>,
-    Out: std::ops::AddAssign<Out>
-        + std::ops::SubAssign<Out>
-        + Neg<Output = Out>
-        + Clone
-        + num::traits::Zero
-        + for<'a> std::ops::AddAssign<&'a Out>
-        + for<'b> std::ops::SubAssign<&'b Out>
-        + std::fmt::Debug,
-    I: Clone + TensorStructure + StructureContract,
-    T: Clone,
+    for<'a, 'b> &'a U: std::ops::Mul<&'b T, Output = U::Out>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = U::Out>,
+    U: DotProduct<T>,
+    I: TensorStructure + Clone + StructureContract,
+    U::Out: PartialEq,
 {
-    type LCM = DenseTensor<Out, I>;
-    fn contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
-        // self is dense U, other is sparse T
-        if let Some((single, i, j)) = self.structure.match_index(&other.structure) {
-            if i >= j {
-                if single {
-                    let final_structure = self.structure.merge_at(&other.structure, (i, j));
-                    let mut result_data = vec![Out::zero(); final_structure.size()];
-                    let mut result_index = 0;
+    type LCM = SparseTensor<U::Out, I>;
 
-                    let mut self_iter = self.iter_fiber(i);
-                    let mut other_iter = other.iter_fiber(j);
+    fn multi_contract(&self, other: &SparseTensor<T, I>) -> Option<Self::LCM> {
+        let (permutation, self_matches, other_matches) =
+            self.structure().match_indices(other.structure()).unwrap();
 
-                    let metric = self.external_structure()[i].representation.negative();
+        let mut final_structure = self.structure.clone();
+        let mergepoint = final_structure.merge(&other.structure);
+        let mut result_data = AHashMap::default();
 
-                    let stride = *final_structure
-                        .strides()
-                        .get(i.saturating_sub(1))
-                        .unwrap_or(&1);
-
-                    for fiber_a in self_iter.by_ref() {
-                        for (skipped, nonzeros, fiber_b) in other_iter.by_ref() {
-                            result_index += skipped * stride;
-                            for (i, k) in nonzeros.iter().enumerate() {
-                                if metric[*k] {
-                                    result_data[result_index] -= fiber_a[*k] * fiber_b[i];
-                                } else {
-                                    result_data[result_index] += fiber_a[*k] * fiber_b[i];
-                                }
-                            }
-                            result_index += 1;
-                        }
-                        other_iter.reset();
-                    }
-
-                    let result = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    Some(result)
-                } else {
-                    let (permutation, self_matches, other_matches) =
-                        self.structure().match_indices(other.structure()).unwrap();
-
-                    let mut final_structure = self.structure.clone();
-                    final_structure.merge(&other.structure);
-
-                    let mut result_data = vec![Out::zero(); final_structure.size()];
-                    let mut result_index = 0;
-
-                    let one = if let Some(o) = final_structure.strides().first() {
-                        *o
-                    } else {
-                        1
-                    };
-                    let stride = *final_structure
-                        .strides()
-                        .get(i.saturating_sub(1))
-                        .unwrap_or(&one);
-
-                    let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
-
-                    while let Some(fiber_a) = selfiter.next() {
-                        for (skipped, nonzeros, fiber_b) in other.iter_multi_fibers(&other_matches)
-                        {
-                            result_index += skipped * stride;
-                            for (i, k) in nonzeros.iter().enumerate() {
-                                if fiber_a[*k].1 {
-                                    result_data[result_index] -=
-                                        fiber_a[selfiter.map[*k]].0 * fiber_b[i];
-                                } else {
-                                    result_data[result_index] +=
-                                        fiber_a[selfiter.map[*k]].0 * fiber_b[i];
-                                }
-                            }
-                            result_index += 1;
-                        }
-                    }
-
-                    let result = DenseTensor {
-                        data: result_data,
-                        structure: final_structure,
-                    };
-
-                    Some(result)
-                }
-            } else {
-                other.contract(self)
-            }
+        // println!("mergepoint {:?}", mergepoint);
+        let stride = if let Some(pos) = mergepoint {
+            *final_structure
+                .strides()
+                .get(pos.saturating_sub(1))
+                .unwrap_or(&1)
         } else {
-            let mut final_structure = self.structure.clone();
-            final_structure.merge(&other.structure);
+            1
+        };
 
-            let mut result_data = vec![Out::zero(); final_structure.size()];
-            let stride = other.size();
+        let mut result_index = 0;
 
-            for (i, u) in self.iter_flat() {
-                for (j, t) in other.iter_flat() {
-                    result_data[i * stride + j] = u * t;
+        let mut self_iter = self.iter_multi_fibers_metric(&self_matches, permutation);
+        let mut other_iter = other.iter_multi_fibers(&other_matches);
+        while let Some((skipped_a, nonzeros_a, fiber_a)) = self_iter.next() {
+            result_index += skipped_a * stride;
+
+            for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
+                result_index += skipped_b;
+                let mut value = U::Out::zero();
+                let mut nonzero = false;
+
+                for (i, j, _x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
+                    nonzeros_b
+                        .binary_search(&self_iter.map[x])
+                        .ok()
+                        .map(|j| (i, j, x))
+                }) {
+                    if fiber_a[i].1 {
+                        value -= fiber_a[i].0 * fiber_b[j];
+                    } else {
+                        value += fiber_a[i].0 * fiber_b[j];
+                    }
+                    nonzero = true;
                 }
+
+                if nonzero && value != U::Out::zero() {
+                    result_data.insert(result_index, value);
+                }
+                result_index += 1;
             }
-            let result = DenseTensor {
-                data: result_data,
-                structure: final_structure,
-            };
-            Some(result)
+            result_index += other_iter.reset();
         }
+
+        let result = SparseTensor {
+            elements: result_data,
+            structure: final_structure,
+        };
+
+        return Some(result);
     }
 }
 
