@@ -23,12 +23,13 @@ const MAX_VERTEX_COUNT: usize = 32;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Esurface {
-    energies: Vec<usize>,
+    pub energies: Vec<usize>,
     sub_orientation: Vec<bool>,
     shift: Vec<usize>,
     shift_signature: bool,
 }
 
+// This equality is naive in the presence of raised propagators
 impl PartialEq for Esurface {
     fn eq(&self, other: &Self) -> bool {
         self.energies == other.energies && self.sub_orientation == other.sub_orientation

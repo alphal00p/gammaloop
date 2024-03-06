@@ -2,7 +2,7 @@ use crate::{
     cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model,
-    subtraction::overlap::EsurfaceDerivedData,
+    subtraction::esurface_data::{self, EsurfaceDerivedData},
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
 };
@@ -929,6 +929,11 @@ impl Graph {
 
     pub fn generate_edge_groups(&mut self) {
         self.derived_data.edge_groups = Some(self.group_edges_by_signature());
+    }
+
+    pub fn generate_esurface_data(&mut self) {
+        let data = esurface_data::generate_esurface_data(&self);
+        self.derived_data.esurface_derived_data = Some(data);
     }
 }
 
