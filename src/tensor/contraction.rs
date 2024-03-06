@@ -1,10 +1,9 @@
 use ahash::AHashMap;
-use eyre::Result;
+
 use itertools::Itertools;
 
 use num::Zero;
-use permutation::Permutation;
-use petgraph::dot::Dot;
+
 use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
 use symbolica::{
@@ -541,7 +540,7 @@ where
                 }
                 result_index += 1;
             }
-            other_iter.reset();
+            let _ = other_iter.reset();
         }
         if max_skip > 0 {
             // println!("skippedDS {max_skip}");
@@ -574,14 +573,14 @@ where
         let mut result_data = vec![U::Out::zero(); final_structure.size()];
         let mut result_index = 0;
 
-        let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation.clone());
+        let selfiter = self.iter_multi_fibers_metric(&self_matches, permutation.clone());
         let mut other_iter = other.iter_multi_fibers_metric(
             &other_matches,
             permutation.clone().inverse().normalize(true),
         );
 
         let mut max_skip = 0;
-        while let Some(fiber_a) = selfiter.next() {
+        for fiber_a in selfiter {
             while let Some((skipped, nonzeros, fiber_b)) = other_iter.next() {
                 result_index += skipped;
                 if skipped > max_skip {
@@ -743,7 +742,7 @@ where
             structure: final_structure,
         };
 
-        return Some(result);
+        Some(result)
     }
 }
 
@@ -1335,6 +1334,15 @@ where
         TensorNetwork {
             graph: Self::generate_network_graph(tensors),
         }
+    }
+}
+
+impl<T> Default for TensorNetwork<T>
+where
+    T: TensorStructure,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -14,8 +14,6 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use crate::tensor::{AbstractIndex, Dimension, NamedStructure, Shadowable};
-
 use super::{
     DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData, Slot, SparseTensor,
     SymbolicAdd, SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg,
@@ -913,17 +911,17 @@ where
 fn test_evaluator() {
     let mut state = State::new();
     let ws = Workspace::new();
-    let structure = NamedStructure::from_integers(
+    let structure = crate::tensor::NamedStructure::from_integers(
         &[
-            (AbstractIndex(4), Dimension(5)),
-            (AbstractIndex(5), Dimension(4)),
+            (crate::tensor::AbstractIndex(4), crate::tensor::Dimension(5)),
+            (crate::tensor::AbstractIndex(5), crate::tensor::Dimension(4)),
         ],
         "r",
     );
-    let p = structure.shadow(&mut state, &ws).unwrap();
+    let p = crate::tensor::Shadowable::shadow(structure, &mut state, &ws).unwrap();
 
     let mut var_map = HashMap::new();
-    let a: DenseTensor<InstructionEvaluator<f64>, NamedStructure> =
+    let a: DenseTensor<InstructionEvaluator<f64>, crate::tensor::NamedStructure> =
         p.to_evaluator(&mut var_map, &state);
 
     for (k, v) in var_map {

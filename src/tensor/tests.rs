@@ -1,19 +1,18 @@
-use std::collections::HashMap;
+
 
 use crate::{
     tensor::{
-        self, ufo::mink_four_vector, Contract, DenseTensor, GetTensorData, HasTensorData,
+        ufo::mink_four_vector, Contract, DenseTensor, GetTensorData, HasTensorData,
         MixedTensor, Representation, SparseTensor, SymbolicContract, TensorStructure,
     },
-    utils::FloatLike,
 };
-use ahash::{HashSet, HashSetExt};
-use funty::{Floating, Integral};
+use ahash::{HashSetExt};
+
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
-use num::{integer::average_floor, Complex, Float, Integer};
-use permutation::Permutation;
-use rand::{distributions::Uniform, rngs, Rng, SeedableRng};
+use num::{Complex};
+
+use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 use smartstring::alias::String;
 use symbolica::{
@@ -22,9 +21,9 @@ use symbolica::{
 };
 
 use super::{
-    structure, symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension,
-    HistoryStructure, NumTensor, SetTensorData, Slot, TensorMultiFiberMetricIterator,
-    TensorNetwork, TensorStructureMultiFiberMetricIterator, VecStructure,
+    symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension,
+    HistoryStructure, NumTensor, SetTensorData, Slot,
+    TensorNetwork, VecStructure,
 };
 
 trait Average {
@@ -382,7 +381,7 @@ fn all_single_contractions() {
 
 #[test]
 fn all_multi_contractions() {
-    let seeds = [48, 50, 118, 225, 234, 310];
+    let _seeds = [48, 50, 118, 225, 234, 310];
     let range = Some((-1000, 1000));
 
     let mut dseq = vec![];

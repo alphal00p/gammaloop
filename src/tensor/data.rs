@@ -1,6 +1,5 @@
 use super::{
-    atomic_expanded_label_id, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot,
-    SparseTensorIterator, SparseTensorLinearIterator, TensorStructure, TracksCount,
+    atomic_expanded_label_id, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot, SparseTensorLinearIterator, TensorStructure, TracksCount,
 };
 use ahash::AHashMap;
 use derive_more::From;

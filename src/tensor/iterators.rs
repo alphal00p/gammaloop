@@ -9,8 +9,6 @@
 
 use std::ops::{AddAssign, Neg, SubAssign};
 
-use crate::tensor::HistoryStructure;
-
 use super::{
     AbstractIndex, ConcreteIndex, DenseTensor, Dimension, GetTensorData, Representation, Slot,
     SparseTensor, SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
@@ -636,13 +634,12 @@ fn multi_iterators() {
         &perm.apply_slice(poses),
         perm.clone().inverse().normalize(true),
     );
-    for ((pos, i, neg), (posp, ip, negp)) in iter.by_ref().zip(iterperm.by_ref()) {
+    for ((pos, i, _neg), (_posp, ip, _negp)) in iter.by_ref().zip(iterperm.by_ref()) {
         println!("   Norm {:?}", s.expanded_index(i).unwrap());
         println!(
             "{pos:<2} Perm {:?}",
             &perm.clone().inverse().apply_slice(
-                &perm
-                    .apply_slice(s.as_slice())
+                perm.apply_slice(s.as_slice())
                     .expanded_index(ip)
                     .unwrap()
                     .as_slice()
@@ -655,7 +652,7 @@ fn multi_iterators() {
 
 #[test]
 fn construct() {
-    let a = HistoryStructure::new(
+    let a = crate::tensor::HistoryStructure::new(
         &[
             (1.into(), Representation::Euclidean(2.into())), //0
             (3.into(), Representation::Euclidean(2.into())), //1     inc

@@ -18,10 +18,10 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 
 use std::i64;
-use std::ops::Deref;
+
 use std::ops::Range;
-use std::path::Display;
-use std::slice::from_mut;
+
+
 use symbolica::coefficient::CoefficientView;
 
 use symbolica::representations::default::ListIteratorD;
@@ -625,7 +625,7 @@ pub trait TensorStructure {
             if let Some(indices) = index_map.get_mut(item) {
                 // Find an index that hasn't been used yet
                 if let Some(&index) = indices.iter().find(|&&i| !used_indices.contains(&i)) {
-                    permutation.push(index.into());
+                    permutation.push(index);
                     used_indices.insert(index);
                 } else {
                     // No available index for this item
@@ -1024,7 +1024,7 @@ impl std::fmt::Display for VecStructure {
         for (index, item) in self.structure.iter().enumerate() {
             if index != 0 {
                 // To avoid a newline at the start
-                write!(f, "\n")?;
+                writeln!(f)?;
             }
             write!(
                 f,
@@ -1117,11 +1117,7 @@ pub trait HasName {
 impl HasName for NamedStructure {
     type Name = SmartString<LazyCompact>;
     fn name(&self) -> Option<Cow<Self::Name>> {
-        if let Some(name) = &self.global_name {
-            Some(Cow::Borrowed(name))
-        } else {
-            None
-        }
+        self.global_name.as_ref().map(Cow::Borrowed)
     }
     fn set_name(&mut self, name: &Self::Name) {
         self.global_name = Some(name.clone());
@@ -1283,11 +1279,7 @@ impl SmartShadowStructure {
 impl HasName for SmartShadowStructure {
     type Name = SmartString<LazyCompact>;
     fn name(&self) -> Option<Cow<SmartString<LazyCompact>>> {
-        if let Some(name) = &self.global_name {
-            Some(Cow::Borrowed(name))
-        } else {
-            None
-        }
+        self.global_name.as_ref().map(Cow::Borrowed)
     }
     fn set_name(&mut self, name: &SmartString<LazyCompact>) {
         self.global_name = Some(name.clone());
@@ -1416,11 +1408,7 @@ where
 {
     type Name = N;
     fn name(&self) -> Option<Cow<N>> {
-        if let Some(name) = &self.global_name {
-            Some(Cow::Borrowed(name))
-        } else {
-            None
-        }
+        self.global_name.as_ref().map(|name| Cow::Borrowed(name))
     }
     fn set_name(&mut self, name: &N) {
         self.global_name = Some(name.clone());
