@@ -12,13 +12,15 @@ use std::ops::{AddAssign, Neg, SubAssign};
 use crate::tensor::HistoryStructure;
 
 use super::{
-    ConcreteIndex, DenseTensor, Dimension, GetTensorData, Representation, Slot, SparseTensor,
-    SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
+    AbstractIndex, ConcreteIndex, DenseTensor, Dimension, GetTensorData, Representation, Slot,
+    SparseTensor, SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
 };
 use ahash::AHashMap;
 
 use permutation::Permutation;
 
+use rand::{Rng, SeedableRng};
+use rand_xoshiro::Xoroshiro64Star;
 use symbolica::state::{State, Workspace};
 
 /// An iterator over all indices of a tensor structure
@@ -91,7 +93,7 @@ impl TensorStructureFiberIterator {
         let mut increment = 1;
 
         if fiber_position == structure.order() - 1 {
-            increment = *strides.get(structure.order() - 2).unwrap_or(&1);
+            increment = *strides.get(structure.order().wrapping_sub(2)).unwrap_or(&1);
         } else if fiber_position != 0 {
             shift = Some(strides[fiber_position - 1]);
             stride = Some(strides[fiber_position]);
@@ -590,6 +592,67 @@ impl Iterator for TensorStructureMultiFiberMetricIterator {
     }
 }
 
+fn test_structure_with_id<T>(ids: T, seed: u64) -> Vec<Slot>
+where
+    T: Iterator<Item = usize>,
+{
+    let mut rng = Xoroshiro64Star::seed_from_u64(seed);
+    let mut s = Vec::new();
+
+    for id in ids {
+        let rep = rng.gen_range(0..=1);
+        let dim = Dimension(rng.gen_range(1..=9));
+        let id = AbstractIndex(id);
+        let rep = match rep {
+            0 => Representation::Euclidean(dim),
+            _ => Representation::Lorentz(dim),
+        };
+
+        s.push((id, rep).into());
+    }
+    s
+}
+
+#[test]
+fn multi_iterators() {
+    let s = test_structure_with_id(0..3, 6);
+
+    let poses = [false, false, false];
+
+    let perm = Permutation::oneline([2, 0, 1]);
+
+    let os = perm.apply_slice(s.as_slice());
+
+    let (p, _, _) = s.match_indices(&os).unwrap();
+
+    if p != perm.clone().inverse().normalize(true) {
+        panic!("Permutation does not match");
+    }
+
+    let mut iter = TensorStructureMultiFiberMetricIterator::new(&s, &poses, perm.clone());
+
+    let mut iterperm = TensorStructureMultiFiberMetricIterator::new(
+        &perm.apply_slice(s.as_slice()),
+        &perm.apply_slice(poses),
+        perm.clone().inverse().normalize(true),
+    );
+    for ((pos, i, neg), (posp, ip, negp)) in iter.by_ref().zip(iterperm.by_ref()) {
+        println!("   Norm {:?}", s.expanded_index(i).unwrap());
+        println!(
+            "{pos:<2} Perm {:?}",
+            &perm.clone().inverse().apply_slice(
+                &perm
+                    .apply_slice(s.as_slice())
+                    .expanded_index(ip)
+                    .unwrap()
+                    .as_slice()
+            )
+        );
+    }
+
+    println!("{:?}", iter.map);
+}
+
 #[test]
 fn construct() {
     let a = HistoryStructure::new(
@@ -706,9 +769,12 @@ where
     }
 
     /// Reset the iterator, so that it can be used again.
-    pub fn reset(&mut self) {
+    #[must_use]
+    pub fn reset(&mut self) -> usize {
         self.fiber_iter.reset();
+        let skipped = self.skipped;
         self.skipped = 0;
+        skipped
     }
 }
 
@@ -820,10 +886,13 @@ where
     }
 
     /// Reset the iterator, so that it can be used again.
-    pub fn reset(&mut self) {
+    #[must_use]
+    pub fn reset(&mut self) -> usize {
         self.fiber_iter.reset();
         self.free_iter.reset();
+        let skipped = self.skipped;
         self.skipped = 0;
+        skipped
     }
 }
 
@@ -931,10 +1000,13 @@ where
         }
     }
 
-    pub fn reset(&mut self) {
+    #[must_use]
+    pub fn reset(&mut self) -> usize {
         self.fiber_iter.reset();
         self.free_iter.reset();
+        let skipped = self.skipped;
         self.skipped = 0;
+        skipped
     }
 }
 
@@ -1033,7 +1105,7 @@ pub struct SparseTensorLinearIterator<'a, T> {
 }
 
 impl<'a, T> SparseTensorLinearIterator<'a, T> {
-    fn new<N>(tensor: &'a SparseTensor<T, N>) -> Self {
+    pub fn new<N>(tensor: &'a SparseTensor<T, N>) -> Self {
         SparseTensorLinearIterator {
             iter: tensor.elements.iter(),
         }
@@ -1422,7 +1494,7 @@ pub struct DenseTensorLinearIterator<'a, T, I> {
 }
 
 impl<'a, T, I> DenseTensorLinearIterator<'a, T, I> {
-    fn new(tensor: &'a DenseTensor<T, I>) -> Self {
+    pub fn new(tensor: &'a DenseTensor<T, I>) -> Self {
         DenseTensorLinearIterator {
             tensor,
             current_flat_index: 0,
