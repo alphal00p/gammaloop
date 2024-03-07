@@ -7,7 +7,7 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-use self::parametric::{MixedTensor, MixedTensors, SymbolicContract};
+use self::parametric::{MixedTensor, MixedTensors};
 use self::structure::HistoryStructure;
 
 use super::{
@@ -97,7 +97,7 @@ impl<N, E> HalfEdgeGraph<N, E> {
                         i.data().as_ffi()
                     ));
                     out.push_str(&format!(
-                        "\n {} -- ext{}",
+                        "\n {} -- ext{};",
                         self.nodemap[i].data().as_ffi(),
                         i.data().as_ffi()
                     ));
@@ -783,36 +783,5 @@ where
 
     pub fn contract(&mut self) {
         self.contract_algo(|tn| tn.edge_to_min_degree_node())
-    }
-}
-
-impl<T> TensorNetwork<T>
-where
-    T: SymbolicContract<T, LCM = T>
-        + Debug
-        + TensorStructure<Structure = HistoryStructure<Symbol>>
-        + TracksCount,
-{
-    fn contract_edge_sym(&mut self, edge_idx: HedgeId, state: &State, ws: &Workspace) {
-        let a = self.graph.nodemap[edge_idx];
-        let b = self.graph.nodemap[self.graph.involution[edge_idx]];
-
-        let ai = self.graph.nodes.get(a).unwrap();
-        let bi = self.graph.nodes.get(b).unwrap();
-        let f = ai.contract_sym(bi, state, ws).unwrap();
-
-        self.graph.merge_nodes(a, b, f);
-    }
-    pub fn contract_sym(&mut self, state: &State, ws: &Workspace) {
-        if let Some(e) = self.edge_to_min_degree_node() {
-            self.contract_edge_sym(e, state, ws);
-            self.contract_sym(state, ws)
-        }
-    }
-    pub fn contract_sym_depth(&mut self, depth: usize, state: &State, ws: &Workspace) {
-        if let Some(e) = self.edge_to_min_degree_node_with_depth(depth) {
-            self.contract_edge_sym(e, state, ws);
-            self.contract_sym_depth(depth, state, ws)
-        }
     }
 }

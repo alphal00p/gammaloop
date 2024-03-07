@@ -1,6 +1,6 @@
 // Gamma chain example
 
-use num::Complex;
+use num::{Complex, One, Zero};
 
 use std::{
     fmt::Debug,
@@ -14,8 +14,9 @@ use _gammaloop::tensor::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
     },
-    AbstractIndex, Contract, DenseTensor, HasTensorData, HistoryStructure, IntoId, NumTensor,
-    SparseTensor, TensorNetwork,
+    AbstractIndex, Contract, DenseTensor, FallibleAddAssign, FallibleMul, FallibleSubAssign,
+    HasTensorData, HistoryStructure, IntoId, NumTensor, SparseTensor, TensorNetwork,
+    TrySmallestUpgrade,
 };
 
 use num::complex::Complex64;
@@ -25,87 +26,86 @@ use symbolica::{
     state::{State, Workspace},
 };
 
-#[allow(dead_code)]
-fn gamma_trace<T>(minkindices: &[i32]) -> SparseTensor<Complex<T>>
-where
-    T: Num
-        + std::default::Default
-        + Copy
-        + Neg<Output = T>
-        + Debug
-        + AddAssign
-        + SubAssign
-        + MulAssign
-        + DivAssign
-        + RemAssign,
-{
-    let mink = minkindices[0];
-    let mut result = gamma(usize::try_from(mink).unwrap().into(), (0.into(), 1.into()));
-    let mut contracting_index = 1;
-    for m in minkindices[1..].iter() {
-        let ui = contracting_index;
-        contracting_index += 1;
+// #[allow(dead_code)]
+// fn gamma_trace<T>(minkindices: &[i32]) -> SparseTensor<Complex<T>>
+// where
+//     T: TrySmallestUpgrade<T, LCM = T>
+//         + One
+//         + Zero
+//         + Default
+//         + Copy
+//         + Neg<Output = T>
+//         + FallibleAddAssign<T>
+//         + FallibleSubAssign<T>,
+//     for<'a, 'b> &'a T: FallibleMul<&'b T, Output = T> + TrySmallestUpgrade<&'b T, LCM = T>,
+// {
+//     let mink = minkindices[0];
+//     let mut result = gamma(usize::try_from(mink).unwrap().into(), (0.into(), 1.into()));
+//     let mut contracting_index = 1;
+//     for m in minkindices[1..].iter() {
+//         let ui = contracting_index;
+//         contracting_index += 1;
 
-        let uj = if contracting_index < minkindices.len() {
-            contracting_index
-        } else {
-            0
-        };
+//         let uj = if contracting_index < minkindices.len() {
+//             contracting_index
+//         } else {
+//             0
+//         };
 
-        if *m > 0 {
-            let gamma: SparseTensor<Complex<T>> =
-                gamma(usize::try_from(*m).unwrap().into(), (ui.into(), uj.into()));
-            result = gamma.contract(&result).unwrap();
-        } else {
-            result = gamma::<T>(
-                usize::try_from(m.neg()).unwrap().into(),
-                (ui.into(), uj.into()),
-            )
-            .contract(&result)
-            .unwrap();
-        }
-    }
-    result
-}
+//         if *m > 0 {
+//             let gamma: SparseTensor<Complex<T>> =
+//                 gamma(usize::try_from(*m).unwrap().into(), (ui.into(), uj.into()));
+//             result = gamma.contract(&result).unwrap();
+//         } else {
+//             result = gamma::<T>(
+//                 usize::try_from(m.neg()).unwrap().into(),
+//                 (ui.into(), uj.into()),
+//             )
+//             .contract(&result)
+//             .unwrap();
+//         }
+//     }
+//     result
+// }
 
-#[allow(dead_code)]
-fn gamma_chain<T>(minkindices: &[i32]) -> SparseTensor<Complex<T>>
-where
-    T: Num
-        + Copy
-        + Neg<Output = T>
-        + Debug
-        + AddAssign
-        + SubAssign
-        + MulAssign
-        + DivAssign
-        + RemAssign
-        + Default,
-{
-    let mink = minkindices[0];
-    let mut result = gamma(usize::try_from(mink).unwrap().into(), (0.into(), 1.into()));
-    let mut contracting_index = 1;
-    for m in minkindices[1..].iter() {
-        let ui = contracting_index;
-        contracting_index += 1;
+// #[allow(dead_code)]
+// fn gamma_chain<T>(minkindices: &[i32]) -> SparseTensor<Complex<T>>
+// where
+//     T: Num
+//         + Copy
+//         + Neg<Output = T>
+//         + Debug
+//         + AddAssign
+//         + SubAssign
+//         + MulAssign
+//         + DivAssign
+//         + RemAssign
+//         + Default,
+// {
+//     let mink = minkindices[0];
+//     let mut result = gamma(usize::try_from(mink).unwrap().into(), (0.into(), 1.into()));
+//     let mut contracting_index = 1;
+//     for m in minkindices[1..].iter() {
+//         let ui = contracting_index;
+//         contracting_index += 1;
 
-        let uj = contracting_index;
+//         let uj = contracting_index;
 
-        if *m > 0 {
-            let gamma: SparseTensor<Complex<T>> =
-                gamma(usize::try_from(*m).unwrap().into(), (ui.into(), uj.into()));
-            result = gamma.contract(&result).unwrap();
-        } else {
-            result = gamma::<T>(
-                AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
-                (ui.into(), uj.into()),
-            )
-            .contract(&result)
-            .unwrap();
-        }
-    }
-    result
-}
+//         if *m > 0 {
+//             let gamma: SparseTensor<Complex<T>> =
+//                 gamma(usize::try_from(*m).unwrap().into(), (ui.into(), uj.into()));
+//             result = gamma.contract(&result).unwrap();
+//         } else {
+//             result = gamma::<T>(
+//                 AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
+//                 (ui.into(), uj.into()),
+//             )
+//             .contract(&result)
+//             .unwrap();
+//         }
+//     }
+//     result
+// }
 
 #[allow(dead_code)]
 fn gamma_net(

@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::ops::Mul;
 
@@ -88,37 +89,54 @@ pub trait TrySmallestUpgrade<T> {
         Self::LCM: Clone;
 }
 
-duplicate! {
-    [ num;
-    [f64] ;
-    [i32] ;]
+// duplicate! {
+//     [ num;
+//     [f64] ;
+//     [i32] ;]
 
-impl TrySmallestUpgrade<num> for Complex<num> {
-    type LCM = Complex<num>;
+// impl TrySmallestUpgrade<num> for Complex<num> {
+//     type LCM = Complex<num>;
 
+//     fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
+//         where
+//             Self::LCM: Clone {
+//         Some(Cow::Borrowed(self))
+//     }
+// }
 
-    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
-        where
-            Self::LCM: Clone {
-        Some(Cow::Borrowed(self))
-    }
-}
+// impl TrySmallestUpgrade<Complex<num>> for num {
+//     type LCM = Complex<num>;
 
-impl TrySmallestUpgrade<Complex<num>> for num {
-    type LCM = Complex<num>;
+//     fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
+//         where
+//             Self::LCM: Clone {
+//         Some(Cow::Owned(Complex::from(*self)))
+//     }
+// }
+// }
 
+// impl<T, U> TrySmallestUpgrade<U> for T
+// where
+//     T: Borrow<T>,
+//     U: Borrow<T>,
+// {
+//     type LCM = T;
 
-    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
-        where
-            Self::LCM: Clone {
-        Some(Cow::Owned(Complex::from(*self)))
-    }
-}
-}
+//     fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
+//     where
+//         Self::LCM: Clone,
+//     {
+//         Some(Cow::Borrowed(self))
+//     }
+// } can't do this because of future impls GRR.
 
 duplicate! {
     [smaller larger;
+    [i16][i16];
+    [i32] [i32];
     [f64] [f64];
+    [Complex<f64>] [Complex<f64>];
+    [f64] [Complex<f64>];
     [f64] [Atom];
     [Atom] [Atom];
     [Complex<f64>] [Atom];
@@ -174,6 +192,7 @@ impl<'b> TrySmallestUpgrade<smaller> for &'b larger {
 duplicate! {
     [smaller larger;
     [f32] [f64];
+    [f64] [ Complex::<f64>];
     [i32] [f64];]
 
 impl TrySmallestUpgrade<larger> for smaller {
@@ -222,6 +241,7 @@ duplicate! {
     [smaller larger;
     [f64] [Atom];
     [Complex<f64>] [Atom];
+    [f64][Complex<f64>];
     [f32] [f64];
     [i32] [f64];]
 impl<'a> TrySmallestUpgrade<&'a larger> for smaller {
@@ -376,6 +396,8 @@ fn test_fallible_mul() {
 
     h.add_assign_fallible(atom);
     let f = atom.mul_fallible(atom);
+
+    Atom::default();
 
     print!("{}", h);
 }
