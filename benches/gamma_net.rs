@@ -11,16 +11,16 @@ use _gammaloop::tensor::{
 use criterion::{criterion_group, criterion_main, Criterion};
 use num::{complex::Complex64, ToPrimitive};
 
-use symbolica::{representations::Identifier, state::State};
+use symbolica::{representations::Symbol, state::State};
 fn gamma_net_sym(
     minkindices: &[i32],
     vbar: [Complex64; 4],
     u: [Complex64; 4],
     state: &mut State,
-) -> TensorNetwork<NumTensor<HistoryStructure<Identifier>>> {
+) -> TensorNetwork<NumTensor<HistoryStructure<Symbol>>> {
     let mut i = 0;
     let mut contracting_index = 0.into();
-    let mut result: Vec<NumTensor<HistoryStructure<Identifier>>> =
+    let mut result: Vec<NumTensor<HistoryStructure<Symbol>>> =
         vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
     for m in minkindices {
         let ui = contracting_index;
@@ -102,7 +102,7 @@ fn indices(n: i32, m: i32) -> Vec<i32> {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let mut state = State::new();
+    let mut state = State::get_global_state().write().unwrap();
     let one = Complex64::new(1.0, 0.0);
     let _zero = Complex64::new(0.0, 0.0);
 

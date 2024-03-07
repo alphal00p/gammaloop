@@ -152,18 +152,15 @@ where
 {
 }
 
-pub fn parse_python_expression(
-    expression: &str,
-    sb_state: &mut symbolica::state::State,
-    sb_workspace: &symbolica::state::Workspace,
-) -> Atom {
+pub fn parse_python_expression(expression: &str) -> Atom {
+    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
     let processed_string = String::from(expression)
         .replace("**", "^")
         .replace("cmath.sqrt", "sqrt")
         .replace("cmath.pi", "pi")
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
-    Atom::parse(processed_string.as_str(), sb_state, sb_workspace)
+    Atom::parse(processed_string.as_str(), &mut sb_state)
         .map_err(|e| {
             format!(
                 "Failed to parse expression : '{}'\nError: {}",
@@ -173,10 +170,7 @@ pub fn parse_python_expression(
         .unwrap()
 }
 
-pub fn to_str_expression(
-    expression: &Atom,
-    sb_state: &symbolica::state::State,
-) -> SmartString<LazyCompact> {
+pub fn to_str_expression(expression: &Atom) -> SmartString<LazyCompact> {
     format!(
         "{}",
         AtomPrinter::new_with_options(
@@ -194,7 +188,6 @@ pub fn to_str_expression(
                 num_exp_as_superscript: false,
                 latex: false
             },
-            sb_state
         )
     )
     .into()

@@ -22,12 +22,6 @@
 
 */
 
-use symbolica::{
-    representations::{Atom, AtomBuilder},
-    state::BufferHandle,
-};
-pub type Expr<'a> = AtomBuilder<'a, BufferHandle<'a, Atom>>;
-
 /// All tooling for tensor structures, indices and representations
 pub mod structure;
 pub use structure::*;
@@ -54,6 +48,10 @@ pub use iterators::*;
 /// Tensor contraction
 pub mod contraction;
 pub use contraction::*;
+
+/// Tensor networks
+pub mod network;
+pub use network::*;
 /// Adding, subtracting, scalar multiplication of tensors
 pub mod arithmetic;
 

@@ -1,5 +1,6 @@
 use super::{
-    atomic_expanded_label_id, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot, SparseTensorLinearIterator, TensorStructure, TracksCount,
+    atomic_expanded_label_id, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot,
+    SparseTensorLinearIterator, TensorStructure, TracksCount,
 };
 use ahash::AHashMap;
 use derive_more::From;
@@ -11,7 +12,7 @@ use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
 use symbolica::{
     representations::Atom,
-    representations::Identifier,
+    representations::Symbol,
     state::{State, Workspace},
 };
 
@@ -75,7 +76,7 @@ pub trait HasTensorData: TensorStructure {
     /// Returns a hashmap of the data, with the the shadowed indices as keys
     fn symhashmap(
         &self,
-        id: Identifier,
+        id: Symbol,
         state: &mut State,
         ws: &Workspace,
     ) -> HashMap<Atom, Self::Data>;
@@ -141,7 +142,7 @@ where
         hashmap
     }
 
-    fn symhashmap(&self, id: Identifier, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
+    fn symhashmap(&self, id: Symbol, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
         let mut hashmap = HashMap::new();
 
         for (k, v) in &self.elements {
@@ -530,7 +531,7 @@ where
         hashmap
     }
 
-    fn symhashmap(&self, id: Identifier, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
+    fn symhashmap(&self, id: Symbol, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
         let mut hashmap = HashMap::new();
 
         for (k, v) in self.iter() {
@@ -618,7 +619,7 @@ where
         }
     }
 
-    fn symhashmap(&self, id: Identifier, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
+    fn symhashmap(&self, id: Symbol, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
         match self {
             DataTensor::Dense(d) => d.symhashmap(id, state, ws),
             DataTensor::Sparse(s) => s.symhashmap(id, state, ws),

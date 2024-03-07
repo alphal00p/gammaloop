@@ -21,7 +21,7 @@ use _gammaloop::tensor::{
 use num::complex::Complex64;
 use num::traits::{Num, ToPrimitive};
 use symbolica::{
-    representations::{Atom, Identifier},
+    representations::{Atom, Symbol},
     state::{State, Workspace},
 };
 
@@ -113,10 +113,10 @@ fn gamma_net(
     vbar: [Complex64; 4],
     u: [Complex64; 4],
     state: &mut State,
-) -> TensorNetwork<NumTensor<HistoryStructure<Identifier>>> {
+) -> TensorNetwork<NumTensor<HistoryStructure<Symbol>>> {
     let mut i = 0;
     let mut contracting_index: AbstractIndex = 0.into();
-    let mut result: Vec<NumTensor<HistoryStructure<Identifier>>> =
+    let mut result: Vec<NumTensor<HistoryStructure<Symbol>>> =
         vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
     for m in minkindices {
         let ui = contracting_index;
@@ -183,12 +183,13 @@ fn gamma_net_param(
     minkindices: &[i32],
     state: &mut State,
     ws: &Workspace,
-) -> TensorNetwork<MixedTensor<HistoryStructure<Identifier>>> {
+) -> TensorNetwork<MixedTensor<HistoryStructure<Symbol>>> {
     let mut i = 0;
     let mut contracting_index: AbstractIndex = 0.into();
-    let mut result: Vec<MixedTensor<HistoryStructure<Identifier>>> = vec![
-        param_euclidean_four_vector(contracting_index, "vbar".into_id(state), state, ws).into(),
-    ];
+    let mut result: Vec<MixedTensor<HistoryStructure<Symbol>>> =
+        vec![
+            param_euclidean_four_vector(contracting_index, "vbar".into_id(state), state, ws).into(),
+        ];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1.into();
@@ -217,7 +218,7 @@ fn gamma_net_param(
     TensorNetwork::from(result)
 }
 
-fn dump_c_with_func(_levels: Vec<Vec<(Identifier, Vec<Atom>)>>) {}
+fn dump_c_with_func(_levels: Vec<Vec<(Symbol, Vec<Atom>)>>) {}
 
 #[allow(unused_variables)]
 fn main() {
@@ -265,7 +266,7 @@ fn main() {
     // // );
 
     let startfull = Instant::now();
-    let mut state = State::new();
+    let mut state = State::get_global_state().write().unwrap();
 
     let mut chain = gamma_net(&vec, vbar, u, &mut state);
     println!("{}", chain.graph.edges.len());
@@ -628,7 +629,7 @@ fn main() {
     //     })
     //     .collect::<Vec<_>>();
 
-    // let levels: Vec<Vec<(Identifier, Vec<Atom>)>> = from_file
+    // let levels: Vec<Vec<(Symbol, Vec<Atom>)>> = from_file
     //     .iter()
     //     .map(|x| {
     //         x.iter()
