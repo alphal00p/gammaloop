@@ -1,8 +1,5 @@
 use ahash::AHashMap;
 
-
-
-
 use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
 use symbolica::{
@@ -14,13 +11,11 @@ use self::parametric::{MixedTensor, MixedTensors, SymbolicContract};
 use self::structure::HistoryStructure;
 
 use super::{
-    parametric, structure, Contract, DataTensor, HasName, HasTensorData, Shadowable, Slot,
-    TensorStructure, TracksCount,
+    parametric, structure, Contract, DataTensor, HasName, Shadowable, Slot, TensorStructure,
+    TracksCount,
 };
 use smartstring::alias::String;
-use std::{
-    fmt::{Debug, Display},
-};
+use std::fmt::{Debug, Display};
 
 new_key_type! {
     pub struct NodeId;
@@ -88,22 +83,26 @@ impl<N, E> HalfEdgeGraph<N, E> {
         //     out.push_str(&format!("\n {}", i.data().as_ffi()));
         // }
         for (i, _) in &self.neighbors {
-            if i > self.involution[i] {
-                out.push_str(&format!(
-                    "\n {} -- {}",
-                    self.nodemap[i].data().as_ffi(),
-                    self.nodemap[self.involution[i]].data().as_ffi()
-                ));
-            } else if i == self.involution[i] {
-                out.push_str(&format!(
-                    "ext{} [shape=none, label=\"\"];",
-                    i.data().as_ffi()
-                ));
-                out.push_str(&format!(
-                    "\n {} -- ext{}",
-                    self.nodemap[i].data().as_ffi(),
-                    i.data().as_ffi()
-                ));
+            match i.cmp(&self.involution[i]) {
+                std::cmp::Ordering::Greater => {
+                    out.push_str(&format!(
+                        "\n {} -- {}",
+                        self.nodemap[i].data().as_ffi(),
+                        self.nodemap[self.involution[i]].data().as_ffi()
+                    ));
+                }
+                std::cmp::Ordering::Equal => {
+                    out.push_str(&format!(
+                        "ext{} [shape=none, label=\"\"];",
+                        i.data().as_ffi()
+                    ));
+                    out.push_str(&format!(
+                        "\n {} -- ext{}",
+                        self.nodemap[i].data().as_ffi(),
+                        i.data().as_ffi()
+                    ));
+                }
+                _ => {}
             }
         }
 
