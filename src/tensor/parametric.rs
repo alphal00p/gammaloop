@@ -18,10 +18,10 @@ use symbolica::{
 };
 
 use super::{
-    DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData, Slot, SparseTensor,
-    SymbolicAdd, SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg,
-    SymbolicStructureContract, SymbolicSub, SymbolicSubAssign, SymbolicZero, TensorStructure,
-    TracksCount,
+    atomic_expanded_label_id, DataIterator, DataTensor, DenseTensor, HasName, HistoryStructure,
+    IntoId, SetTensorData, Slot, SparseTensor, SymbolicAdd, SymbolicAddAssign, SymbolicInto,
+    SymbolicMul, SymbolicNeg, SymbolicStructureContract, SymbolicSub, SymbolicSubAssign,
+    SymbolicZero, TensorStructure, TracksCount,
 };
 
 pub trait SymbolicInternalContract {
@@ -895,7 +895,7 @@ where
             .iter()
             .map(|(idx, x)| {
                 (
-                    idx.clone(),
+                    *idx,
                     x.as_view().evaluate::<T>(const_map, &fn_map, &mut cache),
                 )
             })
@@ -927,6 +927,20 @@ where
             .collect::<Vec<_>>();
 
         DenseTensor { data, structure }
+    }
+
+    pub fn append_const_map<'a, T>(
+        &'a self,
+        data: &DenseTensor<T, I>,
+        const_map: &mut HashMap<AtomView<'a>, T>,
+    ) where
+        I: TensorStructure,
+        T: Copy,
+    {
+        for ((i, a), (j, v)) in self.flat_iter().zip(data.flat_iter()) {
+            assert_eq!(i, j);
+            const_map.insert(a.as_view(), *v);
+        }
     }
 
     pub fn to_evaluator<'a, N>(
@@ -1001,7 +1015,7 @@ fn test_evaluator() {
         ],
         "r",
     );
-    let p = crate::tensor::Shadowable::shadow(structure, &mut state, &ws).unwrap();
+    let p = crate::tensor::Shadowable::shadow(structure).unwrap();
 
     let mut var_map = AHashMap::new();
     let a: DenseTensor<InstructionEvaluator<f64>, crate::tensor::NamedStructure> =

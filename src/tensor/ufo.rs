@@ -171,7 +171,7 @@ where
     N: Clone + IntoId,
 {
     HistoryStructure::new(&[(index, Lorentz(4.into()))], name)
-        .shadow(state, ws)
+        .shadow()
         .unwrap_or_else(|| unreachable!())
 }
 
@@ -185,7 +185,7 @@ where
     N: Clone + IntoId,
 {
     HistoryStructure::new(&[(index, Euclidean(4.into()))], name)
-        .shadow(state, ws)
+        .shadow()
         .unwrap_or_else(|| unreachable!())
 }
 

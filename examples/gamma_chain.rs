@@ -187,15 +187,13 @@ fn gamma_net_param(
     let mut i = 0;
     let mut contracting_index: AbstractIndex = 0.into();
     let mut result: Vec<MixedTensor<HistoryStructure<Symbol>>> =
-        vec![
-            param_euclidean_four_vector(contracting_index, "vbar".into_id(state), state, ws).into(),
-        ];
+        vec![param_euclidean_four_vector(contracting_index, "vbar".into_id(), state, ws).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1.into();
         let uj = contracting_index;
         if *m > 0 {
-            let pname = format!("p{}", i).into_id(state);
+            let pname = format!("p{}", i).into_id();
             i += 1;
             result.push(
                 param_mink_four_vector(usize::try_from(*m).unwrap().into(), pname, state, ws)
@@ -213,8 +211,7 @@ fn gamma_net_param(
             );
         }
     }
-    result
-        .push(param_euclidean_four_vector(contracting_index, "u".into_id(state), state, ws).into());
+    result.push(param_euclidean_four_vector(contracting_index, "u".into_id(), state, ws).into());
     TensorNetwork::from(result)
 }
 

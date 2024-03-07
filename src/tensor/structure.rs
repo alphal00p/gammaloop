@@ -197,11 +197,8 @@ impl Representation {
     ///
     /// for example see [`Slot::to_symbolic`]
     #[allow(clippy::cast_possible_wrap)]
-    pub fn to_fnbuilder<'a, 'b: 'a>(
-        &'a self,
-        state: &'b mut State,
-        ws: &'b Workspace,
-    ) -> FunctionBuilder {
+    pub fn to_fnbuilder<'a, 'b: 'a>(&'a self) -> FunctionBuilder {
+        let mut state = State::get_global_state().write().unwrap();
         let (value, id) = match *self {
             Self::Euclidean(value) => (value, state.get_or_insert_fn("euc", None)),
             Self::Lorentz(value) => (value, state.get_or_insert_fn("lor", None)),
@@ -235,8 +232,8 @@ impl Representation {
     /// assert_eq!("lor(4)",format!("{}",mink.to_symbolic(&mut state,&ws).printer(&state)));
     /// assert_eq!("l4",format!("{}",mink));
     /// ```
-    pub fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Atom {
-        self.to_fnbuilder(state, ws).finish()
+    pub fn to_symbolic(&self) -> Atom {
+        self.to_fnbuilder().finish()
     }
 }
 
@@ -469,8 +466,8 @@ impl Slot {
     /// assert_eq!("lor(4,0)",format!("{}",mu.to_symbolic(&mut state,&ws).printer(&state)));
     /// assert_eq!("0l4",format!("{}",mu));
     /// ```
-    pub fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Atom {
-        let mut value_builder = self.representation.to_fnbuilder(state, ws);
+    pub fn to_symbolic(&self) -> Atom {
+        let mut value_builder = self.representation.to_fnbuilder();
         value_builder =
             value_builder.add_arg(Atom::new_num(usize::from(self.index) as i64).as_atom_view());
         value_builder.finish()
@@ -760,19 +757,14 @@ pub trait TensorStructure {
         self.shape().iter().map(|x| usize::from(*x)).product()
     }
 
-    fn shadow_with(
-        self,
-        f_id: Symbol,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> DenseTensor<Atom, Self::Structure>
+    fn shadow_with(self, f_id: Symbol) -> DenseTensor<Atom, Self::Structure>
     where
         Self: std::marker::Sized,
         Self::Structure: Clone,
     {
         let mut data = vec![];
         for index in self.index_iter() {
-            data.push(atomic_expanded_label_id(&index, f_id, state, ws));
+            data.push(atomic_expanded_label_id(&index, f_id));
         }
 
         DenseTensor {
@@ -781,12 +773,7 @@ pub trait TensorStructure {
         }
     }
 
-    fn to_explicit_rep(
-        self,
-        f_id: Symbol,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> MixedTensor<Self::Structure>
+    fn to_explicit_rep(self, f_id: Symbol) -> MixedTensor<Self::Structure>
     where
         Self: std::marker::Sized,
         Self::Structure: Clone + TensorStructure,
@@ -799,7 +786,7 @@ pub trait TensorStructure {
             ufo::PROJM => ufo::proj_m_data(self.structure().clone()).into(),
             ufo::PROJP => ufo::proj_p_data(self.structure().clone()).into(),
             ufo::SIGMA => ufo::sigma_data(self.structure().clone()).into(),
-            name => self.shadow_with(name, state, ws).into(),
+            name => self.shadow_with(name).into(),
         }
     }
 }
@@ -1547,34 +1534,24 @@ pub fn atomic_expanded_label<I: IntoId>(
     state: &mut State,
     ws: &Workspace,
 ) -> Atom {
-    let id = name.into_id(state);
-    atomic_expanded_label_id(indices, id, state, ws)
+    let id = name.into_id();
+    atomic_expanded_label_id(indices, id)
 }
 
-pub fn atomic_flat_label<I: IntoId>(
-    index: usize,
-    name: I,
-    state: &mut State,
-    ws: &Workspace,
-) -> Atom {
-    let id = name.into_id(state);
-    atomic_flat_label_id(index, id, state, ws)
+pub fn atomic_flat_label<I: IntoId>(index: usize, name: I) -> Atom {
+    let id = name.into_id();
+    atomic_flat_label_id(index, id)
 }
 
 #[allow(clippy::cast_possible_wrap)]
-pub fn atomic_flat_label_id(index: usize, id: Symbol, state: &mut State, ws: &Workspace) -> Atom {
+pub fn atomic_flat_label_id(index: usize, id: Symbol) -> Atom {
     let mut value_builder = FunctionBuilder::new(id);
     value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
     value_builder.finish()
 }
 
 #[allow(clippy::cast_possible_wrap)]
-pub fn atomic_expanded_label_id(
-    indices: &[ConcreteIndex],
-    id: Symbol,
-    state: &mut State,
-    ws: &Workspace,
-) -> Atom {
+pub fn atomic_expanded_label_id(indices: &[ConcreteIndex], id: Symbol) -> Atom {
     let mut value_builder = FunctionBuilder::new(id);
     for &index in indices {
         value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
@@ -1582,30 +1559,42 @@ pub fn atomic_expanded_label_id(
     value_builder.finish()
 }
 pub trait IntoId {
-    fn into_id(self, state: &mut State) -> Symbol;
+    fn into_id(self) -> Symbol;
 }
 
 impl IntoId for SmartString<LazyCompact> {
-    fn into_id(self, state: &mut State) -> Symbol {
-        state.get_or_insert_fn(self, None).unwrap()
+    fn into_id(self) -> Symbol {
+        State::get_global_state()
+            .write()
+            .unwrap()
+            .get_or_insert_fn(self, None)
+            .unwrap()
     }
 }
 
 impl IntoId for Symbol {
-    fn into_id(self, _state: &mut State) -> Symbol {
+    fn into_id(self) -> Symbol {
         self
     }
 }
 
 impl IntoId for &str {
-    fn into_id(self, state: &mut State) -> Symbol {
-        state.get_or_insert_fn(self, None).unwrap()
+    fn into_id(self) -> Symbol {
+        State::get_global_state()
+            .write()
+            .unwrap()
+            .get_or_insert_fn(self, None)
+            .unwrap()
     }
 }
 
 impl IntoId for std::string::String {
-    fn into_id(self, state: &mut State) -> Symbol {
-        state.get_or_insert_fn(self, None).unwrap()
+    fn into_id(self) -> Symbol {
+        State::get_global_state()
+            .write()
+            .unwrap()
+            .get_or_insert_fn(self, None)
+            .unwrap()
     }
 }
 
@@ -1614,40 +1603,40 @@ impl IntoId for std::string::String {
 /// This creates a dense tensor of atoms, where the atoms are the expanded indices of the tensor, with the global name as the name of the labels.
 pub trait Shadowable: TensorStructure {
     type Name: IntoId + Clone;
-    fn shadow(self, state: &mut State, ws: &Workspace) -> Option<DenseTensor<Atom, Self::Structure>>
+    fn shadow(self) -> Option<DenseTensor<Atom, Self::Structure>>
     where
         Self: std::marker::Sized + HasName<Name = <Self as Shadowable>::Name>,
         Self::Structure: Clone,
     {
         let name = self.name()?.into_owned();
 
-        Some(self.shadow_with(name.into_id(state), state, ws))
+        Some(self.shadow_with(name.into_id()))
     }
 
-    fn smart_shadow(self, state: &mut State, ws: &Workspace) -> Option<MixedTensor<Self::Structure>>
+    fn smart_shadow(self) -> Option<MixedTensor<Self::Structure>>
     where
         Self: std::marker::Sized + HasName<Name = <Self as Shadowable>::Name>,
         Self::Structure: Clone + TensorStructure,
     {
         let name = self.name()?.into_owned();
-        Some(self.to_explicit_rep(name.into_id(state), state, ws))
+        Some(self.to_explicit_rep(name.into_id()))
     }
 
-    fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Option<Atom>
+    fn to_symbolic(&self) -> Option<Atom>
     where
         Self: HasName<Name = <Self as Shadowable>::Name>,
     {
-        Some(self.to_symbolic_with(self.name()?.into_owned(), state, ws))
+        Some(self.to_symbolic_with(self.name()?.into_owned()))
     }
 
-    fn to_symbolic_with(&self, name: Self::Name, state: &mut State, ws: &Workspace) -> Atom {
+    fn to_symbolic_with(&self, name: Self::Name) -> Atom {
         let atoms = self
             .external_structure()
             .iter()
-            .map(|slot| slot.to_symbolic(state, ws))
+            .map(|slot| slot.to_symbolic())
             .collect::<Vec<_>>();
 
-        let mut value_builder = FunctionBuilder::new(name.into_id(state));
+        let mut value_builder = FunctionBuilder::new(name.into_id());
         for atom in atoms {
             value_builder = value_builder.add_arg(atom.as_atom_view());
         }
