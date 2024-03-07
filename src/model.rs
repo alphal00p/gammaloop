@@ -292,10 +292,7 @@ impl SerializableParameter {
             nature: param.nature.clone(),
             parameter_type: param.parameter_type.clone(),
             value: param.value.map(|value| (value.re, value.im)),
-            expression: param
-                .expression
-                .as_ref()
-                .map(|expr| utils::to_str_expression(expr)),
+            expression: param.expression.as_ref().map(utils::to_str_expression),
         }
     }
 }
@@ -575,13 +572,11 @@ impl Model {
     }
 
     pub fn from_file(file_path: String) -> Result<Model, Report> {
-        SerializableModel::from_file(file_path)
-            .map(|serializable_model| Model::from_serializable_model(serializable_model))
+        SerializableModel::from_file(file_path).map(Model::from_serializable_model)
     }
 
     pub fn from_yaml_str(yaml_str: String) -> Result<Model, Report> {
-        SerializableModel::from_yaml_str(yaml_str)
-            .map(|serializable_model| Model::from_serializable_model(serializable_model))
+        SerializableModel::from_yaml_str(yaml_str).map(Model::from_serializable_model)
     }
 
     #[inline]

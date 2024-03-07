@@ -1,7 +1,4 @@
-
-
 use ahash::{AHashMap, HashMap};
-use arbitrary_int::Number;
 use enum_try_as_inner::EnumTryAsInner;
 
 use num::Complex;
@@ -18,9 +15,10 @@ use symbolica::{
 };
 
 use super::{
-    DataIterator, DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData, Slot, SparseTensor, SymbolicAdd, SymbolicAddAssign, SymbolicInto,
-    SymbolicMul, SymbolicNeg, SymbolicStructureContract, SymbolicSub, SymbolicSubAssign,
-    SymbolicZero, TensorStructure, TracksCount,
+    DataIterator, DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData, Slot,
+    SparseTensor, SymbolicAdd, SymbolicAddAssign, SymbolicInto, SymbolicMul, SymbolicNeg,
+    SymbolicStructureContract, SymbolicSub, SymbolicSubAssign, SymbolicZero, TensorStructure,
+    TracksCount,
 };
 
 pub trait SymbolicInternalContract {
@@ -119,7 +117,7 @@ where
                     let final_structure =
                         self.structure
                             .merge_at_sym(&other.structure, (i, j), state, ws);
-                    let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+                    let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
                     let mut self_iter = self.iter_fiber(i);
@@ -146,7 +144,7 @@ where
                             }
                             result_index += 1;
                         }
-                        other_iter.reset();
+                        let _ = other_iter.reset();
                     }
 
                     let result = DenseTensor {
@@ -164,7 +162,7 @@ where
                 final_structure.merge_sym(&other.structure, state, ws);
 
                 // Initialize result tensor with default values
-                let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+                let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
                 let mut result_index = 0;
                 let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
 
@@ -188,7 +186,7 @@ where
                         }
                         result_index += 1;
                     }
-                    other_iter.reset();
+                    let _ = other_iter.reset();
                 }
                 let result: DenseTensor<Out, I> = DenseTensor {
                     data: result_data,
@@ -202,7 +200,7 @@ where
         let mut final_structure = self.structure.clone();
         final_structure.merge_sym(&other.structure, state, ws);
 
-        let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+        let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
 
         let stride = other.size();
         for (i, u) in self.iter_flat() {
@@ -249,7 +247,7 @@ where
                     let final_structure =
                         self.structure
                             .merge_at_sym(&other.structure, (i, j), state, ws);
-                    let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+                    let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
                     let metric = self.get_ith_metric(i).unwrap();
                     let mut result_index = 0;
 
@@ -276,7 +274,7 @@ where
                             }
                             result_index += 1;
                         }
-                        other_iter.reset();
+                        let _ = other_iter.reset();
                     }
 
                     let result = DenseTensor {
@@ -292,7 +290,7 @@ where
 
                     let mut final_structure = self.structure.clone();
                     final_structure.merge_sym(&other.structure, state, ws);
-                    let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+                    let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
                     let mut selfiter = self.iter_multi_fibers_metric(&self_matches, permutation);
@@ -326,7 +324,7 @@ where
                             }
                             result_index += 1;
                         }
-                        other_iter.reset();
+                        let _ = other_iter.reset();
                     }
                     let result = DenseTensor {
                         data: result_data,
@@ -342,7 +340,7 @@ where
             let mut final_structure = self.structure.clone();
             final_structure.merge_sym(&other.structure, state, ws);
 
-            let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+            let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
             let stride = other.size();
 
             for (i, u) in self.iter_flat() {
@@ -410,7 +408,7 @@ where
                         result_index += skipped_a;
                         for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
                             result_index += skipped_b * stride;
-                            let mut value = Out::zero(state, ws);
+                            let mut value = Out::sym_zero(state, ws);
                             let mut nonzero = false;
 
                             for (i, j, x) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
@@ -438,7 +436,7 @@ where
                             }
                             result_index += 1;
                         }
-                        other_iter.reset();
+                        let _ = other_iter.reset();
                     }
 
                     let result = SparseTensor {
@@ -472,7 +470,7 @@ where
                     result_index += skipped_a;
                     for (skipped_b, nonzeros_b, fiber_b) in other_iter.by_ref() {
                         result_index += skipped_b * stride;
-                        let mut value = Out::zero(state, ws);
+                        let mut value = Out::sym_zero(state, ws);
                         let mut nonzero = false;
 
                         for (i, j) in nonzeros_a.iter().enumerate().filter_map(|(i, &x)| {
@@ -564,7 +562,7 @@ where
                     let final_structure =
                         self.structure
                             .merge_at_sym(&other.structure, (i, j), state, ws);
-                    let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+                    let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
                     let mut self_iter = self.iter_fiber(i);
@@ -597,7 +595,7 @@ where
                             }
                             result_index += 1;
                         }
-                        other_iter.reset();
+                        let _ = other_iter.reset();
                     }
 
                     let result = DenseTensor {
@@ -613,7 +611,7 @@ where
                     let mut final_structure = self.structure.clone();
                     final_structure.merge_sym(&other.structure, state, ws);
 
-                    let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+                    let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
                     let mut result_index = 0;
 
                     let one = if let Some(o) = final_structure.strides().first() {
@@ -673,7 +671,7 @@ where
             let mut final_structure = self.structure.clone();
             final_structure.merge_sym(&other.structure, state, ws);
 
-            let mut result_data = vec![Out::zero(state, ws); final_structure.size()];
+            let mut result_data = vec![Out::sym_zero(state, ws); final_structure.size()];
             let stride = other.size();
 
             for (i, u) in self.iter_flat() {
@@ -702,7 +700,7 @@ where
     ) -> SparseTensor<Atom, I> {
         let mut result = SparseTensor::empty(self.structure.clone());
         for (index, value) in self.iter() {
-            let _ = result.set(&index, value.into_sym(ws, state).unwrap());
+            let _ = result.set(&index, value.into_sym().unwrap());
         }
         result
     }
@@ -779,7 +777,7 @@ where
     ) -> DenseTensor<Atom, I> {
         let mut result = DenseTensor::symbolic_zeros(self.structure.clone());
         for (index, value) in self.iter() {
-            let _ = result.set(&index, value.into_sym(ws, state).unwrap());
+            let _ = result.set(&index, value.into_sym().unwrap());
         }
         result
     }

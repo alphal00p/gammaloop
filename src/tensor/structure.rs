@@ -8,7 +8,6 @@ use derive_more::From;
 use derive_more::Into;
 use duplicate::duplicate;
 use indexmap::IndexMap;
-use itertools::Itertools;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Serialize;
@@ -25,8 +24,6 @@ use std::ops::Range;
 use symbolica::coefficient::CoefficientView;
 
 use symbolica::representations::AtomView;
-
-
 
 use permutation::Permutation;
 
@@ -1496,7 +1493,7 @@ where
         self.trace_out();
         self.independentize_internal(other);
         self.internal.append(&mut other.internal.clone());
-        self.external.merge(&mut other.external.clone())
+        self.external.merge(&other.external)
     }
 
     /// Merge two [`HistoryStructure`] at the given positions of the external index list. Ideally the internal index list should be independentized before merging

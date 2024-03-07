@@ -2,21 +2,13 @@ use ahash::AHashMap;
 
 use num::Zero;
 
-
-use slotmap::{Key};
-
-
-
-
-
 use super::{
-    DataIterator, DataTensor, DenseTensor, HasTensorData,
-    NumTensor, Representation, SetTensorData, SparseTensor, StructureContract,
-    TensorStructure,
+    DataIterator, DataTensor, DenseTensor, HasTensorData, NumTensor, Representation, SetTensorData,
+    SparseTensor, StructureContract, TensorStructure,
 };
 
 use std::{
-    fmt::{Debug},
+    fmt::Debug,
     // intrinsics::needs_drop,
     ops::Neg,
 };

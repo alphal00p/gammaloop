@@ -10,15 +10,13 @@
 use std::ops::{AddAssign, Neg, SubAssign};
 
 use super::{
-    AbstractIndex, ConcreteIndex, DenseTensor, Dimension, GetTensorData, Representation, Slot,
-    SparseTensor, SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
+    ConcreteIndex, DenseTensor, Dimension, GetTensorData, Representation, Slot, SparseTensor,
+    SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
 };
 use ahash::AHashMap;
 
 use permutation::Permutation;
 
-use rand::{Rng, SeedableRng};
-use rand_xoshiro::Xoroshiro64Star;
 use symbolica::state::{State, Workspace};
 
 /// An iterator over all indices of a tensor structure
@@ -588,145 +586,6 @@ impl Iterator for TensorStructureMultiFiberMetricIterator {
             None
         }
     }
-}
-
-fn test_structure_with_id<T>(ids: T, seed: u64) -> Vec<Slot>
-where
-    T: Iterator<Item = usize>,
-{
-    let mut rng = Xoroshiro64Star::seed_from_u64(seed);
-    let mut s = Vec::new();
-
-    for id in ids {
-        let rep = rng.gen_range(0..=1);
-        let dim = Dimension(rng.gen_range(1..=9));
-        let id = AbstractIndex(id);
-        let rep = match rep {
-            0 => Representation::Euclidean(dim),
-            _ => Representation::Lorentz(dim),
-        };
-
-        s.push((id, rep).into());
-    }
-    s
-}
-
-#[test]
-fn multi_iterators() {
-    let s = test_structure_with_id(0..3, 6);
-
-    let poses = [false, false, false];
-
-    let perm = Permutation::oneline([2, 0, 1]);
-
-    let os = perm.apply_slice(s.as_slice());
-
-    let (p, _, _) = s.match_indices(&os).unwrap();
-
-    if p != perm.clone().inverse().normalize(true) {
-        panic!("Permutation does not match");
-    }
-
-    let mut iter = TensorStructureMultiFiberMetricIterator::new(&s, &poses, perm.clone());
-
-    let mut iterperm = TensorStructureMultiFiberMetricIterator::new(
-        &perm.apply_slice(s.as_slice()),
-        &perm.apply_slice(poses),
-        perm.clone().inverse().normalize(true),
-    );
-    for ((pos, i, _neg), (_posp, ip, _negp)) in iter.by_ref().zip(iterperm.by_ref()) {
-        println!("   Norm {:?}", s.expanded_index(i).unwrap());
-        println!(
-            "{pos:<2} Perm {:?}",
-            &perm.clone().inverse().apply_slice(
-                perm.apply_slice(s.as_slice())
-                    .expanded_index(ip)
-                    .unwrap()
-                    .as_slice()
-            )
-        );
-    }
-
-    println!("{:?}", iter.map);
-}
-
-#[test]
-fn construct() {
-    let a = crate::tensor::HistoryStructure::new(
-        &[
-            (1.into(), Representation::Euclidean(2.into())), //0
-            (3.into(), Representation::Euclidean(2.into())), //1     inc
-            (33.into(), Representation::Lorentz(4.into())),  //2
-            (23.into(), Representation::Lorentz(3.into())),  //3
-                                                             // (22, Representation::Lorentz(3)),  //4     inc
-                                                             // (35, Representation::Lorentz(3)),  //5
-                                                             // (42, Representation::Lorentz(3)),  //6     inc
-        ],
-        "t",
-    );
-
-    let fixed = [false, true, true, false];
-    let free: Vec<bool> = fixed.iter().map(|x| !x).collect();
-    let fi = 0;
-
-    let fiber = TensorStructureFiberIterator::new(&a, fi);
-
-    let mut fiber_iter = TensorStructureMultiFiberIterator::new(&a, &free);
-    let mut free_iter = TensorStructureMultiFiberIterator::new(&a, &fixed);
-
-    let fiber_iter_expanded = TensorStructureMultiFiberIteratorExpanded::new(&a, &free);
-
-    println!("{:?}", free_iter);
-    println!("{:?}", fiber_iter);
-
-    println!("single fiber");
-    for f in fiber {
-        // println!("{:?}", a.expanded_index(f));
-        for i in 0..2 {
-            println!("{:?}", a.expanded_index(f + i * a.strides()[fi]));
-        }
-    }
-
-    println!("multi fiber conjugate");
-    for f in fiber_iter.by_ref() {
-        for i in free_iter.by_ref() {
-            println!("{:?}", a.expanded_index(f + i));
-        }
-        free_iter.reset();
-    }
-
-    fiber_iter.reset();
-
-    println!("multi fiber expanded");
-
-    for f in fiber_iter_expanded {
-        println!("{:?}", f);
-    }
-
-    for f in fiber_iter.by_ref() {
-        println!("{:?}", a.expanded_index(f));
-    }
-
-    let iters = TensorStructureMultiFiberIterator::new_conjugate(&a, &fixed);
-    println!("{:?}", iters.0);
-    println!("{:?}", iters.1);
-    let t = TensorStructureMultiFiberIterator::new(&a, &fixed);
-    // let tt = TensorSkeletonMultiFiberMetricIterator::new(&a, &fixed);
-    println!("{:?}", a.strides());
-    // println!("{:?}", a.strides_column_major());
-    println!("{:?}", t.fixed_strides);
-    println!("{:?}", t.shifts);
-    println!("{:?}", a.expanded_index(t.max));
-    println!("{:?}", t.increment);
-    // println!("{:?}", a.order());
-
-    println!("{:?}", a.expanded_index(t.max));
-
-    let _reps = a.reps();
-
-    // for f in tt {
-    //     println!("{:?},{:?}", a.expanded_index(f.1), f.2);
-    // }
 }
 
 /// Iterator over all indices of a tensor structure, fixing an index
