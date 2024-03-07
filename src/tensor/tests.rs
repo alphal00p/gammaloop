@@ -1,6 +1,6 @@
 use crate::tensor::{
-    ufo::mink_four_vector, Contract, DenseTensor, GetTensorData, HasTensorData, MixedTensor,
-    Representation, SparseTensor, SymbolicContract, TensorStructure,
+    ufo::mink_four_vector, Contract, DataIterator, DenseTensor, GetTensorData, HasTensorData,
+    MixedTensor, Representation, SparseTensor, TensorStructure,
 };
 use ahash::{HashMap, HashMapExt};
 
@@ -769,9 +769,6 @@ fn empty_densor() {
 
 #[test]
 fn symbolic_contract() {
-    let mut state = State::get_global_state().write().unwrap();
-    let ws = Workspace::new();
-
     let structura = HistoryStructure::from_integers(
         &[(1, 2), (4, 3)].map(|(a, d)| (a.into(), d.into())),
         "T".to_string(),
@@ -782,13 +779,24 @@ fn symbolic_contract() {
         "P".to_string(),
     );
 
-    let a = SymbolicTensor::from_named(&structura, &mut state, &ws).unwrap();
-    let b = SymbolicTensor::from_named(&structurb, &mut state, &ws).unwrap();
-    let f = a.contract_sym(&b, &state, &ws).unwrap();
+    let a = SymbolicTensor::from_named(&structura).unwrap();
+    let b = SymbolicTensor::from_named(&structurb).unwrap();
+    let f = a.contract(&b).unwrap();
 
+    let mut state = State::get_global_state().write().unwrap();
     // println!("{:?}", f);
     assert_eq!(
         *f.get_atom(),
         Atom::parse("T(euc(2,1),euc(3,4))*P(euc(2,3),euc(3,2))", &mut state).unwrap()
     );
+
+    let a = f.to_network().unwrap();
+
+    // let syms = a.to_symbolic_tensor_vec();
+
+    // for s in syms {
+    //     println!("{:?}", s.structure());
+    // }
+
+    println!("{}", a.dot());
 }

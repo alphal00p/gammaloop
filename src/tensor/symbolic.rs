@@ -1,5 +1,5 @@
 use super::{
-    HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract, SymbolicContract,
+    Contract, HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract,
     SymbolicStructureContract, TensorNetwork, TensorStructure, VecStructure,
 };
 
@@ -35,14 +35,8 @@ impl TensorStructure for SymbolicTensor {
     }
 }
 
-impl SymbolicStructureContract for SymbolicTensor {
-    fn merge_at_sym(
-        &self,
-        other: &Self,
-        positions: (usize, usize),
-        _state: &State,
-        _ws: &Workspace,
-    ) -> Self {
+impl StructureContract for SymbolicTensor {
+    fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
         let structure = self.structure.merge_at(&other.structure, positions);
         // let mut out: Atom<Linear> = Atom::new();
         // other.expression.mul(state, ws, &self.expression, &mut out);
@@ -53,22 +47,22 @@ impl SymbolicStructureContract for SymbolicTensor {
         }
     }
 
-    fn merge_sym(&mut self, other: &Self, _state: &State, _ws: &Workspace) {
-        self.structure.merge(&other.structure);
+    fn merge(&mut self, other: &Self) -> Option<usize> {
         self.expression = &other.expression * &self.expression;
+        self.structure.merge(&other.structure)
     }
 
-    fn trace_out_sym(&mut self, _state: &State, _ws: &Workspace) {
+    fn trace_out(&mut self) {
         self.structure.trace_out();
     }
 
-    fn trace_sym(&mut self, i: usize, j: usize, _state: &State, _ws: &Workspace) {
+    fn trace(&mut self, i: usize, j: usize) {
         self.structure.trace(i, j);
     }
 }
 
 impl SymbolicTensor {
-    pub fn from_named<N>(structure: &N, _state: &mut State, _ws: &Workspace) -> Option<Self>
+    pub fn from_named<N>(structure: &N) -> Option<Self>
     where
         N: TensorStructure + HasName,
         N::Name: IntoId + Clone,
@@ -84,15 +78,11 @@ impl SymbolicTensor {
         &self.expression
     }
 
-    pub fn to_mixed(self, _state: &mut State, _ws: &Workspace) -> MixedTensor<VecStructure> {
+    pub fn to_mixed(self) -> MixedTensor<VecStructure> {
         self.smart_shadow().unwrap()
     }
 
-    pub fn to_network(
-        self,
-        _state: &mut State,
-        _ws: &Workspace,
-    ) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
+    pub fn to_network(self) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
         let mut network: TensorNetwork<MixedTensor<VecStructure>> = TensorNetwork::new();
 
         if let AtomView::Mul(m) = self.expression.as_view() {
@@ -154,18 +144,16 @@ impl HasName for SymbolicTensor {
 
 /// Symbolic contraction of two symbolic tensors is just a multiplication of the atoms.
 ///
-impl SymbolicContract<SymbolicTensor> for SymbolicTensor {
+impl Contract<SymbolicTensor> for SymbolicTensor {
     type LCM = SymbolicTensor;
-    fn contract_sym(
-        &self,
-        other: &SymbolicTensor,
-        _state: &State,
-        _ws: &Workspace,
-    ) -> Option<Self::LCM> {
+    fn contract(&self, other: &SymbolicTensor) -> Option<Self::LCM> {
         let mut new_structure = self.structure.clone();
+
+        let expression = &other.expression * &self.expression;
+        println!("expression: {}", expression);
         new_structure.merge(&other.structure);
         Some(SymbolicTensor {
-            expression: &other.expression * &self.expression,
+            expression,
             structure: new_structure,
         })
     }

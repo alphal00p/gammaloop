@@ -10,10 +10,7 @@ use num::{Complex, Zero};
 use serde::{Deserialize, Serialize};
 use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
-use symbolica::{
-    representations::Atom,
-    representations::Symbol,
-};
+use symbolica::{representations::Atom, representations::Symbol};
 
 pub trait DataIterator<T> {
     type FlatIter<'a>: Iterator<Item = (usize, &'a T)>
@@ -581,7 +578,8 @@ where
 
 /// Enum for storing either a dense or a sparse tensor, with the same structure
 #[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize, From)]
-pub enum DataTensor<T: Clone, I: TensorStructure> {
+#[derive_err(Debug)]
+pub enum DataTensor<T, I: TensorStructure> {
     Dense(DenseTensor<T, I>),
     Sparse(SparseTensor<T, I>),
 }
