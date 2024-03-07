@@ -13,7 +13,6 @@ use std::{borrow::Cow, collections::HashMap};
 use symbolica::{
     representations::Atom,
     representations::Symbol,
-    state::{State, Workspace},
 };
 
 pub trait DataIterator<T> {

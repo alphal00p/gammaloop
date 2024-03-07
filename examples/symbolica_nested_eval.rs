@@ -8,7 +8,7 @@ use symbolica::{
 
 fn main() {
     let mut state = State::get_global_state().write().unwrap();
-    let ws = Workspace::new();
+    let _ws = Workspace::new();
     // let from_filemap: Vec<Vec<HashMap<String, String>>> =
     //     serde_yaml::from_reader(std::fs::File::open("outmap.yaml").unwrap()).unwrap();
 
@@ -25,7 +25,7 @@ fn main() {
                         v.iter()
                             .map(|x| {
                                 let a = Atom::parse(x, &mut state).unwrap();
-                                let mut a_exp = Atom::new();
+                                let _a_exp = Atom::new();
                                 a.as_view().expand();
                                 a
                             })
@@ -38,5 +38,5 @@ fn main() {
 
     let e = ExpressionEvaluator::new(levels, 10);
 
-    fs::write("eval.cpp", format!("{e}"));
+    fs::write("eval.cpp", format!("{e}")).unwrap();
 }

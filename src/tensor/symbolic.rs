@@ -4,7 +4,7 @@ use super::{
 };
 
 use symbolica::{
-    representations::{AsAtomView, Atom, AtomView, Fun, Mul, Num, Symbol},
+    representations::{Atom, AtomView, Symbol},
     state::{State, Workspace},
 };
 
@@ -40,8 +40,8 @@ impl SymbolicStructureContract for SymbolicTensor {
         &self,
         other: &Self,
         positions: (usize, usize),
-        state: &State,
-        ws: &Workspace,
+        _state: &State,
+        _ws: &Workspace,
     ) -> Self {
         let structure = self.structure.merge_at(&other.structure, positions);
         // let mut out: Atom<Linear> = Atom::new();
@@ -53,7 +53,7 @@ impl SymbolicStructureContract for SymbolicTensor {
         }
     }
 
-    fn merge_sym(&mut self, other: &Self, state: &State, ws: &Workspace) {
+    fn merge_sym(&mut self, other: &Self, _state: &State, _ws: &Workspace) {
         self.structure.merge(&other.structure);
         self.expression = &other.expression * &self.expression;
     }
@@ -68,7 +68,7 @@ impl SymbolicStructureContract for SymbolicTensor {
 }
 
 impl SymbolicTensor {
-    pub fn from_named<N>(structure: &N, state: &mut State, ws: &Workspace) -> Option<Self>
+    pub fn from_named<N>(structure: &N, _state: &mut State, _ws: &Workspace) -> Option<Self>
     where
         N: TensorStructure + HasName,
         N::Name: IntoId + Clone,
@@ -84,14 +84,14 @@ impl SymbolicTensor {
         &self.expression
     }
 
-    pub fn to_mixed(self, state: &mut State, ws: &Workspace) -> MixedTensor<VecStructure> {
+    pub fn to_mixed(self, _state: &mut State, _ws: &Workspace) -> MixedTensor<VecStructure> {
         self.smart_shadow().unwrap()
     }
 
     pub fn to_network(
         self,
-        state: &mut State,
-        ws: &Workspace,
+        _state: &mut State,
+        _ws: &Workspace,
     ) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
         let mut network: TensorNetwork<MixedTensor<VecStructure>> = TensorNetwork::new();
 
@@ -159,8 +159,8 @@ impl SymbolicContract<SymbolicTensor> for SymbolicTensor {
     fn contract_sym(
         &self,
         other: &SymbolicTensor,
-        state: &State,
-        ws: &Workspace,
+        _state: &State,
+        _ws: &Workspace,
     ) -> Option<Self::LCM> {
         let mut new_structure = self.structure.clone();
         new_structure.merge(&other.structure);

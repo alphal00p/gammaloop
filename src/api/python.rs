@@ -9,7 +9,7 @@ use crate::{
 use ahash::HashMap;
 use git_version::git_version;
 use std::{fs, path::Path};
-use symbolica;
+
 const GIT_VERSION: &str = git_version!();
 
 #[allow(unused)]

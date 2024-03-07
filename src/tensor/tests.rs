@@ -2,7 +2,7 @@ use crate::tensor::{
     ufo::mink_four_vector, Contract, DenseTensor, GetTensorData, HasTensorData, MixedTensor,
     Representation, SparseTensor, SymbolicContract, TensorStructure,
 };
-use ahash::{AHashMap, HashMap, HashMapExt, HashSetExt};
+use ahash::{HashMap, HashMapExt, HashSetExt};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;

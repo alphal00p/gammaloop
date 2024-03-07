@@ -2,21 +2,21 @@ use ahash::AHashMap;
 
 use num::Zero;
 
-use serde::{Deserialize, Serialize};
-use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
-use symbolica::state::{State, Workspace};
 
-use self::parametric::{MixedTensor, MixedTensors, SymbolicContract};
-use self::structure::HistoryStructure;
+use slotmap::{Key};
+
+
+
+
 
 use super::{
-    parametric, structure, DataIterator, DataTensor, DenseTensor, HasName, HasTensorData,
-    NumTensor, Representation, SetTensorData, Shadowable, Slot, SparseTensor, StructureContract,
-    TensorStructure, TracksCount,
+    DataIterator, DataTensor, DenseTensor, HasTensorData,
+    NumTensor, Representation, SetTensorData, SparseTensor, StructureContract,
+    TensorStructure,
 };
-use smartstring::alias::String;
+
 use std::{
-    fmt::{Debug, Display},
+    fmt::{Debug},
     // intrinsics::needs_drop,
     ops::Neg,
 };

@@ -15,7 +15,7 @@ use smartstring::{LazyCompact, SmartString};
 use std::fs;
 use std::fs::File;
 use std::path::Path;
-use symbolica;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OutputType {

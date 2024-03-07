@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+
 
 use ahash::{AHashMap, HashMap};
 use arbitrary_int::Number;
@@ -18,8 +18,7 @@ use symbolica::{
 };
 
 use super::{
-    atomic_expanded_label_id, DataIterator, DataTensor, DenseTensor, HasName, HistoryStructure,
-    IntoId, SetTensorData, Slot, SparseTensor, SymbolicAdd, SymbolicAddAssign, SymbolicInto,
+    DataIterator, DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData, Slot, SparseTensor, SymbolicAdd, SymbolicAddAssign, SymbolicInto,
     SymbolicMul, SymbolicNeg, SymbolicStructureContract, SymbolicSub, SymbolicSubAssign,
     SymbolicZero, TensorStructure, TracksCount,
 };
@@ -725,7 +724,7 @@ where
     pub fn symbolic_labels(
         label: &str,
         structure: I,
-        ws: &'a Workspace,
+        _ws: &'a Workspace,
         state: &'a mut State,
     ) -> DenseTensor<Atom, I> {
         let mut data = vec![];
@@ -747,8 +746,8 @@ where
         number: usize,
         label: Symbol,
         structure: I,
-        ws: &'a Workspace,
-        state: &'a State,
+        _ws: &'a Workspace,
+        _state: &'a State,
     ) -> DenseTensor<Atom, I> {
         let mut data = vec![];
         for index in structure.index_iter() {
@@ -946,7 +945,7 @@ where
     pub fn to_evaluator<'a, N>(
         &'a self,
         _var_map: &mut HashMap<AtomView<'a>, Variable>,
-        state: &State,
+        _state: &State,
     ) -> DenseTensor<InstructionEvaluator<N>, I>
     where
         N: NumericalFloatLike + for<'b> std::convert::From<&'b Rational>,
@@ -1006,8 +1005,8 @@ where
 #[test]
 
 fn test_evaluator() {
-    let mut state = State::get_global_state().write().unwrap();
-    let ws = Workspace::new();
+    let state = State::get_global_state().write().unwrap();
+    let _ws = Workspace::new();
     let structure = crate::tensor::NamedStructure::from_integers(
         &[
             (crate::tensor::AbstractIndex(4), crate::tensor::Dimension(5)),
