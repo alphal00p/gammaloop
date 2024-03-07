@@ -931,9 +931,11 @@ impl Graph {
         self.derived_data.edge_groups = Some(self.group_edges_by_signature());
     }
 
-    pub fn generate_esurface_data(&mut self) {
-        let data = esurface_data::generate_esurface_data(&self);
+    pub fn generate_esurface_data(&mut self) -> Result<(), Report> {
+        let data = esurface_data::generate_esurface_data(self)?;
         self.derived_data.esurface_derived_data = Some(data);
+
+        Ok(())
     }
 }
 

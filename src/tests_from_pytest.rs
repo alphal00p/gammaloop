@@ -155,6 +155,17 @@ mod tests_scalar_massless_triangle {
 
         let propagator_groups = graph.group_edges_by_signature();
         assert_eq!(propagator_groups.len(), 3);
+
+        let generate_data = graph.generate_esurface_data();
+
+        if let Err(e) = generate_data {
+            panic!("Error: {}", e);
+        } else {
+            let data = graph.derived_data.esurface_derived_data.as_ref().unwrap();
+            println!("data: {:#?}", data);
+            assert_eq!(1, 2);
+        }
+
         // TODO: @Mathijs, you can put your own checks there
     }
 }

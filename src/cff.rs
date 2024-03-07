@@ -24,9 +24,9 @@ const MAX_VERTEX_COUNT: usize = 32;
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Esurface {
     pub energies: Vec<usize>,
-    sub_orientation: Vec<bool>,
-    shift: Vec<usize>,
-    shift_signature: bool,
+    pub sub_orientation: Vec<bool>,
+    pub shift: Vec<usize>,
+    pub shift_signature: bool,
 }
 
 // This equality is naive in the presence of raised propagators
@@ -71,13 +71,17 @@ impl Esurface {
 
     // the energy cache contains the energies of external edges as well as the virtual,
     // use the location in the supergraph to determine the index
-    fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         let energy_sum = self
             .energies
             .iter()
             .map(|index| energy_cache[*index])
             .sum::<T>();
 
+        energy_sum + self.compute_shift_part(energy_cache)
+    }
+
+    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         let shift_sum = self
             .shift
             .iter()
@@ -89,7 +93,7 @@ impl Esurface {
             false => Into::<T>::into(-1.),
         };
 
-        energy_sum + shift_sign * shift_sum
+        shift_sign * shift_sum
     }
 }
 
