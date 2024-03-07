@@ -2,7 +2,7 @@ use crate::tensor::{
     ufo::mink_four_vector, Contract, DenseTensor, GetTensorData, HasTensorData, MixedTensor,
     Representation, SparseTensor, SymbolicContract, TensorStructure,
 };
-use ahash::HashSetExt;
+use ahash::{AHashMap, HashMap, HashMapExt, HashSetExt};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -673,11 +673,19 @@ fn contract_densor_with_spensor() {
 
 #[test]
 fn evaluate() {
-    let mut state = State::get_global_state().write().unwrap();
-    let ws = Workspace::new();
     let structure = NamedStructure::from_slots(test_structure(3, 1), "a");
 
-    let a = structure.shadow(&mut state, &ws);
+    let a = structure.clone().shadow().unwrap();
+
+    let adata = test_tensor(structure, 1, Some((-100., 100.))).to_dense();
+
+    let mut const_map = HashMap::new();
+
+    a.append_const_map(&adata, &mut const_map);
+
+    let aev: DenseTensor<f64, NamedStructure> = a.evaluate(&const_map);
+
+    assert_eq!(aev.data(), adata.data());
 }
 
 #[test]

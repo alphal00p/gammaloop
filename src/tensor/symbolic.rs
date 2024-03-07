@@ -74,7 +74,7 @@ impl SymbolicTensor {
         N::Name: IntoId + Clone,
     {
         Some(SymbolicTensor {
-            expression: structure.to_symbolic(state, ws)?,
+            expression: structure.to_symbolic()?,
             structure: structure.external_structure().to_vec().into(),
         })
     }
@@ -85,7 +85,7 @@ impl SymbolicTensor {
     }
 
     pub fn to_mixed(self, state: &mut State, ws: &Workspace) -> MixedTensor<VecStructure> {
-        self.smart_shadow(state, ws).unwrap()
+        self.smart_shadow().unwrap()
     }
 
     pub fn to_network(
@@ -105,7 +105,7 @@ impl SymbolicTensor {
                         structure.push(arg.try_into()?);
                     }
                     let s: VecStructure = structure.into();
-                    network.push(s.to_explicit_rep(f_id, state, ws));
+                    network.push(s.to_explicit_rep(f_id));
                 }
             }
         }

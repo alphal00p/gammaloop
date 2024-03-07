@@ -74,12 +74,7 @@ pub trait HasTensorData: TensorStructure {
     fn hashmap(&self) -> IndexMap<Vec<ConcreteIndex>, Self::Data>;
 
     /// Returns a hashmap of the data, with the the shadowed indices as keys
-    fn symhashmap(
-        &self,
-        id: Symbol,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> HashMap<Atom, Self::Data>;
+    fn symhashmap(&self, id: Symbol) -> HashMap<Atom, Self::Data>;
 }
 
 /// Trait for setting the data of a tensor
@@ -142,12 +137,12 @@ where
         hashmap
     }
 
-    fn symhashmap(&self, id: Symbol, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
+    fn symhashmap(&self, id: Symbol) -> HashMap<Atom, T> {
         let mut hashmap = HashMap::new();
 
         for (k, v) in &self.elements {
             hashmap.insert(
-                atomic_expanded_label_id(&self.expanded_index(*k).unwrap(), id, state, ws),
+                atomic_expanded_label_id(&self.expanded_index(*k).unwrap(), id),
                 v.clone(),
             );
         }
@@ -531,11 +526,11 @@ where
         hashmap
     }
 
-    fn symhashmap(&self, id: Symbol, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
+    fn symhashmap(&self, id: Symbol) -> HashMap<Atom, T> {
         let mut hashmap = HashMap::new();
 
         for (k, v) in self.iter() {
-            hashmap.insert(atomic_expanded_label_id(&k, id, state, ws), v.clone());
+            hashmap.insert(atomic_expanded_label_id(&k, id), v.clone());
         }
         hashmap
     }
@@ -619,10 +614,10 @@ where
         }
     }
 
-    fn symhashmap(&self, id: Symbol, state: &mut State, ws: &Workspace) -> HashMap<Atom, T> {
+    fn symhashmap(&self, id: Symbol) -> HashMap<Atom, T> {
         match self {
-            DataTensor::Dense(d) => d.symhashmap(id, state, ws),
-            DataTensor::Sparse(s) => s.symhashmap(id, state, ws),
+            DataTensor::Dense(d) => d.symhashmap(id),
+            DataTensor::Sparse(s) => s.symhashmap(id),
         }
     }
 }

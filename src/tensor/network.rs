@@ -700,7 +700,7 @@ where
 
         for (i, n) in &self.graph.nodes {
             let nid = nodes.insert(MixedTensor::<HistoryStructure<Symbol>>::from(
-                n.structure().clone().shadow(state, ws).unwrap(),
+                n.structure().clone().shadow().unwrap(),
             ));
             let mut first = true;
             for e in self.graph.edges_incident(i) {
