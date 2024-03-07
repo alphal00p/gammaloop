@@ -1,21 +1,21 @@
-use std::{fs};
+use std::fs;
 
 use symbolica::{
     poly::evaluate::ExpressionEvaluator,
-    representations::{default::Linear, Atom, Identifier},
-    state::{ResettableBuffer, State, Workspace},
+    representations::{Atom, Symbol},
+    state::{State, Workspace},
 };
 
 fn main() {
-    let mut state = State::new();
-    let ws: Workspace<Linear> = Workspace::new();
+    let mut state = State::get_global_state().write().unwrap();
+    let ws = Workspace::new();
     // let from_filemap: Vec<Vec<HashMap<String, String>>> =
     //     serde_yaml::from_reader(std::fs::File::open("outmap.yaml").unwrap()).unwrap();
 
     let from_file: Vec<Vec<(String, Vec<String>)>> =
         serde_yaml::from_reader(std::fs::File::open("out.yaml").unwrap()).unwrap();
 
-    let levels: Vec<Vec<(Identifier, Vec<Atom>)>> = from_file
+    let levels: Vec<Vec<(Symbol, Vec<Atom>)>> = from_file
         .iter()
         .map(|x| {
             x.iter()
@@ -24,10 +24,10 @@ fn main() {
                         state.get_or_insert_fn(s, None).unwrap(),
                         v.iter()
                             .map(|x| {
-                                let a = Atom::parse(x, &mut state, &ws).unwrap();
+                                let a = Atom::parse(x, &mut state).unwrap();
                                 let mut a_exp = Atom::new();
-                                a.as_view().expand(&ws, &state, &mut a_exp);
-                                a_exp
+                                a.as_view().expand();
+                                a
                             })
                             .collect::<Vec<_>>(),
                     )
@@ -36,7 +36,7 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    let e = ExpressionEvaluator::new(levels, &state, 10);
+    let e = ExpressionEvaluator::new(levels, 10);
 
     fs::write("eval.cpp", format!("{e}"));
 }

@@ -4,10 +4,8 @@ use super::{
 };
 
 use symbolica::{
-    representations::{
-        default::Linear, AsAtomView, Atom, AtomView, Fun, Identifier, Mul, Num, OwnedFun,
-    },
-    state::{ResettableBuffer, State, Workspace},
+    representations::{AsAtomView, Atom, AtomView, Fun, Mul, Num, Symbol},
+    state::{State, Workspace},
 };
 
 /// A fully symbolic tensor, with no concrete values.
@@ -46,20 +44,18 @@ impl SymbolicStructureContract for SymbolicTensor {
         ws: &Workspace,
     ) -> Self {
         let structure = self.structure.merge_at(&other.structure, positions);
-        let mut out: Atom<Linear> = Atom::new();
-        other.expression.mul(state, ws, &self.expression, &mut out);
+        // let mut out: Atom<Linear> = Atom::new();
+        // other.expression.mul(state, ws, &self.expression, &mut out);
 
         SymbolicTensor {
             structure,
-            expression: out,
+            expression: &other.expression * &self.expression,
         }
     }
 
     fn merge_sym(&mut self, other: &Self, state: &State, ws: &Workspace) {
         self.structure.merge(&other.structure);
-        let mut out: Atom<Linear> = Atom::new();
-        other.expression.mul(state, ws, &self.expression, &mut out);
-        self.expression = out;
+        self.expression = &other.expression * &self.expression;
     }
 
     fn trace_out_sym(&mut self, _state: &State, _ws: &Workspace) {
@@ -103,7 +99,7 @@ impl SymbolicTensor {
             for atom in m.iter() {
                 if let AtomView::Fun(f) = atom {
                     let mut structure: Vec<Slot> = vec![];
-                    let f_id = f.get_name();
+                    let f_id = f.get_symbol();
 
                     for arg in f.iter() {
                         structure.push(arg.try_into()?);
@@ -142,10 +138,10 @@ impl TryFrom<Atom> for SymbolicTensor {
 }
 
 impl HasName for SymbolicTensor {
-    type Name = Identifier;
+    type Name = Symbol;
     fn name(&self) -> Option<std::borrow::Cow<Self::Name>> {
         if let AtomView::Fun(f) = self.expression.as_view() {
-            Some(std::borrow::Cow::Owned(f.get_name()))
+            Some(std::borrow::Cow::Owned(f.get_symbol()))
         } else {
             None
         }
@@ -166,13 +162,10 @@ impl SymbolicContract<SymbolicTensor> for SymbolicTensor {
         state: &State,
         ws: &Workspace,
     ) -> Option<Self::LCM> {
-        let mut out: Atom<Linear> = Atom::new();
-        other.expression.mul(state, ws, &self.expression, &mut out);
-
         let mut new_structure = self.structure.clone();
         new_structure.merge(&other.structure);
         Some(SymbolicTensor {
-            expression: out,
+            expression: &other.expression * &self.expression,
             structure: new_structure,
         })
     }

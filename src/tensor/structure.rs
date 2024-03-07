@@ -16,22 +16,21 @@ use smartstring::LazyCompact;
 use smartstring::SmartString;
 use std::borrow::Cow;
 use std::fmt::Debug;
+use symbolica::representations::ListIterator;
 
 use std::i64;
 
 use std::ops::Range;
 
-
 use symbolica::coefficient::CoefficientView;
 
-use symbolica::representations::default::ListIteratorD;
 use symbolica::representations::AtomView;
 use symbolica::representations::Fun;
 use symbolica::representations::Num;
 
 use permutation::Permutation;
 
-use symbolica::representations::{AsAtomView, Atom, FunctionBuilder, Identifier};
+use symbolica::representations::{AsAtomView, Atom, FunctionBuilder, Symbol};
 use symbolica::state::{State, Workspace};
 
 use std::collections::HashSet;
@@ -113,14 +112,14 @@ impl PartialOrd<Dimension> for usize {
 pub type ConcreteIndex = usize;
 
 pub(crate) const MAX_BUILTIN: u32 = symbolica::state::State::BUILTIN_VAR_LIST.len() as u32;
-pub(crate) const EUC: Identifier = Identifier::init(MAX_BUILTIN);
-pub(crate) const LOR: Identifier = Identifier::init(MAX_BUILTIN + 1);
-pub(crate) const SPIN: Identifier = Identifier::init(MAX_BUILTIN + 2);
-pub(crate) const CADJ: Identifier = Identifier::init(MAX_BUILTIN + 3);
-pub(crate) const CF: Identifier = Identifier::init(MAX_BUILTIN + 4);
-pub(crate) const CAF: Identifier = Identifier::init(MAX_BUILTIN + 5);
-pub(crate) const CS: Identifier = Identifier::init(MAX_BUILTIN + 6);
-pub(crate) const CAS: Identifier = Identifier::init(MAX_BUILTIN + 7);
+pub(crate) const EUC: Symbol = Symbol::init_var(MAX_BUILTIN, 0);
+pub(crate) const LOR: Symbol = Symbol::init_var(MAX_BUILTIN + 1, 0);
+pub(crate) const SPIN: Symbol = Symbol::init_var(MAX_BUILTIN + 2, 0);
+pub(crate) const CADJ: Symbol = Symbol::init_var(MAX_BUILTIN + 3, 0);
+pub(crate) const CF: Symbol = Symbol::init_var(MAX_BUILTIN + 4, 0);
+pub(crate) const CAF: Symbol = Symbol::init_var(MAX_BUILTIN + 5, 0);
+pub(crate) const CS: Symbol = Symbol::init_var(MAX_BUILTIN + 6, 0);
+pub(crate) const CAS: Symbol = Symbol::init_var(MAX_BUILTIN + 7, 0);
 pub(crate) const MAX_REP: u32 = MAX_BUILTIN + 7;
 
 /// A Representation/Dimension of the index.
@@ -202,7 +201,7 @@ impl Representation {
         &'a self,
         state: &'b mut State,
         ws: &'b Workspace,
-    ) -> FunctionBuilder<'a> {
+    ) -> FunctionBuilder {
         let (value, id) = match *self {
             Self::Euclidean(value) => (value, state.get_or_insert_fn("euc", None)),
             Self::Lorentz(value) => (value, state.get_or_insert_fn("lor", None)),
@@ -214,8 +213,7 @@ impl Representation {
             Self::ColorAntiSextet(value) => (value, state.get_or_insert_fn("CAS", None)),
         };
 
-        let mut value_builder =
-            FunctionBuilder::new(id.unwrap_or_else(|_| unreachable!()), state, ws);
+        let mut value_builder = FunctionBuilder::new(id.unwrap_or_else(|_| unreachable!()));
 
         value_builder =
             value_builder.add_arg(Atom::new_num(usize::from(value) as i64).as_atom_view());
@@ -238,7 +236,7 @@ impl Representation {
     /// assert_eq!("l4",format!("{}",mink));
     /// ```
     pub fn to_symbolic(&self, state: &mut State, ws: &Workspace) -> Atom {
-        Atom::new_from_view(&self.to_fnbuilder(state, ws).finish().as_atom_view())
+        self.to_fnbuilder(state, ws).finish()
     }
 }
 
@@ -368,7 +366,7 @@ impl TryFrom<AtomView<'_>> for Slot {
     type Error = &'static str;
 
     fn try_from(value: AtomView<'_>) -> Result<Self, Self::Error> {
-        fn extract_num(iter: &mut ListIteratorD) -> Result<i64, &'static str> {
+        fn extract_num(iter: &mut ListIterator) -> Result<i64, &'static str> {
             if let Some(a) = iter.next() {
                 if let AtomView::Num(n) = a {
                     if let CoefficientView::Natural(n, 1) = n.get_coeff_view() {
@@ -400,7 +398,7 @@ impl TryFrom<AtomView<'_>> for Slot {
         }
 
         let representation = if let AtomView::Fun(f) = value {
-            match f.get_name() {
+            match f.get_symbol() {
                 EUC => Representation::Euclidean(dim),
                 LOR => Representation::Lorentz(dim),
                 SPIN => Representation::Spin(dim),
@@ -475,7 +473,7 @@ impl Slot {
         let mut value_builder = self.representation.to_fnbuilder(state, ws);
         value_builder =
             value_builder.add_arg(Atom::new_num(usize::from(self.index) as i64).as_atom_view());
-        Atom::new_from_view(&value_builder.finish().as_atom_view())
+        value_builder.finish()
     }
 }
 
@@ -764,7 +762,7 @@ pub trait TensorStructure {
 
     fn shadow_with(
         self,
-        f_id: Identifier,
+        f_id: Symbol,
         state: &mut State,
         ws: &Workspace,
     ) -> DenseTensor<Atom, Self::Structure>
@@ -785,7 +783,7 @@ pub trait TensorStructure {
 
     fn to_explicit_rep(
         self,
-        f_id: Identifier,
+        f_id: Symbol,
         state: &mut State,
         ws: &Workspace,
     ) -> MixedTensor<Self::Structure>
@@ -1003,6 +1001,10 @@ impl VecStructure {
     pub fn new(structure: Vec<Slot>) -> Self {
         Self { structure }
     }
+
+    pub fn to_named(self, name: &str) -> NamedStructure {
+        NamedStructure::from_slots(self.structure, name)
+    }
 }
 
 impl From<Vec<Slot>> for VecStructure {
@@ -1102,6 +1104,13 @@ impl NamedStructure {
 
         Self {
             structure,
+            global_name: Some(name.into()),
+        }
+    }
+
+    pub fn from_slots(slots: Vec<Slot>, name: &str) -> Self {
+        Self {
+            structure: slots,
             global_name: Some(name.into()),
         }
     }
@@ -1553,54 +1562,49 @@ pub fn atomic_flat_label<I: IntoId>(
 }
 
 #[allow(clippy::cast_possible_wrap)]
-pub fn atomic_flat_label_id(
-    index: usize,
-    id: Identifier,
-    state: &mut State,
-    ws: &Workspace,
-) -> Atom {
-    let mut value_builder = FunctionBuilder::new(id, state, ws);
+pub fn atomic_flat_label_id(index: usize, id: Symbol, state: &mut State, ws: &Workspace) -> Atom {
+    let mut value_builder = FunctionBuilder::new(id);
     value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
-    Atom::new_from_view(&value_builder.finish().as_atom_view())
+    value_builder.finish()
 }
 
 #[allow(clippy::cast_possible_wrap)]
 pub fn atomic_expanded_label_id(
     indices: &[ConcreteIndex],
-    id: Identifier,
+    id: Symbol,
     state: &mut State,
     ws: &Workspace,
 ) -> Atom {
-    let mut value_builder = FunctionBuilder::new(id, state, ws);
+    let mut value_builder = FunctionBuilder::new(id);
     for &index in indices {
         value_builder = value_builder.add_arg(Atom::new_num(index as i64).as_atom_view());
     }
-    Atom::new_from_view(&value_builder.finish().as_atom_view())
+    value_builder.finish()
 }
 pub trait IntoId {
-    fn into_id(self, state: &mut State) -> Identifier;
+    fn into_id(self, state: &mut State) -> Symbol;
 }
 
 impl IntoId for SmartString<LazyCompact> {
-    fn into_id(self, state: &mut State) -> Identifier {
+    fn into_id(self, state: &mut State) -> Symbol {
         state.get_or_insert_fn(self, None).unwrap()
     }
 }
 
-impl IntoId for Identifier {
-    fn into_id(self, _state: &mut State) -> Identifier {
+impl IntoId for Symbol {
+    fn into_id(self, _state: &mut State) -> Symbol {
         self
     }
 }
 
 impl IntoId for &str {
-    fn into_id(self, state: &mut State) -> Identifier {
+    fn into_id(self, state: &mut State) -> Symbol {
         state.get_or_insert_fn(self, None).unwrap()
     }
 }
 
 impl IntoId for std::string::String {
-    fn into_id(self, state: &mut State) -> Identifier {
+    fn into_id(self, state: &mut State) -> Symbol {
         state.get_or_insert_fn(self, None).unwrap()
     }
 }
@@ -1643,11 +1647,11 @@ pub trait Shadowable: TensorStructure {
             .map(|slot| slot.to_symbolic(state, ws))
             .collect::<Vec<_>>();
 
-        let mut value_builder = FunctionBuilder::new(name.into_id(state), state, ws);
+        let mut value_builder = FunctionBuilder::new(name.into_id(state));
         for atom in atoms {
             value_builder = value_builder.add_arg(atom.as_atom_view());
         }
-        Atom::new_from_view(&value_builder.finish().as_atom_view())
+        value_builder.finish()
     }
 }
 
@@ -1687,19 +1691,19 @@ impl std::fmt::Display for N
     }
 }
 }
-impl HistoryStructure<Identifier> {
+impl HistoryStructure<Symbol> {
     #[must_use]
     pub fn to_string(&self, state: &State) -> String {
         let mut string = String::new();
         if let Some(global_name) = self.name() {
-            string.push_str(&format!("{}:", state.get_name(*global_name)));
+            string.push_str(&format!("{:?}:", global_name));
         }
         for (range, name) in self
             .names
             .iter()
             .filter(|(r, _)| *r != &(0..self.internal.len()) || !self.is_composite())
         {
-            string.push_str(&format!("{}(", state.get_name(*name)));
+            string.push_str(&format!("{:?}(", name));
             for slot in &self.internal[range.clone()] {
                 string.push_str(&format!("{slot},"));
             }

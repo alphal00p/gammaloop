@@ -18,7 +18,7 @@ use symbolica::{
 
 use super::{
     symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension, HistoryStructure,
-    NumTensor, SetTensorData, Slot, TensorNetwork, VecStructure,
+    NamedStructure, NumTensor, SetTensorData, Shadowable, Slot, TensorNetwork, VecStructure,
 };
 
 trait Average {
@@ -660,7 +660,7 @@ fn contract_densor_with_spensor() {
 
 // #[test]
 // fn symbolic_zeros() {
-//     let mut state = State::new();
+//     let mut state = State::get_global_state().write().unwrap();
 //     let ws = Workspace::new();
 //     let structure = TensorSkeleton::from_integers(&[(1, 2), (3, 2)], "a");
 
@@ -672,8 +672,17 @@ fn contract_densor_with_spensor() {
 // }
 
 #[test]
+fn evaluate() {
+    let mut state = State::get_global_state().write().unwrap();
+    let ws = Workspace::new();
+    let structure = NamedStructure::from_slots(test_structure(3, 1), "a");
+
+    let a = structure.shadow(&mut state, &ws);
+}
+
+#[test]
 fn convert_sym() {
-    let mut state = State::new();
+    let mut state = State::get_global_state().write().unwrap();
     let ws = Workspace::new();
     let i = Complex::new(0.0, 1.0);
     let mut data_b = vec![i * Complex::from(5.0), Complex::from(2.6) + i];
@@ -698,7 +707,7 @@ fn convert_sym() {
         "6",
     ]
     .iter()
-    .map(|x| Atom::parse(x, &mut state, &ws).unwrap())
+    .map(|x| Atom::parse(x, &mut state).unwrap())
     .collect();
 
     assert_eq!(
@@ -709,7 +718,7 @@ fn convert_sym() {
 
 // #[test]
 // fn symbolic_matrix_mult() {
-//     let mut state = State::new();
+//     let mut state = State::get_global_state().write().unwrap();
 //     let ws = Workspace::new();
 
 //     let structura = TensorStructure::from_integers(&[1, 4], &[2, 3]);
@@ -752,7 +761,7 @@ fn empty_densor() {
 
 #[test]
 fn symbolic_contract() {
-    let mut state = State::new();
+    let mut state = State::get_global_state().write().unwrap();
     let ws = Workspace::new();
 
     let structura = HistoryStructure::from_integers(
@@ -772,6 +781,6 @@ fn symbolic_contract() {
     // println!("{:?}", f);
     assert_eq!(
         *f.get_atom(),
-        Atom::parse("T(euc(2,1),euc(3,4))*P(euc(2,3),euc(3,2))", &mut state, &ws).unwrap()
+        Atom::parse("T(euc(2,1),euc(3,4))*P(euc(2,3),euc(3,2))", &mut state).unwrap()
     );
 }

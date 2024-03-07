@@ -1,16 +1,16 @@
 use std::{collections::HashMap, time::Instant};
 
 use symbolica::{
-    representations::{default::Linear, Atom, Identifier},
+    representations::{Atom, Symbol},
     state::{State, Workspace},
 };
 
-fn dump_c_with_func(_levels: Vec<Vec<(Identifier, Vec<Atom>)>>, _params: Vec<Atom>) {}
+fn dump_c_with_func(_levels: Vec<Vec<(Symbol, Vec<Atom>)>>, _params: Vec<Atom>) {}
 fn dump_c(_levels: Vec<Vec<HashMap<Atom, Atom>>>, _params: Vec<Atom>) {}
 
 fn main() {
-    let mut state = State::new();
-    let ws: Workspace<Linear> = Workspace::new();
+    let mut state = State::get_global_state().write().unwrap();
+    let ws: Workspace = Workspace::new();
     let from_filemap: Vec<Vec<HashMap<String, String>>> =
         serde_yaml::from_reader(std::fs::File::open("outmap.yaml").unwrap()).unwrap();
 
@@ -19,7 +19,7 @@ fn main() {
 
     let params: Vec<Atom> = paramstr
         .iter()
-        .map(|x| Atom::parse(x, &mut state, &ws).unwrap())
+        .map(|x| Atom::parse(x, &mut state).unwrap())
         .collect();
 
     let startmap = Instant::now();
@@ -32,8 +32,8 @@ fn main() {
                     let mut a = HashMap::new();
                     for (k, v) in x.iter() {
                         a.insert(
-                            Atom::parse(k, &mut state, &ws).unwrap(),
-                            Atom::parse(v, &mut state, &ws).unwrap(),
+                            Atom::parse(k, &mut state).unwrap(),
+                            Atom::parse(v, &mut state).unwrap(),
                         );
                     }
                     a
@@ -47,7 +47,7 @@ fn main() {
         serde_yaml::from_reader(std::fs::File::open("out.yaml").unwrap()).unwrap();
 
     let start = Instant::now();
-    let levels: Vec<Vec<(Identifier, Vec<Atom>)>> = from_file
+    let levels: Vec<Vec<(Symbol, Vec<Atom>)>> = from_file
         .iter()
         .map(|x| {
             x.iter()
@@ -55,7 +55,7 @@ fn main() {
                     (
                         state.get_or_insert_fn(s, None).unwrap(),
                         v.iter()
-                            .map(|x| Atom::parse(x, &mut state, &ws).unwrap())
+                            .map(|x| Atom::parse(x, &mut state).unwrap())
                             .collect::<Vec<_>>(),
                     )
                 })

@@ -1,10 +1,10 @@
 use duplicate::duplicate;
 
 use num::Complex;
-use symbolica::representations::default::Linear;
+
 use symbolica::representations::AsAtomView;
 use symbolica::representations::Atom;
-use symbolica::state::ResettableBuffer;
+
 use symbolica::state::State;
 use symbolica::state::Workspace;
 
@@ -116,9 +116,9 @@ impl SymbolicInto for Complex<f64> {
         let real = self.re.into_sym(ws, state)?;
         let imag = self.im.into_sym(ws, state)?;
         let i = Atom::new_var(State::I);
-        let symrat = (i.builder(state, ws) * &imag) + &real;
+        let symrat = (i * &imag) + &real;
 
-        Some(Atom::new_from_view(&symrat.as_atom_view()))
+        Some(symrat)
     }
 }
 
@@ -178,8 +178,7 @@ impl SymbolicAddAssign<Atom> for Atom {
 
 impl SymbolicAddAssign<&Atom> for Atom {
     fn add_assign_sym(&mut self, rhs: &Atom, ws: &Workspace, state: &State) {
-        let mut out: Atom<Linear> = Atom::new();
-        self.add(state, ws, rhs, &mut out);
+        let out = self.clone() + rhs;
         *self = out;
     }
 }
@@ -190,10 +189,7 @@ pub trait SymbolicSubAssign<T> {
 
 impl SymbolicSubAssign<&Atom> for Atom {
     fn sub_assign_sym(&mut self, rhs: &Atom, ws: &Workspace, state: &State) {
-        let mut negother: Atom<Linear> = Atom::new();
-        rhs.neg(state, ws, &mut negother);
-        let mut out: Atom<Linear> = Atom::new();
-        self.add(state, ws, &negother, &mut out);
+        let out = self.clone() - rhs;
         *self = out;
     }
 }
@@ -210,9 +206,7 @@ pub trait SymbolicNeg {
 
 impl SymbolicNeg for Atom {
     fn neg_sym(self, ws: &Workspace, state: &State) -> Self {
-        let mut out: Atom<Linear> = Atom::new();
-        self.neg(state, ws, &mut out);
-        out
+        -self
     }
 }
 
@@ -277,9 +271,7 @@ forward_ref_binop!(impl SymbolicSub, sub_sym for T, U, Out);
 impl<'a> SymbolicMul<&Atom> for &'a Atom {
     type Output = Atom;
     fn mul_sym(self, rhs: &Atom, ws: &Workspace, state: &State) -> Option<Self::Output> {
-        let mut out: Atom<Linear> = Atom::new();
-        rhs.mul(state, ws, self, &mut out);
-        Some(out)
+        Some(self * rhs)
     }
 }
 
@@ -288,9 +280,7 @@ forward_ref_binop!(impl SymbolicMul, mul_sym for Atom, Atom, Atom);
 impl<'a> SymbolicAdd<&Atom> for &'a Atom {
     type Output = Atom;
     fn add_sym(self, rhs: &Atom, ws: &Workspace, state: &State) -> Option<Self::Output> {
-        let mut out: Atom<Linear> = Atom::new();
-        rhs.add(state, ws, self, &mut out);
-        Some(out)
+        Some(self + rhs)
     }
 }
 
@@ -299,11 +289,7 @@ forward_ref_binop!(impl SymbolicAdd, add_sym for Atom, Atom, Atom);
 impl<'a> SymbolicSub<&Atom> for &'a Atom {
     type Output = Atom;
     fn sub_sym(self, rhs: &Atom, ws: &Workspace, state: &State) -> Option<Self::Output> {
-        let mut negother: Atom<Linear> = Atom::new();
-        rhs.neg(state, ws, &mut negother);
-        let mut out: Atom<Linear> = Atom::new();
-        self.add(state, ws, &negother, &mut out);
-        Some(out)
+        Some(self - rhs)
     }
 }
 
@@ -402,11 +388,11 @@ duplicate! {
 
 #[test]
 fn symbolic() {
-    let mut state = State::new();
+    let mut state = State::get_global_state().write().unwrap();
     let ws: Workspace = Workspace::new();
 
-    let a = Atom::parse("c", &mut state, &ws).unwrap();
-    let b = Atom::parse("d", &mut state, &ws).unwrap();
+    let a = Atom::parse("c", &mut state).unwrap();
+    let b = Atom::parse("d", &mut state).unwrap();
     let c = a.add_sym(&b, &ws, &state).unwrap();
     let _d = c.add_sym(4., &ws, &state).unwrap();
 

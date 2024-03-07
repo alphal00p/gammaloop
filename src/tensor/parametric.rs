@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use ahash::{AHashMap, HashMap};
 use arbitrary_int::Number;
 use enum_try_as_inner::EnumTryAsInner;
@@ -9,8 +11,9 @@ use symbolica::{
         float::NumericalFloatLike,
         rational::{Rational, RationalField},
     },
+    evaluate::EvaluationFn,
     poly::{evaluate::InstructionEvaluator, polynomial::MultivariatePolynomial, Variable},
-    representations::{AsAtomView, Atom, AtomView, FunctionBuilder, Identifier},
+    representations::{AsAtomView, Atom, AtomView, FunctionBuilder, Symbol},
     state::{State, Workspace},
 };
 
@@ -733,7 +736,7 @@ where
                 .collect::<Vec<String>>()
                 .join("_");
 
-            let value = Atom::parse(&format!("{}_{}", label, indices_str), state, ws).unwrap();
+            let value = Atom::parse(&format!("{}_{}", label, indices_str), state).unwrap();
 
             data.push(value);
         }
@@ -742,14 +745,14 @@ where
 
     pub fn numbered_labeled(
         number: usize,
-        label: Identifier,
+        label: Symbol,
         structure: I,
         ws: &'a Workspace,
         state: &'a State,
     ) -> DenseTensor<Atom, I> {
         let mut data = vec![];
         for index in structure.index_iter() {
-            let mut value_builder = FunctionBuilder::new(label, state, ws);
+            let mut value_builder = FunctionBuilder::new(label);
             value_builder = value_builder.add_arg(Atom::new_num(number as i64).as_atom_view());
 
             for i in index {
@@ -757,7 +760,7 @@ where
             }
             // Atom::parse(&format!("{}_{}_{}", label, indices_str, i), state, ws).unwrap();
 
-            let value = Atom::new_from_view(&value_builder.finish().as_atom_view());
+            let value = value_builder.finish();
 
             data.push(value);
         }
@@ -842,10 +845,90 @@ pub enum MixedTensor<T: TensorStructure> {
     Symbolic(DataTensor<Atom, T>),
 }
 
+impl<'a, I: TensorStructure + Clone + 'a> MixedTensor<I> {
+    pub fn evaluate<'b>(&mut self, const_map: &'b HashMap<AtomView<'a>, f64>)
+    where
+        'b: 'a,
+    {
+        let content = match self {
+            MixedTensor::Symbolic(x) => Some(x),
+            _ => None,
+        };
+
+        if let Some(x) = content {
+            *self = MixedTensor::Float(x.evaluate(const_map));
+        }
+    }
+}
+
+impl<I> DataTensor<Atom, I>
+where
+    I: Clone + TensorStructure,
+{
+    pub fn evaluate<'a, 'b, T>(&self, const_map: &'b HashMap<AtomView<'a>, T>) -> DataTensor<T, I>
+    where
+        T: symbolica::domains::float::Real
+            + for<'c> std::convert::From<&'c symbolica::domains::rational::Rational>,
+        'a: 'b,
+    {
+        match self {
+            DataTensor::Dense(x) => DataTensor::Dense(x.evaluate(const_map)),
+            DataTensor::Sparse(x) => DataTensor::Sparse(x.evaluate(const_map)),
+        }
+    }
+}
+
+impl<I> SparseTensor<Atom, I>
+where
+    I: Clone,
+{
+    pub fn evaluate<'a, T>(&self, const_map: &HashMap<AtomView<'a>, T>) -> SparseTensor<T, I>
+    where
+        T: symbolica::domains::float::Real
+            + for<'d> std::convert::From<&'d symbolica::domains::rational::Rational>,
+    {
+        let fn_map: HashMap<_, EvaluationFn<_>> = HashMap::default();
+        let mut cache = HashMap::default();
+        let structure = self.structure.clone();
+        let data = self
+            .elements
+            .iter()
+            .map(|(idx, x)| {
+                (
+                    idx.clone(),
+                    x.as_view().evaluate::<T>(const_map, &fn_map, &mut cache),
+                )
+            })
+            .collect::<AHashMap<_, _>>();
+
+        SparseTensor {
+            elements: data,
+            structure,
+        }
+    }
+}
+
 impl<I> DenseTensor<Atom, I>
 where
     I: Clone,
 {
+    pub fn evaluate<'a, T>(&'a self, const_map: &HashMap<AtomView<'a>, T>) -> DenseTensor<T, I>
+    where
+        T: symbolica::domains::float::Real
+            + for<'b> std::convert::From<&'b symbolica::domains::rational::Rational>,
+    {
+        let fn_map: HashMap<_, EvaluationFn<_>> = HashMap::default();
+        let mut cache = HashMap::default();
+        let structure = self.structure.clone();
+        let data = self
+            .data
+            .iter()
+            .map(|x| x.as_view().evaluate::<T>(const_map, &fn_map, &mut cache))
+            .collect::<Vec<_>>();
+
+        DenseTensor { data, structure }
+    }
+
     pub fn to_evaluator<'a, N>(
         &'a self,
         _var_map: &mut HashMap<AtomView<'a>, Variable>,
@@ -865,7 +948,7 @@ where
 
                 // x.as_view().evaluate(var_map, function_map, cache);
 
-                println!("{}", poly.printer(state));
+                // println!("{}", poly.printer(state));
 
                 let (h, _ops, _) = poly.optimize_horner_scheme(4000);
                 let mut i = h.to_instr(20);
@@ -909,7 +992,7 @@ where
 #[test]
 
 fn test_evaluator() {
-    let mut state = State::new();
+    let mut state = State::get_global_state().write().unwrap();
     let ws = Workspace::new();
     let structure = crate::tensor::NamedStructure::from_integers(
         &[
@@ -924,9 +1007,9 @@ fn test_evaluator() {
     let a: DenseTensor<InstructionEvaluator<f64>, crate::tensor::NamedStructure> =
         p.to_evaluator(&mut var_map, &state);
 
-    for (k, v) in var_map {
-        println!("{} {:?}", k.printer(&state), v);
-    }
+    // for (k, v) in var_map {
+    //     println!("{} {:?}", k.printer(&state), v);
+    // }
 
     let b = a.evaluate(&[
         1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0,
@@ -1002,7 +1085,7 @@ where
     }
 }
 
-pub type MixedTensors = MixedTensor<HistoryStructure<Identifier>>;
+pub type MixedTensors = MixedTensor<HistoryStructure<Symbol>>;
 
 impl<I> From<DenseTensor<f64, I>> for MixedTensor<I>
 where

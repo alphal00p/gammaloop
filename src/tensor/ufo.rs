@@ -8,20 +8,19 @@ use super::{
 use num::{Complex, Float, One, Zero};
 
 use symbolica::{
-    representations::{Atom, Identifier},
+    representations::{Atom, Symbol},
     state::{State, Workspace},
 };
 
-pub const ID: Identifier = Identifier::init(MAX_REP + 1);
-pub const GAMMA: Identifier = Identifier::init(MAX_REP + 2);
-pub const GAMMA5: Identifier = Identifier::init(MAX_REP + 3);
-pub const PROJM: Identifier = Identifier::init(MAX_REP + 4);
-pub const PROJP: Identifier = Identifier::init(MAX_REP + 5);
-pub const SIGMA: Identifier = Identifier::init(MAX_REP + 6);
+pub const ID: Symbol = Symbol::init_var(MAX_REP + 1, 0);
+pub const GAMMA: Symbol = Symbol::init_var(MAX_REP + 2, 0);
+pub const GAMMA5: Symbol = Symbol::init_var(MAX_REP + 3, 0);
+pub const PROJM: Symbol = Symbol::init_var(MAX_REP + 4, 0);
+pub const PROJP: Symbol = Symbol::init_var(MAX_REP + 5, 0);
+pub const SIGMA: Symbol = Symbol::init_var(MAX_REP + 6, 0);
 
-pub fn new_state() -> State {
-    let mut state = State::new();
-
+pub fn new_state() {
+    let mut state = State::get_global_state().write().unwrap();
     assert!(EUC == state.get_or_insert_fn("euc", None).unwrap());
     assert!(LOR == state.get_or_insert_fn("lor", None).unwrap());
     assert!(SPIN == state.get_or_insert_fn("spin", None).unwrap());
@@ -37,7 +36,6 @@ pub fn new_state() -> State {
     assert!(PROJM == state.get_or_insert_fn("ProjM", None).unwrap());
     assert!(PROJP == state.get_or_insert_fn("ProjP", None).unwrap());
     assert!(SIGMA == state.get_or_insert_fn("σ", None).unwrap());
-    state
 }
 
 #[allow(dead_code)]
@@ -119,7 +117,7 @@ pub fn mink_four_vector_sym<T>(
     index: AbstractIndex,
     p: &[T; 4],
     state: &mut symbolica::state::State,
-) -> DenseTensor<T, HistoryStructure<Identifier>>
+) -> DenseTensor<T, HistoryStructure<Symbol>>
 where
     T: Clone,
 {
@@ -147,7 +145,7 @@ pub fn euclidean_four_vector_sym<T>(
     index: AbstractIndex,
     p: &[T; 4],
     state: &mut symbolica::state::State,
-) -> DenseTensor<T, HistoryStructure<Identifier>>
+) -> DenseTensor<T, HistoryStructure<Symbol>>
 where
     T: Clone,
 {
@@ -227,7 +225,7 @@ pub fn gammasym<T>(
     minkindex: AbstractIndex,
     indices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
-) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
+) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: One + Zero + Copy + std::ops::Neg<Output = T>,
 {
@@ -300,7 +298,7 @@ where
 pub fn gamma5sym<T>(
     indices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
-) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
+) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: One + Zero + Copy,
 {
@@ -353,7 +351,7 @@ where
 pub fn proj_msym<T>(
     indices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
-) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
+) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: Float,
 {
@@ -414,7 +412,7 @@ where
 pub fn proj_psym<T>(
     indices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
-) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
+) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: Float,
 {
@@ -494,7 +492,7 @@ pub fn sigmasym<T>(
     indices: (AbstractIndex, AbstractIndex),
     minkdices: (AbstractIndex, AbstractIndex),
     state: &mut symbolica::state::State,
-) -> SparseTensor<Complex<T>, HistoryStructure<Identifier>>
+) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: One + Zero + std::ops::Neg<Output = T> + Copy,
 {
