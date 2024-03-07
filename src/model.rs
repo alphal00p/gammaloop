@@ -49,7 +49,7 @@ impl SerializableVertexRule {
             color_structures: vertex_rule
                 .color_structures
                 .iter()
-                .map(|color_structure| utils::to_str_expression(color_structure))
+                .map(utils::to_str_expression)
                 .collect(),
             lorentz_structures: vertex_rule
                 .lorentz_structures

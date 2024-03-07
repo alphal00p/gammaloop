@@ -10,7 +10,7 @@ fn dump_c(_levels: Vec<Vec<HashMap<Atom, Atom>>>, _params: Vec<Atom>) {}
 
 fn main() {
     let mut state = State::get_global_state().write().unwrap();
-    let ws: Workspace = Workspace::new();
+    let _ws: Workspace = Workspace::new();
     let from_filemap: Vec<Vec<HashMap<String, String>>> =
         serde_yaml::from_reader(std::fs::File::open("outmap.yaml").unwrap()).unwrap();
 

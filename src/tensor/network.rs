@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 
-use hyperdual::Owned;
-use num::Zero;
+
+
 
 use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
@@ -14,16 +14,12 @@ use self::parametric::{MixedTensor, MixedTensors, SymbolicContract};
 use self::structure::HistoryStructure;
 
 use super::{
-    parametric, structure, Contract, DataIterator, DataTensor, DenseTensor, HasName, HasTensorData,
-    NumTensor, Representation, SetTensorData, Shadowable, Slot, SparseTensor, StructureContract,
+    parametric, structure, Contract, DataTensor, HasName, HasTensorData, Shadowable, Slot,
     TensorStructure, TracksCount,
 };
 use smartstring::alias::String;
 use std::{
-    borrow::Cow,
-    collections::HashMap,
     fmt::{Debug, Display},
-    ops::Neg,
 };
 
 new_key_type! {
@@ -680,7 +676,7 @@ where
         &mut self,
         name: &str,
         state: &mut State,
-        ws: &Workspace,
+        _ws: &Workspace,
     ) -> TensorNetwork<MixedTensors> {
         for (i, n) in &mut self.graph.nodes {
             n.mut_structure().set_name(

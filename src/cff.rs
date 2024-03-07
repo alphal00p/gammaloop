@@ -13,7 +13,7 @@ use eyre::{eyre, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    representations::{AsAtomView, Atom},
+    representations::{Atom},
     state::{State, Workspace},
 };
 

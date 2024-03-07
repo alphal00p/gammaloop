@@ -2,7 +2,7 @@ use duplicate::duplicate;
 
 use num::Complex;
 
-use symbolica::representations::AsAtomView;
+
 use symbolica::representations::Atom;
 
 use symbolica::state::State;
@@ -177,7 +177,7 @@ impl SymbolicAddAssign<Atom> for Atom {
 }
 
 impl SymbolicAddAssign<&Atom> for Atom {
-    fn add_assign_sym(&mut self, rhs: &Atom, ws: &Workspace, state: &State) {
+    fn add_assign_sym(&mut self, rhs: &Atom, _ws: &Workspace, _state: &State) {
         let out = self.clone() + rhs;
         *self = out;
     }
@@ -188,7 +188,7 @@ pub trait SymbolicSubAssign<T> {
 }
 
 impl SymbolicSubAssign<&Atom> for Atom {
-    fn sub_assign_sym(&mut self, rhs: &Atom, ws: &Workspace, state: &State) {
+    fn sub_assign_sym(&mut self, rhs: &Atom, _ws: &Workspace, _state: &State) {
         let out = self.clone() - rhs;
         *self = out;
     }
@@ -205,7 +205,7 @@ pub trait SymbolicNeg {
 }
 
 impl SymbolicNeg for Atom {
-    fn neg_sym(self, ws: &Workspace, state: &State) -> Self {
+    fn neg_sym(self, _ws: &Workspace, _state: &State) -> Self {
         -self
     }
 }
@@ -270,7 +270,7 @@ forward_ref_binop!(impl SymbolicSub, sub_sym for T, U, Out);
 
 impl<'a> SymbolicMul<&Atom> for &'a Atom {
     type Output = Atom;
-    fn mul_sym(self, rhs: &Atom, ws: &Workspace, state: &State) -> Option<Self::Output> {
+    fn mul_sym(self, rhs: &Atom, _ws: &Workspace, _state: &State) -> Option<Self::Output> {
         Some(self * rhs)
     }
 }
@@ -279,7 +279,7 @@ forward_ref_binop!(impl SymbolicMul, mul_sym for Atom, Atom, Atom);
 
 impl<'a> SymbolicAdd<&Atom> for &'a Atom {
     type Output = Atom;
-    fn add_sym(self, rhs: &Atom, ws: &Workspace, state: &State) -> Option<Self::Output> {
+    fn add_sym(self, rhs: &Atom, _ws: &Workspace, _state: &State) -> Option<Self::Output> {
         Some(self + rhs)
     }
 }
@@ -288,7 +288,7 @@ forward_ref_binop!(impl SymbolicAdd, add_sym for Atom, Atom, Atom);
 
 impl<'a> SymbolicSub<&Atom> for &'a Atom {
     type Output = Atom;
-    fn sub_sym(self, rhs: &Atom, ws: &Workspace, state: &State) -> Option<Self::Output> {
+    fn sub_sym(self, rhs: &Atom, _ws: &Workspace, _state: &State) -> Option<Self::Output> {
         Some(self - rhs)
     }
 }

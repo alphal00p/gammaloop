@@ -215,6 +215,7 @@ fn gamma_net_param(
     TensorNetwork::from(result)
 }
 
+#[allow(dead_code)]
 fn dump_c_with_func(_levels: Vec<Vec<(Symbol, Vec<Atom>)>>) {}
 
 #[allow(unused_variables)]

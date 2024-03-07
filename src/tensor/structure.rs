@@ -25,8 +25,8 @@ use std::ops::Range;
 use symbolica::coefficient::CoefficientView;
 
 use symbolica::representations::AtomView;
-use symbolica::representations::Fun;
-use symbolica::representations::Num;
+
+
 
 use permutation::Permutation;
 
@@ -1531,8 +1531,8 @@ where
 pub fn atomic_expanded_label<I: IntoId>(
     indices: &[ConcreteIndex],
     name: I,
-    state: &mut State,
-    ws: &Workspace,
+    _state: &mut State,
+    _ws: &Workspace,
 ) -> Atom {
     let id = name.into_id();
     atomic_expanded_label_id(indices, id)
@@ -1682,7 +1682,7 @@ impl std::fmt::Display for N
 }
 impl HistoryStructure<Symbol> {
     #[must_use]
-    pub fn to_string(&self, state: &State) -> String {
+    pub fn to_string(&self, _state: &State) -> String {
         let mut string = String::new();
         if let Some(global_name) = self.name() {
             string.push_str(&format!("{:?}:", global_name));

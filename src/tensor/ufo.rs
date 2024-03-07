@@ -164,8 +164,8 @@ where
 pub fn param_mink_four_vector<N>(
     index: AbstractIndex,
     name: N,
-    state: &mut symbolica::state::State,
-    ws: &Workspace,
+    _state: &mut symbolica::state::State,
+    _ws: &Workspace,
 ) -> DenseTensor<Atom, HistoryStructure<N>>
 where
     N: Clone + IntoId,
@@ -178,8 +178,8 @@ where
 pub fn param_euclidean_four_vector<N>(
     index: AbstractIndex,
     name: N,
-    state: &mut symbolica::state::State,
-    ws: &Workspace,
+    _state: &mut symbolica::state::State,
+    _ws: &Workspace,
 ) -> DenseTensor<Atom, HistoryStructure<N>>
 where
     N: Clone + IntoId,

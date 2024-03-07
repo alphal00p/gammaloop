@@ -64,8 +64,8 @@ mod tests_scalar_massless_triangle {
     #[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
     fn pytest_massless_scalar_triangle() {
         assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-        let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-        let sb_workspace = symbolica::state::Workspace::new();
+        let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+        let _sb_workspace = symbolica::state::Workspace::new();
         let (model, amplitude) =
             load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -149,8 +149,8 @@ mod tests_scalar_massless_triangle {
 #[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
 fn pytest_scalar_fishnet_2x2() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -265,8 +265,8 @@ fn pytest_scalar_fishnet_2x2() {
 #[ignore]
 fn pytest_scalar_sunrise() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -314,8 +314,8 @@ fn pytest_scalar_sunrise() {
 #[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
 fn pytest_scalar_fishnet_2x3() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, mut amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -393,8 +393,8 @@ fn pytest_scalar_fishnet_2x3() {
 fn pytest_scalar_cube() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -467,8 +467,8 @@ fn pytest_scalar_cube() {
 fn pytest_scalar_bubble() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -514,8 +514,8 @@ fn pytest_scalar_bubble() {
 fn pytest_massless_scalar_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -593,8 +593,8 @@ fn pytest_massless_scalar_box() {
 fn pytest_scalar_double_triangle() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -665,8 +665,8 @@ fn pytest_scalar_double_triangle() {
 fn pytest_scalar_mercedes() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -731,8 +731,8 @@ fn pytest_scalar_mercedes() {
 fn pytest_scalar_triangle_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
@@ -807,8 +807,8 @@ fn pytest_scalar_triangle_box() {
 fn pytest_scalar_isopod() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
-    let sb_workspace = symbolica::state::Workspace::new();
+    let _sb_state = symbolica::state::State::get_global_state().write().unwrap();
+    let _sb_workspace = symbolica::state::Workspace::new();
     let (model, amplitude) =
         load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
