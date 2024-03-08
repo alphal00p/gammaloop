@@ -634,35 +634,6 @@ where
 
 impl<T> TensorNetwork<T> {
     pub fn dot(&self) -> std::string::String {
-        // format!(
-        //     "{:?}",
-        //     Dot::with_attr_getters(
-        //         &self.graph,
-        //         &[Config::EdgeNoLabel, Config::NodeNoLabel],
-        //         &|_, e| { format!("label=\"{}\"", e.weight()) },
-        //         &|_, n| { format!("label=\"{}\"", n.1.structure()) }
-        //     )
-        // )
-        // .into()
-        self.graph.dot()
-    }
-}
-
-impl<T> TensorNetwork<T>
-where
-    T: Debug + TensorStructure<Structure = HistoryStructure<Symbol>>,
-{
-    pub fn dotsym(&self, _state: &State) -> std::string::String {
-        // format!(
-        //     "{:?}",
-        //     Dot::with_attr_getters(
-        //         &self.graph,
-        //         &[Config::EdgeNoLabel, Config::NodeNoLabel],
-        //         &|_, e| { format!("label=\"{}\"", e.weight()) },
-        //         &|_, n| { format!("label=\"{}\"", n.1.structure().to_string(state)) }
-        //     )
-        // )
-        // .into()
         self.graph.dot()
     }
 }
@@ -671,18 +642,16 @@ impl<T> TensorNetwork<T>
 where
     T: TensorStructure<Structure = HistoryStructure<Symbol>> + Clone,
 {
-    pub fn symbolic_shadow(
-        &mut self,
-        name: &str,
-        state: &mut State,
-        _ws: &Workspace,
-    ) -> TensorNetwork<MixedTensors> {
-        for (i, n) in &mut self.graph.nodes {
-            n.mut_structure().set_name(
-                &state
-                    .get_or_insert_fn(format!("{}{}", name, i.data().as_ffi()), None)
-                    .unwrap(),
-            );
+    pub fn symbolic_shadow(&mut self, name: &str) -> TensorNetwork<MixedTensors> {
+        {
+            let mut state = State::get_global_state().write().unwrap();
+            for (i, n) in &mut self.graph.nodes {
+                n.mut_structure().set_name(
+                    &state
+                        .get_or_insert_fn(format!("{}{}", name, i.data().as_ffi()), None)
+                        .unwrap(),
+                );
+            }
         }
 
         let edges = self.graph.edges.clone();
@@ -716,15 +685,6 @@ where
             nodemap,
         };
 
-        // let g: Graph<MixedTensors, Slot, Undirected> = Graph::map(
-        //     &self.graph,
-        //     |_, nw| {
-        //         MixedTensor::<HistoryStructure<Symbol>>::from(
-        //             nw.structure().clone().shadow(state, ws).unwrap(),
-        //         )
-        //     },
-        //     |_, &w| w,
-        // );
         TensorNetwork { graph: g }
     }
 }
@@ -747,7 +707,8 @@ impl<T> TensorNetwork<T>
 where
     T: HasName<Name = Symbol>,
 {
-    pub fn namesym(&mut self, name: &str, state: &mut State) {
+    pub fn namesym(&mut self, name: &str) {
+        let mut state = State::get_global_state().write().unwrap();
         for (id, n) in &mut self.graph.nodes {
             n.set_name(
                 &state

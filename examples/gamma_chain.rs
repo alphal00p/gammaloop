@@ -272,13 +272,13 @@ fn main() {
     println!("{}", chain.graph.involution.len());
     println!("{}", chain.graph.neighbors.len());
 
-    println!("{}", chain.dotsym(&state));
+    println!("{}", chain.dot());
     let start = Instant::now();
     chain.contract();
     let duration = start.elapsed();
     let durationfull = startfull.elapsed();
 
-    println!("{}", chain.dotsym(&state));
+    println!("{}", chain.dot());
 
     println!(
         "Gamma net with {} gammas, fully numeric, takes {:?} for the contraction, and {:?} with initialization",

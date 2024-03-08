@@ -1,6 +1,6 @@
 use super::{
-    atomic_expanded_label_id, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot,
-    SparseTensorLinearIterator, TensorStructure, TracksCount,
+    atomic_expanded_label_id, structure, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot,
+    SparseTensorLinearIterator, TensorStructure, TracksCount, TrySmallestUpgrade,
 };
 use ahash::AHashMap;
 use derive_more::From;
@@ -226,6 +226,34 @@ where
     }
 }
 
+impl<T, U, I> TrySmallestUpgrade<SparseTensor<T, I>> for SparseTensor<U, I>
+where
+    U: TrySmallestUpgrade<T>,
+    U::LCM: Clone,
+    I: TensorStructure + Clone,
+{
+    type LCM = SparseTensor<U::LCM, I>;
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
+    where
+        Self::LCM: Clone,
+    {
+        let structure = self.structure.clone();
+        let elements: Option<AHashMap<usize, U::LCM>> = self
+            .elements
+            .iter()
+            .map(|(k, v)| match v.try_upgrade() {
+                Some(Cow::Owned(u)) => Some((*k, u)),
+                Some(Cow::Borrowed(u)) => Some((*k, u.clone())),
+                None => None,
+            })
+            .collect();
+        Some(Cow::Owned(SparseTensor {
+            elements: elements?,
+            structure,
+        }))
+    }
+}
+
 impl<T, I> SparseTensor<T, I>
 where
     I: TensorStructure,
@@ -399,6 +427,34 @@ where
             data: vec![T::zero(); length],
             structure,
         }
+    }
+}
+
+impl<T, U, I> TrySmallestUpgrade<DenseTensor<T, I>> for DenseTensor<U, I>
+where
+    U: TrySmallestUpgrade<T>,
+    U::LCM: Clone,
+    I: TensorStructure + Clone,
+{
+    type LCM = DenseTensor<U::LCM, I>;
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
+    where
+        Self::LCM: Clone,
+    {
+        let structure = self.structure.clone();
+        let data: Option<Vec<U::LCM>> = self
+            .data
+            .iter()
+            .map(|v| match v.try_upgrade() {
+                Some(Cow::Owned(u)) => Some(u),
+                Some(Cow::Borrowed(u)) => Some(u.clone()),
+                None => None,
+            })
+            .collect();
+        Some(Cow::Owned(DenseTensor {
+            data: data?,
+            structure,
+        }))
     }
 }
 

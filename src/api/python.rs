@@ -62,8 +62,6 @@ fn gammalooprs(_py: Python, m: &PyModule) -> PyResult<()> {
 #[pyclass(name = "Worker")]
 pub struct PythonWorker {
     pub model: Model,
-    // sb_state: symbolica::state::State,
-    // sb_workspace: symbolica::state::Workspace,
     pub cross_sections: CrossSectionList,
     pub amplitudes: AmplitudeList,
     pub integrands: HashMap<String, Integrand>,
@@ -88,7 +86,6 @@ impl PythonWorker {
     pub fn new(_cls: &PyType) -> PyResult<PythonWorker> {
         Ok(PythonWorker {
             model: Model::default(),
-
             cross_sections: CrossSectionList::default(),
             amplitudes: AmplitudeList::default(),
             integrands: HashMap::default(),

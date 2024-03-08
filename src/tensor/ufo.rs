@@ -19,7 +19,7 @@ pub const PROJM: Symbol = Symbol::init_var(MAX_REP + 4, 0);
 pub const PROJP: Symbol = Symbol::init_var(MAX_REP + 5, 0);
 pub const SIGMA: Symbol = Symbol::init_var(MAX_REP + 6, 0);
 
-pub fn new_state() {
+pub fn init_state() {
     let mut state = State::get_global_state().write().unwrap();
     assert!(EUC == state.get_or_insert_fn("euc", None).unwrap());
     assert!(LOR == state.get_or_insert_fn("lor", None).unwrap());

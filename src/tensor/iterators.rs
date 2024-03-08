@@ -11,13 +11,11 @@ use std::ops::{AddAssign, Neg, SubAssign};
 
 use super::{
     ConcreteIndex, DenseTensor, Dimension, GetTensorData, Representation, Slot, SparseTensor,
-    SymbolicAddAssign, SymbolicNeg, SymbolicSubAssign, TensorStructure,
+    TensorStructure,
 };
 use ahash::AHashMap;
 
 use permutation::Permutation;
-
-use symbolica::state::{State, Workspace};
 
 /// An iterator over all indices of a tensor structure
 ///
@@ -1117,146 +1115,6 @@ where
     }
 }
 
-/// Iterator over all but two indices of a sparse tensor, where the two indices are traced symbolically (summation using symbolica)
-///
-/// The iterator next returns the value of the trace at the current indices, and the current indices
-///
-pub struct SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
-    tensor: &'a SparseTensor<T, I>,
-    trace_indices: [usize; 2],
-    current_indices: Vec<ConcreteIndex>,
-    done: bool,
-    state: &'b State,
-    ws: &'b Workspace,
-}
-
-impl<'a, 'b, T, I> SparseTensorSymbolicTraceIterator<'a, 'b, T, I>
-where
-    I: TensorStructure,
-{
-    /// Create a new symbolic trace iterator
-    ///
-    /// # Arguments
-    ///
-    /// * `tensor` - A reference to the tensor
-    /// * `trace_indices` - The indices to be traced
-    /// * `state` - The symbolica state
-    /// * `ws` - The symbolica workspace
-    fn new(
-        tensor: &'a SparseTensor<T, I>,
-        trace_indices: [usize; 2],
-        state: &'b State,
-        ws: &'b Workspace,
-    ) -> Self {
-        //trace positions must point to the same dimension
-        assert!(
-            trace_indices
-                .iter()
-                .map(|&pos| tensor.external_structure()[pos].representation)
-                .collect::<Vec<_>>()
-                .iter()
-                .all(|&sig| sig == tensor.external_structure()[trace_indices[0]].representation),
-            "Trace indices must point to the same dimension"
-        );
-        SparseTensorSymbolicTraceIterator {
-            tensor,
-            trace_indices,
-            current_indices: vec![0; tensor.order()],
-            done: false,
-            state,
-            ws,
-        }
-    }
-
-    fn increment_indices(&mut self) -> bool {
-        for (i, index) in self
-            .current_indices
-            .iter_mut()
-            .enumerate()
-            .rev()
-            .filter(|(pos, _)| !self.trace_indices.contains(pos))
-        // Filter out the trace indices
-        {
-            *index += 1;
-            // If the index goes beyond the shape boundary, wrap around to 0
-            if index >= &mut self.tensor.shape()[i] {
-                *index = 0;
-                continue; // carry over to the next dimension
-            }
-            return true; // We've successfully found the next combination
-        }
-        false // No more combinations left
-    }
-}
-
-impl<'a, 'b, T, I> Iterator for SparseTensorSymbolicTraceIterator<'a, 'b, T, I>
-where
-    T: for<'c> SymbolicAddAssign<&'c T> + for<'d> SymbolicSubAssign<&'d T> + SymbolicNeg + Clone,
-    I: Clone + TensorStructure,
-{
-    type Item = (Vec<ConcreteIndex>, T);
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        let trace_dimension =
-            self.tensor.external_structure()[self.trace_indices[0]].representation;
-        let trace_sign = trace_dimension.negative();
-        let mut iter = trace_sign.iter().enumerate();
-        let mut indices = self.current_indices.clone();
-        let (i, mut sign) = iter.next().unwrap(); //First element (to eliminate the need for default)
-
-        indices[self.trace_indices[0]] = i;
-        indices[self.trace_indices[1]] = i;
-
-        // Data might not exist at that concrete index usize, we advance it till it does, and if not we skip
-
-        while self.tensor.is_empty_at(&indices) {
-            let Some((i, signint)) = iter.next() else {
-                self.done = !self.increment_indices();
-                return self.next(); // skip
-            };
-            indices[self.trace_indices[0]] = i;
-            indices[self.trace_indices[1]] = i;
-            sign = signint;
-        }
-
-        let value = (*self.tensor.get(&indices).unwrap()).clone(); //Should now be safe to unwrap
-        let mut trace = if *sign {
-            value.neg_sym(self.ws, self.state)
-        } else {
-            value
-        };
-
-        for (i, sign) in iter {
-            indices[self.trace_indices[0]] = i;
-            indices[self.trace_indices[1]] = i;
-            if let Ok(value) = self.tensor.get(&indices) {
-                if *sign {
-                    trace.sub_assign_sym(value, self.ws, self.state);
-                } else {
-                    trace.add_assign_sym(value, self.ws, self.state);
-                }
-            }
-        }
-
-        //make a vector withouth the trace indices
-        let trace_indices: Vec<ConcreteIndex> = self
-            .current_indices
-            .clone()
-            .into_iter()
-            .enumerate()
-            .filter(|&(i, _)| !self.trace_indices.contains(&i))
-            .map(|(_, x)| x)
-            .collect();
-
-        self.done = !self.increment_indices();
-
-        Some((trace_indices, trace))
-    }
-}
-
 impl<T, I> SparseTensor<T, I>
 where
     I: TensorStructure,
@@ -1275,15 +1133,6 @@ where
 
     pub fn iter_flat(&self) -> SparseTensorLinearIterator<T> {
         SparseTensorLinearIterator::new(self)
-    }
-
-    pub fn iter_symbolic_trace<'a, 'b>(
-        &'a self,
-        trace_indices: [usize; 2],
-        state: &'b State,
-        ws: &'b Workspace,
-    ) -> SparseTensorSymbolicTraceIterator<'a, 'b, T, I> {
-        SparseTensorSymbolicTraceIterator::new(self, trace_indices, state, ws)
     }
 
     pub fn iter_multi_fibers_metric(
@@ -1557,143 +1406,6 @@ where
     }
 }
 
-/// Iterator over all indices of a dense tensor, keeping two indices fixed and tracing over them symbolically (summation using symbolica)
-///
-/// The next method returns the value of the trace at the current indices, and the current indices
-pub struct DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
-    tensor: &'a DenseTensor<T, I>,
-    trace_indices: [usize; 2],
-    current_indices: Vec<ConcreteIndex>,
-    done: bool,
-    state: &'b State,
-    ws: &'b Workspace,
-}
-
-impl<'a, 'b, T, I> DenseTensorSymbolicTraceIterator<'a, 'b, T, I>
-where
-    I: TensorStructure,
-{
-    /// Create a new symbolic trace iterator
-    ///
-    /// # Arguments
-    ///
-    /// * `tensor` - A reference to the tensor
-    /// * `trace_indices` - The indices to be traced
-    /// * `state` - The symbolica state
-    /// * `ws` - The symbolica workspace
-    fn new(
-        tensor: &'a DenseTensor<T, I>,
-        trace_indices: [usize; 2],
-        state: &'b State,
-        ws: &'b Workspace,
-    ) -> Self {
-        assert!(trace_indices.len() >= 2, "Invalid trace indices");
-        //trace positions must point to the same dimension
-        assert!(
-            trace_indices
-                .iter()
-                .map(|&pos| tensor.external_structure()[pos].representation)
-                .collect::<Vec<_>>()
-                .iter()
-                .all(|&sig| sig == tensor.external_structure()[trace_indices[0]].representation),
-            "Trace indices must point to the same dimension"
-        );
-        DenseTensorSymbolicTraceIterator {
-            tensor,
-            trace_indices,
-            current_indices: vec![0; tensor.order()],
-            done: false,
-            state,
-            ws,
-        }
-    }
-
-    fn increment_indices(&mut self) -> bool {
-        for (i, index) in self
-            .current_indices
-            .iter_mut()
-            .enumerate()
-            .rev()
-            .filter(|(pos, _)| !self.trace_indices.contains(pos))
-        {
-            *index += 1;
-            // If the index goes beyond the shape boundary, wrap around to 0
-            if index >= &mut self.tensor.shape()[i] {
-                *index = 0;
-                continue; // carry over to the next dimension
-            }
-            return true; // We've successfully found the next combination
-        }
-        false // No more combinations left
-    }
-}
-
-impl<'a, 'b, T, I> Iterator for DenseTensorSymbolicTraceIterator<'a, 'b, T, I>
-where
-    T: Clone
-        + for<'c> SymbolicAddAssign<&'c T>
-        + for<'d> SymbolicSubAssign<&'d T>
-        + SymbolicNeg
-        + Clone
-        + std::fmt::Debug,
-    I: TensorStructure,
-{
-    type Item = (Vec<ConcreteIndex>, T);
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        let trace_dimension =
-            self.tensor.external_structure()[self.trace_indices[0]].representation;
-        let trace_sign = trace_dimension.negative();
-
-        let mut iter = trace_sign.iter().enumerate();
-        let mut indices = self.current_indices.clone();
-        let (_, sign) = iter.next().unwrap(); //First sign
-
-        for pos in self.trace_indices {
-            indices[pos] = 0;
-        }
-
-        let value = self.tensor.get(&indices).unwrap().clone();
-
-        let mut trace = if *sign {
-            value.neg_sym(self.ws, self.state)
-        } else {
-            value
-        };
-
-        for (i, sign) in iter {
-            for pos in self.trace_indices {
-                indices[pos] = i;
-            }
-
-            if let Ok(value) = self.tensor.get(&indices) {
-                if *sign {
-                    trace.sub_assign_sym(value, self.ws, self.state);
-                } else {
-                    trace.add_assign_sym(value, self.ws, self.state);
-                }
-            }
-        }
-
-        //make a vector without the trace indices
-        let trace_indices: Vec<ConcreteIndex> = self
-            .current_indices
-            .clone()
-            .into_iter()
-            .enumerate()
-            .filter(|&(i, _)| !self.trace_indices.contains(&i))
-            .map(|(_, x)| x)
-            .collect();
-
-        self.done = !self.increment_indices();
-
-        Some((trace_indices, trace))
-    }
-}
-
 impl<T, I> DenseTensor<T, I>
 where
     I: TensorStructure,
@@ -1712,15 +1424,6 @@ where
 
     pub fn iter_trace(&self, trace_indices: [usize; 2]) -> DenseTensorTraceIterator<T, I> {
         DenseTensorTraceIterator::new(self, trace_indices)
-    }
-
-    pub fn iter_symbolic_trace<'a, 'b>(
-        &'a self,
-        trace_indices: [usize; 2],
-        state: &'b State,
-        ws: &'b Workspace,
-    ) -> DenseTensorSymbolicTraceIterator<'a, 'b, T, I> {
-        DenseTensorSymbolicTraceIterator::new(self, trace_indices, state, ws)
     }
 
     pub fn iter_multi_fibers_metric(
