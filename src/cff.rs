@@ -12,10 +12,7 @@ use color_eyre::Report;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    representations::Atom,
-    state::{State, Workspace},
-};
+use symbolica::{representations::Atom, state::State};
 
 use log::info;
 
@@ -37,17 +34,18 @@ impl PartialEq for Esurface {
 
 #[allow(unused)]
 impl Esurface {
-    fn to_atom(&self, state: &mut State, workspace: &Workspace) -> Atom {
+    fn to_atom(&self) -> Atom {
+        let mut state = State::get_global_state().write().unwrap();
         let symbolic_energies = self
             .energies
             .iter()
-            .map(|i| Atom::parse(&format!("E{}", i), state).unwrap())
+            .map(|i| Atom::parse(&format!("E{}", i), &mut state).unwrap())
             .collect_vec();
 
         let symbolic_shift = self
             .shift
             .iter()
-            .map(|i| Atom::parse(&format!("p{}", i), state).unwrap())
+            .map(|i| Atom::parse(&format!("p{}", i), &mut state).unwrap())
             .collect_vec();
 
         let builder_atom = Atom::new();

@@ -1,6 +1,7 @@
 use crate::tensor::{
-    ufo::mink_four_vector, Contract, DataIterator, DenseTensor, GetTensorData, HasTensorData,
-    MixedTensor, Representation, SparseTensor, TensorStructure,
+    ufo::{init_state, mink_four_vector},
+    Contract, DataIterator, DenseTensor, GetTensorData, HasTensorData, MixedTensor, Representation,
+    SparseTensor, TensorStructure,
 };
 use ahash::{HashMap, HashMapExt};
 
@@ -18,7 +19,8 @@ use symbolica::{
 
 use super::{
     symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension, HistoryStructure,
-    NamedStructure, NumTensor, SetTensorData, Shadowable, Slot, TensorNetwork, VecStructure,
+    NamedStructure, NumTensor, SetTensorData, Shadowable, Slot, TensorNetwork, TryIntoUpgrade,
+    TrySmallestUpgrade, VecStructure,
 };
 
 trait Average {
@@ -427,7 +429,7 @@ fn all_multi_contractions() {
     let mut dseq = vec![];
     let mut sseq = vec![];
     let mut sdeq = vec![];
-    for s in 0..100 {
+    for s in 0..1000 {
         let mut rng = Xoroshiro64Star::seed_from_u64(s);
         let ncommon = rng.gen_range(2..5);
 
@@ -704,7 +706,7 @@ fn convert_sym() {
         HistoryStructure::from_integers(&[(1, 2), (4, 3)].map(|(a, d)| (a.into(), d.into())), "b");
     let b = DenseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let symb = b.to_symbolic(&ws, &mut state);
+    let symb: DenseTensor<Atom, _> = b.try_into_upgrade().unwrap();
 
     let expected_data: Vec<Atom> = [
         "5*𝑖",
@@ -769,6 +771,7 @@ fn empty_densor() {
 
 #[test]
 fn symbolic_contract() {
+    init_state();
     let structura = HistoryStructure::from_integers(
         &[(1, 2), (4, 3)].map(|(a, d)| (a.into(), d.into())),
         "T".to_string(),

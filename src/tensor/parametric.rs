@@ -2,127 +2,15 @@ use ahash::{AHashMap, HashMap};
 use enum_try_as_inner::EnumTryAsInner;
 
 use num::Complex;
-use smartstring::alias::String;
 use symbolica::{
-    domains::{
-        float::NumericalFloatLike,
-        rational::{Rational, RationalField},
-    },
     evaluate::EvaluationFn,
-    poly::{evaluate::InstructionEvaluator, polynomial::MultivariatePolynomial, Variable},
-    representations::{AsAtomView, Atom, AtomView, FunctionBuilder, Symbol},
-    state::{State, Workspace},
+    representations::{Atom, AtomView, Symbol},
 };
 
 use super::{
-    Contract, DataIterator, DataTensor, DenseTensor, HasName, HistoryStructure, SetTensorData,
-    Slot, SparseTensor, StructureContract, SymbolicAdd, SymbolicAddAssign, SymbolicInto,
-    SymbolicMul, SymbolicNeg, SymbolicStructureContract, SymbolicSub, SymbolicSubAssign,
-    SymbolicZero, TensorStructure, TracksCount,
+    Contract, DataIterator, DataTensor, DenseTensor, HasName, HistoryStructure, Slot, SparseTensor,
+    StructureContract, TensorStructure, TracksCount,
 };
-
-impl<'a, T, I> SparseTensor<T, I>
-where
-    for<'d> &'d T: SymbolicInto,
-    I: TensorStructure + Clone + SymbolicStructureContract,
-{
-    pub fn to_symbolic<'c: 'a, 'b>(
-        &'b self,
-        ws: &'c Workspace,
-        state: &'c mut State,
-    ) -> SparseTensor<Atom, I> {
-        let mut result = SparseTensor::empty(self.structure.clone());
-        for (index, value) in self.iter() {
-            let _ = result.set(&index, value.into_sym().unwrap());
-        }
-        result
-    }
-}
-
-impl<'a, I> DenseTensor<Atom, I>
-where
-    I: TensorStructure + Clone + SymbolicStructureContract,
-{
-    pub fn symbolic_zeros(structure: I) -> DenseTensor<Atom, I> {
-        let result_data = vec![0; structure.size()];
-
-        DenseTensor {
-            data: result_data.iter().map(|&x| Atom::new_num(x)).collect(),
-            structure,
-        }
-    }
-
-    pub fn symbolic_labels(
-        label: &str,
-        structure: I,
-        _ws: &'a Workspace,
-        state: &'a mut State,
-    ) -> DenseTensor<Atom, I> {
-        let mut data = vec![];
-        for index in structure.index_iter() {
-            let indices_str = index
-                .into_iter()
-                .map(|index| index.to_string().into())
-                .collect::<Vec<String>>()
-                .join("_");
-
-            let value = Atom::parse(&format!("{}_{}", label, indices_str), state).unwrap();
-
-            data.push(value);
-        }
-        DenseTensor { data, structure }
-    }
-
-    pub fn numbered_labeled(
-        number: usize,
-        label: Symbol,
-        structure: I,
-        _ws: &'a Workspace,
-        _state: &'a State,
-    ) -> DenseTensor<Atom, I> {
-        let mut data = vec![];
-        for index in structure.index_iter() {
-            let mut value_builder = FunctionBuilder::new(label);
-            value_builder = value_builder.add_arg(Atom::new_num(number as i64).as_atom_view());
-
-            for i in index {
-                value_builder = value_builder.add_arg(Atom::new_num(i as i64).as_atom_view());
-            }
-            // Atom::parse(&format!("{}_{}_{}", label, indices_si)).unwrap();
-
-            let value = value_builder.finish();
-
-            data.push(value);
-        }
-        DenseTensor { data, structure }
-    }
-}
-
-impl<'a, T, I> DenseTensor<T, I>
-where
-    for<'d> &'d T: SymbolicInto,
-    I: TensorStructure + Clone + SymbolicStructureContract,
-{
-    pub fn to_symbolic<'c: 'a, 'b>(
-        &'b self,
-        ws: &'c Workspace,
-        state: &'c mut State,
-    ) -> DenseTensor<Atom, I> {
-        let mut result = DenseTensor::symbolic_zeros(self.structure.clone());
-        for (index, value) in self.iter() {
-            let _ = result.set(&index, value.into_sym().unwrap());
-        }
-        result
-    }
-}
-
-pub trait FromStucture: Sized {
-    fn from_structure(
-        structure: HistoryStructure<String>,
-        state: &mut State,
-        ws: &Workspace,
-    ) -> Option<Self>;
-}
 
 #[derive(Clone, Debug, EnumTryAsInner)]
 #[derive_err(Debug)]
@@ -229,95 +117,6 @@ where
             const_map.insert(a.as_view(), *v);
         }
     }
-
-    pub fn to_evaluator<'a, N>(
-        &'a self,
-        _var_map: &mut HashMap<AtomView<'a>, Variable>,
-        _state: &State,
-    ) -> DenseTensor<InstructionEvaluator<N>, I>
-    where
-        N: NumericalFloatLike + for<'b> std::convert::From<&'b Rational>,
-    {
-        let structure = self.structure.clone();
-        let data = self
-            .data
-            .iter()
-            .map(|x| {
-                let poly: MultivariatePolynomial<_, u8> = x
-                    .as_view()
-                    .to_polynomial_with_conversion(&RationalField::new());
-
-                // x.as_view().evaluate(var_map, function_map, cache);
-
-                // println!("{}", poly.printer(state));
-
-                let (h, _ops, _) = poly.optimize_horner_scheme(4000);
-                let mut i = h.to_instr(20);
-
-                i.fuse_operations();
-
-                for _ in 0..100_000 {
-                    if !i.common_pair_elimination() {
-                        break;
-                    }
-                    i.fuse_operations();
-                }
-
-                i.to_output(poly.var_map.as_ref().unwrap().to_vec(), true)
-                    .convert::<N>()
-                    .evaluator()
-            })
-            .collect::<Vec<_>>();
-
-        DenseTensor { data, structure }
-    }
-}
-
-impl<I, N> DenseTensor<InstructionEvaluator<N>, I>
-where
-    I: Clone,
-    N: NumericalFloatLike + for<'a> std::convert::From<&'a Rational> + Copy,
-{
-    pub fn evaluate(&self, param: &[N]) -> DenseTensor<N, I> {
-        let structure = self.structure.clone();
-        let data = self
-            .data
-            .iter()
-            .enumerate()
-            .map(|(i, x)| x.clone().evaluate(&[param[i]])[0])
-            .collect::<Vec<_>>();
-        DenseTensor { data, structure }
-    }
-}
-
-#[test]
-
-fn test_evaluator() {
-    let state = State::get_global_state().write().unwrap();
-    let _ws = Workspace::new();
-    let structure = crate::tensor::NamedStructure::from_integers(
-        &[
-            (crate::tensor::AbstractIndex(4), crate::tensor::Dimension(5)),
-            (crate::tensor::AbstractIndex(5), crate::tensor::Dimension(4)),
-        ],
-        "r",
-    );
-    let p = crate::tensor::Shadowable::shadow(structure).unwrap();
-
-    let mut var_map = AHashMap::new();
-    let a: DenseTensor<InstructionEvaluator<f64>, crate::tensor::NamedStructure> =
-        p.to_evaluator(&mut var_map, &state);
-
-    // for (k, v) in var_map {
-    //     println!("{} {:?}", k.printer(&state), v);
-    // }
-
-    let b = a.evaluate(&[
-        1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 3.0,
-        4.0, 5.0,
-    ]);
-
-    println!("{:?}", b);
 }
 
 impl<T> TensorStructure for MixedTensor<T>
