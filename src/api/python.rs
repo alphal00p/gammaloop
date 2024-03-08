@@ -71,7 +71,6 @@ impl Clone for PythonWorker {
     fn clone(&self) -> PythonWorker {
         PythonWorker {
             model: self.model.clone(),
-
             cross_sections: self.cross_sections.clone(),
             amplitudes: self.amplitudes.clone(),
             integrands: self.integrands.clone(),

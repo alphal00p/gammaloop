@@ -1,7 +1,5 @@
 // Gamma chain example
 
-use num::{Complex, One, Zero};
-
 use std::{
     fmt::Debug,
     ops::{AddAssign, DivAssign, MulAssign, Neg, RemAssign, SubAssign},
@@ -19,8 +17,8 @@ use _gammaloop::tensor::{
     TrySmallestUpgrade,
 };
 
-use num::complex::Complex64;
 use num::traits::{Num, ToPrimitive};
+use symbolica::domains::float::Complex;
 use symbolica::{
     representations::{Atom, Symbol},
     state::{State, Workspace},
@@ -110,8 +108,8 @@ use symbolica::{
 #[allow(dead_code)]
 fn gamma_net(
     minkindices: &[i32],
-    vbar: [Complex64; 4],
-    u: [Complex64; 4],
+    vbar: [Complex<f64>; 4],
+    u: [Complex<f64>; 4],
     state: &mut State,
 ) -> TensorNetwork<NumTensor<HistoryStructure<Symbol>>> {
     let mut i = 0;
@@ -124,10 +122,10 @@ fn gamma_net(
         let uj = contracting_index;
         if *m > 0 {
             let p = [
-                Complex64::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
             result
@@ -152,8 +150,8 @@ fn gamma_net(
 fn defered_chain(
     minkindices: &[i32],
     gamma_chain: &SparseTensor<Complex<f64>>,
-    vbar: [Complex64; 4],
-    u: [Complex64; 4],
+    vbar: [Complex<f64>; 4],
+    u: [Complex<f64>; 4],
 ) -> DenseTensor<Complex<f64>> {
     let mut result = euclidean_four_vector(0.into(), &vbar);
     result = gamma_chain.contract(&result).unwrap();
@@ -165,10 +163,10 @@ fn defered_chain(
     for m in minkindices {
         if *m > 0 {
             let p = [
-                Complex64::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
             let pmu = mink_four_vector(usize::try_from(*m).unwrap().into(), &p);
@@ -220,11 +218,21 @@ fn dump_c_with_func(_levels: Vec<Vec<(Symbol, Vec<Atom>)>>) {}
 
 #[allow(unused_variables)]
 fn main() {
-    let one = Complex64::new(1.0, 0.0);
-    let zero = Complex64::new(0.0, 0.0);
+    let one = Complex::<f64>::new(1.0, 0.0);
+    let zero = Complex::<f64>::new(0.0, 0.0);
 
-    let vbar = [one * 3.0, one * 3.1, one * 3.2, one * 3.3];
-    let u = [one * 4.0, one * 4.1, one * 4.2, one * 4.3];
+    let vbar = [
+        one.mul_fallible(3.0).unwrap(),
+        one.mul_fallible(3.1).unwrap(),
+        one.mul_fallible(3.2).unwrap(),
+        one.mul_fallible(3.3).unwrap(),
+    ];
+    let u = [
+        one.mul_fallible(4.0).unwrap(),
+        one.mul_fallible(4.1).unwrap(),
+        one.mul_fallible(4.2).unwrap(),
+        one.mul_fallible(4.3).unwrap(),
+    ];
 
     let spacings: [i32; 2] = [20, 24];
     let mut start = 1;

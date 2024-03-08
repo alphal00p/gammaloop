@@ -1,3 +1,4 @@
+use core::fmt;
 use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::ops::Mul;
@@ -5,8 +6,9 @@ use std::ops::Mul;
 use duplicate::duplicate;
 
 use num::traits::Zero;
-use num::Complex;
+use symbolica::domains::float::Complex;
 
+use symbolica::domains::float::Real;
 use symbolica::representations::Atom;
 
 use symbolica::state::State;
@@ -180,7 +182,6 @@ impl<'b> TrySmallestUpgrade<smaller> for &'b larger {
 duplicate! {
     [smaller larger;
     [f32] [f64];
-    [f64] [ Complex::<f64>];
     [i32] [f64];]
 
 impl TrySmallestUpgrade<larger> for smaller {
@@ -194,6 +195,21 @@ impl TrySmallestUpgrade<larger> for smaller {
     }
 }
 
+}
+
+impl<T> TrySmallestUpgrade<Complex<T>> for T
+where
+    T: Real,
+{
+    type LCM = Complex<T>;
+
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
+    where
+        Self::LCM: Clone,
+    {
+        let new = Complex::new(self.clone(), T::zero());
+        Some(Cow::Owned(new))
+    }
 }
 
 impl TrySmallestUpgrade<Atom> for f64 {

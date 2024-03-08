@@ -1,27 +1,27 @@
 use ahash::{AHashMap, HashMap};
 use enum_try_as_inner::EnumTryAsInner;
 
-use num::Complex;
 use symbolica::{
+    domains::float::Complex,
     evaluate::EvaluationFn,
     representations::{Atom, AtomView, Symbol},
 };
 
 use super::{
     Contract, DataIterator, DataTensor, DenseTensor, HasName, HistoryStructure, Slot, SparseTensor,
-    StructureContract, TensorStructure, TracksCount,
+    StructureContract, TensorStructure, TracksCount, VecStructure,
 };
 
 #[derive(Clone, Debug, EnumTryAsInner)]
 #[derive_err(Debug)]
-pub enum MixedTensor<T: TensorStructure> {
+pub enum MixedTensor<T: TensorStructure = VecStructure> {
     Float(DataTensor<f64, T>),
     Complex(DataTensor<Complex<f64>, T>),
     Symbolic(DataTensor<Atom, T>),
 }
 
 impl<'a, I: TensorStructure + Clone + 'a> MixedTensor<I> {
-    pub fn evaluate<'b>(&mut self, const_map: &'b HashMap<AtomView<'a>, f64>)
+    pub fn evaluate_float<'b>(&mut self, const_map: &'b HashMap<AtomView<'a>, f64>)
     where
         'b: 'a,
     {
@@ -32,6 +32,20 @@ impl<'a, I: TensorStructure + Clone + 'a> MixedTensor<I> {
 
         if let Some(x) = content {
             *self = MixedTensor::Float(x.evaluate(const_map));
+        }
+    }
+
+    pub fn evaluate_complex<'b>(&mut self, const_map: &'b HashMap<AtomView<'a>, Complex<f64>>)
+    where
+        'b: 'a,
+    {
+        let content = match self {
+            MixedTensor::Symbolic(x) => Some(x),
+            _ => None,
+        };
+
+        if let Some(x) = content {
+            *self = MixedTensor::Complex(x.evaluate(const_map));
         }
     }
 }
@@ -104,13 +118,14 @@ where
         DenseTensor { data, structure }
     }
 
-    pub fn append_const_map<'a, T>(
+    pub fn append_const_map<'a, 'b, T>(
         &'a self,
         data: &DenseTensor<T, I>,
-        const_map: &mut HashMap<AtomView<'a>, T>,
+        const_map: &mut HashMap<AtomView<'b>, T>,
     ) where
         I: TensorStructure,
         T: Copy,
+        'a: 'b,
     {
         for ((i, a), (j, v)) in self.flat_iter().zip(data.flat_iter()) {
             assert_eq!(i, j);

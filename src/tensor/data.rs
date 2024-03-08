@@ -1,15 +1,16 @@
 use super::{
     atomic_expanded_label_id, structure, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot,
-    SparseTensorLinearIterator, TensorStructure, TracksCount, TrySmallestUpgrade,
+    SparseTensorLinearIterator, TensorStructure, TracksCount, TrySmallestUpgrade, VecStructure,
 };
 use ahash::AHashMap;
 use derive_more::From;
 use enum_try_as_inner::EnumTryAsInner;
 use indexmap::IndexMap;
-use num::{Complex, Zero};
+use num::Zero;
 use serde::{Deserialize, Serialize};
 use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
+use symbolica::domains::float::Complex;
 use symbolica::{representations::Atom, representations::Symbol};
 
 pub trait DataIterator<T> {
@@ -101,7 +102,7 @@ pub trait GetTensorData {
 /// Stores data in a hashmap of usize, using ahash's hashmap.
 /// The usize key is the flattened index of the corresponding position in the dense tensor
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SparseTensor<T, I = Vec<Slot>> {
+pub struct SparseTensor<T, I = VecStructure> {
     pub elements: AHashMap<usize, T>,
     pub structure: I,
 }
@@ -281,10 +282,10 @@ where
     /// Converts the sparse tensor to a dense tensor, with the same structure
     pub fn to_dense(&self) -> DenseTensor<T, I>
     where
-        T: Clone + Zero,
+        T: Clone + Default,
         I: Clone,
     {
-        let mut dense = DenseTensor::zero(self.structure.clone());
+        let mut dense = DenseTensor::default(self.structure.clone());
         for (indices, value) in self.elements.iter() {
             let _ = dense.set_flat(*indices, value.clone());
         }
@@ -295,10 +296,10 @@ where
     /// If the value is zero, it removes the element at the given indices.
     pub fn smart_set(&mut self, indices: &[ConcreteIndex], value: T) -> Result<(), String>
     where
-        T: Zero + PartialEq,
+        T: Default + PartialEq,
     {
         self.verify_indices(indices)?;
-        if value == T::zero() {
+        if value == T::default() {
             _ = self.elements.remove(&self.flat_index(indices).unwrap());
             return Ok(());
         }
@@ -338,21 +339,21 @@ where
     /// If the index is in the bTree return the value, else return zero.
     pub fn smart_get(&self, indices: &[ConcreteIndex]) -> Result<Cow<T>, String>
     where
-        T: Zero + Clone,
+        T: Default + Clone,
     {
         self.verify_indices(indices)?;
         // if the index is in the bTree return the value, else return default, lazily allocating the default
         Ok(
             match self.elements.get(&self.flat_index(indices).unwrap()) {
                 Some(value) => Cow::Borrowed(value),
-                None => Cow::Owned(T::zero()),
+                None => Cow::Owned(T::default()),
             },
         )
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct DenseTensor<T, I = Vec<Slot>> {
+pub struct DenseTensor<T, I = VecStructure> {
     pub data: Vec<T>,
     pub structure: I,
 }
@@ -495,11 +496,11 @@ where
     /// converts the dense tensor to a sparse tensor, with the same structure
     pub fn to_sparse(&self) -> SparseTensor<T, I>
     where
-        T: Clone + Zero + PartialEq,
+        T: Clone + Default + PartialEq,
     {
         let mut sparse = SparseTensor::empty(self.structure.clone());
         for (i, value) in self.iter() {
-            if *value != T::zero() {
+            if *value != T::default() {
                 let _ = sparse.set(&i, value.clone());
             }
         }
@@ -635,7 +636,7 @@ where
 /// Enum for storing either a dense or a sparse tensor, with the same structure
 #[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize, From)]
 #[derive_err(Debug)]
-pub enum DataTensor<T, I: TensorStructure> {
+pub enum DataTensor<T, I: TensorStructure = VecStructure> {
     Dense(DenseTensor<T, I>),
     Sparse(SparseTensor<T, I>),
 }
@@ -741,7 +742,7 @@ where
 /// Enum for a datatensor with specific numeric data type, generic on the structure type `I`
 #[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize)]
 #[derive_err(Debug)]
-pub enum NumTensor<T: TensorStructure = Vec<Slot>> {
+pub enum NumTensor<T: TensorStructure = VecStructure> {
     Float(DataTensor<f64, T>),
     Complex(DataTensor<Complex<f64>, T>),
 }
