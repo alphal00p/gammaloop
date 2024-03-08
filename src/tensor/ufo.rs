@@ -5,9 +5,11 @@ use super::{
     Representation::{self, Euclidean, Lorentz},
     SetTensorData, Shadowable, Slot, SparseTensor, TensorStructure, MAX_REP,
 };
-use num::{Complex, Float, One, Zero};
+use itertools::Itertools;
+use num::{Float, NumCast, One, Zero};
 
 use symbolica::{
+    domains::float::{Complex, Real},
     representations::{Atom, Symbol},
     state::{State, Workspace},
 };
@@ -40,12 +42,13 @@ pub fn init_state() {
 
 #[allow(dead_code)]
 #[must_use]
-pub fn identity<T>(
+pub fn identity<T, I>(
     indices: (AbstractIndex, AbstractIndex),
     signature: Representation,
-) -> SparseTensor<Complex<T>>
+) -> SparseTensor<Complex<T>, I>
 where
-    T: One + Zero,
+    T: Real,
+    I: TensorStructure + FromIterator<Slot>,
 {
     //TODO: make it just swap indices
     let structure = [(indices.0, signature), (indices.1, signature)]
@@ -96,21 +99,30 @@ where
 
 #[allow(dead_code)]
 #[must_use]
-pub fn lorentz_identity<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
+pub fn lorentz_identity<T, I>(
+    indices: (AbstractIndex, AbstractIndex),
+) -> SparseTensor<Complex<T>, I>
 where
-    T: One + Zero,
+    T: One + Zero + Real,
+    I: TensorStructure + FromIterator<Slot>,
 {
     // IdentityL(1,2) (Lorentz) Kronecker delta δ^μ1_μ1
     let signature = Lorentz(4.into());
     identity(indices, signature)
 }
 
-pub fn mink_four_vector<T>(index: AbstractIndex, p: &[T; 4]) -> DenseTensor<T>
+pub fn mink_four_vector<T, I>(index: AbstractIndex, p: &[T; 4]) -> DenseTensor<T, I>
 where
     T: Clone,
+    I: TensorStructure + FromIterator<Slot>,
 {
-    DenseTensor::from_data(p, vec![Slot::from((index, Lorentz(4.into())))])
-        .unwrap_or_else(|_| unreachable!())
+    DenseTensor::from_data(
+        p,
+        [Slot::from((index, Lorentz(4.into())))]
+            .into_iter()
+            .collect(),
+    )
+    .unwrap_or_else(|_| unreachable!())
 }
 
 pub fn mink_four_vector_sym<T>(
@@ -133,12 +145,18 @@ where
     .unwrap_or_else(|_| unreachable!())
 }
 
-pub fn euclidean_four_vector<T>(index: AbstractIndex, p: &[T; 4]) -> DenseTensor<T>
+pub fn euclidean_four_vector<T, I>(index: AbstractIndex, p: &[T; 4]) -> DenseTensor<T, I>
 where
     T: Clone,
+    I: TensorStructure + FromIterator<Slot>,
 {
-    DenseTensor::from_data(p, vec![Slot::from((index, Euclidean(4.into())))])
-        .unwrap_or_else(|_| unreachable!())
+    DenseTensor::from_data(
+        p,
+        [Slot::from((index, Euclidean(4.into())))]
+            .into_iter()
+            .collect(),
+    )
+    .unwrap_or_else(|_| unreachable!())
 }
 
 pub fn euclidean_four_vector_sym<T>(
@@ -191,9 +209,12 @@ where
 
 #[allow(dead_code)]
 #[must_use]
-pub fn euclidean_identity<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
+pub fn euclidean_identity<T, I>(
+    indices: (AbstractIndex, AbstractIndex),
+) -> SparseTensor<Complex<T>, I>
 where
-    T: One + Zero,
+    T: One + Zero + Real,
+    I: TensorStructure + FromIterator<Slot>,
 {
     // Identity(1,2) (Spinorial) Kronecker delta δ_s1_s2
     let signature = Euclidean(4.into());
@@ -201,12 +222,13 @@ where
 }
 
 #[allow(dead_code)]
-pub fn gamma<T>(
+pub fn gamma<T, I>(
     minkindex: AbstractIndex,
     indices: (AbstractIndex, AbstractIndex),
-) -> SparseTensor<Complex<T>>
+) -> SparseTensor<Complex<T>, I>
 where
-    T: One + Zero + Copy + std::ops::Neg<Output = T>,
+    T: One + Zero + Copy + Real + std::ops::Neg<Output = T> + Real,
+    I: TensorStructure + FromIterator<Slot>,
 {
     // Gamma(1,2,3) Dirac matrix (γ^μ1)_s2_s3
     let structure = [
@@ -227,7 +249,7 @@ pub fn gammasym<T>(
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
-    T: One + Zero + Copy + std::ops::Neg<Output = T>,
+    T: One + Zero + Copy + Real + std::ops::Neg<Output = T> + Real,
 {
     let structure = HistoryStructure::new(
         &[
@@ -246,7 +268,7 @@ where
 #[allow(clippy::similar_names)]
 pub fn gamma_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
-    T: One + Zero + Copy + std::ops::Neg<Output = T>,
+    T: Real,
     N: TensorStructure,
 {
     let c1 = Complex::<T>::new(T::one(), T::zero());
@@ -280,9 +302,10 @@ where
     gamma //.to_dense()
 }
 
-pub fn gamma5<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
+pub fn gamma5<T, I>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>, I>
 where
-    T: One + Zero + Copy,
+    T: One + Zero + Copy + Real,
+    I: TensorStructure + FromIterator<Slot>,
 {
     let structure = [
         (indices.0, Euclidean(4.into())),
@@ -300,7 +323,7 @@ pub fn gamma5sym<T>(
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
-    T: One + Zero + Copy,
+    T: One + Zero + Copy + Real,
 {
     let structure = HistoryStructure::new(
         &[
@@ -317,7 +340,7 @@ where
 
 pub fn gamma5_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
-    T: One + Zero + Copy,
+    T: Real,
     N: TensorStructure,
 {
     let c1 = Complex::<T>::new(T::one(), T::zero());
@@ -332,9 +355,10 @@ where
     gamma5
 }
 
-pub fn proj_m<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
+pub fn proj_m<T, I>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>, I>
 where
-    T: Float,
+    T: Real + NumCast,
+    I: TensorStructure + FromIterator<Slot>,
 {
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
     let structure = [
@@ -353,7 +377,7 @@ pub fn proj_msym<T>(
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
-    T: Float,
+    T: Real + NumCast,
 {
     let structure = HistoryStructure::new(
         &[
@@ -371,7 +395,7 @@ where
 #[allow(clippy::similar_names)]
 pub fn proj_m_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
-    T: Float,
+    T: Real + NumCast,
     N: TensorStructure,
 {
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
@@ -393,9 +417,10 @@ where
     proj_m
 }
 
-pub fn proj_p<T>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>>
+pub fn proj_p<T, I>(indices: (AbstractIndex, AbstractIndex)) -> SparseTensor<Complex<T>, I>
 where
-    T: Float,
+    T: Real + NumCast,
+    I: TensorStructure + FromIterator<Slot>,
 {
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
     let structure = [
@@ -414,7 +439,7 @@ pub fn proj_psym<T>(
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
-    T: Float,
+    T: Real + NumCast,
 {
     let structure = HistoryStructure::new(
         &[
@@ -431,7 +456,7 @@ where
 
 pub fn proj_p_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
-    T: Float,
+    T: Real + NumCast,
     N: TensorStructure,
 {
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
@@ -468,12 +493,13 @@ where
     proj_p
 }
 
-pub fn sigma<T>(
+pub fn sigma<T, I>(
     indices: (AbstractIndex, AbstractIndex),
     minkdices: (AbstractIndex, AbstractIndex),
-) -> SparseTensor<Complex<T>>
+) -> SparseTensor<Complex<T>, I>
 where
-    T: One + Zero + std::ops::Neg<Output = T> + Copy,
+    T: Copy + Real,
+    I: TensorStructure + FromIterator<Slot>,
 {
     let structure = [
         (indices.0, Euclidean(4.into())),
@@ -494,7 +520,7 @@ pub fn sigmasym<T>(
     state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
-    T: One + Zero + std::ops::Neg<Output = T> + Copy,
+    T: Copy + Real,
 {
     let structure = HistoryStructure::new(
         &[
@@ -514,7 +540,7 @@ where
 #[allow(clippy::similar_names)]
 pub fn sigma_data<T, N>(structure: N) -> SparseTensor<Complex<T>, N>
 where
-    T: One + Zero + std::ops::Neg<Output = T> + Copy,
+    T: Copy + Real,
     N: TensorStructure,
 {
     let c1 = Complex::<T>::new(T::one(), T::zero());

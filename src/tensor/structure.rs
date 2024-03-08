@@ -981,6 +981,14 @@ pub struct VecStructure {
     pub structure: Vec<Slot>,
 }
 
+impl FromIterator<Slot> for VecStructure {
+    fn from_iter<T: IntoIterator<Item = Slot>>(iter: T) -> Self {
+        Self {
+            structure: iter.into_iter().collect(),
+        }
+    }
+}
+
 impl VecStructure {
     pub fn new(structure: Vec<Slot>) -> Self {
         Self { structure }
@@ -988,6 +996,23 @@ impl VecStructure {
 
     pub fn to_named(self, name: &str) -> NamedStructure {
         NamedStructure::from_slots(self.structure, name)
+    }
+}
+
+impl From<ContractionCountStructure> for VecStructure {
+    fn from(structure: ContractionCountStructure) -> Self {
+        Self {
+            structure: structure.structure,
+        }
+    }
+}
+
+impl From<VecStructure> for ContractionCountStructure {
+    fn from(structure: VecStructure) -> Self {
+        Self {
+            structure: structure.structure,
+            contractions: 0,
+        }
     }
 }
 
@@ -1161,6 +1186,15 @@ pub struct ContractionCountStructure {
     pub contractions: usize,
 }
 
+impl FromIterator<Slot> for ContractionCountStructure {
+    fn from_iter<T: IntoIterator<Item = Slot>>(iter: T) -> Self {
+        Self {
+            structure: iter.into_iter().collect(),
+            contractions: 0,
+        }
+    }
+}
+
 impl ContractionCountStructure {
     /// Constructs a new [`ContractionCountStructure`] from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
     #[must_use]
@@ -1181,6 +1215,13 @@ impl ContractionCountStructure {
 
         Self {
             structure,
+            contractions: 0,
+        }
+    }
+
+    pub fn from_slots(slots: Vec<Slot>) -> Self {
+        Self {
+            structure: slots,
             contractions: 0,
         }
     }
@@ -1215,7 +1256,7 @@ impl TensorStructure for ContractionCountStructure {
 
 impl StructureContract for ContractionCountStructure {
     fn merge(&mut self, other: &Self) -> Option<usize> {
-        self.contractions += other.contractions;
+        self.contractions += other.contractions + 1;
         self.structure.merge(&other.structure)
     }
 
@@ -1226,7 +1267,7 @@ impl StructureContract for ContractionCountStructure {
     fn merge_at(&self, other: &Self, positions: (usize, usize)) -> Self {
         Self {
             structure: self.structure.merge_at(&other.structure, positions),
-            contractions: self.contractions + other.contractions,
+            contractions: self.contractions + other.contractions + 1,
         }
     }
 

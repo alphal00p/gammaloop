@@ -5,17 +5,18 @@ use _gammaloop::tensor::{
         euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
         mink_four_vector_sym,
     },
-    AbstractIndex, HistoryStructure, NumTensor, TensorNetwork,
+    AbstractIndex, FallibleMul, HistoryStructure, NumTensor, TensorNetwork,
 };
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use num::{complex::Complex64, ToPrimitive};
+use num::ToPrimitive;
+use symbolica::domains::float::Complex;
 
 use symbolica::{representations::Symbol, state::State};
 fn gamma_net_sym(
     minkindices: &[i32],
-    vbar: [Complex64; 4],
-    u: [Complex64; 4],
+    vbar: [Complex<f64>; 4],
+    u: [Complex<f64>; 4],
     state: &mut State,
 ) -> TensorNetwork<NumTensor<HistoryStructure<Symbol>>> {
     let mut i = 0;
@@ -28,10 +29,10 @@ fn gamma_net_sym(
         let uj = contracting_index;
         if *m > 0 {
             let p = [
-                Complex64::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
             result
@@ -54,8 +55,8 @@ fn gamma_net_sym(
 
 fn gamma_net(
     minkindices: &[i32],
-    vbar: [Complex64; 4],
-    u: [Complex64; 4],
+    vbar: [Complex<f64>; 4],
+    u: [Complex<f64>; 4],
 ) -> TensorNetwork<NumTensor> {
     let mut i = 0;
     let mut contracting_index = 0.into();
@@ -66,10 +67,10 @@ fn gamma_net(
         let uj = contracting_index;
         if *m > 0 {
             let p = [
-                Complex64::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
-                Complex64::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.0 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.1 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.2 + 0.01 * i.to_f64().unwrap(), 0.0),
+                Complex::<f64>::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
             result.push(mink_four_vector(usize::try_from(*m).unwrap().into(), &p).into());
@@ -103,12 +104,21 @@ fn indices(n: i32, m: i32) -> Vec<i32> {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut state = State::get_global_state().write().unwrap();
-    let one = Complex64::new(1.0, 0.0);
-    let _zero = Complex64::new(0.0, 0.0);
+    let one = Complex::<f64>::new(1.0, 0.0);
+    let _zero = Complex::<f64>::new(0.0, 0.0);
 
-    let vbar = [one * 3.0, one * 3.1, one * 3.2, one * 3.3];
-    let u = [one * 4.0, one * 4.1, one * 4.2, one * 4.3];
-
+    let vbar = [
+        one.mul_fallible(3.0).unwrap(),
+        one.mul_fallible(3.1).unwrap(),
+        one.mul_fallible(3.2).unwrap(),
+        one.mul_fallible(3.3).unwrap(),
+    ];
+    let u = [
+        one.mul_fallible(4.0).unwrap(),
+        one.mul_fallible(4.1).unwrap(),
+        one.mul_fallible(4.2).unwrap(),
+        one.mul_fallible(4.3).unwrap(),
+    ];
     let minkindices = indices(20, 24);
 
     let netsym = gamma_net_sym(&minkindices, vbar, u, &mut state);

@@ -1,17 +1,16 @@
 use crate::tensor::{
     ufo::{init_state, mink_four_vector},
-    Contract, DataIterator, DenseTensor, GetTensorData, HasTensorData, MixedTensor, Representation,
-    SparseTensor, TensorStructure,
+    Contract, DataIterator, DenseTensor, FallibleMul, GetTensorData, HasTensorData, MixedTensor,
+    Representation, SparseTensor, StructureContract, TensorStructure,
 };
 use ahash::{HashMap, HashMapExt};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
-use num::Complex;
-
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 use smartstring::alias::String;
+use symbolica::domains::float::Complex;
 use symbolica::{
     representations::Atom,
     state::{State, Workspace},
@@ -59,7 +58,7 @@ where
     tensor
 }
 
-fn test_structure(length: usize, seed: u64) -> Vec<Slot> {
+fn test_structure(length: usize, seed: u64) -> VecStructure {
     let mut rng = Xoroshiro64Star::seed_from_u64(seed);
     let mut s = IndexSet::new();
 
@@ -76,10 +75,10 @@ fn test_structure(length: usize, seed: u64) -> Vec<Slot> {
         s.insert((id, rep).into());
     }
 
-    s.into_iter().collect_vec()
+    s.into_iter().collect()
 }
 
-fn test_structure_with_dims(dims: &[usize], seed: u64) -> Vec<Slot> {
+fn test_structure_with_dims(dims: &[usize], seed: u64) -> VecStructure {
     let mut s = IndexSet::new();
     let mut rng = Xoroshiro64Star::seed_from_u64(seed);
 
@@ -100,7 +99,7 @@ fn test_structure_with_dims(dims: &[usize], seed: u64) -> Vec<Slot> {
         }
     }
 
-    s.into_iter().collect_vec()
+    s.into_iter().collect()
 }
 
 #[test]
@@ -209,8 +208,10 @@ fn tensor_structure_forwarding() {
 #[test]
 fn scalar_and_dim1_conract() {
     let common = test_structure_with_dims(&[1, 3, 1, 2], 6);
-    let structa = [test_structure(1, 32), common.clone()].concat();
-    let structb = [test_structure(1, 22), common.clone()].concat();
+    let mut structa = test_structure(1, 32);
+    structa.merge(&common);
+    let mut structb = test_structure(1, 22);
+    structb.merge(&common);
     let range = Some((-100, 100));
 
     let mut tensor_1: SparseTensor<i16> = test_tensor(structa, 3, range);
@@ -238,8 +239,10 @@ fn scalar_and_dim1_conract() {
 fn contract_with_rank_one_in_middle() {
     let s = 12;
     let common = test_structure(3, s);
-    let structa: VecStructure = [test_structure(2, s + 1), common.clone()].concat().into();
-    let structb: VecStructure = [test_structure(1, s + 2), common].concat().into();
+    let mut structa: VecStructure = test_structure(2, s + 1);
+    structa.merge(&common);
+    let mut structb: VecStructure = test_structure(1, s + 2);
+    structb.merge(&common);
 
     // println!("seed: {s}");
 
@@ -473,9 +476,9 @@ fn all_multi_contractions() {
 
 #[test]
 fn gamma() {
-    let g1 = ufo::gamma::<f64>(0.into(), (0.into(), 1.into()));
-    let g2 = ufo::gamma::<f64>(1.into(), (1.into(), 2.into()));
-    let g3 = ufo::gamma::<f64>(2.into(), (2.into(), 0.into()));
+    let g1: SparseTensor<Complex<f64>> = ufo::gamma(0.into(), (0.into(), 1.into()));
+    let g2: SparseTensor<Complex<f64>> = ufo::gamma(1.into(), (1.into(), 2.into()));
+    let g3: SparseTensor<Complex<f64>> = ufo::gamma(2.into(), (2.into(), 0.into()));
 
     let c = g1.contract(&g2).unwrap().contract(&g3).unwrap();
     assert_eq!(
@@ -484,9 +487,10 @@ fn gamma() {
         "Odd traces must vanish"
     );
 
-    let d = ufo::gamma::<f32>(0.into(), (0.into(), 0.into())).internal_contract();
+    let d: SparseTensor<Complex<f64>> =
+        ufo::gamma(0.into(), (0.into(), 0.into())).internal_contract();
 
-    assert_eq!(Vec::<Complex<f32>>::new(), d.data(), "Gammas are traceless");
+    assert_eq!(Vec::<Complex<f64>>::new(), d.data(), "Gammas are traceless");
 }
 
 #[test]
@@ -529,23 +533,47 @@ fn mixed_tensor_contraction() {
         HistoryStructure::from_integers(&[(2, 2), (4, 2)].map(|(a, d)| (a.into(), d.into())), "b");
 
     let b = DenseTensor::from_data(
-        &[1.0 * im, 2.0 * im, 3.0 * im, 4.0 * im],
+        &[
+            im.mul_fallible(1.0).unwrap(),
+            2.0.mul_fallible(im).unwrap(),
+            3.0.mul_fallible(im).unwrap(),
+            4.0.mul_fallible(im).unwrap(),
+        ],
         structur_b.clone(),
     )
     .unwrap();
 
     let f = b.contract(&a).unwrap();
 
-    assert_eq!(f.data, [1.0 * im, 6.0 * im, 2.0 * im, 8.0 * im]);
+    assert_eq!(
+        f.data,
+        [
+            1.0.mul_fallible(im).unwrap(),
+            6.0.mul_fallible(im).unwrap(),
+            2.0.mul_fallible(im).unwrap(),
+            8.0.mul_fallible(im).unwrap()
+        ]
+    );
 
-    let data_a = [(vec![0, 0], 1.0 * im), (vec![1, 1], 2.0 * im)];
+    let data_a = [
+        (vec![0, 0], 1.0.mul_fallible(im).unwrap()),
+        (vec![1, 1], 2.0.mul_fallible(im).unwrap()),
+    ];
 
     let a = SparseTensor::from_data(&data_a, structur_a).unwrap();
 
     let b = DenseTensor::from_data(&[1.0, 2.0, 3.0, 4.0], structur_b).unwrap();
 
     let f = a.contract(&b).unwrap();
-    assert_eq!(f.data, [1.0 * im, 2.0 * im, 6.0 * im, 8.0 * im]);
+    assert_eq!(
+        f.data,
+        [
+            1.0.mul_fallible(im).unwrap(),
+            2.0.mul_fallible(im).unwrap(),
+            6.0.mul_fallible(im).unwrap(),
+            8.0.mul_fallible(im).unwrap()
+        ]
+    );
 }
 
 #[test]
@@ -675,7 +703,7 @@ fn contract_densor_with_spensor() {
 
 #[test]
 fn evaluate() {
-    let structure = NamedStructure::from_slots(test_structure(3, 1), "a");
+    let structure = test_structure(3, 1).to_named("a");
 
     let a = structure.clone().shadow().unwrap();
 
@@ -764,9 +792,17 @@ fn convert_sym() {
 fn empty_densor() {
     let empty_structure = Vec::<Slot>::new();
 
-    let empty: DenseTensor<f64> = DenseTensor::default(empty_structure);
+    let empty: DenseTensor<f64> = DenseTensor::default(empty_structure.into());
 
     assert_eq!(*empty.get(&[]).unwrap(), 0.0);
+}
+
+#[test]
+fn complex() {
+    let structur = test_structure(2, 1);
+
+    let r = Complex::new(1.0, 2.0);
+    let p = Complex::new(3.0, 4.0);
 }
 
 #[test]

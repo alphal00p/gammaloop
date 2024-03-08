@@ -3,6 +3,7 @@ use ahash::AHashMap;
 use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
 use symbolica::{
+    domains::float::Complex,
     representations::{Atom, AtomView, Symbol},
     state::{State, Workspace},
 };
@@ -498,6 +499,7 @@ fn merge() {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TensorNetwork<T> {
     pub graph: HalfEdgeGraph<T, Slot>,
+    pub params: Vec<T>,
 }
 
 impl<T> TensorNetwork<T> {
@@ -544,12 +546,21 @@ where
             .collect()
     }
 
-    pub fn evaluate<'a>(&'a mut self, const_map: &AHashMap<AtomView<'a>, f64>)
+    pub fn evaluate_float<'a>(&'a mut self, const_map: &AHashMap<AtomView<'a>, f64>)
     where
         N: Clone,
     {
         for (_, n) in &mut self.graph.nodes {
-            n.evaluate(const_map);
+            n.evaluate_float(const_map);
+        }
+    }
+
+    pub fn evaluate_complex<'a>(&'a mut self, const_map: &AHashMap<AtomView<'a>, Complex<f64>>)
+    where
+        N: Clone,
+    {
+        for (_, n) in &mut self.graph.nodes {
+            n.evaluate_complex(const_map);
         }
     }
 }
@@ -561,6 +572,7 @@ where
     fn from(tensors: Vec<T>) -> Self {
         TensorNetwork {
             graph: Self::generate_network_graph(tensors),
+            params: Vec::new(),
         }
     }
 }
@@ -581,6 +593,7 @@ where
     pub fn new() -> Self {
         TensorNetwork {
             graph: HalfEdgeGraph::new(),
+            params: Vec::new(),
         }
     }
 
@@ -604,23 +617,38 @@ where
     where
         T: TracksCount,
     {
-        let mut min_degree = usize::MAX;
-        let mut edge_to_min_degree_node = None;
-        for (e, n) in &self.graph.nodemap {
-            let edge_depth = self.graph.nodes[*n].contractions_num()
-                + self.graph.nodes[self.graph.nodemap[self.graph.involution[e]]].contractions_num();
+        let mut neighs: SecondaryMap<NodeId, HedgeId> = self
+            .graph
+            .reverse_nodemap
+            .clone()
+            .into_iter()
+            .filter(|(n, e)| self.graph.nodes[*n].contractions_num() < depth)
+            .collect();
+        if neighs.is_empty() {
+            return None;
+        }
 
-            if edge_depth < depth {
-                let degree = self.graph.degree(*n);
-                if degree < min_degree {
-                    min_degree = degree;
-                    if min_degree > 0 {
-                        edge_to_min_degree_node = Some(self.graph.reverse_nodemap[*n]);
+        loop {
+            let mut all_ext = true;
+            for (node, initial) in &mut neighs {
+                *initial = self.graph.neighbors[*initial];
+                let start = self.graph.reverse_nodemap[node];
+
+                if self.graph.involution[start] != start
+                    && self.graph.nodes[self.graph.nodemap[self.graph.involution[start]]]
+                        .contractions_num()
+                        < depth
+                {
+                    all_ext = false;
+                    if *initial == start {
+                        return Some(start);
                     }
                 }
             }
+            if all_ext {
+                return None;
+            }
         }
-        edge_to_min_degree_node
     }
 }
 impl<T> TensorNetwork<T>
@@ -635,6 +663,19 @@ where
 impl<T> TensorNetwork<T> {
     pub fn dot(&self) -> std::string::String {
         self.graph.dot()
+    }
+}
+
+impl<I> TensorNetwork<MixedTensor<I>>
+where
+    I: TensorStructure + Clone,
+{
+    pub fn generate_params(&mut self) {
+        for (i, n) in &self.graph.nodes {
+            if n.is_symbolic() {
+                self.params.push(n.clone());
+            }
+        }
     }
 }
 
@@ -661,11 +702,14 @@ where
         let mut nodes = DenseSlotMap::with_key();
         let mut nodemap = SecondaryMap::new();
         let mut reverse_nodemap = SecondaryMap::new();
+        let mut params = Vec::new();
 
         for (i, n) in &self.graph.nodes {
-            let nid = nodes.insert(MixedTensor::<HistoryStructure<Symbol>>::from(
-                n.structure().clone().shadow().unwrap(),
-            ));
+            let node = n.structure().clone().shadow().unwrap();
+
+            let nid = nodes.insert(MixedTensor::<HistoryStructure<Symbol>>::from(node.clone()));
+
+            params.push(node.into());
             let mut first = true;
             for e in self.graph.edges_incident(i) {
                 if first {
@@ -685,7 +729,7 @@ where
             nodemap,
         };
 
-        TensorNetwork { graph: g }
+        TensorNetwork { graph: g, params }
     }
 }
 
@@ -743,6 +787,6 @@ where
     }
 
     pub fn contract(&mut self) {
-        self.contract_algo(|tn| tn.edge_to_min_degree_node())
+        self.contract_algo(Self::edge_to_min_degree_node)
     }
 }

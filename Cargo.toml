@@ -26,6 +26,22 @@ criterion = { version = "0.5", features = ["html_reports"] }
 name = "gamma_net"
 harness = false
 
+[[bench]]
+name="evaluate_net"
+harness=false
+
+[[example]]
+name = "gamma_chains"
+path= "examples/Rust/Tensors/gamma_chain.rs"
+
+[[example]]
+name = "gamma_network"
+path="examples/Rust/Tensors/gamma_network.rs"
+
+[[example]]
+name="evaluate_network"
+path="examples/Rust/Tensors/evaluate_network.rs"
+
 [dependencies]
 # You may need bleeding edge changes
 #symbolica = { git = "https://github.com/alphal00p/symbolica" }
