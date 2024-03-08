@@ -193,7 +193,8 @@ pub fn to_str_expression(
                 multiplication_operator: '*',
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
-                latex: false
+                latex: false,
+                symmetric_representation_for_finite_field: false,
             },
             sb_state
         )
@@ -1000,9 +1001,7 @@ pub fn global_parameterize<T: FloatLike>(
 
                     let mut concatenated_vecs = Vec::with_capacity(x.len() / 3);
                     let mut base = radius;
-                    for (_i, (cos_theta, sin_theta)) in
-                        cos_thetas.iter().zip(sin_thetas.iter()).enumerate()
-                    {
+                    for (cos_theta, sin_theta) in cos_thetas.iter().zip(sin_thetas.iter()) {
                         concatenated_vecs.push(base * cos_theta);
                         base *= *sin_theta;
                     }
@@ -1076,7 +1075,7 @@ pub fn global_parameterize<T: FloatLike>(
 
 #[allow(unused)]
 pub fn global_inv_parameterize<T: FloatLike>(
-    moms: &Vec<LorentzVector<T>>,
+    moms: &[LorentzVector<T>],
     e_cm_squared: T,
     settings: &Settings,
     force_radius: bool,

@@ -13,8 +13,8 @@ use eyre::{eyre, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    representations::{AsAtomView, Atom},
-    state::{ResettableBuffer, State, Workspace},
+    representations::Atom,
+    state::{State, Workspace},
 };
 
 use log::info;
@@ -39,38 +39,40 @@ impl PartialEq for Esurface {
 #[allow(unused)]
 impl Esurface {
     fn to_atom(&self, state: &mut State, workspace: &Workspace) -> Atom {
-        let symbolic_energies = self
-            .energies
-            .iter()
-            .map(|i| Atom::parse(&format!("E{}", i), state, workspace).unwrap())
-            .collect_vec();
+        unimplemented!()
+        //let symbolic_energies = self
+        //    .energies
+        //    .iter()
+        //    .map(|i| Atom::parse(&format!("E{}", i), state, workspace).unwrap())
+        //    .collect_vec();
 
-        let symbolic_shift = self
-            .shift
-            .iter()
-            .map(|i| Atom::parse(&format!("p{}", i), state, workspace).unwrap())
-            .collect_vec();
+        //let symbolic_shift = self
+        //    .shift
+        //    .iter()
+        //    .map(|i| Atom::parse(&format!("p{}", i), state, workspace).unwrap())
+        //    .collect_vec();
 
-        let builder_atom = Atom::new();
-        let energy_sum = symbolic_energies
-            .iter()
-            .fold(builder_atom.builder(state, workspace), |acc, energy| {
-                acc + energy
-            });
+        //let builder_atom = Atom::new();
+        //let energy_sum = symbolic_energies
+        //    .iter()
+        //    .fold(builder_atom.builder(state, workspace), |acc, energy| {
+        //        acc + energy
+        //    });
 
-        let esurf = symbolic_shift.iter().fold(energy_sum, |acc, shift| {
-            if self.shift_signature {
-                acc + shift
-            } else {
-                -(-acc + shift)
-            }
-        });
+        //let esurf = symbolic_shift.iter().fold(energy_sum, |acc, shift| {
+        //    if self.shift_signature {
+        //        acc + shift
+        //    } else {
+        //        -(-acc + shift)
+        //    }
+        //});
 
-        Atom::new_from_view(&esurf.as_atom_view())
+        //Atom::new_from_view(&esurf.as_atom_view())
     }
 
     // the energy cache contains the energies of external edges as well as the virtual,
     // use the location in the supergraph to determine the index
+    #[inline]
     pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         let energy_sum = self
             .energies
@@ -81,19 +83,21 @@ impl Esurface {
         energy_sum + self.compute_shift_part(energy_cache)
     }
 
+    // assumes externals are first in the cache
+    #[inline]
     pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+        let shift_sign = match self.shift_signature {
+            true => Into::<T>::into(1.),
+            false => Into::<T>::into(-1.),
+        };
+
         let shift_sum = self
             .shift
             .iter()
             .map(|index| energy_cache[*index])
             .sum::<T>();
 
-        let shift_sign = match self.shift_signature {
-            true => Into::<T>::into(1.),
-            false => Into::<T>::into(-1.),
-        };
-
-        shift_sign * shift_sum
+        shift_sum * shift_sign
     }
 }
 
