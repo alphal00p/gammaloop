@@ -3,6 +3,8 @@ use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::ops::Mul;
 
+use ahash::HashMap;
+use ahash::HashMapExt;
 use duplicate::duplicate;
 
 use num::traits::Zero;
@@ -388,22 +390,41 @@ fn test_fallible_mul() {
     assert_eq!(d, Some(16.));
     assert_eq!(e, Some(16.));
 
-    let atom = &Atom::parse("a", &mut State::get_global_state().write().unwrap()).unwrap();
+    let a = &Atom::parse("a(2)", &mut State::get_global_state().write().unwrap()).unwrap();
+    let b = &Atom::parse("b(1)", &mut State::get_global_state().write().unwrap()).unwrap();
 
-    let f = atom.mul_fallible(4.);
+    let mut f = a.mul_fallible(4.).unwrap();
+    f.add_assign_fallible(b);
 
+    let i = Atom::new_var(State::I);
+
+    f.add_assign_fallible(&i);
+
+    let function_map = HashMap::new();
+    let mut cache = HashMap::new();
+
+    let mut const_map = HashMap::new();
+    const_map.insert(i.as_view(), Complex::<f64>::new(0., 1.));
+
+    const_map.insert(a.as_view(), Complex::<f64>::new(3., 1.));
+
+    const_map.insert(b.as_view(), Complex::<f64>::new(3., 1.));
+
+    let ev = f.as_view().evaluate(&const_map, &function_map, &mut cache);
+
+    println!("{}", ev);
     // print!("{}", f.unwrap());
 
     let g = Complex::new(0.1, 3.);
 
-    let mut h = atom.sub_fallible(g).unwrap();
+    let mut h = a.sub_fallible(g).unwrap();
 
-    h.add_assign_fallible(atom);
-    let f = atom.mul_fallible(atom);
+    h.add_assign_fallible(a);
+    let f = a.mul_fallible(a);
 
     Atom::default();
 
-    print!("{}", h);
+    println!("{}", h);
 }
 
 // impl<T, U> SmallestUpgrade<U> for T

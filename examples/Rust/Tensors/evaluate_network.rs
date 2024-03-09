@@ -1,10 +1,11 @@
+use std::fmt::Debug;
 use std::ops::Neg;
 
 use _gammaloop::tensor::{
     ufo::{euclidean_four_vector, gamma, mink_four_vector},
-    AbstractIndex, DenseTensor, FallibleMul, HasTensorData, MixedTensor, MixedTensors,
-    NamedStructure, NumTensor, Representation, SetTensorData, Shadowable, Slot, SparseTensor,
-    TensorNetwork, TensorStructure, VecStructure,
+    AbstractIndex, ContractionCountStructure, DenseTensor, FallibleMul, HasTensorData, MixedTensor,
+    MixedTensors, NamedStructure, NumTensor, Representation, SetTensorData, Shadowable, Slot,
+    SparseTensor, TensorNetwork, TensorStructure, VecStructure,
 };
 use ahash::{AHashMap, HashMap, HashMapExt};
 use num::ToPrimitive;
@@ -21,20 +22,22 @@ fn gamma_net_param(
     minkindices: &[i32],
     vbar: [Complex<f64>; 4],
     u: [Complex<f64>; 4],
-) -> TensorNetwork<MixedTensor> {
+) -> TensorNetwork<MixedTensor<ContractionCountStructure>> {
     let mut i: i32 = 0;
     let mut contracting_index = 0.into();
-    let mut result: Vec<MixedTensor> = vec![euclidean_four_vector(contracting_index, &vbar).into()];
+    let mut result: Vec<MixedTensor<ContractionCountStructure>> =
+        vec![euclidean_four_vector(contracting_index, &vbar).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1.into();
         let uj = contracting_index;
         if *m > 0 {
-            let p: VecStructure = vec![Slot::from((
+            let p: ContractionCountStructure = vec![Slot::from((
                 usize::try_from(*m).unwrap().into(),
                 Representation::Lorentz(4.into()),
             ))]
-            .into();
+            .into_iter()
+            .collect();
             i += 1;
             let pid = State::get_global_state()
                 .write()
@@ -59,44 +62,38 @@ fn gamma_net_param(
     TensorNetwork::from(result)
 }
 
-fn test_tensor<D, S>(structure: S, seed: u64, range: Option<(D, D)>) -> SparseTensor<D, S>
+fn test_tensor<S>(structure: S) -> SparseTensor<symbolica::domains::float::Complex<f64>, S>
 where
     S: TensorStructure,
-    D: rand::distributions::uniform::SampleUniform,
-    Uniform<D>: Copy,
-
-    rand::distributions::Standard: rand::distributions::Distribution<D>,
 {
-    let mut rng: Xoroshiro64Star = Xoroshiro64Star::seed_from_u64(seed);
+    let mut rng: Xoroshiro64Star = Xoroshiro64Star::from_entropy();
 
     let mut tensor = SparseTensor::empty(structure);
 
     let density = tensor.size();
 
-    if let Some((low, high)) = range {
-        let multipliable = Uniform::new(low, high);
-        for _ in 0..density {
-            tensor
-                .set_flat(rng.gen_range(0..tensor.size()), rng.sample(multipliable))
-                .unwrap();
-        }
-    } else {
-        for _ in 0..density {
-            tensor
-                .set_flat(rng.gen_range(0..tensor.size()), rng.gen())
-                .unwrap();
-        }
+    let multipliable = Uniform::new(1., 10.);
+
+    for _ in 0..density {
+        tensor
+            .set_flat(
+                rng.gen_range(0..tensor.size()),
+                Complex::<f64>::new(rng.sample(multipliable), rng.sample(multipliable)),
+            )
+            .unwrap();
     }
 
     tensor
 }
-
-fn const_map_gen<'a, 'b>(params: &'a [MixedTensor], const_map: &mut HashMap<AtomView<'b>, f64>)
-where
+fn const_map_gen<'a, 'b, I>(
+    params: &'a [MixedTensor<I>],
+    const_map: &mut HashMap<AtomView<'b>, symbolica::domains::float::Complex<f64>>,
+) where
     'a: 'b,
+    I: TensorStructure + Clone + Debug,
 {
     for (i, p) in params.iter().enumerate() {
-        let pdata = test_tensor(p.structure().clone(), i as u64, Some((1.0, 10.0))).to_dense();
+        let pdata = test_tensor(p.structure().clone()).to_dense();
         p.try_as_symbolic()
             .unwrap()
             .try_as_dense()
@@ -137,8 +134,33 @@ fn main() {
     let params = net.params.clone();
     const_map_gen(&params, &mut const_map);
 
-    net.evaluate_float(&const_map);
-    // println!("{:#?}", net.graph.nodes);
+    let i = Atom::new_var(State::I);
+    const_map.insert(i.as_view(), Complex::<f64>::new(0., 1.));
+
+    // net.contract_algo(|tn| tn.edge_to_min_degree_node_with_depth(2));
+
+    // for (i, n) in &net.graph.nodes {
+    //     match n {
+    //         MixedTensor::Symbolic(s) => {
+    //             for (_, a) in s.try_as_dense().unwrap().iter_flat() {
+    //                 println!("{}", a);
+    //             }
+    //         }
+    //         _ => {}
+    //     }
+    // }
+
+    // for p in const_map.keys() {
+    //     if let AtomView::Fun(f) = p {
+    //         println!(
+    //             "Map {}, with id {:?},{:?}",
+    //             State::get_name(f.get_symbol()),
+    //             f.get_symbol(),
+    //             f
+    //         );
+    //     }
+    // }
+    net.evaluate_complex(&const_map);
     net.contract();
     println!("{:?}", net.result().try_as_complex().unwrap().data()[0]);
 }
