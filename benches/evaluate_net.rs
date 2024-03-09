@@ -137,12 +137,13 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let mut net = gamma_net_param(&minkindices, vbar, u);
     net.generate_params();
-    net.contract_algo(|tn| tn.edge_to_min_degree_node_with_depth(2));
+    let params = net.params.clone();
+    println!("{:?}", params.len());
+    net.contract_algo(|tn| tn.edge_to_min_degree_node_with_depth(3));
     let mut const_map = AHashMap::new();
 
     let i = Atom::new_var(State::I);
     const_map.insert(i.as_view(), Complex::<f64>::new(0., 1.));
-    let params = net.params.clone();
 
     let mut group = c.benchmark_group("evaluate_net");
 
