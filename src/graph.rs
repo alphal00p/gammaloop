@@ -444,7 +444,7 @@ impl Graph {
         external_moms: &[LorentzVector<T>],
     ) -> Vec<T> {
         let lmb_sepcification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_sepcification)
+        self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &lmb_sepcification)
     }
 
     #[inline]
@@ -452,14 +452,14 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
-        lmb_specification: LoopMomentumBasisSpecification,
+        lmb_specification: &LoopMomentumBasisSpecification,
     ) -> Vec<T> {
         let lmb = match lmb_specification {
             LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
                 .derived_data
                 .loop_momentum_bases
                 .as_ref()
-                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[lmb_idx],
+                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*lmb_idx],
             LoopMomentumBasisSpecification::Literal(basis) => basis,
         };
 
@@ -503,7 +503,7 @@ impl Graph {
         lmb_specification: LoopMomentumBasisSpecification,
     ) -> T {
         let all_energies =
-            self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_specification);
+            self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &lmb_specification);
 
         self.edges
             .iter()
@@ -730,66 +730,11 @@ impl Graph {
         independent_external_momenta: &[LorentzVector<T>],
         lmb_specification: &LoopMomentumBasisSpecification,
     ) -> Vec<T> {
-        let lmb = match lmb_specification {
-            LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
-                .derived_data
-                .loop_momentum_bases
-                .as_ref()
-                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*lmb_idx],
-            LoopMomentumBasisSpecification::Literal(basis) => basis,
-        };
-
-        let mut energy_cache = vec![T::zero(); self.edges.len()];
-        // some gymnastics to account for the sign of outgoing momenta
-
-        let mut flipped_externals = Vec::with_capacity(independent_external_momenta.len() + 1);
-
-        for (index, edge) in self
-            .edges
-            .iter()
-            .filter(|edge| edge.edge_type != EdgeType::Virtual)
-            .enumerate()
-        {
-            if index < independent_external_momenta.len() {
-                match edge.edge_type {
-                    EdgeType::Incoming => {
-                        flipped_externals.push(independent_external_momenta[index].t);
-                    }
-                    EdgeType::Outgoing => {
-                        flipped_externals.push(-independent_external_momenta[index].t);
-                    }
-                    _ => unreachable!(),
-                }
-            } else {
-                flipped_externals.push(-flipped_externals.iter().fold(T::zero(), |acc, x| acc + x));
-            }
-        }
-
-        // here we still use the non_flipped_externals for the virtual edges, since otherwise we would have to change the signature matrix as well.
-        for (index, edge) in self.edges.iter().enumerate() {
-            energy_cache[index] = match edge.edge_type {
-                EdgeType::Virtual => {
-                    if let Some(mass_value) = edge.particle.mass.value {
-                        let energy_squared = compute_momentum(
-                            &lmb.edge_signatures[index],
-                            loop_moms,
-                            independent_external_momenta,
-                        )
-                        .spatial_squared()
-                            + Into::<T>::into(mass_value.re * mass_value.re);
-                        energy_squared.sqrt()
-                    } else {
-                        compute_momentum(
-                            &lmb.edge_signatures[index],
-                            loop_moms,
-                            independent_external_momenta,
-                        )
-                        .spatial_distance()
-                    }
-                }
-                _ => flipped_externals[index],
-            };
-        }
+        let energy_cache = self.compute_onshell_energies_in_lmb(
+            loop_moms,
+            independent_external_momenta,
+            lmb_specification,
+        );
 
         self.derived_data
             .cff_expression

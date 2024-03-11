@@ -116,7 +116,7 @@ impl GraphIntegrand for AmplitudeGraph {
         let onshell_energies = self.get_graph().compute_onshell_energies_in_lmb(
             &sample.loop_moms,
             &sample.external_moms,
-            lmb_specification,
+            &lmb_specification,
         );
 
         let virtual_energies = self

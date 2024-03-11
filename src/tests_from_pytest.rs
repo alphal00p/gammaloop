@@ -3,6 +3,7 @@ use crate::cff::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType};
 use crate::model::Model;
+use crate::subtraction::esurface_data::get_existing_esurfaces;
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
 use colored::Colorize;
 use itertools::Itertools;
@@ -64,7 +65,10 @@ mod tests_scalar_massless_triangle {
     use rayon::prelude::IndexedParallelIterator;
     use smartstring::SmartString;
 
-    use crate::{graph::EdgeType, observables::AFBSettings};
+    use crate::{
+        graph::EdgeType, observables::AFBSettings,
+        subtraction::esurface_data::get_existing_esurfaces,
+    };
 
     use super::*;
 
@@ -160,13 +164,23 @@ mod tests_scalar_massless_triangle {
 
         if let Err(e) = generate_data {
             panic!("Error: {}", e);
-        } else {
-            let data = graph.derived_data.esurface_derived_data.as_ref().unwrap();
-            println!("data: {:#?}", data);
-            assert_eq!(1, 2);
         }
 
-        // TODO: @Mathijs, you can put your own checks there
+        let energy_cache = graph.compute_onshell_energies(&[k], &[p1, p2]);
+
+        let existing = get_existing_esurfaces(
+            &graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .esurfaces,
+            graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+            &[p1, p2],
+            &energy_cache,
+        );
+
+        assert_eq!(existing.len(), 0);
     }
 }
 
@@ -649,6 +663,54 @@ fn pytest_massless_scalar_box() {
 
     let propagator_groups = graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 4);
+    graph.generate_esurface_data().unwrap();
+
+    let box4_e = [
+        LorentzVector::from_args(14.0, -6.6, -40.0, 0.0),
+        LorentzVector::from_args(43.0, -15.2, -33.0, 0.0),
+        LorentzVector::from_args(17.9, 50.0, -11.8, 0.0),
+    ];
+
+    let loop_mom = LorentzVector::from_args(0.0, 1.0, 2.0, 3.0);
+
+    let cache = graph.compute_onshell_energies(&[loop_mom], &box4_e);
+
+    let existing = get_existing_esurfaces(
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &box4_e,
+        &cache,
+    );
+
+    assert_eq!(existing.len(), 4);
+
+    let loop_mom = LorentzVector::new();
+
+    let mut counter = 0;
+
+    for existing_esurface_id in &existing {
+        let cache = graph.compute_onshell_energies(&[loop_mom], &box4_e);
+
+        let esurface = &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces[*existing_esurface_id];
+
+        let esurface_value = esurface.compute_value(&cache);
+        if esurface_value < 0. {
+            counter += 1;
+        }
+    }
+
+    // this point is inside 2 of the 4 esurfaces
+    assert_eq!(counter, 2);
 }
 
 #[test]

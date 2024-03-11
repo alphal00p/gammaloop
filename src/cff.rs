@@ -26,7 +26,7 @@ pub struct Esurface {
     pub energies: Vec<usize>,
     pub sub_orientation: Vec<bool>,
     pub shift: Vec<usize>,
-    pub shift_signature: bool,
+    pub shift_signature: Vec<bool>,
 }
 
 // This equality is naive in the presence of raised propagators
@@ -86,18 +86,15 @@ impl Esurface {
     // assumes externals are first in the cache
     #[inline]
     pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        let shift_sign = match self.shift_signature {
-            true => Into::<T>::into(1.),
-            false => Into::<T>::into(-1.),
-        };
+        let shift_sum = self.shift.iter().zip(self.shift_signature.iter()).fold(
+            T::zero(),
+            |acc, (index, sign)| match sign {
+                true => acc + energy_cache[*index],
+                false => acc - energy_cache[*index],
+            },
+        );
 
-        let shift_sum = self
-            .shift
-            .iter()
-            .map(|index| energy_cache[*index])
-            .sum::<T>();
-
-        shift_sum * shift_sign
+        shift_sum
     }
 }
 
@@ -1104,8 +1101,8 @@ impl CFFIntermediateGraph {
             .collect_vec();
 
         let shift_signature = match vertex_type {
-            CFFVertexType::Source => false,
-            CFFVertexType::Sink => true,
+            CFFVertexType::Source => vec![false; shift.len()],
+            CFFVertexType::Sink => vec![true; shift.len()],
             CFFVertexType::Both => unreachable!(),
         };
 
@@ -1337,7 +1334,23 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
     info!("generating cff for graph: {}", graph.name);
     info!("number of orientations: {}", orientations.len());
 
-    generate_cff_from_orientations(orientations, &position_map, &external_data)
+    let mut graph_cff =
+        generate_cff_from_orientations(orientations, &position_map, &external_data)?;
+
+    // patch the outgoing edges
+    for esurface in graph_cff.esurfaces.iter_mut() {
+        for (external_edge, signature) in esurface
+            .shift
+            .iter()
+            .zip(esurface.shift_signature.iter_mut())
+        {
+            if graph.edges[*external_edge].edge_type == EdgeType::Outgoing {
+                *signature = !*signature;
+            }
+        }
+    }
+
+    Ok(graph_cff)
 }
 
 fn generate_cff_from_orientations(
@@ -1783,7 +1796,7 @@ mod tests_cff {
         let energies_cache = [1., 2., 3., 4., 5.];
         let shift = vec![3, 4];
         let energies = vec![0, 1, 2];
-        let shift_signature = true;
+        let shift_signature = vec![true; 2];
         let sub_orientation = vec![true, false, true];
 
         let esurface = Esurface {
@@ -1804,7 +1817,7 @@ mod tests_cff {
         let res = esurface.compute_value(&energies_cache);
         assert_eq!(res, 15.);
 
-        let shift_signature = false;
+        let shift_signature = vec![false; 1];
         let energies = vec![0, 2];
         let shift = vec![1];
 
