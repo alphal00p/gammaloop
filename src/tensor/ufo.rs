@@ -21,24 +21,23 @@ pub const PROJM: Symbol = Symbol::init_var(MAX_REP + 4, 0);
 pub const PROJP: Symbol = Symbol::init_var(MAX_REP + 5, 0);
 pub const SIGMA: Symbol = Symbol::init_var(MAX_REP + 6, 0);
 
-pub fn init_state() {
-    let mut state = State::get_global_state().write().unwrap();
-    assert!(EUC == state.get_or_insert_fn("euc", None).unwrap());
-    assert!(LOR == state.get_or_insert_fn("lor", None).unwrap());
-    assert!(SPIN == state.get_or_insert_fn("spin", None).unwrap());
-    assert!(CADJ == state.get_or_insert_fn("CAdj", None).unwrap());
-    assert!(CF == state.get_or_insert_fn("CF", None).unwrap());
-    assert!(CAF == state.get_or_insert_fn("CAF", None).unwrap());
-    assert!(CS == state.get_or_insert_fn("CS", None).unwrap());
-    assert!(CAS == state.get_or_insert_fn("CAS", None).unwrap());
+// pub fn init_state() {
+//     assert!(EUC == State::get_or_insert_fn("euc", None).unwrap());
+//     assert!(LOR == State::get_or_insert_fn("lor", None).unwrap());
+//     assert!(SPIN == State::get_or_insert_fn("spin", None).unwrap());
+//     assert!(CADJ == State::get_or_insert_fn("CAdj", None).unwrap());
+//     assert!(CF == State::get_or_insert_fn("CF", None).unwrap());
+//     assert!(CAF == State::get_or_insert_fn("CAF", None).unwrap());
+//     assert!(CS == State::get_or_insert_fn("CS", None).unwrap());
+//     assert!(CAS == State::get_or_insert_fn("CAS", None).unwrap());
 
-    assert!(ID == state.get_or_insert_fn("id", None).unwrap());
-    assert!(GAMMA == state.get_or_insert_fn("γ", None).unwrap());
-    assert!(GAMMA5 == state.get_or_insert_fn("γ5", None).unwrap());
-    assert!(PROJM == state.get_or_insert_fn("ProjM", None).unwrap());
-    assert!(PROJP == state.get_or_insert_fn("ProjP", None).unwrap());
-    assert!(SIGMA == state.get_or_insert_fn("σ", None).unwrap());
-}
+//     assert!(ID == State::get_or_insert_fn("id", None).unwrap());
+//     assert!(GAMMA == State::get_or_insert_fn("γ", None).unwrap());
+//     assert!(GAMMA5 == State::get_or_insert_fn("γ5", None).unwrap());
+//     assert!(PROJM == State::get_or_insert_fn("ProjM", None).unwrap());
+//     assert!(PROJP == State::get_or_insert_fn("ProjP", None).unwrap());
+//     assert!(SIGMA == State::get_or_insert_fn("σ", None).unwrap());
+// }
 
 #[allow(dead_code)]
 #[must_use]
@@ -128,7 +127,6 @@ where
 pub fn mink_four_vector_sym<T>(
     index: AbstractIndex,
     p: &[T; 4],
-    state: &mut symbolica::state::State,
 ) -> DenseTensor<T, HistoryStructure<Symbol>>
 where
     T: Clone,
@@ -137,9 +135,7 @@ where
         p,
         HistoryStructure::new(
             &[(index, Lorentz(4.into()))],
-            state
-                .get_or_insert_fn("p", None)
-                .unwrap_or_else(|_| unreachable!()),
+            State::get_or_insert_fn("p", None).unwrap_or_else(|_| unreachable!()),
         ),
     )
     .unwrap_or_else(|_| unreachable!())
@@ -162,7 +158,6 @@ where
 pub fn euclidean_four_vector_sym<T>(
     index: AbstractIndex,
     p: &[T; 4],
-    state: &mut symbolica::state::State,
 ) -> DenseTensor<T, HistoryStructure<Symbol>>
 where
     T: Clone,
@@ -171,9 +166,7 @@ where
         p,
         HistoryStructure::new(
             &[(index, Euclidean(4.into()))],
-            state
-                .get_or_insert_fn("p", None)
-                .unwrap_or_else(|_| unreachable!()),
+            State::get_or_insert_fn("p", None).unwrap_or_else(|_| unreachable!()),
         ),
     )
     .unwrap_or_else(|_| unreachable!())
@@ -182,8 +175,6 @@ where
 pub fn param_mink_four_vector<N>(
     index: AbstractIndex,
     name: N,
-    _state: &mut symbolica::state::State,
-    _ws: &Workspace,
 ) -> DenseTensor<Atom, HistoryStructure<N>>
 where
     N: Clone + IntoId,
@@ -196,8 +187,6 @@ where
 pub fn param_euclidean_four_vector<N>(
     index: AbstractIndex,
     name: N,
-    _state: &mut symbolica::state::State,
-    _ws: &Workspace,
 ) -> DenseTensor<Atom, HistoryStructure<N>>
 where
     N: Clone + IntoId,
@@ -246,7 +235,6 @@ where
 pub fn gammasym<T>(
     minkindex: AbstractIndex,
     indices: (AbstractIndex, AbstractIndex),
-    state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: One + Zero + Copy + Real + std::ops::Neg<Output = T> + Real,
@@ -257,9 +245,7 @@ where
             (indices.1, Euclidean(4.into())),
             (minkindex, Lorentz(4.into())),
         ],
-        state
-            .get_or_insert_fn("γ", None)
-            .unwrap_or_else(|_| unreachable!()),
+        State::get_or_insert_fn("γ", None).unwrap_or_else(|_| unreachable!()),
     );
 
     gamma_data(structure)
@@ -320,7 +306,6 @@ where
 
 pub fn gamma5sym<T>(
     indices: (AbstractIndex, AbstractIndex),
-    state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: One + Zero + Copy + Real,
@@ -330,9 +315,7 @@ where
             (indices.0, Euclidean(4.into())),
             (indices.1, Euclidean(4.into())),
         ],
-        state
-            .get_or_insert_fn("γ5", None)
-            .unwrap_or_else(|_| unreachable!()),
+        State::get_or_insert_fn("γ5", None).unwrap_or_else(|_| unreachable!()),
     );
 
     gamma5_data(structure)
@@ -374,7 +357,6 @@ where
 
 pub fn proj_msym<T>(
     indices: (AbstractIndex, AbstractIndex),
-    state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: Real + NumCast,
@@ -384,9 +366,7 @@ where
             (indices.0, Euclidean(4.into())),
             (indices.1, Euclidean(4.into())),
         ],
-        state
-            .get_or_insert_fn("ProjM", None)
-            .unwrap_or_else(|_| unreachable!()),
+        State::get_or_insert_fn("ProjM", None).unwrap_or_else(|_| unreachable!()),
     );
 
     proj_m_data(structure)
@@ -436,7 +416,6 @@ where
 
 pub fn proj_psym<T>(
     indices: (AbstractIndex, AbstractIndex),
-    state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: Real + NumCast,
@@ -446,9 +425,7 @@ where
             (indices.0, Euclidean(4.into())),
             (indices.1, Euclidean(4.into())),
         ],
-        state
-            .get_or_insert_fn("ProjP", None)
-            .unwrap_or_else(|_| unreachable!()),
+        State::get_or_insert_fn("ProjP", None).unwrap_or_else(|_| unreachable!()),
     );
 
     proj_p_data(structure)
@@ -517,7 +494,6 @@ where
 pub fn sigmasym<T>(
     indices: (AbstractIndex, AbstractIndex),
     minkdices: (AbstractIndex, AbstractIndex),
-    state: &mut symbolica::state::State,
 ) -> SparseTensor<Complex<T>, HistoryStructure<Symbol>>
 where
     T: Copy + Real,
@@ -529,9 +505,7 @@ where
             (minkdices.0, Lorentz(4.into())),
             (minkdices.1, Lorentz(4.into())),
         ],
-        state
-            .get_or_insert_fn("σ", None)
-            .unwrap_or_else(|_| unreachable!()),
+        State::get_or_insert_fn("σ", None).unwrap_or_else(|_| unreachable!()),
     );
 
     sigma_data(structure)

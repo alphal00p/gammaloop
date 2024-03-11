@@ -35,17 +35,16 @@ impl PartialEq for Esurface {
 #[allow(unused)]
 impl Esurface {
     fn to_atom(&self) -> Atom {
-        let mut state = State::get_global_state().write().unwrap();
         let symbolic_energies = self
             .energies
             .iter()
-            .map(|i| Atom::parse(&format!("E{}", i), &mut state).unwrap())
+            .map(|i| Atom::parse(&format!("E{}", i)).unwrap())
             .collect_vec();
 
         let symbolic_shift = self
             .shift
             .iter()
-            .map(|i| Atom::parse(&format!("p{}", i), &mut state).unwrap())
+            .map(|i| Atom::parse(&format!("p{}", i)).unwrap())
             .collect_vec();
 
         let builder_atom = Atom::new();

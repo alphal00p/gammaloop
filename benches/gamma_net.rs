@@ -17,12 +17,11 @@ fn gamma_net_sym(
     minkindices: &[i32],
     vbar: [Complex<f64>; 4],
     u: [Complex<f64>; 4],
-    state: &mut State,
 ) -> TensorNetwork<NumTensor<HistoryStructure<Symbol>>> {
     let mut i = 0;
     let mut contracting_index = 0.into();
     let mut result: Vec<NumTensor<HistoryStructure<Symbol>>> =
-        vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
+        vec![euclidean_four_vector_sym(contracting_index, &vbar).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1.into();
@@ -35,21 +34,19 @@ fn gamma_net_sym(
                 Complex::<f64>::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
-            result
-                .push(mink_four_vector_sym(usize::try_from(*m).unwrap().into(), &p, state).into());
-            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj), state).into());
+            result.push(mink_four_vector_sym(usize::try_from(*m).unwrap().into(), &p).into());
+            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj)).into());
         } else {
             result.push(
                 gammasym(
                     AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
                     (ui, uj),
-                    state,
                 )
                 .into(),
             );
         }
     }
-    result.push(euclidean_four_vector_sym(contracting_index, &u, state).into());
+    result.push(euclidean_four_vector_sym(contracting_index, &u).into());
     TensorNetwork::from(result)
 }
 
@@ -103,7 +100,6 @@ fn indices(n: i32, m: i32) -> Vec<i32> {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let mut state = State::get_global_state().write().unwrap();
     let one = Complex::<f64>::new(1.0, 0.0);
     let _zero = Complex::<f64>::new(0.0, 0.0);
 
@@ -121,7 +117,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     ];
     let minkindices = indices(20, 24);
 
-    let netsym = gamma_net_sym(&minkindices, vbar, u, &mut state);
+    let netsym = gamma_net_sym(&minkindices, vbar, u);
     let net = gamma_net(&minkindices, vbar, u);
 
     let mut group = c.benchmark_group("gamma_net");

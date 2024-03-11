@@ -21,7 +21,7 @@ use num::traits::{Num, ToPrimitive};
 use symbolica::domains::float::Complex;
 use symbolica::{
     representations::{Atom, Symbol},
-    state::{State, Workspace},
+    state::Workspace,
 };
 
 // #[allow(dead_code)]
@@ -110,12 +110,11 @@ fn gamma_net(
     minkindices: &[i32],
     vbar: [Complex<f64>; 4],
     u: [Complex<f64>; 4],
-    state: &mut State,
 ) -> TensorNetwork<NumTensor<HistoryStructure<Symbol>>> {
     let mut i = 0;
     let mut contracting_index: AbstractIndex = 0.into();
     let mut result: Vec<NumTensor<HistoryStructure<Symbol>>> =
-        vec![euclidean_four_vector_sym(contracting_index, &vbar, state).into()];
+        vec![euclidean_four_vector_sym(contracting_index, &vbar).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1.into();
@@ -128,21 +127,19 @@ fn gamma_net(
                 Complex::<f64>::new(1.3 + 0.01 * i.to_f64().unwrap(), 0.0),
             ];
             i += 1;
-            result
-                .push(mink_four_vector_sym(usize::try_from(*m).unwrap().into(), &p, state).into());
-            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj), state).into());
+            result.push(mink_four_vector_sym(usize::try_from(*m).unwrap().into(), &p).into());
+            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj)).into());
         } else {
             result.push(
                 gammasym(
                     AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
                     (ui, uj),
-                    state,
                 )
                 .into(),
             );
         }
     }
-    result.push(euclidean_four_vector_sym(contracting_index, &u, state).into());
+    result.push(euclidean_four_vector_sym(contracting_index, &u).into());
     TensorNetwork::from(result)
 }
 
@@ -177,15 +174,11 @@ fn defered_chain(
 }
 
 #[allow(dead_code)]
-fn gamma_net_param(
-    minkindices: &[i32],
-    state: &mut State,
-    ws: &Workspace,
-) -> TensorNetwork<MixedTensor<HistoryStructure<Symbol>>> {
+fn gamma_net_param(minkindices: &[i32]) -> TensorNetwork<MixedTensor<HistoryStructure<Symbol>>> {
     let mut i = 0;
     let mut contracting_index: AbstractIndex = 0.into();
     let mut result: Vec<MixedTensor<HistoryStructure<Symbol>>> =
-        vec![param_euclidean_four_vector(contracting_index, "vbar".into_id(), state, ws).into()];
+        vec![param_euclidean_four_vector(contracting_index, "vbar".into_id()).into()];
     for m in minkindices {
         let ui = contracting_index;
         contracting_index += 1.into();
@@ -193,23 +186,19 @@ fn gamma_net_param(
         if *m > 0 {
             let pname = format!("p{}", i).into_id();
             i += 1;
-            result.push(
-                param_mink_four_vector(usize::try_from(*m).unwrap().into(), pname, state, ws)
-                    .into(),
-            );
-            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj), state).into());
+            result.push(param_mink_four_vector(usize::try_from(*m).unwrap().into(), pname).into());
+            result.push(gammasym(usize::try_from(*m).unwrap().into(), (ui, uj)).into());
         } else {
             result.push(
                 gammasym(
                     AbstractIndex::from(usize::try_from(m.neg()).unwrap() + 10000),
                     (ui, uj),
-                    state,
                 )
                 .into(),
             );
         }
     }
-    result.push(param_euclidean_four_vector(contracting_index, "u".into_id(), state, ws).into());
+    result.push(param_euclidean_four_vector(contracting_index, "u".into_id()).into());
     TensorNetwork::from(result)
 }
 
@@ -272,9 +261,8 @@ fn main() {
     // // );
 
     let startfull = Instant::now();
-    let mut state = State::get_global_state().write().unwrap();
 
-    let mut chain = gamma_net(&vec, vbar, u, &mut state);
+    let mut chain = gamma_net(&vec, vbar, u);
     println!("{}", chain.graph.edges.len());
     println!("{}", chain.graph.nodes.len());
     println!("{}", chain.graph.involution.len());
@@ -305,7 +293,7 @@ fn main() {
     // // let mut chain = gamma_net(&vec, vbar, u);
     // let ws: Workspace<Linear> = Workspace::new();
 
-    // let atom = Atom::parse("A+P", &mut state, &ws).unwrap();
+    // let atom = Atom::parse("A+P", &mut  &ws).unwrap();
 
     // let printops = PrintOptions {
     //     terms_on_new_line: false,
@@ -322,12 +310,12 @@ fn main() {
     // let print = AtomPrinter::new_with_options(atom.as_view(), printops, &state);
 
     // let satom = format!("{}", print);
-    // let natom = Atom::parse(&satom, &mut state, &ws).unwrap();
+    // let natom = Atom::parse(&satom, &mut  &ws).unwrap();
 
     // println!("Print {}", natom.printer(&state));
     // // // println!("{}", chain.dot());
     // // let start = Instant::now();
-    // // chain.contract_sym(&state, &ws);
+    // // chain.contract_sym(& &ws);
     // // let duration = start.elapsed();
     // // println!(
     // //     "Benchmark net {:?} gammas, size in {:?}",
@@ -339,11 +327,11 @@ fn main() {
 
     // // println!("{}", chain.result().structure());
 
-    // // let mut chain_param = gamma_net_param(&vec, &mut state, &ws);
+    // // let mut chain_param = gamma_net_param(&vec, &mut  &ws);
 
     // // println!("{}", chain_param.dot());
     // // let start = Instant::now();
-    // // chain_param.contract_sym_depth(5, &state, &ws);
+    // // chain_param.contract_sym_depth(5, & &ws);
     // // let duration = start.elapsed();
     // // // println!(
     // // //     "Benchmark net param {:?} gammas, size in {:?}",
@@ -356,7 +344,7 @@ fn main() {
 
     // // println!("{}", chain_param.result().structure());
 
-    // let mut chain_param = gamma_net_param(&vec, &mut state, &ws);
+    // let mut chain_param = gamma_net_param(&vec, &mut  &ws);
 
     // println!("{}", chain_param.dotsym(&state));
     // let params: Vec<Atom> = chain_param
@@ -383,16 +371,16 @@ fn main() {
 
     // let params: Vec<Atom> = paramstr
     //     .iter()
-    //     .map(|x| Atom::parse(x, &mut state, &ws).unwrap())
+    //     .map(|x| Atom::parse(x, &mut  &ws).unwrap())
     //     .collect();
 
     // for p in params {
     //     print!("{}", p.printer(&state));
     // }
 
-    // chain_param.contract_sym_depth(9, &state, &ws);
+    // chain_param.contract_sym_depth(9, & &ws);
 
-    // let mut shadow = chain_param.symbolic_shadow("S", &mut state, &ws);
+    // let mut shadow = chain_param.symbolic_shadow("S", &mut  &ws);
     // // println!("{}", chain_param.dotsym(&state));
     // let a = chain_param
     //     .clone()
@@ -418,7 +406,7 @@ fn main() {
     // let amap = chain_param
     //     .to_symbolic_tensor_vec()
     //     .into_iter()
-    //     .map(|x| x.symhashmap(*x.name().unwrap(), &mut state, &ws))
+    //     .map(|x| x.symhashmap(*x.name().unwrap(), &mut  &ws))
     //     .collect::<Vec<_>>();
 
     // let amapstr = amap
@@ -445,7 +433,7 @@ fn main() {
 
     // println!("{}", shadow.dotsym(&state));
     // let start = Instant::now();
-    // shadow.contract_sym_depth(10, &state, &ws);
+    // shadow.contract_sym_depth(10, & &ws);
     // let duration = start.elapsed();
 
     // // println!(
@@ -454,7 +442,7 @@ fn main() {
     // //     duration,
     // // );
 
-    // let mut shadow2 = shadow.symbolic_shadow("T", &mut state, &ws);
+    // let mut shadow2 = shadow.symbolic_shadow("T", &mut  &ws);
     // println!("{}", shadow.dotsym(&state));
     // let b: Vec<(String, Vec<String>)> = shadow
     //     .clone()
@@ -480,7 +468,7 @@ fn main() {
     // let bmap = shadow
     //     .to_symbolic_tensor_vec()
     //     .into_iter()
-    //     .map(|x| x.symhashmap(*x.name().unwrap(), &mut state, &ws))
+    //     .map(|x| x.symhashmap(*x.name().unwrap(), &mut  &ws))
     //     .collect::<Vec<_>>();
 
     // let bmapstr = bmap
@@ -507,7 +495,7 @@ fn main() {
 
     // println!("{}", shadow2.dotsym(&state));
     // let start = Instant::now();
-    // shadow2.contract_sym_depth(10, &state, &ws);
+    // shadow2.contract_sym_depth(10, & &ws);
     // let duration = start.elapsed();
 
     // // println!(
@@ -550,7 +538,7 @@ fn main() {
     // let cmap = shadow2
     //     .to_symbolic_tensor_vec()
     //     .into_iter()
-    //     .map(|x| x.symhashmap(*x.name().unwrap(), &mut state, &ws))
+    //     .map(|x| x.symhashmap(*x.name().unwrap(), &mut  &ws))
     //     .collect::<Vec<_>>();
 
     // let cmapstr = cmap
@@ -583,7 +571,7 @@ fn main() {
     //             v.iter()
     //                 .map(|x| {
     //                     println!("Hi: {}", x);
-    //                     Atom::parse(x, &mut state, &ws).unwrap()
+    //                     Atom::parse(x, &mut  &ws).unwrap()
     //                 })
     //                 .collect::<Vec<_>>(),
     //         )
@@ -625,8 +613,8 @@ fn main() {
     //                 let mut a = HashMap::new();
     //                 for (k, v) in x.iter() {
     //                     a.insert(
-    //                         Atom::parse(k, &mut state, &ws).unwrap(),
-    //                         Atom::parse(v, &mut state, &ws).unwrap(),
+    //                         Atom::parse(k, &mut  &ws).unwrap(),
+    //                         Atom::parse(v, &mut  &ws).unwrap(),
     //                     );
     //                 }
     //                 a
@@ -643,7 +631,7 @@ fn main() {
     //                 (
     //                     state.get_or_insert_fn(s, None).unwrap(),
     //                     v.iter()
-    //                         .map(|x| Atom::parse(x, &mut state, &ws).unwrap())
+    //                         .map(|x| Atom::parse(x, &mut  &ws).unwrap())
     //                         .collect::<Vec<_>>(),
     //                 )
     //             })
@@ -688,7 +676,7 @@ fn main() {
     // // let mut out = ws.new_atom();
     // // let s = chain.finish().data.remove(0);
 
-    // // s.as_view().expand(&ws, &state, &mut out);
+    // // s.as_view().expand(&ws, & &mut out);
 
     // // println!("{}", out.printer(&state));
 
@@ -726,7 +714,7 @@ fn main() {
     // //         "{}",
     // //         InstructionSetPrinter {
     // //             instr: &o,
-    // //             state: &state,
+    // //             state: &
     // //             mode: symbolica::poly::evaluate::InstructionSetMode::CPP(
     // //                 symbolica::poly::evaluate::InstructionSetModeCPPSettings {
     // //                     write_header_and_test: true,
