@@ -5,7 +5,7 @@ use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
 use symbolica::{
     domains::float::Complex,
     representations::{Atom, AtomView, Symbol},
-    state::{State},
+    state::State,
 };
 
 use self::parametric::{MixedTensor, MixedTensors};
@@ -63,7 +63,7 @@ impl<'a> IncidentIterator<'a> {
         }
     }
 }
-
+#[allow(dead_code)]
 impl<N, E> HalfEdgeGraph<N, E> {
     fn new() -> Self {
         HalfEdgeGraph {

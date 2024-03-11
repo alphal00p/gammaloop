@@ -2,7 +2,7 @@ use std::ops::Neg;
 
 use _gammaloop::tensor::{
     ufo::{euclidean_four_vector, gamma, mink_four_vector},
-    AbstractIndex, ContractionCountStructure, FallibleMul, HasTensorData, NumTensor, TensorNetwork,
+    AbstractIndex, ContractionCountStructure, FallibleMul, NumTensor, TensorNetwork,
 };
 use num::ToPrimitive;
 

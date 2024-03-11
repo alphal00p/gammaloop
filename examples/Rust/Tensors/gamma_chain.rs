@@ -1,28 +1,20 @@
 // Gamma chain example
 
-use std::{
-    fmt::Debug,
-    ops::{AddAssign, DivAssign, MulAssign, Neg, RemAssign, SubAssign},
-    time::Instant,
-};
+use std::{ops::Neg, time::Instant};
 
 use _gammaloop::tensor::{
     parametric::MixedTensor,
     ufo::{
-        euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
+        euclidean_four_vector, euclidean_four_vector_sym, gammasym, mink_four_vector,
         mink_four_vector_sym, param_euclidean_four_vector, param_mink_four_vector,
     },
-    AbstractIndex, Contract, DenseTensor, FallibleAddAssign, FallibleMul, FallibleSubAssign,
-    HasTensorData, HistoryStructure, IntoId, NumTensor, SparseTensor, TensorNetwork,
-    TrySmallestUpgrade,
+    AbstractIndex, Contract, DenseTensor, FallibleMul, HasTensorData, HistoryStructure, IntoId,
+    NumTensor, SparseTensor, TensorNetwork,
 };
 
-use num::traits::{Num, ToPrimitive};
+use num::traits::ToPrimitive;
 use symbolica::domains::float::Complex;
-use symbolica::{
-    representations::{Atom, Symbol},
-    state::Workspace,
-};
+use symbolica::representations::{Atom, Symbol};
 
 // #[allow(dead_code)]
 // fn gamma_trace<T>(minkindices: &[i32]) -> SparseTensor<Complex<T>>

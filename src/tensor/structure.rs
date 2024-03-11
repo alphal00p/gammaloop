@@ -1,6 +1,4 @@
 use ahash::AHashMap;
-use block_id::Alphabet;
-use block_id::BlockId;
 use derive_more::Add;
 use derive_more::AddAssign;
 use derive_more::Display;
@@ -8,7 +6,6 @@ use derive_more::From;
 use derive_more::Into;
 use duplicate::duplicate;
 use indexmap::IndexMap;
-use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Serialize;
 use smartstring::LazyCompact;
@@ -1032,7 +1029,7 @@ impl From<VecStructure> for Vec<Slot> {
     }
 }
 
-const IDPRINTER: Lazy<BlockId<char>> = Lazy::new(|| BlockId::new(Alphabet::alphanumeric(), 1, 1));
+// const IDPRINTER: Lazy<BlockId<char>> = Lazy::new(|| BlockId::new(Alphabet::alphanumeric(), 1, 1));
 
 impl std::fmt::Display for VecStructure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

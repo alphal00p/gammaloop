@@ -12,7 +12,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use num::ToPrimitive;
 use symbolica::domains::float::Complex;
 
-use symbolica::{representations::Symbol, state::State};
+use symbolica::representations::Symbol;
 fn gamma_net_sym(
     minkindices: &[i32],
     vbar: [Complex<f64>; 4],
