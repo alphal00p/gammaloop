@@ -39,11 +39,7 @@ fn gamma_net_param(
             .into_iter()
             .collect();
             i += 1;
-            let pid = State::get_global_state()
-                .write()
-                .unwrap()
-                .get_or_insert_fn(&format!("p{}", i), None)
-                .unwrap();
+            let pid = State::get_or_insert_fn(&format!("p{}", i), None).unwrap();
 
             result.push(p.shadow_with(pid).into());
 
@@ -104,6 +100,13 @@ fn const_map_gen<'a, 'b, I>(
 
 fn main() {
     let one = Complex::<f64>::new(1.0, 0.0);
+
+    let notnorm: u8 = 0b10000000;
+    let mut f: u8 = 3;
+    f |= notnorm;
+    println!("{:?}", f);
+    f |= notnorm;
+    println!("{:?}", f);
 
     let vbar = [
         one.mul_fallible(3.0).unwrap(),

@@ -153,14 +153,13 @@ where
 }
 
 pub fn parse_python_expression(expression: &str) -> Atom {
-    let mut sb_state = symbolica::state::State::get_global_state().write().unwrap();
     let processed_string = String::from(expression)
         .replace("**", "^")
         .replace("cmath.sqrt", "sqrt")
         .replace("cmath.pi", "pi")
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
-    Atom::parse(processed_string.as_str(), &mut sb_state)
+    Atom::parse(processed_string.as_str())
         .map_err(|e| {
             format!(
                 "Failed to parse expression : '{}'\nError: {}",

@@ -1,7 +1,6 @@
 use crate::tensor::{
-    ufo::{init_state, mink_four_vector},
-    Contract, DataIterator, DenseTensor, FallibleMul, GetTensorData, HasTensorData, MixedTensor,
-    Representation, SparseTensor, StructureContract, TensorStructure,
+    ufo::mink_four_vector, Contract, DataIterator, DenseTensor, FallibleMul, GetTensorData,
+    HasTensorData, MixedTensor, Representation, SparseTensor, StructureContract, TensorStructure,
 };
 use ahash::{HashMap, HashMapExt};
 
@@ -720,7 +719,6 @@ fn evaluate() {
 
 #[test]
 fn convert_sym() {
-    let mut state = State::get_global_state().write().unwrap();
     let ws = Workspace::new();
     let i = Complex::new(0.0, 1.0);
     let mut data_b = vec![i * Complex::from(5.0), Complex::from(2.6) + i];
@@ -745,7 +743,7 @@ fn convert_sym() {
         "6",
     ]
     .iter()
-    .map(|x| Atom::parse(x, &mut state).unwrap())
+    .map(|x| Atom::parse(x).unwrap())
     .collect();
 
     assert_eq!(
@@ -807,7 +805,6 @@ fn complex() {
 
 #[test]
 fn symbolic_contract() {
-    init_state();
     let structura = HistoryStructure::from_integers(
         &[(1, 2), (4, 3)].map(|(a, d)| (a.into(), d.into())),
         "T".to_string(),
@@ -822,11 +819,9 @@ fn symbolic_contract() {
     let b = SymbolicTensor::from_named(&structurb).unwrap();
     let f = a.contract(&b).unwrap();
 
-    let mut state = State::get_global_state().write().unwrap();
-    // println!("{:?}", f);
     assert_eq!(
         *f.get_atom(),
-        Atom::parse("T(euc(2,1),euc(3,4))*P(euc(2,3),euc(3,2))", &mut state).unwrap()
+        Atom::parse("T(euc(2,1),euc(3,4))*P(euc(2,3),euc(3,2))").unwrap()
     );
 
     let a = f.to_network().unwrap();

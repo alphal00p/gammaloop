@@ -390,8 +390,8 @@ fn test_fallible_mul() {
     assert_eq!(d, Some(16.));
     assert_eq!(e, Some(16.));
 
-    let a = &Atom::parse("a(2)", &mut State::get_global_state().write().unwrap()).unwrap();
-    let b = &Atom::parse("b(1)", &mut State::get_global_state().write().unwrap()).unwrap();
+    let a = &Atom::parse("a(2)").unwrap();
+    let b = &Atom::parse("b(1)").unwrap();
 
     let mut f = a.mul_fallible(4.).unwrap();
     f.add_assign_fallible(b);

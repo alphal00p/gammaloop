@@ -148,7 +148,8 @@ impl Representation {
     /// # Example
     /// ```
     /// # use _gammaloop::tensor::Representation;
-    /// let spin = Representation::Spin(5);
+    /// # use _gammaloop::tensor::Dimension;
+    /// let spin = Representation::Spin(Dimension(5));
     ///
     /// let metric_diag = spin.negative();
     ///
@@ -195,16 +196,15 @@ impl Representation {
     /// for example see [`Slot::to_symbolic`]
     #[allow(clippy::cast_possible_wrap)]
     pub fn to_fnbuilder<'a, 'b: 'a>(&'a self) -> FunctionBuilder {
-        let mut state = State::get_global_state().write().unwrap();
         let (value, id) = match *self {
-            Self::Euclidean(value) => (value, state.get_or_insert_fn("euc", None)),
-            Self::Lorentz(value) => (value, state.get_or_insert_fn("lor", None)),
-            Self::Spin(value) => (value, state.get_or_insert_fn("spin", None)),
-            Self::ColorAdjoint(value) => (value, state.get_or_insert_fn("CAdj", None)),
-            Self::ColorFundamental(value) => (value, state.get_or_insert_fn("CF", None)),
-            Self::ColorAntiFundamental(value) => (value, state.get_or_insert_fn("CAF", None)),
-            Self::ColorSextet(value) => (value, state.get_or_insert_fn("CS", None)),
-            Self::ColorAntiSextet(value) => (value, state.get_or_insert_fn("CAS", None)),
+            Self::Euclidean(value) => (value, State::get_or_insert_fn("euc", None)),
+            Self::Lorentz(value) => (value, State::get_or_insert_fn("lor", None)),
+            Self::Spin(value) => (value, State::get_or_insert_fn("spin", None)),
+            Self::ColorAdjoint(value) => (value, State::get_or_insert_fn("CAdj", None)),
+            Self::ColorFundamental(value) => (value, State::get_or_insert_fn("CF", None)),
+            Self::ColorAntiFundamental(value) => (value, State::get_or_insert_fn("CAF", None)),
+            Self::ColorSextet(value) => (value, State::get_or_insert_fn("CS", None)),
+            Self::ColorAntiSextet(value) => (value, State::get_or_insert_fn("CAS", None)),
         };
 
         let mut value_builder = FunctionBuilder::new(id.unwrap_or_else(|_| unreachable!()));
@@ -222,11 +222,11 @@ impl Representation {
     /// ```
     /// # use symbolica::state::{State, Workspace};
     /// # use _gammaloop::tensor::Representation;
-    /// # let mut state = State::new();
-    /// # let ws = Workspace::new();
-    /// let mink = Representation::Lorentz(4);
+    /// # use _gammaloop::tensor::Dimension;
     ///
-    /// assert_eq!("lor(4)",format!("{}",mink.to_symbolic(&mut state,&ws).printer(&state)));
+    /// let mink = Representation::Lorentz(Dimension(4));
+    ///
+    /// assert_eq!("lor(4)",format!("{}",mink.to_symbolic()));
     /// assert_eq!("l4",format!("{}",mink));
     /// ```
     pub fn to_symbolic(&self) -> Atom {
@@ -320,18 +320,18 @@ impl std::fmt::Display for Representation {
 ///
 /// It can be built from a tuple of `usize` and `Representation`
 /// ```
-/// # use _gammaloop::tensor::{Representation,Slot};
-/// let mink = Representation::Lorentz(4);
-/// let mu = Slot::from((0,mink));
+/// # use _gammaloop::tensor::{Representation,Slot,Dimension,AbstractIndex};
+/// let mink = Representation::Lorentz(Dimension(4));
+/// let mu = Slot::from((AbstractIndex(0),mink));
 ///
-/// assert_eq!("0l4",format!("{}",mu));
+/// assert_eq!("id0l4",format!("{}",mu));
 /// ```
 ///
 /// It can also be built from a tuple of `usize` and `usize`, where we default to `Representation::Euclidean`
 /// ```
 /// # use _gammaloop::tensor::{Representation,Slot};
 /// let mu = Slot::from((0,4));
-/// assert_eq!("0e4",format!("{}",mu));
+/// assert_eq!("id0e4",format!("{}",mu));
 /// ```
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot {
@@ -344,15 +344,13 @@ pub struct Slot {
 /// # Example
 ///
 /// ```
-/// # use symbolica::state::{Workspace};
-/// # use _gammaloop::tensor::ufo_spin_tensors::new_state;
-/// # use _gammaloop::tensor::{Representation,Slot};
+///
+/// # use _gammaloop::tensor::{Representation,Slot,Dimension,AbstractIndex};
 /// # use symbolica::representations::AtomView;
-///    let mut state = new_state();
-///    let ws = Workspace::new();
-///    let mink = Representation::Lorentz(4);
-///    let mu = Slot::from((0, mink));
-///    let atom = mu.to_symbolic(&mut state, &ws);
+
+///    let mink = Representation::Lorentz(Dimension(4));
+///    let mu = Slot::from((AbstractIndex(0), mink));
+///    let atom = mu.to_symbolic();
 ///    let slot = Slot::try_from(atom.as_view()).unwrap();
 ///    assert_eq!(slot, mu);
 /// ```
@@ -391,16 +389,26 @@ impl TryFrom<AtomView<'_>> for Slot {
             return Err("Too many arguments");
         }
 
+        let euc = State::get_or_insert_fn("euc", None).unwrap();
+        let lor = State::get_or_insert_fn("lor", None).unwrap();
+        let spin = State::get_or_insert_fn("spin", None).unwrap();
+        let cadj = State::get_or_insert_fn("CAdj", None).unwrap();
+        let cf = State::get_or_insert_fn("CF", None).unwrap();
+        let caf = State::get_or_insert_fn("CAF", None).unwrap();
+        let cs = State::get_or_insert_fn("CS", None).unwrap();
+        let cas = State::get_or_insert_fn("CAS", None).unwrap();
+
         let representation = if let AtomView::Fun(f) = value {
-            match f.get_symbol() {
-                EUC => Representation::Euclidean(dim),
-                LOR => Representation::Lorentz(dim),
-                SPIN => Representation::Spin(dim),
-                CADJ => Representation::ColorAdjoint(dim),
-                CF => Representation::ColorFundamental(dim),
-                CAF => Representation::ColorAntiFundamental(dim),
-                CS => Representation::ColorSextet(dim),
-                CAS => Representation::ColorAntiSextet(dim),
+            let sym = f.get_symbol();
+            match sym {
+                _ if sym == euc => Representation::Euclidean(dim),
+                _ if sym == lor => Representation::Lorentz(dim),
+                _ if sym == spin => Representation::Spin(dim),
+                _ if sym == cadj => Representation::ColorAdjoint(dim),
+                _ if sym == cf => Representation::ColorFundamental(dim),
+                _ if sym == caf => Representation::ColorAntiFundamental(dim),
+                _ if sym == cs => Representation::ColorSextet(dim),
+                _ if sym == cas => Representation::ColorAntiSextet(dim),
                 _ => return Err("Not a slot, isn't a representation"),
             }
         } else {
@@ -454,14 +462,12 @@ impl Slot {
     ///
     /// ```
     /// # use symbolica::state::{State, Workspace};
-    /// # use _gammaloop::tensor::{Representation,Slot};
-    /// # let mut state = State::new();
-    /// # let ws = Workspace::new();
-    /// let mink = Representation::Lorentz(4);
-    /// let mu = Slot::from((0,mink));
+    /// # use _gammaloop::tensor::{Representation,Slot,Dimension,AbstractIndex};
+    /// let mink = Representation::Lorentz(Dimension(4));
+    /// let mu = Slot::from((AbstractIndex(0),mink));
     ///
-    /// assert_eq!("lor(4,0)",format!("{}",mu.to_symbolic(&mut state,&ws).printer(&state)));
-    /// assert_eq!("0l4",format!("{}",mu));
+    /// assert_eq!("lor(4,0)",format!("{}",mu.to_symbolic()));
+    /// assert_eq!("id0l4",format!("{}",mu));
     /// ```
     pub fn to_symbolic(&self) -> Atom {
         let mut value_builder = self.representation.to_fnbuilder();
@@ -775,14 +781,23 @@ pub trait TensorStructure {
         Self: std::marker::Sized,
         Self::Structure: Clone + TensorStructure,
     {
-        match f_id {
-            ufo::ID => ufo::identity_data::<f64, Self::Structure>(self.structure().clone()).into(),
+        let id = State::get_or_insert_fn("id", None).unwrap();
+        let gamma = State::get_or_insert_fn("γ", None).unwrap();
+        let gamma5 = State::get_or_insert_fn("γ5", None).unwrap();
+        let proj_m = State::get_or_insert_fn("ProjM", None).unwrap();
+        let proj_p = State::get_or_insert_fn("ProjP", None).unwrap();
+        let sigma = State::get_or_insert_fn("σ", None).unwrap();
 
-            ufo::GAMMA => ufo::gamma_data(self.structure().clone()).into(),
-            ufo::GAMMA5 => ufo::gamma5_data(self.structure().clone()).into(),
-            ufo::PROJM => ufo::proj_m_data(self.structure().clone()).into(),
-            ufo::PROJP => ufo::proj_p_data(self.structure().clone()).into(),
-            ufo::SIGMA => ufo::sigma_data(self.structure().clone()).into(),
+        match f_id {
+            _ if f_id == id => {
+                ufo::identity_data::<f64, Self::Structure>(self.structure().clone()).into()
+            }
+
+            _ if f_id == gamma => ufo::gamma_data(self.structure().clone()).into(),
+            _ if f_id == gamma5 => ufo::gamma5_data(self.structure().clone()).into(),
+            _ if f_id == proj_m => ufo::proj_m_data(self.structure().clone()).into(),
+            _ if f_id == proj_p => ufo::proj_p_data(self.structure().clone()).into(),
+            _ if f_id == sigma => ufo::sigma_data(self.structure().clone()).into(),
             name => self.shadow_with(name).into(),
         }
     }
@@ -1602,11 +1617,7 @@ pub trait IntoId {
 
 impl IntoId for SmartString<LazyCompact> {
     fn into_id(self) -> Symbol {
-        State::get_global_state()
-            .write()
-            .unwrap()
-            .get_or_insert_fn(self, None)
-            .unwrap()
+        State::get_or_insert_fn(self, None).unwrap()
     }
 }
 
@@ -1618,21 +1629,13 @@ impl IntoId for Symbol {
 
 impl IntoId for &str {
     fn into_id(self) -> Symbol {
-        State::get_global_state()
-            .write()
-            .unwrap()
-            .get_or_insert_fn(self, None)
-            .unwrap()
+        State::get_or_insert_fn(self, None).unwrap()
     }
 }
 
 impl IntoId for std::string::String {
     fn into_id(self) -> Symbol {
-        State::get_global_state()
-            .write()
-            .unwrap()
-            .get_or_insert_fn(self, None)
-            .unwrap()
+        State::get_or_insert_fn(self, None).unwrap()
     }
 }
 

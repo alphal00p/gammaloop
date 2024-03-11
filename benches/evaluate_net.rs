@@ -55,11 +55,7 @@ fn gamma_net_param(
             .into_iter()
             .collect();
             i += 1;
-            let pid = State::get_global_state()
-                .write()
-                .unwrap()
-                .get_or_insert_fn(&format!("p{}", i), None)
-                .unwrap();
+            let pid = State::get_or_insert_fn(&format!("p{}", i), None).unwrap();
 
             result.push(p.shadow_with(pid).into());
 
@@ -139,7 +135,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     net.generate_params();
     let params = net.params.clone();
     println!("{:?}", params.len());
-    net.contract_algo(|tn| tn.edge_to_min_degree_node_with_depth(3));
+    net.contract_algo(|tn| tn.edge_to_min_degree_node_with_depth(2));
     let mut const_map = AHashMap::new();
 
     let i = Atom::new_var(State::I);
