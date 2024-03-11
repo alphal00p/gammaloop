@@ -1,23 +1,19 @@
 use std::{fmt::Debug, ops::Neg};
 
 use _gammaloop::tensor::{
-    ufo::{
-        euclidean_four_vector, euclidean_four_vector_sym, gamma, gammasym, mink_four_vector,
-        mink_four_vector_sym,
-    },
-    AbstractIndex, ContractionCountStructure, FallibleMul, HistoryStructure, MixedTensor,
-    NumTensor, Representation, SetTensorData, Slot, SparseTensor, TensorNetwork, TensorStructure,
-    VecStructure,
+    ufo::{euclidean_four_vector, gamma},
+    AbstractIndex, ContractionCountStructure, FallibleMul, MixedTensor, Representation,
+    SetTensorData, Slot, SparseTensor, TensorNetwork, TensorStructure,
 };
 
-use ahash::{AHashMap, HashMap, HashMapExt};
+use ahash::{AHashMap, HashMap};
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 use symbolica::{
     domains::float::Complex,
-    representations::{Atom, AtomView, Symbol},
+    representations::{Atom, AtomView},
     state::State,
 };
 
@@ -105,7 +101,7 @@ fn const_map_gen<'a, 'b, I>(
     'a: 'b,
     I: TensorStructure + Clone + Debug,
 {
-    for (i, p) in params.iter().enumerate() {
+    for (_i, p) in params.iter().enumerate() {
         let pdata = test_tensor(p.structure().clone()).to_dense();
         p.try_as_symbolic()
             .unwrap()

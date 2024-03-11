@@ -1,10 +1,8 @@
 use std::borrow::Cow;
 use std::ops::Mul;
 
-use ahash::HashMapExt;
 use duplicate::duplicate;
 
-use num::traits::Zero;
 use symbolica::domains::float::Complex;
 
 use symbolica::domains::float::Real;
@@ -205,7 +203,7 @@ where
     where
         Self::LCM: Clone,
     {
-        let new = Complex::new(self.clone(), T::zero());
+        let new = Complex::new(*self, T::zero());
         Some(Cow::Owned(new))
     }
 }

@@ -719,7 +719,7 @@ fn evaluate() {
 
 #[test]
 fn convert_sym() {
-    let ws = Workspace::new();
+    let _ws = Workspace::new();
     let i = Complex::new(0.0, 1.0);
     let mut data_b = vec![i * Complex::from(5.0), Complex::from(2.6) + i];
     data_b.append(
@@ -797,10 +797,10 @@ fn empty_densor() {
 
 #[test]
 fn complex() {
-    let structur = test_structure(2, 1);
+    let _structur = test_structure(2, 1);
 
-    let r = Complex::new(1.0, 2.0);
-    let p = Complex::new(3.0, 4.0);
+    let _r = Complex::new(1.0, 2.0);
+    let _p = Complex::new(3.0, 4.0);
 }
 
 #[test]
@@ -878,7 +878,7 @@ fn test_fallible_mul() {
     let mut h = a.sub_fallible(g).unwrap();
 
     h.add_assign_fallible(a);
-    let f = a.mul_fallible(a);
+    let _f = a.mul_fallible(a);
 
     Atom::default();
 

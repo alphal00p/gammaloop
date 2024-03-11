@@ -2,13 +2,12 @@ use std::fmt::Debug;
 use std::ops::Neg;
 
 use _gammaloop::tensor::{
-    ufo::{euclidean_four_vector, gamma, mink_four_vector},
-    AbstractIndex, ContractionCountStructure, DenseTensor, FallibleMul, HasTensorData, MixedTensor,
-    MixedTensors, NamedStructure, NumTensor, Representation, SetTensorData, Shadowable, Slot,
-    SparseTensor, TensorNetwork, TensorStructure, VecStructure,
+    ufo::{euclidean_four_vector, gamma},
+    AbstractIndex, ContractionCountStructure, FallibleMul, HasTensorData, MixedTensor,
+    Representation, SetTensorData, Slot, SparseTensor, TensorNetwork, TensorStructure,
 };
-use ahash::{AHashMap, HashMap, HashMapExt};
-use num::ToPrimitive;
+use ahash::{AHashMap, HashMap};
+
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 use symbolica::{
@@ -16,7 +15,6 @@ use symbolica::{
     representations::{Atom, AtomView},
     state::State,
 };
-use yaml_rust::yaml::Hash;
 
 fn gamma_net_param(
     minkindices: &[i32],
@@ -88,7 +86,7 @@ fn const_map_gen<'a, 'b, I>(
     'a: 'b,
     I: TensorStructure + Clone + Debug,
 {
-    for (i, p) in params.iter().enumerate() {
+    for (_i, p) in params.iter().enumerate() {
         let pdata = test_tensor(p.structure().clone()).to_dense();
         p.try_as_symbolic()
             .unwrap()
