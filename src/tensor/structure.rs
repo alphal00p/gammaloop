@@ -108,17 +108,6 @@ impl PartialOrd<Dimension> for usize {
 
 pub type ConcreteIndex = usize;
 
-pub(crate) const MAX_BUILTIN: u32 = symbolica::state::State::BUILTIN_VAR_LIST.len() as u32;
-pub(crate) const EUC: Symbol = Symbol::init_var(MAX_BUILTIN, 0);
-pub(crate) const LOR: Symbol = Symbol::init_var(MAX_BUILTIN + 1, 0);
-pub(crate) const SPIN: Symbol = Symbol::init_var(MAX_BUILTIN + 2, 0);
-pub(crate) const CADJ: Symbol = Symbol::init_var(MAX_BUILTIN + 3, 0);
-pub(crate) const CF: Symbol = Symbol::init_var(MAX_BUILTIN + 4, 0);
-pub(crate) const CAF: Symbol = Symbol::init_var(MAX_BUILTIN + 5, 0);
-pub(crate) const CS: Symbol = Symbol::init_var(MAX_BUILTIN + 6, 0);
-pub(crate) const CAS: Symbol = Symbol::init_var(MAX_BUILTIN + 7, 0);
-pub(crate) const MAX_REP: u32 = MAX_BUILTIN + 7;
-
 /// A Representation/Dimension of the index.
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Representation {

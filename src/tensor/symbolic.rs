@@ -1,11 +1,9 @@
 use super::{
-    Contract, HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract,
-    SymbolicStructureContract, TensorNetwork, TensorStructure, VecStructure,
+    Contract, HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract, TensorNetwork, TensorStructure, VecStructure,
 };
 
 use symbolica::{
     representations::{Atom, AtomView, Symbol},
-    state::{State, Workspace},
 };
 
 /// A fully symbolic tensor, with no concrete values.

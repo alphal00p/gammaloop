@@ -1,9 +1,6 @@
-use core::fmt;
-use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::ops::Mul;
 
-use ahash::HashMap;
 use ahash::HashMapExt;
 use duplicate::duplicate;
 
@@ -14,7 +11,6 @@ use symbolica::domains::float::Real;
 use symbolica::representations::Atom;
 
 use symbolica::state::State;
-use symbolica::state::Workspace;
 
 #[macro_export]
 macro_rules! forward_ref_bino {
@@ -375,56 +371,6 @@ where
         let out = lhs.as_ref() - rhs.as_ref();
         *self = out;
     }
-}
-
-#[test]
-fn test_fallible_mul() {
-    let a: i32 = 4;
-    let b: f64 = 4.;
-    let mut c = a.mul_fallible(b).unwrap();
-    c.add_assign_fallible(&a);
-    let d: Option<f64> = b.mul_fallible(&a);
-    let a: &i32 = &a;
-    let e: Option<f64> = a.mul_fallible(&b);
-    assert_eq!(c, 20.);
-    assert_eq!(d, Some(16.));
-    assert_eq!(e, Some(16.));
-
-    let a = &Atom::parse("a(2)").unwrap();
-    let b = &Atom::parse("b(1)").unwrap();
-
-    let mut f = a.mul_fallible(4.).unwrap();
-    f.add_assign_fallible(b);
-
-    let i = Atom::new_var(State::I);
-
-    f.add_assign_fallible(&i);
-
-    let function_map = HashMap::new();
-    let mut cache = HashMap::new();
-
-    let mut const_map = HashMap::new();
-    const_map.insert(i.as_view(), Complex::<f64>::new(0., 1.));
-
-    const_map.insert(a.as_view(), Complex::<f64>::new(3., 1.));
-
-    const_map.insert(b.as_view(), Complex::<f64>::new(3., 1.));
-
-    let ev = f.as_view().evaluate(&const_map, &function_map, &mut cache);
-
-    println!("{}", ev);
-    // print!("{}", f.unwrap());
-
-    let g = Complex::new(0.1, 3.);
-
-    let mut h = a.sub_fallible(g).unwrap();
-
-    h.add_assign_fallible(a);
-    let f = a.mul_fallible(a);
-
-    Atom::default();
-
-    println!("{}", h);
 }
 
 // impl<T, U> SmallestUpgrade<U> for T

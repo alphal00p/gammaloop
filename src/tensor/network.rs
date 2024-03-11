@@ -5,7 +5,7 @@ use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
 use symbolica::{
     domains::float::Complex,
     representations::{Atom, AtomView, Symbol},
-    state::{State, Workspace},
+    state::{State},
 };
 
 use self::parametric::{MixedTensor, MixedTensors};
@@ -622,7 +622,7 @@ where
             .reverse_nodemap
             .clone()
             .into_iter()
-            .filter(|(n, e)| self.graph.nodes[*n].contractions_num() < depth)
+            .filter(|(n, _e)| self.graph.nodes[*n].contractions_num() < depth)
             .collect();
         if neighs.is_empty() {
             return None;
@@ -671,7 +671,7 @@ where
     I: TensorStructure + Clone,
 {
     pub fn generate_params(&mut self) {
-        for (i, n) in &self.graph.nodes {
+        for (_i, n) in &self.graph.nodes {
             if n.is_symbolic() {
                 self.params.push(n.clone());
             }
