@@ -1,5 +1,5 @@
 use super::{
-    atomic_expanded_label_id, structure, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot,
+    atomic_expanded_label_id, ConcreteIndex, DenseTensorLinearIterator, HasName, Slot,
     SparseTensorLinearIterator, TensorStructure, TracksCount, TrySmallestUpgrade, VecStructure,
 };
 use ahash::AHashMap;

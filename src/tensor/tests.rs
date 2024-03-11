@@ -1,11 +1,11 @@
 use crate::tensor::{
-    ufo::mink_four_vector, Contract, DataIterator, DenseTensor, FallibleMul, GetTensorData,
-    HasTensorData, MixedTensor, Representation, SparseTensor, StructureContract, TensorStructure,
+    ufo::mink_four_vector, Contract, DenseTensor, FallibleAddAssign, FallibleMul, FallibleSub,
+    GetTensorData, HasTensorData, MixedTensor, Representation, SparseTensor, StructureContract,
+    TensorStructure,
 };
 use ahash::{HashMap, HashMapExt};
 
 use indexmap::{IndexMap, IndexSet};
-use itertools::Itertools;
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 use smartstring::alias::String;
@@ -18,7 +18,7 @@ use symbolica::{
 use super::{
     symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension, HistoryStructure,
     NamedStructure, NumTensor, SetTensorData, Shadowable, Slot, TensorNetwork, TryIntoUpgrade,
-    TrySmallestUpgrade, VecStructure,
+    VecStructure,
 };
 
 trait Average {
@@ -833,4 +833,54 @@ fn symbolic_contract() {
     // }
 
     println!("{}", a.dot());
+}
+
+#[test]
+fn test_fallible_mul() {
+    let a: i32 = 4;
+    let b: f64 = 4.;
+    let mut c = a.mul_fallible(b).unwrap();
+    c.add_assign_fallible(&a);
+    let d: Option<f64> = b.mul_fallible(&a);
+    let a: &i32 = &a;
+    let e: Option<f64> = a.mul_fallible(&b);
+    assert_eq!(c, 20.);
+    assert_eq!(d, Some(16.));
+    assert_eq!(e, Some(16.));
+
+    let a = &Atom::parse("a(2)").unwrap();
+    let b = &Atom::parse("b(1)").unwrap();
+
+    let mut f = a.mul_fallible(4.).unwrap();
+    f.add_assign_fallible(b);
+
+    let i = Atom::new_var(State::I);
+
+    f.add_assign_fallible(&i);
+
+    let function_map = HashMap::new();
+    let mut cache = HashMap::new();
+
+    let mut const_map = HashMap::new();
+    const_map.insert(i.as_view(), Complex::<f64>::new(0., 1.));
+
+    const_map.insert(a.as_view(), Complex::<f64>::new(3., 1.));
+
+    const_map.insert(b.as_view(), Complex::<f64>::new(3., 1.));
+
+    let ev = f.as_view().evaluate(&const_map, &function_map, &mut cache);
+
+    println!("{}", ev);
+    // print!("{}", f.unwrap());
+
+    let g = Complex::new(0.1, 3.);
+
+    let mut h = a.sub_fallible(g).unwrap();
+
+    h.add_assign_fallible(a);
+    let f = a.mul_fallible(a);
+
+    Atom::default();
+
+    println!("{}", h);
 }

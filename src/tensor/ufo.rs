@@ -1,25 +1,16 @@
-use crate::tensor::{CADJ, CAF, CAS, CF, CS, EUC, LOR, SPIN};
-
 use super::{
     AbstractIndex, DenseTensor, HistoryStructure, IntoId,
     Representation::{self, Euclidean, Lorentz},
-    SetTensorData, Shadowable, Slot, SparseTensor, TensorStructure, MAX_REP,
+    SetTensorData, Shadowable, Slot, SparseTensor, TensorStructure,
 };
-use itertools::Itertools;
-use num::{Float, NumCast, One, Zero};
+
+use num::{NumCast, One, Zero};
 
 use symbolica::{
     domains::float::{Complex, Real},
     representations::{Atom, Symbol},
-    state::{State, Workspace},
+    state::State,
 };
-
-pub const ID: Symbol = Symbol::init_var(MAX_REP + 1, 0);
-pub const GAMMA: Symbol = Symbol::init_var(MAX_REP + 2, 0);
-pub const GAMMA5: Symbol = Symbol::init_var(MAX_REP + 3, 0);
-pub const PROJM: Symbol = Symbol::init_var(MAX_REP + 4, 0);
-pub const PROJP: Symbol = Symbol::init_var(MAX_REP + 5, 0);
-pub const SIGMA: Symbol = Symbol::init_var(MAX_REP + 6, 0);
 
 // pub fn init_state() {
 //     assert!(EUC == State::get_or_insert_fn("euc", None).unwrap());
