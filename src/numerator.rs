@@ -1,19 +1,16 @@
-use symbolica::{
-    representations::{AsAtomView, Atom},
-    state::{State, Workspace},
-};
+use symbolica::representations::Atom;
 
 use crate::{
     graph::{EdgeType, Graph},
     model::Model,
 };
 
-pub fn generate_numerator(graph: &Graph, model: &Model, state: &mut State, ws: &Workspace) -> Atom {
+pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let _ = model;
     let vatoms: Vec<Atom> = graph
         .vertices
         .iter()
-        .flat_map(|v| v.apply_vertex_rule(graph, state, ws))
+        .flat_map(|v| v.apply_vertex_rule(graph))
         .collect();
     // graph
     //     .edges
@@ -24,9 +21,9 @@ pub fn generate_numerator(graph: &Graph, model: &Model, state: &mut State, ws: &
         .edges
         .iter()
         .filter(|e| e.edge_type == EdgeType::Virtual)
-        .map(|e| e.numerator(graph, state, ws))
+        .map(|e| e.numerator(graph))
         .collect();
-    let mut builder = vatoms[0].builder(state, ws);
+    let mut builder = Atom::new_num(1);
 
     for v in vatoms[1..].iter() {
         builder = builder * v;
@@ -36,5 +33,5 @@ pub fn generate_numerator(graph: &Graph, model: &Model, state: &mut State, ws: &
         builder = builder * e;
     }
 
-    builder.into_atom()
+    builder
 }

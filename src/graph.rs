@@ -19,11 +19,7 @@ use num::Complex;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
-use symbolica::{
-    id::Pattern,
-    representations::Atom,
-    state::{State, Workspace},
-};
+use symbolica::{id::Pattern, representations::Atom};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -192,45 +188,26 @@ impl Edge {
         self.vertices[1] == vertex
     }
 
-    pub fn numerator(&self, graph: &Graph, state: &mut State, ws: &Workspace) -> Atom {
+    pub fn numerator(&self, graph: &Graph) -> Atom {
         let mut atom = self.propagator.numerator.clone();
 
-        let pat: Pattern = Atom::new_num(1).into_pattern(state);
-        let rhs = Pattern::parse(
-            &format!("in{}", graph.edge_name_to_position.get(&self.name).unwrap()),
-            state,
-            ws,
-        )
+        let pat: Pattern = Atom::new_num(1).into_pattern();
+        let rhs = Pattern::parse(&format!(
+            "in{}",
+            graph.edge_name_to_position.get(&self.name).unwrap()
+        ))
         .unwrap();
 
-        pat.replace_all(
-            atom.clone().as_view(),
-            &rhs,
-            state,
-            ws,
-            &HashMap::default(),
-            &mut atom,
-        );
+        atom = pat.replace_all(atom.as_view(), &rhs, None, None);
 
-        let pat: Pattern = Atom::new_num(2).into_pattern(state);
-        let rhs = Pattern::parse(
-            &format!(
-                "out{}",
-                graph.edge_name_to_position.get(&self.name).unwrap()
-            ),
-            state,
-            ws,
-        )
+        let pat: Pattern = Atom::new_num(2).into_pattern();
+        let rhs = Pattern::parse(&format!(
+            "out{}",
+            graph.edge_name_to_position.get(&self.name).unwrap()
+        ))
         .unwrap();
 
-        pat.replace_all(
-            atom.clone().as_view(),
-            &rhs,
-            state,
-            ws,
-            &HashMap::default(),
-            &mut atom,
-        );
+        atom = pat.replace_all(atom.as_view(), &rhs, None, None);
 
         atom
     }
@@ -278,7 +255,7 @@ impl Vertex {
         graph.is_edge_incoming(edge, graph.get_vertex_position(&self.name).unwrap())
     }
 
-    pub fn apply_vertex_rule(&self, graph: &Graph, state: &mut State, ws: &Workspace) -> Vec<Atom> {
+    pub fn apply_vertex_rule(&self, graph: &Graph) -> Vec<Atom> {
         match &self.vertex_info {
             VertexInfo::ExternalVertexInfo(_) => vec![],
             VertexInfo::InteractonVertexInfo(interaction_vertex_info) => {
@@ -289,22 +266,15 @@ impl Vertex {
                     .map(|ls| {
                         let mut atom = ls.structure.clone();
                         for (i, e) in self.edges.iter().enumerate() {
-                            let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern(state);
+                            let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
                             let dir = if self.is_edge_incoming(*e, graph) {
                                 "in"
                             } else {
                                 "out"
                             };
-                            let rhs = Pattern::parse(&format!("{}{}", dir, e), state, ws).unwrap();
-                            let a = atom.clone();
-                            pat.replace_all(
-                                a.as_view(),
-                                &rhs,
-                                state,
-                                ws,
-                                &HashMap::default(),
-                                &mut atom,
-                            );
+                            let rhs = Pattern::parse(&format!("{}{}", dir, e)).unwrap();
+
+                            atom = pat.replace_all(atom.as_view(), &rhs, None, None);
                         }
                         atom
                     })
@@ -702,8 +672,8 @@ impl Graph {
         self.derived_data.cff_expression = Some(generate_cff_expression(self).unwrap());
     }
 
-    pub fn generate_numerator(&mut self, model: &Model, state: &mut State, ws: &Workspace) {
-        self.derived_data.numerator = Some(generate_numerator(self, model, state, ws));
+    pub fn generate_numerator(&mut self, model: &Model) {
+        self.derived_data.numerator = Some(generate_numerator(self, model));
     }
 
     #[inline]

@@ -132,15 +132,12 @@ pub struct SerializablePropagator {
 }
 
 impl SerializablePropagator {
-    pub fn from_propagator(
-        propagator: &Propagator,
-        sb_state: &symbolica::state::State,
-    ) -> SerializablePropagator {
+    pub fn from_propagator(propagator: &Propagator) -> SerializablePropagator {
         SerializablePropagator {
             name: propagator.name.clone(),
             particle: propagator.particle.name.clone(),
-            numerator: utils::to_str_expression(&propagator.numerator, sb_state),
-            denominator: utils::to_str_expression(&propagator.denominator, sb_state),
+            numerator: utils::to_str_expression(&propagator.numerator),
+            denominator: utils::to_str_expression(&propagator.denominator),
         }
     }
 }
@@ -157,22 +154,12 @@ impl Propagator {
     pub fn from_serializable_propagator(
         model: &Model,
         propagator: &SerializablePropagator,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
     ) -> Propagator {
         Propagator {
             name: propagator.name.clone(),
             particle: model.get_particle(&propagator.particle).clone(),
-            numerator: utils::parse_python_expression(
-                propagator.numerator.as_str(),
-                sb_state,
-                sb_workspace,
-            ),
-            denominator: utils::parse_python_expression(
-                propagator.denominator.as_str(),
-                sb_state,
-                sb_workspace,
-            ),
+            numerator: utils::parse_python_expression(propagator.numerator.as_str()),
+            denominator: utils::parse_python_expression(propagator.denominator.as_str()),
         }
     }
 }
@@ -436,9 +423,7 @@ impl SerializableModel {
             propagators: model
                 .propagators
                 .iter()
-                .map(|propagator| {
-                    SerializablePropagator::from_propagator(propagator.as_ref(), sb_state)
-                })
+                .map(|propagator| SerializablePropagator::from_propagator(propagator.as_ref()))
                 .collect(),
             lorentz_structures: model
                 .lorentz_structures
@@ -588,8 +573,6 @@ impl Model {
                 let propagator = Arc::new(Propagator::from_serializable_propagator(
                     &model,
                     serializable_propagator,
-                    sb_state,
-                    sb_workspace,
                 ));
                 model
                     .propagator_name_to_position
