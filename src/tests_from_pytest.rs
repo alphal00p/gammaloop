@@ -18,29 +18,21 @@ use symbolica;
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: f64 = 1.0e-12;
 
-pub fn load_amplitude_output(
-    output_path: String,
-    sb_state: &mut symbolica::state::State,
-    sb_workspace: &symbolica::state::Workspace,
-) -> (Model, Amplitude) {
+pub fn load_amplitude_output(output_path: String) -> (Model, Amplitude) {
     let path = Path::new(&output_path);
     let output_meta_data: OutputMetaData =
         serde_yaml::from_reader(File::open(path.join("output_metadata.yaml")).unwrap()).unwrap();
     assert_eq!(output_meta_data.output_type, OutputType::Amplitudes);
     assert_eq!(output_meta_data.contents.len(), 1);
 
-    let model = Model::from_file(
-        String::from(
-            path.join(format!(
-                "sources/model/{}.yaml",
-                output_meta_data.model_name
-            ))
-            .to_str()
-            .unwrap(),
-        ),
-        sb_state,
-        sb_workspace,
-    )
+    let model = Model::from_file(String::from(
+        path.join(format!(
+            "sources/model/{}.yaml",
+            output_meta_data.model_name
+        ))
+        .to_str()
+        .unwrap(),
+    ))
     .unwrap();
     let amplitude = Amplitude::from_file(
         &model,
@@ -72,13 +64,9 @@ mod tests_scalar_massless_triangle {
     #[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
     fn pytest_massless_scalar_triangle() {
         assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-        let mut sb_state = symbolica::state::State::new();
-        let sb_workspace = symbolica::state::Workspace::new();
-        let (model, amplitude) = load_amplitude_output(
-            env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-            &mut sb_state,
-            &sb_workspace,
-        );
+
+        let (model, amplitude) =
+            load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
         assert_eq!(model.name, "scalars");
         assert!(amplitude.amplitude_graphs.len() == 1);
@@ -160,13 +148,9 @@ mod tests_scalar_massless_triangle {
 #[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
 fn pytest_scalar_fishnet_2x2() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -279,13 +263,9 @@ fn pytest_scalar_fishnet_2x2() {
 #[ignore]
 fn pytest_scalar_sunrise() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -331,13 +311,9 @@ fn pytest_scalar_sunrise() {
 #[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
 fn pytest_scalar_fishnet_2x3() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, mut amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+
+    let (model, mut amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -413,13 +389,8 @@ fn pytest_scalar_fishnet_2x3() {
 fn pytest_scalar_cube() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -490,13 +461,8 @@ fn pytest_scalar_cube() {
 fn pytest_scalar_bubble() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -540,13 +506,8 @@ fn pytest_scalar_bubble() {
 fn pytest_massless_scalar_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -622,13 +583,8 @@ fn pytest_massless_scalar_box() {
 fn pytest_scalar_double_triangle() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -697,13 +653,8 @@ fn pytest_scalar_double_triangle() {
 fn pytest_scalar_mercedes() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -766,13 +717,8 @@ fn pytest_scalar_mercedes() {
 fn pytest_scalar_triangle_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -845,13 +791,8 @@ fn pytest_scalar_triangle_box() {
 fn pytest_scalar_isopod() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);

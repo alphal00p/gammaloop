@@ -8,8 +8,8 @@ use crate::{Precision, StabilityLevelSetting};
 use itertools::Itertools;
 use log::{debug, warn};
 use lorentz_vector::LorentzVector;
+use num::traits::Zero;
 use num::Complex;
-use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 

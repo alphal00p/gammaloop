@@ -24,6 +24,16 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+out.yaml
+outmap.yaml
+params.yaml
+find-baseline.svg
+*.data
+*.old
+eval.cpp
+evaluate.cpp
+perf.data
 # logos
 logos/
 

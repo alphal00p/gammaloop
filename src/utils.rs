@@ -3,10 +3,10 @@ use colored::Colorize;
 use hyperdual::Hyperdual;
 use itertools::{izip, Itertools};
 use lorentz_vector::{Field, LorentzVector, RealNumberLike};
+use num::traits::{Float, FloatConst, FromPrimitive, Num, NumAssign, NumCast, Signed};
+use num::traits::{Inv, One, Zero};
 use num::Complex;
 use num::ToPrimitive;
-use num_traits::{Float, FloatConst, FromPrimitive, Num, NumAssign, NumCast, Signed};
-use num_traits::{Inv, One, Zero};
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
@@ -152,18 +152,14 @@ where
 {
 }
 
-pub fn parse_python_expression(
-    expression: &str,
-    sb_state: &mut symbolica::state::State,
-    sb_workspace: &symbolica::state::Workspace,
-) -> Atom {
+pub fn parse_python_expression(expression: &str) -> Atom {
     let processed_string = String::from(expression)
         .replace("**", "^")
         .replace("cmath.sqrt", "sqrt")
         .replace("cmath.pi", "pi")
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
-    Atom::parse(processed_string.as_str(), sb_state, sb_workspace)
+    Atom::parse(processed_string.as_str())
         .map_err(|e| {
             format!(
                 "Failed to parse expression : '{}'\nError: {}",
@@ -173,10 +169,7 @@ pub fn parse_python_expression(
         .unwrap()
 }
 
-pub fn to_str_expression(
-    expression: &Atom,
-    sb_state: &symbolica::state::State,
-) -> SmartString<LazyCompact> {
+pub fn to_str_expression(expression: &Atom) -> SmartString<LazyCompact> {
     format!(
         "{}",
         AtomPrinter::new_with_options(
@@ -187,13 +180,13 @@ pub fn to_str_expression(
                 color_builtin_functions: false,
                 print_finite_field: false,
                 explicit_rational_polynomial: false,
+                symmetric_representation_for_finite_field: false,
                 number_thousands_separator: None,
                 multiplication_operator: '*',
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
                 latex: false
             },
-            sb_state
         )
     )
     .into()
@@ -960,7 +953,7 @@ pub fn global_parameterize<T: FloatLike>(
                         // r = e_cm * b * x/(1-x)
                         let b = Into::<T>::into(settings.parameterization.b);
                         let radius = e_cm * b * x_r[0] / (T::one() - x_r[0]);
-                        jac *= <T as num_traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                        jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
                         radius
                     }
                 }
@@ -1060,7 +1053,7 @@ pub fn global_parameterize<T: FloatLike>(
 
 #[allow(unused)]
 pub fn global_inv_parameterize<T: FloatLike>(
-    moms: &Vec<LorentzVector<T>>,
+    moms: &[LorentzVector<T>],
     e_cm_squared: T,
     settings: &Settings,
     force_radius: bool,
@@ -1094,7 +1087,7 @@ pub fn global_inv_parameterize<T: FloatLike>(
                     }
                     ParameterizationMapping::Linear => {
                         let b = Into::<T>::into(settings.parameterization.b);
-                        inv_jac /= <T as num_traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
+                        inv_jac /= <T as num::traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
                         xs.push(k_r / (e_cm * b + k_r));
                     }
                 }
@@ -1217,7 +1210,7 @@ pub fn parameterize3d<T: FloatLike>(
                     // r = e_cm * b * x/(1-x)
                     let b = Into::<T>::into(settings.parameterization.b);
                     let radius = e_cm * b * x_r[0] / (T::one() - x_r[0]);
-                    jac *= <T as num_traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                    jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
                     radius
                 }
             };
@@ -1291,7 +1284,7 @@ pub fn inv_parametrize3d<T: FloatLike>(
         }
         ParameterizationMapping::Linear => {
             let b = Into::<T>::into(settings.parameterization.b);
-            jac /= <T as num_traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
+            jac /= <T as num::traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
             k_r / (e_cm * b + k_r)
         }
     };

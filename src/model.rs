@@ -38,10 +38,7 @@ pub struct SerializableVertexRule {
 }
 
 impl SerializableVertexRule {
-    pub fn from_vertex_rule(
-        vertex_rule: &VertexRule,
-        sb_state: &symbolica::state::State,
-    ) -> SerializableVertexRule {
+    pub fn from_vertex_rule(vertex_rule: &VertexRule) -> SerializableVertexRule {
         SerializableVertexRule {
             name: vertex_rule.name.clone(),
             particles: vertex_rule
@@ -52,7 +49,7 @@ impl SerializableVertexRule {
             color_structures: vertex_rule
                 .color_structures
                 .iter()
-                .map(|color_structure| utils::to_str_expression(color_structure, sb_state))
+                .map(utils::to_str_expression)
                 .collect(),
             lorentz_structures: vertex_rule
                 .lorentz_structures
@@ -86,8 +83,6 @@ impl VertexRule {
     pub fn from_serializable_vertex_rule(
         model: &Model,
         vertex_rule: &SerializableVertexRule,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
     ) -> VertexRule {
         VertexRule {
             name: vertex_rule.name.clone(),
@@ -100,11 +95,7 @@ impl VertexRule {
                 .color_structures
                 .iter()
                 .map(|color_structure_name| {
-                    utils::parse_python_expression(
-                        color_structure_name.as_str(),
-                        sb_state,
-                        sb_workspace,
-                    )
+                    utils::parse_python_expression(color_structure_name.as_str())
                 })
                 .collect(),
             lorentz_structures: vertex_rule
@@ -142,13 +133,10 @@ pub struct SerializableCoupling {
 }
 
 impl SerializableCoupling {
-    pub fn from_coupling(
-        coupling: &Coupling,
-        sb_state: &symbolica::state::State,
-    ) -> SerializableCoupling {
+    pub fn from_coupling(coupling: &Coupling) -> SerializableCoupling {
         SerializableCoupling {
             name: coupling.name.clone(),
-            expression: utils::to_str_expression(&coupling.expression, sb_state),
+            expression: utils::to_str_expression(&coupling.expression),
             orders: coupling.orders.clone(),
             value: coupling.value.map(|value| (value.re, value.im)),
         }
@@ -164,18 +152,10 @@ pub struct Coupling {
 }
 
 impl Coupling {
-    pub fn from_serializable_coupling(
-        coupling: &SerializableCoupling,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
-    ) -> Coupling {
+    pub fn from_serializable_coupling(coupling: &SerializableCoupling) -> Coupling {
         Coupling {
             name: coupling.name.clone(),
-            expression: utils::parse_python_expression(
-                coupling.expression.as_str(),
-                sb_state,
-                sb_workspace,
-            ),
+            expression: utils::parse_python_expression(coupling.expression.as_str()),
             orders: coupling.orders.clone(),
             value: coupling.value.map(|value| Complex::new(value.0, value.1)),
         }
@@ -264,14 +244,11 @@ pub struct SerializableLorentzStructure {
 }
 
 impl SerializableLorentzStructure {
-    pub fn from_lorentz_structure(
-        ls: &LorentzStructure,
-        sb_state: &symbolica::state::State,
-    ) -> SerializableLorentzStructure {
+    pub fn from_lorentz_structure(ls: &LorentzStructure) -> SerializableLorentzStructure {
         SerializableLorentzStructure {
             name: ls.name.clone(),
             spins: ls.spins.clone(),
-            structure: utils::to_str_expression(&ls.structure, sb_state),
+            structure: utils::to_str_expression(&ls.structure),
         }
     }
 }
@@ -286,17 +263,11 @@ pub struct LorentzStructure {
 impl LorentzStructure {
     pub fn from_serializable_lorentz_structure(
         ls: &SerializableLorentzStructure,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
     ) -> LorentzStructure {
         LorentzStructure {
             name: ls.name.clone(),
             spins: ls.spins.clone(),
-            structure: utils::parse_python_expression(
-                ls.structure.as_str(),
-                sb_state,
-                sb_workspace,
-            ),
+            structure: utils::parse_python_expression(ls.structure.as_str()),
         }
     }
 }
@@ -313,10 +284,7 @@ pub struct SerializableParameter {
 }
 
 impl SerializableParameter {
-    pub fn from_parameter(
-        param: &Parameter,
-        sb_state: &symbolica::state::State,
-    ) -> SerializableParameter {
+    pub fn from_parameter(param: &Parameter) -> SerializableParameter {
         SerializableParameter {
             name: param.name.clone(),
             lhablock: param.lhablock.clone(),
@@ -324,10 +292,7 @@ impl SerializableParameter {
             nature: param.nature.clone(),
             parameter_type: param.parameter_type.clone(),
             value: param.value.map(|value| (value.re, value.im)),
-            expression: param
-                .expression
-                .as_ref()
-                .map(|expr| utils::to_str_expression(expr, sb_state)),
+            expression: param.expression.as_ref().map(utils::to_str_expression),
         }
     }
 }
@@ -344,11 +309,7 @@ pub struct Parameter {
 }
 
 impl Parameter {
-    pub fn from_serializable_parameter(
-        param: &SerializableParameter,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
-    ) -> Parameter {
+    pub fn from_serializable_parameter(param: &SerializableParameter) -> Parameter {
         Parameter {
             name: param.name.clone(),
             lhablock: param.lhablock.clone(),
@@ -359,7 +320,7 @@ impl Parameter {
             expression: param
                 .expression
                 .as_ref()
-                .map(|expr| utils::parse_python_expression(expr.as_str(), sb_state, sb_workspace)),
+                .map(|expr| utils::parse_python_expression(expr.as_str())),
         }
     }
 }
@@ -398,7 +359,7 @@ impl SerializableModel {
             .suggestion("Is it a correct yaml file")
     }
 
-    pub fn from_model(model: &Model, sb_state: &symbolica::state::State) -> SerializableModel {
+    pub fn from_model(model: &Model) -> SerializableModel {
         SerializableModel {
             name: model.name.clone(),
             restriction: model.restriction.clone(),
@@ -410,9 +371,7 @@ impl SerializableModel {
             parameters: model
                 .parameters
                 .iter()
-                .map(|parameter| {
-                    SerializableParameter::from_parameter(parameter.as_ref(), sb_state)
-                })
+                .map(|parameter| SerializableParameter::from_parameter(parameter.as_ref()))
                 .collect(),
             particles: model
                 .particles
@@ -423,23 +382,18 @@ impl SerializableModel {
                 .lorentz_structures
                 .iter()
                 .map(|lorentz_structure| {
-                    SerializableLorentzStructure::from_lorentz_structure(
-                        lorentz_structure.as_ref(),
-                        sb_state,
-                    )
+                    SerializableLorentzStructure::from_lorentz_structure(lorentz_structure.as_ref())
                 })
                 .collect(),
             couplings: model
                 .couplings
                 .iter()
-                .map(|coupling| SerializableCoupling::from_coupling(coupling.as_ref(), sb_state))
+                .map(|coupling| SerializableCoupling::from_coupling(coupling.as_ref()))
                 .collect(),
             vertex_rules: model
                 .vertex_rules
                 .iter()
-                .map(|vertex_rule| {
-                    SerializableVertexRule::from_vertex_rule(vertex_rule.as_ref(), sb_state)
-                })
+                .map(|vertex_rule| SerializableVertexRule::from_vertex_rule(vertex_rule.as_ref()))
                 .collect(),
         }
     }
@@ -499,11 +453,7 @@ impl Model {
         self.name == "ModelNotLoaded" || self.particles.is_empty()
     }
 
-    pub fn from_serializable_model(
-        serializable_model: SerializableModel,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
-    ) -> Model {
+    pub fn from_serializable_model(serializable_model: SerializableModel) -> Model {
         let mut model: Model = Model::default();
         model.name = serializable_model.name;
         model.restriction = serializable_model.restriction;
@@ -532,11 +482,8 @@ impl Model {
             .iter()
             .enumerate()
             .map(|(i_param, serializable_param)| {
-                let parameter = Arc::new(Parameter::from_serializable_parameter(
-                    serializable_param,
-                    sb_state,
-                    sb_workspace,
-                ));
+                let parameter =
+                    Arc::new(Parameter::from_serializable_parameter(serializable_param));
                 model
                     .parameter_name_to_position
                     .insert(parameter.name.clone(), i_param);
@@ -573,8 +520,6 @@ impl Model {
                 let lorentz_structure =
                     Arc::new(LorentzStructure::from_serializable_lorentz_structure(
                         serializable_lorentz_structure,
-                        sb_state,
-                        sb_workspace,
                     ));
                 model
                     .lorentz_structure_name_to_position
@@ -589,11 +534,8 @@ impl Model {
             .iter()
             .enumerate()
             .map(|(i_coupl, serializable_coupling)| {
-                let coupling = Arc::new(Coupling::from_serializable_coupling(
-                    serializable_coupling,
-                    sb_state,
-                    sb_workspace,
-                ));
+                let coupling =
+                    Arc::new(Coupling::from_serializable_coupling(serializable_coupling));
                 model
                     .coupling_name_to_position
                     .insert(coupling.name.clone(), i_coupl);
@@ -610,8 +552,6 @@ impl Model {
                 let vertex_rule = Arc::new(VertexRule::from_serializable_vertex_rule(
                     &model,
                     serializable_vertex_rule,
-                    sb_state,
-                    sb_workspace,
                 ));
                 model
                     .vertex_rule_name_to_position
@@ -623,32 +563,20 @@ impl Model {
         model
     }
 
-    pub fn to_serializable(&self, sb_state: &symbolica::state::State) -> SerializableModel {
-        SerializableModel::from_model(self, sb_state)
+    pub fn to_serializable(&self) -> SerializableModel {
+        SerializableModel::from_model(self)
     }
 
-    pub fn to_yaml(&self, sb_state: &symbolica::state::State) -> Result<String, Error> {
-        serde_yaml::to_string(&self.to_serializable(sb_state))
+    pub fn to_yaml(&self) -> Result<String, Error> {
+        serde_yaml::to_string(&self.to_serializable())
     }
 
-    pub fn from_file(
-        file_path: String,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
-    ) -> Result<Model, Report> {
-        SerializableModel::from_file(file_path).map(|serializable_model| {
-            Model::from_serializable_model(serializable_model, sb_state, sb_workspace)
-        })
+    pub fn from_file(file_path: String) -> Result<Model, Report> {
+        SerializableModel::from_file(file_path).map(Model::from_serializable_model)
     }
 
-    pub fn from_yaml_str(
-        yaml_str: String,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
-    ) -> Result<Model, Report> {
-        SerializableModel::from_yaml_str(yaml_str).map(|serializable_model| {
-            Model::from_serializable_model(serializable_model, sb_state, sb_workspace)
-        })
+    pub fn from_yaml_str(yaml_str: String) -> Result<Model, Report> {
+        SerializableModel::from_yaml_str(yaml_str).map(Model::from_serializable_model)
     }
 
     #[inline]

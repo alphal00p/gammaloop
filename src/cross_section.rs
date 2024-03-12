@@ -15,7 +15,7 @@ use smartstring::{LazyCompact, SmartString};
 use std::fs;
 use std::fs::File;
 use std::path::Path;
-use symbolica;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OutputType {
@@ -392,13 +392,7 @@ impl CrossSection {
     }
 
     #[allow(unused)]
-    pub fn export(
-        &self,
-        export_root: &str,
-        model: &Model,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
-    ) -> Result<(), Report> {
+    pub fn export(&self, export_root: &str, model: &Model) -> Result<(), Report> {
         // TODO process cross-section by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
 
@@ -492,13 +486,7 @@ impl Amplitude {
     }
 
     #[allow(unused)]
-    pub fn export(
-        &mut self,
-        export_root: &str,
-        model: &Model,
-        sb_state: &mut symbolica::state::State,
-        sb_workspace: &symbolica::state::Workspace,
-    ) -> Result<(), Report> {
+    pub fn export(&mut self, export_root: &str, model: &Model) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
 

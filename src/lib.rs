@@ -1,5 +1,11 @@
 #![cfg_attr(feature = "fail-on-warnings", deny(warnings))]
-
+// #![deny(clippy::all)]
+// #![warn(clippy::pedantic)]
+#![warn(clippy::all)]
+// #![warn(clippy::restriction)]
+// #![warn(clippy::nursery)]
+// #![warn(clippy::cargo)]
+// #![feature(min_specialization)]
 pub mod api;
 pub mod cff;
 pub mod cli_functions;
