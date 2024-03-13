@@ -19,7 +19,10 @@ use num::Complex;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
-use symbolica::{id::Pattern, representations::Atom};
+use symbolica::{
+    id::Pattern,
+    representations::{Atom, AtomView},
+};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -192,22 +195,44 @@ impl Edge {
         let mut atom = self.propagator.numerator.clone();
 
         let pat: Pattern = Atom::new_num(1).into_pattern();
-        let rhs = Pattern::parse(&format!(
+        let index_atom = Atom::parse(&format!(
             "in{}",
             graph.edge_name_to_position.get(&self.name).unwrap()
         ))
         .unwrap();
 
-        atom = pat.replace_all(atom.as_view(), &rhs, None, None);
+        let index_num = if let AtomView::Var(v) = index_atom.as_view() {
+            v.get_symbol().get_id()
+        } else {
+            unreachable!()
+        };
+
+        atom = pat.replace_all(
+            atom.as_view(),
+            &Pattern::parse(&format!("{index_num}")).unwrap(),
+            None,
+            None,
+        );
 
         let pat: Pattern = Atom::new_num(2).into_pattern();
-        let rhs = Pattern::parse(&format!(
+        let index_atom = Atom::parse(&format!(
             "out{}",
             graph.edge_name_to_position.get(&self.name).unwrap()
         ))
         .unwrap();
 
-        atom = pat.replace_all(atom.as_view(), &rhs, None, None);
+        let index_num = if let AtomView::Var(v) = index_atom.as_view() {
+            v.get_symbol().get_id()
+        } else {
+            unreachable!()
+        };
+
+        atom = pat.replace_all(
+            atom.as_view(),
+            &Pattern::parse(&format!("{index_num}")).unwrap(),
+            None,
+            None,
+        );
 
         atom
     }
@@ -272,9 +297,19 @@ impl Vertex {
                             } else {
                                 "out"
                             };
-                            let rhs = Pattern::parse(&format!("{}{}", dir, e)).unwrap();
+                            let index_atom = Atom::parse(&format!("{}{}", dir, e)).unwrap();
+                            let index_num = if let AtomView::Var(v) = index_atom.as_view() {
+                                v.get_symbol().get_id()
+                            } else {
+                                unreachable!()
+                            };
 
-                            atom = pat.replace_all(atom.as_view(), &rhs, None, None);
+                            atom = pat.replace_all(
+                                atom.as_view(),
+                                &Atom::new_num(index_num as i64).into_pattern(),
+                                None,
+                                None,
+                            );
                         }
                         atom
                     })

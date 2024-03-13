@@ -25,11 +25,11 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
         .collect();
     let mut builder = Atom::new_num(1);
 
-    for v in vatoms[1..].iter() {
+    for v in &vatoms {
         builder = builder * v;
     }
 
-    for e in eatoms.iter() {
+    for e in &eatoms {
         builder = builder * e;
     }
 
