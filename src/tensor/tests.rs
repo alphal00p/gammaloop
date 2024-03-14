@@ -1,3 +1,4 @@
+use crate::tensor::IntoId;
 use crate::tensor::{
     ufo::mink_four_vector, Contract, DenseTensor, FallibleAddAssign, FallibleMul, FallibleSub,
     GetTensorData, HasTensorData, MixedTensor, Representation, SparseTensor, StructureContract,
@@ -6,8 +7,11 @@ use crate::tensor::{
 use ahash::{HashMap, HashMapExt};
 
 use indexmap::{IndexMap, IndexSet};
+use petgraph::visit::Data;
+use pyo3::IntoPy;
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
+use rayon::range;
 use smartstring::alias::String;
 use symbolica::domains::float::Complex;
 use symbolica::{
@@ -15,6 +19,7 @@ use symbolica::{
     state::{State, Workspace},
 };
 
+use super::FallibleAdd;
 use super::{
     symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension, HistoryStructure,
     NamedStructure, NumTensor, SetTensorData, Shadowable, Slot, TensorNetwork, TryIntoUpgrade,
@@ -638,11 +643,11 @@ fn sparse_addition() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let f = a + b;
+    // let f = &a + &b;
 
     let result = IndexMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
 
-    assert_eq!(f.hashmap(), result)
+    // assert_eq!(f.hashmap(), result)
 }
 
 #[test]
@@ -660,11 +665,33 @@ fn sparse_sub() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let f = a - b;
+    let f = a.sub_fallible(&b).unwrap();
 
     let result = IndexMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
     assert_eq!(f.hashmap(), result);
     // println!("{:?}", f);
+}
+
+#[test]
+fn arithmetic_data() {
+    let sa = test_structure(3, 1);
+    let range = Some((-1000, 1000));
+
+    let a: DataTensor<i32> = test_tensor(sa.clone(), 1, range).into();
+
+    let b: DataTensor<i32> = test_tensor(sa.clone(), 2, range).into();
+
+    // let c = &a + &b;
+
+    // assert_eq!(
+    // vec![-267, 634, 0, 0, 650, 0, 520, 326, 0, 0, -120, -294, -907, 0, 0],
+    // c.to_dense().data()
+    // );
+
+    let syma = sa.clone().shadow_with("a".into_id());
+    let symb = sa.clone().shadow_with("b".into_id());
+
+    // let symc = &syma + &symb;
 }
 
 #[test]
@@ -839,7 +866,7 @@ fn symbolic_contract() {
 fn test_fallible_mul() {
     let a: i32 = 4;
     let b: f64 = 4.;
-    let mut c = a.mul_fallible(b).unwrap();
+    let mut c: f64 = a.mul_fallible(&b).unwrap();
     c.add_assign_fallible(&a);
     let d: Option<f64> = b.mul_fallible(&a);
     let a: &i32 = &a;

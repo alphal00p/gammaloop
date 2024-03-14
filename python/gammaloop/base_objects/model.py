@@ -128,7 +128,7 @@ class Propagator(object):
                 denominator = 'P(1)**2'
         elif particle.spin == 2:  # spinor 2s+1=2
             if particle.is_massive():
-                numerator = f'PSlash(1,2)+{particle.mass.name}'
+                numerator = f'PSlash(1,2)+{particle.mass.name}*Identity(1,2)'
                 denominator = f'P(1)**2-{particle.mass.name}**2'
             else:
                 numerator = 'PSlash(1,2)'

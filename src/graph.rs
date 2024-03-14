@@ -194,6 +194,38 @@ impl Edge {
     pub fn numerator(&self, graph: &Graph) -> Atom {
         let mut atom = self.propagator.numerator.clone();
 
+        let pindex_atom = Atom::parse(&format!(
+            "p{}",
+            graph.edge_name_to_position.get(&self.name).unwrap()
+        ))
+        .unwrap();
+
+        let pindex_num = if let AtomView::Var(v) = pindex_atom.as_view() {
+            v.get_symbol().get_id()
+        } else {
+            unreachable!()
+        };
+
+        let pfun = Pattern::parse("P(x_)").unwrap();
+        atom = pfun.replace_all(
+            atom.as_view(),
+            &Pattern::parse(&format!("P{}(x_)", pindex_num)).unwrap(),
+            None,
+            None,
+        );
+
+        let pslashfun = Pattern::parse("PSlash(x__)").unwrap();
+        atom = pslashfun.replace_all(
+            atom.as_view(),
+            &Pattern::parse(&format!(
+                "P{}({})Gamma({},x__)",
+                pindex_num, pindex_num, pindex_num
+            ))
+            .unwrap(),
+            None,
+            None,
+        );
+
         let pat: Pattern = Atom::new_num(1).into_pattern();
         let index_atom = Atom::parse(&format!(
             "in{}",

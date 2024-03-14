@@ -3,7 +3,7 @@ use super::{
     TensorStructure, VecStructure,
 };
 
-use symbolica::representations::{Atom, AtomView, Symbol};
+use symbolica::representations::{Atom, AtomView, MulView, Symbol};
 
 /// A fully symbolic tensor, with no concrete values.
 ///
@@ -79,25 +79,42 @@ impl SymbolicTensor {
         self.smart_shadow().unwrap()
     }
 
-    pub fn to_network(self) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
+    fn mul_to_network(
+        mul: MulView,
+    ) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
         let mut network: TensorNetwork<MixedTensor<VecStructure>> = TensorNetwork::new();
+        for atom in mul.iter() {
+            if let AtomView::Fun(f) = atom {
+                let mut structure: Vec<Slot> = vec![];
+                let f_id = f.get_symbol();
 
-        if let AtomView::Mul(m) = self.expression.as_view() {
-            for atom in m.iter() {
-                if let AtomView::Fun(f) = atom {
-                    let mut structure: Vec<Slot> = vec![];
-                    let f_id = f.get_symbol();
+                for arg in f.iter() {
+                    structure.push(arg.try_into()?);
+                }
+                let s: VecStructure = structure.into();
+                network.push(s.to_explicit_rep(f_id));
+            }
 
-                    for arg in f.iter() {
-                        structure.push(arg.try_into()?);
+            if let AtomView::Add(a) = atom {
+                let mut terms = vec![];
+                for t in a.iter() {
+                    if let AtomView::Mul(m) = t {
+                        let mut term_net = Self::mul_to_network(m)?;
+                        term_net.contract();
+                        terms.push(term_net.result());
                     }
-                    let s: VecStructure = structure.into();
-                    network.push(s.to_explicit_rep(f_id));
                 }
             }
         }
-
         Ok(network)
+    }
+
+    pub fn to_network(self) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
+        if let AtomView::Mul(mul) = self.expression.as_view() {
+            Self::mul_to_network(mul)
+        } else {
+            Err("Not a valid expression")
+        }
     }
 }
 
