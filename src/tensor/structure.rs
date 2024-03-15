@@ -592,7 +592,7 @@ pub trait TensorStructure {
         set1 == set2
     }
 
-    /// find the permutation of the external indices that would make the two tensors the same
+    /// find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self
     fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>> {
         if self.external_structure().len() != other.external_structure().len() {
             return None;

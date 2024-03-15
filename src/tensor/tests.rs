@@ -148,6 +148,19 @@ fn indexflatten() {
 }
 
 #[test]
+fn permutation() {
+    let a: Vec<Slot> = vec![(1, 2).into(), (3, 4).into(), (5, 6).into()];
+
+    let b: Vec<Slot> = vec![(3, 4).into(), (5, 6).into(), (1, 2).into()];
+
+    let permutation = a.find_permutation(&b).unwrap();
+
+    let c = permutation.iter().map(|x| b[*x]).collect::<Vec<_>>();
+
+    assert_eq!(c, a);
+}
+
+#[test]
 fn trace() {
     let structura =
         HistoryStructure::from_integers(&[(1, 5), (1, 5)].map(|(a, d)| (a.into(), d.into())), "a");
@@ -681,12 +694,12 @@ fn arithmetic_data() {
 
     let b: DataTensor<i32> = test_tensor(sa.clone(), 2, range).into();
 
-    // let c = &a + &b;
+    let c = a.add_fallible(&b).unwrap();
 
-    // assert_eq!(
-    // vec![-267, 634, 0, 0, 650, 0, 520, 326, 0, 0, -120, -294, -907, 0, 0],
-    // c.to_dense().data()
-    // );
+    assert_eq!(
+        vec![-267, 634, 0, 0, 650, 0, 520, 326, 0, 0, -120, -294, -907, 0, 0],
+        c.to_dense().data()
+    );
 
     let syma = sa.clone().shadow_with("a".into_id());
     let symb = sa.clone().shadow_with("b".into_id());
