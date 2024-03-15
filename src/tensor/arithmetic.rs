@@ -1,6 +1,8 @@
 use crate::tensor::{structure, ConcreteIndex, GetTensorData, SetTensorData};
 
-use super::{DataTensor, DenseTensor, FallibleAdd, FallibleSub, SparseTensor, TensorStructure};
+use super::{
+    DataTensor, DenseTensor, FallibleAdd, FallibleSub, MixedTensor, SparseTensor, TensorStructure,
+};
 use ahash::AHashMap;
 use num::traits::Num;
 use std::ops::{Add, Mul, Sub};
@@ -13,19 +15,17 @@ where
     type Output = DenseTensor<Out, I>;
     fn add_fallible(self, rhs: &DenseTensor<T, I>) -> Option<Self::Output> {
         assert!(self.structure().same_external(rhs.structure()));
+        // Makes rhs into self ,when applied.
         let permutation = self.structure().find_permutation(rhs.structure()).unwrap();
-        let structure = rhs.structure().clone();
+        let structure = self.structure().clone();
 
-        let data: Option<Vec<Out>> = rhs
-            .data
+        let data: Option<Vec<Out>> = self
             .iter()
-            .enumerate()
-            .map(|(i, u)| {
-                let indices = structure.expanded_index(i).unwrap();
+            .map(|(indices, u)| {
                 let permuted_indices: Vec<ConcreteIndex> =
                     permutation.iter().map(|&index| indices[index]).collect();
-                let self_value = self.get(&permuted_indices).unwrap();
-                self_value.add_fallible(u)
+                let t = rhs.get(&permuted_indices).unwrap();
+                u.add_fallible(t)
             })
             .collect();
 
@@ -41,20 +41,21 @@ impl<'a, T, U, I, Out> FallibleAdd<&SparseTensor<T, I>> for &'a DenseTensor<U, I
 where
     for<'b, 'c> &'b U: FallibleAdd<&'c T, Output = Out>,
     I: TensorStructure + Clone,
+    T: Default + Clone,
 {
     type Output = DenseTensor<Out, I>;
     fn add_fallible(self, rhs: &SparseTensor<T, I>) -> Option<Self::Output> {
         assert!(self.structure().same_external(rhs.structure()));
         let permutation = self.structure().find_permutation(rhs.structure()).unwrap();
-        let structure = rhs.structure().clone();
+        let structure = self.structure().clone();
 
-        let data: Option<Vec<Out>> = rhs
+        let data: Option<Vec<Out>> = self
             .iter()
-            .map(|(indices, value)| {
+            .map(|(indices, u)| {
                 let permuted_indices: Vec<ConcreteIndex> =
                     permutation.iter().map(|&index| indices[index]).collect();
-                let self_value = self.get(&permuted_indices).unwrap();
-                self_value.add_fallible(value)
+                let t = rhs.smart_get(&permuted_indices).unwrap();
+                u.add_fallible(&t)
             })
             .collect();
 
@@ -70,20 +71,21 @@ impl<'a, T, U, I, Out> FallibleAdd<&DenseTensor<T, I>> for &'a SparseTensor<U, I
 where
     for<'b, 'c> &'b U: FallibleAdd<&'c T, Output = Out>,
     I: TensorStructure + Clone,
+    U: Default + Clone,
 {
     type Output = DenseTensor<Out, I>;
     fn add_fallible(self, rhs: &DenseTensor<T, I>) -> Option<Self::Output> {
         assert!(self.structure().same_external(rhs.structure()));
-        let permutation = self.structure().find_permutation(rhs.structure()).unwrap();
+        let permutation = rhs.structure().find_permutation(self.structure()).unwrap();
         let structure = rhs.structure().clone();
 
         let data: Option<Vec<Out>> = rhs
             .iter()
-            .map(|(indices, value)| {
+            .map(|(indices, t)| {
                 let permuted_indices: Vec<ConcreteIndex> =
                     permutation.iter().map(|&index| indices[index]).collect();
-                let self_value = self.get(&permuted_indices).unwrap();
-                self_value.add_fallible(value)
+                let u = self.smart_get(&permuted_indices).unwrap();
+                u.add_fallible(t)
             })
             .collect();
 
@@ -99,22 +101,88 @@ impl<'a, T, U, I, Out> FallibleAdd<&SparseTensor<T, I>> for &'a SparseTensor<U, 
 where
     for<'b, 'c> &'b U: FallibleAdd<&'c T, Output = Out>,
     I: TensorStructure + Clone,
-    U: Default + Clone,
+    T: Default + Clone,
+    Out: Default + PartialEq,
 {
     type Output = SparseTensor<Out, I>;
     fn add_fallible(self, rhs: &SparseTensor<T, I>) -> Option<Self::Output> {
         assert!(self.structure().same_external(rhs.structure()));
         let permutation = self.structure().find_permutation(rhs.structure()).unwrap();
-        let structure = rhs.structure().clone();
+        let structure = self.structure().clone();
         let mut data = SparseTensor::empty(structure);
-        for (indices, value) in rhs.iter() {
+        for (indices, u) in self.iter() {
             let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
-            let self_value = self.smart_get(&permuted_indices).unwrap();
-            data.set(&indices, self_value.add_fallible(value)?).unwrap();
+            let t = rhs.smart_get(&permuted_indices).unwrap();
+            data.smart_set(&indices, u.add_fallible(&t)?).unwrap();
         }
 
         Some(data)
+    }
+}
+
+impl<'a, T, U, Out, I> FallibleAdd<&DataTensor<T, I>> for &'a DataTensor<U, I>
+where
+    for<'b, 'c> &'b U: FallibleAdd<&'c T, Output = Out>,
+    U: Default + Clone,
+    T: Default + Clone,
+    Out: Default + PartialEq,
+    I: TensorStructure + Clone,
+{
+    type Output = DataTensor<Out, I>;
+    fn add_fallible(self, rhs: &DataTensor<T, I>) -> Option<Self::Output> {
+        match (self, rhs) {
+            (DataTensor::Dense(a), DataTensor::Dense(b)) => {
+                Some(DataTensor::Dense(a.add_fallible(b)?))
+            }
+            (DataTensor::Sparse(a), DataTensor::Sparse(b)) => {
+                Some(DataTensor::Sparse(a.add_fallible(b)?))
+            }
+            (DataTensor::Dense(a), DataTensor::Sparse(b)) => {
+                Some(DataTensor::Dense(a.add_fallible(b)?))
+            }
+            (DataTensor::Sparse(a), DataTensor::Dense(b)) => {
+                Some(DataTensor::Dense(a.add_fallible(b)?))
+            }
+        }
+    }
+}
+
+impl<'a, I> FallibleAdd<&MixedTensor<I>> for &'a MixedTensor<I>
+where
+    I: TensorStructure + Clone,
+{
+    type Output = MixedTensor<I>;
+    fn add_fallible(self, rhs: &MixedTensor<I>) -> Option<Self::Output> {
+        match (self, rhs) {
+            (MixedTensor::Float(a), MixedTensor::Float(b)) => {
+                Some(MixedTensor::Float(a.add_fallible(b)?))
+            }
+            (MixedTensor::Complex(a), MixedTensor::Complex(b)) => {
+                Some(MixedTensor::Complex(a.add_fallible(b)?))
+            }
+            (MixedTensor::Float(a), MixedTensor::Complex(b)) => {
+                Some(MixedTensor::Complex(a.add_fallible(b)?))
+            }
+            (MixedTensor::Complex(a), MixedTensor::Float(b)) => {
+                Some(MixedTensor::Complex(a.add_fallible(b)?))
+            }
+            (MixedTensor::Symbolic(a), MixedTensor::Symbolic(b)) => {
+                Some(MixedTensor::Symbolic(a.add_fallible(b)?))
+            }
+            (MixedTensor::Symbolic(a), MixedTensor::Float(b)) => {
+                Some(MixedTensor::Symbolic(a.add_fallible(b)?))
+            }
+            (MixedTensor::Symbolic(a), MixedTensor::Complex(b)) => {
+                Some(MixedTensor::Symbolic(a.add_fallible(b)?))
+            }
+            (MixedTensor::Float(a), MixedTensor::Symbolic(b)) => {
+                Some(MixedTensor::Symbolic(a.add_fallible(b)?))
+            }
+            (MixedTensor::Complex(a), MixedTensor::Symbolic(b)) => {
+                Some(MixedTensor::Symbolic(a.add_fallible(b)?))
+            }
+        }
     }
 }
 
@@ -127,18 +195,15 @@ where
     fn sub_fallible(self, rhs: &DenseTensor<T, I>) -> Option<Self::Output> {
         assert!(self.structure().same_external(rhs.structure()));
         let permutation = self.structure().find_permutation(rhs.structure()).unwrap();
-        let structure = rhs.structure().clone();
+        let structure = self.structure().clone();
 
-        let data: Option<Vec<Out>> = rhs
-            .data
+        let data: Option<Vec<Out>> = self
             .iter()
-            .enumerate()
-            .map(|(i, u)| {
-                let indices = structure.expanded_index(i).unwrap();
+            .map(|(indices, u)| {
                 let permuted_indices: Vec<ConcreteIndex> =
                     permutation.iter().map(|&index| indices[index]).collect();
-                let self_value = self.get(&permuted_indices).unwrap();
-                self_value.sub_fallible(u)
+                let t = rhs.get(&permuted_indices).unwrap();
+                u.sub_fallible(t)
             })
             .collect();
 
@@ -158,19 +223,16 @@ where
     type Output = DenseTensor<Out, I>;
     fn sub_fallible(self, rhs: &DenseTensor<T, I>) -> Option<Self::Output> {
         assert!(self.structure().same_external(rhs.structure()));
-        let permutation = self.structure().find_permutation(rhs.structure()).unwrap();
+        let permutation = rhs.structure().find_permutation(self.structure()).unwrap();
         let structure = rhs.structure().clone();
 
         let data: Option<Vec<Out>> = rhs
-            .data
             .iter()
-            .enumerate()
-            .map(|(i, u)| {
-                let indices = structure.expanded_index(i).unwrap();
+            .map(|(indices, t)| {
                 let permuted_indices: Vec<ConcreteIndex> =
                     permutation.iter().map(|&index| indices[index]).collect();
-                let self_value = self.get(&permuted_indices).unwrap();
-                self_value.sub_fallible(u)
+                let u = self.get(&permuted_indices).unwrap();
+                u.sub_fallible(t)
             })
             .collect();
 
@@ -184,12 +246,31 @@ where
 
 impl<'a, T, U, I, Out> FallibleSub<&SparseTensor<T, I>> for &'a DenseTensor<U, I>
 where
-    for<'b, 'c> &'b T: FallibleSub<&'c U, Output = Out>,
+    for<'b, 'c> &'b U: FallibleSub<&'c T, Output = Out>,
     I: TensorStructure + Clone,
+    T: Default + Clone,
 {
     type Output = DenseTensor<Out, I>;
     fn sub_fallible(self, rhs: &SparseTensor<T, I>) -> Option<Self::Output> {
-        rhs.sub_fallible(self)
+        assert!(self.structure().same_external(rhs.structure()));
+        let permutation = self.structure().find_permutation(rhs.structure()).unwrap();
+        let structure = self.structure().clone();
+
+        let data: Option<Vec<Out>> = self
+            .iter()
+            .map(|(indices, u)| {
+                let permuted_indices: Vec<ConcreteIndex> =
+                    permutation.iter().map(|&index| indices[index]).collect();
+                let t = rhs.smart_get(&permuted_indices).unwrap();
+                u.sub_fallible(&t)
+            })
+            .collect();
+
+        if let Some(data) = data {
+            Some(DenseTensor { structure, data })
+        } else {
+            None
+        }
     }
 }
 
@@ -197,169 +278,86 @@ impl<'a, T, U, I, Out> FallibleSub<&SparseTensor<T, I>> for &'a SparseTensor<U, 
 where
     for<'b, 'c> &'b U: FallibleSub<&'c T, Output = Out>,
     I: TensorStructure + Clone,
-    U: Default + Clone,
+    T: Default + Clone,
+    Out: Default + PartialEq,
 {
     type Output = SparseTensor<Out, I>;
     fn sub_fallible(self, rhs: &SparseTensor<T, I>) -> Option<Self::Output> {
         assert!(self.structure().same_external(rhs.structure()));
         let permutation = self.structure().find_permutation(rhs.structure()).unwrap();
-        let structure = rhs.structure().clone();
+        let structure = self.structure().clone();
         let mut data = SparseTensor::empty(structure);
-        for (indices, value) in rhs.iter() {
+        for (indices, u) in self.iter() {
             let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
-            let self_value = self.smart_get(&permuted_indices).unwrap();
-            data.set(&indices, self_value.sub_fallible(value)?).unwrap();
+            let t = rhs.smart_get(&permuted_indices).unwrap();
+            data.smart_set(&indices, u.sub_fallible(&t)?).unwrap();
         }
 
         Some(data)
     }
 }
 
-// impl<'a, T, I> Sub<&DenseTensor<T, I>> for &'a DenseTensor<T, I>
-// where
-//     for<'b, 'c> &'b T: Sub<&'c T, Output = T>,
-//     T: Clone,
-//     I: TensorStructure + Clone,
-// {
-//     type Output = DenseTensor<T, I>;
-//     fn sub(self, other: &DenseTensor<T, I>) -> DenseTensor<T, I> {
-//         assert!(self.structure().same_external(other.structure()));
-//         let permutation = self
-//             .structure()
-//             .find_permutation(other.structure())
-//             .unwrap();
-
-//         let mut result = self.clone();
-
-//         for (indices, value) in other.iter() {
-//             let permuted_indices: Vec<ConcreteIndex> =
-//                 permutation.iter().map(|&index| indices[index]).collect();
-//             let self_value = self.get(&permuted_indices).unwrap();
-//             result.set(&indices, self_value - value).unwrap();
-//         }
-//         result
-//     }
-// }
-
-// impl<'a, T, I> Sub<&SparseTensor<T, I>> for &'a SparseTensor<T, I>
-// where
-//     for<'b, 'c> &'b T: Sub<&'c T, Output = T>,
-//     T: Clone + Default,
-//     I: TensorStructure + Clone,
-// {
-//     type Output = SparseTensor<T, I>;
-//     fn sub(self, other: &SparseTensor<T, I>) -> SparseTensor<T, I> {
-//         assert!(self.structure().same_external(other.structure()));
-//         let permutation = self
-//             .structure()
-//             .find_permutation(other.structure())
-//             .unwrap();
-
-//         let mut result = self.clone();
-
-//         for (indices, value) in other.iter() {
-//             let permuted_indices: Vec<ConcreteIndex> =
-//                 permutation.iter().map(|&index| indices[index]).collect();
-//             let self_value = self.smart_get(&permuted_indices).unwrap();
-//             result.set(&indices, self_value.as_ref() - value).unwrap();
-//         }
-
-//         result
-//     }
-// }
-
-// impl<'a, T, I> Sub<&SparseTensor<T, I>> for &'a DenseTensor<T, I>
-// where
-//     for<'b, 'c> &'b T: Sub<&'c T, Output = T>,
-//     T: Clone,
-//     I: TensorStructure + Clone,
-// {
-//     type Output = DenseTensor<T, I>;
-//     fn sub(self, other: &SparseTensor<T, I>) -> DenseTensor<T, I> {
-//         assert!(self.structure().same_external(other.structure()));
-//         let permutation = self
-//             .structure()
-//             .find_permutation(other.structure())
-//             .unwrap();
-
-//         let mut result = self.clone();
-
-//         for (indices, value) in other.iter() {
-//             let permuted_indices: Vec<ConcreteIndex> =
-//                 permutation.iter().map(|&index| indices[index]).collect();
-//             let self_value = self.get(&permuted_indices).unwrap();
-//             result.set(&indices, self_value - value).unwrap();
-//         }
-//         result
-//     }
-// }
-
-// impl<'a, T, I> Sub<&DenseTensor<T, I>> for &'a SparseTensor<T, I>
-// where
-//     for<'b, 'c> &'b T: Sub<&'c T, Output = T>,
-//     T: Clone,
-//     I: TensorStructure + Clone,
-// {
-//     type Output = DenseTensor<T, I>;
-//     fn sub(self, other: &DenseTensor<T, I>) -> DenseTensor<T, I> {
-//         other - self
-//     }
-// }
-
-// impl<'a, T, I> Mul<&T> for &'a DenseTensor<T, I>
-// where
-//     T: Num + Clone + Copy,
-//     I: TensorStructure + Clone,
-// {
-//     type Output = DenseTensor<T, I>;
-//     fn mul(self, other: &T) -> DenseTensor<T, I> {
-//         let mut result = self.clone();
-
-//         for (indices, value) in self.iter() {
-//             result.set(&indices, *other * *value).unwrap();
-//         }
-//         result
-//     }
-// }
-
-// impl<'a, T, I> Mul<&T> for &'a SparseTensor<T, I>
-// where
-//     T: Num + Copy + Default,
-//     I: TensorStructure + Clone,
-// {
-//     type Output = SparseTensor<T, I>;
-//     fn mul(self, other: &T) -> Self::Output {
-//         let mut result = self.clone();
-
-//         for (indices, value) in self.iter() {
-//             result.set(&indices, *other * *value).unwrap();
-//         }
-//         result
-//     }
-// }
-
-impl<'a, T, U, Out, I> FallibleAdd<&DataTensor<T, I>> for &'a DataTensor<U, I>
+impl<'a, T, U, Out, I> FallibleSub<&DataTensor<T, I>> for &'a DataTensor<U, I>
 where
-    for<'b, 'c> &'b U: FallibleAdd<&'c T, Output = Out>,
-
+    for<'b, 'c> &'b U: FallibleSub<&'c T, Output = Out>,
     U: Default + Clone,
+    T: Default + Clone,
+    Out: Default + PartialEq,
     I: TensorStructure + Clone,
 {
     type Output = DataTensor<Out, I>;
-    fn add_fallible(self, rhs: &DataTensor<T, I>) -> Option<Self::Output> {
+    fn sub_fallible(self, rhs: &DataTensor<T, I>) -> Option<Self::Output> {
         match (self, rhs) {
             (DataTensor::Dense(a), DataTensor::Dense(b)) => {
-                Some(DataTensor::Dense(a.add_fallible(b)?))
+                Some(DataTensor::Dense(a.sub_fallible(b)?))
             }
             (DataTensor::Sparse(a), DataTensor::Sparse(b)) => {
-                Some(DataTensor::Sparse(a.add_fallible(b)?))
+                Some(DataTensor::Sparse(a.sub_fallible(b)?))
             }
             (DataTensor::Dense(a), DataTensor::Sparse(b)) => {
-                Some(DataTensor::Dense(a.add_fallible(b)?))
+                Some(DataTensor::Dense(a.sub_fallible(b)?))
             }
             (DataTensor::Sparse(a), DataTensor::Dense(b)) => {
-                Some(DataTensor::Dense(a.add_fallible(b)?))
+                Some(DataTensor::Dense(a.sub_fallible(b)?))
+            }
+        }
+    }
+}
+
+impl<'a, I> FallibleSub<&MixedTensor<I>> for &'a MixedTensor<I>
+where
+    I: TensorStructure + Clone,
+{
+    type Output = MixedTensor<I>;
+    fn sub_fallible(self, rhs: &MixedTensor<I>) -> Option<Self::Output> {
+        match (self, rhs) {
+            (MixedTensor::Float(a), MixedTensor::Float(b)) => {
+                Some(MixedTensor::Float(a.sub_fallible(b)?))
+            }
+            (MixedTensor::Complex(a), MixedTensor::Complex(b)) => {
+                Some(MixedTensor::Complex(a.sub_fallible(b)?))
+            }
+            (MixedTensor::Float(a), MixedTensor::Complex(b)) => {
+                Some(MixedTensor::Complex(a.sub_fallible(b)?))
+            }
+            (MixedTensor::Complex(a), MixedTensor::Float(b)) => {
+                Some(MixedTensor::Complex(a.sub_fallible(b)?))
+            }
+            (MixedTensor::Symbolic(a), MixedTensor::Symbolic(b)) => {
+                Some(MixedTensor::Symbolic(a.sub_fallible(b)?))
+            }
+            (MixedTensor::Symbolic(a), MixedTensor::Float(b)) => {
+                Some(MixedTensor::Symbolic(a.sub_fallible(b)?))
+            }
+            (MixedTensor::Symbolic(a), MixedTensor::Complex(b)) => {
+                Some(MixedTensor::Symbolic(a.sub_fallible(b)?))
+            }
+            (MixedTensor::Float(a), MixedTensor::Symbolic(b)) => {
+                Some(MixedTensor::Symbolic(a.sub_fallible(b)?))
+            }
+            (MixedTensor::Complex(a), MixedTensor::Symbolic(b)) => {
+                Some(MixedTensor::Symbolic(a.sub_fallible(b)?))
             }
         }
     }
