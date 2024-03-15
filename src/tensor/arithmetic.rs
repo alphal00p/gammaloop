@@ -1,11 +1,12 @@
-use crate::tensor::{structure, ConcreteIndex, GetTensorData, SetTensorData};
+use crate::tensor::{ConcreteIndex, GetTensorData, SetTensorData};
 
 use super::{
-    DataTensor, DenseTensor, FallibleAdd, FallibleSub, MixedTensor, SparseTensor, TensorStructure,
+    DataTensor, DenseTensor, FallibleAdd, FallibleMul, FallibleSub, MixedTensor, SparseTensor,
+    TensorStructure,
 };
-use ahash::AHashMap;
-use num::traits::Num;
-use std::ops::{Add, Mul, Sub};
+
+use symbolica::domains::float::Complex;
+use symbolica::representations::Atom;
 
 impl<'a, T, U, I, Out> FallibleAdd<&DenseTensor<T, I>> for &'a DenseTensor<U, I>
 where
@@ -359,6 +360,102 @@ where
             (MixedTensor::Complex(a), MixedTensor::Symbolic(b)) => {
                 Some(MixedTensor::Symbolic(a.sub_fallible(b)?))
             }
+        }
+    }
+}
+
+trait ScalarMul<T> {
+    type Output;
+    fn scalar_mul(&self, rhs: T) -> Option<Self::Output>;
+}
+
+impl<'a, T, U, I, Out> ScalarMul<&T> for &'a DenseTensor<U, I>
+where
+    for<'b, 'c> &'b U: FallibleMul<&'c T, Output = Out>,
+    I: TensorStructure + Clone,
+{
+    type Output = DenseTensor<Out, I>;
+    fn scalar_mul(&self, rhs: &T) -> Option<Self::Output> {
+        let data: Option<Vec<Out>> = self.iter_flat().map(|(_, u)| u.mul_fallible(rhs)).collect();
+
+        if let Some(data) = data {
+            Some(DenseTensor {
+                structure: self.structure().clone(),
+                data,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T, U, I, Out> ScalarMul<&T> for &'a SparseTensor<U, I>
+where
+    for<'b, 'c> &'b U: FallibleMul<&'c T, Output = Out>,
+    I: TensorStructure + Clone,
+{
+    type Output = SparseTensor<Out, I>;
+    fn scalar_mul(&self, rhs: &T) -> Option<Self::Output> {
+        let mut data = SparseTensor::empty(self.structure().clone());
+        for (indices, u) in self.iter_flat() {
+            data.set_flat(indices, u.mul_fallible(rhs)?).unwrap();
+        }
+        Some(data)
+    }
+}
+
+impl<'a, T, U, I, Out> ScalarMul<&T> for &'a DataTensor<U, I>
+where
+    for<'b, 'c> &'b U: FallibleMul<&'c T, Output = Out>,
+    I: TensorStructure + Clone,
+{
+    type Output = DataTensor<Out, I>;
+    fn scalar_mul(&self, rhs: &T) -> Option<Self::Output> {
+        match self {
+            DataTensor::Dense(a) => Some(DataTensor::Dense(a.scalar_mul(rhs)?)),
+            DataTensor::Sparse(a) => Some(DataTensor::Sparse(a.scalar_mul(rhs)?)),
+        }
+    }
+}
+
+impl<'a, I> ScalarMul<&f64> for &'a MixedTensor<I>
+where
+    I: TensorStructure + Clone,
+{
+    type Output = MixedTensor<I>;
+    fn scalar_mul(&self, rhs: &f64) -> Option<Self::Output> {
+        match self {
+            MixedTensor::Float(a) => Some(MixedTensor::Float(a.scalar_mul(rhs)?)),
+            MixedTensor::Complex(a) => Some(MixedTensor::Complex(a.scalar_mul(rhs)?)),
+            MixedTensor::Symbolic(a) => Some(MixedTensor::Symbolic(a.scalar_mul(rhs)?)),
+        }
+    }
+}
+
+impl<'a, I> ScalarMul<&Complex<f64>> for &'a MixedTensor<I>
+where
+    I: TensorStructure + Clone,
+{
+    type Output = MixedTensor<I>;
+    fn scalar_mul(&self, rhs: &Complex<f64>) -> Option<Self::Output> {
+        match self {
+            MixedTensor::Float(a) => Some(MixedTensor::Complex(a.scalar_mul(rhs)?)),
+            MixedTensor::Complex(a) => Some(MixedTensor::Complex(a.scalar_mul(rhs)?)),
+            MixedTensor::Symbolic(a) => Some(MixedTensor::Symbolic(a.scalar_mul(rhs)?)),
+        }
+    }
+}
+
+impl<'a, I> ScalarMul<&Atom> for &'a MixedTensor<I>
+where
+    I: TensorStructure + Clone,
+{
+    type Output = MixedTensor<I>;
+    fn scalar_mul(&self, rhs: &Atom) -> Option<Self::Output> {
+        match self {
+            MixedTensor::Float(a) => Some(MixedTensor::Symbolic(a.scalar_mul(rhs)?)),
+            MixedTensor::Complex(a) => Some(MixedTensor::Symbolic(a.scalar_mul(rhs)?)),
+            MixedTensor::Symbolic(a) => Some(MixedTensor::Symbolic(a.scalar_mul(rhs)?)),
         }
     }
 }
