@@ -1,4 +1,3 @@
-use crate::tensor::IntoId;
 use crate::tensor::{
     ufo::mink_four_vector, Contract, DenseTensor, FallibleAddAssign, FallibleMul, FallibleSub,
     GetTensorData, HasTensorData, MixedTensor, Representation, SparseTensor, StructureContract,
@@ -7,11 +6,10 @@ use crate::tensor::{
 use ahash::{HashMap, HashMapExt};
 
 use indexmap::{IndexMap, IndexSet};
-use petgraph::visit::Data;
-use pyo3::IntoPy;
+
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
-use rayon::range;
+
 use smartstring::alias::String;
 use symbolica::domains::float::Complex;
 use symbolica::{
@@ -656,11 +654,11 @@ fn sparse_addition() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    // let f = &a + &b;
+    let f = a.add_fallible(&b).unwrap();
 
     let result = IndexMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
 
-    // assert_eq!(f.hashmap(), result)
+    assert_eq!(f.hashmap(), result)
 }
 
 #[test]
@@ -701,10 +699,10 @@ fn arithmetic_data() {
         c.to_dense().data()
     );
 
-    let syma = sa.clone().shadow_with("a".into_id());
-    let symb = sa.clone().shadow_with("b".into_id());
+    // let syma = sa.clone().shadow_with("a".into_id());
+    // let symb = sa.clone().shadow_with("b".into_id());
 
-    // let symc = &syma + &symb;
+    //  let symc = &syma + &symb;
 }
 
 #[test]

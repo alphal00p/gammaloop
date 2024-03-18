@@ -364,9 +364,9 @@ where
     }
 }
 
-trait ScalarMul<T> {
+pub trait ScalarMul<T> {
     type Output;
-    fn scalar_mul(&self, rhs: T) -> Option<Self::Output>;
+    fn scalar_mul(self, rhs: T) -> Option<Self::Output>;
 }
 
 impl<'a, T, U, I, Out> ScalarMul<&T> for &'a DenseTensor<U, I>
@@ -375,7 +375,7 @@ where
     I: TensorStructure + Clone,
 {
     type Output = DenseTensor<Out, I>;
-    fn scalar_mul(&self, rhs: &T) -> Option<Self::Output> {
+    fn scalar_mul(self, rhs: &T) -> Option<Self::Output> {
         let data: Option<Vec<Out>> = self.iter_flat().map(|(_, u)| u.mul_fallible(rhs)).collect();
 
         if let Some(data) = data {
@@ -395,7 +395,7 @@ where
     I: TensorStructure + Clone,
 {
     type Output = SparseTensor<Out, I>;
-    fn scalar_mul(&self, rhs: &T) -> Option<Self::Output> {
+    fn scalar_mul(self, rhs: &T) -> Option<Self::Output> {
         let mut data = SparseTensor::empty(self.structure().clone());
         for (indices, u) in self.iter_flat() {
             data.set_flat(indices, u.mul_fallible(rhs)?).unwrap();
@@ -410,7 +410,7 @@ where
     I: TensorStructure + Clone,
 {
     type Output = DataTensor<Out, I>;
-    fn scalar_mul(&self, rhs: &T) -> Option<Self::Output> {
+    fn scalar_mul(self, rhs: &T) -> Option<Self::Output> {
         match self {
             DataTensor::Dense(a) => Some(DataTensor::Dense(a.scalar_mul(rhs)?)),
             DataTensor::Sparse(a) => Some(DataTensor::Sparse(a.scalar_mul(rhs)?)),
@@ -423,7 +423,7 @@ where
     I: TensorStructure + Clone,
 {
     type Output = MixedTensor<I>;
-    fn scalar_mul(&self, rhs: &f64) -> Option<Self::Output> {
+    fn scalar_mul(self, rhs: &f64) -> Option<Self::Output> {
         match self {
             MixedTensor::Float(a) => Some(MixedTensor::Float(a.scalar_mul(rhs)?)),
             MixedTensor::Complex(a) => Some(MixedTensor::Complex(a.scalar_mul(rhs)?)),
@@ -437,7 +437,7 @@ where
     I: TensorStructure + Clone,
 {
     type Output = MixedTensor<I>;
-    fn scalar_mul(&self, rhs: &Complex<f64>) -> Option<Self::Output> {
+    fn scalar_mul(self, rhs: &Complex<f64>) -> Option<Self::Output> {
         match self {
             MixedTensor::Float(a) => Some(MixedTensor::Complex(a.scalar_mul(rhs)?)),
             MixedTensor::Complex(a) => Some(MixedTensor::Complex(a.scalar_mul(rhs)?)),
@@ -451,7 +451,7 @@ where
     I: TensorStructure + Clone,
 {
     type Output = MixedTensor<I>;
-    fn scalar_mul(&self, rhs: &Atom) -> Option<Self::Output> {
+    fn scalar_mul(self, rhs: &Atom) -> Option<Self::Output> {
         match self {
             MixedTensor::Float(a) => Some(MixedTensor::Symbolic(a.scalar_mul(rhs)?)),
             MixedTensor::Complex(a) => Some(MixedTensor::Symbolic(a.scalar_mul(rhs)?)),

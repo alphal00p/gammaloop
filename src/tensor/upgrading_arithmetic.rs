@@ -10,8 +10,6 @@ use symbolica::representations::Atom;
 
 use symbolica::state::State;
 
-use super::SparseTensor;
-
 #[macro_export]
 macro_rules! forward_ref_bino {
     (impl $imp:ident, $method:ident for $t:ty, $u:ty,$out:ty) => {

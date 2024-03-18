@@ -1,6 +1,6 @@
 use super::{
-    Contract, HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract, TensorNetwork,
-    TensorStructure, VecStructure,
+    Contract, FallibleAdd, HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract,
+    TensorNetwork, TensorStructure, VecStructure,
 };
 
 use symbolica::representations::{Atom, AtomView, MulView, Symbol};
@@ -84,26 +84,44 @@ impl SymbolicTensor {
     ) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
         let mut network: TensorNetwork<MixedTensor<VecStructure>> = TensorNetwork::new();
         for atom in mul.iter() {
-            if let AtomView::Fun(f) = atom {
-                let mut structure: Vec<Slot> = vec![];
-                let f_id = f.get_symbol();
+            match atom {
+                AtomView::Fun(f) => {
+                    let mut structure: Vec<Slot> = vec![];
+                    let f_id = f.get_symbol();
 
-                for arg in f.iter() {
-                    structure.push(arg.try_into()?);
-                }
-                let s: VecStructure = structure.into();
-                network.push(s.to_explicit_rep(f_id));
-            }
-
-            if let AtomView::Add(a) = atom {
-                let mut terms = vec![];
-                for t in a.iter() {
-                    if let AtomView::Mul(m) = t {
-                        let mut term_net = Self::mul_to_network(m)?;
-                        term_net.contract();
-                        terms.push(term_net.result());
+                    for arg in f.iter() {
+                        structure.push(arg.try_into()?);
                     }
+                    let s: VecStructure = structure.into();
+                    network.push(s.to_explicit_rep(f_id));
                 }
+                AtomView::Var(v) => {
+                    let mut a = Atom::new();
+                    a.set_from_view(&v.as_view());
+                    network.scalar_mul(&a);
+                }
+                AtomView::Num(n) => {
+                    let mut a = Atom::new();
+                    a.set_from_view(&n.as_view());
+                    network.scalar_mul(&a);
+                }
+                AtomView::Add(a) => {
+                    let mut terms = vec![];
+                    for t in a.iter() {
+                        if let AtomView::Mul(m) = t {
+                            let mut term_net = Self::mul_to_network(m)?;
+                            term_net.contract();
+                            terms.push(term_net.result());
+                        }
+                    }
+                    let sum = terms
+                        .into_iter()
+                        .reduce(|a, b| a.add_fallible(&b).unwrap())
+                        .unwrap();
+
+                    network.push(sum);
+                }
+                _ => return Err("Not a valid expression"),
             }
         }
         Ok(network)

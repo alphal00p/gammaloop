@@ -7,7 +7,7 @@ use derive_more::From;
 use enum_try_as_inner::EnumTryAsInner;
 use indexmap::IndexMap;
 use num::Zero;
-use petgraph::visit::Data;
+
 use serde::{Deserialize, Serialize};
 use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
