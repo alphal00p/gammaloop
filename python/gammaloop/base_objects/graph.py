@@ -9,7 +9,8 @@ import yaml
 
 from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger, EMPTY_LIST  # pylint: disable=unused-import # type: ignore
 import gammaloop.misc.utils as utils
-from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter  # type: ignore # pylint: disable=unused-import
+# type: ignore # pylint: disable=unused-import
+from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter
 
 
 class EdgeType(StrEnum):
@@ -250,6 +251,11 @@ class Edge(object):
         constant_definitions['labelDistance'] = f'{label_distance:.2f}'
 
         template_line = r'\efmf{%(line_type)s%(comma)s%(options)s}{%(left_vertex)s,%(right_vertex)s}'
+
+        if graph.loop_momentum_basis is None:
+            raise GammaLoopError(
+                "Specify a loop momentum basis drawing a graph.")
+
         lmb_position = graph.loop_momentum_basis.index(
             self) if self in graph.loop_momentum_basis else None
         line_options: dict[str, str] = {}
@@ -460,10 +466,10 @@ class Graph(object):
         # For forward scattering graphs, keep track of the bipartite map, i.e. which in and out externals will carry identical momenta.
         self.external_connections: list[tuple[
             Vertex | None, Vertex | None]] = external_connections
-        if loop_momentum_basis is None:
-            self.loop_momentum_basis: list[Edge] = []
-        else:
-            self.loop_momentum_basis: list[Edge] = loop_momentum_basis
+        # if loop_momentum_basis is None:
+        #     self.loop_momentum_basis: list[Edge] = []
+        # else:
+        self.loop_momentum_basis: list[Edge] | None = loop_momentum_basis
         self.name_to_position: dict[str, dict[str, int]] = {}
 
     def get_sorted_incoming_edges(self) -> list[Edge]:
@@ -538,7 +544,7 @@ class Graph(object):
             'external_connections': [[e[0].name if e[0] is not None else None,
                                       e[1].name if e[1] is not None else None] for e in self.external_connections],
             'overall_factor': self.overall_factor,
-            'loop_momentum_basis': [e.name for e in self.loop_momentum_basis],
+            'loop_momentum_basis': [e.name for e in self.loop_momentum_basis] if self.loop_momentum_basis is not None else None,
             'edge_signatures': self.edge_signatures
         }
 
@@ -734,7 +740,7 @@ class Graph(object):
         return [[e for e_i, e in enumerate(self.edges) if e_i not in spanning_tree] for spanning_tree in spanning_trees]
 
     def generate_momentum_flow(self) -> list[tuple[list[int], list[int]]]:
-        if len(self.loop_momentum_basis) == 0:
+        if self.loop_momentum_basis is None:
             raise GammaLoopError(
                 "Specify a loop momentum basis before generating a momentum flow.")
         if len(self.external_connections) == 0:

@@ -464,28 +464,44 @@ class GammaLoop(object):
             raise GammaLoopError(f"File '{args.file_path}' does not exist")
 
         file_path = Path(os.path.abspath(args.file_path))
-        sys.path.insert(0, str(file_path.parent))
 
-        if not args.no_compile:
-            # compile the file first before importing it with optimization flag and same executable as used for gammaLoop.
-            # This avoids that memory isn't freed after compiling when using the __import__ directly
-            logger.info("Compiling imported supergraphs.")
-            subprocess.run([sys.executable, '-O', '-m',
-                           file_path.stem], cwd=file_path.parent, check=True)
+        match args.format:
+            case 'yaml':
+                try:
+                    all_raw_graphs: list[Any] = yaml.safe_load(
+                        open(file_path, 'r', encoding='utf-8'))['graphs']
+                except Exception as exc:
+                    raise GammaLoopError(
+                        f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
 
-        qgraph_loaded_module = __import__(file_path.stem)
-        # Reload to avoid border effects if this is the second time qgraph output is loaded within this same Python session.
-        importlib.reload(qgraph_loaded_module)
-        logger.info("Imported %s graphs from qgraph output '%s'.",
-                    len(qgraph_loaded_module.graphs), args.file_path)
-        del sys.path[0]
+            case 'qgraph':
+                sys.path.insert(0, str(file_path.parent))
+
+                if not args.no_compile:
+                    # compile the file first before importing it with optimization flag and same executable as used for gammaLoop.
+                    # This avoids that memory isn't freed after compiling when using the __import__ directly
+                    logger.info("Compiling imported supergraphs.")
+                    subprocess.run([sys.executable, '-O', '-m',
+                                    file_path.stem], cwd=file_path.parent, check=True)
+
+                qgraph_loaded_module = __import__(file_path.stem)
+                # Reload to avoid border effects if this is the second time qgraph output is loaded within this same Python session.
+                importlib.reload(qgraph_loaded_module)
+                logger.info("Imported %s graphs from qgraph output '%s'.",
+                            len(qgraph_loaded_module.graphs), args.file_path)
+                del sys.path[0]
+                all_raw_graphs: list[Any] = qgraph_loaded_module.graphs
+
+            case _:
+                raise GammaLoopError(
+                    "Invalid graph format: '%s' for importing graphs.", args.format)
 
         graphs: list[Graph] = []
-        for i_qg, qgraph_object in enumerate(qgraph_loaded_module.graphs):
+        for i_qg, qgraph_object in enumerate(all_raw_graphs):
             graphs.append(Graph.from_qgraph(
                 self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}"))
         logger.info("Successfully loaded %s graphs.",
-                    len(qgraph_loaded_module.graphs))
+                    len(all_raw_graphs))
 
         # Now determine if it is a supergraph or an amplitude graph
         graph_type = None
@@ -544,8 +560,8 @@ class GammaLoop(object):
                         sg_id=0, sg_cut_id=0, fs_cut_id=i, amplitude_side=Side.LEFT,
                         graph=g
                     )
-                ]
-            ) for i, g in enumerate(graphs)])
+                    for i, g in enumerate(graphs)]
+            )])
 
     # output command
     output_parser = ArgumentParser(prog='output')
