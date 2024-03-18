@@ -4,11 +4,13 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
+    poetry2nix.url = "github:nix-community/poetry2nix";
   };
 
   outputs = {
     self,
     nixpkgs,
+    poetry2nix,
     rust-overlay,
   }: let
     overlays = [
@@ -23,15 +25,23 @@
           then rust.fromRustupToolchainFile ./rust-toolchain
           else rust.stable.latest.default;
       })
+      poetry2nix.overlays.default
     ];
     supportedSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
     forEachSupportedSystem = f:
       nixpkgs.lib.genAttrs supportedSystems (system:
         f {
-          pkgs = import nixpkgs {inherit overlays system;};
+          pkgs = import nixpkgs {
+            inherit system overlays;
+          };
         });
   in {
-    devShells = forEachSupportedSystem ({pkgs}: {
+    devShells = forEachSupportedSystem ({pkgs}: let
+      poetryEnv = pkgs.poetry2nix.mkPoetryEnv {
+        projectDir = ./.;
+        python = pkgs.python311;
+      };
+    in {
       default = pkgs.mkShell {
         #devshell definition :
         # LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
@@ -51,7 +61,7 @@
           cargo-watch
           python311
           texlive.combined.scheme-medium
-          poetry
+          poetryEnv
           ghostscript
           mupdf
           poppler_utils
