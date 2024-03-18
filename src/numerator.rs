@@ -107,3 +107,6 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
 
     builder
 }
+
+#[cfg(test)]
+mod tests;
