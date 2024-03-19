@@ -18,8 +18,8 @@ use symbolica;
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: f64 = 1.0e-12;
 
-pub fn load_amplitude_output(output_path: String) -> (Model, Amplitude) {
-    let path = Path::new(&output_path);
+pub fn load_amplitude_output(output_path: &str) -> (Model, Amplitude) {
+    let path = Path::new(output_path);
     let output_meta_data: OutputMetaData =
         serde_yaml::from_reader(File::open(path.join("output_metadata.yaml")).unwrap()).unwrap();
     assert_eq!(output_meta_data.output_type, OutputType::Amplitudes);
@@ -66,7 +66,7 @@ mod tests_scalar_massless_triangle {
         assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
         let (model, amplitude) =
-            load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+            load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
         assert_eq!(model.name, "scalars");
         assert!(amplitude.amplitude_graphs.len() == 1);
@@ -150,7 +150,7 @@ fn pytest_scalar_fishnet_2x2() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -265,7 +265,7 @@ fn pytest_scalar_sunrise() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -313,7 +313,7 @@ fn pytest_scalar_fishnet_2x3() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, mut amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -390,7 +390,7 @@ fn pytest_scalar_cube() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -462,7 +462,7 @@ fn pytest_scalar_bubble() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -507,7 +507,7 @@ fn pytest_massless_scalar_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -584,7 +584,7 @@ fn pytest_scalar_double_triangle() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -654,7 +654,7 @@ fn pytest_scalar_mercedes() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -718,7 +718,7 @@ fn pytest_scalar_triangle_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -792,7 +792,7 @@ fn pytest_scalar_isopod() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -872,7 +872,7 @@ fn pytest_lbl_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 

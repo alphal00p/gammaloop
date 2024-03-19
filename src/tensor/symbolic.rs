@@ -1,6 +1,8 @@
+use std::path::Display;
+
 use super::{
-    Contract, FallibleAdd, HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract,
-    TensorNetwork, TensorStructure, VecStructure,
+    network, Contract, FallibleAdd, HasName, IntoId, MixedTensor, Shadowable, Slot,
+    StructureContract, TensorNetwork, TensorStructure, VecStructure,
 };
 
 use symbolica::representations::{Atom, AtomView, MulView, Symbol};
@@ -11,7 +13,7 @@ use symbolica::representations::{Atom, AtomView, MulView, Symbol};
 /// Currently contraction is just a multiplication of the atoms, but in the future this will ensure that internal indices are independent accross the contraction.
 ///
 /// Additionally, this can also be used as a tensor structure, that tracks the history, much like [`HistoryStructure`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymbolicTensor {
     structure: VecStructure,
     expression: symbolica::representations::Atom,
@@ -79,7 +81,53 @@ impl SymbolicTensor {
         self.smart_shadow().unwrap()
     }
 
-    fn mul_to_network(
+    pub fn mul_to_tracking_network(
+        mul: MulView,
+    ) -> Result<TensorNetwork<MixedTensor<SymbolicTensor>>, &'static str> {
+        let mut network: TensorNetwork<MixedTensor<SymbolicTensor>> = TensorNetwork::new();
+        for atom in mul.iter() {
+            match atom {
+                AtomView::Fun(f) => {
+                    let mut a = Atom::new();
+                    a.set_from_view(&f.as_view());
+                    let structure: SymbolicTensor = a.try_into()?;
+
+                    network.push(structure.to_explicit_rep(f.get_symbol()));
+                }
+                AtomView::Var(v) => {
+                    let mut a = Atom::new();
+                    a.set_from_view(&v.as_view());
+                    println!("Var: {}", a);
+                    network.scalar_mul(&a);
+                }
+                AtomView::Num(n) => {
+                    let mut a = Atom::new();
+                    a.set_from_view(&n.as_view());
+                    network.scalar_mul(&a);
+                }
+                AtomView::Add(a) => {
+                    let mut terms = vec![];
+                    for t in a.iter() {
+                        if let AtomView::Mul(m) = t {
+                            let mut term_net = Self::mul_to_tracking_network(m)?;
+                            term_net.contract();
+                            terms.push(term_net.result());
+                        }
+                    }
+                    let sum = terms
+                        .into_iter()
+                        .reduce(|a, b| a.add_fallible(&b).unwrap())
+                        .unwrap();
+
+                    network.push(sum);
+                }
+                _ => return Err("Not a valid expression"),
+            }
+        }
+        Ok(network)
+    }
+
+    pub fn mul_to_network(
         mul: MulView,
     ) -> Result<TensorNetwork<MixedTensor<VecStructure>>, &'static str> {
         let mut network: TensorNetwork<MixedTensor<VecStructure>> = TensorNetwork::new();
@@ -98,6 +146,7 @@ impl SymbolicTensor {
                 AtomView::Var(v) => {
                     let mut a = Atom::new();
                     a.set_from_view(&v.as_view());
+                    println!("Var: {}", a);
                     network.scalar_mul(&a);
                 }
                 AtomView::Num(n) => {
@@ -133,19 +182,6 @@ impl SymbolicTensor {
         } else {
             Err("Not a valid expression")
         }
-    }
-}
-
-impl TryFrom<AtomView<'_>> for VecStructure {
-    type Error = &'static str;
-    fn try_from(value: AtomView) -> Result<Self, Self::Error> {
-        let mut structure: Vec<Slot> = vec![];
-        if let AtomView::Fun(f) = value {
-            for arg in f.iter() {
-                structure.push(arg.try_into()?);
-            }
-        }
-        Ok(structure.into())
     }
 }
 
@@ -188,5 +224,11 @@ impl Contract<SymbolicTensor> for SymbolicTensor {
             expression,
             structure: new_structure,
         })
+    }
+}
+
+impl std::fmt::Display for SymbolicTensor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.expression)
     }
 }

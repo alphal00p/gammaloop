@@ -61,7 +61,7 @@
           cargo-watch
           python311
           texlive.combined.scheme-medium
-          poetryEnv
+          poetry
           ghostscript
           mupdf
           poppler_utils

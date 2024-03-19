@@ -1,0 +1,145 @@
+
+\documentclass{article}
+\usepackage{feynmp}
+\usepackage[paperwidth=70cm,paperheight=120cm,centering,textwidth=70cm,textheight=100cm,left=-2cm,top=10cm]{geometry}
+\usepackage{amsmath}
+\usepackage{xcolor}
+
+\thispagestyle{empty}
+
+% Definition of constants 
+\newcommand{\arcMaxDistance}{1.00}
+\newcommand{\externalLegTension}{3.00}
+\newcommand{\defaultTension}{1.00}
+\newcommand{\lineWidth}{1.75}
+\newcommand{\lineColor}{black}
+\newcommand{\lmbColor}{red}
+\newcommand{\labelColor}{black}
+\newcommand{\labelSize}{20pt}
+\newcommand{\nonLmbColor}{blue}
+\newcommand{\arrowSize}{1.50}
+\newcommand{\doubleArrowSize}{2.00}
+\newcommand{\labelDistance}{13.00}
+\newcommand{\anchorTension}{2.00}
+\newcommand{\anchorLine}{phantom}
+\newcommand{\anchorColor}{red}
+\newcommand{\vertexShape}{circle}
+\newcommand{\vertexSize}{5.00thick}
+\newcommand{\blobSize}{15.00}
+\newcommand{\captionSize}{40pt}
+
+% this ensures new commands in fmf are expanded
+\newcommand{\efmf}[1]{
+  \begingroup\edef\x{\endgroup\noexpand\fmf{#1}}\x
+}
+\newcommand{\efmfv}[1]{
+  \begingroup\edef\x{\endgroup\noexpand\fmfv{#1}}\x
+}
+
+% This facilitate toggling between showing and hiding vertex and edge labels
+\newcommand{\showAnchorLabel}[1]{#1}
+\newcommand{\hideAnchorLabel}[1]{}
+\newcommand{\showVertexLabel}[1]{#1}
+\newcommand{\hideVertexLabel}[1]{}
+\newcommand{\showEdgeLabel}[1]{#1}
+\newcommand{\hideEdgeLabel}[1]{$$}
+
+% Remove label color because it sadly interferes with the efmf and efmfv trick above
+\newcommand{\setLabelColor}[1]{}
+%\newcommand{\setLabelColor}[1]{\color{#1}}
+
+\begin{document}
+\begin{fmffile}{diagram_0_lbl_box_0}
+\fmfcmd{
+ style_def my_phantom_arrow expr p =
+  draw_phantom_arrow p;
+  shrink (\arrowSize);
+    cfill (arrow p);
+  endshrink;
+ enddef;
+}
+\fmfcmd{
+ style_def my_double_phantom_arrow expr p =
+  draw_phantom_arrow p;
+  shrink (\doubleArrowSize);
+    cfill (arrow p);
+  endshrink;
+ enddef;
+}
+\hspace{8cm}\setlength{\unitlength}{1pt}\fontsize{\labelSize}{\labelSize*1.2}\selectfont
+\begin{fmfgraph*}(1500,1200)
+ % ignore: latex
+% incoming external vertices
+\fmfleft{v0}
+
+% outgoing external vertices
+\fmfright{v1,v2,v3}
+
+% incoming half edges
+% == Drawing edge 'p1' (e0) with particle a
+\efmf{wiggly,width=\lineWidth,fore=\lineColor,tension=\defaultTension,label=\showEdgeLabel{\setLabelColor{\labelColor}p1$|{\gamma}|p_{1}$},label.dist=\labelDistance}{v0,v4}
+% Draw an arrow to indicate orientations of vectors as well
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\nonLmbColor,tension=0,label.dist=\labelDistance}{v0,v4}
+% Draw a phantom additional tension for external leg
+\efmf{phantom,width=\lineWidth,fore=black,tension=\externalLegTension,label.dist=\labelDistance}{v0,v4}
+
+% external outgoing half edges
+% == Drawing edge 'p2' (e1) with particle a
+\efmf{wiggly,width=\lineWidth,fore=\lineColor,tension=\defaultTension,label=\showEdgeLabel{\setLabelColor{\labelColor}p2$|{\gamma}|p_{2}$},label.dist=\labelDistance}{v5,v1}
+% Draw an arrow to indicate orientations of vectors as well
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\nonLmbColor,tension=0,label.dist=\labelDistance}{v5,v1}
+% Draw a phantom additional tension for external leg
+\efmf{phantom,width=\lineWidth,fore=black,tension=\externalLegTension,label.dist=\labelDistance}{v5,v1}
+% == Drawing edge 'p3' (e2) with particle a
+\efmf{wiggly,width=\lineWidth,fore=\lineColor,tension=\defaultTension,label=\showEdgeLabel{\setLabelColor{\labelColor}p3$|{\gamma}|p_{3}$},label.dist=\labelDistance}{v6,v2}
+% Draw an arrow to indicate orientations of vectors as well
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\nonLmbColor,tension=0,label.dist=\labelDistance}{v6,v2}
+% Draw a phantom additional tension for external leg
+\efmf{phantom,width=\lineWidth,fore=black,tension=\externalLegTension,label.dist=\labelDistance}{v6,v2}
+% == Drawing edge 'p4' (e3) with particle a
+\efmf{wiggly,width=\lineWidth,fore=\lineColor,tension=\defaultTension,label=\showEdgeLabel{\setLabelColor{\labelColor}p4$|{\gamma}|p_{4}|(p_{1}-p_{2}-p_{3})$},label.dist=\labelDistance}{v7,v3}
+% Draw an arrow to indicate orientations of vectors as well
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\nonLmbColor,tension=0,label.dist=\labelDistance}{v7,v3}
+% Draw a phantom additional tension for external leg
+\efmf{phantom,width=\lineWidth,fore=black,tension=\externalLegTension,label.dist=\labelDistance}{v7,v3}
+
+% internal edges
+% == Drawing edge 'q1' (e4) with particle t
+\efmf{dbl_plain,width=\lineWidth,fore=\lineColor,tension=\defaultTension,label=\showEdgeLabel{\setLabelColor{\labelColor}q1$|{t}|(k_{0}+p_{2}+p_{3})$},label.dist=\labelDistance}{v4,v5}
+% Draw an arrow to indicate orientations of vectors as well
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\nonLmbColor,tension=0,label.dist=\labelDistance}{v4,v5}
+% == Drawing edge 'q2' (e5) with particle t
+\efmf{dbl_plain,width=\lineWidth,fore=\lineColor,tension=\defaultTension,label=\showEdgeLabel{\setLabelColor{\labelColor}q2$|{t}|(k_{0}+p_{3})$},label.dist=\labelDistance}{v5,v6}
+% Draw an arrow to indicate orientations of vectors as well
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\nonLmbColor,tension=0,label.dist=\labelDistance}{v5,v6}
+% == Drawing edge 'q3' (e6) with particle t
+\efmf{dbl_plain,width=\lineWidth,fore=\lineColor,tension=\defaultTension,label=\showEdgeLabel{\setLabelColor{\lmbColor}q3$|{t}|k_{0}$},label.dist=\labelDistance}{v6,v7}
+% Draw an arrow to indicate orientations of vectors as well
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\nonLmbColor,tension=0,label.dist=\labelDistance}{v6,v7}
+% Draw a colored arrow for this LMB edge
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\lmbColor,tension=0,label.dist=\labelDistance}{v6,v7}
+% == Drawing edge 'q4' (e7) with particle t
+\efmf{dbl_plain,width=\lineWidth,fore=\lineColor,tension=\defaultTension,label=\showEdgeLabel{\setLabelColor{\labelColor}q4$|{t}|(k_{0}-p_{1}+p_{2}+p_{3})$},label.dist=\labelDistance}{v7,v4}
+% Draw an arrow to indicate orientations of vectors as well
+\efmf{my_double_phantom_arrow,width=\lineWidth,fore=\nonLmbColor,tension=0,label.dist=\labelDistance}{v7,v4}
+
+% label vertices
+\showVertexLabel{\fmflabel{v5}{v4}}
+\efmfv{decor.shape=\vertexShape,decor.filled=full,label.dist=\labelDistance,decor.size=\vertexSize}{v4}
+\showVertexLabel{\fmflabel{v6}{v5}}
+\efmfv{decor.shape=\vertexShape,decor.filled=full,label.dist=\labelDistance,decor.size=\vertexSize}{v5}
+\showVertexLabel{\fmflabel{v7}{v6}}
+\efmfv{decor.shape=\vertexShape,decor.filled=full,label.dist=\labelDistance,decor.size=\vertexSize}{v6}
+\showVertexLabel{\fmflabel{v8}{v7}}
+\efmfv{decor.shape=\vertexShape,decor.filled=full,label.dist=\labelDistance,decor.size=\vertexSize}{v7}
+
+% external tension phantom edges
+
+
+\end{fmfgraph*}
+\end{fmffile}
+\begin{center}
+\vspace{0.5cm}
+{\fontfamily{qcr}\selectfont\fontsize{\captionSize}{\captionSize*1.2}\selectfont Amplitude lbl box {\bf \fontfamily{qcr}\selectfont\fontsize{\captionSize}{\captionSize}\selectfont \#0}}
+\end{center}
+\end{document}

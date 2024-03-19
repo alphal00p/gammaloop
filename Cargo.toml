@@ -42,11 +42,6 @@ path="examples/Rust/Tensors/gamma_network.rs"
 name="evaluate_network"
 path="examples/Rust/Tensors/evaluate_network.rs"
 
-
-[[example]]
-name="recursive_bug"
-path="examples/Rust/Tensors/recursive_bug.rs"
-
 [dependencies]
 # You may need bleeding edge changes
 symbolica = { git = "https://github.com/alphal00p/symbolica" }

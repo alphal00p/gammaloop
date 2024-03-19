@@ -1,21 +1,27 @@
-use pyo3::prelude::*;
-use pyo3::{types::PyModule, Py, PyAny, PyResult, Python};
+use symbolica::representations::AtomView;
+
+use crate::{
+    tensor::{SymbolicTensor, TensorStructure},
+    tests_from_pytest::load_amplitude_output,
+};
 
 #[test]
 
-fn python() -> PyResult<()> {
-    pyo3::prepare_freethreaded_python();
-    let py_api = include_str!("../../python/gammaloop/interface/gammaloop_interface.py");
+fn lbl() {
+    let (model, amplitude) = load_amplitude_output("./src/numerator/lbl/");
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    let a = Python::with_gil(|py| -> PyResult<()> {
-        let interface: Py<PyAny> = PyModule::from_code(py, py_api, "", "")?
-            .getattr("Gammaloop")?
-            .into();
-        let gloop = interface.call0(py)?;
-        gloop.call_method(py, "do_import_model", ("help",), None)?;
+    graph.generate_numerator(&model);
+    let numerator = graph.derived_data.numerator.unwrap();
 
-        Ok(())
-    })?;
+    println!("{}", numerator);
 
-    Ok(())
+    if let AtomView::Mul(mul) = numerator.as_view() {
+        let mut net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
+
+        println!("{}", net.dot());
+        for (id, t) in net.graph.nodes {
+            println!("{}", t.structure());
+        }
+    }
 }

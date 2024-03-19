@@ -209,7 +209,11 @@ impl Edge {
         let pfun = Pattern::parse("P(x_)").unwrap();
         atom = pfun.replace_all(
             atom.as_view(),
-            &Pattern::parse(&format!("P{}(x_)", pindex_num)).unwrap(),
+            &Pattern::parse(&format!(
+                "P{}(lor(4,x_))",
+                graph.edge_name_to_position.get(&self.name).unwrap()
+            ))
+            .unwrap(),
             None,
             None,
         );
@@ -218,8 +222,10 @@ impl Edge {
         atom = pslashfun.replace_all(
             atom.as_view(),
             &Pattern::parse(&format!(
-                "P{}({})Gamma({},x__)",
-                pindex_num, pindex_num, pindex_num
+                "P{}(lor(4,{}))Gamma({},x__)",
+                graph.edge_name_to_position.get(&self.name).unwrap(),
+                pindex_num,
+                pindex_num
             ))
             .unwrap(),
             None,
