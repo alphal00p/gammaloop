@@ -33,14 +33,6 @@ pub fn load_amplitude_output(output_path: &str) -> (Model, Amplitude) {
         .to_str()
         .unwrap(),
     ))
-    let model = Model::from_file(String::from(
-        path.join(format!(
-            "sources/model/{}.yaml",
-            output_meta_data.model_name
-        ))
-        .to_str()
-        .unwrap(),
-    ))
     .unwrap();
     let amplitude = Amplitude::from_file(
         &model,

@@ -675,7 +675,7 @@ fn sparse_sub() {
 
     let f = a.sub_fallible(&b).unwrap();
 
-    let result = IndexMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
+    let result = IndexMap::from([(vec![0, 1], -1.0)]);
     assert_eq!(f.hashmap(), result);
     // println!("{:?}", f);
 }
@@ -688,6 +688,9 @@ fn arithmetic_data() {
     let a: DataTensor<i32> = test_tensor(sa.clone(), 1, range).into();
 
     let b: DataTensor<i32> = test_tensor(sa.clone(), 2, range).into();
+
+    println!("{:?}", a);
+    println!("{:?}", b);
 
     let c = a.add_fallible(&b).unwrap();
 

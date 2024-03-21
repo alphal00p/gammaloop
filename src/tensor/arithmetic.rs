@@ -1,8 +1,10 @@
+use std::fmt::Debug;
+
 use crate::tensor::{ConcreteIndex, GetTensorData, SetTensorData};
 
 use super::{
     DataTensor, DenseTensor, FallibleAdd, FallibleMul, FallibleSub, MixedTensor, SparseTensor,
-    TensorStructure,
+    TensorStructure, TryFromUpgrade, TryIntoUpgrade, TrySmallestUpgrade,
 };
 
 use symbolica::domains::float::Complex;
@@ -102,8 +104,8 @@ impl<'a, T, U, I, Out> FallibleAdd<&SparseTensor<T, I>> for &'a SparseTensor<U, 
 where
     for<'b, 'c> &'b U: FallibleAdd<&'c T, Output = Out>,
     I: TensorStructure + Clone,
-    T: Default + Clone,
-    Out: Default + PartialEq,
+    T: Default + Clone + Debug,
+    Out: Default + PartialEq + TryFromUpgrade<T>,
 {
     type Output = SparseTensor<Out, I>;
     fn add_fallible(self, rhs: &SparseTensor<T, I>) -> Option<Self::Output> {
@@ -115,7 +117,18 @@ where
             let permuted_indices: Vec<ConcreteIndex> =
                 permutation.iter().map(|&index| indices[index]).collect();
             let t = rhs.smart_get(&permuted_indices).unwrap();
+            println!("{:?}", t);
             data.smart_set(&indices, u.add_fallible(&t)?).unwrap();
+        }
+
+        let permutation: Vec<usize> = rhs.structure().find_permutation(self.structure()).unwrap();
+        for (i, t) in rhs.iter() {
+            let permuted_indices: Vec<ConcreteIndex> =
+                permutation.iter().map(|&index| i[index]).collect();
+
+            if self.get(&permuted_indices).is_err() {
+                data.smart_set(&i, t.clone().try_into_upgrade()?).unwrap();
+            }
         }
 
         Some(data)
@@ -126,8 +139,8 @@ impl<'a, T, U, Out, I> FallibleAdd<&DataTensor<T, I>> for &'a DataTensor<U, I>
 where
     for<'b, 'c> &'b U: FallibleAdd<&'c T, Output = Out>,
     U: Default + Clone,
-    T: Default + Clone,
-    Out: Default + PartialEq,
+    T: Default + Clone + Debug,
+    Out: Default + PartialEq + TryFromUpgrade<T>,
     I: TensorStructure + Clone,
 {
     type Output = DataTensor<Out, I>;
@@ -280,6 +293,7 @@ where
     for<'b, 'c> &'b U: FallibleSub<&'c T, Output = Out>,
     I: TensorStructure + Clone,
     T: Default + Clone,
+    U: Default,
     Out: Default + PartialEq,
 {
     type Output = SparseTensor<Out, I>;
@@ -293,6 +307,15 @@ where
                 permutation.iter().map(|&index| indices[index]).collect();
             let t = rhs.smart_get(&permuted_indices).unwrap();
             data.smart_set(&indices, u.sub_fallible(&t)?).unwrap();
+        }
+        let permutation: Vec<usize> = rhs.structure().find_permutation(self.structure()).unwrap();
+        for (i, t) in rhs.iter() {
+            let permuted_indices: Vec<ConcreteIndex> =
+                permutation.iter().map(|&index| i[index]).collect();
+
+            if self.get(&permuted_indices).is_err() {
+                data.smart_set(&i, U::default().sub_fallible(t)?).unwrap();
+            }
         }
 
         Some(data)
