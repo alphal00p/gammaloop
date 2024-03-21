@@ -7,6 +7,7 @@ use derive_more::From;
 use enum_try_as_inner::EnumTryAsInner;
 use indexmap::IndexMap;
 use num::Zero;
+
 use serde::{Deserialize, Serialize};
 use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
@@ -641,6 +642,31 @@ pub enum DataTensor<T, I: TensorStructure = VecStructure> {
     Sparse(SparseTensor<T, I>),
 }
 
+impl<T, I> DataTensor<T, I>
+where
+    I: TensorStructure + Clone,
+{
+    pub fn to_sparse(self) -> SparseTensor<T, I>
+    where
+        T: Clone + Default + PartialEq,
+    {
+        match self {
+            DataTensor::Dense(d) => d.to_sparse(),
+            DataTensor::Sparse(s) => s,
+        }
+    }
+
+    pub fn to_dense(self) -> DenseTensor<T, I>
+    where
+        T: Clone + Default + PartialEq,
+    {
+        match self {
+            DataTensor::Dense(d) => d,
+            DataTensor::Sparse(s) => s.to_dense(),
+        }
+    }
+}
+
 impl<T, I> HasTensorData for DataTensor<T, I>
 where
     I: TensorStructure,
@@ -735,6 +761,27 @@ where
         match self {
             DataTensor::Dense(d) => d.contractions_num(),
             DataTensor::Sparse(s) => s.contractions_num(),
+        }
+    }
+}
+
+impl<T, U> TrySmallestUpgrade<DataTensor<T>> for DataTensor<U>
+where
+    U: TrySmallestUpgrade<T>,
+    U::LCM: Clone,
+{
+    type LCM = DataTensor<U::LCM>;
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
+    where
+        Self::LCM: Clone,
+    {
+        match self {
+            DataTensor::Dense(d) => d
+                .try_upgrade()
+                .map(|x| Cow::Owned(DataTensor::Dense(x.into_owned()))),
+            DataTensor::Sparse(s) => s
+                .try_upgrade()
+                .map(|x| Cow::Owned(DataTensor::Sparse(x.into_owned()))),
         }
     }
 }

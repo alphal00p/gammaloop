@@ -12,8 +12,8 @@ use self::parametric::{MixedTensor, MixedTensors};
 use self::structure::HistoryStructure;
 
 use super::{
-    parametric, structure, Contract, DataTensor, HasName, Shadowable, Slot, TensorStructure,
-    TracksCount,
+    arithmetic::ScalarMul, parametric, structure, Contract, DataTensor, HasName, Shadowable, Slot,
+    TensorStructure, TracksCount,
 };
 use smartstring::alias::String;
 use std::fmt::{Debug, Display};
@@ -594,6 +594,15 @@ where
         TensorNetwork {
             graph: HalfEdgeGraph::new(),
             params: Vec::new(),
+        }
+    }
+
+    pub fn scalar_mul<U>(&mut self, scalar: U)
+    where
+        for<'a> &'a T: ScalarMul<U, Output = T>,
+    {
+        if let Some((id, tensor)) = self.graph.nodes.iter().next() {
+            self.graph.nodes[id] = tensor.scalar_mul(scalar).unwrap();
         }
     }
 

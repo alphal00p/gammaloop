@@ -1,7 +1,5 @@
 use ahash::AHashMap;
 
-
-
 use super::{
     DataIterator, DataTensor, DenseTensor, FallibleAddAssign, FallibleMul, FallibleSubAssign,
     HasTensorData, NumTensor, Representation, SetTensorData, SparseTensor, StructureContract,
