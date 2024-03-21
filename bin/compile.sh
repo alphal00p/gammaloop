@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 RETCODE=0;
-./python/gammaloop/bin/build_dependencies.sh "$@"
+./python/gammaloop/bin/build_dependencies.sh
 RETCODE=$RETCODE+$?;
 ./bin/compile_lib.sh "$@"
 RETCODE=$RETCODE+$?;
