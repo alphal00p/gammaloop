@@ -3,7 +3,7 @@ use super::{
     TensorNetwork, TensorStructure, VecStructure,
 };
 
-use symbolica::representations::{Atom, AtomView, MulView, Symbol};
+use symbolica::representations::{AddView, Atom, AtomView, MulView, Symbol};
 
 /// A fully symbolic tensor, with no concrete values.
 ///
@@ -79,6 +79,68 @@ impl SymbolicTensor {
         self.smart_shadow().unwrap()
     }
 
+    fn add_view_to_tensor(add: AddView) -> Result<MixedTensor<VecStructure>, &'static str> {
+        let mut terms = vec![];
+        for t in add.iter() {
+            match t {
+                AtomView::Mul(m) => {
+                    let mut term_net = Self::mul_to_network(m)?;
+                    term_net.contract();
+                    terms.push(term_net.result());
+                }
+                AtomView::Add(a) => {
+                    terms.push(Self::add_view_to_tensor(a)?);
+                }
+                _ => {
+                    return Err("Not a valid expression");
+                }
+            }
+        }
+        let sum = terms
+            .into_iter()
+            .reduce(|a, b| a.add_fallible(&b).unwrap())
+            .unwrap();
+
+        Ok(sum)
+    }
+
+    fn add_view_to_tracking_tensor(
+        add: AddView,
+    ) -> Result<MixedTensor<SymbolicTensor>, &'static str> {
+        let mut terms = vec![];
+        for t in add.iter() {
+            match t {
+                AtomView::Mul(m) => {
+                    let mut term_net = Self::mul_to_tracking_network(m)?;
+                    term_net.contract();
+                    terms.push(term_net.result());
+                }
+                AtomView::Add(a) => {
+                    terms.push(Self::add_view_to_tracking_tensor(a)?);
+                }
+                AtomView::Fun(f) => {
+                    let mut a = Atom::new();
+                    a.set_from_view(&f.as_view());
+                    let structure: SymbolicTensor = a.try_into()?;
+
+                    terms.push(structure.to_explicit_rep(f.get_symbol()));
+                }
+                _ => {
+                    let mut a = Atom::new();
+                    a.set_from_view(&t);
+                    println!("Var: {}", a);
+                    return Err("Not a valid expression");
+                }
+            }
+        }
+        let sum = terms
+            .into_iter()
+            .reduce(|a, b| a.add_fallible(&b).unwrap())
+            .unwrap();
+
+        Ok(sum)
+    }
+
     pub fn mul_to_tracking_network(
         mul: MulView,
     ) -> Result<TensorNetwork<MixedTensor<SymbolicTensor>>, &'static str> {
@@ -104,18 +166,7 @@ impl SymbolicTensor {
                     network.scalar_mul(&a);
                 }
                 AtomView::Add(a) => {
-                    let mut terms = vec![];
-                    for t in a.iter() {
-                        if let AtomView::Mul(m) = t {
-                            let mut term_net = Self::mul_to_tracking_network(m)?;
-                            term_net.contract();
-                            terms.push(term_net.result());
-                        }
-                    }
-                    let sum = terms
-                        .into_iter()
-                        .reduce(|a, b| a.add_fallible(&b).unwrap())
-                        .unwrap();
+                    let sum = Self::add_view_to_tracking_tensor(a)?;
 
                     network.push(sum);
                 }

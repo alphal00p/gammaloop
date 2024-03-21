@@ -12,7 +12,10 @@ fn lbl() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     graph.generate_numerator(&model);
-    let numerator = graph.derived_data.numerator.unwrap();
+    let mut numerator = graph.derived_data.numerator.clone().unwrap();
+    for (lhs, rhs) in graph.generate_lmb_replacement_rules() {
+        numerator = lhs.replace_all(numerator.as_view(), &rhs, None, None);
+    }
 
     println!("{}", numerator);
 

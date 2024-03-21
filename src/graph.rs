@@ -16,6 +16,8 @@ use nalgebra::DMatrix;
 #[allow(unused_imports)]
 use num::traits::Float;
 use num::Complex;
+use petgraph::graph;
+use rand::seq::index;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
@@ -210,7 +212,7 @@ impl Edge {
         atom = pfun.replace_all(
             atom.as_view(),
             &Pattern::parse(&format!(
-                "P{}(lor(4,x_))",
+                "Q{}(lor(4,x_))",
                 graph.edge_name_to_position.get(&self.name).unwrap()
             ))
             .unwrap(),
@@ -222,7 +224,7 @@ impl Edge {
         atom = pslashfun.replace_all(
             atom.as_view(),
             &Pattern::parse(&format!(
-                "P{}(lor(4,{}))Gamma({},x__)",
+                "Q{}(lor(4,{}))Gamma({},x__)",
                 graph.edge_name_to_position.get(&self.name).unwrap(),
                 pindex_num,
                 pindex_num
@@ -386,6 +388,7 @@ impl SerializableGraph {
                 .iter()
                 .map(|e| SerializableEdge::from_edge(graph, e))
                 .collect(),
+
             overall_factor: graph.overall_factor,
             external_connections: graph
                 .external_connections
@@ -425,6 +428,7 @@ pub struct Graph {
     pub name: SmartString<LazyCompact>,
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
+    pub external_edges: Vec<usize>,
     pub overall_factor: f64,
     pub external_connections: Vec<(Option<usize>, Option<usize>)>,
     pub loop_momentum_basis: LoopMomentumBasis,
@@ -449,6 +453,7 @@ impl Graph {
             name: graph.name.clone(),
             vertices,
             edges: vec![],
+            external_edges: vec![],
             overall_factor: graph.overall_factor,
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
@@ -467,6 +472,19 @@ impl Graph {
             .edges
             .iter()
             .map(|e| Edge::from_serializable_edge(model, &g, e))
+            .collect();
+
+        g.external_edges = g
+            .edges
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| {
+                if e.edge_type == EdgeType::Incoming || e.edge_type == EdgeType::Outgoing {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
             .collect();
         for (i_e, e) in g.edges.iter().enumerate() {
             edge_name_to_position.insert(e.name.clone(), i_e);
@@ -735,6 +753,61 @@ impl Graph {
         if self.derived_data.loop_momentum_bases.is_none() {
             self.generate_loop_momentum_bases();
         }
+    }
+
+    pub fn generate_lmb_replacement_rules(&self) -> Vec<(Pattern, Pattern)> {
+        self.loop_momentum_basis_replacement_rule(&self.loop_momentum_basis)
+    }
+
+    fn loop_momentum_basis_replacement_rule(
+        &self,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<(Pattern, Pattern)> {
+        let mut rule = vec![];
+
+        for (i, signature) in lmb.edge_signatures.iter().enumerate() {
+            println!("lhs {}", Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap());
+            rule.push((
+                Pattern::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
+                self.replacement_rule_from_signature(i, &lmb.basis, &signature),
+            ));
+        }
+
+        rule
+    }
+
+    fn replacement_rule_from_signature(
+        &self,
+        index: usize,
+        basis: &[usize],
+        signature: &(Vec<isize>, Vec<isize>),
+    ) -> Pattern {
+        let mut acc = Atom::new_num(0);
+        for (i_l, sign) in signature.0.iter().enumerate() {
+            match sign {
+                1 => {
+                    acc = &acc + &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+                }
+                -1 => {
+                    acc = &acc - &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+                }
+                _ => {}
+            }
+        }
+
+        for (i_e, sign) in signature.1.iter().enumerate() {
+            match sign {
+                1 => {
+                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+                }
+                -1 => {
+                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+                }
+                _ => {}
+            }
+        }
+        println!("rhs {}", acc);
+        acc.into_pattern()
     }
 
     pub fn generate_ltd(&mut self) {
