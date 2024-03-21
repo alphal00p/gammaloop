@@ -10,10 +10,7 @@ use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 use smartstring::alias::String;
 use symbolica::domains::float::Complex;
-use symbolica::{
-    representations::Atom,
-    state::{State, Workspace},
-};
+use symbolica::{representations::Atom, state::State};
 
 use super::{
     symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension, HistoryStructure,
@@ -719,7 +716,6 @@ fn evaluate() {
 
 #[test]
 fn convert_sym() {
-    let _ws = Workspace::new();
     let i = Complex::new(0.0, 1.0);
     let mut data_b = vec![i * Complex::from(5.0), Complex::from(2.6) + i];
     data_b.append(

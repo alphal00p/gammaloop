@@ -37,7 +37,7 @@ fn gamma_net_param(
             .into_iter()
             .collect();
             i += 1;
-            let pid = State::get_or_insert_fn(&format!("p{}", i), None).unwrap();
+            let pid = State::get_symbol(&format!("p{}", i));
 
             result.push(p.shadow_with(pid).into());
 
