@@ -4,7 +4,7 @@ use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType};
 use crate::model::Model;
 use crate::subtraction::esurface_data::get_existing_esurfaces;
-use crate::subtraction::overlap;
+use crate::subtraction::overlap::{self, find_center};
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
 use clarabel::solver::IPSolver;
 use colored::Colorize;
@@ -724,8 +724,6 @@ fn pytest_massless_scalar_box() {
 
     // this point is inside 2 of the 4 esurfaces
     assert_eq!(esurfaces_to_test.len(), 2);
-    let mut problem = overlap::construct_problem(&graph, &esurfaces_to_test, &box4_e);
-    problem.solve();
 
     // println!("solution: {:?}", problem.solution.x);
 
@@ -733,8 +731,7 @@ fn pytest_massless_scalar_box() {
         println!("---------------------");
 
         let esurfaces = es.into_iter().copied().collect_vec();
-        let mut problem = overlap::construct_problem(&graph, &esurfaces, &box4_e);
-        problem.solve();
+        let center = find_center(&graph, &esurfaces, &box4_e);
 
         for esurface in &esurfaces {
             let real_esurface = &graph
@@ -747,21 +744,15 @@ fn pytest_massless_scalar_box() {
                 "esurface: {}",
                 real_esurface.string_format_in_lmb(&graph.loop_momentum_basis)
             );
+
+            let esurface_value_at_center = center
+                .as_ref()
+                .map(|loop_mom| real_esurface.compute_from_momenta(&graph, loop_mom, &box4_e));
+
+            println!("value at center: {:?}", esurface_value_at_center);
+            println!("center: {:?}", center);
         }
-
-        println!("status: {:?}", problem.solution.status);
-
-        let len = problem.solution.x.len();
-        let centre = LorentzVector::from_args(
-            0.0,
-            problem.solution.x[len - 3],
-            problem.solution.x[len - 2],
-            problem.solution.x[len - 1],
-        );
-
-        println!("centre: {:?}", centre);
     }
-
     assert_eq!(1, 2);
 }
 

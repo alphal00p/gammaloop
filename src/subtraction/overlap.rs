@@ -5,6 +5,7 @@ use num::Complex;
 
 use crate::graph::Graph;
 use crate::utils::compute_shift_part;
+use crate::utils::FloatLike;
 
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {
@@ -22,7 +23,17 @@ impl<'a> PropagatorConstraint<'a> {
     }
 }
 
-pub fn construct_problem(
+fn extract_center<T: FloatLike>(num_loops: usize, solution: &[T]) -> Vec<LorentzVector<T>> {
+    let len = solution.len();
+    let num_loop_vars = 3 * num_loops;
+
+    solution[len - num_loop_vars..]
+        .windows(3)
+        .map(|window| LorentzVector::from_args(T::zero(), window[0], window[1], window[2]))
+        .collect()
+}
+
+fn construct_solver(
     graph: &Graph,
     esurface_ids: &[usize],
     external_momenta: &[LorentzVector<f64>],
@@ -190,4 +201,22 @@ pub fn construct_problem(
         &cones,
         settings,
     )
+}
+
+pub fn find_center(
+    graph: &Graph,
+    esurface_ids: &[usize],
+    external_momenta: &[LorentzVector<f64>],
+) -> Option<Vec<LorentzVector<f64>>> {
+    let mut solver = construct_solver(graph, esurface_ids, external_momenta);
+    solver.solve();
+
+    if solver.solution.status == SolverStatus::Solved
+        || solver.solution.status == SolverStatus::AlmostSolved
+    {
+        let center = extract_center(graph.loop_momentum_basis.basis.len(), &solver.solution.x);
+        Some(center)
+    } else {
+        None
+    }
 }
