@@ -4,13 +4,14 @@ use std::{
 };
 
 use crate::{
-    graph::{EdgeType, Graph},
-    utils::FloatLike,
+    graph::{EdgeType, Graph, LoopMomentumBasis},
+    utils::{compute_momentum, compute_t_part_of_shift_part, format_momentum, FloatLike},
 };
 use ahash::{HashMap, HashMapExt, HashSet};
 use color_eyre::Report;
 use eyre::{eyre, Result};
 use itertools::Itertools;
+use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     representations::Atom,
@@ -70,6 +71,45 @@ impl Esurface {
         //Atom::new_from_view(&esurf.as_atom_view())
     }
 
+    fn format_shift_string(&self) -> String {
+        self.shift
+            .iter()
+            .zip(self.shift_signature.iter())
+            .map(|(i, s)| {
+                if *s {
+                    format!("+ p_{}", i)
+                } else {
+                    format!("- p_{}", i)
+                }
+            })
+            .join(" ")
+    }
+
+    pub fn string_format(&self) -> String {
+        let mut energies_string = self.energies.iter().map(|i| format!("E_{}", i)).join(" + ");
+
+        let shift_string = self.format_shift_string();
+
+        energies_string.push(' ');
+        energies_string.push_str(&shift_string);
+        energies_string
+    }
+
+    pub fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
+        let mut energies_string = self
+            .energies
+            .iter()
+            .map(|i| {
+                let signature = &lmb.edge_signatures[*i];
+                format!("|{}|", format_momentum(signature))
+            })
+            .join(" + ");
+
+        let shift_string = self.format_shift_string();
+        energies_string.push(' ');
+        energies_string.push_str(&shift_string);
+        energies_string
+    }
     // the energy cache contains the energies of external edges as well as the virtual,
     // use the location in the supergraph to determine the index
     #[inline]
@@ -95,6 +135,47 @@ impl Esurface {
         );
 
         shift_sum
+    }
+
+    #[inline]
+    pub fn compute_from_momenta<T: FloatLike>(
+        &self,
+        graph: &Graph,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+    ) -> T {
+        let lmb = &graph.loop_momentum_basis;
+
+        let energy_sum = self
+            .energies
+            .iter()
+            .map(|index| {
+                let signature = &lmb.edge_signatures[*index];
+                let momentum = compute_momentum(signature, loop_moms, external_moms);
+                let mass = if let Some(mass) = graph.edges[*index].particle.mass.value {
+                    Into::<T>::into(mass.re)
+                } else {
+                    T::zero()
+                };
+
+                (momentum.spatial_squared() + mass * mass).sqrt()
+            })
+            .sum::<T>();
+
+        let shift_part = self
+            .shift
+            .iter()
+            .zip(self.shift_signature.iter())
+            .map(|(index, sign)| {
+                let external_signature = &lmb.edge_signatures[*index].1;
+                match sign {
+                    true => compute_t_part_of_shift_part(external_signature, external_moms),
+                    false => -compute_t_part_of_shift_part(external_signature, external_moms),
+                }
+            })
+            .sum::<T>();
+
+        energy_sum + shift_part
     }
 }
 

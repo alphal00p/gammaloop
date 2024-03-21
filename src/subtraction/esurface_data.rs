@@ -62,12 +62,12 @@ pub fn get_existing_esurfaces<T: FloatLike>(
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct EsurfaceDerivedData {
-    esurface_data: Vec<EsurfaceData>,
+    pub esurface_data: Vec<EsurfaceData>,
     orientation_pairs: Vec<(usize, usize)>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-struct EsurfaceData {
+pub struct EsurfaceData {
     cut_momentum_basis: usize,
     mass_sum_squared: f64,
     shift_signature: Vec<isize>,
@@ -91,6 +91,24 @@ impl EsurfaceData {
             shift.t,
             shift.square() - Into::<T>::into(self.mass_sum_squared),
         )
+    }
+
+    pub fn compute_shift_part_from_externals<T: FloatLike>(
+        &self,
+        externals: &[LorentzVector<T>],
+    ) -> T {
+        let mut shift = T::zero();
+
+        for (i, external) in externals.iter().enumerate() {
+            match self.shift_signature[i] {
+                1 => shift += external.t,
+                -1 => shift -= external.t,
+                0 => {}
+                _ => unreachable!("Shift signature must be -1, 0 or 1"),
+            }
+        }
+
+        shift
     }
 }
 

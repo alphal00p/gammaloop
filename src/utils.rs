@@ -665,6 +665,50 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
     false
 }
 
+pub fn compute_shift_part<T: FloatLike>(
+    external_signature: &[isize],
+    external_moms: &[LorentzVector<T>],
+) -> LorentzVector<T> {
+    let mut res = LorentzVector::default();
+
+    for i_l in external_signature.iter().enumerate() {
+        match i_l.1 {
+            1 => {
+                res += external_moms[i_l.0];
+            }
+            -1 => {
+                res -= external_moms[i_l.0];
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
+    res
+}
+
+pub fn compute_t_part_of_shift_part<T: FloatLike>(
+    external_signature: &[isize],
+    external_moms: &[LorentzVector<T>],
+) -> T {
+    let mut res = T::zero();
+
+    for i_l in external_signature.iter().enumerate() {
+        match i_l.1 {
+            1 => {
+                res += external_moms[i_l.0].t;
+            }
+            -1 => {
+                res -= external_moms[i_l.0].t;
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
+    res
+}
+
 #[allow(unused)]
 pub fn compute_momentum<T: FloatLike>(
     signature: &(Vec<isize>, Vec<isize>),
@@ -696,6 +740,60 @@ pub fn compute_momentum<T: FloatLike>(
             _ => unreachable!("Sign should be, -1,0,1"),
         }
     }
+    res
+}
+
+/// Usefull for debugging
+pub fn format_momentum(signature: &(Vec<isize>, Vec<isize>)) -> String {
+    let mut res = String::new();
+    let mut first = true;
+
+    for (i_l, sign) in signature.0.iter().enumerate() {
+        match sign {
+            1 => {
+                if first {
+                    res.push_str(&format!("k_{}", i_l));
+                    first = false;
+                } else {
+                    res.push_str(&format!(" + k_{}", i_l));
+                }
+            }
+            -1 => {
+                if first {
+                    res.push_str(&format!("-k_{}", i_l));
+                    first = false;
+                } else {
+                    res.push_str(&format!(" - k_{}", i_l));
+                }
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
+    for (i_l, sign) in signature.1.iter().enumerate() {
+        match sign {
+            1 => {
+                if first {
+                    res.push_str(&format!("p_{}", i_l));
+                    first = false;
+                } else {
+                    res.push_str(&format!(" + p_{}", i_l));
+                }
+            }
+            -1 => {
+                if first {
+                    res.push_str(&format!("-p_{}", i_l));
+                    first = false;
+                } else {
+                    res.push_str(&format!(" - p_{}", i_l));
+                }
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
     res
 }
 

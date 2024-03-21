@@ -1,15 +1,33 @@
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use lorentz_vector::LorentzVector;
+use num::Complex;
 
 use crate::graph::Graph;
+use crate::utils::compute_shift_part;
+
+/// Helper struct to construct the socp problem
+struct PropagatorConstraint<'a> {
+    propagator_id: usize,            // index into the graph's edges
+    mass_pointer: Option<usize>,     // pointer to value of unique mass
+    loop_signature: &'a [isize],     // loop signature of the propagator
+    external_signature: &'a [isize], // external signature of the propagator
+}
+
+impl<'a> PropagatorConstraint<'a> {
+    fn get_dimension(&self) -> usize {
+        let mass_value = if self.mass_pointer.is_some() { 1 } else { 0 };
+
+        3 * self.loop_signature.iter().filter(|&x| *x != 0).count() + mass_value + 1
+    }
+}
 
 pub fn construct_problem(
     graph: &Graph,
     esurface_ids: &[usize],
     external_momenta: &[LorentzVector<f64>],
 ) -> DefaultSolver {
-    let lmb = graph.loop_momentum_basis;
+    let lmb = &graph.loop_momentum_basis;
     let num_loops = lmb.basis.len();
     let num_loop_vars = 3 * num_loops;
 
@@ -20,65 +38,156 @@ pub fn construct_problem(
         .unwrap()
         .esurfaces;
 
-    let esurface_derived_data = graph.derived_data.esurface_derived_data.as_ref().unwrap();
+    let _esurface_derived_data = graph.derived_data.esurface_derived_data.as_ref().unwrap();
 
-    // upper bound on the number of propagators
-    let mut inequivalent_propagators: Vec<usize> = Vec::with_capacity(lmb.edge_signatures.len());
+    let temp_loop_momenta = vec![LorentzVector::default(); num_loops];
+    let energy_cache = graph.compute_onshell_energies(&temp_loop_momenta, external_momenta);
 
-    // for now, each propagator has it's own mass
-    let mut masses = Vec::with_capacity(lmb.edge_signatures.len());
+    // first we study the structure of the problem
+    let mut propagator_constraints: Vec<PropagatorConstraint> =
+        Vec::with_capacity(graph.edges.len());
 
-    // loop_signatures
-    let mut propagator_loop_signatures: Vec<Vec<isize>> =
-        Vec::with_capacity(lmb.edge_signatures.len());
+    let mut inequivalent_masses: Vec<Complex<f64>> = vec![];
 
-    let mut num_massive_propagators = 0;
+    let mut esurface_constraints: Vec<Vec<usize>> = Vec::with_capacity(esurface_ids.len());
 
     for esurface_id in esurface_ids {
         let esurface = &esurfaces[*esurface_id];
+        let mut esurface_constraint_indices: Vec<usize> = Vec::with_capacity(6);
+
         for &edge_id in &esurface.energies {
-            if let Some(edge_position) = inequivalent_propagators
+            if let Some(edge_position) = propagator_constraints
                 .iter()
-                .position(|&index| index == edge_id)
+                .position(|constraint| constraint.propagator_id == edge_id)
             {
+                esurface_constraint_indices.push(edge_position);
             } else {
-                // store the propagator and it's mass
-                let mass = graph.edges[edge_id].particle.mass.value.map(|m| m.re);
+                let propagator_id = edge_id;
+                let mass_pointer = graph.edges[propagator_id].particle.mass.value.map(|m| {
+                    if let Some(mass_position) = inequivalent_masses.iter().position(|&x| x == m) {
+                        mass_position
+                    } else {
+                        inequivalent_masses.push(m);
+                        inequivalent_masses.len() - 1
+                    }
+                });
 
-                if mass.is_some() {
-                    num_massive_propagators += 1;
-                }
+                let (loop_signature, external_signature) = &lmb.edge_signatures[edge_id];
 
-                inequivalent_propagators.push(edge_id);
-                let loop_signature = lmb.edge_signatures[edge_id].0;
-                propagator_loop_signatures.push(loop_signature);
+                let propagator_constraint = PropagatorConstraint {
+                    propagator_id,
+                    mass_pointer,
+                    loop_signature,
+                    external_signature,
+                };
 
-                masses.push(mass);
+                propagator_constraints.push(propagator_constraint);
+                esurface_constraint_indices.push(propagator_constraints.len() - 1);
             };
+        }
+
+        esurface_constraints.push(esurface_constraint_indices);
+    }
+
+    // now we know the structure, so we can put it in matrix form.
+    // variables are stored as [r , x_p_0, ... x_p_m, k1_x, k1_y, ... k_n_x, k_n_y, k_n_z]
+    let propagator_index_offset = 1;
+    let loop_momentum_offset = propagator_index_offset + propagator_constraints.len();
+
+    let num_primal_variables = loop_momentum_offset + num_loop_vars;
+
+    let cone_dimension_sum = propagator_constraints
+        .iter()
+        .map(|constraint| constraint.get_dimension())
+        .sum::<usize>();
+
+    let num_constaints = 1 + esurface_constraints.len() + cone_dimension_sum;
+
+    // quadratic part of the objective function, we don't need this for now
+    let p_matrix: CscMatrix<f64> =
+        CscMatrix::spalloc((num_primal_variables, num_primal_variables), 0);
+
+    // objective function
+    let mut q_vector = vec![0.0; num_primal_variables];
+    q_vector[0] = 1.0;
+
+    // construct the cones
+    let mut cones: Vec<SupportedConeT<f64>> = Vec::with_capacity(1 + propagator_constraints.len());
+    cones.push(NonnegativeConeT(1));
+    cones.push(NonnegativeConeT(esurface_constraints.len()));
+
+    for prop_constraint in &propagator_constraints {
+        cones.push(SecondOrderConeT(prop_constraint.get_dimension()));
+    }
+
+    // write the constaint equations
+    let mut a_matrix = vec![vec![0.0; num_primal_variables]; num_constaints];
+    let mut b_vector = vec![0.0; num_constaints];
+
+    a_matrix[0][0] = 1.0;
+    // esurface constraints
+    for (constraint_index, (esurface_id, esurface_constraint)) in esurface_ids
+        .iter()
+        .zip(esurface_constraints.iter())
+        .enumerate()
+    {
+        for prop_index in esurface_constraint {
+            a_matrix[constraint_index + 1][*prop_index + propagator_index_offset] = 1.0;
+        }
+
+        let shift_part = esurfaces[*esurface_id].compute_shift_part(&energy_cache);
+        b_vector[constraint_index + 1] = -shift_part;
+        a_matrix[constraint_index + 1][0] = -1.0;
+    }
+
+    // propagator constraints
+    let mut vertical_offset = esurface_constraints.len() + 1;
+    for (cone_index, propagator_constraint) in propagator_constraints.iter().enumerate() {
+        a_matrix[vertical_offset][propagator_index_offset + cone_index] = -1.0;
+        vertical_offset += 1;
+
+        let spatial_shift =
+            compute_shift_part(propagator_constraint.external_signature, external_momenta);
+
+        b_vector[vertical_offset] = spatial_shift.x;
+        b_vector[vertical_offset + 1] = spatial_shift.y;
+        b_vector[vertical_offset + 2] = spatial_shift.z;
+
+        for (loop_index, individual_loop_signature) in
+            propagator_constraint.loop_signature.iter().enumerate()
+        {
+            if *individual_loop_signature != 0 {
+                a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index] =
+                    -*individual_loop_signature as f64;
+                vertical_offset += 1;
+                a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index + 1] =
+                    -*individual_loop_signature as f64;
+                vertical_offset += 1;
+                a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index + 2] =
+                    -*individual_loop_signature as f64;
+                vertical_offset += 1;
+            }
+        }
+
+        if let Some(mass_index) = propagator_constraint.mass_pointer {
+            b_vector[vertical_offset] = inequivalent_masses[mass_index].re;
+            vertical_offset += 1;
         }
     }
 
-    // this is a rather ungodly expression.
-    let num_constraints = 1
-        + esurface_ids.len()
-        + inequivalent_propagators
-            .iter()
-            .enumerate()
-            .map(|(index, edge_id)| {
-                let mut cone_size = 0;
-                if masses[index].is_some() {
-                    cone_size += 1;
-                }
+    let a_matrix_sparse = CscMatrix::from(&a_matrix);
 
-                cone_size += 3 * propagator_loop_signatures[index]
-                    .iter()
-                    .filter(|&x| *x != 0)
-                    .count();
+    let settings = DefaultSettingsBuilder::default()
+        .verbose(false)
+        .build()
+        .unwrap();
 
-                cone_size
-            })
-            .sum::<usize>()
-        + num_massive_propagators;
-
-    todo!()
+    DefaultSolver::new(
+        &p_matrix,
+        &q_vector,
+        &a_matrix_sparse,
+        &b_vector,
+        &cones,
+        settings,
+    )
 }

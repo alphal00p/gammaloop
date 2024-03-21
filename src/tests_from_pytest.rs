@@ -4,7 +4,9 @@ use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType};
 use crate::model::Model;
 use crate::subtraction::esurface_data::get_existing_esurfaces;
+use crate::subtraction::overlap;
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
+use clarabel::solver::IPSolver;
 use colored::Colorize;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
@@ -691,7 +693,9 @@ fn pytest_massless_scalar_box() {
 
     let loop_mom = LorentzVector::new();
 
-    let mut counter = 0;
+    println!("debug info: ");
+
+    let mut esurfaces_to_test = vec![];
 
     for existing_esurface_id in &existing {
         let cache = graph.compute_onshell_energies(&[loop_mom], &box4_e);
@@ -703,14 +707,62 @@ fn pytest_massless_scalar_box() {
             .unwrap()
             .esurfaces[*existing_esurface_id];
 
+        let esurface_string = esurface.string_format();
+        println!("existing esurface: {}", esurface_string);
+        println!(
+            "in lmb: {}",
+            esurface.string_format_in_lmb(&graph.loop_momentum_basis)
+        );
+
         let esurface_value = esurface.compute_value(&cache);
+        println!("Value of esurface at origin: {}", esurface_value);
+
         if esurface_value < 0. {
-            counter += 1;
+            esurfaces_to_test.push(*existing_esurface_id);
         }
     }
 
     // this point is inside 2 of the 4 esurfaces
-    assert_eq!(counter, 2);
+    assert_eq!(esurfaces_to_test.len(), 2);
+    let mut problem = overlap::construct_problem(&graph, &esurfaces_to_test, &box4_e);
+    problem.solve();
+
+    // println!("solution: {:?}", problem.solution.x);
+
+    for es in existing.iter().combinations(2) {
+        println!("---------------------");
+
+        let esurfaces = es.into_iter().copied().collect_vec();
+        let mut problem = overlap::construct_problem(&graph, &esurfaces, &box4_e);
+        problem.solve();
+
+        for esurface in &esurfaces {
+            let real_esurface = &graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .esurfaces[*esurface];
+            println!(
+                "esurface: {}",
+                real_esurface.string_format_in_lmb(&graph.loop_momentum_basis)
+            );
+        }
+
+        println!("status: {:?}", problem.solution.status);
+
+        let len = problem.solution.x.len();
+        let centre = LorentzVector::from_args(
+            0.0,
+            problem.solution.x[len - 3],
+            problem.solution.x[len - 2],
+            problem.solution.x[len - 1],
+        );
+
+        println!("centre: {:?}", centre);
+    }
+
+    assert_eq!(1, 2);
 }
 
 #[test]
