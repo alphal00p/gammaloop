@@ -66,7 +66,7 @@ def register_symbolica() -> bool:
     # Check if is_licensed exist for backward compatibility. Later on, it can be removed.
     if gl_is_symbolica_registered is not None or (hasattr(symbolica, 'is_licensed') and symbolica.is_licensed()):
         gl_is_symbolica_registered = True
-        return gl_is_symbolica_registered
+        return True
 
     if 'SYMBOLICA_LICENSE' not in os.environ:
         symbolica_license = None
@@ -84,11 +84,18 @@ def register_symbolica() -> bool:
             except:  # pylint: disable=bare-except
                 logger.critical(
                     "Could not set Symbolica license key from gammaloop configuration file specifying license '%s'.", symbolica_license)
-                gl_is_symbolica_registered = True
+                gl_is_symbolica_registered = False
                 return False
         else:
-            gl_is_symbolica_registered = False
-            return False
+            try:
+                set_license_key('GAMMALOOP_USER')
+                gl_is_symbolica_registered = True
+                return True
+            except:  # pylint: disable=bare-except
+                logger.critical(
+                    "The version of symbolica loaded requires a license. Specify via the environment variable 'SYMBOLICA_LICENSE' or through the config files of gammaloop.")
+                gl_is_symbolica_registered = False
+                return False
     else:
         try:
             set_license_key(os.environ['SYMBOLICA_LICENSE'])
