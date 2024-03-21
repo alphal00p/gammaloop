@@ -183,17 +183,17 @@ impl Representation {
     #[allow(clippy::cast_possible_wrap)]
     pub fn to_fnbuilder<'a, 'b: 'a>(&'a self) -> FunctionBuilder {
         let (value, id) = match *self {
-            Self::Euclidean(value) => (value, State::get_or_insert_fn("euc", None)),
-            Self::Lorentz(value) => (value, State::get_or_insert_fn("lor", None)),
-            Self::Spin(value) => (value, State::get_or_insert_fn("spin", None)),
-            Self::ColorAdjoint(value) => (value, State::get_or_insert_fn("CAdj", None)),
-            Self::ColorFundamental(value) => (value, State::get_or_insert_fn("CF", None)),
-            Self::ColorAntiFundamental(value) => (value, State::get_or_insert_fn("CAF", None)),
-            Self::ColorSextet(value) => (value, State::get_or_insert_fn("CS", None)),
-            Self::ColorAntiSextet(value) => (value, State::get_or_insert_fn("CAS", None)),
+            Self::Euclidean(value) => (value, State::get_symbol("euc")),
+            Self::Lorentz(value) => (value, State::get_symbol("lor")),
+            Self::Spin(value) => (value, State::get_symbol("spin")),
+            Self::ColorAdjoint(value) => (value, State::get_symbol("CAdj")),
+            Self::ColorFundamental(value) => (value, State::get_symbol("CF")),
+            Self::ColorAntiFundamental(value) => (value, State::get_symbol("CAF")),
+            Self::ColorSextet(value) => (value, State::get_symbol("CS")),
+            Self::ColorAntiSextet(value) => (value, State::get_symbol("CAS")),
         };
 
-        let mut value_builder = FunctionBuilder::new(id.unwrap_or_else(|_| unreachable!()));
+        let mut value_builder = FunctionBuilder::new(id);
 
         value_builder =
             value_builder.add_arg(Atom::new_num(usize::from(value) as i64).as_atom_view());
@@ -375,14 +375,14 @@ impl TryFrom<AtomView<'_>> for Slot {
             return Err("Too many arguments");
         }
 
-        let euc = State::get_or_insert_fn("euc", None).unwrap();
-        let lor = State::get_or_insert_fn("lor", None).unwrap();
-        let spin = State::get_or_insert_fn("spin", None).unwrap();
-        let cadj = State::get_or_insert_fn("CAdj", None).unwrap();
-        let cf = State::get_or_insert_fn("CF", None).unwrap();
-        let caf = State::get_or_insert_fn("CAF", None).unwrap();
-        let cs = State::get_or_insert_fn("CS", None).unwrap();
-        let cas = State::get_or_insert_fn("CAS", None).unwrap();
+        let euc = State::get_symbol("euc");
+        let lor = State::get_symbol("lor");
+        let spin = State::get_symbol("spin");
+        let cadj = State::get_symbol("CAdj");
+        let cf = State::get_symbol("CF");
+        let caf = State::get_symbol("CAF");
+        let cs = State::get_symbol("CS");
+        let cas = State::get_symbol("CAS");
 
         let representation = if let AtomView::Fun(f) = value {
             let sym = f.get_symbol();
@@ -767,12 +767,12 @@ pub trait TensorStructure {
         Self: std::marker::Sized,
         Self::Structure: Clone + TensorStructure,
     {
-        let id = State::get_or_insert_fn("id", None).unwrap();
-        let gamma = State::get_or_insert_fn("γ", None).unwrap();
-        let gamma5 = State::get_or_insert_fn("γ5", None).unwrap();
-        let proj_m = State::get_or_insert_fn("ProjM", None).unwrap();
-        let proj_p = State::get_or_insert_fn("ProjP", None).unwrap();
-        let sigma = State::get_or_insert_fn("σ", None).unwrap();
+        let id = State::get_symbol("id");
+        let gamma = State::get_symbol("γ");
+        let gamma5 = State::get_symbol("γ5");
+        let proj_m = State::get_symbol("ProjM");
+        let proj_p = State::get_symbol("ProjP");
+        let sigma = State::get_symbol("σ");
 
         match f_id {
             _ if f_id == id => {
@@ -1603,7 +1603,7 @@ pub trait IntoId {
 
 impl IntoId for SmartString<LazyCompact> {
     fn into_id(self) -> Symbol {
-        State::get_or_insert_fn(self, None).unwrap()
+        State::get_symbol(self)
     }
 }
 
@@ -1615,13 +1615,13 @@ impl IntoId for Symbol {
 
 impl IntoId for &str {
     fn into_id(self) -> Symbol {
-        State::get_or_insert_fn(self, None).unwrap()
+        State::get_symbol(self)
     }
 }
 
 impl IntoId for std::string::String {
     fn into_id(self) -> Symbol {
-        State::get_or_insert_fn(self, None).unwrap()
+        State::get_symbol(self)
     }
 }
 

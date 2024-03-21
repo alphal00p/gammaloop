@@ -13,21 +13,21 @@ use symbolica::{
 };
 
 // pub fn init_state() {
-//     assert!(EUC == State::get_or_insert_fn("euc", None).unwrap());
-//     assert!(LOR == State::get_or_insert_fn("lor", None).unwrap());
-//     assert!(SPIN == State::get_or_insert_fn("spin", None).unwrap());
-//     assert!(CADJ == State::get_or_insert_fn("CAdj", None).unwrap());
-//     assert!(CF == State::get_or_insert_fn("CF", None).unwrap());
-//     assert!(CAF == State::get_or_insert_fn("CAF", None).unwrap());
-//     assert!(CS == State::get_or_insert_fn("CS", None).unwrap());
-//     assert!(CAS == State::get_or_insert_fn("CAS", None).unwrap());
+//     assert!(EUC == State::get_symbol("euc", None).unwrap());
+//     assert!(LOR == State::get_symbol("lor", None).unwrap());
+//     assert!(SPIN == State::get_symbol("spin", None).unwrap());
+//     assert!(CADJ == State::get_symbol("CAdj", None).unwrap());
+//     assert!(CF == State::get_symbol("CF", None).unwrap());
+//     assert!(CAF == State::get_symbol("CAF", None).unwrap());
+//     assert!(CS == State::get_symbol("CS", None).unwrap());
+//     assert!(CAS == State::get_symbol("CAS", None).unwrap());
 
-//     assert!(ID == State::get_or_insert_fn("id", None).unwrap());
-//     assert!(GAMMA == State::get_or_insert_fn("γ", None).unwrap());
-//     assert!(GAMMA5 == State::get_or_insert_fn("γ5", None).unwrap());
-//     assert!(PROJM == State::get_or_insert_fn("ProjM", None).unwrap());
-//     assert!(PROJP == State::get_or_insert_fn("ProjP", None).unwrap());
-//     assert!(SIGMA == State::get_or_insert_fn("σ", None).unwrap());
+//     assert!(ID == State::get_symbol("id", None).unwrap());
+//     assert!(GAMMA == State::get_symbol("γ", None).unwrap());
+//     assert!(GAMMA5 == State::get_symbol("γ5", None).unwrap());
+//     assert!(PROJM == State::get_symbol("ProjM", None).unwrap());
+//     assert!(PROJP == State::get_symbol("ProjP", None).unwrap());
+//     assert!(SIGMA == State::get_symbol("σ", None).unwrap());
 // }
 
 #[allow(dead_code)]
@@ -124,10 +124,7 @@ where
 {
     DenseTensor::from_data(
         p,
-        HistoryStructure::new(
-            &[(index, Lorentz(4.into()))],
-            State::get_or_insert_fn("p", None).unwrap_or_else(|_| unreachable!()),
-        ),
+        HistoryStructure::new(&[(index, Lorentz(4.into()))], State::get_symbol("p")),
     )
     .unwrap_or_else(|_| unreachable!())
 }
@@ -155,10 +152,7 @@ where
 {
     DenseTensor::from_data(
         p,
-        HistoryStructure::new(
-            &[(index, Euclidean(4.into()))],
-            State::get_or_insert_fn("p", None).unwrap_or_else(|_| unreachable!()),
-        ),
+        HistoryStructure::new(&[(index, Euclidean(4.into()))], State::get_symbol("p")),
     )
     .unwrap_or_else(|_| unreachable!())
 }
@@ -236,7 +230,7 @@ where
             (indices.1, Euclidean(4.into())),
             (minkindex, Lorentz(4.into())),
         ],
-        State::get_or_insert_fn("γ", None).unwrap_or_else(|_| unreachable!()),
+        State::get_symbol("γ"),
     );
 
     gamma_data(structure)
@@ -306,7 +300,7 @@ where
             (indices.0, Euclidean(4.into())),
             (indices.1, Euclidean(4.into())),
         ],
-        State::get_or_insert_fn("γ5", None).unwrap_or_else(|_| unreachable!()),
+        State::get_symbol("γ5"),
     );
 
     gamma5_data(structure)
@@ -357,7 +351,7 @@ where
             (indices.0, Euclidean(4.into())),
             (indices.1, Euclidean(4.into())),
         ],
-        State::get_or_insert_fn("ProjM", None).unwrap_or_else(|_| unreachable!()),
+        State::get_symbol("ProjM"),
     );
 
     proj_m_data(structure)
@@ -416,7 +410,7 @@ where
             (indices.0, Euclidean(4.into())),
             (indices.1, Euclidean(4.into())),
         ],
-        State::get_or_insert_fn("ProjP", None).unwrap_or_else(|_| unreachable!()),
+        State::get_symbol("ProjP"),
     );
 
     proj_p_data(structure)
@@ -496,7 +490,7 @@ where
             (minkdices.0, Lorentz(4.into())),
             (minkdices.1, Lorentz(4.into())),
         ],
-        State::get_or_insert_fn("σ", None).unwrap_or_else(|_| unreachable!()),
+        State::get_symbol("σ"),
     );
 
     sigma_data(structure)
