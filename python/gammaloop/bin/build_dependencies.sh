@@ -2,6 +2,8 @@
 
 RETCODE=0;
 
+
+
 clean_dependencies () {
     cd dependencies
 
@@ -81,7 +83,8 @@ build_dependencies () {
     
     if ! test -d symbolica; then
         echo "Cloning symbolica ...";
-        git clone https://github.com/alphal00p/symbolica &>> dependency_build.log
+        ${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}
+        $CMD_TO_ACCESS_SYMBOLICA &>> dependency_build.log
     fi
 
     if ! test -f symbolica/symbolica_path.txt; then

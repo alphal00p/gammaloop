@@ -236,7 +236,7 @@ class GammaLoop(object):
         if gl_is_symbolica_registered is False:
             raise GammaLoopError("Symbolica is not registered and since gammaLoop uses it both within Python and Rust, multiple instances of Symbolica are necessary.\n"
                                  + "Please register Symbolica by setting the environment variable 'SYMBOLICA_LICENSE' or by adding it to the gammaloop configuration file.\n"
-                                 + "Also make sure you have a working internet connection.")
+                                 + "Also make sure you have a working internet connection. Alternatively, revert the license setting to the default value 'GAMMALOOP_USER'.")
 
     def get_model_from_rust_worker(self) -> Model:
         return Model.from_yaml(self.rust_worker.get_model())

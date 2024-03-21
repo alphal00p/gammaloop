@@ -85,7 +85,7 @@ You can find example of command files in the `<MODULE_PATH>/data/run_cards/` dir
 
 ### 2. Usage from within a Jupyter notebook: the Python API
 
-*TODO*
+* WORK IN PROGRESS *
 
 ### 3. Usage from the rust binary executable: ./gammaloop_rust_cli
 
