@@ -40,10 +40,13 @@ jobs:
         ./bin/compile_lib.sh --release
     - name: Run code checks
       run: |
-        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python -m "codecheck"
+        source `./bin/gammaloop -show_venv`
+        ./bin/run_tests.sh python -m "codecheck"
     - name: Run python tests
       run: |
-        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python -m "not drawing"
+        source `./bin/gammaloop -show_venv`
+        ./bin/run_tests.sh python -m "not drawing"
     - name: Run native rust tests
       run: |
-        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh rust
+        source `./bin/gammaloop -show_venv`
+        ./bin/run_tests.sh rust
