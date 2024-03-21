@@ -695,10 +695,11 @@ where
     pub fn symbolic_shadow(&mut self, name: &str) -> TensorNetwork<MixedTensors> {
         {
             for (i, n) in &mut self.graph.nodes {
-                n.mut_structure().set_name(
-                    &State::get_or_insert_fn(format!("{}{}", name, i.data().as_ffi()), None)
-                        .unwrap(),
-                );
+                n.mut_structure().set_name(&State::get_symbol(format!(
+                    "{}{}",
+                    name,
+                    i.data().as_ffi()
+                )));
             }
         }
 
@@ -760,9 +761,11 @@ where
 {
     pub fn namesym(&mut self, name: &str) {
         for (id, n) in &mut self.graph.nodes {
-            n.set_name(
-                &State::get_or_insert_fn(format!("{}{}", name, id.data().as_ffi()), None).unwrap(),
-            );
+            n.set_name(&State::get_symbol(format!(
+                "{}{}",
+                name,
+                id.data().as_ffi()
+            )));
         }
     }
 }

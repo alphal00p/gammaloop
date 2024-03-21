@@ -1,8 +1,6 @@
-use std::path::Display;
-
 use super::{
-    network, Contract, FallibleAdd, HasName, IntoId, MixedTensor, Shadowable, Slot,
-    StructureContract, TensorNetwork, TensorStructure, VecStructure,
+    Contract, FallibleAdd, HasName, IntoId, MixedTensor, Shadowable, Slot, StructureContract,
+    TensorNetwork, TensorStructure, VecStructure,
 };
 
 use symbolica::representations::{Atom, AtomView, MulView, Symbol};
