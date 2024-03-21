@@ -29,7 +29,7 @@ authors = [
   { name = "Valentin Hirschi" },
 ]
 
-dependencies = ["PyYAML>=6.0.1", "symbolica>=0.1.0", "PyMuPDF>=1.23.4"]
+dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -72,6 +72,7 @@ include = ["python/gammaloop"]
 exclude = [
   "python/gammaloop/data/templates/drawing/combine_pages.py",
   "python/gammaloop/data/models/*",
+  "python/gammaloop/dependencies/*",
   "python/gammaloop/_gammaloop.so",
   "python/gammaloop/requirements.txt",
   "python/gammaloop/run_python_tests.sh",

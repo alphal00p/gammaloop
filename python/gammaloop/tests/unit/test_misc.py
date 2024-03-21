@@ -4,11 +4,13 @@ from subprocess import Popen, PIPE
 from pprint import pformat
 from gammaloop.misc.common import GL_PATH, logger, GammaLoopError
 
+
 class TestCode:
 
     @pytest.mark.codecheck
     def test_pyright(self):
-        process = Popen(['pyright'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
+        process = Popen(['pyright', '--warnings'],
+                        cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
         output, error = process.communicate()
         stdout = output.decode("utf-8")
         stderr = error.decode("utf-8")

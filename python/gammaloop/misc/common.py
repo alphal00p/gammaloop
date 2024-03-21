@@ -4,9 +4,8 @@ import logging
 from enum import Enum
 import yaml
 from typing import Any
-import symbolica  # pylint: disable=import-error # type: ignore
-from gammaloop.misc.utils import setup_logging
-
+from gammaloop.misc.utils import setup_logging, Colour
+from gammaloop import check_gammaloop_dependencies
 pjoin = os.path.join
 
 GL_PATH = os.path.abspath(os.path.join(
@@ -28,11 +27,21 @@ EMPTY_LIST: list[Any] = []
 logger = logging.getLogger('GammaLoop')
 
 try:
+    import symbolica  # pylint: disable=import-error # type: ignore
     # pylint: disable=unused-import
     from symbolica import Expression, Transformer, set_license_key  # type: ignore
+    if not str(os.path.abspath(symbolica.__file__)).startswith(str(os.path.join(GL_PATH, 'dependencies', 'venv'))):
+        logger.warning(
+            "Symbolica is not being imported from the virtual environment of gammaloop. This may lead to unexpected behaviour.")
+        logger.warning(
+            "You can avoid this by running the following command: %sgammaloop --build_dependencies && source %s%s",
+            Colour.GREEN, os.path.abspath(os.path.join(GL_PATH, 'dependencies', 'venv', 'bin', 'activate')), Colour.END)
 except ImportError:
     logger.critical(
-        "Could not import Symbolica, please install symbolica with 'python -m pip install symbolica'.")
+        "Could not import Symbolica, please run\n\n%sgammaloop --build_dependencies && source %s%s\n", Colour.GREEN,
+        os.path.abspath(os.path.join(
+            GL_PATH, 'dependencies', 'venv', 'bin', 'activate')),
+        Colour.END)
     sys.exit(1)
 
 
@@ -53,6 +62,7 @@ def load_configuration(config_path: str, quiet: bool = False) -> dict[str, Any]:
 def register_symbolica() -> bool:
     # pylint: disable=global-statement
     global gl_is_symbolica_registered
+
     # Check if is_licensed exist for backward compatibility. Later on, it can be removed.
     if gl_is_symbolica_registered is not None or (hasattr(symbolica, 'is_licensed') and symbolica.is_licensed()):
         gl_is_symbolica_registered = True

@@ -43,7 +43,7 @@ class GammaLoopConfiguration(object):
     def __init__(self, path: str | None = None):
         self._config: dict[str, Any] = {
             'symbolica': {
-                'license': "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>"
+                'license': "GAMMALOOP_USER"
             },
             'drawing': {
                 'mode': 'feynmp',

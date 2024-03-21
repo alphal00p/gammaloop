@@ -1,6 +1,6 @@
 import pytest
-from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
 from gammaloop.interface.gammaloop_interface import CommandList
+from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
 from pathlib import Path
 
 
