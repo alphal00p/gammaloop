@@ -77,7 +77,7 @@ def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: floa
     gl = get_gamma_loop_interpreter()
 
 #     # create the output needed for the test
-    command_list = gammaloop.CommandList.from_string(
+    command_list = gl_interface.CommandList.from_string(
         "import_model scalars-full")
     command_list.add_command(
         f"import_graphs {graph_path} --format=qgraph")
@@ -89,7 +89,7 @@ def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: floa
     shutil.copyfile(test_config_path,
                     os.path.join(workspace, 'cards', 'run_card.yaml'))
 
-    command_list = gammaloop.CommandList.from_string(
+    command_list = gl_interface.CommandList.from_string(
         "launch {}".format(workspace))
     command_list.add_command("integrate {}".format(graph))
 
