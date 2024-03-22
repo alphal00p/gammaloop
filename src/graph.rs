@@ -442,7 +442,7 @@ impl Graph {
         external_moms: &[LorentzVector<T>],
     ) -> Vec<T> {
         let lmb_sepcification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_sepcification)
+        self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &lmb_sepcification)
     }
 
     #[inline]
@@ -450,14 +450,14 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
-        lmb_specification: LoopMomentumBasisSpecification,
+        lmb_specification: &LoopMomentumBasisSpecification,
     ) -> Vec<T> {
         let lmb = match lmb_specification {
             LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
                 .derived_data
                 .loop_momentum_bases
                 .as_ref()
-                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[lmb_idx],
+                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*lmb_idx],
             LoopMomentumBasisSpecification::Literal(basis) => basis,
         };
 
@@ -490,7 +490,7 @@ impl Graph {
         external_moms: &[LorentzVector<T>],
     ) -> T {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.compute_energy_product_in_lmb(loop_moms, external_moms, lmb_specification)
+        self.compute_energy_product_in_lmb(loop_moms, external_moms, &lmb_specification)
     }
 
     #[inline]
@@ -498,7 +498,7 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
-        lmb_specification: LoopMomentumBasisSpecification,
+        lmb_specification: &LoopMomentumBasisSpecification,
     ) -> T {
         let all_energies =
             self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_specification);

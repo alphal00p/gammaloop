@@ -325,12 +325,6 @@ fn batch_branch(
 ) -> Result<(), Report> {
     // much of this should be moved to the main cli function
 
-    // setup symbolica for model loading
-    let mut state = State::default();
-    let workspace = Workspace::new();
-
-    // set symbolica license, works without for now
-
     println!("settings passed by command line will be overwritten by configurations in the process output and batch input");
 
     // load the settings
@@ -349,7 +343,7 @@ fn batch_branch(
         .ok_or_else(|| eyre!("could not convert path to string"))?
         .to_string();
 
-    let model = Model::from_file(path_to_model_string, &mut state, &workspace)?;
+    let model = Model::from_file(path_to_model_string)?;
 
     // load the amplitude
     let path_to_amplitude_yaml = process_output_file

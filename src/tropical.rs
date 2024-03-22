@@ -1,7 +1,7 @@
 use ahash::HashSet;
 use color_eyre::Report;
 use log::info;
-use num_traits::Zero;
+use num::traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::{
