@@ -3,6 +3,7 @@ use color_eyre::Report;
 use colored::Colorize;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
+use std::env;
 use symbolica::numerical_integration::Sample;
 
 use crate::{
@@ -131,6 +132,9 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
 
     let mut settings: Settings = Settings::from_file(matches.value_of("config").unwrap())?;
 
+    if env::var("SYMBOLICA_LICENSE").is_err() {
+        env::set_var("SYMBOLICA_LICENSE", "GAMMALOOP_USER");
+    }
     print_banner();
     if settings.general.debug > 0 {
         info!(

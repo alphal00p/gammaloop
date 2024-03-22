@@ -78,6 +78,13 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# dependencies
+python/gammaloop/dependencies/LOCK
+python/gammaloop/dependencies/INSTALLED
+python/gammaloop/dependencies/dependency_build.log
+python/gammaloop/dependencies/venv/
+python/gammaloop/dependencies/symbolica/
+
 # Translations
 *.mo
 *.pot

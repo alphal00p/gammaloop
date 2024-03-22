@@ -14,7 +14,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use symbolica::representations::Atom;
 
-use log::info;
+use log::debug;
 
 const MAX_VERTEX_COUNT: usize = 32;
 
@@ -1300,8 +1300,8 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
     }
 
     let (orientations, position_map) = get_orientations(graph);
-    info!("generating cff for graph: {}", graph.name);
-    info!("number of orientations: {}", orientations.len());
+    debug!("generating cff for graph: {}", graph.name);
+    debug!("number of orientations: {}", orientations.len());
 
     generate_cff_from_orientations(orientations, &position_map, &external_data)
 }
@@ -1323,7 +1323,7 @@ fn generate_cff_from_orientations(
         .filter(|(_, graph)| !graph.has_directed_cycle_initial().unwrap())
         .collect_vec();
 
-    info!(
+    debug!(
         "number of acyclic orientations: {}",
         acyclic_orientations_and_graphs.len()
     );
@@ -1390,8 +1390,8 @@ fn generate_cff_from_orientations(
         cff_expression.terms.push(tree);
     }
 
-    info!("number of cache hits: {}", cache_hits);
-    info!(
+    debug!("number of cache hits: {}", cache_hits);
+    debug!(
         "percentage of cache hits: {:.1}%",
         cache_hits as f64 / (cache_hits + non_cache_hits) as f64 * 100.0
     );

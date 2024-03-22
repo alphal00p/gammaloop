@@ -5,7 +5,7 @@ use crate::{
     utils::{compute_momentum, FloatLike},
 };
 use itertools::Itertools;
-use log::info;
+use log::debug;
 use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
@@ -536,7 +536,7 @@ pub struct SerializableLTDExpression {
 }
 
 pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
-    info!("generating ltd expression for graph: {:?}", graph.name);
+    debug!("generating ltd expression for graph: {:?}", graph.name);
 
     let loop_line_signatures = graph
         .edges
@@ -560,7 +560,7 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
     let cut_structure = cut_structure_generator.generate_structure(&countour_closure, true);
 
     graph.generate_loop_momentum_bases_if_not_exists();
-    info!(
+    debug!(
         "number of spanning trees: {}",
         graph
             .derived_data
