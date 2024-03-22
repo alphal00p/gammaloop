@@ -39,6 +39,10 @@ impl PartialEq for Esurface {
 
 #[allow(unused)]
 impl Esurface {
+    pub fn get_point_inside<T: FloatLike>(&self) -> Vec<LorentzVector<T>> {
+        todo!("Implement")
+    }
+
     fn to_atom(&self, state: &mut State, workspace: &Workspace) -> Atom {
         unimplemented!()
         //let symbolic_energies = self
@@ -110,8 +114,8 @@ impl Esurface {
         energies_string.push_str(&shift_string);
         energies_string
     }
-    // the energy cache contains the energies of external edges as well as the virtual,
-    // use the location in the supergraph to determine the index
+
+    // compute the value, assuming we already computed the on shell energies
     #[inline]
     pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         let energy_sum = self
@@ -123,7 +127,7 @@ impl Esurface {
         energy_sum + self.compute_shift_part(energy_cache)
     }
 
-    // assumes externals are first in the cache
+    // only compute the shift part, useful for existence checks and center finding
     #[inline]
     pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         let shift_sum = self.shift.iter().zip(self.shift_signature.iter()).fold(
@@ -137,6 +141,7 @@ impl Esurface {
         shift_sum
     }
 
+    // compute the value of the esurface from the momenta, needed for center finding
     #[inline]
     pub fn compute_from_momenta<T: FloatLike>(
         &self,

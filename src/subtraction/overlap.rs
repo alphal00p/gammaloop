@@ -2,6 +2,8 @@ use clarabel::algebra::*;
 use clarabel::solver::*;
 use lorentz_vector::LorentzVector;
 use num::Complex;
+use rayon::vec;
+use serde_yaml::Index;
 
 use crate::graph::Graph;
 use crate::utils::compute_shift_part;
@@ -219,4 +221,82 @@ pub fn find_center(
     } else {
         None
     }
+}
+
+pub fn find_maximal_overlap(
+    graph: &Graph,
+    mut existing_esurface_ids: Vec<usize>,
+    external_momenta: &[LorentzVector<f64>],
+) -> Vec<(Vec<usize>, Vec<LorentzVector<f64>>)> {
+    let mut res = vec![];
+    let num_loops = graph.loop_momentum_basis.basis.len();
+
+    let esurface_list = &graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
+
+    // first try if all esurfaces have a single center
+    let option_center = find_center(graph, &existing_esurface_ids, external_momenta);
+
+    if let Some(center) = option_center {
+        return vec![(existing_esurface_ids, center)];
+    }
+
+    // construct pairs of esurfaces
+    let len = existing_esurface_ids.len();
+    let mut pair_centers = Vec::with_capacity(len * (len - 1) / 2);
+    let mut has_overlap_with = vec![vec![]; len];
+
+    for i in 0..len {
+        for j in i + 1..len {
+            let center = find_center(
+                graph,
+                &[existing_esurface_ids[i], existing_esurface_ids[j]],
+                external_momenta,
+            );
+
+            if center.is_some() {
+                has_overlap_with[i].push(j);
+                has_overlap_with[j].push(i);
+            }
+
+            pair_centers.push(center);
+        }
+    }
+
+    for (index, esurfaces_paired) in has_overlap_with.iter().enumerate() {
+        if esurfaces_paired.is_empty() {
+            res.push((
+                vec![existing_esurface_ids[index]],
+                esurface_list[existing_esurface_ids[index]].get_point_inside(),
+            ));
+
+            let index_to_remove = existing_esurface_ids
+                .iter()
+                .position(|&x| x == index)
+                .unwrap();
+
+            existing_esurface_ids.remove(index_to_remove);
+        } else if esurfaces_paired.len() == 1 {
+            res.push((
+                vec![
+                    existing_esurface_ids[index],
+                    existing_esurface_ids[esurfaces_paired[0]],
+                ],
+                pair_centers[index + len * esurfaces_paired[0]]
+                    .as_ref()
+                    .unwrap()
+                    .clone(),
+            ));
+        }
+    }
+
+    res
+}
+
+struct EsurfacePairs {
+    data: Vec<Option<Vec<LorentzVector<f64>>>>,
 }
