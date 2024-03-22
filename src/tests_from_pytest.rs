@@ -675,20 +675,33 @@ fn pytest_massless_scalar_box() {
     let loop_mom = LorentzVector::from_args(0.0, 1.0, 2.0, 3.0);
 
     let cache = graph.compute_onshell_energies(&[loop_mom], &box4_e);
+    let esurfaces = &graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
 
     let existing = get_existing_esurfaces(
-        &graph
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .esurfaces,
+        esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &box4_e,
         &cache,
     );
 
-    find_maximal_overlap(&graph, &existing, &box4_e);
+    let edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .collect_vec();
+
+    find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing,
+        esurfaces,
+        &edge_masses,
+        &box4_e,
+    );
 
     assert_eq!(existing.len(), 4);
 
@@ -728,10 +741,9 @@ fn pytest_massless_scalar_box() {
 
     // println!("solution: {:?}", problem.solution.x);
 
-    let real_mass_vector = graph
-        .edges
+    let real_mass_vector = edge_masses
         .iter()
-        .map(|edge| match edge.particle.mass.value {
+        .map(|edge_mass| match edge_mass {
             Some(mass) => mass.re,
             None => 0.0,
         })
@@ -740,10 +752,16 @@ fn pytest_massless_scalar_box() {
     for es in existing.iter().combinations(2) {
         println!("---------------------");
 
-        let esurfaces = es.into_iter().copied().collect_vec();
-        let center = find_center(&graph, &esurfaces, &box4_e);
+        let existing_esurfaces = es.into_iter().copied().collect_vec();
+        let center = find_center(
+            &graph.loop_momentum_basis,
+            &existing_esurfaces,
+            esurfaces,
+            &edge_masses,
+            &box4_e,
+        );
 
-        for esurface in &esurfaces {
+        for esurface in &existing_esurfaces {
             let real_esurface = &graph
                 .derived_data
                 .cff_expression

@@ -162,8 +162,16 @@ impl Esurface {
             })
             .sum::<T>();
 
-        let shift_part = self
-            .shift
+        energy_sum + self.compute_shift_part_from_momenta(lmb, external_moms)
+    }
+
+    #[inline]
+    pub fn compute_shift_part_from_momenta<T: FloatLike>(
+        &self,
+        lmb: &LoopMomentumBasis,
+        external_moms: &[LorentzVector<T>],
+    ) -> T {
+        self.shift
             .iter()
             .zip(self.shift_signature.iter())
             .map(|(index, sign)| {
@@ -173,9 +181,7 @@ impl Esurface {
                     false => -compute_t_part_of_shift_part(external_signature, external_moms),
                 }
             })
-            .sum::<T>();
-
-        energy_sum + shift_part
+            .sum::<T>()
     }
 }
 

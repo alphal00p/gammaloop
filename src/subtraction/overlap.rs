@@ -1,11 +1,14 @@
+use core::panic;
+
+use ahash::HashMap;
+use ahash::HashMapExt;
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use lorentz_vector::LorentzVector;
 use num::Complex;
-use rayon::vec;
-use serde_yaml::Index;
 
-use crate::graph::Graph;
+use crate::cff::Esurface;
+use crate::graph::LoopMomentumBasis;
 use crate::utils::compute_shift_part;
 use crate::utils::FloatLike;
 
@@ -36,35 +39,24 @@ fn extract_center<T: FloatLike>(num_loops: usize, solution: &[T]) -> Vec<Lorentz
 }
 
 fn construct_solver(
-    graph: &Graph,
-    esurface_ids: &[usize],
+    lmb: &LoopMomentumBasis,
+    existing_esurface_ids: &[usize],
+    esurfaces: &[Esurface],
+    edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
 ) -> DefaultSolver {
-    let lmb = &graph.loop_momentum_basis;
     let num_loops = lmb.basis.len();
     let num_loop_vars = 3 * num_loops;
-
-    let esurfaces = &graph
-        .derived_data
-        .cff_expression
-        .as_ref()
-        .unwrap()
-        .esurfaces;
-
-    let _esurface_derived_data = graph.derived_data.esurface_derived_data.as_ref().unwrap();
-
-    let temp_loop_momenta = vec![LorentzVector::default(); num_loops];
-    let energy_cache = graph.compute_onshell_energies(&temp_loop_momenta, external_momenta);
+    let num_edges = lmb.edge_signatures.len();
 
     // first we study the structure of the problem
-    let mut propagator_constraints: Vec<PropagatorConstraint> =
-        Vec::with_capacity(graph.edges.len());
+    let mut propagator_constraints: Vec<PropagatorConstraint> = Vec::with_capacity(num_edges);
 
     let mut inequivalent_masses: Vec<Complex<f64>> = vec![];
 
-    let mut esurface_constraints: Vec<Vec<usize>> = Vec::with_capacity(esurface_ids.len());
+    let mut esurface_constraints: Vec<Vec<usize>> = Vec::with_capacity(existing_esurface_ids.len());
 
-    for esurface_id in esurface_ids {
+    for esurface_id in existing_esurface_ids {
         let esurface = &esurfaces[*esurface_id];
         let mut esurface_constraint_indices: Vec<usize> = Vec::with_capacity(6);
 
@@ -76,7 +68,7 @@ fn construct_solver(
                 esurface_constraint_indices.push(edge_position);
             } else {
                 let propagator_id = edge_id;
-                let mass_pointer = graph.edges[propagator_id].particle.mass.value.map(|m| {
+                let mass_pointer = edge_masses[propagator_id].map(|m| {
                     if let Some(mass_position) = inequivalent_masses.iter().position(|&x| x == m) {
                         mass_position
                     } else {
@@ -139,7 +131,7 @@ fn construct_solver(
 
     a_matrix[0][0] = 1.0;
     // esurface constraints
-    for (constraint_index, (esurface_id, esurface_constraint)) in esurface_ids
+    for (constraint_index, (esurface_id, esurface_constraint)) in existing_esurface_ids
         .iter()
         .zip(esurface_constraints.iter())
         .enumerate()
@@ -148,7 +140,8 @@ fn construct_solver(
             a_matrix[constraint_index + 1][*prop_index + propagator_index_offset] = 1.0;
         }
 
-        let shift_part = esurfaces[*esurface_id].compute_shift_part(&energy_cache);
+        let shift_part =
+            esurfaces[*esurface_id].compute_shift_part_from_momenta(lmb, external_momenta);
         b_vector[constraint_index + 1] = -shift_part;
         a_matrix[constraint_index + 1][0] = -1.0;
     }
@@ -206,97 +199,119 @@ fn construct_solver(
 }
 
 pub fn find_center(
-    graph: &Graph,
-    esurface_ids: &[usize],
+    lmb: &LoopMomentumBasis,
+    existing_esurfaces_ids: &[usize],
+    esurfaces: &[Esurface],
+    edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
 ) -> Option<Vec<LorentzVector<f64>>> {
-    let mut solver = construct_solver(graph, esurface_ids, external_momenta);
+    let mut solver = construct_solver(
+        lmb,
+        existing_esurfaces_ids,
+        esurfaces,
+        edge_masses,
+        external_momenta,
+    );
     solver.solve();
+
+    let loop_number = lmb.basis.len();
 
     if solver.solution.status == SolverStatus::Solved
         || solver.solution.status == SolverStatus::AlmostSolved
     {
-        let center = extract_center(graph.loop_momentum_basis.basis.len(), &solver.solution.x);
+        let center = extract_center(loop_number, &solver.solution.x);
         Some(center)
     } else {
         None
     }
 }
 
+#[allow(unused_variables)]
 pub fn find_maximal_overlap(
-    graph: &Graph,
-    mut existing_esurface_ids: Vec<usize>,
+    lmb: &LoopMomentumBasis,
+    existing_esurface_ids: &[usize],
+    esurfaces: &[Esurface],
+    edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
 ) -> Vec<(Vec<usize>, Vec<LorentzVector<f64>>)> {
     let mut res = vec![];
-    let num_loops = graph.loop_momentum_basis.basis.len();
-
-    let esurface_list = &graph
-        .derived_data
-        .cff_expression
-        .as_ref()
-        .unwrap()
-        .esurfaces;
+    let num_loops = lmb.basis.len();
 
     // first try if all esurfaces have a single center
-    let option_center = find_center(graph, &existing_esurface_ids, external_momenta);
+    let option_center = find_center(
+        lmb,
+        existing_esurface_ids,
+        esurfaces,
+        edge_masses,
+        external_momenta,
+    );
 
     if let Some(center) = option_center {
-        return vec![(existing_esurface_ids, center)];
+        res.push((existing_esurface_ids.to_vec(), center));
+        return res;
     }
 
     // construct pairs of esurfaces
     let len = existing_esurface_ids.len();
-    let mut pair_centers = Vec::with_capacity(len * (len - 1) / 2);
+    let mut pair_centers = EsurfacePairs::new(len);
     let mut has_overlap_with = vec![vec![]; len];
 
     for i in 0..len {
         for j in i + 1..len {
-            let center = find_center(
-                graph,
+            let option_center = find_center(
+                lmb,
                 &[existing_esurface_ids[i], existing_esurface_ids[j]],
+                esurfaces,
+                edge_masses,
                 external_momenta,
             );
 
-            if center.is_some() {
+            if let Some(center) = option_center {
                 has_overlap_with[i].push(j);
                 has_overlap_with[j].push(i);
+                pair_centers.insert((i, j), center);
             }
-
-            pair_centers.push(center);
         }
     }
 
-    for (index, esurfaces_paired) in has_overlap_with.iter().enumerate() {
-        if esurfaces_paired.is_empty() {
-            res.push((
-                vec![existing_esurface_ids[index]],
-                esurface_list[existing_esurface_ids[index]].get_point_inside(),
-            ));
+    println!("{:?}", has_overlap_with);
+    println!("{:?}", pair_centers);
 
-            let index_to_remove = existing_esurface_ids
-                .iter()
-                .position(|&x| x == index)
-                .unwrap();
+    let existing_esurfaces_for_stage_2 = existing_esurface_ids.to_vec();
 
-            existing_esurface_ids.remove(index_to_remove);
-        } else if esurfaces_paired.len() == 1 {
-            res.push((
-                vec![
-                    existing_esurface_ids[index],
-                    existing_esurface_ids[esurfaces_paired[0]],
-                ],
-                pair_centers[index + len * esurfaces_paired[0]]
-                    .as_ref()
-                    .unwrap()
-                    .clone(),
-            ));
-        }
+    for (esurface_id_index, overlaps_with) in has_overlap_with.iter().enumerate() {
+        if overlaps_with.is_empty() {}
     }
 
-    res
+    panic!();
 }
 
+#[derive(Debug)]
 struct EsurfacePairs {
-    data: Vec<Option<Vec<LorentzVector<f64>>>>,
+    data: HashMap<(usize, usize), Vec<LorentzVector<f64>>>,
+}
+
+impl EsurfacePairs {
+    #[allow(dead_code)]
+    fn get_remove(&mut self, mut pair: (usize, usize)) -> Option<Vec<LorentzVector<f64>>> {
+        if pair.0 > pair.1 {
+            std::mem::swap(&mut pair.0, &mut pair.1);
+        }
+
+        self.data.remove(&pair)
+    }
+
+    fn insert(&mut self, pair: (usize, usize), center: Vec<LorentzVector<f64>>) {
+        if pair.0 > pair.1 {
+            self.data.insert((pair.1, pair.0), center);
+        } else {
+            self.data.insert(pair, center);
+        }
+    }
+
+    fn new(num_esurfaces: usize) -> Self {
+        Self {
+            data: HashMap::with_capacity(num_esurfaces * (num_esurfaces - 1) / 2),
+        }
+    }
 }
