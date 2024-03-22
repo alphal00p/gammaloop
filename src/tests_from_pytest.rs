@@ -6,7 +6,6 @@ use crate::model::Model;
 use crate::subtraction::esurface_data::get_existing_esurfaces;
 use crate::subtraction::overlap::{self, find_center};
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
-use clarabel::solver::IPSolver;
 use colored::Colorize;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
