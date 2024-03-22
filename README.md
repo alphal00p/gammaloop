@@ -9,9 +9,11 @@ See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
 ## Installation
 
-All installations require Rust to be installed on your system.
+### > Requirements
 
-You can easily instal Rust with [this one-liner](https://www.rust-lang.org/tools/install).
+* `Rust`: You can easily instal Rust with [this one-liner](https://www.rust-lang.org/tools/install)
+
+* `Python3`: v3.10+
 
 ### > Installation using `pip`
 ```
@@ -20,11 +22,13 @@ gammaloop --build_dependencies
 source `gammaloop -venv`
 ```
 
+*Note:* when using the `fish` shell, the last command should be replaced by: `. (./bin/gammaloop -venv).fish`
+
 ### > Installation from sources
 ```
 git clone https://github.com/alphal00p/gammaloop.git
 cd gammaloop
-./bin/compile.sh --release
+./bin/compile.sh
 source python/gammaloop/dependencies/venv/bin/activate
 ```
 The relevant binaries will then be in `./bin/` and the gammaloop python module is located at `./python/gammaloop`.
