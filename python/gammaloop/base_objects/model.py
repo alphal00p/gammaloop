@@ -360,7 +360,7 @@ class Particle(object):
         return self.mass.value is None or abs(self.mass.value) > 0.
 
     @staticmethod
-    def santize_texname(texname: str) -> str:
+    def sanitize_texname(texname: str) -> str:
         # Some UFO model unfortunately include ~ and _ in texnames, which are not allowed in LaTeX
         return texname.replace('~', 'x').replace('_', '')
 
@@ -371,8 +371,8 @@ class Particle(object):
             ufo_object.pdg_code, ufo_object.name, ufo_object.antiname, ufo_object.spin, ufo_object.color,
             model.get_parameter(ufo_object.mass.name),
             model.get_parameter(ufo_object.width.name),
-            Particle.santize_texname(ufo_object.texname),
-            Particle.santize_texname(ufo_object.antitexname),
+            Particle.sanitize_texname(ufo_object.texname),
+            Particle.sanitize_texname(ufo_object.antitexname),
             ufo_object.charge,
             ufo_object.GhostNumber,
             ufo_object.LeptonNumber,
