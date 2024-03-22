@@ -32,15 +32,15 @@ harness = false
 
 [[example]]
 name = "gamma_chains"
-path = "examples/Rust/Tensors/gamma_chain.rs"
+path = "examples/rust/tensors/gamma_chain.rs"
 
 [[example]]
 name = "gamma_network"
-path = "examples/Rust/Tensors/gamma_network.rs"
+path = "examples/rust/tensors/gamma_network.rs"
 
 [[example]]
 name = "evaluate_network"
-path = "examples/Rust/Tensors/evaluate_network.rs"
+path = "examples/rust/tensors/evaluate_network.rs"
 
 [dependencies]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
