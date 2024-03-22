@@ -19,8 +19,10 @@ use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
+use num::traits::Zero;
 use num::Complex;
 use num_traits::{Inv, Zero};
+use serde::{Deserialize, Serialize};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 
 /// Trait to capture the common behaviour of amplitudes and cross sections

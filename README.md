@@ -1,4 +1,5 @@
-# GammaLoop
+# gammaLoop
+![tests status](https://github.com/alphal00p/gammaloop/actions/workflows/gamma_loop_tests.yml/badge.svg?event=push)
 
 *Computation of differential cross-sections using Local Unitarity.*
 
@@ -8,21 +9,25 @@ See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
 ## Installation
 
+All installations require Rust to be installed on your system.
+
+You can easily instal Rust with [this one-liner](https://www.rust-lang.org/tools/install).
+
 ### > Installation using `pip`
 ```
 pip install gammaloop
+gammaloop --build_dependencies
+source `gammaloop -venv`
 ```
 
 ### > Installation from sources
 ```
 git clone https://github.com/alphal00p/gammaloop.git
 cd gammaloop
-python -m pip install -r ./python/gammaloop/requirements.txt
-./bin/build_dependencies.sh
-./bin/compile_bin.sh --release
-./bin/compile_lib.sh --release
+./bin/compile.sh --release
+source python/gammaloop/dependencies/venv/bin/activate
 ```
-The relevant binaries will then be in `./bin/` and the python module in `./python/gammalop`.
+The relevant binaries will then be in `./bin/` and the gammaloop python module is located at `./python/gammaloop`.
 
 ## Tests
 
@@ -39,7 +44,7 @@ bash -c 'cd `python -c "import os; import gammaloop; print(os.path.dirname(gamma
 
 ### > Testing an installation from sources
 
-Simply run:
+Run:
 ```
 /bin/run_tests.sh python
 /bin/run_tests.sh rust
@@ -47,12 +52,24 @@ Simply run:
 
 ## Usage
 
-`GammaLoop` can be used as a python command line interface (`gammaloop`) for scattering process code generation or also directly as a binary (`gammaloop_rust_cli`) for steering the Monte-Carlo integration. Both programs are installed as scripts in the `bin` directly when installing `GammaLoop` using `pip` or when installing it from sources.
+There are three entry points to the `GammaLoop` functionalities:
 
-### > Generating scattering process code with ./gammaloop
+1. Preferred method is through the Python command-line interface `gammaloop`.
 
+2. Alternatively, the same functionalities can be accessed programmatically, e.g. in Jupyter notebook, through the Python API by importing the `gammaloop` library.
+
+3. Finally, expert users may also find it useful to steer some of functionalities directly from the rust binary `gammaloop_rust_cli`.
+
+Both executables `gammaloop` and `gammaloop_rust_cli` are made available as scripts in the `bin` directory.
+The `gammaloop` Python module is also exposed after installation and ready to be imported in user custom Python scripts.
+
+### 1. Usage from the Python command-line interface: ./gammaloop
+
+`GammaLoop` is typically used through the python command-line interface `gammaloop`.
 Place your list of commands in a file named e.g. `cmd.gL`, for instance:
+
 ```
+# Content of file 'cmd.gL'
 import_model sm --format ufo
 export_model ./sm.yaml --format yaml
 ```
@@ -69,11 +86,18 @@ to get an overview of available commands and:
 ./bin/gammaloop -c "help import_model"
 ```
 to get help on any specific command.
+
 You can find example of command files in the `<MODULE_PATH>/data/run_cards/` directory.
 
-### > Steering Monte-Carlo integration with ./gammaloop_rust_cli
+### 2. Usage from within a Jupyter notebook: the Python API
 
-Steering a Monte-Carlo integration with `gammaloop_rust_cli` can be done by running:
+  *WORK IN PROGRESS*
+
+### 3. Usage from the rust binary executable: ./gammaloop_rust_cli
+
+All typical usecases of `GammaLoop` are available through the Python command-line interface mentioned earlier.
+However, expert users might want to steer the Monte-Carlo integration directly using the `gammaloop_rust_cli` binary.
+This is possible throught the `gammaloop_rust_cli` binary, which can be used as follows:
 ```
 ./bin/gammaloop_rust_cli --config <MODULE_PATH>/gammaloop/data/run_cards/rust_run_config.yaml
 ```

@@ -1,6 +1,7 @@
 import pytest
 import json
 from subprocess import Popen, PIPE
+from pprint import pformat
 from gammaloop.misc.common import GL_PATH, logger, GammaLoopError
 
 
@@ -8,7 +9,8 @@ class TestCode:
 
     @pytest.mark.codecheck
     def test_pyright(self):
-        process = Popen(['pyright'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
+        process = Popen(['pyright', '--warnings'],
+                        cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
         output, error = process.communicate()
         stdout = output.decode("utf-8")
         stderr = error.decode("utf-8")
@@ -36,6 +38,8 @@ class TestCode:
 
         compiler_artifact = output.decode("utf-8")
         warning_msg = None
+        i_msg = 0
+        found_warning = None
         for json_line in reversed(compiler_artifact.split("\n")):
             if json_line == "":
                 continue
@@ -46,9 +50,17 @@ class TestCode:
             if 'message' in json_obj:
                 json_msg = json_obj['message']
                 if "level" in json_msg and json_msg["level"] in ["warning", "error"]:
-                    warning_msg = f"Clippy issued at least one warning : {'Unknown' if 'message' not in json_msg else json_msg['message']}"
-                    break
+                    if warning_msg is None:
+                        found_warning = f"Clippy issued at least one warning : {'Unknown' if 'message' not in json_msg else json_msg['message']}"
+                        warning_msg = found_warning
+                        warning_msg += "\nAll clippy warnings and errors:"
+                    else:
+                        i_msg += 1
+                        for category in ['spans', 'children']:
+                            if category in json_msg:
+                                del json_msg[category]
+                        warning_msg += f"\n\n>>> #{i_msg}:\n\n{pformat(json_msg)}"
         if warning_msg is not None:
             logger.critical(warning_msg)
 
-        assert warning_msg is None
+        assert found_warning is None

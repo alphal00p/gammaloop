@@ -59,8 +59,8 @@ class TestParamCard:
                               'width_scalar_2', 'aewm1', 'gf', 'mass_scalar_1', 'lam', 'mass_scalar_2'}
 
         for restrict_card, (target_n_parameters, target_n_interactions, target_n_couplings) in [
-            ('restrict_default.dat', (9, 10, 1)),
-            (None, (8, 10, 1))
+            ('restrict_default.dat', (9, 25, 1)),
+            (None, (8, 25, 1))
         ]:
             model = Model.from_ufo_model('scalars')
 
