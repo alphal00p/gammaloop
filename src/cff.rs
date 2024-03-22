@@ -145,23 +145,18 @@ impl Esurface {
     #[inline]
     pub fn compute_from_momenta<T: FloatLike>(
         &self,
-        graph: &Graph,
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &[T],
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
     ) -> T {
-        let lmb = &graph.loop_momentum_basis;
-
         let energy_sum = self
             .energies
             .iter()
             .map(|index| {
                 let signature = &lmb.edge_signatures[*index];
                 let momentum = compute_momentum(signature, loop_moms, external_moms);
-                let mass = if let Some(mass) = graph.edges[*index].particle.mass.value {
-                    Into::<T>::into(mass.re)
-                } else {
-                    T::zero()
-                };
+                let mass = real_mass_vector[*index];
 
                 (momentum.spatial_squared() + mass * mass).sqrt()
             })

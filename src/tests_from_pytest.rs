@@ -4,7 +4,7 @@ use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType};
 use crate::model::Model;
 use crate::subtraction::esurface_data::get_existing_esurfaces;
-use crate::subtraction::overlap::{self, find_center};
+use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
 use colored::Colorize;
 use itertools::Itertools;
@@ -688,6 +688,8 @@ fn pytest_massless_scalar_box() {
         &cache,
     );
 
+    find_maximal_overlap(&graph, &existing, &box4_e);
+
     assert_eq!(existing.len(), 4);
 
     let loop_mom = LorentzVector::new();
@@ -726,6 +728,15 @@ fn pytest_massless_scalar_box() {
 
     // println!("solution: {:?}", problem.solution.x);
 
+    let real_mass_vector = graph
+        .edges
+        .iter()
+        .map(|edge| match edge.particle.mass.value {
+            Some(mass) => mass.re,
+            None => 0.0,
+        })
+        .collect_vec();
+
     for es in existing.iter().combinations(2) {
         println!("---------------------");
 
@@ -744,9 +755,14 @@ fn pytest_massless_scalar_box() {
                 real_esurface.string_format_in_lmb(&graph.loop_momentum_basis)
             );
 
-            let esurface_value_at_center = center
-                .as_ref()
-                .map(|loop_mom| real_esurface.compute_from_momenta(&graph, loop_mom, &box4_e));
+            let esurface_value_at_center = center.as_ref().map(|loop_mom| {
+                real_esurface.compute_from_momenta(
+                    &graph.loop_momentum_basis,
+                    &real_mass_vector,
+                    loop_mom,
+                    &box4_e,
+                )
+            });
 
             println!("value at center: {:?}", esurface_value_at_center);
             println!("center: {:?}", center);
