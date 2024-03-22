@@ -9,6 +9,10 @@ See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
 ## Installation
 
+All installations require Rust to be installed on your system.
+
+You can easily instal Rust with [this one-liner](https://www.rust-lang.org/tools/install).
+
 ### > Installation using `pip`
 ```
 pip install gammaloop
@@ -63,7 +67,9 @@ The `gammaloop` Python module is also exposed after installation and ready to be
 
 `GammaLoop` is typically used through the python command-line interface `gammaloop`.
 Place your list of commands in a file named e.g. `cmd.gL`, for instance:
+
 ```
+# Content of file 'cmd.gL'
 import_model sm --format ufo
 export_model ./sm.yaml --format yaml
 ```
