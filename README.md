@@ -7,6 +7,19 @@ See [www.alphaloop.ch](www.alphaloop.ch) for details on the theoretical framewor
 
 See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
+## TL;DR: I want to be running γLoop already!
+
+We salute the eagerness of our users.
+
+So if you want to jump right in, then run the following to immediately start integrating the scalar three-loop mercedes diagram!
+
+```
+git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
+./bin/compile.sh
+source python/gammaloop/dependencies/venv/bin/activate
+./bin/gammaloop example/cards/scalar_mercedes.gL
+```
+
 ## Installation
 
 ### > Requirements
@@ -101,7 +114,11 @@ You can find example of command files in the `<MODULE_PATH>/data/run_cards/` dir
 
 ### 2. Usage from within a Jupyter notebook: the Python API
 
-  *WORK IN PROGRESS*
+Follow the example jupyter notebook given in example to get started with the Python API.
+```
+cd <GAMMALOOP_INSTALLATION_DIRECTORY>/examples/jupyter
+jupyter notebook steer_gammaloop.ipynb
+``` 
 
 ### 3. Usage from the rust binary executable: ./gammaloop_rust_cli
 

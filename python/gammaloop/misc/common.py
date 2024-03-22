@@ -13,7 +13,9 @@ GL_PATH = os.path.abspath(os.path.join(
 DATA_PATH = os.path.abspath(os.path.join(GL_PATH, 'data'))
 GL_CONSOLE_HANDLER = setup_logging()
 
+global GL_DEBUG
 GL_DEBUG = False
+
 gl_is_symbolica_registered = None
 
 GAMMALOOP_CONFIG_PATHS = [
@@ -76,7 +78,7 @@ def register_symbolica() -> bool:
         gl_is_symbolica_registered = True
         return True
 
-    if 'SYMBOLICA_LICENSE' not in os.environ:
+    if 'SYMBOLICA_LICENSE' not in os.environ or os.environ['SYMBOLICA_LICENSE'] == '':
         symbolica_license = None
         for path in GAMMALOOP_CONFIG_PATHS:
             if os.path.exists(path):
@@ -96,6 +98,7 @@ def register_symbolica() -> bool:
                 return False
         else:
             try:
+                os.environ['SYMBOLICA_LICENSE'] = 'GAMMALOOP_USER'
                 set_license_key('GAMMALOOP_USER')
                 gl_is_symbolica_registered = True
                 return True
