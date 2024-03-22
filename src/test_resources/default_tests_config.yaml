@@ -20,6 +20,7 @@ Parameterization:
   mapping: linear
   b: 1.0
 Integrator:
+  seed: 69
   n_bins: 64
   bin_number_evolution: null
   min_samples_for_update: 1000
