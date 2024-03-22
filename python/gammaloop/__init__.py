@@ -58,7 +58,7 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
         gammaloop_root_path, 'dependencies', 'venv'))
 
     if venv_path != os.path.abspath(os.path.join(os.path.dirname(sys.executable), os.path.pardir)):
-        print("%sWARNING:%s It is recommended to run gammaloop within its Python virtual environment, by issueing the command:\n\n%ssource %s/bin/activate%s\n" % (
+        print("%sWARNING:%s It is recommended to run gammaloop within its Python virtual environment, by issuing the command:\n\n%ssource %s/bin/activate%s\n" % (
             CLIColour.YELLOW, CLIColour.END, CLIColour.GREEN, venv_path, CLIColour.END))
         if not no_gammaloop_python_venv:
             if not os.path.isfile(os.path.join(venv_path, 'site_paths.txt')):
@@ -103,7 +103,7 @@ def cli():
                            default=False, help='Enable quiet mode')
     argparser.add_argument('--no_file_handler', '-nfh', action='store_true',
                            default=False, help='Disable logging to files')
-    argparser.add_argument('--show_venv_activate_path', '-show_venv', action='store_true',
+    argparser.add_argument('--show_venv_activate_path', '-venv', action='store_true',
                            default=False, help='Show gammaloop Python venv activate path')
     argparser.add_argument('--command', '-c', dest='run_command', action='store_true',
                            default=False, help='Directly run command specified')

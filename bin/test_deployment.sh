@@ -26,7 +26,7 @@ RETCODE=$RETCODE+$?;
 gammaloop --build_dependencies
 RETCODE=$RETCODE+$?;
 cd `ls -d1 ./venv/lib/python*/site-packages/gammaloop`
-source `gammaloop -show_venv`
+source `gammaloop -venv`
 python -m pytest
 RETCODE=$RETCODE+$?;
 exit $(($RETCODE))
