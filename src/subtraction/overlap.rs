@@ -315,3 +315,68 @@ impl EsurfacePairs {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use lorentz_vector::LorentzVector;
+    use num::Complex;
+
+    use crate::{cff::Esurface, graph::LoopMomentumBasis};
+
+    #[test]
+    fn test_box_4e() {
+        let external_momenta = [
+            LorentzVector::from_args(14.0, -6.6, -40.0, 0.0),
+            LorentzVector::from_args(-43.0, 15.2, 33.0, 0.0),
+            LorentzVector::from_args(-17.9, -50.0, 11.8, 0.0),
+        ];
+
+        let box_basis = vec![4];
+        let box_signatures = vec![
+            (vec![0], vec![1, 0, 0]),
+            (vec![0], vec![0, 1, 0]),
+            (vec![0], vec![0, 0, 1]),
+            (vec![0], vec![-1, -1, -1]),
+            (vec![1], vec![0, 0, 0]),
+            (vec![1], vec![1, 0, 0]),
+            (vec![1], vec![1, 1, 0]),
+            (vec![1], vec![1, 1, 1]),
+        ];
+
+        let box_lmb = LoopMomentumBasis {
+            basis: box_basis,
+            edge_signatures: box_signatures,
+        };
+
+        let esurfaces = [
+            Esurface {
+                energies: vec![5, 6],
+                sub_orientation: vec![],
+                shift: vec![1],
+                shift_signature: vec![true],
+            },
+            Esurface {
+                energies: vec![4, 7],
+                sub_orientation: vec![],
+                shift: vec![1, 2],
+                shift_signature: vec![true, true],
+            },
+            Esurface {
+                energies: vec![4, 6],
+                sub_orientation: vec![],
+                shift: vec![0, 1],
+                shift_signature: vec![true, true],
+            },
+            Esurface {
+                energies: vec![4, 7],
+                sub_orientation: vec![],
+                shift: vec![0, 1, 2],
+                shift_signature: vec![true, true, true],
+            },
+        ];
+
+        let edge_masses: Vec<Option<Complex<f64>>> = vec![None; 8];
+
+        todo!();
+    }
+}
