@@ -32,9 +32,17 @@ try:
     from symbolica import Expression, Transformer, set_license_key  # type: ignore
     if not str(os.path.abspath(symbolica.__file__)).startswith(str(os.path.join(GL_PATH, 'dependencies', 'venv'))):
         logger.warning(
-            "Symbolica is not being imported from the virtual environment of gammaloop. This may lead to unexpected behaviour.")
-        logger.warning(
-            "You can avoid this by running the following command: %sgammaloop --build_dependencies && source %s%s",
+            """\n\n/*
+|
+| Symbolica is not being imported from the virtual environment of gammaloop.
+| Instead it was loaded from %s%s%s.
+| This may lead to unexpected behaviour. You can avoid this by running the following command:
+|
+| %sgammaloop --build_dependencies && source %s%s
+|
+\\*
+""",
+            Colour.RED, os.path.abspath(symbolica.__file__), Colour.END,
             Colour.GREEN, os.path.abspath(os.path.join(GL_PATH, 'dependencies', 'venv', 'bin', 'activate')), Colour.END)
 except ImportError:
     logger.critical(

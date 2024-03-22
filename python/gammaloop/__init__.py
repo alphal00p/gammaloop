@@ -7,6 +7,8 @@ __version__ = "0.0.1"
 
 GL_PATH = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
+DEPENDENCIES_CHECKED = False
+
 
 class CLIColour(StrEnum):
     PURPLE = '\033[95m'
@@ -22,6 +24,10 @@ class CLIColour(StrEnum):
 
 
 def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=False, no_gammaloop_python_venv=False):
+
+    global DEPENDENCIES_CHECKED
+    if DEPENDENCIES_CHECKED and all(opt is False for opt in [clean_dependencies, build_dependencies, no_gammaloop_python_venv]):
+        return
 
     gammaloop_root_path = os.path.abspath(GL_PATH)
 
@@ -80,6 +86,8 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
                             CLIColour.GREEN, CLIColour.END, ', '.join(site_paths)))
                         for site_path in site_paths:
                             sys.path.insert(0, site_path)
+
+    DEPENDENCIES_CHECKED = True
 
 
 def cli():

@@ -11,9 +11,15 @@ See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
 ### > Requirements
 
-* `Rust`: You can easily instal Rust with [this one-liner](https://www.rust-lang.org/tools/install)
+* `Rust`: You can easily instal Rust with this [one-liner](https://www.rust-lang.org/tools/install)
 
 * `Python3`: v3.10+
+
+* `gcc`: v10+
+
+*Note*: The project has been tested on Linux and MacOS. 
+
+Windows users are encouraged to use [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/).
 
 ### > Installation using `pip`
 ```
@@ -60,7 +66,7 @@ There are three entry points to the `GammaLoop` functionalities:
 
 1. Preferred method is through the Python command-line interface `gammaloop`.
 
-2. Alternatively, the same functionalities can be accessed programmatically, e.g. in Jupyter notebook, through the Python API by importing the `gammaloop` library.
+2. Alternatively, the same functionalities can be accessed programmatically, e.g. in a Jupyter notebook, through the Python API, by importing the `gammaloop` library.
 
 3. Finally, expert users may also find it useful to steer some of functionalities directly from the rust binary `gammaloop_rust_cli`.
 
