@@ -193,29 +193,14 @@ impl StatisticsCounter {
         let total_time = format_evaluation_time(self.get_avg_total_timing());
 
         info!(
-            "|  average ltd expression evaluation time: {}",
-            time_ltd_formatted
+            "|  timing  | total: {} | param: {} | ltd: {}",
+            total_time, param_time_formatted, time_ltd_formatted
         );
 
         info!(
-            "|  average paramatrization time:           {}",
-            param_time_formatted
-        );
-
-        info!("|  total evaluation time:                  {}", total_time);
-
-        info!(
-            "|  evaluations in f64:                     {:.2}%",
-            self.get_percentage_f64()
-        );
-
-        info!(
-            "|  evaluations in f128:                    {:.2}%",
-            self.get_percentage_f128()
-        );
-
-        info!(
-            "|  nan evaluations:                        {:.2}%",
+            "|  evals  | f64: {:.2}% | f128: {:.2}% | nan: {:.2}%",
+            self.get_percentage_f64(),
+            self.get_percentage_f128(),
             self.get_percentage_nan()
         );
     }
