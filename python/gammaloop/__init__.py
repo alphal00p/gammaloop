@@ -70,7 +70,7 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
     if not no_gammaloop_python_venv:
         if not os.path.isfile(os.path.join(venv_path, 'site_paths.txt')):
             print("%sWARNING:%s Could not find Python virtual environment list of sites in file '%s'.\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
-                os.path.join(venv_path, 'venv_site_paths.txt'), CLIColour.GREEN, CLIColour.END))
+                CLIColour.YELLOW, CLIColour.END, os.path.join(venv_path, 'venv_site_paths.txt'), CLIColour.GREEN, CLIColour.END))
         else:
             try:
                 with open(os.path.join(venv_path, 'site_paths.txt'), 'r') as f:
@@ -78,7 +78,7 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
             except Exception as e:
                 site_paths = None
                 print("%sWARNING:%s Could not extract list of site paths of the Python virtual environment of gammaloop from file '%s' (error: %s%s%s).\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
-                    os.path.join(venv_path, 'site_paths.txt'), CLIColour.RED, str(e), CLIColour.END, CLIColour.GREEN, CLIColour.END))
+                    CLIColour.YELLOW, CLIColour.END, os.path.join(venv_path, 'site_paths.txt'), CLIColour.RED, str(e), CLIColour.END, CLIColour.GREEN, CLIColour.END))
             if site_paths is not None:
                 site_paths = [sp for sp in site_paths if sp.startswith(
                     venv_path) and len(sys.path) == 0 or sp != sys.path[0]]
@@ -124,7 +124,7 @@ def cli():
         if not os.path.isfile(venv_path):
             print("%sCould not find the gammaloop Python virtual environment activate script at '%s'.%s" % (
                 CLIColour.RED, venv_path, CLIColour.END))
-            print("Make sur to first run %sgammaloop --build_dependencies%s" %
+            print("Make sur to first run %sgammaloop --build_dependencies%s%s" %
                   (CLIColour.GREEN, venv_path, CLIColour.END))
             sys.exit(1)
         else:
