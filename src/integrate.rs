@@ -26,8 +26,10 @@ use crate::{IntegratedPhase, IntegrationResult};
 use log::{debug, error, info, trace, warn};
 use num::Complex;
 use rayon::prelude::*;
+use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Instant;
 use tabled::{Style, Table, Tabled};
@@ -56,7 +58,9 @@ pub struct IntegralResult {
     pdf: String,
 }
 
-struct IntegrationState {
+/// struct to keep track of state, used in the havana_integrate function
+/// the idea is to save this to disk after each iteration, so that the integration can be resumed
+pub struct IntegrationState {
     num_points: usize,
     integral: StatisticsAccumulator<f64>,
     all_integrals: Vec<StatisticsAccumulator<f64>>,
@@ -73,7 +77,7 @@ impl IntegrationState {
     {
         let num_points = 0;
         let iter = 0;
-        let rng = MonteCarloRng::new(settings.integrator.seed, 0);
+        let rng = MonteCarloRng::new(settings.integrator.seed, 0); // in havana_integrate, samples are generated on a single thread
         let grid = create_grid();
         let integral = StatisticsAccumulator::new();
         let all_integrals = vec![StatisticsAccumulator::new(); N_INTEGRAND_ACCUMULATORS];
@@ -89,6 +93,45 @@ impl IntegrationState {
             iter,
         }
     }
+
+    fn reset_rng(&mut self, seed: u64) {
+        self.rng = MonteCarloRng::new(seed, self.iter);
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SerializableIntegrationState {
+    num_points: usize,
+    integral: StatisticsAccumulator<f64>,
+    all_integrals: Vec<StatisticsAccumulator<f64>>,
+    stats: StatisticsCounter,
+    grid: Grid<f64>,
+    iter: usize,
+}
+
+impl SerializableIntegrationState {
+    fn from_integration_state(state: &IntegrationState) -> Self {
+        Self {
+            num_points: state.num_points,
+            integral: state.integral.clone(),
+            all_integrals: state.all_integrals.clone(),
+            stats: state.stats,
+            grid: state.grid.clone(),
+            iter: state.iter,
+        }
+    }
+
+    pub fn into_integration_state(self, settings: &Settings) -> IntegrationState {
+        IntegrationState {
+            num_points: self.num_points,
+            integral: self.integral,
+            all_integrals: self.all_integrals,
+            stats: self.stats,
+            rng: MonteCarloRng::new(settings.integrator.seed, self.iter),
+            grid: self.grid,
+            iter: self.iter,
+        }
+    }
 }
 
 /// Integrate function used for local runs
@@ -96,13 +139,19 @@ pub fn havana_integrate<F>(
     settings: &Settings,
     user_data_generator: F,
     target: Option<Complex<f64>>,
+    state: Option<IntegrationState>,
+    workspace: Option<PathBuf>,
 ) -> crate::IntegrationResult
 where
     F: Fn(&Settings) -> UserData,
 {
     let mut user_data = user_data_generator(settings);
-    let mut integration_state =
-        IntegrationState::new_from_settings(settings, || user_data.integrand[0].create_grid());
+
+    let mut integration_state = if let Some(integration_state) = state {
+        integration_state
+    } else {
+        IntegrationState::new_from_settings(settings, || user_data.integrand[0].create_grid())
+    };
 
     let mut samples = vec![Sample::new(); settings.integrator.n_start];
     let mut f_evals = vec![vec![0.; N_INTEGRAND_ACCUMULATORS]; settings.integrator.n_start];
@@ -302,6 +351,10 @@ where
         }
 
         integration_state.iter += 1;
+
+        // set the rng for the next iteration.
+        integration_state.reset_rng(settings.integrator.seed);
+
         integration_state.num_points += cur_points;
 
         info!(
@@ -442,6 +495,22 @@ where
             itg.update_results(integration_state.iter);
         }
         info!("");
+
+        // now write the integration state to disk if a workspace has been provided.
+        if let Some(ref workspace_path) = workspace {
+            let integration_state_path = workspace_path.join("integration_state");
+            let serializable_integration_state =
+                SerializableIntegrationState::from_integration_state(&integration_state);
+
+            match fs::write(
+                integration_state_path,
+                bincode::serialize(&serializable_integration_state)
+                    .unwrap_or_else(|_| panic!("failed to serialize the integration state")),
+            ) {
+                Ok(_) => {}
+                Err(_) => warn!("Warning: failed to write integration state to disk"),
+            }
+        }
     }
 
     IntegrationResult {

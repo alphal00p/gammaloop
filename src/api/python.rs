@@ -3,7 +3,9 @@ use crate::{
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
     inspect,
     integrands::Integrand,
-    integrate::{havana_integrate, MasterNode, SerializableBatchResult},
+    integrate::{
+        havana_integrate, MasterNode, SerializableBatchResult, SerializableIntegrationState,
+    },
     model::Model,
     HasIntegrand, Settings,
 };
@@ -11,7 +13,10 @@ use ahash::HashMap;
 use ctrlc;
 use git_version::git_version;
 use log::info;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 const GIT_VERSION: &str = git_version!();
 
@@ -341,6 +346,7 @@ impl PythonWorker {
         integrand: &str,
         num_cores: usize,
         result_path: &str,
+        workspace_path: &str,
         target: Option<(f64, f64)>,
     ) -> PyResult<String> {
         match self.integrands.get_mut(integrand) {
@@ -360,10 +366,31 @@ impl PythonWorker {
                     })
                     .expect("error setting interrupt handler");
 
+                    let workspace_path = PathBuf::from(workspace_path);
+
+                    let path_to_state = workspace_path.join("integration_state");
+
+                    let integration_state = match fs::read(path_to_state) {
+                        Ok(state) => {
+                            info!("found integration state, resuming integration");
+
+                            let temp_state: SerializableIntegrationState =
+                                bincode::deserialize(&state).unwrap();
+                            Some(temp_state.into_integration_state(&settings))
+                        }
+
+                        Err(_) => {
+                            info!("no integration state found, starting new integration");
+                            None
+                        }
+                    };
+
                     let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),
                         target,
+                        integration_state,
+                        Some(workspace_path),
                     );
 
                     fs::write(

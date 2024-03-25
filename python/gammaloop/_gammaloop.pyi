@@ -69,7 +69,7 @@ class Worker:
     def inspect_integrand(self, integrand: str, pt: list[float], term: list[int], force_radius: bool, is_momentum_space: bool, use_f128: bool) -> None:
         """ Inspects the integrand given in argument at the point given in argument. """
 
-    def integrate_integrand(self, integrand: str, num_cores: int, result_path: str, target: tuple[float, float] | None) -> None:
+    def integrate_integrand(self, integrand: str, num_cores: int, result_path: str, workspace_path: str, target: tuple[float, float] | None) -> None:
         """ Integrates the integrand given in argument over the target given in argument. """
 
     def load_master_node(self, integrand: str) -> None:

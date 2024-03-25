@@ -734,6 +734,8 @@ class GammaLoop(object):
     integrate_parser.add_argument('--cores', '-c', type=int, default=1,)
     integrate_parser.add_argument(
         '--target', '-t', nargs=2, type=float, default=None)
+    integrate_parser.add_argument(
+        '--restart', '-r', action='store_true',)
 
     def do_integrate(self, str_args: str) -> None:
         if str_args == 'help':
@@ -752,8 +754,18 @@ class GammaLoop(object):
         result_output_path = self.launched_output.joinpath(
             "runs").joinpath("run.yaml")
 
+        workspace_path = self.launched_output.joinpath("workspace")
+        if args.restart and os.path.exists(workspace_path):
+            shutil.rmtree(workspace_path)
+
+        if not os.path.exists(workspace_path):
+            os.mkdir(workspace_path)
+
         self.rust_worker.integrate_integrand(
-            args.integrand, args.cores, str(result_output_path), target)
+            args.integrand, args.cores, str(result_output_path), str(workspace_path), target)
+
+        # nuke the workspace if integration finishes
+        shutil.rmtree(workspace_path)
 
     # test_ir_limits
     test_ir_limits_parser = ArgumentParser(prog='test_ir_limits')

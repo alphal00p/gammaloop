@@ -298,7 +298,7 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
                 .map(|_i| integrand_factory(settings))
                 .collect(),
         };
-        let result = havana_integrate(&settings, user_data_generator, target);
+        let result = havana_integrate(&settings, user_data_generator, target, None, None);
 
         info!("");
         info!(
