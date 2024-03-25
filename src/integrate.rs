@@ -16,8 +16,10 @@ use crate::integrands::HasIntegrand;
 use crate::observables::Event;
 use crate::observables::SerializableEvent;
 use crate::utils;
+use crate::DiscreteGraphSamplingSettings;
 use crate::Integrand;
 use crate::IntegratorSettings;
+use crate::SamplingSettings;
 use crate::Settings;
 use crate::{IntegratedPhase, IntegrationResult};
 #[allow(unused_imports)]
@@ -79,15 +81,49 @@ where
 
     let mut grid = user_data.integrand[0].create_grid();
 
-    let grid_str = match &grid {
-        Grid::Discrete(g) => format!(
-            "top-level discrete {}-dimensional grid",
-            format!("{}", g.bins.len()).bold().blue()
-        ),
-        Grid::Continuous(g) => {
+    let grid_str = match &settings.sampling {
+        SamplingSettings::MultiChanneling(_multi_channeling_settings) => {
+            let cont_dimension = match &grid {
+                Grid::Continuous(g) => g.continuous_dimensions.len(),
+                _ => unreachable!(),
+            };
+
+            // I don't specify the number of channels, because they are different for each graph
             format!(
-                "top-level continuous {}-dimensional grid",
-                format!("{}", g.continuous_dimensions.len()).bold().blue()
+                "a continuous {}-dimensional grid with multi-channeling over lmbs",
+                cont_dimension
+            )
+        }
+        SamplingSettings::Default => {
+            let cont_dimension = match &grid {
+                Grid::Continuous(g) => g.continuous_dimensions.len(),
+                _ => unreachable!(),
+            };
+
+            format!("a continuous {}-dimensional grid", cont_dimension)
+        }
+        SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => {
+            let num_graphs = match &grid {
+                Grid::Discrete(g) => g.bins.len(),
+                _ => unreachable!(),
+            };
+
+            let inner_settings_string = match discrete_graph_sampling_settings {
+                DiscreteGraphSamplingSettings::Default => String::from(""),
+                DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
+                    String::from(" and a nested discrete grid over lmb-channels")
+                }
+                DiscreteGraphSamplingSettings::TropicalSampling => {
+                    String::from(" and tropical sampling")
+                }
+                DiscreteGraphSamplingSettings::MultiChanneling(_) => {
+                    String::from(" and multi-channeling over lmb-channels")
+                }
+            };
+
+            format!(
+                "a discrete grid with {} graphs{}",
+                num_graphs, inner_settings_string
             )
         }
     };
@@ -97,11 +133,9 @@ where
     let cores = user_data.integrand.len();
 
     let t_start = Instant::now();
-    info!(
-        "gammaloop now integrates '{}' over a {} ...\n",
-        format!("{}", settings.hard_coded_integrand).green(),
-        grid_str
-    );
+
+    info!("Integrating over a {} ...\n", grid_str);
+
     while num_points < settings.integrator.n_max {
         let cur_points = settings.integrator.n_start + settings.integrator.n_increase * iter;
         samples.resize(cur_points, Sample::new());

@@ -9,6 +9,7 @@ use crate::{
 };
 use ahash::HashMap;
 use git_version::git_version;
+use log::info;
 use std::{fs, path::Path};
 
 const GIT_VERSION: &str = git_version!();
@@ -349,6 +350,8 @@ impl PythonWorker {
                         Some((re, im)) => Some(num::Complex::new(re, im)),
                         _ => None,
                     };
+
+                    info!("Gammaloop now integrates {}", integrand);
 
                     let result = havana_integrate(
                         &settings,
