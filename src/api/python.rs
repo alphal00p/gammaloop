@@ -8,6 +8,7 @@ use crate::{
     HasIntegrand, Settings,
 };
 use ahash::HashMap;
+use ctrlc;
 use git_version::git_version;
 use log::info;
 use std::{fs, path::Path};
@@ -352,6 +353,12 @@ impl PythonWorker {
                     };
 
                     info!("Gammaloop now integrates {}", integrand);
+
+                    ctrlc::set_handler(|| {
+                        println!("Aborted");
+                        std::process::exit(2);
+                    })
+                    .expect("error setting interrupt handler");
 
                     let result = havana_integrate(
                         &settings,
