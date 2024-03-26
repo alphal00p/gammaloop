@@ -59,43 +59,27 @@ def run_drawing(drawing_path: str) -> bool:
     return True
 
 
-def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: float):
+def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: float, process_path: Path):
     max_mc_error_dif = 5.0
     max_rel_error_dif = 0.01
     max_percent_error = 0.01
 
-    workspace = os.path.join(RESOURCES_PATH, 'test_{}'.format(graph))
-    graph_path = os.path.join(
-        RESOURCES_PATH, 'qgraf_outputs', '{}.py'.format(graph))
     test_config_path = os.path.join(
         RESOURCES_PATH, 'test_configs', '{}.yaml'.format(graph))
 
-    # clean up output if it is there
-    if os.path.exists(workspace):
-        shutil.rmtree(workspace)
-
     gl = get_gamma_loop_interpreter()
-
-#     # create the output needed for the test
-    command_list = gl_interface.CommandList.from_string(
-        "import_model scalars-full")
-    command_list.add_command(
-        f"import_graphs {graph_path} --format=qgraph")
-    command_list.add_command(f"output {workspace}")
-
-    gl.run(command_list)
 
     # copy settings
     shutil.copyfile(test_config_path,
-                    os.path.join(workspace, 'cards', 'run_card.yaml'))
+                    os.path.join(process_path, 'cards', 'run_card.yaml'))
 
     command_list = gl_interface.CommandList.from_string(
-        "launch {}".format(workspace))
+        "launch {}".format(process_path))
     command_list.add_command("integrate {}".format(graph))
 
     gl.run(command_list)
 
-    f = open(os.path.join(workspace, 'runs', 'run.yaml'), "r").read()
+    f = open(os.path.join(process_path, 'runs', 'run.yaml'), "r").read()
     run_yaml = yaml.safe_load(f)
 
     res_for_check = run_yaml["result"][0]
@@ -114,5 +98,3 @@ def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: floa
     assert absolute_difference < max_mc_error_dif * error_for_check
     assert relative_difference < max_rel_error_dif
     assert error_for_check < max_percent_error * abs(target)
-
-    shutil.rmtree(workspace)
