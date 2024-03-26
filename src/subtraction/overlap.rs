@@ -277,10 +277,10 @@ pub fn find_maximal_overlap(
     println!("{:?}", has_overlap_with);
     println!("{:?}", pair_centers);
 
-    let existing_esurfaces_for_stage_2 = existing_esurface_ids.to_vec();
-
     for (esurface_id_index, overlaps_with) in has_overlap_with.iter().enumerate() {
-        if overlaps_with.is_empty() {}
+        if overlaps_with.is_empty() {
+            let esurface_id = existing_esurface_ids[esurface_id_index];
+        }
     }
 
     panic!();
@@ -317,6 +317,7 @@ impl EsurfacePairs {
 }
 
 #[cfg(test)]
+#[allow(dead_code, unused_variables)]
 mod tests {
     use itertools::Itertools;
     use lorentz_vector::LorentzVector;
@@ -410,5 +411,11 @@ mod tests {
     fn test_box_4e() {
         // massless variant
         let box4e = HelperBoxStructure::new(None);
+    }
+
+    /// This test deforms the threshold structure into 4 pieces with no overlap
+    #[test]
+    fn test_disconnected_box_4e() {
+        let box4e = HelperBoxStructure::new(Some([10.5; 4]));
     }
 }
