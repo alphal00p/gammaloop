@@ -96,6 +96,8 @@ rand_xoshiro = "0.6.0"
 funty = "2.0.0"
 block-id = "0.2.1"
 once_cell = "1.19.0"
+enum_delegate = {git="https://gitlab.com/dawn_app/enum_delegate"}
+treena = "0.0.5"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

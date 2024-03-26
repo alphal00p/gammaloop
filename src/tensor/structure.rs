@@ -592,7 +592,7 @@ pub trait TensorStructure {
         set1 == set2
     }
 
-    /// find the permutation of the external indices that would make the two tensors the same
+    /// find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self
     fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>> {
         if self.external_structure().len() != other.external_structure().len() {
             return None;
@@ -746,10 +746,9 @@ pub trait TensorStructure {
         self.shape().iter().map(|x| usize::from(*x)).product()
     }
 
-    fn shadow_with(self, f_id: Symbol) -> DenseTensor<Atom, Self::Structure>
+    fn shadow_with(self, f_id: Symbol) -> DenseTensor<Atom, Self>
     where
-        Self: std::marker::Sized,
-        Self::Structure: Clone,
+        Self: std::marker::Sized + Clone,
     {
         let mut data = vec![];
         for index in self.index_iter() {
@@ -758,14 +757,13 @@ pub trait TensorStructure {
 
         DenseTensor {
             data,
-            structure: self.structure().clone(),
+            structure: self,
         }
     }
 
-    fn to_explicit_rep(self, f_id: Symbol) -> MixedTensor<Self::Structure>
+    fn to_explicit_rep(self, f_id: Symbol) -> MixedTensor<Self>
     where
-        Self: std::marker::Sized,
-        Self::Structure: Clone + TensorStructure,
+        Self: std::marker::Sized + Clone + TensorStructure,
     {
         let id = State::get_symbol("id");
         let gamma = State::get_symbol("γ");
@@ -775,15 +773,13 @@ pub trait TensorStructure {
         let sigma = State::get_symbol("σ");
 
         match f_id {
-            _ if f_id == id => {
-                ufo::identity_data::<f64, Self::Structure>(self.structure().clone()).into()
-            }
+            _ if f_id == id => ufo::identity_data::<f64, Self>(self).into(),
 
-            _ if f_id == gamma => ufo::gamma_data(self.structure().clone()).into(),
-            _ if f_id == gamma5 => ufo::gamma5_data(self.structure().clone()).into(),
-            _ if f_id == proj_m => ufo::proj_m_data(self.structure().clone()).into(),
-            _ if f_id == proj_p => ufo::proj_p_data(self.structure().clone()).into(),
-            _ if f_id == sigma => ufo::sigma_data(self.structure().clone()).into(),
+            _ if f_id == gamma => ufo::gamma_data(self).into(),
+            _ if f_id == gamma5 => ufo::gamma5_data(self).into(),
+            _ if f_id == proj_m => ufo::proj_m_data(self).into(),
+            _ if f_id == proj_p => ufo::proj_p_data(self).into(),
+            _ if f_id == sigma => ufo::sigma_data(self).into(),
             name => self.shadow_with(name).into(),
         }
     }
@@ -980,6 +976,21 @@ where
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct VecStructure {
     pub structure: Vec<Slot>,
+}
+
+impl TryFrom<AtomView<'_>> for VecStructure {
+    type Error = &'static str;
+    fn try_from(value: AtomView) -> Result<Self, Self::Error> {
+        let mut structure: Vec<Slot> = vec![];
+        if let AtomView::Fun(f) = value {
+            for arg in f.iter() {
+                structure.push(arg.try_into()?);
+            }
+        } else {
+            return Err("Not a valid expression");
+        }
+        Ok(structure.into())
+    }
 }
 
 impl FromIterator<Slot> for VecStructure {
@@ -1633,11 +1644,11 @@ pub trait Shadowable: TensorStructure {
     fn shadow(self) -> Option<DenseTensor<Atom, Self::Structure>>
     where
         Self: std::marker::Sized + HasName<Name = <Self as Shadowable>::Name>,
-        Self::Structure: Clone,
+        Self::Structure: Clone + TensorStructure,
     {
         let name = self.name()?.into_owned();
 
-        Some(self.shadow_with(name.into_id()))
+        Some(self.structure().clone().shadow_with(name.into_id()))
     }
 
     fn smart_shadow(self) -> Option<MixedTensor<Self::Structure>>
@@ -1646,7 +1657,7 @@ pub trait Shadowable: TensorStructure {
         Self::Structure: Clone + TensorStructure,
     {
         let name = self.name()?.into_owned();
-        Some(self.to_explicit_rep(name.into_id()))
+        Some(self.structure().clone().to_explicit_rep(name.into_id()))
     }
 
     fn to_symbolic(&self) -> Option<Atom>

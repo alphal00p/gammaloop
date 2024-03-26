@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+<<<<<<< HEAD
 
     crane = {
       url = "github:ipetkov/crane";
@@ -21,11 +22,16 @@
       url = "github:rustsec/advisory-db";
       flake = false;
     };
+=======
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    poetry2nix.url = "github:nix-community/poetry2nix";
+>>>>>>> numerator
   };
 
   outputs = {
     self,
     nixpkgs,
+<<<<<<< HEAD
     crane,
     fenix,
     flake-utils,
@@ -34,6 +40,44 @@
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
+=======
+    poetry2nix,
+    rust-overlay,
+  }: let
+    overlays = [
+      rust-overlay.overlays.default
+      (final: prev: {
+        rustToolchain = let
+          rust = prev.rust-bin;
+        in
+          if builtins.pathExists ./rust-toolchain.toml
+          then rust.fromRustupToolchainFile ./rust-toolchain.toml
+          else if builtins.pathExists ./rust-toolchain
+          then rust.fromRustupToolchainFile ./rust-toolchain
+          else rust.stable.latest.default;
+      })
+      poetry2nix.overlays.default
+    ];
+    supportedSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
+    forEachSupportedSystem = f:
+      nixpkgs.lib.genAttrs supportedSystems (system:
+        f {
+          pkgs = import nixpkgs {
+            inherit system overlays;
+          };
+        });
+  in {
+    devShells = forEachSupportedSystem ({pkgs}: let
+      poetryEnv = pkgs.poetry2nix.mkPoetryEnv {
+        projectDir = ./.;
+        python = pkgs.python311;
+      };
+    in {
+      default = pkgs.mkShell {
+        #devshell definition :
+        # LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+        # RUST_SRC_PATH = "${pkgs.rust.packages.beta.rustPlatform.rustLibSrc}";
+>>>>>>> numerator
 
       inherit (pkgs) lib;
 

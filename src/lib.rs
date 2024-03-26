@@ -18,11 +18,13 @@ pub mod integrands;
 pub mod integrate;
 pub mod ltd;
 pub mod model;
+pub mod numerator;
 pub mod observables;
 pub mod tensor;
 pub mod tests;
 pub mod tests_from_pytest;
 pub mod utils;
+pub mod uv;
 
 use color_eyre::{Help, Report};
 #[allow(unused)]

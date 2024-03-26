@@ -1,7 +1,8 @@
 use crate::{
     cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
-    model,
+    model::{self, Model},
+    numerator::generate_numerator,
     utils::{compute_momentum, FloatLike},
 };
 use ahash::RandomState;
@@ -15,9 +16,15 @@ use nalgebra::DMatrix;
 #[allow(unused_imports)]
 use num::traits::Float;
 use num::Complex;
+use petgraph::graph;
+use rand::seq::index;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
+use symbolica::{
+    id::Pattern,
+    representations::{Atom, AtomView},
+};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -132,6 +139,7 @@ pub struct SerializableEdge {
     name: SmartString<LazyCompact>,
     edge_type: EdgeType,
     particle: SmartString<LazyCompact>,
+    propagator: SmartString<LazyCompact>,
     vertices: [SmartString<LazyCompact>; 2],
 }
 
@@ -141,6 +149,7 @@ impl SerializableEdge {
             name: edge.name.clone(),
             edge_type: edge.edge_type.clone(),
             particle: edge.particle.name.clone(),
+            propagator: edge.propagator.name.clone(),
             vertices: [
                 graph.vertices[edge.vertices[0]].name.clone(),
                 graph.vertices[edge.vertices[1]].name.clone(),
@@ -153,6 +162,7 @@ impl SerializableEdge {
 pub struct Edge {
     pub name: SmartString<LazyCompact>,
     pub edge_type: EdgeType,
+    pub propagator: Arc<model::Propagator>,
     pub particle: Arc<model::Particle>,
     pub vertices: [usize; 2],
 }
@@ -167,6 +177,7 @@ impl Edge {
             name: serializable_edge.name.clone(),
             edge_type: serializable_edge.edge_type.clone(),
             particle: model.get_particle(&serializable_edge.particle),
+            propagator: model.get_propagator(&serializable_edge.propagator),
             vertices: [
                 graph
                     .get_vertex_position(&serializable_edge.vertices[0])
@@ -176,6 +187,94 @@ impl Edge {
                     .unwrap(),
             ],
         }
+    }
+
+    pub fn is_incoming_to(&self, vertex: usize) -> bool {
+        self.vertices[1] == vertex
+    }
+
+    pub fn numerator(&self, graph: &Graph) -> Atom {
+        let mut atom = self.propagator.numerator.clone();
+
+        let pindex_atom = Atom::parse(&format!(
+            "p{}",
+            graph.edge_name_to_position.get(&self.name).unwrap()
+        ))
+        .unwrap();
+
+        let pindex_num = if let AtomView::Var(v) = pindex_atom.as_view() {
+            v.get_symbol().get_id()
+        } else {
+            unreachable!()
+        };
+
+        let pfun = Pattern::parse("P(x_)").unwrap();
+        atom = pfun.replace_all(
+            atom.as_view(),
+            &Pattern::parse(&format!(
+                "Q{}(lor(4,x_))",
+                graph.edge_name_to_position.get(&self.name).unwrap()
+            ))
+            .unwrap(),
+            None,
+            None,
+        );
+
+        let pslashfun = Pattern::parse("PSlash(x__)").unwrap();
+        atom = pslashfun.replace_all(
+            atom.as_view(),
+            &Pattern::parse(&format!(
+                "Q{}(lor(4,{}))Gamma({},x__)",
+                graph.edge_name_to_position.get(&self.name).unwrap(),
+                pindex_num,
+                pindex_num
+            ))
+            .unwrap(),
+            None,
+            None,
+        );
+
+        let pat: Pattern = Atom::new_num(1).into_pattern();
+        let index_atom = Atom::parse(&format!(
+            "in{}",
+            graph.edge_name_to_position.get(&self.name).unwrap()
+        ))
+        .unwrap();
+
+        let index_num = if let AtomView::Var(v) = index_atom.as_view() {
+            v.get_symbol().get_id()
+        } else {
+            unreachable!()
+        };
+
+        atom = pat.replace_all(
+            atom.as_view(),
+            &Pattern::parse(&format!("{index_num}")).unwrap(),
+            None,
+            None,
+        );
+
+        let pat: Pattern = Atom::new_num(2).into_pattern();
+        let index_atom = Atom::parse(&format!(
+            "out{}",
+            graph.edge_name_to_position.get(&self.name).unwrap()
+        ))
+        .unwrap();
+
+        let index_num = if let AtomView::Var(v) = index_atom.as_view() {
+            v.get_symbol().get_id()
+        } else {
+            unreachable!()
+        };
+
+        atom = pat.replace_all(
+            atom.as_view(),
+            &Pattern::parse(&format!("{index_num}")).unwrap(),
+            None,
+            None,
+        );
+
+        atom
     }
 }
 
@@ -216,6 +315,48 @@ impl Vertex {
             edges: vec![],
         }
     }
+
+    pub fn is_edge_incoming(&self, edge: usize, graph: &Graph) -> bool {
+        graph.is_edge_incoming(edge, graph.get_vertex_position(&self.name).unwrap())
+    }
+
+    pub fn apply_vertex_rule(&self, graph: &Graph) -> Vec<Atom> {
+        match &self.vertex_info {
+            VertexInfo::ExternalVertexInfo(_) => vec![],
+            VertexInfo::InteractonVertexInfo(interaction_vertex_info) => {
+                let info = interaction_vertex_info;
+                info.vertex_rule
+                    .lorentz_structures
+                    .iter()
+                    .map(|ls| {
+                        let mut atom = ls.structure.clone();
+                        for (i, e) in self.edges.iter().enumerate() {
+                            let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
+                            let dir = if self.is_edge_incoming(*e, graph) {
+                                "in"
+                            } else {
+                                "out"
+                            };
+                            let index_atom = Atom::parse(&format!("{}{}", dir, e)).unwrap();
+                            let index_num = if let AtomView::Var(v) = index_atom.as_view() {
+                                v.get_symbol().get_id()
+                            } else {
+                                unreachable!()
+                            };
+
+                            atom = pat.replace_all(
+                                atom.as_view(),
+                                &Atom::new_num(index_num as i64).into_pattern(),
+                                None,
+                                None,
+                            );
+                        }
+                        atom
+                    })
+                    .collect_vec()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -247,6 +388,7 @@ impl SerializableGraph {
                 .iter()
                 .map(|e| SerializableEdge::from_edge(graph, e))
                 .collect(),
+
             overall_factor: graph.overall_factor,
             external_connections: graph
                 .external_connections
@@ -286,6 +428,7 @@ pub struct Graph {
     pub name: SmartString<LazyCompact>,
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
+    pub external_edges: Vec<usize>,
     pub overall_factor: f64,
     pub external_connections: Vec<(Option<usize>, Option<usize>)>,
     pub loop_momentum_basis: LoopMomentumBasis,
@@ -310,6 +453,7 @@ impl Graph {
             name: graph.name.clone(),
             vertices,
             edges: vec![],
+            external_edges: vec![],
             overall_factor: graph.overall_factor,
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
@@ -328,6 +472,19 @@ impl Graph {
             .edges
             .iter()
             .map(|e| Edge::from_serializable_edge(model, &g, e))
+            .collect();
+
+        g.external_edges = g
+            .edges
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| {
+                if e.edge_type == EdgeType::Incoming || e.edge_type == EdgeType::Outgoing {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
             .collect();
         for (i_e, e) in g.edges.iter().enumerate() {
             edge_name_to_position.insert(e.name.clone(), i_e);
@@ -598,12 +755,71 @@ impl Graph {
         }
     }
 
+    pub fn generate_lmb_replacement_rules(&self) -> Vec<(Pattern, Pattern)> {
+        self.loop_momentum_basis_replacement_rule(&self.loop_momentum_basis)
+    }
+
+    fn loop_momentum_basis_replacement_rule(
+        &self,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<(Pattern, Pattern)> {
+        let mut rule = vec![];
+
+        for (i, signature) in lmb.edge_signatures.iter().enumerate() {
+            println!("lhs {}", Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap());
+            rule.push((
+                Pattern::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
+                self.replacement_rule_from_signature(i, &lmb.basis, &signature),
+            ));
+        }
+
+        rule
+    }
+
+    fn replacement_rule_from_signature(
+        &self,
+        index: usize,
+        basis: &[usize],
+        signature: &(Vec<isize>, Vec<isize>),
+    ) -> Pattern {
+        let mut acc = Atom::new_num(0);
+        for (i_l, sign) in signature.0.iter().enumerate() {
+            match sign {
+                1 => {
+                    acc = &acc + &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+                }
+                -1 => {
+                    acc = &acc - &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+                }
+                _ => {}
+            }
+        }
+
+        for (i_e, sign) in signature.1.iter().enumerate() {
+            match sign {
+                1 => {
+                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+                }
+                -1 => {
+                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+                }
+                _ => {}
+            }
+        }
+        println!("rhs {}", acc);
+        acc.into_pattern()
+    }
+
     pub fn generate_ltd(&mut self) {
         self.derived_data.ltd_expression = Some(generate_ltd_expression(self));
     }
 
     pub fn generate_cff(&mut self) {
         self.derived_data.cff_expression = Some(generate_cff_expression(self).unwrap());
+    }
+
+    pub fn generate_numerator(&mut self, model: &Model) {
+        self.derived_data.numerator = Some(generate_numerator(self, model));
     }
 
     #[inline]
@@ -713,6 +929,10 @@ impl Graph {
         self.derived_data = derived_data;
         Ok(())
     }
+
+    pub fn is_edge_incoming(&self, edge: usize, vertex: usize) -> bool {
+        self.edges[edge].is_incoming_to(vertex)
+    }
 }
 
 #[allow(dead_code)]
@@ -721,6 +941,7 @@ pub struct DerivedGraphData {
     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
+    pub numerator: Option<Atom>,
 }
 
 impl DerivedGraphData {
@@ -729,6 +950,7 @@ impl DerivedGraphData {
             loop_momentum_bases: None,
             cff_expression: None,
             ltd_expression: None,
+            numerator: None,
         }
     }
 
@@ -756,6 +978,7 @@ impl DerivedGraphData {
             ltd_expression: serializable
                 .ltd_expression
                 .map(LTDExpression::from_serializable),
+            numerator: None,
         }
     }
 

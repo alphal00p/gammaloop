@@ -16,7 +16,6 @@ use std::fs;
 use std::fs::File;
 use std::path::Path;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OutputType {
     #[serde(rename = "amplitudes")]

@@ -1,0 +1,4 @@
+model_name: sm
+output_type: amplitudes
+contents:
+- lbl_box
