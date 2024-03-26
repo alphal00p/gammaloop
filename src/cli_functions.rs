@@ -170,6 +170,8 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
         )
         .get_matches_from(args);
 
+    crate::set_interrupt_handler();
+
     if let Some(matches) = matches.subcommand_matches("batch") {
         let path_to_process_output = PathBuf::from_str(matches.value_of("process_file").unwrap())?;
         let path_to_batch_input = PathBuf::from_str(matches.value_of("batch_input_file").unwrap())?;

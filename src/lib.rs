@@ -38,9 +38,12 @@ use num::Complex;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
+use std::sync::atomic::AtomicBool;
 use utils::FloatLike;
 
 use serde::{Deserialize, Serialize};
+
+pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const MAX_CORES: usize = 1000;
 
@@ -60,6 +63,23 @@ pub enum HFunction {
     PolyLeftRightExponential,
     #[serde(rename = "exponential_ct")]
     ExponentialCT,
+}
+
+pub fn set_interrupt_handler() {
+    INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
+    let _ = ctrlc::set_handler(|| {
+        INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+}
+
+#[inline]
+pub fn is_interrupted() -> bool {
+    INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[inline]
+pub fn set_interrupted(flag: bool) {
+    INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
 }
 
 const fn _default_true() -> bool {

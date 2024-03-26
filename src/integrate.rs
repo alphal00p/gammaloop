@@ -21,6 +21,8 @@ use crate::Integrand;
 use crate::IntegratorSettings;
 use crate::SamplingSettings;
 use crate::Settings;
+use crate::INTERRUPTED;
+use crate::{is_interrupted, set_interrupted};
 use crate::{IntegratedPhase, IntegrationResult};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -31,6 +33,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 use std::time::Instant;
 use tabled::{Style, Table, Tabled};
 
@@ -190,7 +193,7 @@ where
                     String::from(" and a nested discrete grid over lmb-channels")
                 }
                 DiscreteGraphSamplingSettings::TropicalSampling => {
-                    String::from(" and tropical sampling")
+                    format!(" and 🌴🥥 {} 🥥🌴", "tropical sampling".green().bold())
                 }
                 DiscreteGraphSamplingSettings::MultiChanneling(_) => {
                     String::from(" and multi-channeling over lmb-channels")
@@ -198,8 +201,10 @@ where
             };
 
             format!(
-                "a discrete grid with {} graphs{}",
-                num_graphs, inner_settings_string
+                "a discrete grid with {} {}{}",
+                num_graphs,
+                if num_graphs > 1 { "graphs" } else { "graph" },
+                inner_settings_string
             )
         }
     };
@@ -208,9 +213,21 @@ where
 
     let t_start = Instant::now();
 
-    info!("Integrating over a {} ...\n", grid_str);
+    info!(
+        "Integrating using {} ltd with {} {} over {} ...",
+        if settings.general.use_ltd {
+            "naive"
+        } else {
+            "cff"
+        },
+        cores,
+        if cores > 1 { "cores" } else { "core" },
+        grid_str
+    );
+    info!("");
 
-    while integration_state.num_points < settings.integrator.n_max {
+    let mut n_samples_evaluated = 0;
+    'integrateLoop: while integration_state.num_points < settings.integrator.n_max {
         let cur_points =
             settings.integrator.n_start + settings.integrator.n_increase * integration_state.iter;
         samples.resize(cur_points, Sample::new());
@@ -241,6 +258,9 @@ where
                 for ((f_evals_i, s), result) in
                     ff.iter_mut().zip(xi.iter()).zip(result_list.iter_mut())
                 {
+                    if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                        return;
+                    }
                     let fc = integrand_f.evaluate_sample(
                         s,
                         s.get_weight(),
@@ -254,6 +274,10 @@ where
                 }
             });
 
+        if is_interrupted() {
+            warn!("{}", "Integration iterrupted by user".yellow());
+            break 'integrateLoop;
+        }
         for (s, f) in samples[..cur_points].iter().zip(&f_evals[..cur_points]) {
             let sel_f = match settings.integrator.integrated_phase {
                 IntegratedPhase::Real => &f[0],
@@ -356,133 +380,7 @@ where
         integration_state.reset_rng(settings.integrator.seed);
 
         integration_state.num_points += cur_points;
-
-        info!(
-            "/  [ {} ] {}: n_pts={:-6.0}K {} {} /sample/core ",
-            format!(
-                "{:^7}",
-                utils::format_wdhms(t_start.elapsed().as_secs() as usize)
-            )
-            .bold(),
-            format!("Iteration #{:-4}", integration_state.iter)
-                .bold()
-                .green(),
-            cur_points as f64 / 1000.,
-            if integration_state.num_points >= 10_000_000 {
-                format!(
-                    "n_tot={:-7.0}M",
-                    integration_state.num_points as f64 / 1_000_000.
-                )
-                .bold()
-                .green()
-            } else {
-                format!(
-                    "n_tot={:-7.0}K",
-                    integration_state.num_points as f64 / 1000.
-                )
-                .bold()
-                .green()
-            },
-            format!(
-                "{:-17.3} ms",
-                (((t_start.elapsed().as_secs() as f64) * 1000.)
-                    / (integration_state.num_points as f64))
-                    * (cores as f64)
-            )
-            .bold()
-            .blue()
-        );
-
-        for i_integrand in 0..(N_INTEGRAND_ACCUMULATORS / 2) {
-            print_integral_result(
-                &integration_state.all_integrals[2 * i_integrand],
-                i_integrand + 1,
-                integration_state.iter,
-                "re",
-                if i_integrand == 0 {
-                    target.map(|o| o.re).or(None)
-                } else {
-                    None
-                },
-            );
-            print_integral_result(
-                &integration_state.all_integrals[2 * i_integrand + 1],
-                i_integrand + 1,
-                integration_state.iter,
-                "im",
-                if i_integrand == 0 {
-                    target.map(|o| o.im).or(None)
-                } else {
-                    None
-                },
-            );
-        }
-        if settings.integrator.show_max_wgt_info {
-            info!("|  -------------------------------------------------------------------------------------------");
-            info!(
-                "|  {:<16} | {:<23} | {}",
-                "Integrand", "Max Eval", "Max Eval xs",
-            );
-            for i_integrand in 0..(N_INTEGRAND_ACCUMULATORS / 2) {
-                for part in 0..=1 {
-                    for sgn in 0..=1 {
-                        if (if sgn == 0 {
-                            integration_state.all_integrals[2 * i_integrand + part]
-                                .max_eval_positive
-                        } else {
-                            integration_state.all_integrals[2 * i_integrand + part]
-                                .max_eval_negative
-                        }) == 0.
-                        {
-                            continue;
-                        }
-
-                        info!(
-                            "|  {:<20} | {:<23} | {}",
-                            format!(
-                                "itg #{:-3} {} [{}] ",
-                                format!("{:<3}", i_integrand + 1),
-                                format!("{:<2}", if part == 0 { "re" } else { "im" }).blue(),
-                                format!("{:<1}", if sgn == 0 { "+" } else { "-" }).blue()
-                            ),
-                            format!(
-                                "{:+.16e}",
-                                if sgn == 0 {
-                                    integration_state.all_integrals[2 * i_integrand + part]
-                                        .max_eval_positive
-                                } else {
-                                    integration_state.all_integrals[2 * i_integrand + part]
-                                        .max_eval_negative
-                                }
-                            ),
-                            format!(
-                                "( {} )",
-                                if let Some(sample) = if sgn == 0 {
-                                    &integration_state.all_integrals[2 * i_integrand + part]
-                                        .max_eval_positive_xs
-                                } else {
-                                    &integration_state.all_integrals[2 * i_integrand + part]
-                                        .max_eval_negative_xs
-                                } {
-                                    match sample {
-                                        Sample::Continuous(_w, v) => v
-                                            .iter()
-                                            .map(|&x| format!("{:.16}", x))
-                                            .collect::<Vec<_>>()
-                                            .join(", "),
-                                        _ => "N/A".to_string(),
-                                    }
-                                } else {
-                                    "N/A".to_string()
-                                }
-                            )
-                        );
-                    }
-                }
-            }
-        }
-
-        integration_state.stats.display_status();
+        n_samples_evaluated += cur_points;
 
         // now merge all statistics and observables into the first
         let (first, others) = user_data.integrand[..cores].split_at_mut(1);
@@ -494,6 +392,16 @@ where
         if let Some(itg) = user_data.integrand[..cores].first_mut() {
             itg.update_results(integration_state.iter);
         }
+
+        show_integration_status(
+            &integration_state,
+            cores,
+            t_start.elapsed(),
+            cur_points,
+            n_samples_evaluated,
+            &target,
+            settings.integrator.show_max_wgt_info,
+        );
         info!("");
 
         // now write the integration state to disk if a workspace has been provided.
@@ -521,6 +429,31 @@ where
                 Err(_) => warn!("Warning: failed to write settings to disk"),
             }
         }
+    }
+    // Reset the interrupted flag
+    set_interrupted(false);
+
+    if integration_state.num_points > 0 {
+        info!("");
+        info!("{}", "Final integration results:".bold().green());
+        info!("");
+        show_integration_status(
+            &integration_state,
+            cores,
+            t_start.elapsed(),
+            0,
+            n_samples_evaluated,
+            &target,
+            true,
+        );
+        info!("");
+    } else {
+        info!("");
+        warn!(
+            "{}",
+            "No final integration results to display since no iteration completed.".yellow()
+        );
+        info!("");
     }
 
     IntegrationResult {
@@ -1099,6 +1032,149 @@ impl MasterNode {
     }
 }
 
+pub fn show_integration_status(
+    integration_state: &IntegrationState,
+    cores: usize,
+    elapsed_time: Duration,
+    cur_points: usize,
+    n_samples_evaluated: usize,
+    target: &Option<Complex<f64>>,
+    show_max_wgt_info: bool,
+) {
+    info!(
+        "/  [ {} ] {}: n_pts={:-6.0}K {} {}",
+        format!(
+            "{:^7}",
+            utils::format_wdhms(elapsed_time.as_secs() as usize)
+        )
+        .bold(),
+        format!("Iteration #{:-4}", integration_state.iter)
+            .bold()
+            .green(),
+        cur_points as f64 / 1000.,
+        if integration_state.num_points >= 10_000_000 {
+            format!(
+                "n_tot={:-7.0}M",
+                integration_state.num_points as f64 / 1_000_000.
+            )
+            .bold()
+            .green()
+        } else {
+            format!(
+                "n_tot={:-7.0}K",
+                integration_state.num_points as f64 / 1000.
+            )
+            .bold()
+            .green()
+        },
+        format!(
+            "{:-22}",
+            format!(
+                "{:-9} /sample/core",
+                if n_samples_evaluated == 0 {
+                    "N/A".red()
+                } else {
+                    utils::format_evaluation_time_from_f64(
+                        elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
+                    )
+                    .bold()
+                    .blue()
+                }
+            )
+        )
+    );
+
+    for i_integrand in 0..(N_INTEGRAND_ACCUMULATORS / 2) {
+        print_integral_result(
+            &integration_state.all_integrals[2 * i_integrand],
+            i_integrand + 1,
+            integration_state.iter,
+            "re",
+            if i_integrand == 0 {
+                target.map(|o| o.re).or(None)
+            } else {
+                None
+            },
+        );
+        print_integral_result(
+            &integration_state.all_integrals[2 * i_integrand + 1],
+            i_integrand + 1,
+            integration_state.iter,
+            "im",
+            if i_integrand == 0 {
+                target.map(|o| o.im).or(None)
+            } else {
+                None
+            },
+        );
+    }
+    if show_max_wgt_info {
+        info!("|  -------------------------------------------------------------------------------------------");
+        info!(
+            "|  {:<16} | {:<23} | {}",
+            "Integrand", "Max Eval", "Max Eval xs",
+        );
+        for i_integrand in 0..(N_INTEGRAND_ACCUMULATORS / 2) {
+            for part in 0..=1 {
+                for sgn in 0..=1 {
+                    if (if sgn == 0 {
+                        integration_state.all_integrals[2 * i_integrand + part].max_eval_positive
+                    } else {
+                        integration_state.all_integrals[2 * i_integrand + part].max_eval_negative
+                    }) == 0.
+                    {
+                        continue;
+                    }
+
+                    info!(
+                        "|  {:<20} | {:<23} | {}",
+                        format!(
+                            "itg #{:-3} {} [{}] ",
+                            format!("{:<3}", i_integrand + 1),
+                            format!("{:<2}", if part == 0 { "re" } else { "im" }).blue(),
+                            format!("{:<1}", if sgn == 0 { "+" } else { "-" }).blue()
+                        ),
+                        format!(
+                            "{:+.16e}",
+                            if sgn == 0 {
+                                integration_state.all_integrals[2 * i_integrand + part]
+                                    .max_eval_positive
+                            } else {
+                                integration_state.all_integrals[2 * i_integrand + part]
+                                    .max_eval_negative
+                            }
+                        ),
+                        format!(
+                            "( {} )",
+                            if let Some(sample) = if sgn == 0 {
+                                &integration_state.all_integrals[2 * i_integrand + part]
+                                    .max_eval_positive_xs
+                            } else {
+                                &integration_state.all_integrals[2 * i_integrand + part]
+                                    .max_eval_negative_xs
+                            } {
+                                match sample {
+                                    Sample::Continuous(_w, v) => v
+                                        .iter()
+                                        .map(|&x| format!("{:.16}", x))
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                    _ => "N/A".to_string(),
+                                }
+                            } else {
+                                "N/A".to_string()
+                            }
+                        )
+                    );
+                }
+            }
+        }
+        info!("|  -------------------------------------------------------------------------------------------");
+    }
+
+    integration_state.stats.display_status();
+}
+
 pub fn print_integral_result(
     itg: &StatisticsAccumulator<f64>,
     i_itg: usize,
@@ -1170,12 +1246,12 @@ pub fn print_integral_result(
             let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
                 / (itg.avg.abs() * (itg.processed_samples as f64));
             if mwi > 1. {
-                format!("  mwi: {:-5.3}", mwi).red()
+                format!("  mwi: {:-10.4e}", mwi).red()
             } else {
-                format!("  mwi: {:-5.3}", mwi).normal()
+                format!("  mwi: {:-10.4e}", mwi).normal()
             }
         } else {
-            format!("  mwi: {:-5.3}", 0.).normal()
+            format!("  mwi: {:-10.4e}", 0.).normal()
         }
     );
 }

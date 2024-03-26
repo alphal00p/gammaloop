@@ -1779,7 +1779,7 @@ mod tests_cff {
             shift_signature,
         };
 
-        let _edge_types = vec![
+        let _edge_types = [
             EdgeType::Virtual,
             EdgeType::Virtual,
             EdgeType::Virtual,
@@ -1977,7 +1977,7 @@ mod tests_cff {
             (5, 4),
         ];
 
-        let _edge_types = vec![
+        let _edge_types = [
             EdgeType::Virtual,
             EdgeType::Virtual,
             EdgeType::Virtual,
@@ -2063,7 +2063,7 @@ mod tests_cff {
             (5, 8),
         ];
 
-        let _edge_types = vec![
+        let _edge_types = [
             EdgeType::Virtual,
             EdgeType::Virtual,
             EdgeType::Virtual,

@@ -11,7 +11,7 @@ use crate::{
     HasIntegrand, Settings,
 };
 use ahash::HashMap;
-use ctrlc;
+use colored::Colorize;
 use git_version::git_version;
 use log::{info, warn};
 use std::{
@@ -49,7 +49,7 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
     );
     Ok(())
     */
-
+    crate::set_interrupt_handler();
     cli(&py
         .import("sys")?
         .getattr("argv")?
@@ -62,6 +62,7 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
 fn gammalooprs(_py: Python, m: &PyModule) -> PyResult<()> {
     // TODO: Verify that indeed Python logger level is used in that case.
     pyo3_log::init();
+    crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
@@ -94,6 +95,7 @@ impl Clone for PythonWorker {
 impl PythonWorker {
     #[classmethod]
     pub fn new(_cls: &PyType) -> PyResult<PythonWorker> {
+        crate::set_interrupt_handler();
         Ok(PythonWorker {
             model: Model::default(),
             cross_sections: CrossSectionList::default(),
@@ -358,13 +360,7 @@ impl PythonWorker {
                         _ => None,
                     };
 
-                    info!("Gammaloop now integrates {}", integrand);
-
-                    ctrlc::set_handler(|| {
-                        println!("Aborted");
-                        std::process::exit(2);
-                    })
-                    .expect("error setting interrupt handler");
+                    info!("Gammaloop now integrates {}", integrand.green().bold());
 
                     let workspace_path = PathBuf::from(workspace_path);
 
@@ -372,7 +368,11 @@ impl PythonWorker {
 
                     let integration_state = match fs::read(path_to_state) {
                         Ok(state_bytes) => {
-                            info!("Found integration state, result of previous integration: \n");
+                            info!(
+                                "{}",
+                                "Found integration state, result of previous integration:".yellow()
+                            );
+                            info!("");
 
                             let serializable_state: SerializableIntegrationState =
                                 bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
@@ -408,14 +408,15 @@ impl PythonWorker {
                                 "im",
                                 target.map(|c| c.im),
                             );
+                            info!("");
+                            warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
+                            info!("{}", "Resuming integration".yellow());
 
-                            info!("Resuming integration \n");
-                            warn!("Warning, any changes to the settings will be ignored, integrate with --restart for changes to take effect");
                             Some(state)
                         }
 
                         Err(_) => {
-                            info!("no integration state found, starting new integration");
+                            info!("No integration state found, starting new integration");
                             None
                         }
                     };

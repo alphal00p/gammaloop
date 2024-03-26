@@ -765,7 +765,10 @@ class GammaLoop(object):
             args.integrand, args.cores, str(result_output_path), str(workspace_path), target)
 
         # nuke the workspace if integration finishes
-        shutil.rmtree(workspace_path)
+        # For now leave the possibility of restarting where integration left off.
+        # Maybe in the future add an option to automatically clean the workspace after running is completed or
+        # specify a "run_tag" that allows to have mutliple workspace concurrently active
+        # shutil.rmtree(workspace_path)
 
     # test_ir_limits
     test_ir_limits_parser = ArgumentParser(prog='test_ir_limits')

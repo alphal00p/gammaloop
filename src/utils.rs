@@ -1680,10 +1680,14 @@ pub fn format_evaluation_time(time: Duration) -> String {
     if time_secs < 1e-6 {
         format!("{} ns", time.as_nanos())
     } else if time_secs < 1e-3 {
-        format!("{} µs", time.as_micros())
+        format!("{:.2} µs", (time.as_nanos() as f64) / 1000.)
     } else if time_secs < 1.0 {
-        format!("{} ms", time.as_millis())
+        format!("{:.2} ms", (time.as_micros() as f64) / 1000.)
     } else {
-        format!("{} s", time.as_secs())
+        format!("{:.2} s", (time.as_millis() as f64) / 1000.)
     }
+}
+
+pub fn format_evaluation_time_from_f64(time: f64) -> String {
+    format_evaluation_time(Duration::from_secs_f64(time))
 }

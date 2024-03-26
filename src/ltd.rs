@@ -669,7 +669,7 @@ mod tests {
         // test sign
 
         let test_permutation = vec![0, 1, 2];
-        let test_signature_matrix = vec![vec![-1, 0, 1], vec![0, 1, 0], vec![1, 0, 0]];
+        let test_signature_matrix = [vec![-1, 0, 1], vec![0, 1, 0], vec![1, 0, 0]];
         let test_sigmas = vec![1., -1., 1.];
 
         let test_residue_generator = ResidueGenerator {
