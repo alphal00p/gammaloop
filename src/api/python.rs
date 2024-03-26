@@ -4,7 +4,8 @@ use crate::{
     inspect,
     integrands::Integrand,
     integrate::{
-        havana_integrate, MasterNode, SerializableBatchResult, SerializableIntegrationState,
+        havana_integrate, print_integral_result, IntegrationState, MasterNode,
+        SerializableBatchResult, SerializableIntegrationState,
     },
     model::Model,
     HasIntegrand, Settings,
@@ -371,12 +372,33 @@ impl PythonWorker {
                     let path_to_state = workspace_path.join("integration_state");
 
                     let integration_state = match fs::read(path_to_state) {
-                        Ok(state) => {
-                            info!("found integration state, resuming integration");
+                        Ok(state_bytes) => {
+                            info!("Found integration state, result of previous integration: \n");
 
-                            let temp_state: SerializableIntegrationState =
-                                bincode::deserialize(&state).unwrap();
-                            Some(temp_state.into_integration_state(&settings))
+                            let state: IntegrationState =
+                                bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
+                                    .unwrap()
+                                    .into_integration_state(&settings);
+
+                            print_integral_result(
+                                &state.all_integrals[0],
+                                1,
+                                state.iter,
+                                "re",
+                                target.map(|c| c.re),
+                            );
+
+                            print_integral_result(
+                                &state.all_integrals[1],
+                                2,
+                                state.iter,
+                                "im",
+                                target.map(|c| c.im),
+                            );
+
+                            info!("Resuming integration \n");
+
+                            Some(state)
                         }
 
                         Err(_) => {

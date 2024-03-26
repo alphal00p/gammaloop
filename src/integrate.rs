@@ -61,13 +61,13 @@ pub struct IntegralResult {
 /// struct to keep track of state, used in the havana_integrate function
 /// the idea is to save this to disk after each iteration, so that the integration can be resumed
 pub struct IntegrationState {
-    num_points: usize,
-    integral: StatisticsAccumulator<f64>,
-    all_integrals: Vec<StatisticsAccumulator<f64>>,
-    stats: StatisticsCounter,
-    rng: MonteCarloRng,
-    grid: Grid<f64>,
-    iter: usize,
+    pub num_points: usize,
+    pub integral: StatisticsAccumulator<f64>,
+    pub all_integrals: Vec<StatisticsAccumulator<f64>>,
+    pub stats: StatisticsCounter,
+    pub rng: MonteCarloRng,
+    pub grid: Grid<f64>,
+    pub iter: usize,
 }
 
 impl IntegrationState {
@@ -1089,7 +1089,7 @@ impl MasterNode {
     }
 }
 
-fn print_integral_result(
+pub fn print_integral_result(
     itg: &StatisticsAccumulator<f64>,
     i_itg: usize,
     i_iter: usize,
