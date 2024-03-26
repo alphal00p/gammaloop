@@ -1246,12 +1246,12 @@ pub fn print_integral_result(
             let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
                 / (itg.avg.abs() * (itg.processed_samples as f64));
             if mwi > 1. {
-                format!("  mwi: {:-10.4e}", mwi).red()
+                format!("  mwi: {:<10.4e}", mwi).red()
             } else {
-                format!("  mwi: {:-10.4e}", mwi).normal()
+                format!("  mwi: {:<10.4e}", mwi).normal()
             }
         } else {
-            format!("  mwi: {:-10.4e}", 0.).normal()
+            format!("  mwi: {:<10.4e}", 0.).normal()
         }
     );
 }

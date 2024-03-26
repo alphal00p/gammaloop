@@ -342,6 +342,7 @@ impl Default for Externals {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(tag = "type")]
 pub enum SamplingSettings {
     #[default]
     #[serde(rename = "default")]
@@ -358,7 +359,7 @@ pub struct MultiChannelingSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-#[serde(tag = "type")]
+#[serde(tag = "subtype")]
 pub enum DiscreteGraphSamplingSettings {
     #[default]
     #[serde(rename = "default")]
