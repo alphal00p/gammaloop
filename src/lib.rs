@@ -24,7 +24,6 @@ pub mod tensor;
 pub mod tests;
 pub mod tests_from_pytest;
 pub mod utils;
-pub mod uv;
 
 use color_eyre::{Help, Report};
 #[allow(unused)]

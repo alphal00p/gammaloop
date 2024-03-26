@@ -58,6 +58,7 @@ impl StructureContract for SymbolicTensor {
     }
 }
 
+#[allow(dead_code)]
 impl SymbolicTensor {
     pub fn from_named<N>(structure: &N) -> Option<Self>
     where

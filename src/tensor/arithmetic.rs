@@ -4,7 +4,7 @@ use crate::tensor::{ConcreteIndex, GetTensorData, SetTensorData};
 
 use super::{
     DataTensor, DenseTensor, FallibleAdd, FallibleMul, FallibleSub, MixedTensor, SparseTensor,
-    TensorStructure, TryFromUpgrade, TryIntoUpgrade, TrySmallestUpgrade,
+    TensorStructure, TryFromUpgrade, TryIntoUpgrade,
 };
 
 use symbolica::domains::float::Complex;

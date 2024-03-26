@@ -16,8 +16,7 @@ use nalgebra::DMatrix;
 #[allow(unused_imports)]
 use num::traits::Float;
 use num::Complex;
-use petgraph::graph;
-use rand::seq::index;
+
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
@@ -769,7 +768,7 @@ impl Graph {
             println!("lhs {}", Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap());
             rule.push((
                 Pattern::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
-                self.replacement_rule_from_signature(i, &lmb.basis, &signature),
+                self.replacement_rule_from_signature(i, &signature),
             ));
         }
 
@@ -779,7 +778,7 @@ impl Graph {
     fn replacement_rule_from_signature(
         &self,
         index: usize,
-        basis: &[usize],
+
         signature: &(Vec<isize>, Vec<isize>),
     ) -> Pattern {
         let mut acc = Atom::new_num(0);
