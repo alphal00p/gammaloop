@@ -5,19 +5,21 @@ Integrand:
   type: gamma_loop
 Kinematics:
   e_cm: 3.0
-  externals: !constant
-  - - 0.5
-    - 1.5
-    - 2.0
-    - 2.5
-  - - 0.5
-    - 1.5
-    - 2.0
-    - 2.5
-  - - -1.0
-    - -6.0
-    - -7.0
-    - -8.0
+  externals:
+    type: constant
+    momenta:
+      - - 0.5
+        - 1.5
+        - 2.0
+        - 2.5
+      - - 0.5
+        - 1.5
+        - 2.0
+        - 2.5
+      - - -1.0
+        - -6.0
+        - -7.0
+        - -8.0
 Parameterization:
   mode: spherical
   mapping: linear
@@ -40,13 +42,14 @@ Selectors: []
 Stability:
   rotation_axis: y
   levels:
-  - precision: Double
-    required_precision_for_re: 1e-5
-    required_precision_for_im: 1e-5
-    escalate_for_large_weight_threshold: 0.9
-  - precision: Quad
-    required_precision_for_re: 1e-5
-    required_precision_for_im: 1e-5
-    escalate_for_large_weight_threshold: -1.0
-sampling: !discrete_graph_sampling
-  type: tropical
+    - precision: Double
+      required_precision_for_re: 1e-5
+      required_precision_for_im: 1e-5
+      escalate_for_large_weight_threshold: 0.9
+    - precision: Quad
+      required_precision_for_re: 1e-5
+      required_precision_for_im: 1e-5
+      escalate_for_large_weight_threshold: -1.0
+sampling:
+  type: discrete_graph_sampling
+  subtype: tropical

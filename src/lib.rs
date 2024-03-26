@@ -313,6 +313,7 @@ pub enum Precision {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type", content = "momenta")]
 pub enum Externals {
     #[serde(rename = "constant")]
     Constant(Vec<[f64; 4]>),
