@@ -4,8 +4,8 @@ use crate::{
     inspect,
     integrands::Integrand,
     integrate::{
-        havana_integrate, print_integral_result, IntegrationState, MasterNode,
-        SerializableBatchResult, SerializableIntegrationState,
+        havana_integrate, print_integral_result, MasterNode, SerializableBatchResult,
+        SerializableIntegrationState,
     },
     model::Model,
     HasIntegrand, Settings,
@@ -13,7 +13,7 @@ use crate::{
 use ahash::HashMap;
 use ctrlc;
 use git_version::git_version;
-use log::info;
+use log::{info, warn};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -353,7 +353,6 @@ impl PythonWorker {
         match self.integrands.get_mut(integrand) {
             Some(integrand_enum) => match integrand_enum {
                 Integrand::GammaLoopIntegrand(gloop_integrand) => {
-                    let settings = gloop_integrand.settings.clone();
                     let target = match target {
                         Some((re, im)) => Some(num::Complex::new(re, im)),
                         _ => None,
@@ -375,10 +374,24 @@ impl PythonWorker {
                         Ok(state_bytes) => {
                             info!("Found integration state, result of previous integration: \n");
 
-                            let state: IntegrationState =
+                            let serializable_state: SerializableIntegrationState =
                                 bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
-                                    .unwrap()
-                                    .into_integration_state(&settings);
+                                    .unwrap();
+
+                            let path_to_workspace_settings = workspace_path.join("settings.yaml");
+                            let workspace_settings_string =
+                                fs::read_to_string(path_to_workspace_settings)
+                                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                            let workspace_settings: Settings =
+                                serde_yaml::from_str(&workspace_settings_string)
+                                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                            // force the settings to be the same as the ones used in the previous integration
+                            gloop_integrand.settings = workspace_settings.clone();
+
+                            let state =
+                                serializable_state.into_integration_state(&workspace_settings);
 
                             print_integral_result(
                                 &state.all_integrals[0],
@@ -397,7 +410,7 @@ impl PythonWorker {
                             );
 
                             info!("Resuming integration \n");
-
+                            warn!("Warning, any changes to the settings will be ignored, integrate with --restart for changes to take effect");
                             Some(state)
                         }
 
@@ -407,6 +420,7 @@ impl PythonWorker {
                         }
                     };
 
+                    let settings = gloop_integrand.settings.clone();
                     let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),

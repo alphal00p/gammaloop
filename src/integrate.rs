@@ -510,6 +510,16 @@ where
                 Ok(_) => {}
                 Err(_) => warn!("Warning: failed to write integration state to disk"),
             }
+
+            // write the settings to the workspace as well
+            let settings_path = workspace_path.join("settings.yaml");
+            let settings_string = serde_yaml::to_string(settings)
+                .unwrap_or_else(|_| panic!("failed to serialize the settings to a yaml string"));
+
+            match fs::write(settings_path, settings_string) {
+                Ok(_) => {}
+                Err(_) => warn!("Warning: failed to write settings to disk"),
+            }
         }
     }
 
