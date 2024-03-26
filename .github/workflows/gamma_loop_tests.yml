@@ -34,16 +34,19 @@ jobs:
         ./bin/build_dependencies.sh    
     - name: Compile binary
       run: |
-        ./bin/compile_bin.sh --release
+        ./bin/compile_bin.sh
     - name: Compile library
       run: |
-        ./bin/compile_lib.sh --release
+        ./bin/compile_lib.sh
     - name: Run code checks
       run: |
-        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python -m "codecheck"
+        source `./bin/gammaloop -venv`
+        ./bin/run_tests.sh python -m "codecheck"
     - name: Run python tests
       run: |
-        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh python -m "not drawing"
+        source `./bin/gammaloop -venv`
+        ./bin/run_tests.sh python -m "not drawing"
     - name: Run native rust tests
       run: |
-        SYMBOLICA_LICENSE=`base64 -d <<< "ZTNmODM0MWQtNDAyZC01MjJkLTg3ZmEtNjQxNTMxOTkxNWEz"` ./bin/run_tests.sh rust
+        source `./bin/gammaloop -venv`
+        ./bin/run_tests.sh rust
