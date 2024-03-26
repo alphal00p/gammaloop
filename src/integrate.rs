@@ -16,6 +16,7 @@ use crate::integrands::HasIntegrand;
 use crate::observables::Event;
 use crate::observables::SerializableEvent;
 use crate::utils;
+use crate::utils::format_sample;
 use crate::DiscreteGraphSamplingSettings;
 use crate::Integrand;
 use crate::IntegratorSettings;
@@ -1153,14 +1154,7 @@ pub fn show_integration_status(
                                 &integration_state.all_integrals[2 * i_integrand + part]
                                     .max_eval_negative_xs
                             } {
-                                match sample {
-                                    Sample::Continuous(_w, v) => v
-                                        .iter()
-                                        .map(|&x| format!("{:.16}", x))
-                                        .collect::<Vec<_>>()
-                                        .join(", "),
-                                    _ => "N/A".to_string(),
-                                }
+                                format_sample(sample)
                             } else {
                                 "N/A".to_string()
                             }

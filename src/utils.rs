@@ -1693,19 +1693,19 @@ pub fn format_evaluation_time_from_f64(time: f64) -> String {
     format_evaluation_time(Duration::from_secs_f64(time))
 }
 
-pub fn format_sample(sample: Sample<f64>) -> String {
+pub fn format_sample(sample: &Sample<f64>) -> String {
     match sample {
         Sample::Continuous(_, xs) => {
             let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
             format!("xs: [{}]", xs_point)
         }
-        Sample::Discrete(_, graph_index, Some(nested_sample)) => match *nested_sample {
+        Sample::Discrete(_, graph_index, Some(nested_sample)) => match nested_sample.as_ref() {
             Sample::Continuous(_, xs) => {
                 let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
                 format!("graph: {}, xs: [{}]", graph_index, xs_point)
             }
             Sample::Discrete(_, channel_index, Some(nested_cont_sample)) => {
-                match *nested_cont_sample {
+                match nested_cont_sample.as_ref() {
                     Sample::Continuous(_, xs) => {
                         let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
                         format!(
