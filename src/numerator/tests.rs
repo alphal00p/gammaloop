@@ -1,4 +1,4 @@
-use symbolica::representations::AtomView;
+use symbolica::{printer::PrintOptions, representations::AtomView};
 
 use crate::{
     tensor::{SymbolicTensor, TensorStructure},
@@ -8,13 +8,21 @@ use crate::{
 #[test]
 
 fn lbl() {
-    let (model, amplitude) = load_amplitude_output(&"./src/numerator/lbl/");
+    let (model, amplitude) = load_amplitude_output(&"./src/test_resources/lbl/");
+
+    model
+        .export_coupling_replacement_rules(&"./ignore/", PrintOptions::mathematica())
+        .unwrap();
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     graph.generate_numerator(&model);
+
     let mut numerator = graph.derived_data.numerator.clone().unwrap();
+    println!("{}", numerator);
     for (lhs, rhs) in graph.generate_lmb_replacement_rules() {
-        numerator = lhs.replace_all(numerator.as_view(), &rhs, None, None);
+        numerator =
+            lhs.into_pattern()
+                .replace_all(numerator.as_view(), &rhs.into_pattern(), None, None);
     }
 
     println!("{}", numerator);

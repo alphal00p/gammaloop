@@ -1,3 +1,0 @@
-import_model sm
-import_graphs python/gammaloop/tests/test_data/qgraf_outputs/lbl_box.py -f qgraph --no_compile
-output ./lbl
