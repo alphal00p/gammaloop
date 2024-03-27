@@ -1,9 +1,9 @@
 #![allow(unused_imports)]
-use crate::cff::generate_cff_expression;
+use crate::cff::esurface::get_existing_esurfaces;
+use crate::cff::generation::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType};
 use crate::model::Model;
-use crate::subtraction::esurface_data::get_existing_esurfaces;
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
 use colored::Colorize;
@@ -58,10 +58,7 @@ mod tests_scalar_massless_triangle {
     use rayon::prelude::IndexedParallelIterator;
     use smartstring::SmartString;
 
-    use crate::{
-        graph::EdgeType, observables::AFBSettings,
-        subtraction::esurface_data::get_existing_esurfaces,
-    };
+    use crate::{cff::esurface::get_existing_esurfaces, graph::EdgeType, observables::AFBSettings};
 
     use super::*;
 

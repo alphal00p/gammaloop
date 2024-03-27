@@ -6,7 +6,7 @@ use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
 
-use crate::cff::{EsurfaceCollection, EsurfaceId};
+use crate::cff::generation::{EsurfaceCollection, EsurfaceId};
 use crate::graph::Graph;
 use crate::utils::FloatLike;
 

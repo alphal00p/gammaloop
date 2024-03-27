@@ -1,8 +1,10 @@
 use crate::{
-    cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
+    cff::{
+        esurface::{generate_esurface_data, EsurfaceDerivedData},
+        generation::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
+    },
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model,
-    subtraction::esurface_data::{self, EsurfaceDerivedData},
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
 };
@@ -877,7 +879,7 @@ impl Graph {
     }
 
     pub fn generate_esurface_data(&mut self) -> Result<(), Report> {
-        let data = esurface_data::generate_esurface_data(self)?;
+        let data = generate_esurface_data(self)?;
         self.derived_data.esurface_derived_data = Some(data);
 
         Ok(())
