@@ -27,7 +27,7 @@ def run_rust_test(rust_tests_binary: Path, output_path: Path, test_name: str) ->
     new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = str(output_path)
     if 'SYMBOLICA_LICENSE' not in new_env:
         new_env['SYMBOLICA_LICENSE'] = 'GAMMALOOP_USER'
-    process = Popen([rust_tests_binary, f'pytest_{test_name}', '--test-threads=1', '--ignored',
+    process = Popen(['cargo', 'test', f'pytest_{test_name}', '--release', '--target-dir', os.path.join(GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries'), '--', '--test-threads=1', '--ignored',
                     '--nocapture'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE, env=new_env)
     output, error = process.communicate()
     if process.returncode != 0:

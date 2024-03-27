@@ -6,7 +6,6 @@ from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, p
 from gammaloop.interface.gammaloop_interface import CommandList
 from gammaloop.misc.common import GL_PATH, GammaLoopError, logger
 
-
 # Was intended to run with pytest --mypy but stupidly it won't read any mypy config file so it's unworkable.
 # We will use pyright instead.
 # def pytest_configure(config: pytest.Config):
@@ -247,9 +246,9 @@ output {output_path}"""))
 
 
 @pytest.fixture(scope="session")
-def compile_rust_tests():
+def compile_rust_tests() -> Path | None:
     process = Popen(['cargo', 'build', '--release', '--features=binary,fail-on-warnings', '--no-default-features',
-                     '--tests', '--message-format=json'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
+                    '--tests', '--message-format=json'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
     logger.critical("Compiling rust tests...")
     output, err = process.communicate()
     if process.returncode != 0:
@@ -264,9 +263,9 @@ def compile_rust_tests():
             json_obj = json.loads(json_line)
         except json.decoder.JSONDecodeError:
             continue
-        if json_obj["reason"] == "compiler-artifact" and json_obj["package_id"].startswith('gammalooprs') and "lib" in json_obj["target"]["kind"] and json_obj["executable"] is not None:
+        if json_obj["reason"] == "compiler-artifact" and 'gammalooprs' in json_obj["package_id"] and "lib" in json_obj["target"]["kind"] and json_obj["executable"] is not None:
             logger.critical(
                 "Rust tests successfully compiled to binary '%s'", json_obj["executable"])
             return json_obj["executable"]
-    raise GammaLoopError(
-        "Failed to find executable in compiler artifact:\n"+compiler_artifact)
+
+    return None
