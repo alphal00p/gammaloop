@@ -222,6 +222,18 @@ output {output_path}"""))
 
 
 @pytest.fixture(scope="session")
+def scalar_raised_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_raised_triangle")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','raised_triangle.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
 def epem_a_ddx_nlo_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     output_path = Path(tmpdir_factory.mktemp(

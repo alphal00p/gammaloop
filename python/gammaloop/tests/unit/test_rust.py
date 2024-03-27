@@ -51,6 +51,6 @@ class TestRust:
         assert run_rust_test(compile_rust_tests, scalar_isopod_export,
                              'scalar_isopod')
 
-    def test_rust_raised_triangle(self, compile_rust_tests: Path, raised_triangle_export: Path):
-        assert run_rust_test(compile_rust_tests, raised_triangle_export,
+    def test_rust_raised_triangle(self, compile_rust_tests: Path, scalar_raised_triangle_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_raised_triangle_export,
                              'raised_triangle')
