@@ -885,8 +885,8 @@ particles:
   color: 1
   mass: ZERO
   width: ZERO
-  texname: '{\nu_e}'
-  antitexname: '{\overline{\nu}_e}'
+  texname: '{\nue}'
+  antitexname: '{\overline{\nu}e}'
   charge: 0.0
   ghost_number: 0
   lepton_number: 1
@@ -898,8 +898,8 @@ particles:
   color: 1
   mass: ZERO
   width: ZERO
-  texname: '{\overline{\nu}_e}'
-  antitexname: '{\nu_e}'
+  texname: '{\overline{\nu}e}'
+  antitexname: '{\nue}'
   charge: -0.0
   ghost_number: 0
   lepton_number: -1
@@ -911,8 +911,8 @@ particles:
   color: 1
   mass: ZERO
   width: ZERO
-  texname: '{\nu_\mu}'
-  antitexname: '{\overline{\nu}_\mu}'
+  texname: '{\nu\mu}'
+  antitexname: '{\overline{\nu}\mu}'
   charge: 0.0
   ghost_number: 0
   lepton_number: 1
@@ -924,8 +924,8 @@ particles:
   color: 1
   mass: ZERO
   width: ZERO
-  texname: '{\overline{\nu}_\mu}'
-  antitexname: '{\nu_\mu}'
+  texname: '{\overline{\nu}\mu}'
+  antitexname: '{\nu\mu}'
   charge: -0.0
   ghost_number: 0
   lepton_number: -1
@@ -937,8 +937,8 @@ particles:
   color: 1
   mass: ZERO
   width: ZERO
-  texname: '{\nu_\tau}'
-  antitexname: '{\overline{\nu}_\tau}'
+  texname: '{\nu\tau}'
+  antitexname: '{\overline{\nu}\tau}'
   charge: 0.0
   ghost_number: 0
   lepton_number: 1
@@ -950,8 +950,8 @@ particles:
   color: 1
   mass: ZERO
   width: ZERO
-  texname: '{\overline{\nu}_\tau}'
-  antitexname: '{\nu_\tau}'
+  texname: '{\overline{\nu}\tau}'
+  antitexname: '{\nu\tau}'
   charge: -0.0
   ghost_number: 0
   lepton_number: -1
@@ -1132,8 +1132,8 @@ particles:
   color: 1
   mass: MZ
   width: WZ
-  texname: '{G_0}'
-  antitexname: '{G_0}'
+  texname: '{G0}'
+  antitexname: '{G0}'
   charge: 0.0
   ghost_number: 0
   lepton_number: 0

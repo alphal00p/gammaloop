@@ -158,7 +158,6 @@ impl SymbolicTensor {
                 AtomView::Var(v) => {
                     let mut a = Atom::new();
                     a.set_from_view(&v.as_view());
-                    println!("Var: {}", a);
                     network.scalar_mul(&a);
                 }
                 AtomView::Num(n) => {
@@ -196,7 +195,6 @@ impl SymbolicTensor {
                 AtomView::Var(v) => {
                     let mut a = Atom::new();
                     a.set_from_view(&v.as_view());
-                    println!("Var: {}", a);
                     network.scalar_mul(&a);
                 }
                 AtomView::Num(n) => {
@@ -268,7 +266,6 @@ impl Contract<SymbolicTensor> for SymbolicTensor {
         let mut new_structure = self.structure.clone();
 
         let expression = &other.expression * &self.expression;
-        println!("expression: {}", expression);
         new_structure.merge(&other.structure);
         Some(SymbolicTensor {
             expression,

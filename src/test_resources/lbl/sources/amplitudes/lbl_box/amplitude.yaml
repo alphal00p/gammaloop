@@ -137,22 +137,22 @@ amplitude_graphs:
     loop_momentum_basis:
     - q3
     edge_signatures:
+      p4:
+      - - 0
+      - - 1
+        - -1
+        - -1
+        - 0
       q2:
       - - 1
       - - 0
         - 0
         - 1
         - 0
-      q3:
+      q1:
       - - 1
       - - 0
-        - 0
-        - 0
-        - 0
-      p3:
-      - - 0
-      - - 0
-        - 0
+        - 1
         - 1
         - 0
       p2:
@@ -161,21 +161,21 @@ amplitude_graphs:
         - 1
         - 0
         - 0
-      p4:
+      p3:
       - - 0
-      - - 1
-        - -1
-        - -1
+      - - 0
         - 0
-      q1:
-      - - 1
-      - - 0
-        - 1
         - 1
         - 0
       p1:
       - - 0
       - - 1
+        - 0
+        - 0
+        - 0
+      q3:
+      - - 1
+      - - 0
         - 0
         - 0
         - 0
@@ -185,3 +185,4 @@ amplitude_graphs:
         - 1
         - 1
         - 0
+  multi_channeling_channels: []

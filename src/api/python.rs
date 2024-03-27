@@ -317,7 +317,6 @@ impl PythonWorker {
     pub fn export_numerators(&mut self, export_root: &str, format: &str) -> PyResult<String> {
         self.generate_numerators();
 
-        println!("Exporting numerators");
         for amplitude in self.amplitudes.container.iter_mut() {
             amplitude
                 .export_numerator(export_root, Self::printer_options(format))
@@ -343,9 +342,7 @@ impl PythonWorker {
                 .export_lmb_subs(export_root, Self::printer_options(format))
                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))
                 .unwrap();
-            println!("Exported lmb substitutions for amplitude ",)
         }
-        println!("Exported lmb substitutions for amplitude ",);
         Ok(format!("Exported lmb substitutions"))
     }
 

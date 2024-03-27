@@ -55,6 +55,7 @@ impl SerializableVertexRule {
                 .color_structures
                 .iter()
                 .map(utils::to_str_expression)
+                .map(SmartString::from)
                 .collect(),
             lorentz_structures: vertex_rule
                 .lorentz_structures
@@ -141,8 +142,8 @@ impl SerializablePropagator {
         SerializablePropagator {
             name: propagator.name.clone(),
             particle: propagator.particle.name.clone(),
-            numerator: utils::to_str_expression(&propagator.numerator),
-            denominator: utils::to_str_expression(&propagator.denominator),
+            numerator: utils::to_str_expression(&propagator.numerator).into(),
+            denominator: utils::to_str_expression(&propagator.denominator).into(),
         }
     }
 }
@@ -182,7 +183,7 @@ impl SerializableCoupling {
     pub fn from_coupling(coupling: &Coupling) -> SerializableCoupling {
         SerializableCoupling {
             name: coupling.name.clone(),
-            expression: utils::to_str_expression(&coupling.expression),
+            expression: utils::to_str_expression(&coupling.expression).into(),
             orders: coupling.orders.clone(),
             value: coupling.value.map(|value| (value.re, value.im)),
         }
@@ -317,7 +318,7 @@ impl SerializableLorentzStructure {
         SerializableLorentzStructure {
             name: ls.name.clone(),
             spins: ls.spins.clone(),
-            structure: utils::to_str_expression(&ls.structure),
+            structure: utils::to_str_expression(&ls.structure).into(),
         }
     }
 }
@@ -361,7 +362,11 @@ impl SerializableParameter {
             nature: param.nature.clone(),
             parameter_type: param.parameter_type.clone(),
             value: param.value.map(|value| (value.re, value.im)),
-            expression: param.expression.as_ref().map(utils::to_str_expression),
+            expression: param
+                .expression
+                .as_ref()
+                .map(utils::to_str_expression)
+                .map(SmartString::from),
         }
     }
 }

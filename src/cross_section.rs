@@ -538,7 +538,6 @@ impl Amplitude {
                 path.join("lmb_replacement.json"),
                 serde_json::to_string_pretty(&rep_rules).unwrap(),
             )?;
-            print!("HO")
         }
 
         Ok(())
