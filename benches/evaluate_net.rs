@@ -101,6 +101,7 @@ fn const_map_gen<'a, 'b, I>(
     'a: 'b,
     I: TensorStructure + Clone + Debug,
 {
+    #[allow(clippy::unused_enumerate_index)]
     for (_i, p) in params.iter().enumerate() {
         let pdata = test_tensor(p.structure().clone()).to_dense();
         p.try_as_symbolic()

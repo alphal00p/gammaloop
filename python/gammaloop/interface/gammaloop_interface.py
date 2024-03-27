@@ -8,6 +8,7 @@ import os
 from typing import Any
 from pprint import pformat
 import yaml
+import shutil
 from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH
 from gammaloop.misc.utils import Colour
 from gammaloop.base_objects.model import Model, InputParamCard
@@ -32,6 +33,7 @@ AVAILABLE_COMMANDS = [
     'info',
     'integrate',
     'inspect',
+    'hpc_run',
     'test_ir_limits',
     'test_uv_limits',
     'set'
@@ -714,13 +716,12 @@ class GammaLoop(object):
         if str_args == 'help':
             self.inspect_parser.print_help()
             return
-        _args = self.inspect_parser.parse_args(split_str_args(str_args))
+        args = self.inspect_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        args = self.inspect_parser.parse_args(split_str_args(str_args))
         self.rust_worker.inspect_integrand(
             args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
 
@@ -728,18 +729,46 @@ class GammaLoop(object):
 
     # integrate command
     integrate_parser = ArgumentParser(prog='integrate')
+    integrate_parser.add_argument(
+        "integrand", type=str, help="Integrand to integrate.")
+    integrate_parser.add_argument('--cores', '-c', type=int, default=1,)
+    integrate_parser.add_argument(
+        '--target', '-t', nargs=2, type=float, default=None)
+    integrate_parser.add_argument(
+        '--restart', '-r', action='store_true',)
 
     def do_integrate(self, str_args: str) -> None:
         if str_args == 'help':
             self.integrate_parser.print_help()
             return
-        _args = self.integrate_parser.parse_args(split_str_args(str_args))
+        args = self.integrate_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        raise GammaLoopError("Command not implemented yet")
+        target = None
+        if args.target is not None:
+            target = (args.target[0], args.target[1])
+
+        result_output_path = self.launched_output.joinpath(
+            "runs").joinpath("run.yaml")
+
+        workspace_path = self.launched_output.joinpath("workspace")
+        if args.restart and os.path.exists(workspace_path):
+            shutil.rmtree(workspace_path)
+
+        if not os.path.exists(workspace_path):
+            os.mkdir(workspace_path)
+
+        self.rust_worker.integrate_integrand(
+            args.integrand, args.cores, str(result_output_path), str(workspace_path), target)
+
+        # nuke the workspace if integration finishes
+        # For now leave the possibility of restarting where integration left off.
+        # Maybe in the future add an option to automatically clean the workspace after running is completed or
+        # specify a "run_tag" that allows to have mutliple workspace concurrently active
+        # shutil.rmtree(workspace_path)
 
     # test_ir_limits
     test_ir_limits_parser = ArgumentParser(prog='test_ir_limits')
@@ -788,3 +817,69 @@ class GammaLoop(object):
 
         args = self.help_parser.parse_args(split_str_args(str_args))
         self.run(CommandList.from_string(f"{args.cmd} help"))
+
+    hpc_parser = ArgumentParser(prog='hpc_run')
+    hpc_parser.add_argument('integrand', type=str,
+                            help="Integrand to integrate", default=None)
+
+    def do_hpc_run(self, str_args: str) -> None:
+        args = self.hpc_parser.parse_args(split_str_args(str_args))
+        if self.launched_output is None:
+            raise GammaLoopError(
+                "No output launched. Please launch an output first with 'launch' command.")
+
+        # create a workspace for batch input/output files
+        workspace_path = self.launched_output.joinpath("workspace")
+
+        if not workspace_path.exists():
+            workspace_path.mkdir()
+
+        from hyperqueue import LocalCluster, Job  # type: ignore
+        from hyperqueue.cluster import WorkerConfig  # type: ignore
+
+        print("starting hpc test run")
+        self.rust_worker.load_master_node(args.integrand)
+
+        # this will be loaded from settings, eventually with dynamic points that can increase with iterations
+        n_iterations = 10
+        n_tasks = 4
+        n_points_per_task = 1000000
+        n_cores = 1
+
+        export_grid = False
+        output_accumulator = False
+
+        # this local cluster is just for testing
+        with LocalCluster() as cluster:
+            cluster.start_worker()
+
+            client = cluster.client()  # type: ignore
+
+            for _ in range(n_iterations):
+                task_ids = [i*(n_iterations + 1) for i in range(n_tasks)]
+                job = Job()
+
+                for id in task_ids:
+                    input_file = workspace_path.joinpath(
+                        "job_{}".format(str(id)))
+
+                    output_file = workspace_path.joinpath(
+                        "job_{}_out".format(str(id)))
+
+                    self.rust_worker.write_batch_input(
+                        n_cores, n_points_per_task, export_grid, output_accumulator, str(workspace_path), id)
+
+                    job.program(["bin/gammaloop_rust_cli", "batch", "--batch_input_file={}".format(str(input_file)),
+                                "--name=massless_triangle", "--process_file=triangle", "--output_name={}".format(str(output_file))])
+
+                submitted = client.submit(job)
+                client.wait_for_jobs([submitted])
+
+                for id in task_ids:
+                    self.rust_worker.process_batch_output(
+                        str(workspace_path), id)
+
+                self.rust_worker.update_iter()
+                self.rust_worker.display_master_node_status()
+
+        shutil.rmtree(workspace_path)

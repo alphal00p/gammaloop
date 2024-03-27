@@ -6,6 +6,7 @@ use symbolica::numerical_integration::Sample;
 use crate::integrands::HasIntegrand;
 use crate::utils;
 use crate::Integrand;
+use crate::SamplingSettings;
 use crate::Settings;
 use lorentz_vector::LorentzVector;
 use num::traits::ToPrimitive;
@@ -15,7 +16,7 @@ pub fn inspect(
     settings: &Settings,
     integrand: &mut Integrand,
     mut pt: Vec<f64>,
-    term: &[usize],
+    _term: &[usize],
     mut force_radius: bool,
     is_momentum_space: bool,
     use_f128: bool,
@@ -48,19 +49,27 @@ pub fn inspect(
         .map(|x| f128::f128::to_f64(x).unwrap())
         .collect::<Vec<_>>();
 
-    let sample = match integrand {
-        Integrand::GammaLoopIntegrand(int) => int.create_sample(term, xs_f64.clone()),
-        _ => Sample::Continuous(
+    let sample = {
+        let cont_sample = Sample::Continuous(
             1.,
             if force_radius {
                 xs_f64.clone()[1..].to_vec()
             } else {
                 xs_f64.clone()
             },
-        ),
+        );
+        match &settings.sampling {
+            SamplingSettings::DiscreteGraphs(_) => {
+                let graph_id = _term[0];
+                Sample::Discrete(1., graph_id, Some(Box::new(cont_sample)))
+            }
+            _ => cont_sample,
+        }
     };
 
-    let eval = integrand.evaluate_sample(&sample, 0., 1, use_f128);
+    let eval_result = integrand.evaluate_sample(&sample, 0., 1, use_f128, 0.0);
+    let eval = eval_result.integrand_result;
+
     info!(
         "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
         format!(

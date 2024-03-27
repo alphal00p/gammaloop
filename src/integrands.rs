@@ -1,8 +1,9 @@
+use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
 use crate::observables::EventManager;
 use crate::utils::FloatLike;
-use crate::{utils, Settings};
+use crate::{utils, IntegratorSettings, Precision, Settings};
 use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -50,14 +51,19 @@ pub trait HasIntegrand {
     fn create_grid(&self) -> Grid<f64>;
 
     fn evaluate_sample(
-        &mut self,
+        &self,
         sample: &Sample<f64>,
         wgt: f64,
         iter: usize,
         use_f128: bool,
-    ) -> Complex<f64>;
+        max_eval: f64,
+    ) -> EvaluationResult;
 
     fn get_n_dim(&self) -> usize;
+
+    fn get_integrator_settings(&self) -> IntegratorSettings {
+        IntegratorSettings::default()
+    }
 
     // In case your integrand supports observable, then overload this function to combine the observables
     fn merge_results<I: HasIntegrand>(&mut self, _other: &mut I, _iter: usize) {}
@@ -116,8 +122,12 @@ impl UnitSurfaceIntegrand {
         settings: Settings,
         integrand_settings: UnitSurfaceSettings,
     ) -> UnitSurfaceIntegrand {
-        let n_dim =
-            utils::get_n_dim_for_n_loop_momenta(&settings, integrand_settings.n_3d_momenta, true);
+        let n_dim = utils::get_n_dim_for_n_loop_momenta(
+            &settings,
+            integrand_settings.n_3d_momenta,
+            true,
+            None,
+        );
         let surface = utils::compute_surface_and_volume(
             integrand_settings.n_3d_momenta * 3 - 1,
             settings.kinematics.e_cm,
@@ -162,18 +172,23 @@ impl HasIntegrand for UnitSurfaceIntegrand {
     }
 
     fn evaluate_sample(
-        &mut self,
+        &self,
         sample: &Sample<f64>,
         wgt: f64,
         iter: usize,
         use_f128: bool,
-    ) -> Complex<f64> {
+        max_eval: f64,
+    ) -> EvaluationResult {
+        let start_evaluate_sample = std::time::Instant::now();
+
         let xs = match sample {
             Sample::Continuous(_w, v) => v,
             _ => panic!("Wrong sample type"),
         };
         let mut sample_xs = vec![self.settings.kinematics.e_cm];
         sample_xs.extend(xs);
+
+        let before_parameterization = std::time::Instant::now();
         let (moms, jac) = self.parameterize(sample_xs.as_slice());
         let mut loop_momenta = vec![];
         for m in &moms {
@@ -184,6 +199,10 @@ impl HasIntegrand for UnitSurfaceIntegrand {
                 z: m[2],
             });
         }
+
+        let parameterization_time = before_parameterization.elapsed();
+
+        let before_evaluation = std::time::Instant::now();
         let mut itg_wgt = self.evaluate_numerator(loop_momenta.as_slice());
         // Normalize the integral
         itg_wgt /= self.surface;
@@ -204,7 +223,26 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             info!("Sampling jacobian : {:+.16e}", jac);
             info!("Final contribution: {:+.16e}", itg_wgt * jac);
         }
-        Complex::new(itg_wgt, 0.) * jac
+
+        let is_nan = itg_wgt.is_nan();
+
+        let evaluation_time = before_evaluation.elapsed();
+
+        let evaluation_metadata = EvaluationMetaData {
+            total_timing: start_evaluate_sample.elapsed(),
+            rep3d_evaluation_time: evaluation_time,
+            parameterization_time,
+            relative_instability_error: Complex::new(0., 0.),
+            highest_precision: Precision::Double,
+            is_nan,
+        };
+
+        EvaluationResult {
+            integrand_result: Complex::new(itg_wgt, 0.) * jac,
+            integrator_weight: wgt,
+            event_buffer: vec![],
+            evaluation_metadata,
+        }
     }
 }
 
@@ -224,8 +262,12 @@ pub struct UnitVolumeIntegrand {
 #[allow(unused)]
 impl UnitVolumeIntegrand {
     pub fn new(settings: Settings, integrand_settings: UnitVolumeSettings) -> UnitVolumeIntegrand {
-        let n_dim =
-            utils::get_n_dim_for_n_loop_momenta(&settings, integrand_settings.n_3d_momenta, false);
+        let n_dim = utils::get_n_dim_for_n_loop_momenta(
+            &settings,
+            integrand_settings.n_3d_momenta,
+            false,
+            None,
+        );
         let volume = utils::compute_surface_and_volume(
             integrand_settings.n_3d_momenta * 3,
             settings.kinematics.e_cm,
@@ -280,16 +322,22 @@ impl HasIntegrand for UnitVolumeIntegrand {
     }
 
     fn evaluate_sample(
-        &mut self,
+        &self,
         sample: &Sample<f64>,
         wgt: f64,
         iter: usize,
         use_f128: bool,
-    ) -> Complex<f64> {
+        max_eval: f64,
+    ) -> EvaluationResult {
+        let start_evaluate_sample = std::time::Instant::now();
+
         let xs = match sample {
             Sample::Continuous(_w, v) => v,
             _ => panic!("Wrong sample type"),
         };
+
+        let before_parameterization = std::time::Instant::now();
+
         let (moms, jac) = self.parameterize(xs);
         let mut loop_momenta = vec![];
         for m in &moms {
@@ -300,6 +348,10 @@ impl HasIntegrand for UnitVolumeIntegrand {
                 z: m[2],
             });
         }
+
+        let parameterization_time = before_parameterization.elapsed();
+
+        let before_evaluation = std::time::Instant::now();
         let mut itg_wgt = self.evaluate_numerator(loop_momenta.as_slice());
         // Normalize the integral
         itg_wgt /= self.volume;
@@ -320,6 +372,25 @@ impl HasIntegrand for UnitVolumeIntegrand {
             info!("Sampling jacobian : {:+.16e}", jac);
             info!("Final contribution: {:+.16e}", itg_wgt * jac);
         }
-        Complex::new(itg_wgt, 0.) * jac
+
+        let is_nan = itg_wgt.is_nan();
+
+        let evaluation_time = before_evaluation.elapsed();
+
+        let evaluation_metadata = EvaluationMetaData {
+            total_timing: start_evaluate_sample.elapsed(),
+            rep3d_evaluation_time: evaluation_time,
+            parameterization_time,
+            relative_instability_error: Complex::new(0., 0.),
+            highest_precision: Precision::Double,
+            is_nan,
+        };
+
+        EvaluationResult {
+            integrand_result: Complex::new(itg_wgt, 0.) * jac,
+            integrator_weight: wgt,
+            event_buffer: vec![],
+            evaluation_metadata,
+        }
     }
 }

@@ -12,6 +12,7 @@ import re
 from pprint import pformat
 
 import gammaloop.misc.common as common
+from gammaloop.misc import LOGGING_PREFIX_FORMAT
 
 
 class NoAliasDumper(yaml.SafeDumper):
@@ -32,6 +33,7 @@ class Colour(StrEnum):
     YELLOW = '\033[93m'
     RED = '\033[91m'
     BOLD = '\033[1m'
+    GRAY = '\033[21m'
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
@@ -149,14 +151,69 @@ def expression_to_string_safe(expr: sb.Expression) -> str:
             "Symbolica (@%s)failed to cast expression to string:\n%s\nwith exception:\n%s", sb.__file__, expr, exception)
 
 
-def setup_logging() -> logging.StreamHandler[TextIO]:
-    console_format = f'[{Colour.GREEN} %(asctime)s {Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
-    file_format = '[%(asctime)s] %(name)s %(levelname)s: %(message)s'
+class GammaLoopCustomFormatter(logging.Formatter):
+    """Logging colored formatter"""
 
+    def __init__(self, fmt: str, datefmt: str | None = None):
+        super().__init__(datefmt=datefmt)
+        self.fmt = fmt
+        self.datefmt = datefmt
+
+    def format(self, record: logging.LogRecord) -> str:
+        formatter = logging.Formatter(self.fmt, self.datefmt)
+        if record.levelno != logging.DEBUG:
+            if record.name.startswith('_gammaloop'):
+                record.name = f"rust.{record.name[11:]}"
+            if len(record.name) > 20:
+                record.name = f"{record.name[:17]}..."
+            record.name = f"{record.name:20}"
+        match record.levelno:
+            case logging.DEBUG:
+                record.levelname = f"{Colour.GRAY}{record.levelname:8}{Colour.END}"
+            case logging.INFO:
+                record.levelname = f"{record.levelname:8}"
+            case logging.WARNING:
+                record.levelname = f"{Colour.YELLOW}{record.levelname:8}{Colour.END}"
+            case logging.ERROR:
+                record.levelname = f"{Colour.RED}{record.levelname:8}{Colour.END}"
+            case logging.CRITICAL:
+                record.levelname = f"{Colour.RED}{Colour.BOLD}{record.levelname:8}{Colour.END}"
+            case _:
+                record.levelname = f"{record.levelname:8}"
+        record.asctime = self.formatTime(record, self.datefmt)
+        return formatter.format(record)
+
+    # def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+    #     if datefmt is None:
+    #         return time.strftime('%Y-%m-%d %H:%M:%S.%f', time.localtime(record.created))
+    #     else:
+    #         return time.strftime(datefmt, time.localtime(record.created))
+
+
+def setup_logging() -> logging.StreamHandler[TextIO]:
+    match LOGGING_PREFIX_FORMAT:
+        case 'none':
+            console_format = f'%(message)s'
+            time_format = "%H:%M:%S"
+        case 'min':
+            console_format = f'%(levelname)s: %(message)s'
+            time_format = "%H:%M:%S"
+        case 'short':
+            console_format = f'[{Colour.GREEN}%(asctime)s{Colour.END}] %(levelname)s: %(message)s'
+            time_format = "%H:%M:%S"
+        case 'long':
+            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
+            time_format = '%Y-%m-%d %H:%M:%S'
+        case _:
+            raise common.GammaLoopError(
+                "Invalid LOGGING_PREFIX_FORMAT: %s", LOGGING_PREFIX_FORMAT)
+    file_format = '[%(asctime)s] %(name)s %(levelname)s: %(message)s'
+    console_formatter = GammaLoopCustomFormatter(
+        console_format, datefmt=time_format)
+    file_formatter = GammaLoopCustomFormatter(file_format)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter(console_format))
-
+    console_handler.setFormatter(console_formatter)
     logging.getLogger().handlers = []
     logging.getLogger().addHandler(console_handler)
 
@@ -164,13 +221,13 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
         log_file_name = 'gammaloop_debug.log'
         file_handler = logging.FileHandler(log_file_name, mode='w')
         file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(file_format))
+        file_handler.setFormatter(file_formatter)
         logging.getLogger().addHandler(file_handler)
 
         error_file_name = 'gammaloop_error.log'
         error_file_handler = logging.FileHandler(error_file_name, mode='w')
         error_file_handler.setLevel(logging.ERROR)
-        error_file_handler.setFormatter(logging.Formatter(file_format))
+        error_file_handler.setFormatter(file_formatter)
         logging.getLogger().addHandler(error_file_handler)
 
     logging.getLogger().setLevel(logging.DEBUG)

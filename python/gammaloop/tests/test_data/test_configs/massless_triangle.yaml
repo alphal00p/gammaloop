@@ -1,0 +1,51 @@
+General:
+  debug: 0
+  use_ltd: false
+Integrand:
+  type: gamma_loop
+Kinematics:
+  e_cm: 3.0
+  externals:
+    type: constant
+    momenta:
+      - - 1.0
+        - 3.0
+        - 4.0
+        - 5.0
+      - - -1.0
+        - -6.0
+        - -7.0
+        - -8.0
+Parameterization:
+  mode: spherical
+  mapping: linear
+  b: 10.0
+Integrator:
+  n_bins: 16
+  bin_number_evolution: null
+  min_samples_for_update: 100
+  n_start: 100000
+  n_increase: 0
+  n_max: 100000
+  integrated_phase: imag
+  learning_rate: 1.5
+  train_on_avg: false
+  show_max_wgt_info: false
+  max_prob_ratio: 0.01
+  seed: 1337
+Observables: []
+Selectors: []
+Stability:
+  rotation_axis: y
+  levels:
+    - precision: Double
+      required_precision_for_re: 1e-5
+      required_precision_for_im: 1e-5
+      escalate_for_large_weight_threshold: 0.9
+    - precision: Quad
+      required_precision_for_re: 1e-5
+      required_precision_for_im: 1e-5
+      escalate_for_large_weight_threshold: -1.0
+sampling:
+  type: discrete_graph_sampling
+  subtype: tropical

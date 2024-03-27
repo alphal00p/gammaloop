@@ -107,7 +107,12 @@ def cli():
                            default=False, help='Show gammaloop Python venv activate path')
     argparser.add_argument('--command', '-c', dest='run_command', action='store_true',
                            default=False, help='Directly run command specified')
+    argparser.add_argument('--logging_format', '-lf', dest='logging_format', default='long',
+                           choices=['long', 'short', 'min', 'none'], help='Type of prefix for the logging format')
     args = argparser.parse_args()
+
+    from . import misc
+    misc.LOGGING_PREFIX_FORMAT = args.logging_format
 
     if args.show_venv_activate_path:
         venv_path = os.path.abspath(os.path.join(

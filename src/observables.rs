@@ -467,6 +467,70 @@ pub struct Event {
     pub weights: SmallVec<[f64; 1]>,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct SerializableEvent {
+    pub kinematic_configuration: (Vec<[f64; 4]>, Vec<[f64; 4]>),
+    pub final_state_particle_ids: Vec<isize>,
+    pub integrand: (f64, f64),
+    pub weights: Vec<f64>,
+}
+
+impl SerializableEvent {
+    pub fn from_event(event: &Event) -> Self {
+        let kinematic_configuration = (
+            event
+                .kinematic_configuration
+                .0
+                .iter()
+                .map(|k| [k.t, k.x, k.y, k.z])
+                .collect::<Vec<_>>(),
+            event
+                .kinematic_configuration
+                .1
+                .iter()
+                .map(|k| [k.t, k.x, k.y, k.z])
+                .collect::<Vec<_>>(),
+        );
+
+        let final_state_particle_ids = event.final_state_particle_ids.to_vec();
+        let integrand = (event.integrand.re, event.integrand.im);
+        let weights = event.weights.to_vec();
+
+        Self {
+            kinematic_configuration,
+            final_state_particle_ids,
+            integrand,
+            weights,
+        }
+    }
+
+    pub fn into_event(self) -> Event {
+        let kinematic_configuration = (
+            self.kinematic_configuration
+                .0
+                .iter()
+                .map(|k| LorentzVector::from_args(k[0], k[1], k[2], k[3]))
+                .collect::<SmallVec<[LorentzVector<f64>; 2]>>(),
+            self.kinematic_configuration
+                .1
+                .iter()
+                .map(|k| LorentzVector::from_args(k[0], k[1], k[2], k[3]))
+                .collect::<SmallVec<[LorentzVector<f64>; 4]>>(),
+        );
+
+        let final_state_particle_ids: SmallVec<[isize; 5]> = self.final_state_particle_ids.into();
+        let integrand = Complex::new(self.integrand.0, self.integrand.1);
+        let weights: SmallVec<[f64; 1]> = self.weights.into();
+
+        Event {
+            kinematic_configuration,
+            final_state_particle_ids,
+            integrand,
+            weights,
+        }
+    }
+}
+
 #[allow(unused)]
 pub enum Selectors {
     All(NoEventSelector),

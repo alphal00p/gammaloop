@@ -8,14 +8,10 @@ Kinematics:
   externals:
     type: constant
     momenta:
-      - - 2.0
-        - 2.0
-        - 3.0
-        - 4.0
-      - - 1.0
-        - 2.0
-        - 9.0
-        - 3.0
+      - - 0.0
+        - 0.0
+        - 0.0
+        - 1.0
 Parameterization:
   mode: spherical
   mapping: linear
@@ -24,27 +20,28 @@ Integrator:
   n_bins: 16
   bin_number_evolution: null
   min_samples_for_update: 100
-  n_start: 1000000
+  n_start: 100000
   n_increase: 0
-  n_max: 1000000000
+  n_max: 100000
   integrated_phase: real
   learning_rate: 1.5
   train_on_avg: false
   show_max_wgt_info: false
   max_prob_ratio: 0.01
-  seed: 0
+  seed: 1337
 Observables: []
 Selectors: []
 Stability:
   rotation_axis: x
   levels:
-  - precision: Double
-    required_precision_for_re: 1e-5
-    required_precision_for_im: 1e-5
-    escalate_for_large_weight_threshold: 0.9
-  - precision: Quad
-    required_precision_for_re: 1e-5
-    required_precision_for_im: 1e-5
-    escalate_for_large_weight_threshold: -1.0
+    - precision: Double
+      required_precision_for_re: 1e-5
+      required_precision_for_im: 1e-5
+      escalate_for_large_weight_threshold: -1.0
+    - precision: Quad
+      required_precision_for_re: 1e-5
+      required_precision_for_im: 1e-5
+      escalate_for_large_weight_threshold: -1.0
 sampling:
-  type: default
+  type: discrete_graph_sampling
+  subtype: tropical
