@@ -54,20 +54,24 @@ impl Esurface {
             .iter()
             .fold(builder_atom, |acc, energy| acc + energy);
 
-        let esurf = symbolic_shift.iter().fold(energy_sum, |acc, shift| {
-            if self.shift_signature {
-                acc + shift
-            } else {
-                -(-acc + shift)
-            }
-        });
+        let esurf = symbolic_shift.iter().zip(self.shift_signature.iter()).fold(
+            energy_sum,
+            |acc, (shift, &shift_signature)| {
+                if shift_signature {
+                    acc + shift
+                } else {
+                    acc - shift
+                }
+            },
+        );
 
         esurf
     }
 
     // the energy cache contains the energies of external edges as well as the virtual,
     // use the location in the supergraph to determine the index
-    fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    #[inline]
+    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         let energy_sum = self
             .energies
             .iter()
@@ -132,6 +136,52 @@ impl Esurface {
                 }
             })
             .sum::<T>()
+    }
+
+    pub fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
+        let mut energy_sum = self
+            .energies
+            .iter()
+            .map(|index| {
+                let signature = &lmb.edge_signatures[*index];
+                format!("|{}|", format_momentum(signature))
+            })
+            .join(" + ");
+
+        let shift_part = self
+            .shift_signature
+            .iter()
+            .zip(self.shift.iter())
+            .map(|(sign, index)| {
+                let signature = &lmb.edge_signatures[*index];
+                let sign = if *sign { "+" } else { "-" };
+                format!(" {} {}^0", sign, format_momentum(signature))
+            })
+            .join("");
+
+        energy_sum.push_str(&shift_part);
+        energy_sum
+    }
+
+    pub fn string_format(&self) -> String {
+        let mut energy_sum = self
+            .energies
+            .iter()
+            .map(|index| format!("E{}", index))
+            .join(" + ");
+
+        let shift_part = self
+            .shift_signature
+            .iter()
+            .zip(self.shift.iter())
+            .map(|(sign, index)| {
+                let sign = if *sign { "+" } else { "-" };
+                format!(" {} p{}", sign, index)
+            })
+            .join("");
+
+        energy_sum.push_str(&shift_part);
+        energy_sum
     }
 }
 

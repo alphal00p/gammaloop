@@ -1054,13 +1054,8 @@ fn pytest_scalar_isopod() {
 fn pytest_raised_triangle() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let mut sb_state = symbolica::state::State::new();
-    let sb_workspace = symbolica::state::Workspace::new();
-    let (model, amplitude) = load_amplitude_output(
-        env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap(),
-        &mut sb_state,
-        &sb_workspace,
-    );
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);

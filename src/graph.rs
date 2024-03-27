@@ -503,7 +503,7 @@ impl Graph {
         lmb_specification: &LoopMomentumBasisSpecification,
     ) -> T {
         let all_energies =
-            self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &lmb_specification);
+            self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_specification);
 
         self.edges
             .iter()

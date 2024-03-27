@@ -189,7 +189,6 @@ pub fn to_str_expression(expression: &Atom) -> SmartString<LazyCompact> {
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
                 latex: false,
-                symmetric_representation_for_finite_field: false,
             },
         )
     )
