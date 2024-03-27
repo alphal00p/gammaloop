@@ -816,7 +816,7 @@ impl Graph {
         for (i, signature) in lmb.edge_signatures.iter().enumerate() {
             rule.push((
                 Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
-                self.replacement_rule_from_signature(i, &signature),
+                self.replacement_rule_from_signature(i, signature),
             ));
         }
 

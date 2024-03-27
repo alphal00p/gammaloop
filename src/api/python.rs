@@ -322,7 +322,7 @@ impl PythonWorker {
                 .export_numerator(export_root, Self::printer_options(format))
                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         }
-        Ok(format!("Exported numerators"))
+        Ok("Exported numerators".to_string())
     }
 
     pub fn export_coupling_replacement_rules(
@@ -333,7 +333,7 @@ impl PythonWorker {
         self.model
             .export_coupling_replacement_rules(export_root, Self::printer_options(format))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-        Ok(format!("Exported coupling substitutions"))
+        Ok("Exported coupling substitutions".to_string())
     }
 
     pub fn export_lmb_subs(&self, export_root: &str, format: &str) -> PyResult<String> {
@@ -343,7 +343,7 @@ impl PythonWorker {
                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))
                 .unwrap();
         }
-        Ok(format!("Exported lmb substitutions"))
+        Ok("Exported lmb substitutions".to_string())
     }
 
     pub fn inspect_integrand(

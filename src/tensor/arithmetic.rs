@@ -32,11 +32,7 @@ where
             })
             .collect();
 
-        if let Some(data) = data {
-            Some(DenseTensor { structure, data })
-        } else {
-            None
-        }
+        data.map(|data| DenseTensor { structure, data })
     }
 }
 
@@ -62,11 +58,7 @@ where
             })
             .collect();
 
-        if let Some(data) = data {
-            Some(DenseTensor { structure, data })
-        } else {
-            None
-        }
+        data.map(|data| DenseTensor { structure, data })
     }
 }
 
@@ -92,11 +84,7 @@ where
             })
             .collect();
 
-        if let Some(data) = data {
-            Some(DenseTensor { structure, data })
-        } else {
-            None
-        }
+        data.map(|data| DenseTensor { structure, data })
     }
 }
 
@@ -221,11 +209,7 @@ where
             })
             .collect();
 
-        if let Some(data) = data {
-            Some(DenseTensor { structure, data })
-        } else {
-            None
-        }
+        data.map(|data| DenseTensor { structure, data })
     }
 }
 
@@ -250,11 +234,7 @@ where
             })
             .collect();
 
-        if let Some(data) = data {
-            Some(DenseTensor { structure, data })
-        } else {
-            None
-        }
+        data.map(|data| DenseTensor { structure, data })
     }
 }
 
@@ -280,11 +260,7 @@ where
             })
             .collect();
 
-        if let Some(data) = data {
-            Some(DenseTensor { structure, data })
-        } else {
-            None
-        }
+        data.map(|data| DenseTensor { structure, data })
     }
 }
 
@@ -401,14 +377,10 @@ where
     fn scalar_mul(self, rhs: &T) -> Option<Self::Output> {
         let data: Option<Vec<Out>> = self.iter_flat().map(|(_, u)| u.mul_fallible(rhs)).collect();
 
-        if let Some(data) = data {
-            Some(DenseTensor {
-                structure: self.structure().clone(),
-                data,
-            })
-        } else {
-            None
-        }
+        data.map(|data| DenseTensor {
+            structure: self.structure().clone(),
+            data,
+        })
     }
 }
 

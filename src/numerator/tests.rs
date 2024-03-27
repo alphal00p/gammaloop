@@ -5,10 +5,10 @@ use crate::{tensor::SymbolicTensor, tests_from_pytest::load_amplitude_output};
 #[test]
 #[allow(unused)]
 fn lbl() {
-    let (model, amplitude) = load_amplitude_output(&"./src/test_resources/lbl/");
+    let (model, amplitude) = load_amplitude_output("./src/test_resources/lbl/");
 
     model
-        .export_coupling_replacement_rules(&"./ignore/", PrintOptions::mathematica())
+        .export_coupling_replacement_rules("./ignore/", PrintOptions::mathematica())
         .unwrap();
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
