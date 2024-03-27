@@ -1,6 +1,7 @@
 use std::{
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
+    ops::Index,
 };
 
 use crate::{
@@ -460,8 +461,72 @@ enum SerializableCFFTreeNode {
 #[derive(Debug, Clone)]
 pub struct CFFExpression {
     pub terms: Vec<CFFTree>,
-    pub esurfaces: Vec<Esurface>,
+    pub esurfaces: EsurfaceCollection,
     inequivalent_nodes: HashMap<HashableCFFIntermediateGraph, (usize, usize)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EsurfaceCollection {
+    esurfaces: Vec<Esurface>,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct EsurfaceId(usize);
+
+impl EsurfaceCollection {
+    pub fn to_vec(self) -> Vec<Esurface> {
+        self.esurfaces
+    }
+
+    pub fn from_vec(esurfaces: Vec<Esurface>) -> Self {
+        Self { esurfaces }
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.esurfaces.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.esurfaces.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Esurface> {
+        self.esurfaces.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Esurface> {
+        self.esurfaces.iter_mut()
+    }
+
+    pub fn push(&mut self, esurface: Esurface) {
+        self.esurfaces.push(esurface);
+    }
+
+    pub fn iterate_all_ids(&self) -> impl Iterator<Item = EsurfaceId> {
+        (0..self.len()).map(EsurfaceId)
+    }
+}
+
+impl From<usize> for EsurfaceId {
+    fn from(id: usize) -> Self {
+        Self(id)
+    }
+}
+
+impl Index<EsurfaceId> for EsurfaceCollection {
+    type Output = Esurface;
+
+    fn index(&self, index: EsurfaceId) -> &Self::Output {
+        &self.esurfaces[index.0]
+    }
+}
+
+impl From<EsurfaceId> for usize {
+    fn from(id: EsurfaceId) -> Self {
+        id.0
+    }
 }
 
 impl CFFExpression {
@@ -476,7 +541,7 @@ impl CFFExpression {
 
         SerializableCFFExpression {
             terms,
-            esurfaces,
+            esurfaces: esurfaces.to_vec(),
             inequivalent_nodes,
         }
     }
@@ -498,7 +563,7 @@ impl CFFExpression {
 
         Self {
             terms,
-            esurfaces,
+            esurfaces: EsurfaceCollection::from_vec(esurfaces),
             inequivalent_nodes,
         }
     }
@@ -1447,7 +1512,7 @@ fn generate_cff_from_orientations(
 ) -> Result<CFFExpression, Report> {
     let mut cff_expression = CFFExpression {
         terms: vec![],
-        esurfaces: vec![],
+        esurfaces: EsurfaceCollection::from_vec(vec![]),
         inequivalent_nodes: HashMap::default(),
     };
 
@@ -1484,9 +1549,10 @@ fn generate_cff_from_orientations(
                     node.graph
                         .generate_children(position_map, external_data, &orientation)?;
 
-                if let Some(esurface_id) =
-                    cff_expression.esurfaces.iter().position(|e| e == &esurface)
-                {
+                let option_esurface_id =
+                    cff_expression.esurfaces.iter().position(|e| e == &esurface);
+
+                if let Some(esurface_id) = option_esurface_id {
                     tree.insert_esurface(node_id, esurface_id)?;
                 } else {
                     tree.insert_esurface(node_id, cff_expression.esurfaces.len())?;

@@ -1,5 +1,3 @@
-use core::panic;
-
 use ahash::HashMap;
 use ahash::HashMapExt;
 use clarabel::algebra::*;
@@ -7,7 +5,8 @@ use clarabel::solver::*;
 use lorentz_vector::LorentzVector;
 use num::Complex;
 
-use crate::cff::Esurface;
+use crate::cff::EsurfaceCollection;
+use crate::cff::EsurfaceId;
 use crate::graph::LoopMomentumBasis;
 use crate::utils::compute_shift_part;
 use crate::utils::FloatLike;
@@ -40,8 +39,8 @@ fn extract_center<T: FloatLike>(num_loops: usize, solution: &[T]) -> Vec<Lorentz
 
 fn construct_solver(
     lmb: &LoopMomentumBasis,
-    existing_esurface_ids: &[usize],
-    esurfaces: &[Esurface],
+    existing_esurface_ids: &[EsurfaceId],
+    esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
 ) -> DefaultSolver {
@@ -200,8 +199,8 @@ fn construct_solver(
 
 pub fn find_center(
     lmb: &LoopMomentumBasis,
-    existing_esurfaces_ids: &[usize],
-    esurfaces: &[Esurface],
+    existing_esurfaces_ids: &[EsurfaceId],
+    esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
 ) -> Option<Vec<LorentzVector<f64>>> {
@@ -229,11 +228,11 @@ pub fn find_center(
 #[allow(unused_variables)]
 pub fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
-    existing_esurface_ids: &[usize],
-    esurfaces: &[Esurface],
+    existing_esurface_ids: &[EsurfaceId],
+    esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
-) -> Vec<(Vec<usize>, Vec<LorentzVector<f64>>)> {
+) -> Vec<(Vec<EsurfaceId>, Vec<LorentzVector<f64>>)> {
     let mut res = vec![];
     let num_loops = lmb.basis.len();
 
@@ -283,7 +282,7 @@ pub fn find_maximal_overlap(
         }
     }
 
-    panic!();
+    todo!();
 }
 
 #[derive(Debug)]

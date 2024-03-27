@@ -1,9 +1,12 @@
+use std::ops::Index;
+
 use color_eyre::Report;
 use eyre::eyre;
+use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
 
-use crate::cff::Esurface;
+use crate::cff::{EsurfaceCollection, EsurfaceId};
 use crate::graph::Graph;
 use crate::utils::FloatLike;
 
@@ -12,11 +15,11 @@ const MAX_EXPECTED_CAPACITY: usize = 32; // Used to prevent reallocations during
 /// Returns the list of esurfaces which may exist, must be called each time at evaluation if externals are not fixed.
 #[inline]
 pub fn get_existing_esurfaces<T: FloatLike>(
-    esurfaces: &[Esurface],
+    esurfaces: &EsurfaceCollection,
     esurface_derived_data: &EsurfaceDerivedData,
     externals: &[LorentzVector<T>],
     energy_cache: &[T],
-) -> Vec<usize> {
+) -> Vec<EsurfaceId> {
     let mut existing_esurfaces = Vec::with_capacity(MAX_EXPECTED_CAPACITY);
 
     for orientation_pair in &esurface_derived_data.orientation_pairs {
@@ -35,8 +38,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
             }
         };
 
-        let shift_signature =
-            &esurface_derived_data.esurface_data[esurface_to_check_id].shift_signature;
+        let shift_signature = &esurface_derived_data[esurface_to_check_id].shift_signature;
 
         let mut esurface_shift = LorentzVector::new();
 
@@ -50,8 +52,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
         }
 
         let shift_spatial_sq = esurface_shift.spatial_squared();
-        let mass_sum_squared =
-            esurface_derived_data.esurface_data[esurface_to_check_id].mass_sum_squared;
+        let mass_sum_squared = esurface_derived_data[esurface_to_check_id].mass_sum_squared;
 
         if shift_zero_sq >= shift_spatial_sq + Into::<T>::into(mass_sum_squared) {
             existing_esurfaces.push(esurface_to_check_id);
@@ -62,8 +63,16 @@ pub fn get_existing_esurfaces<T: FloatLike>(
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct EsurfaceDerivedData {
-    pub esurface_data: Vec<EsurfaceData>,
-    orientation_pairs: Vec<(usize, usize)>,
+    esurface_data: Vec<EsurfaceData>,
+    orientation_pairs: Vec<(EsurfaceId, EsurfaceId)>,
+}
+
+impl Index<EsurfaceId> for EsurfaceDerivedData {
+    type Output = EsurfaceData;
+
+    fn index(&self, index: EsurfaceId) -> &Self::Output {
+        &self.esurface_data[Into::<usize>::into(index)]
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -163,7 +172,7 @@ pub fn generate_esurface_data(graph: &Graph) -> Result<EsurfaceDerivedData, Repo
         })
         .collect::<Result<Vec<_>, Report>>()?;
 
-    let mut esurface_ids = (0..cff.esurfaces.len()).collect::<Vec<_>>();
+    let mut esurface_ids = cff.esurfaces.iterate_all_ids().collect_vec();
     let mut orientation_pairs = Vec::with_capacity(esurface_ids.len() / 2);
 
     while let Some(esurface_id) = esurface_ids.pop() {
