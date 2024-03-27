@@ -1,190 +1,24 @@
 use std::{
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
-    ops::Index,
 };
 
 use crate::{
-    graph::{EdgeType, Graph, LoopMomentumBasis},
-    utils::{compute_momentum, compute_t_part_of_shift_part, format_momentum, FloatLike},
+    graph::{EdgeType, Graph},
+    utils::FloatLike,
 };
 use ahash::{HashMap, HashMapExt, HashSet};
 use color_eyre::Report;
 use eyre::{eyre, Result};
 use itertools::Itertools;
-use lorentz_vector::LorentzVector;
+
 use serde::{Deserialize, Serialize};
-use symbolica::representations::Atom;
 
 use log::debug;
 
+use super::esurface::{Esurface, EsurfaceCollection};
+
 const MAX_VERTEX_COUNT: usize = 32;
-
-#[derive(Serialize, Deserialize, Debug, Clone, Eq)]
-pub struct Esurface {
-    pub energies: Vec<usize>,
-    pub sub_orientation: Vec<bool>,
-    pub shift: Vec<usize>,
-    pub shift_signature: Vec<bool>,
-}
-
-// This equality is naive in the presence of raised propagators
-impl PartialEq for Esurface {
-    fn eq(&self, other: &Self) -> bool {
-        self.energies == other.energies && self.sub_orientation == other.sub_orientation
-    }
-}
-
-#[allow(unused)]
-impl Esurface {
-    fn to_atom(&self) -> Atom {
-        let symbolic_energies = self
-            .energies
-            .iter()
-            .map(|i| Atom::parse(&format!("E{}", i)).unwrap())
-            .collect_vec();
-
-        let symbolic_shift = self
-            .shift
-            .iter()
-            .map(|i| Atom::parse(&format!("p{}", i)).unwrap())
-            .collect_vec();
-
-        let builder_atom = Atom::new();
-        let energy_sum = symbolic_energies
-            .iter()
-            .fold(builder_atom, |acc, energy| acc + energy);
-
-        let esurf = symbolic_shift.iter().zip(self.shift_signature.iter()).fold(
-            energy_sum,
-            |acc, (shift, &shift_signature)| {
-                if shift_signature {
-                    acc + shift
-                } else {
-                    acc - shift
-                }
-            },
-        );
-
-        esurf
-    }
-
-    // the energy cache contains the energies of external edges as well as the virtual,
-    // use the location in the supergraph to determine the index
-    #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        let energy_sum = self
-            .energies
-            .iter()
-            .map(|index| energy_cache[*index])
-            .sum::<T>();
-
-        energy_sum + self.compute_shift_part(energy_cache)
-    }
-
-    // only compute the shift part, useful for existence checks and center finding
-    #[inline]
-    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        let shift_sum = self.shift.iter().zip(self.shift_signature.iter()).fold(
-            T::zero(),
-            |acc, (index, sign)| match sign {
-                true => acc + energy_cache[*index],
-                false => acc - energy_cache[*index],
-            },
-        );
-
-        shift_sum
-    }
-
-    // compute the value of the esurface from the momenta, needed for center finding
-    #[inline]
-    pub fn compute_from_momenta<T: FloatLike>(
-        &self,
-        lmb: &LoopMomentumBasis,
-        real_mass_vector: &[T],
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-    ) -> T {
-        let energy_sum = self
-            .energies
-            .iter()
-            .map(|index| {
-                let signature = &lmb.edge_signatures[*index];
-                let momentum = compute_momentum(signature, loop_moms, external_moms);
-                let mass = real_mass_vector[*index];
-
-                (momentum.spatial_squared() + mass * mass).sqrt()
-            })
-            .sum::<T>();
-
-        energy_sum + self.compute_shift_part_from_momenta(lmb, external_moms)
-    }
-
-    #[inline]
-    pub fn compute_shift_part_from_momenta<T: FloatLike>(
-        &self,
-        lmb: &LoopMomentumBasis,
-        external_moms: &[LorentzVector<T>],
-    ) -> T {
-        self.shift
-            .iter()
-            .zip(self.shift_signature.iter())
-            .map(|(index, sign)| {
-                let external_signature = &lmb.edge_signatures[*index].1;
-                match sign {
-                    true => compute_t_part_of_shift_part(external_signature, external_moms),
-                    false => -compute_t_part_of_shift_part(external_signature, external_moms),
-                }
-            })
-            .sum::<T>()
-    }
-
-    pub fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
-        let mut energy_sum = self
-            .energies
-            .iter()
-            .map(|index| {
-                let signature = &lmb.edge_signatures[*index];
-                format!("|{}|", format_momentum(signature))
-            })
-            .join(" + ");
-
-        let shift_part = self
-            .shift_signature
-            .iter()
-            .zip(self.shift.iter())
-            .map(|(sign, index)| {
-                let signature = &lmb.edge_signatures[*index];
-                let sign = if *sign { "+" } else { "-" };
-                format!(" {} {}^0", sign, format_momentum(signature))
-            })
-            .join("");
-
-        energy_sum.push_str(&shift_part);
-        energy_sum
-    }
-
-    pub fn string_format(&self) -> String {
-        let mut energy_sum = self
-            .energies
-            .iter()
-            .map(|index| format!("E{}", index))
-            .join(" + ");
-
-        let shift_part = self
-            .shift_signature
-            .iter()
-            .zip(self.shift.iter())
-            .map(|(sign, index)| {
-                let sign = if *sign { "+" } else { "-" };
-                format!(" {} p{}", sign, index)
-            })
-            .join("");
-
-        energy_sum.push_str(&shift_part);
-        energy_sum
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct CFFTree {
@@ -463,70 +297,6 @@ pub struct CFFExpression {
     pub terms: Vec<CFFTree>,
     pub esurfaces: EsurfaceCollection,
     inequivalent_nodes: HashMap<HashableCFFIntermediateGraph, (usize, usize)>,
-}
-
-#[derive(Debug, Clone)]
-pub struct EsurfaceCollection {
-    esurfaces: Vec<Esurface>,
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct EsurfaceId(usize);
-
-impl EsurfaceCollection {
-    pub fn to_vec(self) -> Vec<Esurface> {
-        self.esurfaces
-    }
-
-    pub fn from_vec(esurfaces: Vec<Esurface>) -> Self {
-        Self { esurfaces }
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.esurfaces.len()
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.esurfaces.is_empty()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &Esurface> {
-        self.esurfaces.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Esurface> {
-        self.esurfaces.iter_mut()
-    }
-
-    pub fn push(&mut self, esurface: Esurface) {
-        self.esurfaces.push(esurface);
-    }
-
-    pub fn iterate_all_ids(&self) -> impl Iterator<Item = EsurfaceId> {
-        (0..self.len()).map(EsurfaceId)
-    }
-}
-
-impl From<usize> for EsurfaceId {
-    fn from(id: usize) -> Self {
-        Self(id)
-    }
-}
-
-impl Index<EsurfaceId> for EsurfaceCollection {
-    type Output = Esurface;
-
-    fn index(&self, index: EsurfaceId) -> &Self::Output {
-        &self.esurfaces[index.0]
-    }
-}
-
-impl From<EsurfaceId> for usize {
-    fn from(id: EsurfaceId) -> Self {
-        id.0
-    }
 }
 
 impl CFFExpression {

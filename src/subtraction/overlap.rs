@@ -5,7 +5,7 @@ use clarabel::solver::*;
 use lorentz_vector::LorentzVector;
 use num::Complex;
 
-use crate::cff::generation::{EsurfaceCollection, EsurfaceId};
+use crate::cff::esurface::{EsurfaceCollection, EsurfaceId};
 use crate::graph::LoopMomentumBasis;
 use crate::utils::compute_shift_part;
 use crate::utils::FloatLike;
@@ -321,7 +321,7 @@ mod tests {
     use lorentz_vector::LorentzVector;
     use num::Complex;
 
-    use crate::{cff::generation::Esurface, graph::LoopMomentumBasis};
+    use crate::{cff::esurface::Esurface, graph::LoopMomentumBasis};
 
     struct HelperBoxStructure {
         external_momenta: [LorentzVector<f64>; 3],
