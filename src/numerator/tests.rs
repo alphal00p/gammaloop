@@ -8,7 +8,7 @@ use crate::{
 #[test]
 
 fn lbl() {
-    let (model, amplitude) = load_amplitude_output(&"./src/test_resources/lbl/");
+    let (model, amplitude) = load_amplitude_output(&"./src/tepst_resources/lbl/");
 
     model
         .export_coupling_replacement_rules(&"./ignore/", PrintOptions::mathematica())

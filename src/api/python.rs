@@ -591,13 +591,3 @@ impl PythonWorker {
         }
     }
 }
-
-impl PythonWorker {
-    fn printer_options(format: &str) -> PrintOptions {
-        match format {
-            "mathematica" => PrintOptions::mathematica(),
-            "latex" => PrintOptions::latex(),
-            _ => PrintOptions::default(),
-        }
-    }
-}
