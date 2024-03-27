@@ -7,10 +7,11 @@ Kinematics:
   e_cm: 3.0
   externals:
     type: constant
+    momenta:
       - - 0.0
-      - 0.0
-      - 0.0
-      - 1.0
+        - 0.0
+        - 0.0
+        - 1.0
 Parameterization:
   mode: spherical
   mapping: linear
