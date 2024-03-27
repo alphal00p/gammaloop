@@ -135,12 +135,13 @@ class ForwardScatteringGraph(object):
 
 
 class AmplitudeGraph(object):
-    def __init__(self, sg_id: int, sg_cut_id: int, fs_cut_id: int, amplitude_side: Side, graph: Graph):
+    def __init__(self, sg_id: int, sg_cut_id: int, fs_cut_id: int, amplitude_side: Side, graph: Graph, multi_channeling_structure: list[int] = []):
         self.sg_id: int = sg_id
         self.sg_cut_id: int = sg_cut_id
         self.fs_cut_id: int = fs_cut_id
         self.amplitude_side: Side = amplitude_side
         self.graph: Graph = graph
+        self.multi_channeling_channels: list[int] = []
 
     def draw(self, model: Model, drawings_path: str, file_name: str | None, **drawing_options: dict[str, Any]) -> Path:
 
@@ -160,7 +161,8 @@ class AmplitudeGraph(object):
             amplitude_graph_dict['sg_cut_id'],
             amplitude_graph_dict['fs_cut_id'],
             Side[amplitude_graph_dict['amplitude_side']],
-            Graph.from_serializable_dict(model, amplitude_graph_dict['graph'])
+            Graph.from_serializable_dict(model, amplitude_graph_dict['graph']),
+            amplitude_graph_dict['multi_channeling_channels']
         )
 
     def to_serializable_dict(self) -> dict[str, Any]:
@@ -170,4 +172,5 @@ class AmplitudeGraph(object):
             'fs_cut_id': self.fs_cut_id,
             'amplitude_side': str(self.amplitude_side),
             'graph': self.graph.to_serializable_dict(),
+            'multi_channeling_channels': self.multi_channeling_channels,
         }

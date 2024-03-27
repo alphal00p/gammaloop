@@ -56,7 +56,7 @@ lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = 
     "serde_support",
     "hyperdual_support",
     "f128_support",
-]}
+] }
 hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
 rand = "0.8"
 rayon = "1.5"
@@ -96,8 +96,9 @@ rand_xoshiro = "0.6.0"
 funty = "2.0.0"
 block-id = "0.2.1"
 once_cell = "1.19.0"
-enum_delegate = {git="https://gitlab.com/dawn_app/enum_delegate"}
+enum_delegate = { git = "https://gitlab.com/dawn_app/enum_delegate" }
 treena = "0.0.5"
+ctrlc = "3.4.4"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

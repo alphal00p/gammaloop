@@ -10,12 +10,14 @@ pub mod api;
 pub mod cff;
 pub mod cli_functions;
 pub mod cross_section;
+pub mod evaluation_result;
 pub mod gammaloop_integrand;
 pub mod graph;
 pub mod h_function_test;
 pub mod inspect;
 pub mod integrands;
 pub mod integrate;
+pub mod linalg;
 pub mod ltd;
 pub mod model;
 pub mod numerator;
@@ -23,6 +25,7 @@ pub mod observables;
 pub mod tensor;
 pub mod tests;
 pub mod tests_from_pytest;
+pub mod tropical;
 pub mod utils;
 
 use color_eyre::{Help, Report};
@@ -36,9 +39,12 @@ use num::Complex;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
+use std::sync::atomic::AtomicBool;
 use utils::FloatLike;
 
 use serde::{Deserialize, Serialize};
+
+pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const MAX_CORES: usize = 1000;
 
@@ -58,6 +64,23 @@ pub enum HFunction {
     PolyLeftRightExponential,
     #[serde(rename = "exponential_ct")]
     ExponentialCT,
+}
+
+pub fn set_interrupt_handler() {
+    INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
+    let _ = ctrlc::set_handler(|| {
+        INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+}
+
+#[inline]
+pub fn is_interrupted() -> bool {
+    INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[inline]
+pub fn set_interrupted(flag: bool) {
+    INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
 }
 
 const fn _default_true() -> bool {
@@ -145,6 +168,7 @@ pub struct IntegratorSettings {
     pub train_on_avg: bool,
     pub show_max_wgt_info: bool,
     pub max_prob_ratio: f64,
+    pub seed: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -189,6 +213,8 @@ pub struct Settings {
     #[serde(rename = "Stability")]
     #[serde(default = "StabilitySettings::default")]
     pub stability: StabilitySettings,
+    #[serde(rename = "sampling")]
+    pub sampling: SamplingSettings,
 }
 
 impl Settings {
@@ -235,7 +261,6 @@ pub struct StabilityLevelSetting {
     required_precision_for_re: f64,
     required_precision_for_im: f64,
     escalate_for_large_weight_threshold: f64,
-    accepted_radius_in_x_range: [f64; 2],
 }
 
 impl StabilityLevelSetting {
@@ -245,7 +270,6 @@ impl StabilityLevelSetting {
             required_precision_for_re: 1e-15,
             required_precision_for_im: 1e-15,
             escalate_for_large_weight_threshold: 0.9,
-            accepted_radius_in_x_range: [0.0, 0.9],
         }
     }
 
@@ -255,7 +279,6 @@ impl StabilityLevelSetting {
             required_precision_for_re: 1e-15,
             required_precision_for_im: 1e-15,
             escalate_for_large_weight_threshold: -1.0,
-            accepted_radius_in_x_range: [0.0, 1.0],
         }
     }
 }
@@ -291,6 +314,7 @@ pub enum Precision {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type", content = "momenta")]
 pub enum Externals {
     #[serde(rename = "constant")]
     Constant(Vec<[f64; 4]>),
@@ -317,4 +341,35 @@ impl Default for Externals {
     fn default() -> Self {
         Externals::Constant(vec![[0.0; 4]; 15])
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(tag = "type")]
+pub enum SamplingSettings {
+    #[default]
+    #[serde(rename = "default")]
+    Default,
+    #[serde(rename = "multi_channeling")]
+    MultiChanneling(MultiChannelingSettings),
+    #[serde(rename = "discrete_graph_sampling")]
+    DiscreteGraphs(DiscreteGraphSamplingSettings),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct MultiChannelingSettings {
+    pub alpha: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(tag = "subtype")]
+pub enum DiscreteGraphSamplingSettings {
+    #[default]
+    #[serde(rename = "default")]
+    Default,
+    #[serde(rename = "multi_channeling")]
+    MultiChanneling(MultiChannelingSettings),
+    #[serde(rename = "discrete_multi_channeling")]
+    DiscreteMultiChanneling(MultiChannelingSettings),
+    #[serde(rename = "tropical")]
+    TropicalSampling,
 }

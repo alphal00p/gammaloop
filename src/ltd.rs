@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    graph::{EdgeType, Graph},
+    graph::{EdgeType, Graph, LoopMomentumBasisSpecification},
     utils::{compute_momentum, FloatLike},
 };
 use itertools::Itertools;
@@ -509,6 +509,21 @@ impl LTDExpression {
             .sum()
     }
 
+    pub fn evaluate_in_lmb<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        graph: &Graph,
+        lmb_specification: &LoopMomentumBasisSpecification,
+    ) -> T {
+        let emr = graph.compute_emr_in_lmb(loop_moms, external_moms, lmb_specification);
+
+        self.terms
+            .iter()
+            .map(|term| term.evaluate(external_moms, &emr, graph))
+            .sum()
+    }
+
     pub fn to_serializable(&self) -> SerializableLTDExpression {
         SerializableLTDExpression {
             terms: self
@@ -539,20 +554,15 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
     debug!("generating ltd expression for graph: {:?}", graph.name);
 
     let loop_line_signatures = graph
-        .edges
-        .iter()
-        .filter(|e| e.edge_type == EdgeType::Virtual)
-        .map(|e| graph.get_edge_position(&e.name).unwrap())
-        .map(|e| graph.loop_momentum_basis.edge_signatures[e].0.clone())
+        .get_virtual_edges_iterator()
+        .map(|(index, _e)| graph.loop_momentum_basis.edge_signatures[index].0.clone())
         .collect_vec();
 
     let loop_number = loop_line_signatures[0].len();
 
     let position_map = graph
-        .edges
-        .iter()
-        .filter(|e| e.edge_type == EdgeType::Virtual)
-        .map(|e| graph.get_edge_position(&e.name).unwrap())
+        .get_virtual_edges_iterator()
+        .map(|(index, _e)| index)
         .collect_vec();
 
     let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);
@@ -659,7 +669,7 @@ mod tests {
         // test sign
 
         let test_permutation = vec![0, 1, 2];
-        let test_signature_matrix = vec![vec![-1, 0, 1], vec![0, 1, 0], vec![1, 0, 0]];
+        let test_signature_matrix = [vec![-1, 0, 1], vec![0, 1, 0], vec![1, 0, 0]];
         let test_sigmas = vec![1., -1., 1.];
 
         let test_residue_generator = ResidueGenerator {

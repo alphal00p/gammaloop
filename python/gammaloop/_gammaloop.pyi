@@ -68,3 +68,21 @@ class Worker:
 
     def inspect_integrand(self, integrand: str, pt: list[float], term: list[int], force_radius: bool, is_momentum_space: bool, use_f128: bool) -> None:
         """ Inspects the integrand given in argument at the point given in argument. """
+
+    def integrate_integrand(self, integrand: str, num_cores: int, result_path: str, workspace_path: str, target: tuple[float, float] | None) -> None:
+        """ Integrates the integrand given in argument over the target given in argument. """
+
+    def load_master_node(self, integrand: str) -> None:
+        """Setup a master node for the integrand given in argument."""
+
+    def write_batch_input(self, num_cores: int, num_samples: int, export_grid: bool, output_accumulator: bool, workspace_path: str, job_id: int) -> None:
+        """ Writes a batch input file for a integration job """
+
+    def process_batch_output(self, workspace_path: str, job_id: int) -> None:
+        """process the output of a job"""
+
+    def display_master_node_status(self) -> None:
+        """display information about the current run"""
+
+    def update_iter(self) -> None:
+        """finish the iteration"""

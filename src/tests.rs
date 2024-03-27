@@ -54,7 +54,7 @@ fn compare_integration(
     match phase {
         IntegratedPhase::Both => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
-            let res = havana_integrate(settings, user_data_generator, Some(target));
+            let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
             if !approx_eq(res.result[0], target.re, applied_tolerance)
                 || !validate_error(res.error[0], target.re - res.result[0])
             {
@@ -71,7 +71,7 @@ fn compare_integration(
                 return false;
             }
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
-            let res = havana_integrate(settings, user_data_generator, Some(target));
+            let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
             if !approx_eq(res.result[1], target.im, applied_tolerance)
                 || !validate_error(res.error[1], target.re - res.result[1])
             {
@@ -90,7 +90,7 @@ fn compare_integration(
         }
         IntegratedPhase::Real => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
-            let res = havana_integrate(settings, user_data_generator, Some(target));
+            let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
             if !approx_eq(res.result[0], target.re, applied_tolerance)
                 || !validate_error(res.error[0], target.im - res.result[0])
             {
@@ -109,7 +109,7 @@ fn compare_integration(
         }
         IntegratedPhase::Imag => {
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
-            let res = havana_integrate(settings, user_data_generator, Some(target));
+            let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
             if !approx_eq(res.result[1], target.im, applied_tolerance)
                 || !validate_error(res.error[1], target.im - res.result[1])
             {

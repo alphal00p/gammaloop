@@ -1,3 +1,4 @@
+use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use colored::Colorize;
 use hyperdual::Hyperdual;
@@ -12,6 +13,8 @@ use smartstring::{LazyCompact, SmartString};
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::ops::Neg;
+use std::time::Duration;
+use symbolica::numerical_integration::Sample;
 
 #[allow(unused_imports)]
 use log::{debug, info};
@@ -880,7 +883,19 @@ pub fn get_n_dim_for_n_loop_momenta(
     settings: &Settings,
     n_loop_momenta: usize,
     force_radius: bool,
+    n_edges: Option<usize>, // for tropical parameterization, we need to know the number of edges
 ) -> usize {
+    if settings.sampling
+        == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
+    {
+        let tropical_part = 2 * n_edges.unwrap() - 1;
+        let d_l = 3 * n_loop_momenta;
+        return if d_l % 2 == 1 {
+            tropical_part + d_l + 1
+        } else {
+            tropical_part + d_l
+        };
+    }
     match settings.parameterization.mode {
         ParameterizationMode::HyperSphericalFlat => {
             // Because we use Box-Muller, we need to have an even number of angular dimensions
@@ -1058,6 +1073,11 @@ pub fn global_inv_parameterize<T: FloatLike>(
     settings: &Settings,
     force_radius: bool,
 ) -> (Vec<T>, T) {
+    if settings.sampling
+        == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
+    {
+        panic!("Trying to inverse parameterize a tropical parametrization.")
+    }
     match settings.parameterization.mode {
         ParameterizationMode::HyperSpherical => {
             let e_cm = e_cm_squared.sqrt() * Into::<T>::into(settings.parameterization.shifts[0].0);
@@ -1496,6 +1516,9 @@ pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
     let mut x_n = x0;
     for _ in 0..n_iter {
         let r = x_n.powf(a - 1.0) * (-x_n).exp() / gamma_a;
+        if x_n <= 0. {
+            x_n = 1.0e-16;
+        }
         let t_n = if p <= 0.5 {
             (gamma_lr(a, x_n) - p) / r
         } else {
@@ -1650,4 +1673,51 @@ pub fn format_for_compare_digits(x: f64, y: f64) -> (String, String) {
     let string_y = string_vec.iter().map(|(_, y)| y).join("");
 
     (string_x, string_y)
+}
+
+#[allow(unused)]
+pub fn format_evaluation_time(time: Duration) -> String {
+    let time_secs = time.as_secs_f64();
+    if time_secs < 1e-6 {
+        format!("{} ns", time.as_nanos())
+    } else if time_secs < 1e-3 {
+        format!("{:.2} µs", (time.as_nanos() as f64) / 1000.)
+    } else if time_secs < 1.0 {
+        format!("{:.2} ms", (time.as_micros() as f64) / 1000.)
+    } else {
+        format!("{:.2} s", (time.as_millis() as f64) / 1000.)
+    }
+}
+
+pub fn format_evaluation_time_from_f64(time: f64) -> String {
+    format_evaluation_time(Duration::from_secs_f64(time))
+}
+
+pub fn format_sample(sample: &Sample<f64>) -> String {
+    match sample {
+        Sample::Continuous(_, xs) => {
+            let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
+            format!("xs: [{}]", xs_point)
+        }
+        Sample::Discrete(_, graph_index, Some(nested_sample)) => match nested_sample.as_ref() {
+            Sample::Continuous(_, xs) => {
+                let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
+                format!("graph: {}, xs: [{}]", graph_index, xs_point)
+            }
+            Sample::Discrete(_, channel_index, Some(nested_cont_sample)) => {
+                match nested_cont_sample.as_ref() {
+                    Sample::Continuous(_, xs) => {
+                        let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
+                        format!(
+                            "graph: {}, channel: {}, xs: [{}]",
+                            graph_index, channel_index, xs_point
+                        )
+                    }
+                    _ => String::from("N/A"),
+                }
+            }
+            _ => String::from("N/A"),
+        },
+        _ => String::from("N/A"),
+    }
 }
