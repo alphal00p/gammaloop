@@ -13,12 +13,9 @@ use eyre::{eyre, Result};
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    representations::Atom,
-    state::{State, Workspace},
-};
+use symbolica::representations::Atom;
 
-use log::info;
+use log::debug;
 
 const MAX_VERTEX_COUNT: usize = 32;
 
@@ -39,85 +36,38 @@ impl PartialEq for Esurface {
 
 #[allow(unused)]
 impl Esurface {
-    pub fn get_point_inside<T: FloatLike>(&self) -> Vec<LorentzVector<T>> {
-        todo!("Implement")
-    }
-
-    fn to_atom(&self, state: &mut State, workspace: &Workspace) -> Atom {
-        unimplemented!()
-        //let symbolic_energies = self
-        //    .energies
-        //    .iter()
-        //    .map(|i| Atom::parse(&format!("E{}", i), state, workspace).unwrap())
-        //    .collect_vec();
-
-        //let symbolic_shift = self
-        //    .shift
-        //    .iter()
-        //    .map(|i| Atom::parse(&format!("p{}", i), state, workspace).unwrap())
-        //    .collect_vec();
-
-        //let builder_atom = Atom::new();
-        //let energy_sum = symbolic_energies
-        //    .iter()
-        //    .fold(builder_atom.builder(state, workspace), |acc, energy| {
-        //        acc + energy
-        //    });
-
-        //let esurf = symbolic_shift.iter().fold(energy_sum, |acc, shift| {
-        //    if self.shift_signature {
-        //        acc + shift
-        //    } else {
-        //        -(-acc + shift)
-        //    }
-        //});
-
-        //Atom::new_from_view(&esurf.as_atom_view())
-    }
-
-    fn format_shift_string(&self) -> String {
-        self.shift
-            .iter()
-            .zip(self.shift_signature.iter())
-            .map(|(i, s)| {
-                if *s {
-                    format!("+ p_{}", i)
-                } else {
-                    format!("- p_{}", i)
-                }
-            })
-            .join(" ")
-    }
-
-    pub fn string_format(&self) -> String {
-        let mut energies_string = self.energies.iter().map(|i| format!("E_{}", i)).join(" + ");
-
-        let shift_string = self.format_shift_string();
-
-        energies_string.push(' ');
-        energies_string.push_str(&shift_string);
-        energies_string
-    }
-
-    pub fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
-        let mut energies_string = self
+    fn to_atom(&self) -> Atom {
+        let symbolic_energies = self
             .energies
             .iter()
-            .map(|i| {
-                let signature = &lmb.edge_signatures[*i];
-                format!("|{}|", format_momentum(signature))
-            })
-            .join(" + ");
+            .map(|i| Atom::parse(&format!("E{}", i)).unwrap())
+            .collect_vec();
 
-        let shift_string = self.format_shift_string();
-        energies_string.push(' ');
-        energies_string.push_str(&shift_string);
-        energies_string
+        let symbolic_shift = self
+            .shift
+            .iter()
+            .map(|i| Atom::parse(&format!("p{}", i)).unwrap())
+            .collect_vec();
+
+        let builder_atom = Atom::new();
+        let energy_sum = symbolic_energies
+            .iter()
+            .fold(builder_atom, |acc, energy| acc + energy);
+
+        let esurf = symbolic_shift.iter().fold(energy_sum, |acc, shift| {
+            if self.shift_signature {
+                acc + shift
+            } else {
+                -(-acc + shift)
+            }
+        });
+
+        esurf
     }
 
-    // compute the value, assuming we already computed the on shell energies
-    #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    // the energy cache contains the energies of external edges as well as the virtual,
+    // use the location in the supergraph to determine the index
+    fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         let energy_sum = self
             .energies
             .iter()
@@ -1418,8 +1368,8 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
     }
 
     let (orientations, position_map) = get_orientations(graph);
-    info!("generating cff for graph: {}", graph.name);
-    info!("number of orientations: {}", orientations.len());
+    debug!("generating cff for graph: {}", graph.name);
+    debug!("number of orientations: {}", orientations.len());
 
     let mut graph_cff =
         generate_cff_from_orientations(orientations, &position_map, &external_data)?;
@@ -1457,7 +1407,7 @@ fn generate_cff_from_orientations(
         .filter(|(_, graph)| !graph.has_directed_cycle_initial().unwrap())
         .collect_vec();
 
-    info!(
+    debug!(
         "number of acyclic orientations: {}",
         acyclic_orientations_and_graphs.len()
     );
@@ -1524,8 +1474,8 @@ fn generate_cff_from_orientations(
         cff_expression.terms.push(tree);
     }
 
-    info!("number of cache hits: {}", cache_hits);
-    info!(
+    debug!("number of cache hits: {}", cache_hits);
+    debug!(
         "percentage of cache hits: {:.1}%",
         cache_hits as f64 / (cache_hits + non_cache_hits) as f64 * 100.0
     );
@@ -1536,7 +1486,7 @@ fn generate_cff_from_orientations(
 #[cfg(test)]
 mod tests_cff {
     use lorentz_vector::LorentzVector;
-    use num_traits::Inv;
+    use num::traits::Inv;
 
     use super::*;
 
@@ -1893,7 +1843,7 @@ mod tests_cff {
             shift_signature,
         };
 
-        let _edge_types = vec![
+        let _edge_types = [
             EdgeType::Virtual,
             EdgeType::Virtual,
             EdgeType::Virtual,
@@ -2091,7 +2041,7 @@ mod tests_cff {
             (5, 4),
         ];
 
-        let _edge_types = vec![
+        let _edge_types = [
             EdgeType::Virtual,
             EdgeType::Virtual,
             EdgeType::Virtual,
@@ -2177,7 +2127,7 @@ mod tests_cff {
             (5, 8),
         ];
 
-        let _edge_types = vec![
+        let _edge_types = [
             EdgeType::Virtual,
             EdgeType::Virtual,
             EdgeType::Virtual,

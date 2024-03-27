@@ -1,5 +1,11 @@
 #![cfg_attr(feature = "fail-on-warnings", deny(warnings))]
-
+// #![deny(clippy::all)]
+// #![warn(clippy::pedantic)]
+#![warn(clippy::all)]
+// #![warn(clippy::restriction)]
+// #![warn(clippy::nursery)]
+// #![warn(clippy::cargo)]
+// #![feature(min_specialization)]
 pub mod api;
 pub mod cff;
 pub mod cli_functions;
@@ -33,9 +39,12 @@ use num::Complex;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
+use std::sync::atomic::AtomicBool;
 use utils::FloatLike;
 
 use serde::{Deserialize, Serialize};
+
+pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const MAX_CORES: usize = 1000;
 
@@ -55,6 +64,23 @@ pub enum HFunction {
     PolyLeftRightExponential,
     #[serde(rename = "exponential_ct")]
     ExponentialCT,
+}
+
+pub fn set_interrupt_handler() {
+    INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
+    let _ = ctrlc::set_handler(|| {
+        INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+}
+
+#[inline]
+pub fn is_interrupted() -> bool {
+    INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[inline]
+pub fn set_interrupted(flag: bool) {
+    INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
 }
 
 const fn _default_true() -> bool {
@@ -288,6 +314,7 @@ pub enum Precision {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type", content = "momenta")]
 pub enum Externals {
     #[serde(rename = "constant")]
     Constant(Vec<[f64; 4]>),
@@ -317,6 +344,7 @@ impl Default for Externals {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(tag = "type")]
 pub enum SamplingSettings {
     #[default]
     #[serde(rename = "default")]
@@ -333,7 +361,7 @@ pub struct MultiChannelingSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-#[serde(tag = "type")]
+#[serde(tag = "subtype")]
 pub enum DiscreteGraphSamplingSettings {
     #[default]
     #[serde(rename = "default")]

@@ -1,6 +1,6 @@
 import pytest
-from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
 from gammaloop.interface.gammaloop_interface import CommandList
+from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
 from pathlib import Path
 
 
@@ -62,10 +62,10 @@ class TestLoadModel:
         gloop.run(CommandList.from_string("import_model scalars"))
 
         assert len(gloop.model.particles) == 3
-        assert len(gloop.model.lorentz_structures) == 1
+        assert len(gloop.model.lorentz_structures) == 2
         assert len(gloop.model.couplings) == 1
         assert len(gloop.model.parameters) == 12
-        assert len(gloop.model.vertex_rules) == 10
+        assert len(gloop.model.vertex_rules) == 25
         assert len(gloop.model.orders) == 2
 
 
@@ -127,6 +127,7 @@ class TestMasslessScalarTriangleAmplitude:
             assert amplitudes[0].name == 'massless_triangle'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_massless_triangle_export: str):
         assert run_drawing(pjoin(scalar_massless_triangle_export, 'sources',
                            'amplitudes', 'massless_triangle', 'drawings'))
@@ -149,6 +150,7 @@ class TestMasslessScalarBoxAmplitude:
             assert amplitudes[0].name == 'massless_box'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_massless_box_export: str):
         assert run_drawing(pjoin(scalar_massless_box_export, 'sources',
                            'amplitudes', 'massless_box', 'drawings'))
@@ -170,6 +172,7 @@ class TestScalarFishnet2x2:
             assert amplitudes[0].name == 'fishnet_2x2'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_fishnet_2x2_export: Path):
         assert run_drawing(pjoin(scalar_fishnet_2x2_export, 'sources',
                            'amplitudes', 'fishnet_2x2', 'drawings'))
@@ -192,6 +195,7 @@ class TestScalarFishnet2x3:
             assert amplitudes[0].name == 'fishnet_2x3'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_fishnet_2x3_export: str):
         assert run_drawing(pjoin(scalar_fishnet_2x3_export, 'sources',
                            'amplitudes', 'fishnet_2x3', 'drawings'))
@@ -213,6 +217,7 @@ class TestScalarCube:
             assert amplitudes[0].name == 'cube'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_cube_export: Path):
         assert run_drawing(pjoin(scalar_cube_export, 'sources',
                            'amplitudes', 'cube', 'drawings'))
@@ -235,6 +240,7 @@ class TestEpEmADdxNLOCrossSection:
             assert len(amplitudes) == 0
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, epem_a_ddx_nlo_export: Path):
         assert run_drawing(pjoin(epem_a_ddx_nlo_export, 'sources',
                            'cross_sections', 'epem_a_ddx_NLO', 'drawings'))
@@ -253,6 +259,7 @@ class TestEpEmADdxNLOCrossSection:
             assert len(amplitudes) == 0
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing_massive(self, massive_epem_a_ddx_nlo_export: Path):
         assert run_drawing(pjoin(massive_epem_a_ddx_nlo_export, 'sources',
                            'cross_sections', 'epem_a_ddx_NLO', 'drawings'))
@@ -274,6 +281,7 @@ class TestScalarBubble:
             assert amplitudes[0].name == 'bubble'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_bubble_export: Path):
         assert run_drawing(pjoin(scalar_bubble_export, 'sources',
                            'amplitudes', 'bubble', 'drawings'))
@@ -295,6 +303,7 @@ class TestScalarDoubleTriangle:
             assert amplitudes[0].name == 'double_triangle'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_double_triangle_export: Path):
         assert run_drawing(pjoin(scalar_double_triangle_export, 'sources',
                            'amplitudes', 'double_triangle', 'drawings'))
@@ -316,6 +325,7 @@ class TestScalarMercedes:
             assert amplitudes[0].name == 'mercedes'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_mercedes_export: Path):
         assert run_drawing(pjoin(scalar_mercedes_export, 'sources',
                            'amplitudes', 'mercedes', 'drawings'))
@@ -337,6 +347,7 @@ class TestScalarTriangleBox:
             assert amplitudes[0].name == 'triangle_box'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_triangle_box_export: Path):
         assert run_drawing(pjoin(scalar_triangle_box_export, 'sources',
                            'amplitudes', 'triangle_box', 'drawings'))
@@ -358,6 +369,7 @@ class TestScalarIsopod:
             assert amplitudes[0].name == 'isopod'
         gloop.run(CommandList.from_string("info"))
 
+    @pytest.mark.drawing
     def test_drawing(self, scalar_isopod_export: Path):
         assert run_drawing(pjoin(scalar_isopod_export, 'sources',
                            'amplitudes', 'isopod', 'drawings'))

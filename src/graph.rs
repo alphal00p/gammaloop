@@ -14,9 +14,9 @@ use itertools::Itertools;
 use log::warn;
 use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
-use num::Complex;
 #[allow(unused_imports)]
-use num_traits::Float;
+use num::traits::Float;
+use num::Complex;
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
@@ -492,7 +492,7 @@ impl Graph {
         external_moms: &[LorentzVector<T>],
     ) -> T {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.compute_energy_product_in_lmb(loop_moms, external_moms, lmb_specification)
+        self.compute_energy_product_in_lmb(loop_moms, external_moms, &lmb_specification)
     }
 
     #[inline]
@@ -500,7 +500,7 @@ impl Graph {
         &self,
         loop_moms: &[LorentzVector<T>],
         external_moms: &[LorentzVector<T>],
-        lmb_specification: LoopMomentumBasisSpecification,
+        lmb_specification: &LoopMomentumBasisSpecification,
     ) -> T {
         let all_energies =
             self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &lmb_specification);

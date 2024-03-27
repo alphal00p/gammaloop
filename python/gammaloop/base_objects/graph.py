@@ -4,12 +4,13 @@ import os
 import itertools
 from pathlib import Path
 from enum import StrEnum
-import yaml
 from typing import Any
+import yaml
 
 from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger, EMPTY_LIST  # pylint: disable=unused-import # type: ignore
 import gammaloop.misc.utils as utils
-from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter  # type: ignore
+# type: ignore # pylint: disable=unused-import
+from gammaloop.base_objects.model import Model, VertexRule, Particle, Parameter
 
 
 class EdgeType(StrEnum):
@@ -117,7 +118,7 @@ class Vertex(object):
         return Vertex('dummy_vertex')
 
     def set_vertex_rule_from_model(self, model: Model) -> None:
-        assert (self.edges is not None)
+        assert self.edges is not None
 
         if len(self.edges) == 1:
             self.vertex_info = ExternalVertexInfo(
@@ -127,15 +128,13 @@ class Vertex(object):
         if self.vertex_info.get_type() == 'unspecified':
             vertex_particles = [e.particle if e.vertices[1] is self else e.particle.get_anti_particle(
                 model) for e in self.edges]
-            orig_vertex_particles = list(vertex_particles)
-
             interactions = model.get_vertices_from_particles(vertex_particles)
             if len(interactions) == 0:
                 raise GammaLoopError(
-                    f"No interaction found for vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}]")
+                    f"No interaction found for vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}]")
             elif len(interactions) > 1:
                 raise GammaLoopError(
-                    f"Found more than one valid interaction for vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}]. Importing from qgraph is not supported in this case.")
+                    f"Found more than one valid interaction for vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}]. Importing from qgraph is not supported in this case.")
             self.vertex_info = InteractonVertexInfo(interactions[0])
         elif not isinstance(self.vertex_info, InteractonVertexInfo):
             raise GammaLoopError(
@@ -158,10 +157,10 @@ class Vertex(object):
                     break
             else:
                 raise GammaLoopError(
-                    f"Particle {part.name} not found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
+                    f"Particle {part.name} not found in vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}].")
         if len(vertex_particles_per_edge) > 0:
             raise GammaLoopError(
-                f"Not all particles were found in vertex {self.name} with particles [{','.join(p.name for p in orig_vertex_particles)}].")
+                f"Not all particles were found in vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}].")
         self.edges = sorted_edges
 
     def to_serializable_dict(self) -> dict[str, Any]:
@@ -235,7 +234,8 @@ class Edge(object):
         }
 
     def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_edge_labels: bool = True, show_particle_names: bool = True, show_edge_names: bool = True, show_edge_composite_momenta: bool = False,
-             label_size: str = '15pt', label_distance: float = 13.0, show_edge_momenta: bool = True, draw_arrow_for_all_edges: bool = True, draw_lmb: bool = True, arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
+             label_size: str = '15pt', label_distance: float = 13.0, show_edge_momenta: bool = True, draw_arrow_for_all_edges: bool = True, draw_lmb: bool = True,
+             arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
              arrow_size_for_single_line: float = 2.5, arrow_size_for_double_line: float = 2.5, line_color: str = 'black', label_color: str = 'black', lmb_color: str = 'red', non_lmb_color: str = 'blue', **_opts: Any) -> list[str]:
         constant_definitions['arcMaxDistance'] = f'{arc_max_distance:.2f}'
         constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'
@@ -251,6 +251,11 @@ class Edge(object):
         constant_definitions['labelDistance'] = f'{label_distance:.2f}'
 
         template_line = r'\efmf{%(line_type)s%(comma)s%(options)s}{%(left_vertex)s,%(right_vertex)s}'
+
+        if graph.loop_momentum_basis is None:
+            raise GammaLoopError(
+                "Specify a loop momentum basis drawing a graph.")
+
         lmb_position = graph.loop_momentum_basis.index(
             self) if self in graph.loop_momentum_basis else None
         line_options: dict[str, str] = {}
@@ -311,10 +316,10 @@ class Edge(object):
             mom_sig = graph.get_edge_signature(self.name)
             if (mom_sig[0].count(0) + mom_sig[1].count(0)) < len(mom_sig[0])+len(mom_sig[1])-1:
                 str_mom = ''.join(
-                    ((f'+' if s > 0 else '-' if abs(s)
+                    (('+' if s > 0 else '-' if abs(s)
                      == 1 else f'{s:+d}')+f'k_{{{i_lm}}}')
                     for i_lm, s in enumerate(mom_sig[0]) if s != 0)+''.join(
-                    ((f'+' if s > 0 else '-' if abs(s)
+                    (('+' if s > 0 else '-' if abs(s)
                      == 1 else f'{s:+d}')+f'p_{{{i_ext+1}}}')
                     for i_ext, s in enumerate(mom_sig[1]) if s != 0)
                 if str_mom.startswith('+'):
@@ -461,10 +466,10 @@ class Graph(object):
         # For forward scattering graphs, keep track of the bipartite map, i.e. which in and out externals will carry identical momenta.
         self.external_connections: list[tuple[
             Vertex | None, Vertex | None]] = external_connections
-        if loop_momentum_basis is None:
-            self.loop_momentum_basis: list[Edge] = []
-        else:
-            self.loop_momentum_basis: list[Edge] = loop_momentum_basis
+        # if loop_momentum_basis is None:
+        #     self.loop_momentum_basis: list[Edge] = []
+        # else:
+        self.loop_momentum_basis: list[Edge] | None = loop_momentum_basis
         self.name_to_position: dict[str, dict[str, int]] = {}
 
     def get_sorted_incoming_edges(self) -> list[Edge]:
@@ -539,7 +544,7 @@ class Graph(object):
             'external_connections': [[e[0].name if e[0] is not None else None,
                                       e[1].name if e[1] is not None else None] for e in self.external_connections],
             'overall_factor': self.overall_factor,
-            'loop_momentum_basis': [e.name for e in self.loop_momentum_basis],
+            'loop_momentum_basis': [e.name for e in self.loop_momentum_basis] if self.loop_momentum_basis is not None else None,
             'edge_signatures': self.edge_signatures
         }
 
@@ -735,7 +740,7 @@ class Graph(object):
         return [[e for e_i, e in enumerate(self.edges) if e_i not in spanning_tree] for spanning_tree in spanning_trees]
 
     def generate_momentum_flow(self) -> list[tuple[list[int], list[int]]]:
-        if len(self.loop_momentum_basis) == 0:
+        if self.loop_momentum_basis is None:
             raise GammaLoopError(
                 "Specify a loop momentum basis before generating a momentum flow.")
         if len(self.external_connections) == 0:
@@ -782,7 +787,7 @@ class Graph(object):
                 return self.draw_feynmp(model, file_path_without_extension, caption, diagram_id, **drawing_options['feynmp'])
             case _:
                 raise GammaLoopError(
-                    "Feynman drawing mode '%d' is not supported. Currently only 'feynmp' is supported." % drawing_options['mode'])
+                    f"Feynman drawing mode '{drawing_options['mode']}' is not supported. Currently only 'feynmp' is supported.")
 
     def draw_feynmp(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, caption_size: str = '20pt', **drawing_options: Any) -> Path:
 

@@ -3,14 +3,22 @@ use crate::{
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
     inspect,
     integrands::Integrand,
-    integrate::{havana_integrate, MasterNode, SerializableBatchResult},
+    integrate::{
+        havana_integrate, print_integral_result, MasterNode, SerializableBatchResult,
+        SerializableIntegrationState,
+    },
     model::Model,
     HasIntegrand, Settings,
 };
 use ahash::HashMap;
+use colored::Colorize;
 use git_version::git_version;
-use std::{fs, path::Path};
-use symbolica;
+use log::{info, warn};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
 const GIT_VERSION: &str = git_version!();
 
 #[allow(unused)]
@@ -41,7 +49,7 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
     );
     Ok(())
     */
-
+    crate::set_interrupt_handler();
     cli(&py
         .import("sys")?
         .getattr("argv")?
@@ -54,6 +62,7 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
 fn gammalooprs(_py: Python, m: &PyModule) -> PyResult<()> {
     // TODO: Verify that indeed Python logger level is used in that case.
     pyo3_log::init();
+    crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
@@ -63,8 +72,6 @@ fn gammalooprs(_py: Python, m: &PyModule) -> PyResult<()> {
 #[pyclass(name = "Worker")]
 pub struct PythonWorker {
     pub model: Model,
-    sb_state: symbolica::state::State,
-    sb_workspace: symbolica::state::Workspace,
     pub cross_sections: CrossSectionList,
     pub amplitudes: AmplitudeList,
     pub integrands: HashMap<String, Integrand>,
@@ -75,8 +82,6 @@ impl Clone for PythonWorker {
     fn clone(&self) -> PythonWorker {
         PythonWorker {
             model: self.model.clone(),
-            sb_state: self.sb_state.clone(),
-            sb_workspace: symbolica::state::Workspace::new(),
             cross_sections: self.cross_sections.clone(),
             amplitudes: self.amplitudes.clone(),
             integrands: self.integrands.clone(),
@@ -90,10 +95,9 @@ impl Clone for PythonWorker {
 impl PythonWorker {
     #[classmethod]
     pub fn new(_cls: &PyType) -> PyResult<PythonWorker> {
+        crate::set_interrupt_handler();
         Ok(PythonWorker {
             model: Model::default(),
-            sb_state: symbolica::state::State::new(),
-            sb_workspace: symbolica::state::Workspace::new(),
             cross_sections: CrossSectionList::default(),
             amplitudes: AmplitudeList::default(),
             integrands: HashMap::default(),
@@ -102,23 +106,15 @@ impl PythonWorker {
     }
 
     pub fn load_model(&mut self, file_path: &str) -> PyResult<()> {
-        Model::from_file(
-            String::from(file_path),
-            &mut self.sb_state,
-            &self.sb_workspace,
-        )
-        .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-        .map(|m| self.model = m)
+        Model::from_file(String::from(file_path))
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+            .map(|m| self.model = m)
     }
 
     pub fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
-        Model::from_yaml_str(
-            String::from(yaml_str),
-            &mut self.sb_state,
-            &self.sb_workspace,
-        )
-        .map_err(|e| exceptions::PyException::new_err(e.root_cause().to_string()))
-        .map(|m| self.model = m)
+        Model::from_yaml_str(String::from(yaml_str))
+            .map_err(|e| exceptions::PyException::new_err(e.root_cause().to_string()))
+            .map(|m| self.model = m)
     }
 
     // Note: one could consider returning a PyModel class containing the serialisable model as well,
@@ -126,7 +122,7 @@ impl PythonWorker {
     // which will be deserialize in said native class.
     pub fn get_model(&self) -> PyResult<String> {
         self.model
-            .to_yaml(&self.sb_state)
+            .to_yaml()
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
@@ -247,12 +243,7 @@ impl PythonWorker {
         for cross_section in &self.cross_sections.container {
             if cross_section_names.contains(&cross_section.name.as_str()) {
                 n_exported += 1;
-                let res = cross_section.export(
-                    export_root,
-                    &self.model,
-                    &mut self.sb_state,
-                    &self.sb_workspace,
-                );
+                let res = cross_section.export(export_root, &self.model);
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));
                 }
@@ -276,12 +267,7 @@ impl PythonWorker {
         for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.as_str()) {
                 n_exported += 1;
-                let res = amplitude.export(
-                    export_root,
-                    &self.model,
-                    &mut self.sb_state,
-                    &self.sb_workspace,
-                );
+                let res = amplitude.export(export_root, &self.model);
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));
                 }
@@ -363,21 +349,85 @@ impl PythonWorker {
         integrand: &str,
         num_cores: usize,
         result_path: &str,
+        workspace_path: &str,
         target: Option<(f64, f64)>,
     ) -> PyResult<String> {
         match self.integrands.get_mut(integrand) {
             Some(integrand_enum) => match integrand_enum {
                 Integrand::GammaLoopIntegrand(gloop_integrand) => {
-                    let settings = gloop_integrand.settings.clone();
                     let target = match target {
                         Some((re, im)) => Some(num::Complex::new(re, im)),
                         _ => None,
                     };
 
+                    info!("Gammaloop now integrates {}", integrand.green().bold());
+
+                    let workspace_path = PathBuf::from(workspace_path);
+
+                    let path_to_state = workspace_path.join("integration_state");
+
+                    let integration_state = match fs::read(path_to_state) {
+                        Ok(state_bytes) => {
+                            info!(
+                                "{}",
+                                "Found integration state, result of previous integration:".yellow()
+                            );
+                            info!("");
+
+                            let serializable_state: SerializableIntegrationState =
+                                bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
+                                    .unwrap();
+
+                            let path_to_workspace_settings = workspace_path.join("settings.yaml");
+                            let workspace_settings_string =
+                                fs::read_to_string(path_to_workspace_settings)
+                                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                            let workspace_settings: Settings =
+                                serde_yaml::from_str(&workspace_settings_string)
+                                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                            // force the settings to be the same as the ones used in the previous integration
+                            gloop_integrand.settings = workspace_settings.clone();
+
+                            let state =
+                                serializable_state.into_integration_state(&workspace_settings);
+
+                            print_integral_result(
+                                &state.all_integrals[0],
+                                1,
+                                state.iter,
+                                "re",
+                                target.map(|c| c.re),
+                            );
+
+                            print_integral_result(
+                                &state.all_integrals[1],
+                                2,
+                                state.iter,
+                                "im",
+                                target.map(|c| c.im),
+                            );
+                            info!("");
+                            warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
+                            info!("{}", "Resuming integration".yellow());
+
+                            Some(state)
+                        }
+
+                        Err(_) => {
+                            info!("No integration state found, starting new integration");
+                            None
+                        }
+                    };
+
+                    let settings = gloop_integrand.settings.clone();
                     let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),
                         target,
+                        integration_state,
+                        Some(workspace_path),
                     );
 
                     fs::write(

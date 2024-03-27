@@ -14,12 +14,37 @@ repository = "https://github.com/alphal00p/gammaloop"
 [profile.dev-optim]
 inherits = "dev"
 opt-level = 2
+#lto=true
+
+[profile.bench]
+lto = "fat"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "gamma_net"
+harness = false
+
+[[bench]]
+name = "evaluate_net"
+harness = false
+
+[[example]]
+name = "gamma_chains"
+path = "examples/rust/tensors/gamma_chain.rs"
+
+[[example]]
+name = "gamma_network"
+path = "examples/rust/tensors/gamma_network.rs"
+
+[[example]]
+name = "evaluate_network"
+path = "examples/rust/tensors/evaluate_network.rs"
 
 [dependencies]
-# You may need bleeding edge changes
+symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 #symbolica = { git = "https://github.com/alphal00p/symbolica" }
-#symbolica = "*"
-symbolica = { path = "../symbolica" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = "1.3.3"
@@ -32,8 +57,6 @@ lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = 
     "hyperdual_support",
     "f128_support",
 ] }
-num = "0.3"
-num-traits = "0.2"
 hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
 rand = "0.8"
 rayon = "1.5"
@@ -44,10 +67,9 @@ colored = "*"
 yaml-rust = "0.4"
 libc = "0.2.0"
 statrs = "0.16.0"
-smallvec = "1.7"
+smallvec = { version = "1.7", features = ["const_generics"] }
 itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
-ahash = "*"
 vectorize = "0.2.0"
 log = "*"
 env_logger = "*"
@@ -56,6 +78,27 @@ nalgebra = "0.32.3"
 num-complex = "0.4.4"
 rug = "1.22.0"
 clarabel = "0"
+wide = "0.7.13"
+arbitrary-int = { version = "1.2.6", features = ["num-traits"] }
+duplicate = "1.0.0"
+rustc-hash = "1.1.0"
+petgraph = "0.6.4"
+enum-try-as-inner = "0.1.1"
+indexmap = "2.2.2"
+nohash-hasher = "0.2.0"
+intmap = { git = "https://github.com/lcnbr/rust-intmap" }
+permutation = "0.4.1"
+slotmap = { version = "1.0.7", features = ["serde"] }
+ahash = { version = "0.8.8", features = ["serde"] }
+num = { version = "0.4.1", features = ["serde"] }
+pprof = { version = "0.13.0", features = ["flamegraph"] }
+derive_more = "0.99.17"
+rand_xoshiro = "0.6.0"
+funty = "2.0.0"
+block-id = "0.2.1"
+once_cell = "1.19.0"
+enum_delegate = { git = "https://gitlab.com/dawn_app/enum_delegate" }
+ctrlc = "3.4.4"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -69,11 +112,11 @@ pyo3-build-config = "*"
 crate-type = ["cdylib", "lib"]
 name = "_gammaloop"
 required-features = ["python_api"]
-
+bench = false
 [[bin]]
 name = "cli"
 required-features = ["binary"]
-
+bench = false
 [features]
 extension-module = ["pyo3/extension-module"]
 default = ["python_api"]

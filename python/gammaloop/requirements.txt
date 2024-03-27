@@ -1,3 +1,2 @@
 PyYAML>=6.0.1
-symbolica>=0.1.0
 PyMuPDF>=1.23.4

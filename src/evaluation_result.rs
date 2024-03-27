@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use colored::Colorize;
 use log::info;
 use num::Complex;
 use serde::{Deserialize, Serialize};
@@ -193,30 +194,25 @@ impl StatisticsCounter {
         let total_time = format_evaluation_time(self.get_avg_total_timing());
 
         info!(
-            "|  average ltd expression evaluation time: {}",
-            time_ltd_formatted
+            "|  {}  | {} {} | {} {} | {} {}",
+            format!("{:-7}", "timing").blue().bold(),
+            format!("{:-7}", "total:"),
+            format!("{:-9}", total_time).green(),
+            format!("{:-7}", "param:"),
+            format!("{:-9}", param_time_formatted).green(),
+            format!("{:-7}", "ltd:"),
+            format!("{:-9}", time_ltd_formatted).green(),
         );
 
         info!(
-            "|  average paramatrization time:           {}",
-            param_time_formatted
-        );
-
-        info!("|  total evaluation time:                  {}", total_time);
-
-        info!(
-            "|  evaluations in f64:                     {:.2}%",
-            self.get_percentage_f64()
-        );
-
-        info!(
-            "|  evaluations in f128:                    {:.2}%",
-            self.get_percentage_f128()
-        );
-
-        info!(
-            "|  nan evaluations:                        {:.2}%",
-            self.get_percentage_nan()
+            "|  {}  | {} {} | {} {} | {} {}",
+            format!("{:-7}", "evals").blue().bold(),
+            format!("{:-7}", "f64:"),
+            format!("{:-9}", format!("{:.2}%", self.get_percentage_f64())).green(),
+            format!("{:-7}", "f128:"),
+            format!("{:-9}", format!("{:.2}%", self.get_percentage_f128())).green(),
+            format!("{:-7}", "nan:"),
+            format!("{:-9}", format!("{:.2}%", self.get_percentage_nan())).green(),
         );
     }
 }

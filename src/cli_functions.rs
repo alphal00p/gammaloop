@@ -4,10 +4,8 @@ use colored::Colorize;
 use eyre::eyre;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use symbolica::{
-    numerical_integration::Sample,
-    state::{State, Workspace},
-};
+use std::env;
+use symbolica::numerical_integration::Sample;
 
 use crate::{
     cross_section::Amplitude,
@@ -172,6 +170,8 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
         )
         .get_matches_from(args);
 
+    crate::set_interrupt_handler();
+
     if let Some(matches) = matches.subcommand_matches("batch") {
         let path_to_process_output = PathBuf::from_str(matches.value_of("process_file").unwrap())?;
         let path_to_batch_input = PathBuf::from_str(matches.value_of("batch_input_file").unwrap())?;
@@ -188,6 +188,9 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
 
     let mut settings: Settings = Settings::from_file(matches.value_of("config").unwrap())?;
 
+    if env::var("SYMBOLICA_LICENSE").is_err() {
+        env::set_var("SYMBOLICA_LICENSE", "GAMMALOOP_USER");
+    }
     print_banner();
     if settings.general.debug > 0 {
         info!(
@@ -297,7 +300,7 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
                 .map(|_i| integrand_factory(settings))
                 .collect(),
         };
-        let result = havana_integrate(&settings, user_data_generator, target);
+        let result = havana_integrate(&settings, user_data_generator, target, None, None);
 
         info!("");
         info!(
@@ -324,12 +327,6 @@ fn batch_branch(
 ) -> Result<(), Report> {
     // much of this should be moved to the main cli function
 
-    // setup symbolica for model loading
-    let mut state = State::default();
-    let workspace = Workspace::new();
-
-    // set symbolica license, works without for now
-
     println!("settings passed by command line will be overwritten by configurations in the process output and batch input");
 
     // load the settings
@@ -348,7 +345,7 @@ fn batch_branch(
         .ok_or_else(|| eyre!("could not convert path to string"))?
         .to_string();
 
-    let model = Model::from_file(path_to_model_string, &mut state, &workspace)?;
+    let model = Model::from_file(path_to_model_string)?;
 
     // load the amplitude
     let path_to_amplitude_yaml = process_output_file

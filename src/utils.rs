@@ -4,16 +4,17 @@ use colored::Colorize;
 use hyperdual::Hyperdual;
 use itertools::{izip, Itertools};
 use lorentz_vector::{Field, LorentzVector, RealNumberLike};
+use num::traits::{Float, FloatConst, FromPrimitive, Num, NumAssign, NumCast, Signed};
+use num::traits::{Inv, One, Zero};
 use num::Complex;
 use num::ToPrimitive;
-use num_traits::{Float, FloatConst, FromPrimitive, Num, NumAssign, NumCast, Signed};
-use num_traits::{Inv, One, Zero};
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::ops::Neg;
 use std::time::Duration;
+use symbolica::numerical_integration::Sample;
 
 #[allow(unused_imports)]
 use log::{debug, info};
@@ -154,18 +155,14 @@ where
 {
 }
 
-pub fn parse_python_expression(
-    expression: &str,
-    sb_state: &mut symbolica::state::State,
-    sb_workspace: &symbolica::state::Workspace,
-) -> Atom {
+pub fn parse_python_expression(expression: &str) -> Atom {
     let processed_string = String::from(expression)
         .replace("**", "^")
         .replace("cmath.sqrt", "sqrt")
         .replace("cmath.pi", "pi")
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
-    Atom::parse(processed_string.as_str(), sb_state, sb_workspace)
+    Atom::parse(processed_string.as_str())
         .map_err(|e| {
             format!(
                 "Failed to parse expression : '{}'\nError: {}",
@@ -175,10 +172,7 @@ pub fn parse_python_expression(
         .unwrap()
 }
 
-pub fn to_str_expression(
-    expression: &Atom,
-    sb_state: &symbolica::state::State,
-) -> SmartString<LazyCompact> {
+pub fn to_str_expression(expression: &Atom) -> SmartString<LazyCompact> {
     format!(
         "{}",
         AtomPrinter::new_with_options(
@@ -189,6 +183,7 @@ pub fn to_str_expression(
                 color_builtin_functions: false,
                 print_finite_field: false,
                 explicit_rational_polynomial: false,
+                symmetric_representation_for_finite_field: false,
                 number_thousands_separator: None,
                 multiplication_operator: '*',
                 square_brackets_for_function: false,
@@ -196,7 +191,6 @@ pub fn to_str_expression(
                 latex: false,
                 symmetric_representation_for_finite_field: false,
             },
-            sb_state
         )
     )
     .into()
@@ -1073,7 +1067,7 @@ pub fn global_parameterize<T: FloatLike>(
                         // r = e_cm * b * x/(1-x)
                         let b = Into::<T>::into(settings.parameterization.b);
                         let radius = e_cm * b * x_r[0] / (T::one() - x_r[0]);
-                        jac *= <T as num_traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                        jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
                         radius
                     }
                 }
@@ -1212,7 +1206,7 @@ pub fn global_inv_parameterize<T: FloatLike>(
                     }
                     ParameterizationMapping::Linear => {
                         let b = Into::<T>::into(settings.parameterization.b);
-                        inv_jac /= <T as num_traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
+                        inv_jac /= <T as num::traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
                         xs.push(k_r / (e_cm * b + k_r));
                     }
                 }
@@ -1335,7 +1329,7 @@ pub fn parameterize3d<T: FloatLike>(
                     // r = e_cm * b * x/(1-x)
                     let b = Into::<T>::into(settings.parameterization.b);
                     let radius = e_cm * b * x_r[0] / (T::one() - x_r[0]);
-                    jac *= <T as num_traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                    jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
                     radius
                 }
             };
@@ -1409,7 +1403,7 @@ pub fn inv_parametrize3d<T: FloatLike>(
         }
         ParameterizationMapping::Linear => {
             let b = Into::<T>::into(settings.parameterization.b);
-            jac /= <T as num_traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
+            jac /= <T as num::traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
             k_r / (e_cm * b + k_r)
         }
     };
@@ -1786,10 +1780,43 @@ pub fn format_evaluation_time(time: Duration) -> String {
     if time_secs < 1e-6 {
         format!("{} ns", time.as_nanos())
     } else if time_secs < 1e-3 {
-        format!("{} µs", time.as_micros())
+        format!("{:.2} µs", (time.as_nanos() as f64) / 1000.)
     } else if time_secs < 1.0 {
-        format!("{} ms", time.as_millis())
+        format!("{:.2} ms", (time.as_micros() as f64) / 1000.)
     } else {
-        format!("{} s", time.as_secs())
+        format!("{:.2} s", (time.as_millis() as f64) / 1000.)
+    }
+}
+
+pub fn format_evaluation_time_from_f64(time: f64) -> String {
+    format_evaluation_time(Duration::from_secs_f64(time))
+}
+
+pub fn format_sample(sample: &Sample<f64>) -> String {
+    match sample {
+        Sample::Continuous(_, xs) => {
+            let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
+            format!("xs: [{}]", xs_point)
+        }
+        Sample::Discrete(_, graph_index, Some(nested_sample)) => match nested_sample.as_ref() {
+            Sample::Continuous(_, xs) => {
+                let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
+                format!("graph: {}, xs: [{}]", graph_index, xs_point)
+            }
+            Sample::Discrete(_, channel_index, Some(nested_cont_sample)) => {
+                match nested_cont_sample.as_ref() {
+                    Sample::Continuous(_, xs) => {
+                        let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
+                        format!(
+                            "graph: {}, channel: {}, xs: [{}]",
+                            graph_index, channel_index, xs_point
+                        )
+                    }
+                    _ => String::from("N/A"),
+                }
+            }
+            _ => String::from("N/A"),
+        },
+        _ => String::from("N/A"),
     }
 }

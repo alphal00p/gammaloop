@@ -6,20 +6,23 @@ Integrand:
   n_3d_momenta: 11
 Kinematics:
   e_cm: 64
-  externals: !constant
-  - - 2.0
-    - 2.0
-    - 3.0
-    - 4.0
-  - - 1.0
-    - 2.0
-    - 9.0
-    - 3.0
+  externals: 
+    type: constant
+    momenta:
+      - - 2.0
+        - 2.0
+        - 3.0
+        - 4.0
+      - - 1.0
+        - 2.0
+        - 9.0
+        - 3.0
 Parameterization:
   mode: spherical
   mapping: linear
   b: 1.0
 Integrator:
+  seed: 69
   n_bins: 64
   bin_number_evolution: null
   min_samples_for_update: 1000
@@ -44,4 +47,5 @@ Stability:
     required_precision_for_re: 1e-5
     required_precision_for_im: 1e-5
     escalate_for_large_weight_threshold: -1.0
-sampling: !default
+sampling: 
+  type: default

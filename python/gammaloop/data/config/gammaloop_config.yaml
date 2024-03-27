@@ -1,5 +1,5 @@
 symbolica:
-  license: "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>"
+  license: "GAMMALOOP_USER"
 drawing:
   mode: "feynmp"
   combined_graphs_pdf_grid_shape: [3, 2]
@@ -29,5 +29,5 @@ drawing:
     lmb_color: "red"
     anchor_tension: 2.0
     caption_size: "40pt"
-export_settings: 
+export_settings:
   write_default_settings: false

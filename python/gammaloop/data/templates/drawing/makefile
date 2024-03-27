@@ -5,9 +5,9 @@ COMPILE_LOG = compilation.log
 
 ALLGRAPHS=all_graphs.pdf
 GRAPHS_SRC=$(wildcard *.tex)
-GRAPHS_PDF=$(patsubst %.tex,%.pdf,$(wildcard *.tex))
+# GRAPHS_PDF=$(sort $(patsubst %.tex,%.pdf,$(wildcard *.tex)))
+GRAPHS_PDF= {all_targets}
 
-# targets: {all_targets}
 all: $(OUTPUT)
 
 %.pdf: %.tex
@@ -19,7 +19,7 @@ all: $(OUTPUT)
 	ps2pdf $*.ps 2>&1 >> $(COMPILE_LOG)
 	pdfcrop $*.pdf $*.pdf 2>&1 >> $(COMPILE_LOG)
 
-$(ALLGRAPHS): $(sort $(GRAPHS_PDF))
+$(ALLGRAPHS): $(GRAPHS_PDF)
 	pdfunite $^ $@
 
 $(OUTPUT): $(ALLGRAPHS)

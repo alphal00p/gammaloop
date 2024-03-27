@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import Counter
 
 import importlib
 import importlib.util
@@ -359,13 +360,19 @@ class Particle(object):
         return self.mass.value is None or abs(self.mass.value) > 0.
 
     @staticmethod
+    def sanitize_texname(texname: str) -> str:
+        # Some UFO model unfortunately include ~ and _ in texnames, which are not allowed in LaTeX
+        return texname.replace('~', 'x').replace('_', '')
+
+    @staticmethod
     def from_ufo_object(model: Model, ufo_object: Any) -> Particle:
 
         return Particle(
             ufo_object.pdg_code, ufo_object.name, ufo_object.antiname, ufo_object.spin, ufo_object.color,
             model.get_parameter(ufo_object.mass.name),
             model.get_parameter(ufo_object.width.name),
-            ufo_object.texname, ufo_object.antitexname,
+            Particle.sanitize_texname(ufo_object.texname),
+            Particle.sanitize_texname(ufo_object.antitexname),
             ufo_object.charge,
             ufo_object.GhostNumber,
             ufo_object.LeptonNumber,
@@ -582,8 +589,10 @@ class Model(object):
         model_path = os.path.abspath(
             pjoin(DATA_PATH, 'models', ufo_model_path))
         sys.path.insert(0, os.path.dirname(model_path))
+        sys.path.insert(0, model_path)
         model_name = os.path.basename(model_path)
         ufo_model = importlib.import_module(model_name)
+        del sys.path[0]
         del sys.path[0]
 
         # Note that this approach does not work because of relative imports in the UFO model __init__.py file
@@ -689,7 +698,7 @@ class Model(object):
         return self.to_serializable_model().to_yaml()
 
     def get_vertices_from_particles(self, particles: list[Particle]) -> list[VertexRule]:
-        return [vertex_rule for vertex_rule in self.vertex_rules if set(vertex_rule.particles) == set(particles)]
+        return [vertex_rule for vertex_rule in self.vertex_rules if Counter(vertex_rule.particles) == Counter(particles)]
 
     def get_order(self, order_name: str) -> Order:
         return self.orders[self.name_to_position['orders'][order_name]]

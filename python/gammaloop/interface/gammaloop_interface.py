@@ -45,7 +45,7 @@ class GammaLoopConfiguration(object):
     def __init__(self, path: str | None = None):
         self._config: dict[str, Any] = {
             'symbolica': {
-                'license': "<PASTE_YOUR_SYMBOLICA_LICENSE_HERE>"
+                'license': "GAMMALOOP_USER"
             },
             'drawing': {
                 'mode': 'feynmp',
@@ -238,7 +238,7 @@ class GammaLoop(object):
         if gl_is_symbolica_registered is False:
             raise GammaLoopError("Symbolica is not registered and since gammaLoop uses it both within Python and Rust, multiple instances of Symbolica are necessary.\n"
                                  + "Please register Symbolica by setting the environment variable 'SYMBOLICA_LICENSE' or by adding it to the gammaloop configuration file.\n"
-                                 + "Also make sure you have a working internet connection.")
+                                 + "Also make sure you have a working internet connection. Alternatively, revert the license setting to the default value 'GAMMALOOP_USER'.")
 
     def get_model_from_rust_worker(self) -> Model:
         return Model.from_yaml(self.rust_worker.get_model())
@@ -466,28 +466,44 @@ class GammaLoop(object):
             raise GammaLoopError(f"File '{args.file_path}' does not exist")
 
         file_path = Path(os.path.abspath(args.file_path))
-        sys.path.insert(0, str(file_path.parent))
 
-        if not args.no_compile:
-            # compile the file first before importing it with optimization flag and same executable as used for gammaLoop.
-            # This avoids that memory isn't freed after compiling when using the __import__ directly
-            logger.info("Compiling imported supergraphs.")
-            subprocess.run([sys.executable, '-O', '-m',
-                           file_path.stem], cwd=file_path.parent, check=True)
+        match args.format:
+            case 'yaml':
+                try:
+                    all_raw_graphs: list[Any] = yaml.safe_load(
+                        open(file_path, 'r', encoding='utf-8'))['graphs']
+                except Exception as exc:
+                    raise GammaLoopError(
+                        f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
 
-        qgraph_loaded_module = __import__(file_path.stem)
-        # Reload to avoid border effects if this is the second time qgraph output is loaded within this same Python session.
-        importlib.reload(qgraph_loaded_module)
-        logger.info("Imported %s graphs from qgraph output '%s'.",
-                    len(qgraph_loaded_module.graphs), args.file_path)
-        del sys.path[0]
+            case 'qgraph':
+                sys.path.insert(0, str(file_path.parent))
+
+                if not args.no_compile:
+                    # compile the file first before importing it with optimization flag and same executable as used for gammaLoop.
+                    # This avoids that memory isn't freed after compiling when using the __import__ directly
+                    logger.info("Compiling imported supergraphs.")
+                    subprocess.run([sys.executable, '-O', '-m',
+                                    file_path.stem], cwd=file_path.parent, check=True)
+
+                qgraph_loaded_module = __import__(file_path.stem)
+                # Reload to avoid border effects if this is the second time qgraph output is loaded within this same Python session.
+                importlib.reload(qgraph_loaded_module)
+                logger.info("Imported %s graphs from qgraph output '%s'.",
+                            len(qgraph_loaded_module.graphs), args.file_path)
+                del sys.path[0]
+                all_raw_graphs: list[Any] = qgraph_loaded_module.graphs
+
+            case _:
+                raise GammaLoopError(
+                    "Invalid graph format: '%s' for importing graphs.", args.format)
 
         graphs: list[Graph] = []
-        for i_qg, qgraph_object in enumerate(qgraph_loaded_module.graphs):
+        for i_qg, qgraph_object in enumerate(all_raw_graphs):
             graphs.append(Graph.from_qgraph(
                 self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}"))
         logger.info("Successfully loaded %s graphs.",
-                    len(qgraph_loaded_module.graphs))
+                    len(all_raw_graphs))
 
         # Now determine if it is a supergraph or an amplitude graph
         graph_type = None
@@ -546,8 +562,8 @@ class GammaLoop(object):
                         sg_id=0, sg_cut_id=0, fs_cut_id=i, amplitude_side=Side.LEFT,
                         graph=g
                     )
-                ]
-            ) for i, g in enumerate(graphs)])
+                    for i, g in enumerate(graphs)]
+            )])
 
     # output command
     output_parser = ArgumentParser(prog='output')
@@ -718,6 +734,8 @@ class GammaLoop(object):
     integrate_parser.add_argument('--cores', '-c', type=int, default=1,)
     integrate_parser.add_argument(
         '--target', '-t', nargs=2, type=float, default=None)
+    integrate_parser.add_argument(
+        '--restart', '-r', action='store_true',)
 
     def do_integrate(self, str_args: str) -> None:
         if str_args == 'help':
@@ -736,8 +754,21 @@ class GammaLoop(object):
         result_output_path = self.launched_output.joinpath(
             "runs").joinpath("run.yaml")
 
+        workspace_path = self.launched_output.joinpath("workspace")
+        if args.restart and os.path.exists(workspace_path):
+            shutil.rmtree(workspace_path)
+
+        if not os.path.exists(workspace_path):
+            os.mkdir(workspace_path)
+
         self.rust_worker.integrate_integrand(
-            args.integrand, args.cores, str(result_output_path), target)
+            args.integrand, args.cores, str(result_output_path), str(workspace_path), target)
+
+        # nuke the workspace if integration finishes
+        # For now leave the possibility of restarting where integration left off.
+        # Maybe in the future add an option to automatically clean the workspace after running is completed or
+        # specify a "run_tag" that allows to have mutliple workspace concurrently active
+        # shutil.rmtree(workspace_path)
 
     # test_ir_limits
     test_ir_limits_parser = ArgumentParser(prog='test_ir_limits')

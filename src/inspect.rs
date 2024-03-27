@@ -9,8 +9,8 @@ use crate::Integrand;
 use crate::SamplingSettings;
 use crate::Settings;
 use lorentz_vector::LorentzVector;
+use num::traits::ToPrimitive;
 use num::Complex;
-use num_traits::ToPrimitive;
 
 pub fn inspect(
     settings: &Settings,

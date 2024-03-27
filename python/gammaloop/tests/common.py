@@ -2,7 +2,8 @@ import logging
 import os
 from pathlib import Path
 from subprocess import Popen, PIPE
-import gammaloop
+import gammaloop.misc.common
+import gammaloop.interface.gammaloop_interface as gl_interface
 from gammaloop.misc.common import GL_PATH, logger
 import shutil
 import yaml
@@ -13,10 +14,10 @@ RESOURCES_PATH = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), 'test_data')
 
 
-def get_gamma_loop_interpreter() -> gammaloop.GammaLoop:
-    gloop = gammaloop.GammaLoop()
-    gammaloop.GL_DEBUG = True
-    gammaloop.GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
+def get_gamma_loop_interpreter() -> gl_interface.GammaLoop:
+    gloop = gl_interface.GammaLoop()
+    gammaloop.misc.common.GL_DEBUG = True
+    gammaloop.misc.common.GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
     return gloop
 
 
@@ -24,7 +25,9 @@ def run_rust_test(rust_tests_binary: Path, output_path: Path, test_name: str) ->
 
     new_env: dict[str, str] = os.environ.copy()
     new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = str(output_path)
-    process = Popen([rust_tests_binary, f'pytest_{test_name}', '--test-threads=1', '--ignored',
+    if 'SYMBOLICA_LICENSE' not in new_env:
+        new_env['SYMBOLICA_LICENSE'] = 'GAMMALOOP_USER'
+    process = Popen(['cargo', 'test', f'pytest_{test_name}', '--release', '--target-dir', os.path.join(GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries'), '--', '--test-threads=1', '--ignored',
                     '--nocapture'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE, env=new_env)
     output, error = process.communicate()
     if process.returncode != 0:
@@ -38,55 +41,45 @@ def run_rust_test(rust_tests_binary: Path, output_path: Path, test_name: str) ->
 
 def run_drawing(drawing_path: str) -> bool:
 
-    process = Popen(['make', f'feynman_diagrams.pdf'],
+    process = Popen(['make', 'feynman_diagrams.pdf'],
                     cwd=drawing_path, stdout=PIPE, stderr=PIPE)
     output, error = process.communicate()
     if process.returncode != 0 or not os.path.isfile(pjoin(drawing_path, 'feynman_diagrams.pdf')):
         logger.info("DRAWING TEST STDOUT:\n%s", output.decode("utf-8"))
         logger.info("DRAWING TEST STDERR:\n%s", error.decode("utf-8"))
+        if os.path.isfile(pjoin(drawing_path, 'compilation.log')):
+            with open(pjoin(drawing_path, 'compilation.log'), 'r', encoding="utf-8") as f:
+                compilation_log = f.read()
+        else:
+            compilation_log = "No compilation log found."
+        logger.info("DRAWING TEST compilation log:\n%s", compilation_log)
         return False
     logger.debug("DRAWING TEST STDOUT:\n%s", output.decode("utf-8"))
     logger.debug("DRAWING TEST STDERR:\n%s", error.decode("utf-8"))
     return True
 
 
-def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: float):
+def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: float, process_path: Path):
     max_mc_error_dif = 5.0
     max_rel_error_dif = 0.01
     max_percent_error = 0.01
 
-    workspace = os.path.join(RESOURCES_PATH, 'test_{}'.format(graph))
-    graph_path = os.path.join(
-        RESOURCES_PATH, 'qgraf_outputs', '{}.py'.format(graph))
     test_config_path = os.path.join(
         RESOURCES_PATH, 'test_configs', '{}.yaml'.format(graph))
 
-    # clean up output if it is there
-    if os.path.exists(workspace):
-        shutil.rmtree(workspace)
-
     gl = get_gamma_loop_interpreter()
-
-#     # create the output needed for the test
-    command_list = gammaloop.CommandList.from_string(
-        "import_model scalars-full")
-    command_list.add_command(
-        f"import_graphs {graph_path} --format=qgraph")
-    command_list.add_command(f"output {workspace}")
-
-    gl.run(command_list)
 
     # copy settings
     shutil.copyfile(test_config_path,
-                    os.path.join(workspace, 'cards', 'run_card.yaml'))
+                    os.path.join(process_path, 'cards', 'run_card.yaml'))
 
-    command_list = gammaloop.CommandList.from_string(
-        "launch {}".format(workspace))
+    command_list = gl_interface.CommandList.from_string(
+        "launch {}".format(process_path))
     command_list.add_command("integrate {}".format(graph))
 
     gl.run(command_list)
 
-    f = open(os.path.join(workspace, 'runs', 'run.yaml'), "r").read()
+    f = open(os.path.join(process_path, 'runs', 'run.yaml'), "r").read()
     run_yaml = yaml.safe_load(f)
 
     res_for_check = run_yaml["result"][0]
@@ -105,5 +98,3 @@ def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: floa
     assert absolute_difference < max_mc_error_dif * error_for_check
     assert relative_difference < max_rel_error_dif
     assert error_for_check < max_percent_error * abs(target)
-
-    shutil.rmtree(workspace)
