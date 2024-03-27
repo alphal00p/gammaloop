@@ -806,20 +806,16 @@ impl Graph {
         }
     }
 
-    pub fn generate_lmb_replacement_rules(&self) -> Vec<(Pattern, Pattern)> {
+    pub fn generate_lmb_replacement_rules(&self) -> Vec<(Atom, Atom)> {
         self.loop_momentum_basis_replacement_rule(&self.loop_momentum_basis)
     }
 
-    fn loop_momentum_basis_replacement_rule(
-        &self,
-        lmb: &LoopMomentumBasis,
-    ) -> Vec<(Pattern, Pattern)> {
+    fn loop_momentum_basis_replacement_rule(&self, lmb: &LoopMomentumBasis) -> Vec<(Atom, Atom)> {
         let mut rule = vec![];
 
         for (i, signature) in lmb.edge_signatures.iter().enumerate() {
-            println!("lhs {}", Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap());
             rule.push((
-                Pattern::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
+                Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
                 self.replacement_rule_from_signature(i, &signature),
             ));
         }
@@ -832,7 +828,7 @@ impl Graph {
         index: usize,
 
         signature: &(Vec<isize>, Vec<isize>),
-    ) -> Pattern {
+    ) -> Atom {
         let mut acc = Atom::new_num(0);
         for (i_l, sign) in signature.0.iter().enumerate() {
             match sign {
@@ -857,8 +853,7 @@ impl Graph {
                 _ => {}
             }
         }
-        println!("rhs {}", acc);
-        acc.into_pattern()
+        acc
     }
 
     pub fn generate_ltd(&mut self) {
@@ -898,6 +893,12 @@ impl Graph {
 
     pub fn generate_numerator(&mut self, model: &Model) {
         self.derived_data.numerator = Some(generate_numerator(self, model));
+    }
+
+    pub fn smart_generate_numerator(&mut self, model: &Model) {
+        if self.derived_data.numerator.is_none() {
+            self.derived_data.numerator = Some(generate_numerator(self, model));
+        }
     }
 
     #[inline]

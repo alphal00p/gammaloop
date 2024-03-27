@@ -63,6 +63,10 @@ pip-delete-this-directory.txt
 # GammaLoop test outputs
 TEST_OUTPUT*/
 
+
+# General ignored directory
+ignore/
+
 # Unit test / coverage reports
 htmlcov/
 .tox/

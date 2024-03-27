@@ -18,6 +18,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use symbolica::printer::PrintOptions;
 
 const GIT_VERSION: &str = git_version!();
 
@@ -68,6 +69,8 @@ fn gammalooprs(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
     Ok(())
 }
+
+pub struct OutputOptions {}
 
 #[pyclass(name = "Worker")]
 pub struct PythonWorker {
@@ -220,6 +223,10 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
+    pub fn generate_numerators(&mut self) {
+        self.amplitudes.generate_numerator(&self.model);
+    }
+
     // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,
     // but since python already has its native class for this, it is better for now to pass a yaml representation
     // which will be deserialize in said native class.
@@ -305,6 +312,41 @@ impl PythonWorker {
             integrand_counter,
             self.amplitudes.container.len()
         ))
+    }
+
+    pub fn export_numerators(&mut self, export_root: &str, format: &str) -> PyResult<String> {
+        self.generate_numerators();
+
+        println!("Exporting numerators");
+        for amplitude in self.amplitudes.container.iter_mut() {
+            amplitude
+                .export_numerator(export_root, Self::printer_options(format))
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        }
+        Ok(format!("Exported numerators"))
+    }
+
+    pub fn export_coupling_replacement_rules(
+        &self,
+        export_root: &str,
+        format: &str,
+    ) -> PyResult<String> {
+        self.model
+            .export_coupling_replacement_rules(export_root, Self::printer_options(format))
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        Ok(format!("Exported coupling substitutions"))
+    }
+
+    pub fn export_lmb_subs(&self, export_root: &str, format: &str) -> PyResult<String> {
+        for amplitude in self.amplitudes.container.iter() {
+            amplitude
+                .export_lmb_subs(export_root, Self::printer_options(format))
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+                .unwrap();
+            println!("Exported lmb substitutions for amplitude ",)
+        }
+        println!("Exported lmb substitutions for amplitude ",);
+        Ok(format!("Exported lmb substitutions"))
     }
 
     pub fn inspect_integrand(
@@ -536,6 +578,26 @@ impl PythonWorker {
     pub fn update_iter(&mut self) {
         if let Some(master_node) = &mut self.master_node {
             master_node.update_iter();
+        }
+    }
+}
+
+impl PythonWorker {
+    fn printer_options(format: &str) -> PrintOptions {
+        match format {
+            "mathematica" => PrintOptions::mathematica(),
+            "latex" => PrintOptions::latex(),
+            _ => PrintOptions::default(),
+        }
+    }
+}
+
+impl PythonWorker {
+    fn printer_options(format: &str) -> PrintOptions {
+        match format {
+            "mathematica" => PrintOptions::mathematica(),
+            "latex" => PrintOptions::latex(),
+            _ => PrintOptions::default(),
         }
     }
 }

@@ -569,6 +569,11 @@ class GammaLoop(object):
     output_parser = ArgumentParser(prog='output')
     output_parser.add_argument(
         'output_path', type=str, help='Path to output the cross section to')
+    output_parser.add_argument('-n','--numerator',default=False,action='store_true', help='Generate numerator and output it to a text file')
+    output_parser.add_argument('-lmb','--lmb_replacement',default=False,action='store_true', help='Generate lmb replacements and output it to a text file')
+    output_parser.add_argument('-c','--coupling_replacements',default=False,action='store_true', help='Generate coupling replacements and output it to a text file')
+    output_parser.add_argument('-f','--format',type=str, default='default',
+                                      choices=['default', 'mathematica','latex'], help='Format to export symbolica objects in.')
 
     def do_output(self, str_args: str) -> None:
         if str_args == 'help':
@@ -583,6 +588,13 @@ class GammaLoop(object):
         if self.model.is_empty():
             raise GammaLoopError(
                 "No model loaded. Please load a model first with 'import_model' command.")
+        else:
+            if args.coupling_replacements:
+                self.rust_worker.export_coupling_replacement_rules(args.output_path,args.format)
+                logger.info("Coupling replacement rules exported to model directory.")
+            
+        
+
 
         if len(self.cross_sections) == 0 and len(self.amplitudes) == 0:
             raise GammaLoopError("No process generated yet.")
@@ -596,6 +608,12 @@ class GammaLoop(object):
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
             amplitude_exporter.export(args.output_path, self.amplitudes)
+            if args.numerator:
+                amplitude_exporter.export_numerator(args.output_path, self.amplitudes, args.format)
+            if args.lmb_replacement:
+                self.rust_worker.export_lmb_subs(args.output_path,args.format)
+                logger.info("Lmb substitutions exported to amplitude numerator directory.")
+            
             logger.info("Amplitudes exported to '%s'.", args.output_path)
     #
     # Run interface type of commands below (those bound to a particular output already generated)

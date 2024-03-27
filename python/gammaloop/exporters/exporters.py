@@ -26,6 +26,10 @@ class OutputMetaData(dict[str, Any]):
     def from_yaml_str(yaml_str: str):
         return OutputMetaData(yaml.safe_load(yaml_str))
 
+def split_str_args(str_args: str) -> list[str]:
+    return str_args.split(' ') if str_args != '' else []
+
+
 
 class GammaLoopExporter(object):
 
@@ -35,7 +39,8 @@ class GammaLoopExporter(object):
 
     def generic_export(self, export_root: Path):
 
-        os.makedirs(export_root)
+
+        os.makedirs(export_root, exist_ok=True)
 
         # Build the output structure
         os.makedirs(pjoin(export_root, 'cards'))
@@ -47,8 +52,8 @@ class GammaLoopExporter(object):
         with open(pjoin(export_root, 'cards', 'proc_card.gL'), 'w', encoding='utf-8') as file:
             file.write(self.gammaloop.command_history.nice_string())
 
-        os.makedirs(pjoin(export_root, 'sources'))
-        os.makedirs(pjoin(export_root, 'sources', 'model'))
+        os.makedirs(pjoin(export_root, 'sources'),exist_ok=True)
+        os.makedirs(pjoin(export_root, 'sources', 'model'),exist_ok=True)
         with open(pjoin(export_root, 'sources', 'model', f'{self.gammaloop.model.name}.yaml'), 'w', encoding='utf-8') as file:
             file.write(self.gammaloop.model.to_yaml())
 
@@ -87,6 +92,13 @@ class AmplitudesExporter(GammaLoopExporter):
     def __init__(self, gammaloop_interface: gammaloop_interface.GammaLoop, args: argparse.Namespace):
         GammaLoopExporter.__init__(self, gammaloop_interface, args)
         # Further processing here for additional info if need be
+
+    def export_numerator(self, export_root: Path, amplitudes: AmplitudeList, format: str):
+        for amplitude in amplitudes:
+            os.makedirs(pjoin(export_root, 'sources',
+                        'amplitudes', f'{amplitude.name}','numerator'))
+        
+        self.gammaloop.rust_worker.export_numerators(str(export_root), format)
 
     def export(self, export_root: Path, amplitudes: AmplitudeList):
 
