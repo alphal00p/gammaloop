@@ -2,9 +2,12 @@ use ahash::HashMap;
 use ahash::HashMapExt;
 use clarabel::algebra::*;
 use clarabel::solver::*;
+use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use num::Complex;
 
+use crate::cff::esurface::ExistingEsurfaceId;
+use crate::cff::esurface::ExistingEsurfaces;
 use crate::cff::esurface::{EsurfaceCollection, EsurfaceId};
 use crate::graph::LoopMomentumBasis;
 use crate::utils::compute_shift_part;
@@ -38,7 +41,8 @@ fn extract_center<T: FloatLike>(num_loops: usize, solution: &[T]) -> Vec<Lorentz
 
 fn construct_solver(
     lmb: &LoopMomentumBasis,
-    existing_esurface_ids: &[EsurfaceId],
+    esurfaces_to_consider: &[ExistingEsurfaceId],
+    existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
@@ -52,10 +56,10 @@ fn construct_solver(
 
     let mut inequivalent_masses: Vec<Complex<f64>> = vec![];
 
-    let mut esurface_constraints: Vec<Vec<usize>> = Vec::with_capacity(existing_esurface_ids.len());
+    let mut esurface_constraints: Vec<Vec<usize>> = Vec::with_capacity(esurfaces_to_consider.len());
 
-    for esurface_id in existing_esurface_ids {
-        let esurface = &esurfaces[*esurface_id];
+    for esurface_id in esurfaces_to_consider.iter() {
+        let esurface = &esurfaces[existing_esurfaces[*esurface_id]];
         let mut esurface_constraint_indices: Vec<usize> = Vec::with_capacity(6);
 
         for &edge_id in &esurface.energies {
@@ -129,7 +133,7 @@ fn construct_solver(
 
     a_matrix[0][0] = 1.0;
     // esurface constraints
-    for (constraint_index, (esurface_id, esurface_constraint)) in existing_esurface_ids
+    for (constraint_index, (esurface_id, esurface_constraint)) in esurfaces_to_consider
         .iter()
         .zip(esurface_constraints.iter())
         .enumerate()
@@ -138,8 +142,8 @@ fn construct_solver(
             a_matrix[constraint_index + 1][*prop_index + propagator_index_offset] = 1.0;
         }
 
-        let shift_part =
-            esurfaces[*esurface_id].compute_shift_part_from_momenta(lmb, external_momenta);
+        let shift_part = esurfaces[existing_esurfaces[*esurface_id]]
+            .compute_shift_part_from_momenta(lmb, external_momenta);
         b_vector[constraint_index + 1] = -shift_part;
         a_matrix[constraint_index + 1][0] = -1.0;
     }
@@ -198,14 +202,16 @@ fn construct_solver(
 
 pub fn find_center(
     lmb: &LoopMomentumBasis,
-    existing_esurfaces_ids: &[EsurfaceId],
+    esurfaces_to_consider: &[ExistingEsurfaceId],
+    existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
 ) -> Option<Vec<LorentzVector<f64>>> {
     let mut solver = construct_solver(
         lmb,
-        existing_esurfaces_ids,
+        esurfaces_to_consider,
+        existing_esurfaces,
         esurfaces,
         edge_masses,
         external_momenta,
@@ -227,7 +233,7 @@ pub fn find_center(
 #[allow(unused_variables)]
 pub fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
-    existing_esurface_ids: &[EsurfaceId],
+    existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
@@ -235,71 +241,56 @@ pub fn find_maximal_overlap(
     let mut res = vec![];
     let num_loops = lmb.basis.len();
 
-    // first try if all esurfaces have a single center
+    let all_existing_esurfaces = existing_esurfaces.all_indices().collect_vec();
+
+    // first try if all esurfaces have a single center, we explitely seach a center instead of trying the
+    // origin. This is because the origin might not be optimal.
     let option_center = find_center(
         lmb,
-        existing_esurface_ids,
+        &all_existing_esurfaces,
+        existing_esurfaces,
         esurfaces,
         edge_masses,
         external_momenta,
     );
 
     if let Some(center) = option_center {
-        res.push((existing_esurface_ids.to_vec(), center));
+        res.push((existing_esurfaces.clone().to_vec(), center));
         return res;
     }
 
-    // construct pairs of esurfaces
-    let len = existing_esurface_ids.len();
-    let mut pair_centers = EsurfacePairs::new(len);
-    let mut has_overlap_with = vec![vec![]; len];
+    // if the center is not valid, create a table of all pairs
+    let esurface_pairs = EsurfacePairs::new(
+        lmb,
+        existing_esurfaces,
+        esurfaces,
+        edge_masses,
+        external_momenta,
+    );
 
-    for i in 0..len {
-        for j in i + 1..len {
-            let option_center = find_center(
-                lmb,
-                &[existing_esurface_ids[i], existing_esurface_ids[j]],
-                esurfaces,
-                edge_masses,
-                external_momenta,
-            );
-
-            if let Some(center) = option_center {
-                has_overlap_with[i].push(j);
-                has_overlap_with[j].push(i);
-                pair_centers.insert((i, j), center);
-            }
+    for (existing_esurface_id, &esurface_id) in existing_esurfaces.iter_enumerate() {
+        // if an esurface overlaps with no other esurface, it is part of the maximal overlap structure
+        if esurface_pairs.has_no_overlap(existing_esurface_id) {
+            let center = esurfaces[esurface_id].get_point_inside();
+            res.push((vec![esurface_id], center));
         }
     }
 
-    println!("{:?}", has_overlap_with);
-    println!("{:?}", pair_centers);
-
-    for (esurface_id_index, overlaps_with) in has_overlap_with.iter().enumerate() {
-        if overlaps_with.is_empty() {
-            let esurface_id = existing_esurface_ids[esurface_id_index];
-        }
-    }
-
-    todo!();
+    res
 }
 
 #[derive(Debug)]
 struct EsurfacePairs {
-    data: HashMap<(usize, usize), Vec<LorentzVector<f64>>>,
+    data: HashMap<(ExistingEsurfaceId, ExistingEsurfaceId), Vec<LorentzVector<f64>>>,
+    has_pair_with: Vec<Vec<ExistingEsurfaceId>>,
 }
 
 impl EsurfacePairs {
-    #[allow(dead_code)]
-    fn get_remove(&mut self, mut pair: (usize, usize)) -> Option<Vec<LorentzVector<f64>>> {
-        if pair.0 > pair.1 {
-            std::mem::swap(&mut pair.0, &mut pair.1);
-        }
-
-        self.data.remove(&pair)
-    }
-
-    fn insert(&mut self, pair: (usize, usize), center: Vec<LorentzVector<f64>>) {
+    fn insert(
+        &mut self,
+        pair: (ExistingEsurfaceId, ExistingEsurfaceId),
+        center: Vec<LorentzVector<f64>>,
+    ) {
         if pair.0 > pair.1 {
             self.data.insert((pair.1, pair.0), center);
         } else {
@@ -307,16 +298,85 @@ impl EsurfacePairs {
         }
     }
 
-    fn new(num_esurfaces: usize) -> Self {
+    fn new_empty(num_existing_esurfaces: usize) -> Self {
         Self {
-            data: HashMap::with_capacity(num_esurfaces * (num_esurfaces - 1) / 2),
+            data: HashMap::with_capacity(num_existing_esurfaces * (num_existing_esurfaces - 1) / 2),
+            has_pair_with: vec![Vec::with_capacity(num_existing_esurfaces); num_existing_esurfaces],
         }
+    }
+
+    fn new(
+        lmb: &LoopMomentumBasis,
+        existing_esurfaces: &ExistingEsurfaces,
+        esurfaces: &EsurfaceCollection,
+        edge_masses: &[Option<Complex<f64>>],
+        external_momenta: &[LorentzVector<f64>],
+    ) -> Self {
+        let mut res = Self::new_empty(existing_esurfaces.len());
+
+        let all_existing_esurfaces = existing_esurfaces.all_indices().collect_vec();
+
+        for (i, &esurface_id_1) in all_existing_esurfaces.iter().enumerate() {
+            for &esurface_id_2 in all_existing_esurfaces.iter().skip(i + 1) {
+                let center = find_center(
+                    lmb,
+                    &[esurface_id_1, esurface_id_2],
+                    existing_esurfaces,
+                    esurfaces,
+                    edge_masses,
+                    external_momenta,
+                );
+
+                if let Some(center) = center {
+                    res.insert((esurface_id_1, esurface_id_2), center);
+                    res.has_pair_with[Into::<usize>::into(esurface_id_1)].push(esurface_id_2);
+                    res.has_pair_with[Into::<usize>::into(esurface_id_2)].push(esurface_id_1);
+                }
+            }
+        }
+
+        res
+    }
+
+    fn has_no_overlap(&self, esurface_id: ExistingEsurfaceId) -> bool {
+        self.has_pair_with[Into::<usize>::into(esurface_id)].is_empty()
+    }
+
+    fn construct_possible_subsets_of_len(
+        &self,
+        existing_esurfaces: &ExistingEsurfaces,
+        subset_len: usize,
+    ) -> Vec<Vec<ExistingEsurfaceId>> {
+        let mut res = vec![];
+        let num_existing_esurfaces = self.has_pair_with.len();
+        assert!(subset_len < num_existing_esurfaces);
+
+        let mut subsets = existing_esurfaces.all_indices().combinations(subset_len);
+
+        // horrendously inefficient, many things can be skipped. by manually advancing the subsets iterator.
+        for subset in subsets {
+            let is_valid = subset.iter().combinations(2).all(|pair| {
+                assert!(pair[0] < pair[1]);
+                let pair = (
+                    Into::<ExistingEsurfaceId>::into(*pair[0]),
+                    Into::<ExistingEsurfaceId>::into(*pair[1]),
+                );
+                self.data.contains_key(&pair)
+            });
+
+            if is_valid {
+                res.push(subset);
+            }
+        }
+
+        res
     }
 }
 
 #[cfg(test)]
 #[allow(dead_code, unused_variables)]
 mod tests {
+    use super::*;
     use itertools::Itertools;
     use lorentz_vector::LorentzVector;
     use num::Complex;
@@ -326,7 +386,8 @@ mod tests {
     struct HelperBoxStructure {
         external_momenta: [LorentzVector<f64>; 3],
         lmb: LoopMomentumBasis,
-        esurfaces: [Esurface; 4],
+        esurfaces: EsurfaceCollection,
+        existing_esurfaces: ExistingEsurfaces,
         edge_masses: Vec<Option<Complex<f64>>>,
     }
 
@@ -355,7 +416,7 @@ mod tests {
                 edge_signatures: box_signatures,
             };
 
-            let esurfaces = [
+            let esurfaces_array = [
                 Esurface {
                     energies: vec![5, 6],
                     sub_orientation: vec![],
@@ -363,7 +424,7 @@ mod tests {
                     shift_signature: vec![true],
                 },
                 Esurface {
-                    energies: vec![4, 7],
+                    energies: vec![5, 7],
                     sub_orientation: vec![],
                     shift: vec![1, 2],
                     shift_signature: vec![true, true],
@@ -382,6 +443,8 @@ mod tests {
                 },
             ];
 
+            let esurfaces = EsurfaceCollection::from_vec(esurfaces_array.to_vec());
+
             let edge_masses = match masses {
                 Some(masses) => {
                     let mut edge_masses = vec![None; 4];
@@ -396,13 +459,65 @@ mod tests {
                 None => vec![None; 8],
             };
 
+            let existing_esurfaces =
+                ExistingEsurfaces::from_vec((0..4).map(Into::<EsurfaceId>::into).collect());
+
             Self {
                 external_momenta,
                 lmb: box_lmb,
+                existing_esurfaces,
                 esurfaces,
                 edge_masses,
             }
         }
+    }
+
+    #[test]
+    fn test_pair_creator() {
+        let box4e = HelperBoxStructure::new(None);
+
+        let esurface_pairs = EsurfacePairs::new(
+            &box4e.lmb,
+            &box4e.existing_esurfaces,
+            &box4e.esurfaces,
+            &box4e.edge_masses,
+            &box4e.external_momenta,
+        );
+
+        assert_eq!(esurface_pairs.data.len(), 4);
+
+        let box4e_massive = HelperBoxStructure::new(Some([10.5; 4]));
+        let esurface_pairs_massive = EsurfacePairs::new(
+            &box4e_massive.lmb,
+            &box4e_massive.existing_esurfaces,
+            &box4e_massive.esurfaces,
+            &box4e_massive.edge_masses,
+            &box4e_massive.external_momenta,
+        );
+
+        assert_eq!(esurface_pairs_massive.data.len(), 0);
+    }
+
+    #[test]
+    fn test_subset_generator() {
+        let box4e = HelperBoxStructure::new(None);
+
+        let esurface_pairs = EsurfacePairs::new(
+            &box4e.lmb,
+            &box4e.existing_esurfaces,
+            &box4e.esurfaces,
+            &box4e.edge_masses,
+            &box4e.external_momenta,
+        );
+
+        let subsets_3 =
+            esurface_pairs.construct_possible_subsets_of_len(&box4e.existing_esurfaces, 3);
+
+        assert_eq!(subsets_3.len(), 0);
+
+        let subsets_2 =
+            esurface_pairs.construct_possible_subsets_of_len(&box4e.existing_esurfaces, 2);
+        assert_eq!(subsets_2.len(), 4);
     }
 
     #[test]

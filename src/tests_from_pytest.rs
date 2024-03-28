@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::cff::esurface::get_existing_esurfaces;
+use crate::cff::esurface::{get_existing_esurfaces, ExistingEsurfaces};
 use crate::cff::generation::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType};
@@ -669,7 +669,7 @@ fn pytest_massless_scalar_box() {
 
     let mut esurfaces_to_test = vec![];
 
-    for existing_esurface_id in &existing {
+    for existing_esurface_id in existing.iter() {
         let cache = graph.compute_onshell_energies(&[loop_mom], &box4_e);
 
         let esurface = &graph
@@ -713,7 +713,8 @@ fn pytest_massless_scalar_box() {
         let existing_esurfaces = es.into_iter().copied().collect_vec();
         let center = find_center(
             &graph.loop_momentum_basis,
-            &existing_esurfaces,
+            todo!(),
+            &ExistingEsurfaces::from_vec(existing_esurfaces),
             esurfaces,
             &edge_masses,
             &box4_e,
