@@ -64,8 +64,10 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
         gammaloop_root_path, 'dependencies', 'venv'))
 
     if venv_path != os.path.abspath(os.path.join(os.path.dirname(sys.executable), os.path.pardir)):
-        print("%sWARNING:%s It is recommended to run gammaloop within its Python virtual environment, by issuing the command:\n\n%ssource %s/bin/activate%s\n" % (
-            CLIColour.YELLOW, CLIColour.END, CLIColour.GREEN, venv_path, CLIColour.END))
+        # Do not warn about this for now as it is not strictly necessary as of now
+        # print("%sWARNING:%s It is recommended to run gammaloop within its Python virtual environment, by issuing the command:\n\n%ssource %s/bin/activate%s\n" % (
+        #    CLIColour.YELLOW, CLIColour.END, CLIColour.GREEN, venv_path, CLIColour.END))
+        pass
 
     if not no_gammaloop_python_venv:
         if not os.path.isfile(os.path.join(venv_path, 'site_paths.txt')):
@@ -81,10 +83,10 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
                     CLIColour.YELLOW, CLIColour.END, os.path.join(venv_path, 'site_paths.txt'), CLIColour.RED, str(e), CLIColour.END, CLIColour.GREEN, CLIColour.END))
             if site_paths is not None:
                 site_paths = [sp for sp in site_paths if sp.startswith(
-                    venv_path) and len(sys.path) == 0 or sp != sys.path[0]]
+                    venv_path) and (len(sys.path) == 0 or sp != sys.path[0])]
                 if len(site_paths) > 0:
                     print("%sINFO:%s The following paths have been automatically and temporarily added by gammaloop to your PYTHONPATH:\n%s" % (
-                        CLIColour.GREEN, CLIColour.END, ', '.join(site_paths)))
+                        CLIColour.GREEN, CLIColour.END, '\n'.join('%s%s%s' % (CLIColour.BLUE, site_path, CLIColour.END) for site_path in site_paths)))
                     for site_path in site_paths:
                         sys.path.insert(0, site_path)
 

@@ -11,7 +11,7 @@ See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
 We salute the eagerness of our users.
 
-So if you want to jump right in, then run the following to immediately start integrating the scalar three-loop mercedes diagram!
+If you want to jump right in, run the following to immediately start integrating the scalar three-loop mercedes diagram!
 
 ```
 git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
@@ -128,6 +128,8 @@ This is possible throught the `gammaloop_rust_cli` binary, which can be used as 
 ```
 ./bin/gammaloop_rust_cli --config <MODULE_PATH>/gammaloop/data/run_cards/rust_run_config.yaml
 ```
+*Note*: You have to manually define your desired external momenta in this default `rust_run_config.yaml` file.
+
 You will find more information on the content of the run configuration file and steering options in the [wiki](https://wiki.alphaloop.ch/) and by running:
 ```
 ./bin/gammaloop_rust_cli --help

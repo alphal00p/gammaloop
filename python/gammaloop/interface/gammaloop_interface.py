@@ -9,14 +9,15 @@ from typing import Any
 from pprint import pformat
 import yaml
 import shutil
+import copy
 from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH
-from gammaloop.misc.utils import Colour
+from gammaloop.misc.utils import Colour, verbose_yaml_dump
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
 from gammaloop.base_objects.graph import Graph
 import gammaloop.cross_section.cross_section as cross_section
 import gammaloop.cross_section.supergraph as supergraph
-from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExporter, OutputMetaData
+from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExporter, OutputMetaData, update_run_card_in_output
 # This is the pyo3 binding of the gammaloop rust engine
 import gammaloop._gammaloop as gl_rust  # pylint: disable=import-error, no-name-in-module # type: ignore
 
@@ -36,13 +37,15 @@ AVAILABLE_COMMANDS = [
     'hpc_run',
     'test_ir_limits',
     'test_uv_limits',
-    'set'
+    'set',
+    'reset'
 ]
 
 
 class GammaLoopConfiguration(object):
 
-    def __init__(self, path: str | None = None):
+    def __init__(self, path: str | None = None, quiet=False):
+        self._shorthands = {}
         self._config: dict[str, Any] = {
             'symbolica': {
                 'license': "GAMMALOOP_USER"
@@ -67,9 +70,9 @@ class GammaLoopConfiguration(object):
                     'use_vertex_names': True,
                     'vertex_size': 5.0,
                     'vertex_shape': "circle",
-                    'line_width': 1.5,
+                    'line_width': 1.75,
                     'arrow_size_for_single_line': 1.5,
-                    'arrow_size_for_double_line': 1.5,
+                    'arrow_size_for_double_line': 2.0,
                     'line_color': "black",
                     'label_color': "black",
                     'non_lmb_color': "blue",
@@ -79,18 +82,95 @@ class GammaLoopConfiguration(object):
                 }
             },
             'export_settings': {
-                'write_default_settings': True,
+                'write_default_settings': False,
             },
+            'run_settings': {
+                'General': {
+                    'debug': 0,
+                    'use_ltd': False
+                },
+                'Integrand': {
+                    'type': 'gamma_loop'
+                },
+                'Kinematics': {
+                    'e_cm': 3.0,
+                    'externals': {
+                        'type': 'constant',
+                        'momenta': None  # Will be set automatically
+                    }
+                },
+                'Parameterization': {
+                    'mode': 'spherical',
+                    'mapping': 'linear',
+                    'b': 10.0
+                },
+                'Integrator': {
+                    'n_bins': 16,
+                    'bin_number_evolution': None,
+                    'min_samples_for_update': 100,
+                    'n_start': 1000000,
+                    'n_increase': 0,
+                    'n_max': 1000000000,
+                    'integrated_phase': 'real',
+                    'learning_rate': 1.5,
+                    'train_on_avg': False,
+                    'show_max_wgt_info': False,
+                    'max_prob_ratio': 0.01,
+                    'seed': 0
+                },
+                'Observables': [],
+                'Selectors': [],
+                'Stability': {
+                    'rotation_axis': 'x',
+                    'levels': [
+                        {
+                            'precision': 'Double',
+                            'required_precision_for_re': 1.e-5,
+                            'required_precision_for_im': 1.e-5,
+                            'escalate_for_large_weight_threshold': 0.9
+                        },
+                        {
+                            'precision': 'Quad',
+                            'required_precision_for_re': 1.e-5,
+                            'required_precision_for_im': 1.e-5,
+                            'escalate_for_large_weight_threshold': -1.0
+                        }
+                    ]
+                },
+                'sampling': {
+                    'type': 'default'
+                }
+            }
         }
+
         if path is None:
             for config_path in GAMMALOOP_CONFIG_PATHS:
                 if os.path.exists(config_path):
-                    self.update(load_configuration(config_path), '')
-        else:
-            self.update(load_configuration(path))
+                    self.update(load_configuration(config_path, quiet), '')
+        # Allowing for '' to be provided as a path in order to force the default configuration to be kept.
+        elif path != '':
+            self.update(load_configuration(path, quiet))
 
-    @classmethod
-    def _update_config_chunk(cls, root_path: str, config_chunk: dict[str, Any], updater: Any) -> None:
+        self.update_shorthands()
+
+    def update_shorthands(self, cur_path=None, root_dict: dict[str, Any] | None = None) -> None:
+        if cur_path is None:
+            cur_path = []
+        if root_dict is None:
+            root_dict = self._config
+        for key, value in root_dict.items():
+            if not isinstance(key, str):
+                continue
+            # We cannot create short-hands for conflicting option names that would yield ambiguities
+            for depth in range(1, len(cur_path)+1):
+                shorthand = '.'.join(cur_path[depth:] + [key,])
+                if shorthand not in self._shorthands:
+                    self._shorthands[shorthand] = '.'.join(cur_path + [key,])
+            if isinstance(value, dict) and not key.endswith('_dict'):
+                self.update_shorthands(
+                    cur_path=cur_path + [key,], root_dict=value)
+
+    def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any], updater: Any) -> None:
         for key, value in updater.items():
             if root_path == '':
                 setting_path = key
@@ -100,6 +180,12 @@ class GammaLoopConfiguration(object):
                 raise GammaLoopError(
                     f"Invalid path for setting {setting_path}")
             if key not in config_chunk:
+                # Allow to create new keys for the rust run settings configuration
+                if 'run_settings' in root_path.split('.'):
+                    config_chunk[key] = value
+                    self.update_shorthands(cur_path=root_path.split(
+                        '.')+[key,], root_dict=config_chunk)
+                    continue
                 raise GammaLoopError(
                     f"No settings {setting_path} in gammaloop configuration.")
             if isinstance(value, dict):
@@ -114,16 +200,16 @@ class GammaLoopConfiguration(object):
                         config_chunk[key] = updater
                         continue
                 else:
-                    cls._update_config_chunk(
+                    self._update_config_chunk(
                         setting_path, config_chunk[key], value)
             else:
-                if type(value) is not type(config_chunk[key]):
+                if value is not None and config_chunk[key] is not None and type(value) is not type(config_chunk[key]):
                     raise GammaLoopError(
                         f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
                 config_chunk[key] = value
                 continue
 
-    def update(self, new_setting: Any, path: str = '') -> None:
+    def update(self, new_setting: Any, path: str = '', allow_shorthands: bool = True) -> None:
         context = self._config
         for key in path.split('.'):
             if key == "":
@@ -134,7 +220,18 @@ class GammaLoopConfiguration(object):
             context = context[key]
         self._update_config_chunk(path, context, new_setting)
 
-    def get_setting(self, path: str):
+    def set_setting(self, path: str, new_setting: Any, allow_shorthands: bool = True) -> str:
+        if allow_shorthands and path in self._shorthands:
+            return self.set_setting(self._shorthands[path], new_setting, allow_shorthands=False)
+
+        p = path.split('.')
+        self.update({p[-1]: new_setting}, path=('.'.join(p[:-1])
+                    if len(p) > 1 else ''), allow_shorthands=allow_shorthands)
+        return path
+
+    def get_setting(self, path: str, allow_shorthands: bool = True) -> Any:
+        if allow_shorthands and path in self._shorthands:
+            return self.get_setting(self._shorthands[path], allow_shorthands=False)
         context = self._config
         for key in path.split('.'):
             if key == "":
@@ -145,11 +242,14 @@ class GammaLoopConfiguration(object):
             context = context[key]
         return context
 
-    def __getitem__(self, key: str):
+    def __getitem__(self, key: str) -> Any:
         if key in self._config:
             return self._config[key]
         else:
             raise GammaLoopError(f"Unknown gammloop setting '{key}'")
+
+    def __str__(self) -> str:
+        return verbose_yaml_dump(self._config)
 
 
 def split_str_args(str_args: str) -> list[str]:
@@ -179,7 +279,7 @@ class CommandList(list[tuple[str, str]]):
             self.append(('shell_run', cmd[1:]))
             return
         cmd_split: list[str] = cmd.split(' ', 1)
-        if len(cmd_split[0]) > 1 and cmd_split[0].startswith('#'):
+        if cmd.startswith('#'):
             return
         if cmd_split[0] not in AVAILABLE_COMMANDS:
             raise GammaLoopError(f"Unknown command: {cmd_split[0]}")
@@ -232,6 +332,8 @@ class GammaLoop(object):
         self.amplitudes: cross_section.AmplitudeList = cross_section.AmplitudeList()
 
         self.config: GammaLoopConfiguration = GammaLoopConfiguration()
+        self.default_config: GammaLoopConfiguration = copy.deepcopy(
+            self.config)
         self.launched_output: Path | None = None
         self.command_history: CommandList = CommandList()
 
@@ -286,6 +388,21 @@ class GammaLoop(object):
                     else:
                         raise GammaLoopError(f"Invalid command '{cmd}'")
 
+    # reset command
+    reset_parser = ArgumentParser(prog='set')
+    reset_parser.add_argument('path', metavar='path', type=str,
+                              help='Setting path to reset default value for')
+
+    def do_reset(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.reset_parser.print_help()
+            return
+        args = self.reset_parser.parse_args(split_str_args(str_args))
+        default_value = self.default_config.get_setting(args.path)
+        full_path = self.config.set_setting(args.path, default_value)
+        logger.info("Setting '%s%s%s' successfully reset its default value: %s%s%s",
+                    Colour.GREEN, full_path, Colour.END, Colour.BLUE, repr(default_value), Colour.END)
+
     # set command
     set_parser = ArgumentParser(prog='set')
     set_parser.add_argument('path', metavar='path', type=str,
@@ -304,16 +421,11 @@ class GammaLoop(object):
         except Exception as exc:
             raise GammaLoopError(
                 f"Invalid value '{args.value}' for setting '{args.path}'. Error:\n{exc}") from exc
-        setting_path = args.path.split('.')
-        if len(setting_path) == 1:
-            setting_route = ''
-        else:
-            setting_route = '.'.join(setting_path[:-1])
-        self.config.update(
-            {setting_path[-1]: config_value}, path=setting_route)
+
+        full_path = self.config.set_setting(args.path, config_value)
         str_setting = pformat(config_value)
         logger.info("Setting '%s%s%s' to:%s%s%s%s", Colour.GREEN,
-                    args.path, Colour.END, Colour.BLUE, '\n' if len(str_setting) > 20 else ' ', str_setting, Colour.END)
+                    full_path, Colour.END, Colour.BLUE, '\n' if len(str_setting) > 80 else ' ', str_setting, Colour.END)
 
     # show_settings command
     show_settings = ArgumentParser(prog='show_settings')
@@ -329,7 +441,7 @@ class GammaLoop(object):
         setting = self.config.get_setting(args.path)
         str_setting: str = pformat(setting)
         logger.info("Current value of setting %s%s%s:%s%s%s%s",
-                    Colour.GREEN, args.path, Colour.END, '\n' if len(str_setting) > 20 else ' ', Colour.BLUE, str_setting, Colour.END)
+                    Colour.GREEN, args.path, Colour.END, '\n' if len(str_setting) > 80 else ' ', Colour.BLUE, str_setting, Colour.END)
 
     # import_model command
     import_model_parser = ArgumentParser(prog='import_model')
@@ -569,11 +681,14 @@ class GammaLoop(object):
     output_parser = ArgumentParser(prog='output')
     output_parser.add_argument(
         'output_path', type=str, help='Path to output the cross section to')
-    output_parser.add_argument('-n','--numerator',default=False,action='store_true', help='Generate numerator and output it to a text file')
-    output_parser.add_argument('-lmb','--lmb_replacement',default=False,action='store_true', help='Generate lmb replacements and output it to a text file')
-    output_parser.add_argument('-c','--coupling_replacements',default=False,action='store_true', help='Generate coupling replacements and output it to a text file')
-    output_parser.add_argument('-f','--format',type=str, default='default',
-                                      choices=['default', 'mathematica','latex'], help='Format to export symbolica objects in.')
+    output_parser.add_argument('-n', '--numerator', default=False, action='store_true',
+                               help='Generate numerator and output it to a text file')
+    output_parser.add_argument('-lmb', '--lmb_replacement', default=False, action='store_true',
+                               help='Generate lmb replacements and output it to a text file')
+    output_parser.add_argument('-c', '--coupling_replacements', default=False, action='store_true',
+                               help='Generate coupling replacements and output it to a text file')
+    output_parser.add_argument('-f', '--format', type=str, default='default',
+                               choices=['default', 'mathematica', 'latex'], help='Format to export symbolica objects in.')
 
     def do_output(self, str_args: str) -> None:
         if str_args == 'help':
@@ -590,11 +705,10 @@ class GammaLoop(object):
                 "No model loaded. Please load a model first with 'import_model' command.")
         else:
             if args.coupling_replacements:
-                self.rust_worker.export_coupling_replacement_rules(args.output_path,args.format)
-                logger.info("Coupling replacement rules exported to model directory.")
-            
-        
-
+                self.rust_worker.export_coupling_replacement_rules(
+                    args.output_path, args.format)
+                logger.info(
+                    "Coupling replacement rules exported to model directory.")
 
         if len(self.cross_sections) == 0 and len(self.amplitudes) == 0:
             raise GammaLoopError("No process generated yet.")
@@ -609,11 +723,13 @@ class GammaLoop(object):
             amplitude_exporter = AmplitudesExporter(self, args)
             amplitude_exporter.export(args.output_path, self.amplitudes)
             if args.numerator:
-                amplitude_exporter.export_numerator(args.output_path, self.amplitudes, args.format)
+                amplitude_exporter.export_numerator(
+                    args.output_path, self.amplitudes, args.format)
             if args.lmb_replacement:
-                self.rust_worker.export_lmb_subs(args.output_path,args.format)
-                logger.info("Lmb substitutions exported to amplitude numerator directory.")
-            
+                self.rust_worker.export_lmb_subs(args.output_path, args.format)
+                logger.info(
+                    "Lmb substitutions exported to amplitude numerator directory.")
+
             logger.info("Amplitudes exported to '%s'.", args.output_path)
     #
     # Run interface type of commands below (those bound to a particular output already generated)
@@ -625,6 +741,8 @@ class GammaLoop(object):
         'path_to_launch', type=str, help='Path to launch a given run command to')
     launch_parser.add_argument('--no_overwrite_model', '-nom', action='store_true', default=False,
                                help='Do not overwrite model with the new parameter and coupling values derived from the param card.')
+    launch_parser.add_argument('--no_overwrite_run_settings', '-nors', action='store_true', default=False,
+                               help='Do not overwrite the run settings with the new settings derived from the run card.')
 
     def do_launch(self, str_args: str) -> None:
         if str_args == 'help':
@@ -649,6 +767,15 @@ class GammaLoop(object):
             with open(pjoin(args.path_to_launch, 'sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
                 file.write(processed_yaml_model)
         self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+
+        # Sync the run_settings from the interface to the output or vice-versa
+        if not args.no_overwrite_run_settings:
+            run_settings = load_configuration(
+                pjoin(args.path_to_launch, 'cards', 'run_card.yaml'), True)
+            # Do not overwrite the external momenta setting in gammaLoop if they are set constant in the process dir
+            if run_settings['Kinematics']['externals']['type'] == 'constant':
+                del run_settings['Kinematics']
+            self.config.update({'run_settings': run_settings})
 
         # Depending on the type of output, sync cross-section or amplitude
         if output_metadata['output_type'] == 'amplitudes':
@@ -765,6 +892,11 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
+        # Update the run card in the output with the current configuration
+        update_run_card_in_output(self.launched_output, self.config)
+        self.rust_worker.load_amplitude_integrands(
+            pjoin(self.launched_output, 'cards', 'run_card.yaml'))
+
         target = None
         if args.target is not None:
             target = (args.target[0], args.target[1])
@@ -801,6 +933,11 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
+        # Update the run card in the output with the current configuration
+        update_run_card_in_output(self.launched_output, self.config)
+        self.rust_worker.load_amplitude_integrands(
+            pjoin(self.launched_output, 'cards', 'run_card.yaml'))
+
         raise GammaLoopError("Command not implemented yet")
 
     # test_uv_limits
@@ -815,6 +952,11 @@ class GammaLoop(object):
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
+
+        # Update the run card in the output with the current configuration
+        update_run_card_in_output(self.launched_output, self.config)
+        self.rust_worker.load_amplitude_integrands(
+            pjoin(self.launched_output, 'cards', 'run_card.yaml'))
 
         raise GammaLoopError("Command not implemented yet")
 
@@ -845,6 +987,11 @@ class GammaLoop(object):
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
+
+        # Update the run card in the output with the current configuration
+        update_run_card_in_output(self.launched_output, self.config)
+        self.rust_worker.load_amplitude_integrands(
+            pjoin(self.launched_output, 'cards', 'run_card.yaml'))
 
         # create a workspace for batch input/output files
         workspace_path = self.launched_output.joinpath("workspace")

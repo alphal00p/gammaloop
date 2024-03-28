@@ -11,4 +11,11 @@ show_settings drawing.feynmp.show_edge_composite_momenta
 output examples/cards/scalar_mercedes
 launch examples/cards/scalar_mercedes
 info
-inspect mercedes -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327 -t 0
+set integrated_phase 'imag'
+# Tropical sampling
+#set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
+# Regular sampling with cartesian product of spherical parameterisation
+set sampling {'type':'default'}
+set externals.momenta [[1.,0.,0.,2.],[1.,0.,0.,-2.]]
+#inspect mercedes -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327 -t 0
+integrate mercedes -c 1 -r -t 0. 1.
