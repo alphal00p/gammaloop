@@ -102,6 +102,93 @@ class VertexRule(object):
         return SerializableVertexRule.from_vertex_rule(self)
 
 
+class Propagator(object):
+    def __init__(self, name: str, particle: Particle, numerator: str, denominator: str):
+        self.name: str = name
+        self.particle: Particle = particle
+        self.numerator: SBE = utils.parse_python_expression_safe(numerator)
+        self.denominator: SBE = utils.parse_python_expression_safe(denominator)
+
+    @staticmethod
+    def from_particle(particle: Particle, gauge: str) -> Propagator:
+
+        name = f'{particle.name}_prop{gauge}'
+        if particle.spin == -1:  # ghost
+            numerator = '1'
+            if particle.is_massive():
+                denominator = f'P(1)**2-{particle.mass.name}**2'
+            else:
+                denominator = 'P(1)**2'
+        elif particle.spin == 1:  # scalar 2s+1=1
+            if particle.is_massive():
+                numerator = '1'
+                denominator = f'P(1)**2-{particle.mass.name}**2'
+            else:
+                numerator = '1'
+                denominator = 'P(1)**2'
+        elif particle.spin == 2:  # spinor 2s+1=2
+            if particle.is_massive():
+                numerator = f'PSlash(1,2)+{particle.mass.name}*Identity(1,2)'
+                denominator = f'P(1)**2-{particle.mass.name}**2'
+            else:
+                numerator = 'PSlash(1,2)'
+                denominator = 'P(1)**2'
+        elif particle.spin == 3:  # vector 2s+1=3
+            if particle.is_massive():
+                numerator = f'-Metric(1,2)+P(1)*P(2)/{particle.mass.name}**2'
+                denominator = f'P(1)**2-{particle.mass.name}**2'
+            else:
+                denominator = 'P(1)**2'
+                if gauge == 'Feynman':
+                    numerator = '-Metric(1,2)'
+                else:
+                    raise GammaLoopError(
+                        f'Gauge {gauge} not implemented for vector particles')
+        else:
+            raise GammaLoopError(
+                f'Particle spin {particle.spin} not implemented')
+
+        return Propagator(
+            name,
+            particle,
+            numerator,
+            denominator
+        )
+
+    @staticmethod
+    def from_serializable_propagator(model: Model, serializable_propagator: SerializablePropagator, ) -> Propagator:
+        return Propagator(
+            serializable_propagator.name,
+            model.get_particle(serializable_propagator.particle),
+            serializable_propagator.numerator,
+            serializable_propagator.denominator
+        )
+
+    def to_serializable_propagator(self) -> SerializablePropagator:
+        return SerializablePropagator.from_propagator(self)
+
+
+class SerializablePropagator(object):
+    def __init__(self, name: str, particle: str, numerator: str, denominator: str):
+        self.name: str = name
+        self.particle: str = particle
+        self.numerator: str = numerator
+        self.denominator: str = denominator
+
+    @staticmethod
+    def from_propagator(propagator: Propagator) -> SerializablePropagator:
+        return SerializablePropagator(propagator.name, propagator.particle.name, utils.expression_to_string_safe(propagator.numerator), utils.expression_to_string_safe(propagator.denominator))
+
+    @staticmethod
+    def from_dict(dict_repr: dict[str, Any]) -> SerializablePropagator:
+        return SerializablePropagator(
+            dict_repr['name'],
+            dict_repr['particle'],
+            dict_repr['numerator'],
+            dict_repr['denominator']
+        )
+
+
 class SerializableCoupling(object):
     def __init__(self, name: str, expression: str, orders: list[tuple[str, int]], value: tuple[float, float] | None):
         self.name: str = name
@@ -428,6 +515,7 @@ class SerializableModel(object):
         self.orders: list[Order] = []
         self.parameters: list[SerializableParameter] = []
         self.particles: list[SerializableParticle] = []
+        self.propagators: list[SerializablePropagator] = []
         self.lorentz_structures: list[SerializableLorentzStructure] = []
         self.couplings: list[SerializableCoupling] = []
         self.vertex_rules: list[SerializableVertexRule] = []
@@ -441,6 +529,8 @@ class SerializableModel(object):
             parameter.to_serializable_parameter() for parameter in model.parameters]
         serializable_model.particles = [
             particle.to_serializable_particle() for particle in model.particles]
+        serializable_model.propagators = [
+            propagator.to_serializable_propagator() for propagator in model.propagators]
         serializable_model.lorentz_structures = [lorentz_structure.to_serializable_lorentz_structure(
         ) for lorentz_structure in model.lorentz_structures]
         serializable_model.couplings = [
@@ -456,6 +546,7 @@ class SerializableModel(object):
             'orders': [order.__dict__ for order in self.orders],
             'parameters': [parameter.__dict__ for parameter in self.parameters],
             'particles': [particle.__dict__ for particle in self.particles],
+            'propagators': [propagator.__dict__ for propagator in self.propagators],
             'lorentz_structures': [lorentz_structure.__dict__ for lorentz_structure in self.lorentz_structures],
             'couplings': [coupling.__dict__ for coupling in self.couplings],
             'vertex_rules': [vertex_rule.__dict__ for vertex_rule in self.vertex_rules]
@@ -472,6 +563,8 @@ class SerializableModel(object):
             parameter) for parameter in yaml_model['parameters']]
         serializable_model.particles = [SerializableParticle.from_dict(
             particle) for particle in yaml_model['particles']]
+        serializable_model.propagators = [SerializablePropagator.from_dict(
+            propagator) for propagator in yaml_model['propagators']]
         serializable_model.lorentz_structures = [SerializableLorentzStructure.from_dict(
             lorentz_structure) for lorentz_structure in yaml_model['lorentz_structures']]
         serializable_model.couplings = [SerializableCoupling.from_dict(
@@ -493,6 +586,7 @@ class Model(object):
         self.orders: list[Order] = []
         self.parameters: list[Parameter] = []
         self.particles: list[Particle] = []
+        self.propagators: list[Propagator] = []
         self.lorentz_structures: list[LorentzStructure] = []
         self.couplings: list[Coupling] = []
         self.vertex_rules: list[VertexRule] = []
@@ -619,6 +713,11 @@ class Model(object):
             particle.name: i for i, particle in enumerate(model.particles)}
         model.name_to_position['particles_from_PDG'] = {
             particle.pdg_code: i for i, particle in enumerate(model.particles)}
+        # Load propagators
+        model.propagators = [Propagator.from_particle(
+            particle, 'Feynman') for particle in model.particles]
+        model.name_to_position['propagators'] = {
+            propagator.name: i for i, propagator in enumerate(model.propagators)}
         # Load Lorentz structures
         model.lorentz_structures = [LorentzStructure.from_ufo_object(
             lorentz) for lorentz in ufo_model.all_lorentz]
@@ -648,6 +747,8 @@ class Model(object):
             particle.name: i for i, particle in enumerate(self.particles)}
         self.name_to_position['particles_from_PDG'] = {
             particle.pdg_code: i for i, particle in enumerate(self.particles)}
+        self.name_to_position['propagators'] = {
+            propagator.name: i for i, propagator in enumerate(self.propagators)}
         self.name_to_position['lorentz_structures'] = {
             lorentz.name: i for i, lorentz in enumerate(self.lorentz_structures)}
         self.name_to_position['couplings'] = {
@@ -673,6 +774,8 @@ class Model(object):
             particle.name: i for i, particle in enumerate(model.particles)}
         model.name_to_position['particles_from_PDG'] = {
             particle.pdg_code: i for i, particle in enumerate(model.particles)}
+        model.propagators = [Propagator.from_serializable_propagator(
+            model, propagator) for propagator in serializable_model.propagators]
         model.lorentz_structures = [LorentzStructure.from_serializable_lorentz_structure(
             lorentz) for lorentz in serializable_model.lorentz_structures]
         model.name_to_position['lorentz_structures'] = {
@@ -719,6 +822,9 @@ class Model(object):
 
     def get_particle_from_pdg(self, pdg: int) -> Particle:
         return self.particles[self.name_to_position['particles_from_PDG'][pdg]]
+
+    def get_propagator(self, propagator_name: str) -> Propagator:
+        return self.propagators[self.name_to_position['propagators'][propagator_name]]
 
     def get_lorentz_structure(self, lorentz_name: str) -> LorentzStructure:
         return self.lorentz_structures[self.name_to_position['lorentz_structures'][lorentz_name]]

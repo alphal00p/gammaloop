@@ -5,7 +5,6 @@ from subprocess import Popen, PIPE
 import gammaloop.misc.common
 import gammaloop.interface.gammaloop_interface as gl_interface
 from gammaloop.misc.common import GL_PATH, logger
-import shutil
 import yaml
 
 pjoin = os.path.join
@@ -59,26 +58,12 @@ def run_drawing(drawing_path: str) -> bool:
     return True
 
 
-def scalar_euclidean_integration_test(graph: str, imag_phase: bool, target: float, process_path: Path):
+def check_integration_result(imag_phase: bool, target: float, process_path: Path):
     max_mc_error_dif = 5.0
     max_rel_error_dif = 0.01
     max_percent_error = 0.01
 
-    test_config_path = os.path.join(
-        RESOURCES_PATH, 'test_configs', '{}.yaml'.format(graph))
-
-    gl = get_gamma_loop_interpreter()
-
     # copy settings
-    shutil.copyfile(test_config_path,
-                    os.path.join(process_path, 'cards', 'run_card.yaml'))
-
-    command_list = gl_interface.CommandList.from_string(
-        "launch {}".format(process_path))
-    command_list.add_command("integrate {}".format(graph))
-
-    gl.run(command_list)
-
     f = open(os.path.join(process_path, 'runs', 'run.yaml'), "r").read()
     run_yaml = yaml.safe_load(f)
 

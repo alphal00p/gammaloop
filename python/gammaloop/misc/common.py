@@ -13,7 +13,9 @@ GL_PATH = os.path.abspath(os.path.join(
 DATA_PATH = os.path.abspath(os.path.join(GL_PATH, 'data'))
 GL_CONSOLE_HANDLER = setup_logging()
 
+global GL_DEBUG
 GL_DEBUG = False
+
 gl_is_symbolica_registered = None
 
 GAMMALOOP_CONFIG_PATHS = [
@@ -32,9 +34,17 @@ try:
     from symbolica import Expression, Transformer, set_license_key  # type: ignore
     if not str(os.path.abspath(symbolica.__file__)).startswith(str(os.path.join(GL_PATH, 'dependencies', 'venv'))):
         logger.warning(
-            "Symbolica is not being imported from the virtual environment of gammaloop. This may lead to unexpected behaviour.")
-        logger.warning(
-            "You can avoid this by running the following command: %sgammaloop --build_dependencies && source %s%s",
+            """\n\n/*
+|
+| Symbolica is not being imported from the virtual environment of gammaloop.
+| Instead it was loaded from %s%s%s.
+| This may lead to unexpected behaviour. You can avoid this by running the following command:
+|
+| %sgammaloop --build_dependencies && source %s%s
+|
+\\*
+""",
+            Colour.RED, os.path.abspath(symbolica.__file__), Colour.END,
             Colour.GREEN, os.path.abspath(os.path.join(GL_PATH, 'dependencies', 'venv', 'bin', 'activate')), Colour.END)
 except ImportError:
     logger.critical(
@@ -68,7 +78,7 @@ def register_symbolica() -> bool:
         gl_is_symbolica_registered = True
         return True
 
-    if 'SYMBOLICA_LICENSE' not in os.environ:
+    if 'SYMBOLICA_LICENSE' not in os.environ or os.environ['SYMBOLICA_LICENSE'] == '':
         symbolica_license = None
         for path in GAMMALOOP_CONFIG_PATHS:
             if os.path.exists(path):
@@ -88,6 +98,7 @@ def register_symbolica() -> bool:
                 return False
         else:
             try:
+                os.environ['SYMBOLICA_LICENSE'] = 'GAMMALOOP_USER'
                 set_license_key('GAMMALOOP_USER')
                 gl_is_symbolica_registered = True
                 return True

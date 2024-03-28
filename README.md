@@ -7,13 +7,32 @@ See [www.alphaloop.ch](www.alphaloop.ch) for details on the theoretical framewor
 
 See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
+## TL;DR: I want to be running γLoop already!
+
+We salute the eagerness of our users.
+
+If you want to jump right in, run the following to immediately start integrating the scalar three-loop mercedes diagram!
+
+```
+git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
+./bin/compile.sh
+source python/gammaloop/dependencies/venv/bin/activate
+./bin/gammaloop example/cards/scalar_mercedes.gL
+```
+
 ## Installation
 
 ### > Requirements
 
-* `Rust`: You can easily instal Rust with [this one-liner](https://www.rust-lang.org/tools/install)
+* `Rust`: You can easily instal Rust with this [one-liner](https://www.rust-lang.org/tools/install)
 
 * `Python3`: v3.10+
+
+* `gcc`: v10+
+
+*Note*: The project has been tested on Linux and MacOS. 
+
+Windows users are encouraged to use [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/).
 
 ### > Installation using `pip`
 ```
@@ -60,7 +79,7 @@ There are three entry points to the `GammaLoop` functionalities:
 
 1. Preferred method is through the Python command-line interface `gammaloop`.
 
-2. Alternatively, the same functionalities can be accessed programmatically, e.g. in Jupyter notebook, through the Python API by importing the `gammaloop` library.
+2. Alternatively, the same functionalities can be accessed programmatically, e.g. in a Jupyter notebook, through the Python API, by importing the `gammaloop` library.
 
 3. Finally, expert users may also find it useful to steer some of functionalities directly from the rust binary `gammaloop_rust_cli`.
 
@@ -95,7 +114,11 @@ You can find example of command files in the `<MODULE_PATH>/data/run_cards/` dir
 
 ### 2. Usage from within a Jupyter notebook: the Python API
 
-  *WORK IN PROGRESS*
+Follow the example jupyter notebook given in example to get started with the Python API.
+```
+cd <GAMMALOOP_INSTALLATION_DIRECTORY>/examples/jupyter
+jupyter notebook steer_gammaloop.ipynb
+``` 
 
 ### 3. Usage from the rust binary executable: ./gammaloop_rust_cli
 
@@ -105,6 +128,8 @@ This is possible throught the `gammaloop_rust_cli` binary, which can be used as 
 ```
 ./bin/gammaloop_rust_cli --config <MODULE_PATH>/gammaloop/data/run_cards/rust_run_config.yaml
 ```
+*Note*: You have to manually define your desired external momenta in this default `rust_run_config.yaml` file.
+
 You will find more information on the content of the run configuration file and steering options in the [wiki](https://wiki.alphaloop.ch/) and by running:
 ```
 ./bin/gammaloop_rust_cli --help

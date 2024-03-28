@@ -6,12 +6,15 @@ use crate::tensor::{
 use ahash::{HashMap, HashMapExt};
 
 use indexmap::{IndexMap, IndexSet};
+
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
+
 use smartstring::alias::String;
 use symbolica::domains::float::Complex;
 use symbolica::{representations::Atom, state::State};
 
+use super::FallibleAdd;
 use super::{
     symbolic::SymbolicTensor, ufo, AbstractIndex, DataTensor, Dimension, HistoryStructure,
     NamedStructure, NumTensor, SetTensorData, Shadowable, Slot, TensorNetwork, TryIntoUpgrade,
@@ -137,6 +140,19 @@ fn indexflatten() {
     let idx = vec![1, 2, 3, 1];
     let flatidx = a.flat_index(&idx).unwrap();
     assert_eq!(idx, a.expanded_index(flatidx).unwrap());
+}
+
+#[test]
+fn permutation() {
+    let a: Vec<Slot> = vec![(1, 2).into(), (3, 4).into(), (5, 6).into()];
+
+    let b: Vec<Slot> = vec![(3, 4).into(), (5, 6).into(), (1, 2).into()];
+
+    let permutation = a.find_permutation(&b).unwrap();
+
+    let c = permutation.iter().map(|x| b[*x]).collect::<Vec<_>>();
+
+    assert_eq!(c, a);
 }
 
 #[test]
@@ -635,7 +651,7 @@ fn sparse_addition() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let f = a + b;
+    let f = a.add_fallible(&b).unwrap();
 
     let result = IndexMap::from([(vec![0, 1], 3.0), (vec![1, 0], 3.0)]);
 
@@ -657,11 +673,36 @@ fn sparse_sub() {
 
     let b = SparseTensor::from_data(&data_b, structur_b).unwrap();
 
-    let f = a - b;
+    let f = a.sub_fallible(&b).unwrap();
 
-    let result = IndexMap::from([(vec![0, 1], -1.0), (vec![1, 0], 0.0)]);
+    let result = IndexMap::from([(vec![0, 1], -1.0)]);
     assert_eq!(f.hashmap(), result);
     // println!("{:?}", f);
+}
+
+#[test]
+fn arithmetic_data() {
+    let sa = test_structure(3, 1);
+    let range = Some((-1000, 1000));
+
+    let a: DataTensor<i32> = test_tensor(sa.clone(), 1, range).into();
+
+    let b: DataTensor<i32> = test_tensor(sa.clone(), 2, range).into();
+
+    println!("{:?}", a);
+    println!("{:?}", b);
+
+    let c = a.add_fallible(&b).unwrap();
+
+    assert_eq!(
+        vec![-267, 634, 0, 0, 650, 0, 520, 326, 0, 0, -120, -294, -907, 0, 0],
+        c.to_dense().data()
+    );
+
+    // let syma = sa.clone().shadow_with("a".into_id());
+    // let symb = sa.clone().shadow_with("b".into_id());
+
+    //  let symc = &syma + &symb;
 }
 
 #[test]
@@ -835,7 +876,7 @@ fn symbolic_contract() {
 fn test_fallible_mul() {
     let a: i32 = 4;
     let b: f64 = 4.;
-    let mut c = a.mul_fallible(b).unwrap();
+    let mut c: f64 = a.mul_fallible(&b).unwrap();
     c.add_assign_fallible(&a);
     let d: Option<f64> = b.mul_fallible(&a);
     let a: &i32 = &a;

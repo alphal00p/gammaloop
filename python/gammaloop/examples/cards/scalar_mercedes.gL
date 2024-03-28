@@ -1,0 +1,24 @@
+import_model scalars-full
+import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/ltd_topology_f.py --format=qgraph
+set drawing.feynmp.show_edge_composite_momenta True
+show_settings drawing.feynmp.show_edge_composite_momenta
+#set drawing.feynmp.show_edge_labels False
+#set drawing.feynmp.show_vertex_labels True
+#set drawing.feynmp.use_vertex_names True
+#set drawing.feynmp.caption_size "10pt"
+#set drawing.combined_graphs_pdf_grid_shape [1,1]
+!rm -rf examples/cards/scalar_mercedes
+output examples/cards/scalar_mercedes
+launch examples/cards/scalar_mercedes
+info
+set integrated_phase 'imag'
+# Tropical sampling
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
+# Regular sampling with cartesian product of spherical parameterisation
+#set sampling {'type':'default'}
+set e_cm 1.
+set externals.momenta [[0.,0.,0.,1.],]
+set n_start 1000000
+set n_max 5000000
+#inspect ltd_topology_f -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327 -t 0
+integrate ltd_topology_f -c 8 -r -t (0.,-5.26647e-6)

@@ -222,6 +222,18 @@ output {output_path}"""))
 
 
 @pytest.fixture(scope="session")
+def lbl_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_lbl_box")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','lbl_box.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
 def epem_a_ddx_nlo_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     output_path = Path(tmpdir_factory.mktemp(

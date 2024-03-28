@@ -53,11 +53,9 @@ pub trait TryFromUpgrade<T> {
 }
 
 pub trait TrySmallestUpgrade<T> {
-    type LCM;
+    type LCM: Clone;
 
-    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
-    where
-        Self::LCM: Clone;
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>;
 }
 
 impl<T, U> TryFromUpgrade<T> for U
@@ -161,7 +159,7 @@ impl<'a,'b> TrySmallestUpgrade<&'a smaller> for &'b larger {
     fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
         where
             Self::LCM: Clone {
-        Some(Cow::Borrowed(self))
+        Some(Cow::Borrowed(*self))
     }
 }
 
@@ -170,7 +168,7 @@ impl<'b> TrySmallestUpgrade<smaller> for &'b larger {
     fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
         where
             Self::LCM: Clone {
-        Some(Cow::Borrowed(self))
+        Some(Cow::Borrowed(*self))
     }
 }
 }
@@ -199,10 +197,7 @@ where
 {
     type LCM = Complex<T>;
 
-    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
-    where
-        Self::LCM: Clone,
-    {
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>> {
         let new = Complex::new(*self, T::zero());
         Some(Cow::Owned(new))
     }
@@ -210,10 +205,7 @@ where
 
 impl TrySmallestUpgrade<Atom> for f64 {
     type LCM = Atom;
-    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
-    where
-        Self::LCM: Clone,
-    {
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>> {
         let rugrat = rug::Rational::from_f64(*self)?;
         let natrat = symbolica::domains::rational::Rational::from_large(rugrat);
         let symrat = Atom::new_num(symbolica::coefficient::Coefficient::from(natrat));
@@ -224,10 +216,7 @@ impl TrySmallestUpgrade<Atom> for f64 {
 
 impl TrySmallestUpgrade<Atom> for Complex<f64> {
     type LCM = Atom;
-    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
-    where
-        Self::LCM: Clone,
-    {
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>> {
         let real: Cow<'_, Atom> = <f64 as TrySmallestUpgrade<Atom>>::try_upgrade(&self.re)?;
         let imag: Cow<'_, Atom> = <f64 as TrySmallestUpgrade<Atom>>::try_upgrade(&self.im)?;
         let i = Atom::new_var(State::I);
@@ -291,19 +280,20 @@ where
         Some(lhs.as_ref().mul(rhs.as_ref()))
     }
 }
+
 pub trait FallibleAdd<T> {
     type Output;
     fn add_fallible(self, rhs: T) -> Option<Self::Output>;
 }
 
-impl<T, U> FallibleAdd<T> for U
+impl<T, U, Out> FallibleAdd<T> for U
 where
-    U: TrySmallestUpgrade<T>,
-    T: TrySmallestUpgrade<U, LCM = <U as TrySmallestUpgrade<T>>::LCM>,
-    U::LCM: Clone,
-    for<'a, 'b> &'a U::LCM: std::ops::Add<&'b U::LCM, Output = U::LCM>,
+    U: TrySmallestUpgrade<T, LCM = Out>,
+    T: TrySmallestUpgrade<U, LCM = Out>,
+    Out: Clone,
+    for<'a, 'b> &'a Out: std::ops::Add<&'b Out, Output = Out>,
 {
-    type Output = U::LCM;
+    type Output = Out;
 
     fn add_fallible(self, rhs: T) -> Option<Self::Output> {
         let lhs = self.try_upgrade()?;
