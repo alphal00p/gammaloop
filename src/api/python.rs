@@ -336,16 +336,6 @@ impl PythonWorker {
         Ok("Exported coupling substitutions".to_string())
     }
 
-    pub fn export_lmb_subs(&self, export_root: &str, format: &str) -> PyResult<String> {
-        for amplitude in self.amplitudes.container.iter() {
-            amplitude
-                .export_lmb_subs(export_root, Self::printer_options(format))
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-                .unwrap();
-        }
-        Ok("Exported lmb substitutions".to_string())
-    }
-
     pub fn inspect_integrand(
         &mut self,
         integrand: &str,

@@ -174,3 +174,6 @@ default.nix
 # latex logs
 *.log
 # End of https://www.toptal.com/developers/gitignore/api/rust,python
+
+# Ignore the local test resources
+src/test_resources/qqddg/

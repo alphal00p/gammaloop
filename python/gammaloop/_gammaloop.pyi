@@ -64,8 +64,7 @@ class Worker:
         """Exports the numerators to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
 
 
-    def export_lmb_subs(self,export_root:str,format:str)->None:
-        """Exports the lmb substitutions to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
+   
     
     def export_coupling_replacement_rules(self,export_root:str,format:str)->None:
         """Exports the coupling replacement rules to the export root given in argument. The format can be 'default' or 'mathematica' or 'latex'."""

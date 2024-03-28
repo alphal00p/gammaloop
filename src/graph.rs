@@ -330,8 +330,25 @@ impl Vertex {
                     .iter()
                     .map(|ls| {
                         let mut atom = ls.structure.clone();
+
+                        for (i, e) in self.edges.iter().enumerate() {
+                            let momentum_in_pattern =
+                                Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
+
+                            let momentum_out_pattern =
+                                Pattern::parse(&format!("Q{}(lor(4,x_))", e)).unwrap();
+
+                            atom = momentum_in_pattern.replace_all(
+                                atom.as_view(),
+                                &momentum_out_pattern,
+                                None,
+                                None,
+                            );
+                        }
+
                         for (i, e) in self.edges.iter().enumerate() {
                             let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
+
                             let dir = if self.is_edge_incoming(*e, graph) {
                                 "in"
                             } else {
@@ -1225,4 +1242,47 @@ pub struct SerializableLoopMomentumBasis {
 pub enum LoopMomentumBasisSpecification<'a> {
     Literal(&'a LoopMomentumBasis),
     FromList(usize),
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+
+    use crate::cross_section::OutputMetaData;
+
+    use super::*;
+
+    fn model_sm() -> Model {
+        let path = Path::new("./src/test_resources/lbl/");
+        let output_meta_data: OutputMetaData =
+            serde_yaml::from_reader(File::open(path.join("output_metadata.yaml")).unwrap())
+                .unwrap();
+        Model::from_file(String::from(
+            path.join(format!(
+                "sources/model/{}.yaml",
+                output_meta_data.model_name
+            ))
+            .to_str()
+            .unwrap(),
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn vertex_rule() {
+        let model = model_sm();
+
+        let v = &model.vertex_rules[model.vertex_rule_name_to_position["V_44"]];
+
+        let vertex = Vertex {
+            name: "v".into(),
+            vertex_info: VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+                vertex_rule: v.clone(),
+            }),
+            edges: vec![2, 3],
+        };
+
+        let lorentz = v.lorentz_structures[0].structure.clone();
+        // println!("{}");
+    }
 }

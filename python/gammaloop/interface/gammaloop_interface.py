@@ -683,8 +683,7 @@ class GammaLoop(object):
         'output_path', type=str, help='Path to output the cross section to')
     output_parser.add_argument('-num', '--numerator', default=False, action='store_true',
                                help='Generate numerator and output it to a text file')
-    output_parser.add_argument('-nlr', '--no_numerator_lmb_replacement', default=False, action='store_true',
-                               help='Generate lmb replacements and output it to a text file')
+    
     output_parser.add_argument('-mr', '--model_replacements', default=False, action='store_true',
                                help='Generate coupling replacements and output it to a text file')
     output_parser.add_argument('-nf', '--numerator_format', type=str, default='default',
@@ -725,11 +724,7 @@ class GammaLoop(object):
             if args.numerator:
                 amplitude_exporter.export_numerator(
                     args.output_path, self.amplitudes, args.numerator_format)
-                if not args.no_numerator_lmb_replacement:
-                    self.rust_worker.export_lmb_subs(
-                        args.output_path, args.numerator_format)
-                    logger.info(
-                        "Lmb substitutions exported to amplitude numerator directory.")
+                
 
             logger.info("Amplitudes exported to '%s'.", args.output_path)
     #

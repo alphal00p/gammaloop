@@ -494,52 +494,38 @@ impl Amplitude {
             .join("numerator");
         for amplitude_graph in self.amplitude_graphs.iter() {
             if let Some(num) = &amplitude_graph.graph.derived_data.numerator {
-                fs::write(
-                    path.join(format!("numerator_{}.txt", amplitude_graph.graph.name)),
+                let rep_rules: Vec<(String, String)> = amplitude_graph
+                    .graph
+                    .generate_lmb_replacement_rules()
+                    .iter()
+                    .map(|(lhs, rhs)| {
+                        (
+                            format!(
+                                "{}",
+                                AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
+                            ),
+                            format!(
+                                "{}",
+                                AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
+                            ),
+                        )
+                    })
+                    .collect();
+
+                let out = (
                     format!(
                         "{}",
                         AtomPrinter::new_with_options(num.as_view(), printer_ops)
                     ),
+                    rep_rules,
+                );
+
+                fs::write(
+                    path.join(format!("{}_num.json", amplitude_graph.graph.name)),
+                    serde_json::to_string_pretty(&out).unwrap(),
                 )?;
             }
         }
-        Ok(())
-    }
-
-    pub fn export_lmb_subs(
-        &self,
-        export_root: &str,
-        printer_ops: PrintOptions,
-    ) -> Result<(), Report> {
-        let path = Path::new(export_root)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str())
-            .join("numerator");
-        for amplitude_graph in self.amplitude_graphs.iter() {
-            let rep_rules: Vec<(String, String)> = amplitude_graph
-                .graph
-                .generate_lmb_replacement_rules()
-                .iter()
-                .map(|(lhs, rhs)| {
-                    (
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
-                        ),
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
-                        ),
-                    )
-                })
-                .collect();
-            fs::write(
-                path.join("lmb_replacement.json"),
-                serde_json::to_string_pretty(&rep_rules).unwrap(),
-            )?;
-        }
-
         Ok(())
     }
 
