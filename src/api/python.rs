@@ -582,9 +582,48 @@ impl PythonWorker {
 impl PythonWorker {
     fn printer_options(format: &str) -> PrintOptions {
         match format {
-            "mathematica" => PrintOptions::mathematica(),
-            "latex" => PrintOptions::latex(),
-            _ => PrintOptions::default(),
+            "mathematica" => PrintOptions {
+                terms_on_new_line: false,
+                color_top_level_sum: false,
+                color: false,
+                color_builtin_functions: false,
+                print_finite_field: true,
+                symmetric_representation_for_finite_field: false,
+                explicit_rational_polynomial: false,
+                number_thousands_separator: None,
+                multiplication_operator: ' ',
+                square_brackets_for_function: true,
+                num_exp_as_superscript: false,
+                latex: false,
+            },
+            "latex" => PrintOptions {
+                terms_on_new_line: false,
+                color: false,
+                color_top_level_sum: false,
+                color_builtin_functions: false,
+                print_finite_field: true,
+                symmetric_representation_for_finite_field: false,
+                explicit_rational_polynomial: false,
+                number_thousands_separator: None,
+                multiplication_operator: ' ',
+                square_brackets_for_function: false,
+                num_exp_as_superscript: false,
+                latex: true,
+            },
+            _ => PrintOptions {
+                terms_on_new_line: false,
+                color_top_level_sum: true,
+                color: false,
+                color_builtin_functions: true,
+                print_finite_field: true,
+                symmetric_representation_for_finite_field: false,
+                explicit_rational_polynomial: false,
+                number_thousands_separator: None,
+                multiplication_operator: '*',
+                square_brackets_for_function: false,
+                num_exp_as_superscript: false,
+                latex: false,
+            },
         }
     }
 }
