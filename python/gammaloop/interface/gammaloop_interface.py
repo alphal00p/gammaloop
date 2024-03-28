@@ -878,7 +878,7 @@ class GammaLoop(object):
         "integrand", type=str, help="Integrand to integrate.")
     integrate_parser.add_argument('--cores', '-c', type=int, default=1,)
     integrate_parser.add_argument(
-        '--target', '-t', nargs=2, type=float, default=None)
+        '--target', '-t', type=str, default=None)
     integrate_parser.add_argument(
         '--restart', '-r', action='store_true',)
 
@@ -897,9 +897,14 @@ class GammaLoop(object):
         self.rust_worker.load_amplitude_integrands(
             pjoin(self.launched_output, 'cards', 'run_card.yaml'))
 
-        target = None
+        target: tuple[float, float] | None = None
         if args.target is not None:
-            target = (args.target[0], args.target[1])
+            try:
+                tmp: Any = eval(args.target)
+                target = (float(tmp[0]), float(tmp[1]))
+            except Exception as exc:
+                raise GammaLoopError(
+                    f"Invalid target '{args.target}'. It should be a 2-tuple identifying a complex numbers. Error:\n{exc}") from exc
 
         result_output_path = self.launched_output.joinpath(
             "runs").joinpath("run.yaml")
