@@ -15,6 +15,20 @@ use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::representations::{Atom, FunctionBuilder};
 use symbolica::state::State;
 
+fn normalise_complex(atom: &Atom) -> Atom {
+    let re = Atom::parse("re_").unwrap();
+    let im = Atom::parse("im_").unwrap();
+
+    let comp_id = State::get_symbol("complex");
+
+    let complexfn = fun!(comp_id, re, im).into_pattern();
+
+    let i = Atom::new_var(State::I);
+    let complexpanded = &re + i * &im;
+
+    complexfn.replace_all(atom.as_view(), &complexpanded.into_pattern(), None, None)
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub enum ParameterNature {
     #[default]
@@ -210,23 +224,7 @@ impl Coupling {
 
     pub fn rep_rule(&self) -> [Atom; 2] {
         let lhs = Atom::parse(&self.name).unwrap();
-
-        let re = Atom::parse("re_").unwrap();
-        let im = Atom::parse("im_").unwrap();
-
-        let comp_id = State::get_symbol("complex");
-
-        let complexfn = fun!(comp_id, re, im).into_pattern();
-
-        let i = Atom::new_var(State::I);
-        let complexpanded = &re + i * &im;
-
-        let rhs = complexfn.replace_all(
-            self.expression.as_view(),
-            &complexpanded.into_pattern(),
-            None,
-            None,
-        );
+        let rhs = normalise_complex(&self.expression);
 
         [lhs, rhs]
     }
@@ -397,6 +395,13 @@ impl Parameter {
                 .map(|expr| utils::parse_python_expression(expr.as_str())),
         }
     }
+
+    pub fn rep_rule(&self) -> Option<[Atom; 2]> {
+        let lhs = Atom::parse(&self.name).unwrap();
+        let rhs = self.expression.clone();
+
+        Some([lhs, normalise_complex(&rhs?)])
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
@@ -557,8 +562,18 @@ impl Model {
             );
         }
 
+        for para in self.parameters.iter() {
+            if let Some(rule) = para.rep_rule() {
+                reps.push(
+                    rule.map(|a| {
+                        format!("{}", AtomPrinter::new_with_options(a.as_view(), print_ops))
+                    }),
+                );
+            }
+        }
+
         fs::write(
-            path.join("coupling_replacements.json"),
+            path.join("model_replacements.json"),
             serde_json::to_string_pretty(&reps)?,
         )?;
 

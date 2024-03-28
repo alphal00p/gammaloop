@@ -1274,7 +1274,7 @@ mod tests {
 
         let v = &model.vertex_rules[model.vertex_rule_name_to_position["V_44"]];
 
-        let vertex = Vertex {
+        let _vertex = Vertex {
             name: "v".into(),
             vertex_info: VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
                 vertex_rule: v.clone(),
@@ -1282,7 +1282,7 @@ mod tests {
             edges: vec![2, 3],
         };
 
-        let lorentz = v.lorentz_structures[0].structure.clone();
+        let _lorentz = v.lorentz_structures[0].structure.clone();
         // println!("{}");
     }
 }
