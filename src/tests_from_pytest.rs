@@ -1028,11 +1028,13 @@ fn pytest_hexagon() {
         -LorentzVector::from_args(-80., -5.6, -40.0, 0.0),
     ];
 
+    let empty_loop_mom = [LorentzVector::from_args(0., 0., 0., 0.)];
+
     let existing_esurface = get_existing_esurfaces(
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.compute_onshell_energies(&kinematics, &kinematics),
+        &graph.compute_onshell_energies(&empty_loop_mom, &kinematics),
     );
 
     assert_eq!(existing_esurface.len(), 6);
@@ -1057,4 +1059,36 @@ fn pytest_hexagon() {
     assert_eq!(maximal_overlap[1].0.len(), 3);
     assert_eq!(maximal_overlap[2].0.len(), 3);
     assert_eq!(maximal_overlap[3].0.len(), 2);
+
+    let hexagon_10_e = [
+        LorentzVector::from_args(-80., 29., -70., 0.),
+        LorentzVector::from_args(83.5, 14.0, 70.0, 0.0),
+        LorentzVector::from_args(88.5, 6.5, -6., 0.),
+        -LorentzVector::from_args(36.5, -71., 97.5, 0.),
+        -LorentzVector::from_args(12.5, -83.5, -57.5, 0.),
+    ];
+
+    let existing_esurfaces = get_existing_esurfaces(
+        esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &hexagon_10_e,
+        &graph.compute_onshell_energies(&empty_loop_mom, &hexagon_10_e),
+    );
+
+    assert_eq!(existing_esurfaces.len(), 10);
+
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurfaces,
+        esurfaces,
+        &edge_masses,
+        &hexagon_10_e,
+        0,
+    );
+
+    assert_eq!(maximal_overlap.len(), 4);
+    assert_eq!(maximal_overlap[0].0.len(), 8);
+    assert_eq!(maximal_overlap[1].0.len(), 8);
+    assert_eq!(maximal_overlap[2].0.len(), 7);
+    assert_eq!(maximal_overlap[3].0.len(), 7);
 }
