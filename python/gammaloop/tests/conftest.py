@@ -258,6 +258,18 @@ output {output_path}"""))
 
 
 @pytest.fixture(scope="session")
+def scalar_hexagon_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_hexagon")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'hexagon.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
 def compile_rust_tests() -> Path | None:
     process = Popen(['cargo', 'build', '--release', '--features=binary,fail-on-warnings', '--no-default-features',
                     '--tests', '--message-format=json'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)

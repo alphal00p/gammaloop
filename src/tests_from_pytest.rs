@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::cff::esurface::{get_existing_esurfaces, ExistingEsurfaces};
+use crate::cff::esurface::{get_existing_esurfaces, ExistingEsurfaceId, ExistingEsurfaces};
 use crate::cff::generation::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType};
@@ -8,6 +8,7 @@ use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
 use colored::Colorize;
 use itertools::Itertools;
+use libc::__c_anonymous_ptrace_syscall_info_exit;
 use lorentz_vector::LorentzVector;
 use num::Complex;
 use rayon::prelude::IndexedParallelIterator;
@@ -659,93 +660,24 @@ fn pytest_massless_scalar_box() {
         esurfaces,
         &edge_masses,
         &box4_e,
+        0,
     );
 
     assert_eq!(existing.len(), 4);
 
-    let loop_mom = LorentzVector::new();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing,
+        esurfaces,
+        &edge_masses,
+        &box4_e,
+        0,
+    );
 
-    println!("debug info: ");
-
-    let mut esurfaces_to_test = vec![];
-
-    for existing_esurface_id in existing.iter() {
-        let cache = graph.compute_onshell_energies(&[loop_mom], &box4_e);
-
-        let esurface = &graph
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .esurfaces[*existing_esurface_id];
-
-        let esurface_string = esurface.string_format();
-        println!("existing esurface: {}", esurface_string);
-        println!(
-            "in lmb: {}",
-            esurface.string_format_in_lmb(&graph.loop_momentum_basis)
-        );
-
-        let esurface_value = esurface.compute_value(&cache);
-        println!("Value of esurface at origin: {}", esurface_value);
-
-        if esurface_value < 0. {
-            esurfaces_to_test.push(*existing_esurface_id);
-        }
+    assert_eq!(maximal_overlap.len(), 4);
+    for overlap in maximal_overlap.iter() {
+        assert_eq!(overlap.0.len(), 2);
     }
-
-    // this point is inside 2 of the 4 esurfaces
-    assert_eq!(esurfaces_to_test.len(), 2);
-
-    // println!("solution: {:?}", problem.solution.x);
-
-    let real_mass_vector = edge_masses
-        .iter()
-        .map(|edge_mass| match edge_mass {
-            Some(mass) => mass.re,
-            None => 0.0,
-        })
-        .collect_vec();
-
-    for es in existing.iter().combinations(2) {
-        println!("---------------------");
-
-        let existing_esurfaces = es.into_iter().copied().collect_vec();
-        let center = find_center(
-            &graph.loop_momentum_basis,
-            todo!(),
-            &ExistingEsurfaces::from_vec(existing_esurfaces),
-            esurfaces,
-            &edge_masses,
-            &box4_e,
-        );
-
-        for esurface in &existing_esurfaces {
-            let real_esurface = &graph
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .esurfaces[*esurface];
-            println!(
-                "esurface: {}",
-                real_esurface.string_format_in_lmb(&graph.loop_momentum_basis)
-            );
-
-            let esurface_value_at_center = center.as_ref().map(|loop_mom| {
-                real_esurface.compute_from_momenta(
-                    &graph.loop_momentum_basis,
-                    &real_mass_vector,
-                    loop_mom,
-                    &box4_e,
-                )
-            });
-
-            println!("value at center: {:?}", esurface_value_at_center);
-            println!("center: {:?}", center);
-        }
-    }
-    assert_eq!(1, 2);
 }
 
 #[test]
@@ -1062,4 +994,67 @@ fn pytest_raised_triangle() {
 
     let propagator_groups = graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 5);
+}
+
+#[test]
+#[ignore]
+fn pytest_hexagon() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let (model, amplitude) =
+        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    assert_eq!(model.name, "scalars");
+    assert!(amplitude.amplitude_graphs.len() == 1);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let esurfaces = &graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
+
+    let kinematics = [
+        LorentzVector::from_args(24., -21.2, 71., 0.),
+        LorentzVector::from_args(50.4, 15.8, -18.8, 0.),
+        LorentzVector::from_args(-0.2, 46.2, 8.6, 0.),
+        -LorentzVector::from_args(-33.2, 2.6, -70.8, 0.),
+        -LorentzVector::from_args(-80., -5.6, -40.0, 0.0),
+    ];
+
+    let existing_esurface = get_existing_esurfaces(
+        esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &kinematics,
+        &graph.compute_onshell_energies(&kinematics, &kinematics),
+    );
+
+    assert_eq!(existing_esurface.len(), 6);
+
+    let edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .collect_vec();
+
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurface,
+        esurfaces,
+        &edge_masses,
+        &kinematics,
+        0,
+    );
+
+    assert_eq!(maximal_overlap.len(), 4);
+    assert_eq!(maximal_overlap[0].0.len(), 3);
+    assert_eq!(maximal_overlap[1].0.len(), 3);
+    assert_eq!(maximal_overlap[2].0.len(), 3);
+    assert_eq!(maximal_overlap[3].0.len(), 2);
 }

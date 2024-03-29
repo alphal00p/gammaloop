@@ -2,7 +2,7 @@ graphs = []
 # To be imported after having the gammaloop UFO model named "scalars"
 
 # Triangle massless
-graphs.append(
+graphs.append(  # type: ignore
     {
         "edges": {
             101: {

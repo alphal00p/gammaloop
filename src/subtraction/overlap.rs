@@ -5,8 +5,6 @@ use clarabel::solver::*;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use num::Complex;
-use num::Zero;
-use rayon::result;
 
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
@@ -48,6 +46,7 @@ fn construct_solver(
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
+    verbose: bool,
 ) -> DefaultSolver {
     let num_loops = lmb.basis.len();
     let num_loop_vars = 3 * num_loops;
@@ -188,7 +187,7 @@ fn construct_solver(
     let a_matrix_sparse = CscMatrix::from(&a_matrix);
 
     let settings = DefaultSettingsBuilder::default()
-        .verbose(false)
+        .verbose(verbose)
         .build()
         .unwrap();
 
@@ -209,6 +208,7 @@ pub fn find_center(
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
+    verbose: bool,
 ) -> Option<Vec<LorentzVector<f64>>> {
     let mut solver = construct_solver(
         lmb,
@@ -217,16 +217,36 @@ pub fn find_center(
         esurfaces,
         edge_masses,
         external_momenta,
+        verbose,
     );
     solver.solve();
 
     let loop_number = lmb.basis.len();
 
-    if solver.solution.status == SolverStatus::Solved
-        || solver.solution.status == SolverStatus::AlmostSolved
-    {
+    if solver.solution.status == SolverStatus::Solved {
         let center = extract_center(loop_number, &solver.solution.x);
         Some(center)
+    } else if solver.solution.status == SolverStatus::AlmostSolved
+        || solver.solution.status == SolverStatus::InsufficientProgress
+    {
+        // if the solver did not converge, we check if the solution is still valid
+        let center = extract_center(loop_number, &solver.solution.x);
+
+        let is_valid = esurfaces_to_consider.iter().all(|&existing_esurface_id| {
+            let esurface = &esurfaces[existing_esurfaces[existing_esurface_id]];
+            esurface.compute_from_momenta(
+                lmb,
+                &to_real_mass_vector(edge_masses),
+                &center,
+                external_momenta,
+            ) < 0.0
+        });
+
+        if is_valid {
+            Some(center)
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -239,6 +259,7 @@ pub fn find_maximal_overlap(
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<f64>>],
     external_momenta: &[LorentzVector<f64>],
+    debug: usize,
 ) -> Vec<(Vec<EsurfaceId>, Vec<LorentzVector<f64>>)> {
     let mut res = vec![];
     let num_loops = lmb.basis.len();
@@ -254,6 +275,7 @@ pub fn find_maximal_overlap(
         esurfaces,
         edge_masses,
         external_momenta,
+        false,
     );
 
     if let Some(center) = option_center {
@@ -270,6 +292,10 @@ pub fn find_maximal_overlap(
         external_momenta,
     );
 
+    if debug > 1 {
+        println!("Pairs: {:#?}", esurface_pairs);
+    }
+
     let mut num_disconnected_surfaces = 0;
 
     for (existing_esurface_id, &esurface_id) in existing_esurfaces.iter_enumerate() {
@@ -282,6 +308,7 @@ pub fn find_maximal_overlap(
                 esurfaces,
                 edge_masses,
                 external_momenta,
+                false,
             );
 
             res.push((
@@ -316,6 +343,7 @@ pub fn find_maximal_overlap(
                 esurfaces,
                 edge_masses,
                 external_momenta,
+                false,
             );
 
             if let Some(center) = option_center {
@@ -390,6 +418,7 @@ impl EsurfacePairs {
                     esurfaces,
                     edge_masses,
                     external_momenta,
+                    false,
                 );
 
                 if let Some(center) = center {
@@ -438,6 +467,16 @@ impl EsurfacePairs {
     }
 }
 
+fn to_real_mass_vector(edge_masses: &[Option<Complex<f64>>]) -> Vec<f64> {
+    edge_masses
+        .iter()
+        .map(|mass| match mass {
+            Some(m) => m.re,
+            None => 0.0,
+        })
+        .collect_vec()
+}
+
 #[cfg(test)]
 #[allow(dead_code, unused_variables)]
 mod tests {
@@ -446,20 +485,7 @@ mod tests {
     use lorentz_vector::LorentzVector;
     use num::Complex;
 
-    fn to_real_mass_vector(edge_masses: &[Option<Complex<f64>>]) -> Vec<f64> {
-        edge_masses
-            .iter()
-            .map(|mass| match mass {
-                Some(m) => m.re,
-                None => 0.0,
-            })
-            .collect_vec()
-    }
-
-    use crate::{
-        cff::esurface::{self, Esurface},
-        graph::LoopMomentumBasis,
-    };
+    use crate::{cff::esurface::Esurface, graph::LoopMomentumBasis};
 
     struct HelperBoxStructure {
         external_momenta: [LorentzVector<f64>; 3],
@@ -664,6 +690,7 @@ mod tests {
             &box4e.esurfaces,
             &box4e.edge_masses,
             &box4e.external_momenta,
+            0,
         );
 
         assert_eq!(maximal_overlap.len(), 4);
@@ -695,6 +722,7 @@ mod tests {
             &box4e.esurfaces,
             &box4e.edge_masses,
             &box4e.external_momenta,
+            0,
         );
 
         assert_eq!(maximal_overlap.len(), 4);
