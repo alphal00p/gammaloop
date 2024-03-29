@@ -191,7 +191,7 @@ pub struct EsurfaceCollection {
 }
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EsurfaceId(usize);
 
 impl From<EsurfaceId> for usize {

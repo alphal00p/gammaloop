@@ -5,6 +5,8 @@ use clarabel::solver::*;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use num::Complex;
+use num::Zero;
+use rayon::result;
 
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
@@ -268,15 +270,78 @@ pub fn find_maximal_overlap(
         external_momenta,
     );
 
+    let mut num_disconnected_surfaces = 0;
+
     for (existing_esurface_id, &esurface_id) in existing_esurfaces.iter_enumerate() {
         // if an esurface overlaps with no other esurface, it is part of the maximal overlap structure
         if esurface_pairs.has_no_overlap(existing_esurface_id) {
-            let center = esurfaces[esurface_id].get_point_inside();
-            res.push((vec![esurface_id], center));
+            let center = find_center(
+                lmb,
+                &[existing_esurface_id],
+                existing_esurfaces,
+                esurfaces,
+                edge_masses,
+                external_momenta,
+            );
+
+            res.push((
+                vec![esurface_id],
+                center.unwrap_or_else(|| {
+                    panic!("Could not find center of esurface {:?}", esurface_id)
+                }),
+            ));
+            num_disconnected_surfaces += 1;
         }
     }
 
+    if num_disconnected_surfaces == existing_esurfaces.len() {
+        return res;
+    }
+
+    let mut subset_size = existing_esurfaces.len() - num_disconnected_surfaces - 1;
+
+    while subset_size > 1 {
+        let possible_subsets =
+            esurface_pairs.construct_possible_subsets_of_len(existing_esurfaces, subset_size);
+
+        for subset in possible_subsets.iter() {
+            if is_subset_of_result(subset, &res, existing_esurfaces) {
+                continue;
+            }
+
+            let option_center = find_center(
+                lmb,
+                subset,
+                existing_esurfaces,
+                esurfaces,
+                edge_masses,
+                external_momenta,
+            );
+
+            if let Some(center) = option_center {
+                res.push((
+                    subset.iter().map(|&i| existing_esurfaces[i]).collect(),
+                    center,
+                ));
+            }
+        }
+
+        subset_size -= 1;
+    }
+
     res
+}
+
+fn is_subset_of_result(
+    subset: &[ExistingEsurfaceId],
+    result: &[(Vec<EsurfaceId>, Vec<LorentzVector<f64>>)],
+    existing_esurfaces: &ExistingEsurfaces,
+) -> bool {
+    result.iter().any(|(result_subset, _)| {
+        subset
+            .iter()
+            .all(|&x| result_subset.contains(&existing_esurfaces[x]))
+    })
 }
 
 #[derive(Debug)]
@@ -351,9 +416,9 @@ impl EsurfacePairs {
         let num_existing_esurfaces = self.has_pair_with.len();
         assert!(subset_len < num_existing_esurfaces);
 
-        let mut subsets = existing_esurfaces.all_indices().combinations(subset_len);
+        let subsets = existing_esurfaces.all_indices().combinations(subset_len);
 
-        // horrendously inefficient, many things can be skipped. by manually advancing the subsets iterator.
+        // horrendously inefficient, many subsets can be skipped once one is found to not be valid.
         for subset in subsets {
             let is_valid = subset.iter().combinations(2).all(|pair| {
                 assert!(pair[0] < pair[1]);
@@ -381,7 +446,20 @@ mod tests {
     use lorentz_vector::LorentzVector;
     use num::Complex;
 
-    use crate::{cff::esurface::Esurface, graph::LoopMomentumBasis};
+    fn to_real_mass_vector(edge_masses: &[Option<Complex<f64>>]) -> Vec<f64> {
+        edge_masses
+            .iter()
+            .map(|mass| match mass {
+                Some(m) => m.re,
+                None => 0.0,
+            })
+            .collect_vec()
+    }
+
+    use crate::{
+        cff::esurface::{self, Esurface},
+        graph::LoopMomentumBasis,
+    };
 
     struct HelperBoxStructure {
         external_momenta: [LorentzVector<f64>; 3],
@@ -473,6 +551,61 @@ mod tests {
     }
 
     #[test]
+    fn test_is_subset_of_result() {
+        let fake_res = vec![
+            (
+                vec![
+                    Into::<EsurfaceId>::into(1),
+                    Into::<EsurfaceId>::into(2),
+                    Into::<EsurfaceId>::into(3),
+                ],
+                vec![],
+            ),
+            (
+                vec![
+                    Into::<EsurfaceId>::into(1),
+                    Into::<EsurfaceId>::into(2),
+                    Into::<EsurfaceId>::into(4),
+                ],
+                vec![],
+            ),
+            (
+                vec![
+                    Into::<EsurfaceId>::into(2),
+                    Into::<EsurfaceId>::into(3),
+                    Into::<EsurfaceId>::into(4),
+                ],
+                vec![],
+            ),
+        ];
+
+        let existing_esurfaces =
+            ExistingEsurfaces::from_vec((0..5).map(Into::<EsurfaceId>::into).collect());
+
+        let fake_subset = vec![
+            Into::<ExistingEsurfaceId>::into(1),
+            Into::<ExistingEsurfaceId>::into(2),
+        ];
+
+        assert!(is_subset_of_result(
+            &fake_subset,
+            &fake_res,
+            &existing_esurfaces
+        ));
+
+        let fake_subset_2 = vec![
+            Into::<ExistingEsurfaceId>::into(0),
+            Into::<ExistingEsurfaceId>::into(4),
+        ];
+
+        assert!(!is_subset_of_result(
+            &fake_subset_2,
+            &fake_res,
+            &existing_esurfaces
+        ));
+    }
+
+    #[test]
     fn test_pair_creator() {
         let box4e = HelperBoxStructure::new(None);
 
@@ -524,11 +657,61 @@ mod tests {
     fn test_box_4e() {
         // massless variant
         let box4e = HelperBoxStructure::new(None);
+
+        let maximal_overlap = find_maximal_overlap(
+            &box4e.lmb,
+            &box4e.existing_esurfaces,
+            &box4e.esurfaces,
+            &box4e.edge_masses,
+            &box4e.external_momenta,
+        );
+
+        assert_eq!(maximal_overlap.len(), 4);
+
+        for (esurfaces, center) in maximal_overlap.iter() {
+            assert_eq!(esurfaces.len(), 2);
+
+            for esurface in esurfaces.iter() {
+                let esurfaec_val = box4e.esurfaces[*esurface].compute_from_momenta(
+                    &box4e.lmb,
+                    &to_real_mass_vector(box4e.edge_masses.as_slice()),
+                    center,
+                    &box4e.external_momenta,
+                );
+
+                assert!(esurfaec_val < 0.0);
+            }
+        }
     }
 
     /// This test deforms the threshold structure into 4 pieces with no overlap
     #[test]
     fn test_disconnected_box_4e() {
         let box4e = HelperBoxStructure::new(Some([10.5; 4]));
+
+        let maximal_overlap = find_maximal_overlap(
+            &box4e.lmb,
+            &box4e.existing_esurfaces,
+            &box4e.esurfaces,
+            &box4e.edge_masses,
+            &box4e.external_momenta,
+        );
+
+        assert_eq!(maximal_overlap.len(), 4);
+
+        for (esurfaces, center) in maximal_overlap.iter() {
+            assert_eq!(esurfaces.len(), 1);
+
+            for esurface in esurfaces.iter() {
+                let esurfaec_val = box4e.esurfaces[*esurface].compute_from_momenta(
+                    &box4e.lmb,
+                    &to_real_mass_vector(box4e.edge_masses.as_slice()),
+                    center,
+                    &box4e.external_momenta,
+                );
+
+                assert!(esurfaec_val < 0.0);
+            }
+        }
     }
 }
