@@ -1,6 +1,6 @@
-use symbolica::{printer::PrintOptions, representations::AtomView};
+use symbolica::printer::PrintOptions;
 
-use crate::{tensor::SymbolicTensor, tests_from_pytest::load_amplitude_output};
+use crate::tests_from_pytest::load_amplitude_output;
 
 #[test]
 #[allow(unused)]
@@ -22,14 +22,14 @@ fn lbl() {
                 .replace_all(numerator.as_view(), &rhs.into_pattern(), None, None);
     }
 
-    // println!("{}", numerator);
+    println!("{}", numerator);
 
-    if let AtomView::Mul(mul) = numerator.as_view() {
-        let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
+    // if let AtomView::Mul(mul) = numerator.as_view() {
+    //     let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
 
-        // println!("{}", net.dot());
-        for (_, t) in net.graph.nodes {
-            // println!("{}", t.structure());
-        }
-    }
+    //     println!("{}", net.dot());
+    //     for (_, t) in net.graph.nodes {
+    //         // println!("{}", t.structure());
+    //     }
+    // }
 }

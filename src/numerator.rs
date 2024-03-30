@@ -10,7 +10,7 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let vatoms: Vec<Atom> = graph
         .vertices
         .iter()
-        .flat_map(|v| v.apply_vertex_rule(graph))
+        .flat_map(|v| v.contracted_vertex_rule(graph))
         .collect();
     // graph
     //     .edges

@@ -3,6 +3,11 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
     numerator::generate_numerator,
+    tensor::{
+        AbstractIndex, Contract, DataTensor, DenseTensor, GetTensorData, Representation,
+        SetTensorData, Slot, SparseTensor, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT,
+        COLORFUND, COLORSEXT, EUCLIDEAN,
+    },
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
 };
@@ -25,6 +30,10 @@ use symbolica::{
     id::Pattern,
     representations::{Atom, AtomView},
 };
+
+use constcat::concat;
+
+const MAX_COLOR_INNER_CONTRACTIONS: usize = 3;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -86,6 +95,262 @@ impl HasVertexInfo for ExternalVertexInfo {
 pub struct InteractionVertexInfo {
     #[allow(unused)]
     pub vertex_rule: Arc<model::VertexRule>,
+}
+
+impl InteractionVertexInfo {
+    pub fn apply_vertex_rule(
+        &self,
+        edges: &[usize],
+        vertex_pos: usize,
+        graph: &Graph,
+    ) -> Option<[DataTensor<Atom>; 3]> {
+        let spin_structure = self
+            .vertex_rule
+            .lorentz_structures
+            .iter()
+            .map(|ls| {
+                let mut atom = ls.structure.clone();
+
+                for (i, e) in edges.iter().enumerate() {
+                    let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
+
+                    let momentum_out_pattern =
+                        Pattern::parse(&format!("Q{}(lor(4,x_))", e)).unwrap();
+
+                    atom = momentum_in_pattern.replace_all(
+                        atom.as_view(),
+                        &momentum_out_pattern,
+                        None,
+                        None,
+                    );
+                }
+
+                for (i, e) in edges.iter().enumerate() {
+                    let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
+
+                    let dir = if graph.is_edge_incoming(*e, vertex_pos) {
+                        "in"
+                    } else {
+                        "out"
+                    };
+
+                    let index_num = AbstractIndex::try_from(format!("{}{}", dir, e)).unwrap().0;
+
+                    atom = pat.replace_all(
+                        atom.as_view(),
+                        &Atom::new_num(index_num as i64).into_pattern(),
+                        None,
+                        None,
+                    );
+                }
+                atom
+            })
+            .collect_vec();
+
+        let color_structure: Vec<Atom> = self
+            .vertex_rule
+            .color_structures
+            .iter()
+            .map(|cs| {
+                let mut atom = cs.clone();
+
+                //a is adjoint index, i is fundamental index, ia is antifundamental index, s is sextet ,sa is antisextet
+
+                let t_pat = Pattern::parse("T(a_,i_,ia_)").unwrap();
+
+                let t_rep = Pattern::parse("T(coad(a_),cof(i_),coaf(ia_))").unwrap();
+
+                atom = t_pat.replace_all(atom.as_view(), &t_rep, None, None);
+
+                let f_pat = Pattern::parse("f(a1_,a2_,a3_)").unwrap();
+
+                let f_rep = Pattern::parse("f(coad(a1_),coad(a2_),coad(a3_))").unwrap();
+
+                atom = f_pat.replace_all(atom.as_view(), &f_rep, None, None);
+
+                let d_pat = Pattern::parse("d(a1_,a2_,a3_)").unwrap();
+
+                let d_rep = Pattern::parse("d(coad(a1_),coad(a2_),coad(a3_))").unwrap();
+
+                atom = d_pat.replace_all(atom.as_view(), &d_rep, None, None);
+
+                let eps_pat = Pattern::parse("Epsilon(i1_,i2_,i3_)").unwrap();
+
+                let eps_rep = Pattern::parse("EpsilonBar(cof(i1_),cof(i2_),cof(i3_))").unwrap();
+
+                atom = eps_pat.replace_all(atom.as_view(), &eps_rep, None, None);
+
+                let eps_bar_pat = Pattern::parse("EpsilonBar(ia_1,ia_2,ia_3)").unwrap();
+
+                let eps_bar_rep =
+                    Pattern::parse("Epsilon(coaf(ia_1),coaf(ia_2),coaf(ia_3))").unwrap();
+
+                atom = eps_bar_pat.replace_all(atom.as_view(), &eps_bar_rep, None, None);
+
+                let t6_pat = Pattern::parse("T6(a_,s_,as_)").unwrap();
+
+                let t6_rep = Pattern::parse("T6(coad(a_),cos(s_),coas(as_))").unwrap();
+
+                atom = t6_pat.replace_all(atom.as_view(), &t6_rep, None, None);
+
+                let k6_pat = Pattern::parse("K6(ia1_,ia2_,s_)").unwrap();
+
+                let k6_rep = Pattern::parse("K6(coaf(ia1_),coaf(ia2_),cos(s_))").unwrap();
+
+                atom = k6_pat.replace_all(atom.as_view(), &k6_rep, None, None);
+
+                let k6_bar_pat = Pattern::parse("K6Bar(as_,i1_,i2_)").unwrap();
+
+                let k6_bar_rep = Pattern::parse("K6Bar(coas(as_),cof(i1_),cof(i2_))").unwrap();
+
+                atom = k6_bar_pat.replace_all(atom.as_view(), &k6_bar_rep, None, None);
+
+                //T(1,2,3) Fundamental representation matrix (T a1 )ı  ̄3 i2
+                // f(1,2,3) Antisymmetric structure constant f a1a2a3
+                // d(1,2,3) Symmetric structure constant da1 a2 a3
+                // Epsilon(1,2,3) Fundamental Levi-Civita tensor εi1 i2 i3 EpsilonBar(1,2,3) Antifundamental Levi-Civita tensor εı  ̄1 ı  ̄2 ı  ̄3
+                // T6(1,2,3) Sextet representation matrix (T a1 6 ) ̄ α3 α2
+                // K6(1,2,3) Sextet Clebsch-Gordan coefficient (K6)ı  ̄2 ı  ̄3 α1 K6Bar(1,2,3) Antisextet Clebsch-Gordan coefficient (K6) ̄ α1 i2i3
+
+                // First process kronkers, with respect to spin:
+
+                let spins: Vec<isize> =
+                    self.vertex_rule.particles.iter().map(|s| s.color).collect();
+
+                for (i, s) in spins.iter().enumerate() {
+                    let id1 = Pattern::parse(&format!("Identity({},x_)", i + 1)).unwrap();
+
+                    let id2 = Pattern::parse(&format!("Identity(x_,{})", i + 1)).unwrap();
+
+                    let ind = match s {
+                        1 => concat!(EUCLIDEAN, "("),
+                        3 => concat!(COLORFUND, "("),
+                        -3 => concat!(COLORANTIFUND, "("),
+                        6 => concat!(COLORSEXT, "("),
+                        -6 => concat!(COLORANTISEXT, "("),
+                        8 => concat!(COLORADJ, "("),
+                        i => panic!("Color {i}not supported "),
+                    };
+
+                    atom = id1.replace_all(
+                        atom.as_view(),
+                        &Pattern::parse(&format!("Identity({}{}),x_)", ind, i + 1)).unwrap(),
+                        None,
+                        None,
+                    );
+
+                    atom = id2.replace_all(
+                        atom.as_view(),
+                        &Pattern::parse(&format!("Identity(x_,{}{}))", ind, i + 1)).unwrap(),
+                        None,
+                        None,
+                    );
+                }
+
+                let id3 = Pattern::parse("Identity(x__)").unwrap();
+
+                atom = id3.replace_all(
+                    atom.as_view(),
+                    &Pattern::parse("id(x__)").unwrap(),
+                    None,
+                    None,
+                );
+
+                for (i, e) in edges.iter().enumerate() {
+                    let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
+
+                    let dir = if graph.is_edge_incoming(*e, vertex_pos) {
+                        "in"
+                    } else {
+                        "out"
+                    };
+
+                    let index_num = AbstractIndex::try_from(format!("{}{}", dir, e)).unwrap().0;
+
+                    atom = pat.replace_all(
+                        atom.as_view(),
+                        &Atom::new_num(index_num as i64).into_pattern(),
+                        None,
+                        None,
+                    );
+                }
+
+                for i in 0..MAX_COLOR_INNER_CONTRACTIONS {
+                    let pat: Pattern = Atom::new_num(-1 - i as i64).into_pattern();
+
+                    let index_num = AbstractIndex::try_from(format!("inner{}", i)).unwrap().0;
+                    atom = pat.replace_all(
+                        atom.as_view(),
+                        &Atom::new_num(index_num as i64).into_pattern(),
+                        None,
+                        None,
+                    );
+                }
+
+                let euc = Pattern::parse(concat!(EUCLIDEAN, "(x_)")).unwrap();
+                let euc_rep = Pattern::parse(concat!(EUCLIDEAN, "(1,x_)")).unwrap();
+
+                atom = euc.replace_all(atom.as_view(), &euc_rep, None, None);
+
+                let cof = Pattern::parse(concat!(COLORFUND, "(x_)")).unwrap();
+                let cof_rep = Pattern::parse(concat!(COLORFUND, "(3,x_)")).unwrap();
+
+                atom = cof.replace_all(atom.as_view(), &cof_rep, None, None);
+
+                let coaf = Pattern::parse(concat!(COLORANTIFUND, "(x_)")).unwrap();
+                let coaf_rep = Pattern::parse(concat!(COLORANTIFUND, "(3,x_)")).unwrap();
+
+                atom = coaf.replace_all(atom.as_view(), &coaf_rep, None, None);
+
+                let cos = Pattern::parse(concat!(COLORSEXT, "(x_)")).unwrap();
+                let cos_rep = Pattern::parse(concat!(COLORSEXT, "(6,x_)")).unwrap();
+
+                atom = cos.replace_all(atom.as_view(), &cos_rep, None, None);
+
+                let coas = Pattern::parse(concat!(COLORANTISEXT, "(x_)")).unwrap();
+                let coas_rep = Pattern::parse(concat!(COLORANTISEXT, "(6,x_)")).unwrap();
+
+                atom = coas.replace_all(atom.as_view(), &coas_rep, None, None);
+
+                let coa = Pattern::parse(concat!(COLORADJ, "(x_)")).unwrap();
+                let coa_rep = Pattern::parse(concat!(COLORADJ, "(8,x_)")).unwrap();
+
+                atom = coa.replace_all(atom.as_view(), &coa_rep, None, None);
+
+                atom
+            })
+            .collect();
+
+        let i = Slot {
+            index: AbstractIndex::try_from(format!("i{}", vertex_pos)).unwrap(),
+            representation: Representation::Euclidean(color_structure.len().into()),
+        };
+
+        let color_structure = DataTensor::Dense(
+            DenseTensor::from_data(&color_structure, VecStructure::from(vec![i])).unwrap(),
+        );
+
+        let j = Slot {
+            index: AbstractIndex::try_from(format!("j{}", vertex_pos)).unwrap(),
+            representation: Representation::Euclidean(spin_structure.len().into()),
+        };
+        let spin_structure = DataTensor::Dense(
+            DenseTensor::from_data(&spin_structure, VecStructure::from(vec![j])).unwrap(),
+        );
+
+        let mut couplings: DataTensor<Atom> =
+            DataTensor::Sparse(SparseTensor::empty(VecStructure::from(vec![i, j])));
+
+        for (i, row) in self.vertex_rule.couplings.iter().enumerate() {
+            for (j, col) in row.iter().enumerate() {
+                if let Some(atom) = col {
+                    couplings.set(&[i, j], atom.expression.clone()).unwrap();
+                }
+            }
+        }
+
+        Some([spin_structure, color_structure, couplings])
+    }
 }
 
 impl HasVertexInfo for InteractionVertexInfo {
@@ -320,59 +585,30 @@ impl Vertex {
         graph.is_edge_incoming(edge, graph.get_vertex_position(&self.name).unwrap())
     }
 
-    pub fn apply_vertex_rule(&self, graph: &Graph) -> Vec<Atom> {
+    pub fn apply_vertex_rule(&self, graph: &Graph) -> Option<[DataTensor<Atom>; 3]> {
         match &self.vertex_info {
-            VertexInfo::ExternalVertexInfo(_) => vec![],
-            VertexInfo::InteractonVertexInfo(interaction_vertex_info) => {
-                let info = interaction_vertex_info;
-                info.vertex_rule
-                    .lorentz_structures
-                    .iter()
-                    .map(|ls| {
-                        let mut atom = ls.structure.clone();
-
-                        for (i, e) in self.edges.iter().enumerate() {
-                            let momentum_in_pattern =
-                                Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
-
-                            let momentum_out_pattern =
-                                Pattern::parse(&format!("Q{}(lor(4,x_))", e)).unwrap();
-
-                            atom = momentum_in_pattern.replace_all(
-                                atom.as_view(),
-                                &momentum_out_pattern,
-                                None,
-                                None,
-                            );
-                        }
-
-                        for (i, e) in self.edges.iter().enumerate() {
-                            let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
-
-                            let dir = if self.is_edge_incoming(*e, graph) {
-                                "in"
-                            } else {
-                                "out"
-                            };
-                            let index_atom = Atom::parse(&format!("{}{}", dir, e)).unwrap();
-                            let index_num = if let AtomView::Var(v) = index_atom.as_view() {
-                                v.get_symbol().get_id()
-                            } else {
-                                unreachable!()
-                            };
-
-                            atom = pat.replace_all(
-                                atom.as_view(),
-                                &Atom::new_num(index_num as i64).into_pattern(),
-                                None,
-                                None,
-                            );
-                        }
-                        atom
-                    })
-                    .collect_vec()
-            }
+            VertexInfo::ExternalVertexInfo(_) => None,
+            VertexInfo::InteractonVertexInfo(interaction_vertex_info) => interaction_vertex_info
+                .apply_vertex_rule(
+                    &self.edges,
+                    graph.get_vertex_position(&self.name).unwrap(),
+                    graph,
+                ),
         }
+    }
+
+    pub fn contracted_vertex_rule(&self, graph: &Graph) -> Option<Atom> {
+        let all = self.apply_vertex_rule(graph)?;
+
+        let scalar = all
+            .into_iter()
+            .reduce(|acc, tensor| acc.contract(&tensor).unwrap())
+            .unwrap()
+            .get(&[])
+            .unwrap()
+            .clone();
+
+        Some(scalar)
     }
 }
 

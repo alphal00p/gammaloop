@@ -546,6 +546,28 @@ where
             .collect()
     }
 
+    // pub fn evaluate<'a, D>(
+    //     &'a self,
+    //     const_map: &AHashMap<AtomView<'a>, D>,
+    // ) -> TensorNetwork<DataTensor<D, N>>
+    // where
+    //     D: Clone,
+    //     N: Clone + TensorStructure,
+    // {
+    //     // let mut evaluated_net = TensorNetwork::new();
+    //     // for (id,t) in &self.graph.nodes {
+
+    //     //     let evaluated_tensor = match t{
+    //     //         MixedTensor::Complex(t)=> t.into(),
+    //     //         MixedTensor::Symbolic(t)=> t.evaluate(const_map),
+    //     //         MixedTensor::Float(t)=> t.into(),
+    //     //     }
+    //     //     evaluated_net.push(evaluated_tensor);
+    //     // }
+
+    //     // evaluated_net
+    // }
+
     pub fn evaluate_float<'a>(&'a mut self, const_map: &AHashMap<AtomView<'a>, f64>)
     where
         N: Clone,

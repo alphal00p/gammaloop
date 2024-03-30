@@ -177,10 +177,19 @@ where
 {
     type GetData = T;
     fn get(&self, indices: &[ConcreteIndex]) -> Result<&T, String> {
-        self.verify_indices(indices)?;
-        self.elements
-            .get(&self.flat_index(indices).unwrap())
-            .ok_or("No elements at that spot".into())
+        if let Ok(idx) = self.flat_index(indices) {
+            self.elements
+                .get(&idx)
+                .ok_or("No elements at that spot".into())
+        } else if self.structure.is_scalar() && indices.is_empty() {
+            self.elements
+                .iter()
+                .next()
+                .map(|(_, v)| v)
+                .ok_or("err".into())
+        } else {
+            Err("Index out of bounds".into())
+        }
     }
 
     fn get_linear(&self, index: usize) -> Option<&T> {
@@ -782,6 +791,48 @@ where
             DataTensor::Sparse(s) => s
                 .try_upgrade()
                 .map(|x| Cow::Owned(DataTensor::Sparse(x.into_owned()))),
+        }
+    }
+}
+
+impl<T, S> SetTensorData for DataTensor<T, S>
+where
+    S: TensorStructure,
+{
+    type SetData = T;
+
+    fn set(&mut self, indices: &[ConcreteIndex], value: Self::SetData) -> Result<(), String> {
+        match self {
+            DataTensor::Dense(d) => d.set(indices, value),
+            DataTensor::Sparse(s) => s.set(indices, value),
+        }
+    }
+
+    fn set_flat(&mut self, index: usize, value: Self::SetData) -> Result<(), String> {
+        match self {
+            DataTensor::Dense(d) => d.set_flat(index, value),
+            DataTensor::Sparse(s) => s.set_flat(index, value),
+        }
+    }
+}
+
+impl<T, S> GetTensorData for DataTensor<T, S>
+where
+    S: TensorStructure,
+{
+    type GetData = T;
+
+    fn get(&self, indices: &[ConcreteIndex]) -> Result<&Self::GetData, String> {
+        match self {
+            DataTensor::Dense(d) => d.get(indices),
+            DataTensor::Sparse(s) => s.get(indices),
+        }
+    }
+
+    fn get_linear(&self, index: usize) -> Option<&Self::GetData> {
+        match self {
+            DataTensor::Dense(d) => d.get_linear(index),
+            DataTensor::Sparse(s) => s.get_linear(index),
         }
     }
 }

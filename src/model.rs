@@ -91,10 +91,33 @@ impl SerializableVertexRule {
 }
 
 #[derive(Debug, Clone)]
+pub struct ColorStructure {
+    color_structure: Vec<Atom>,
+}
+
+impl ColorStructure {
+    pub fn new(color_structure: Vec<Atom>) -> Self {
+        ColorStructure { color_structure }
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<Atom> {
+        self.color_structure.iter()
+    }
+}
+
+impl FromIterator<Atom> for ColorStructure {
+    fn from_iter<T: IntoIterator<Item = Atom>>(iter: T) -> Self {
+        ColorStructure {
+            color_structure: iter.into_iter().collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct VertexRule {
     pub name: SmartString<LazyCompact>,
     pub particles: Vec<Arc<Particle>>,
-    pub color_structures: Vec<Atom>,
+    pub color_structures: ColorStructure,
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Vec<Option<Arc<Coupling>>>>,
 }
