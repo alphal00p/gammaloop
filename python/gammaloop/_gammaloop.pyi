@@ -60,12 +60,10 @@ class Worker:
     def export_amplitudes(self, export_root: str, amplitude_names: list[str]) -> None:
         """ Exports the amplitudes given in argument to the export root given in argument. """
 
-    def export_numerators(self,export_root:str,format:str)->None:
-        """Exports the numerators to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
+    def export_expressions(self,export_root:str,format:str)->None:
+        """Exports the numerator and denominator to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
 
 
-   
-    
     def export_coupling_replacement_rules(self,export_root:str,format:str)->None:
         """Exports the coupling replacement rules to the export root given in argument. The format can be 'default' or 'mathematica' or 'latex'."""
 

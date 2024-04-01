@@ -314,15 +314,15 @@ impl PythonWorker {
         ))
     }
 
-    pub fn export_numerators(&mut self, export_root: &str, format: &str) -> PyResult<String> {
+    pub fn export_expressions(&mut self, export_root: &str, format: &str) -> PyResult<String> {
         self.generate_numerators();
 
         for amplitude in self.amplitudes.container.iter_mut() {
             amplitude
-                .export_numerator(export_root, Self::printer_options(format))
+                .export_expressions(export_root, Self::printer_options(format))
                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         }
-        Ok("Exported numerators".to_string())
+        Ok("Exported expressions".to_string())
     }
 
     pub fn export_coupling_replacement_rules(

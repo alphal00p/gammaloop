@@ -244,12 +244,14 @@ class AmplitudesExporter(GammaLoopExporter):
             self.configuration_for_process.set_setting(
                 'run_settings.Kinematics.e_cm', e_cm)
 
-    def export_numerator(self, export_root: Path, amplitudes: AmplitudeList, format: str):
+    def export_expression(self, export_root: Path, amplitudes: AmplitudeList, format: str):
         for amplitude in amplitudes:
             os.makedirs(pjoin(export_root, 'sources',
-                        'amplitudes', f'{amplitude.name}', 'numerator'))
+                        'amplitudes', f'{amplitude.name}', 'expressions'))
 
-        self.gammaloop.rust_worker.export_numerators(str(export_root), format)
+        self.gammaloop.rust_worker.export_expressions(str(export_root), format)
+    
+
 
     def export(self, export_root: Path, amplitudes: AmplitudeList):
 

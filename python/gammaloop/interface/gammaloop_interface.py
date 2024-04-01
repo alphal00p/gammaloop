@@ -681,12 +681,12 @@ class GammaLoop(object):
     output_parser = ArgumentParser(prog='output')
     output_parser.add_argument(
         'output_path', type=str, help='Path to output the cross section to')
-    output_parser.add_argument('-num', '--numerator', default=False, action='store_true',
-                               help='Generate numerator and output it to a text file')
+    output_parser.add_argument('-exp', '--expression', default=False, action='store_true',
+                               help='Generate expression associated to the graph and output it to a text file')
     
     output_parser.add_argument('-mr', '--model_replacements', default=False, action='store_true',
                                help='Generate coupling replacements and output it to a text file')
-    output_parser.add_argument('-nf', '--numerator_format', type=str, default='default',
+    output_parser.add_argument('-ef', '--expression_format', type=str, default='default',
                                choices=['default', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
 
     def do_output(self, str_args: str) -> None:
@@ -705,7 +705,7 @@ class GammaLoop(object):
 
         if args.model_replacements:
             self.rust_worker.export_coupling_replacement_rules(
-                args.output_path, args.numerator_format)
+                args.output_path, args.expression_format)
             logger.info(
                 "Model replacement rules exported to model directory.")
 
@@ -721,9 +721,9 @@ class GammaLoop(object):
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
             amplitude_exporter.export(args.output_path, self.amplitudes)
-            if args.numerator:
-                amplitude_exporter.export_numerator(
-                    args.output_path, self.amplitudes, args.numerator_format)
+            if args.expression:
+                amplitude_exporter.export_expression(
+                    args.output_path, self.amplitudes, args.expression_format)
                 
 
             logger.info("Amplitudes exported to '%s'.", args.output_path)

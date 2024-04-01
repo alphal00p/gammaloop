@@ -26,10 +26,7 @@ use num::Complex;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
-use symbolica::{
-    id::Pattern,
-    representations::{Atom, AtomView},
-};
+use symbolica::{id::Pattern, representations::Atom};
 
 use constcat::concat;
 
@@ -458,88 +455,72 @@ impl Edge {
         self.vertices[1] == vertex
     }
 
+    pub fn denominator(&self, graph: &Graph) -> (Atom, Atom) {
+        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+        let mom = Atom::parse(&format!("Q{num}")).unwrap();
+        let mass = self
+            .particle
+            .mass
+            .expression
+            .clone()
+            .unwrap_or(Atom::new_num(0));
+
+        (mom, mass)
+    }
+
     pub fn numerator(&self, graph: &Graph) -> Atom {
-        let mut atom = self.propagator.numerator.clone();
+        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+        match self.edge_type {
+            EdgeType::Incoming => self.particle.incoming_polarization_atom(num),
+            EdgeType::Outgoing => self.particle.outgoing_polarization_atom(num),
+            EdgeType::Virtual => {
+                let mut atom = self.propagator.numerator.clone();
 
-        let pindex_atom = Atom::parse(&format!(
-            "p{}",
-            graph.edge_name_to_position.get(&self.name).unwrap()
-        ))
-        .unwrap();
+                let pindex_num = AbstractIndex::try_from(format!("p{}", num)).unwrap().0;
+                let pfun = Pattern::parse("P(x_)").unwrap();
+                atom = pfun.replace_all(
+                    atom.as_view(),
+                    &Pattern::parse(&format!("Q{}(lor(4,x_))", num)).unwrap(),
+                    None,
+                    None,
+                );
 
-        let pindex_num = if let AtomView::Var(v) = pindex_atom.as_view() {
-            v.get_symbol().get_id()
-        } else {
-            unreachable!()
-        };
+                let pslashfun = Pattern::parse("PSlash(x__)").unwrap();
+                atom = pslashfun.replace_all(
+                    atom.as_view(),
+                    &Pattern::parse(&format!(
+                        "Q{}(lor(4,{}))Gamma({},x__)",
+                        num, pindex_num, pindex_num
+                    ))
+                    .unwrap(),
+                    None,
+                    None,
+                );
 
-        let pfun = Pattern::parse("P(x_)").unwrap();
-        atom = pfun.replace_all(
-            atom.as_view(),
-            &Pattern::parse(&format!(
-                "Q{}(lor(4,x_))",
-                graph.edge_name_to_position.get(&self.name).unwrap()
-            ))
-            .unwrap(),
-            None,
-            None,
-        );
+                let pat: Pattern = Atom::new_num(1).into_pattern();
 
-        let pslashfun = Pattern::parse("PSlash(x__)").unwrap();
-        atom = pslashfun.replace_all(
-            atom.as_view(),
-            &Pattern::parse(&format!(
-                "Q{}(lor(4,{}))Gamma({},x__)",
-                graph.edge_name_to_position.get(&self.name).unwrap(),
-                pindex_num,
-                pindex_num
-            ))
-            .unwrap(),
-            None,
-            None,
-        );
+                let in_index_num = AbstractIndex::try_from(format!("in{}", num)).unwrap().0;
 
-        let pat: Pattern = Atom::new_num(1).into_pattern();
-        let index_atom = Atom::parse(&format!(
-            "in{}",
-            graph.edge_name_to_position.get(&self.name).unwrap()
-        ))
-        .unwrap();
+                atom = pat.replace_all(
+                    atom.as_view(),
+                    &Pattern::parse(&format!("{in_index_num}")).unwrap(),
+                    None,
+                    None,
+                );
 
-        let index_num = if let AtomView::Var(v) = index_atom.as_view() {
-            v.get_symbol().get_id()
-        } else {
-            unreachable!()
-        };
+                let pat: Pattern = Atom::new_num(2).into_pattern();
 
-        atom = pat.replace_all(
-            atom.as_view(),
-            &Pattern::parse(&format!("{index_num}")).unwrap(),
-            None,
-            None,
-        );
+                let out_index_num = AbstractIndex::try_from(format!("out{}", num)).unwrap().0;
+                atom = pat.replace_all(
+                    atom.as_view(),
+                    &Pattern::parse(&format!("{out_index_num}")).unwrap(),
+                    None,
+                    None,
+                );
 
-        let pat: Pattern = Atom::new_num(2).into_pattern();
-        let index_atom = Atom::parse(&format!(
-            "out{}",
-            graph.edge_name_to_position.get(&self.name).unwrap()
-        ))
-        .unwrap();
-
-        let index_num = if let AtomView::Var(v) = index_atom.as_view() {
-            v.get_symbol().get_id()
-        } else {
-            unreachable!()
-        };
-
-        atom = pat.replace_all(
-            atom.as_view(),
-            &Pattern::parse(&format!("{index_num}")).unwrap(),
-            None,
-            None,
-        );
-
-        atom
+                atom
+            }
+        }
     }
 }
 
@@ -1111,6 +1092,10 @@ impl Graph {
 
     pub fn generate_ltd(&mut self) {
         self.derived_data.ltd_expression = Some(generate_ltd_expression(self));
+    }
+
+    pub fn denominator(self) -> Vec<(Atom, Atom)> {
+        self.edges.iter().map(|e| e.denominator(&self)).collect()
     }
 
     pub fn generate_cff(&mut self) {

@@ -482,7 +482,7 @@ impl Amplitude {
         SerializableAmplitude::from_amplitude(self)
     }
 
-    pub fn export_numerator(
+    pub fn export_denominator(
         &self,
         export_root: &str,
         printer_ops: PrintOptions,
@@ -491,9 +491,66 @@ impl Amplitude {
             .join("sources")
             .join("amplitudes")
             .join(self.name.as_str())
-            .join("numerator");
+            .join("denominator");
+
+        for amplitude_graph in self.amplitude_graphs.iter() {
+            let dens: Vec<(String, String)> = amplitude_graph
+                .graph
+                .edges
+                .iter()
+                .map(|e| {
+                    let (mom, mass) = e.denominator(&amplitude_graph.graph);
+                    (
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                        ),
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                        ),
+                    )
+                })
+                .collect();
+            fs::write(
+                path.join(format!("{}_den.json", amplitude_graph.graph.name)),
+                serde_json::to_string_pretty(&dens).unwrap(),
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn export_expressions(
+        &self,
+        export_root: &str,
+        printer_ops: PrintOptions,
+    ) -> Result<(), Report> {
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str())
+            .join("expressions");
         for amplitude_graph in self.amplitude_graphs.iter() {
             if let Some(num) = &amplitude_graph.graph.derived_data.numerator {
+                let dens: Vec<(String, String)> = amplitude_graph
+                    .graph
+                    .edges
+                    .iter()
+                    .map(|e| {
+                        let (mom, mass) = e.denominator(&amplitude_graph.graph);
+                        (
+                            format!(
+                                "{}",
+                                AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                            ),
+                            format!(
+                                "{}",
+                                AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                            ),
+                        )
+                    })
+                    .collect();
+
                 let rep_rules: Vec<(String, String)> = amplitude_graph
                     .graph
                     .generate_lmb_replacement_rules()
@@ -518,10 +575,11 @@ impl Amplitude {
                         AtomPrinter::new_with_options(num.as_view(), printer_ops)
                     ),
                     rep_rules,
+                    dens,
                 );
 
                 fs::write(
-                    path.join(format!("{}_num.json", amplitude_graph.graph.name)),
+                    path.join(format!("{}_exp.json", amplitude_graph.graph.name)),
                     serde_json::to_string_pretty(&out).unwrap(),
                 )?;
             }

@@ -1,3 +1,4 @@
+use crate::tensor::AbstractIndex;
 use crate::utils;
 use ahash::RandomState;
 use color_eyre::{Help, Report};
@@ -323,6 +324,38 @@ impl Particle {
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
+        }
+    }
+
+    pub fn incoming_polarization_atom(&self, num: usize) -> Atom {
+        let id = AbstractIndex::try_from(format!("in{}", num)).unwrap().0;
+        match self.spin {
+            1 => Atom::parse("1").unwrap(),
+            2 => {
+                if self.pdg_code > 0 {
+                    Atom::parse(&format!("u{num}(spin(4,{id}))")).unwrap()
+                } else {
+                    Atom::parse(&format!("vbar{num}(spin(4,{id}))")).unwrap()
+                }
+            }
+            3 => Atom::parse(&format!("ϵ{num}(lor(4,{id}))")).unwrap(),
+            _ => panic!("Spin {}/2 not supported", self.spin),
+        }
+    }
+
+    pub fn outgoing_polarization_atom(&self, num: usize) -> Atom {
+        let id = AbstractIndex::try_from(format!("out{}", num)).unwrap().0;
+        match self.spin {
+            1 => Atom::parse("1").unwrap(),
+            2 => {
+                if self.pdg_code > 0 {
+                    Atom::parse(&format!("ubar{num}(spin(4,{id}))")).unwrap()
+                } else {
+                    Atom::parse(&format!("v{num}(spin(4,{id}))")).unwrap()
+                }
+            }
+            3 => Atom::parse(&format!("ϵbar{num}(lor(4,{id}))")).unwrap(),
+            _ => panic!("Spin {}/2 not supported", self.spin),
         }
     }
 }
