@@ -44,7 +44,7 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let gamma = Pattern::parse("Gamma(mu_,i_,j_)").unwrap();
     builder = gamma.replace_all(
         builder.as_view(),
-        &Pattern::parse("γ(lor(4,mu_),euc(4,i_),euc(4,j_))").unwrap(),
+        &Pattern::parse("γ(lor(4,mu_),spin(4,i_),spin(4,j_))").unwrap(),
         None,
         None,
     );
@@ -52,7 +52,7 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let gamma5 = Pattern::parse("Gamma5(i_,j_)").unwrap();
     builder = gamma5.replace_all(
         builder.as_view(),
-        &Pattern::parse("γ5(euc(4,i_),euc(4,j_))").unwrap(),
+        &Pattern::parse("γ5(spin(4,i_),spin(4,j_))").unwrap(),
         None,
         None,
     );
@@ -60,7 +60,7 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let proj_m = Pattern::parse("ProjM(i_,j_)").unwrap();
     builder = proj_m.replace_all(
         builder.as_view(),
-        &Pattern::parse("ProjM(euc(4,i_),euc(4,j_))").unwrap(),
+        &Pattern::parse("ProjM(spin(4,i_),spin(4,j_))").unwrap(),
         None,
         None,
     );
@@ -68,7 +68,7 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let proj_p = Pattern::parse("ProjP(i_,j_)").unwrap();
     builder = proj_p.replace_all(
         builder.as_view(),
-        &Pattern::parse("ProjP(euc(4,i_),euc(4,j_))").unwrap(),
+        &Pattern::parse("ProjP(spin(4,i_),spin(4,j_))").unwrap(),
         None,
         None,
     );
@@ -76,7 +76,7 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let sigma = Pattern::parse("Sigma(mu_,nu_,i_,j_)").unwrap();
     builder = sigma.replace_all(
         builder.as_view(),
-        &Pattern::parse("σ(lor(4,mu_),lor(4,nu_),euc(4,i_),euc(4,j_))").unwrap(),
+        &Pattern::parse("σ(lor(4,mu_),lor(4,nu_),spin(4,i_),spin(4,j_))").unwrap(),
         None,
         None,
     );
@@ -84,7 +84,7 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let charge_conj = Pattern::parse("C(i_,j_)").unwrap();
     builder = charge_conj.replace_all(
         builder.as_view(),
-        &Pattern::parse("C(euc(4,i_),euc(4,j_))").unwrap(),
+        &Pattern::parse("C(spin(4,i_),spin(4,j_))").unwrap(),
         None,
         None,
     );

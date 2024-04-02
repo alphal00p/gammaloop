@@ -339,7 +339,7 @@ impl Particle {
                 }
             }
             3 => Atom::parse(&format!("ϵ{num}(lor(4,{id}))")).unwrap(),
-            _ => panic!("Spin {}/2 not supported", self.spin),
+            _ => Atom::parse("1").unwrap(),
         }
     }
 
@@ -355,7 +355,7 @@ impl Particle {
                 }
             }
             3 => Atom::parse(&format!("ϵbar{num}(lor(4,{id}))")).unwrap(),
-            _ => panic!("Spin {}/2 not supported", self.spin),
+            _ => Atom::parse("1").unwrap(),
         }
     }
 }
