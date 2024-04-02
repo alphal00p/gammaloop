@@ -92,7 +92,7 @@ def parse_python_expression(expr: str | None) -> sb.Expression | None:
 
 def replace_pseudo_floats(expression: str) -> str:
 
-    def rationalize_float(fl: re.Match[str]) -> str:
+    def rationalize_float(fl: re.Match[str]) -> sb.Expression:
         fl_eval: float = eval(fl.group())
         rationalized_fl = SBE.num(fl_eval, 10000)  # type: ignore
         rationalized_fl_eval: float = eval(str(rationalized_fl)+'.')
