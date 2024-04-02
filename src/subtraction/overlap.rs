@@ -438,31 +438,45 @@ impl EsurfacePairs {
 
     fn construct_possible_subsets_of_len(
         &self,
-        existing_esurfaces: &ExistingEsurfaces,
+        _existing_esurfaces: &ExistingEsurfaces,
         subset_len: usize,
     ) -> Vec<Vec<ExistingEsurfaceId>> {
         let mut res = vec![];
         let num_existing_esurfaces = self.has_pair_with.len();
         assert!(subset_len < num_existing_esurfaces);
 
-        let subsets = existing_esurfaces.all_indices().combinations(subset_len);
+        let mut subset = EsurfaceSubset::new(subset_len, num_existing_esurfaces);
+        let mut not_at_end = true;
 
-        // horrendously inefficient, many subsets can be skipped once one is found to not be valid.
-        for subset in subsets {
-            let is_valid = subset.iter().combinations(2).all(|pair| {
-                assert!(pair[0] < pair[1]);
+        while not_at_end {
+            let mut is_valid = true;
+            let mut index_to_advance = subset_len - 1;
+            for pair_data in subset.subset.iter().enumerate().combinations(2) {
                 let pair = (
-                    Into::<ExistingEsurfaceId>::into(*pair[0]),
-                    Into::<ExistingEsurfaceId>::into(*pair[1]),
+                    Into::<ExistingEsurfaceId>::into(*pair_data[0].1),
+                    Into::<ExistingEsurfaceId>::into(*pair_data[1].1),
                 );
-                self.data.contains_key(&pair)
-            });
+
+                if !self.data.contains_key(&pair) {
+                    is_valid = false;
+                    index_to_advance = pair_data[1].0;
+                    break;
+                }
+            }
 
             if is_valid {
-                res.push(subset);
+                res.push(
+                    subset
+                        .subset
+                        .iter()
+                        .map(|&x| Into::<ExistingEsurfaceId>::into(x))
+                        .collect(),
+                );
+                not_at_end = subset.advance_nth_index(index_to_advance);
+            } else {
+                not_at_end = subset.advance_nth_index(index_to_advance);
             }
         }
-
         res
     }
 }
@@ -475,6 +489,38 @@ fn to_real_mass_vector(edge_masses: &[Option<Complex<f64>>]) -> Vec<f64> {
             None => 0.0,
         })
         .collect_vec()
+}
+
+struct EsurfaceSubset {
+    subset: Vec<usize>,
+    num_esurfaces: usize,
+}
+
+impl EsurfaceSubset {
+    fn new(len: usize, num_esurfaces: usize) -> Self {
+        Self {
+            subset: (0..len).collect(),
+            num_esurfaces,
+        }
+    }
+
+    fn advance_nth_index(&mut self, n: usize) -> bool {
+        let max_value_of_n = self.num_esurfaces - (self.subset.len() - n) + 1;
+
+        if self.subset[n] == max_value_of_n {
+            if n == 0 {
+                false
+            } else {
+                self.advance_nth_index(n - 1)
+            }
+        } else {
+            self.subset[n] += 1;
+            for i in n + 1..self.subset.len() {
+                self.subset[i] = self.subset[i - 1] + 1;
+            }
+            true
+        }
+    }
 }
 
 #[cfg(test)]
