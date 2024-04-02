@@ -339,7 +339,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     let mut existing_esurfaces = ExistingEsurfaces::with_capacity(MAX_EXPECTED_CAPACITY);
 
     for orientation_pair in &esurface_derived_data.orientation_pairs {
-        let (esurface_to_check_id, shift_zero_sq) = {
+        if let Some((esurface_to_check_id, shift_zero_sq)) = {
             let (esurface_id, other_esurface_id) = orientation_pair;
 
             let esurface = &esurfaces[*esurface_id];
@@ -348,30 +348,32 @@ pub fn get_existing_esurfaces<T: FloatLike>(
             let shift_zero_sq = shift_part * shift_part;
 
             if shift_part < T::zero() {
-                (*esurface_id, shift_zero_sq)
+                Some((*esurface_id, shift_zero_sq))
+            } else if shift_part > T::zero() {
+                Some((*other_esurface_id, shift_zero_sq))
             } else {
-                (*other_esurface_id, shift_zero_sq)
+                None
             }
-        };
+        } {
+            let shift_signature = &esurface_derived_data[esurface_to_check_id].shift_signature;
 
-        let shift_signature = &esurface_derived_data[esurface_to_check_id].shift_signature;
+            let mut esurface_shift = LorentzVector::new();
 
-        let mut esurface_shift = LorentzVector::new();
-
-        for i in 0..shift_signature.len() - 1 {
-            match shift_signature[i] {
-                1 => esurface_shift += externals[i],
-                -1 => esurface_shift -= externals[i],
-                0 => {}
-                _ => unreachable!("Shift signature must be -1, 0 or 1"),
+            for i in 0..shift_signature.len() - 1 {
+                match shift_signature[i] {
+                    1 => esurface_shift += externals[i],
+                    -1 => esurface_shift -= externals[i],
+                    0 => {}
+                    _ => unreachable!("Shift signature must be -1, 0 or 1"),
+                }
             }
-        }
 
-        let shift_spatial_sq = esurface_shift.spatial_squared();
-        let mass_sum_squared = esurface_derived_data[esurface_to_check_id].mass_sum_squared;
+            let shift_spatial_sq = esurface_shift.spatial_squared();
+            let mass_sum_squared = esurface_derived_data[esurface_to_check_id].mass_sum_squared;
 
-        if shift_zero_sq >= shift_spatial_sq + Into::<T>::into(mass_sum_squared) {
-            existing_esurfaces.push(esurface_to_check_id);
+            if shift_zero_sq >= shift_spatial_sq + Into::<T>::into(mass_sum_squared) {
+                existing_esurfaces.push(esurface_to_check_id);
+            }
         }
     }
     existing_esurfaces
