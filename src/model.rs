@@ -16,6 +16,7 @@ use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::representations::{Atom, FunctionBuilder};
 use symbolica::state::State;
 
+#[allow(unused)]
 fn normalise_complex(atom: &Atom) -> Atom {
     let re = Atom::parse("re_").unwrap();
     let im = Atom::parse("im_").unwrap();
@@ -248,7 +249,8 @@ impl Coupling {
 
     pub fn rep_rule(&self) -> [Atom; 2] {
         let lhs = Atom::parse(&self.name).unwrap();
-        let rhs = normalise_complex(&self.expression);
+        //let rhs = normalise_complex(&self.expression);
+        let rhs = self.expression.clone();
 
         [lhs, rhs]
     }
@@ -456,7 +458,8 @@ impl Parameter {
         let lhs = Atom::parse(&self.name).unwrap();
         let rhs = self.expression.clone();
 
-        Some([lhs, normalise_complex(&rhs?)])
+        //Some([lhs, normalise_complex(&rhs?)])
+        Some([lhs, rhs?])
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]

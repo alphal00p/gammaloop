@@ -4,7 +4,7 @@ import logging
 from enum import Enum
 import yaml
 from typing import Any
-from gammaloop.misc.utils import setup_logging, Colour
+from gammaloop.misc.utils import setup_logging, Colour  # type: ignore
 from gammaloop import check_gammaloop_dependencies
 pjoin = os.path.join
 
@@ -25,6 +25,22 @@ GAMMALOOP_CONFIG_PATHS = [
 
 # Useful for pyLance to work fine when doing something like sum([[1,2],[4,5]],[]) to flatten the nested list
 EMPTY_LIST: list[Any] = []
+
+
+class GammaLoopWarning(Enum):
+    FloatInExpression = 100
+    DroppingEpsilonTerms = 101
+
+    def __str__(self):
+        if self == GammaLoopWarning.FloatInExpression:
+            return "FloatInExpression"
+        elif self == GammaLoopWarning.DroppingEpsilonTerms:
+            return "DroppingEpsilonTerms"
+        else:
+            raise GammaLoopError(f"Unknown side: {self}")
+
+
+GL_WARNINGS_ISSUED: set[GammaLoopWarning] = set()
 
 logger = logging.getLogger('GammaLoop')
 

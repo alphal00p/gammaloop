@@ -10,7 +10,7 @@ from pprint import pformat
 import yaml
 import shutil
 import copy
-from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH
+from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GammaLoopWarning
 from gammaloop.misc.utils import Colour, verbose_yaml_dump
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
@@ -45,7 +45,7 @@ AVAILABLE_COMMANDS = [
 class GammaLoopConfiguration(object):
 
     def __init__(self, path: str | None = None, quiet=False):
-        self._shorthands = {}
+        self._shorthands: dict[str, str] = {}
         self._config: dict[str, Any] = {
             'symbolica': {
                 'license': "GAMMALOOP_USER"
@@ -491,6 +491,10 @@ class GammaLoop(object):
             case _:
                 raise GammaLoopError(f"Invalid model format: '{args.format}'")
 
+        # Make sure to issue warnings again if they were issued before
+        if GammaLoopWarning.FloatInExpression in GL_WARNINGS_ISSUED:
+            GL_WARNINGS_ISSUED.remove(GammaLoopWarning.FloatInExpression)
+
         self.model.restriction = model_restriction
 
         if model_restriction not in [None, 'full']:
@@ -521,7 +525,6 @@ class GammaLoop(object):
 
         # Assign the UFO model to our rust worker
         self.rust_worker.load_model_from_yaml_str(self.model.to_yaml())
-
         logger.info("Successfully loaded model '%s'.",
                     self.model.get_full_name())
 
@@ -683,7 +686,6 @@ class GammaLoop(object):
         'output_path', type=str, help='Path to output the cross section to')
     output_parser.add_argument('-exp', '--expression', default=False, action='store_true',
                                help='Generate expression associated to the graph and output it to a text file')
-    
     output_parser.add_argument('-mr', '--model_replacements', default=False, action='store_true',
                                help='Generate coupling replacements and output it to a text file')
     output_parser.add_argument('-ef', '--expression_format', type=str, default='default',
@@ -724,7 +726,6 @@ class GammaLoop(object):
             if args.expression:
                 amplitude_exporter.export_expression(
                     args.output_path, self.amplitudes, args.expression_format)
-                
 
             logger.info("Amplitudes exported to '%s'.", args.output_path)
     #

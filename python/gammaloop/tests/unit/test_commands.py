@@ -67,6 +67,32 @@ class TestLoadModel:
         assert len(gloop.model.vertex_rules) == 119
         assert len(gloop.model.orders) == 2
 
+    def test_load_full_loop_sm_from_ufo(self):
+        loop_sm_model_path = os.path.join(RESOURCES_PATH, 'models', 'loop_sm')
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"import_model {loop_sm_model_path}-full --format ufo"))
+
+        assert len(gloop.model.particles) == 35
+        assert len(gloop.model.lorentz_structures) == 40
+        assert len(gloop.model.couplings) == 266
+        assert len(gloop.model.parameters) == 146
+        assert len(gloop.model.vertex_rules) == 130
+        assert len(gloop.model.orders) == 2
+
+    def test_load_loop_sm_from_ufo(self):
+        loop_sm_model_path = os.path.join(RESOURCES_PATH, 'models', 'loop_sm')
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"import_model {loop_sm_model_path} --format ufo"))
+
+        assert len(gloop.model.particles) == 35
+        assert len(gloop.model.lorentz_structures) == 40
+        assert len(gloop.model.couplings) == 163
+        assert len(gloop.model.parameters) == 146
+        assert len(gloop.model.vertex_rules) == 96
+        assert len(gloop.model.orders) == 2
+
     # This test uses a session-wide fixture defined in conftest.py
     def test_load_sm_from_yaml(self, sm_model_yaml_file: str):
         gloop = get_gamma_loop_interpreter()

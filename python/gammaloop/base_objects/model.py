@@ -10,7 +10,7 @@ from enum import StrEnum
 import yaml
 import cmath
 from symbolica import Expression as SBE, AtomType  # pylint: disable=import-error
-from gammaloop.misc.common import pjoin, DATA_PATH, GammaLoopError, logger
+from gammaloop.misc.common import pjoin, DATA_PATH, GammaLoopError, logger, GL_WARNINGS_ISSUED, GammaLoopWarning
 import gammaloop.misc.utils as utils
 from gammaloop.base_objects.param_card import ParamCard
 pjoin = os.path.join
@@ -225,7 +225,18 @@ class Coupling(object):
 
     @staticmethod
     def from_ufo_object(ufo_object: Any) -> Coupling:
-        return Coupling(ufo_object.name, ufo_object.value, ufo_object.order)
+        expression = ufo_object.value
+        if isinstance(ufo_object.value, dict):
+            if list(ufo_object.value.keys()) == [0,]:
+                expression = ufo_object.value[0]
+            else:
+                if GammaLoopWarning.DroppingEpsilonTerms not in GL_WARNINGS_ISSUED:
+                    GL_WARNINGS_ISSUED.add(
+                        GammaLoopWarning.DroppingEpsilonTerms)
+                    logger.warning(
+                        "Only finite terms of order ε^0 are retained in model expressions")
+                expression = ufo_object.value.get(0, '0')
+        return Coupling(ufo_object.name, expression, ufo_object.order)
 
     @staticmethod
     def from_serializable_coupling(serializable_coupling: SerializableCoupling) -> Coupling:
@@ -334,13 +345,28 @@ class Parameter(object):
 
     @staticmethod
     def from_ufo_object(ufo_object: Any) -> Parameter:
+        # This ugly hack is to fix an annoying persistent typo in many NLO models
+        if ufo_object.nature == 'interal':
+            ufo_object.nature = 'internal'
+
         if ufo_object.nature == 'external':
             param_value = complex(ufo_object.value)
             param_expression: str | None = None
         elif ufo_object.nature == 'internal':
-            param_expression: str | None = ufo_object.value
+            expression: Any = ufo_object.value
+            if isinstance(ufo_object.value, dict):
+                if list(ufo_object.value.keys()) == [0,]:
+                    expression = ufo_object.value[0]
+                else:
+                    if GammaLoopWarning.DroppingEpsilonTerms not in GL_WARNINGS_ISSUED:
+                        GL_WARNINGS_ISSUED.add(
+                            GammaLoopWarning.DroppingEpsilonTerms)
+                        logger.warning(
+                            "Only finite terms of order ε^0 are retained in model expressions")
+                    expression = ufo_object.value.get(0, '0')
+            param_expression: str | None = expression
             try:
-                param_value = complex(ufo_object.value)
+                param_value = complex(expression)
                 param_expression = None
             except ValueError:
                 param_value = None
@@ -349,8 +375,9 @@ class Parameter(object):
                 f"Invalid parameter nature '{ufo_object.nature}'")
 
         return Parameter(
-            ufo_object.lhablock,
-            None if ufo_object.lhacode is None else tuple(ufo_object.lhacode),
+            ufo_object.lhablock if hasattr(ufo_object, 'lhablock') else None,
+            (None if ufo_object.lhacode is None else tuple(ufo_object.lhacode)
+             ) if hasattr(ufo_object, 'lhacode') else None,
             ufo_object.name,
             ParameterNature(ufo_object.nature), ParameterType(ufo_object.type),
             param_value, param_expression
@@ -463,7 +490,7 @@ class Particle(object):
             ufo_object.charge,
             ufo_object.GhostNumber,
             ufo_object.LeptonNumber,
-            ufo_object.Y
+            ufo_object.Y if hasattr(ufo_object, 'Y') else 0
         )
 
     @staticmethod
@@ -597,6 +624,48 @@ class Model(object):
         return f"{self.name}-{'full' if self.restriction is None else self.restriction}"
 
     # We must delay the building of model functions to make sure Symbolica has been registered at this point.
+    @staticmethod
+    def model_function_reglog(xs: list[complex]) -> complex:
+        arg: list[float] = [xs[0].real, xs[0].imag]
+        if abs(arg[0]) == 0.:
+            arg[0] = 0.
+        if abs(arg[1]) == 0.:
+            arg[1] = 0.
+        if arg == [0., 0.]:
+            return 0.
+        else:
+            return cmath.log(complex(arg[0], arg[1]))
+
+    @staticmethod
+    def model_function_reglogp(xs: list[complex]) -> complex:
+        arg: list[float] = [xs[0].real, xs[0].imag]
+        if abs(arg[0]) == 0.:
+            arg[0] = 0.
+        if abs(arg[1]) == 0.:
+            arg[1] = 0.
+        if arg == [0., 0.]:
+            return 0.
+        else:
+            if arg[0] < 0. and arg[1] < 0.:
+                return cmath.log(complex(arg[0], arg[1])) + complex(0., 2*cmath.pi)
+            else:
+                return cmath.log(complex(arg[0], arg[1]))
+
+    @staticmethod
+    def model_function_reglogm(xs: list[complex]) -> complex:
+        arg: list[float] = [xs[0].real, xs[0].imag]
+        if abs(arg[0]) == 0.:
+            arg[0] = 0.
+        if abs(arg[1]) == 0.:
+            arg[1] = 0.
+        if arg == [0., 0.]:
+            return 0.
+        else:
+            if arg[0] < 0. and arg[1] > 0.:
+                return cmath.log(complex(arg[0], arg[1])) - complex(0., 2*cmath.pi)
+            else:
+                return cmath.log(complex(arg[0], arg[1]))
+
     @classmethod
     def set_model_functions(cls):
         cls.model_functions: dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]] = {
@@ -607,6 +676,11 @@ class Model(object):
             SBE.fun('atan'): lambda xs: cmath.atan(xs[0]),
             SBE.fun('complexconjugate'): lambda xs: xs[0].conjugate(),
             SBE.fun('complex'): lambda xs: xs[0]+complex(0, 1)*xs[1],
+            # These functions are typically only used in NLO models
+            SBE.fun('cond'): lambda xs: xs[1] if abs(xs[0]) == 0. else xs[2],
+            SBE.fun('reglog'): lambda xs: Model.model_function_reglog(xs),
+            SBE.fun('reglogp'): lambda xs: Model.model_function_reglogp(xs),
+            SBE.fun('reglogm'): lambda xs: Model.model_function_reglogm(xs),
         }
 
     @classmethod
@@ -706,6 +780,13 @@ class Model(object):
             param) for param in ufo_model.all_parameters]
         model.name_to_position['parameters'] = {
             param.name: i for i, param in enumerate(model.parameters)}
+        if hasattr(ufo_model, 'all_CTparameters'):
+            ct_parameters = [Parameter.from_ufo_object(
+                param) for param in ufo_model.all_CTparameters]
+            model.name_to_position['parameters'].update({
+                param.name: len(model.parameters)+i for i, param in enumerate(ct_parameters)})
+            model.parameters.extend(ct_parameters)
+
         # Load particles
         model.particles = [Particle.from_ufo_object(
             model, particle) for particle in ufo_model.all_particles]
@@ -905,6 +986,9 @@ class Model(object):
                     if parameter.expression is None:
                         raise GammaLoopError(
                             f"Internal parameter '{parameter.name}' has no value nor expression.")
+                    # print([utils.expression_to_string_safe(f(SBE.var('x')))
+                    #       for f in self.get_model_functions()])
+                    # print(parameter.expression)
                     if evaluation_round == Model.MAX_ALLOWED_RECURSION_IN_PARAMETER_EVALUATION:
                         eval_result = utils.evaluate_symbolica_expression_safe(
                             parameter.expression, evaluation_variables, self.get_model_functions())
@@ -961,6 +1045,7 @@ class Model(object):
                 zero_parameters), ', '.join(zero_parameters))
 
         self.update_internal_parameters(input_card)
+
         self.update_coupling_values()
 
         if simplify:

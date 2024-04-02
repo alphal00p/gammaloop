@@ -193,8 +193,11 @@ def cli():
             if command_file is None:
                 raise GammaLoopError(
                     f"File '{args.command_file}' does not exist.")
-        else:
+        elif args.command_file is not None:
             command_file = args.command_file
+        else:
+            raise GammaLoopError(
+                "No command file or string specified.")
         commands = CommandList.from_file(command_file)
 
     gamma_loop.run(commands)
