@@ -1,5 +1,7 @@
 import pytest
-from gammaloop.interface.gammaloop_interface import CommandList
+import os
+from gammaloop.interface.gammaloop_interface import CommandList, GammaLoopConfiguration
+from gammaloop.misc.common import load_configuration, GL_PATH
 from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
 from pathlib import Path
 
@@ -18,6 +20,27 @@ class TestShellCommand:
         assert gloop.config['drawing']['combined_graphs_pdf_grid_shape'] == [
             1, 1]
         assert gloop.config['drawing']['feynmp']['show_edge_labels'] == True
+
+
+class TestGammaLoopConfigurationDefaults:
+
+    def test_default_config(self):
+        default_configuration = GammaLoopConfiguration(path='')
+        rust_run_config = load_configuration(os.path.join(
+            GL_PATH, 'data', 'run_cards', 'rust_run_config.yaml'))
+        gammaloop_config = load_configuration(os.path.join(
+            GL_PATH, 'data', 'config', 'gammaloop_config.yaml'))
+
+        rust_run_default_config = default_configuration._config['run_settings']
+        del default_configuration._config['run_settings']
+        # from pprint import pprint
+        # pprint(rust_run_default_config)
+        # pprint(rust_run_config)
+        assert rust_run_default_config == rust_run_config
+        # from pprint import pprint
+        # pprint(default_configuration._config)
+        # pprint(gammaloop_config)
+        assert default_configuration._config == gammaloop_config
 
 
 class TestLoadModel:
@@ -42,6 +65,32 @@ class TestLoadModel:
         assert len(gloop.model.couplings) == 72
         assert len(gloop.model.parameters) == 72
         assert len(gloop.model.vertex_rules) == 119
+        assert len(gloop.model.orders) == 2
+
+    def test_load_full_loop_sm_from_ufo(self):
+        loop_sm_model_path = os.path.join(RESOURCES_PATH, 'models', 'loop_sm')
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"import_model {loop_sm_model_path}-full --format ufo"))
+
+        assert len(gloop.model.particles) == 35
+        assert len(gloop.model.lorentz_structures) == 40
+        assert len(gloop.model.couplings) == 266
+        assert len(gloop.model.parameters) == 146
+        assert len(gloop.model.vertex_rules) == 130
+        assert len(gloop.model.orders) == 2
+
+    def test_load_loop_sm_from_ufo(self):
+        loop_sm_model_path = os.path.join(RESOURCES_PATH, 'models', 'loop_sm')
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            f"import_model {loop_sm_model_path} --format ufo"))
+
+        assert len(gloop.model.particles) == 35
+        assert len(gloop.model.lorentz_structures) == 40
+        assert len(gloop.model.couplings) == 163
+        assert len(gloop.model.parameters) == 146
+        assert len(gloop.model.vertex_rules) == 96
         assert len(gloop.model.orders) == 2
 
     # This test uses a session-wide fixture defined in conftest.py

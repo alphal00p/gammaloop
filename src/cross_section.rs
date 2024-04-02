@@ -12,7 +12,7 @@ use smartstring::{LazyCompact, SmartString};
 use std::fs;
 use std::fs::File;
 use std::path::Path;
-
+use symbolica::printer::{AtomPrinter, PrintOptions};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OutputType {
@@ -482,6 +482,111 @@ impl Amplitude {
         SerializableAmplitude::from_amplitude(self)
     }
 
+    pub fn export_denominator(
+        &self,
+        export_root: &str,
+        printer_ops: PrintOptions,
+    ) -> Result<(), Report> {
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str())
+            .join("denominator");
+
+        for amplitude_graph in self.amplitude_graphs.iter() {
+            let dens: Vec<(String, String)> = amplitude_graph
+                .graph
+                .edges
+                .iter()
+                .map(|e| {
+                    let (mom, mass) = e.denominator(&amplitude_graph.graph);
+                    (
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                        ),
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                        ),
+                    )
+                })
+                .collect();
+            fs::write(
+                path.join(format!("{}_den.json", amplitude_graph.graph.name)),
+                serde_json::to_string_pretty(&dens).unwrap(),
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn export_expressions(
+        &self,
+        export_root: &str,
+        printer_ops: PrintOptions,
+    ) -> Result<(), Report> {
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str())
+            .join("expressions");
+        for amplitude_graph in self.amplitude_graphs.iter() {
+            if let Some(num) = &amplitude_graph.graph.derived_data.numerator {
+                let dens: Vec<(String, String)> = amplitude_graph
+                    .graph
+                    .edges
+                    .iter()
+                    .map(|e| {
+                        let (mom, mass) = e.denominator(&amplitude_graph.graph);
+                        (
+                            format!(
+                                "{}",
+                                AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                            ),
+                            format!(
+                                "{}",
+                                AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                            ),
+                        )
+                    })
+                    .collect();
+
+                let rep_rules: Vec<(String, String)> = amplitude_graph
+                    .graph
+                    .generate_lmb_replacement_rules()
+                    .iter()
+                    .map(|(lhs, rhs)| {
+                        (
+                            format!(
+                                "{}",
+                                AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
+                            ),
+                            format!(
+                                "{}",
+                                AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
+                            ),
+                        )
+                    })
+                    .collect();
+
+                let out = (
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(num.as_view(), printer_ops)
+                    ),
+                    rep_rules,
+                    dens,
+                );
+
+                fs::write(
+                    path.join(format!("{}_exp.json", amplitude_graph.graph.name)),
+                    serde_json::to_string_pretty(&out).unwrap(),
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     #[allow(unused)]
     pub fn export(&mut self, export_root: &str, model: &Model) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
@@ -512,6 +617,7 @@ impl Amplitude {
                 bincode::serialize(&amplitude_graph.graph.derived_data.to_serializable())?,
             );
         }
+
         // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
 
         Ok(())
@@ -678,5 +784,13 @@ impl AmplitudeList {
             amplitude.load_derived_data(&ampltitude_path)?;
         }
         Ok(())
+    }
+
+    pub fn generate_numerator(&mut self, model: &Model) {
+        for amplitude in self.container.iter_mut() {
+            for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
+                amplitude_graph.graph.generate_numerator(model);
+            }
+        }
     }
 }

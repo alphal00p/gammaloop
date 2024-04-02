@@ -1,18 +1,20 @@
 from enum import StrEnum
 from typing import TextIO, Any, Callable
 from collections import deque, defaultdict
-from symbolica import Expression as SBE  # pylint: disable=import-error
 import logging
 import logging.handlers
 import os
 import sys
-import symbolica as sb  # pylint: disable=import-error # type: ignore
+
 import yaml
 import re
 from pprint import pformat
 
 import gammaloop.misc.common as common
 from gammaloop.misc import LOGGING_PREFIX_FORMAT
+
+from symbolica import Expression as SBE  # pylint: disable=import-error # nopep8
+import symbolica as sb  # pylint: disable=import-error # type: ignore # nopep8
 
 
 class NoAliasDumper(yaml.SafeDumper):
@@ -88,39 +90,79 @@ def parse_python_expression(expr: str | None) -> sb.Expression | None:
         return None
 
 
-def replace_pseudo_floats(expression: str):
-    # Check for actual floats
-    actual_floats = re.findall(r'\d+\.\d+', expression)
-    if actual_floats:
-        raise ValueError(
-            f"Expression contains the following floating point values in the expression: {actual_floats}" +
-            "\nThis is not supported by Symbolica and typically, the model needs to be adjusted to declare those floats as internal constant parameters.")
+def replace_pseudo_floats(expression: str) -> str:
 
-    # Replace pseudo-floats
-    modified_expression = re.sub(r'(\d+)\.', r'\1', expression)
+    def rationalize_float(fl: re.Match[str]) -> sb.Expression:
+        fl_eval: float = eval(fl.group())
+        rationalized_fl = SBE.num(fl_eval, 10000)  # type: ignore
+        rationalized_fl_eval: float = eval(str(rationalized_fl)+'.')
+        if common.GammaLoopWarning.FloatInExpression not in common.GL_WARNINGS_ISSUED:
+            common.GL_WARNINGS_ISSUED.add(
+                common.GammaLoopWarning.FloatInExpression)
+            common.logger.warning(
+                f"Expression contains the following floating point values in the expression: {fl.group()} (mapped to {rationalized_fl})")
+            common.logger.warning(
+                "It is typically best for the UFO model to be adjusted and declare these floats as internal constant parameters instead, or have them written as a fraction.")
+        valid_cast = True
+        if abs(rationalized_fl_eval-fl_eval) != 0.:
+            if abs(fl_eval) != 0.:
+                if abs(rationalized_fl_eval-fl_eval)/abs(fl_eval) > 1.0e-12:
+                    valid_cast = False
+            else:
+                if abs(rationalized_fl_eval-fl_eval) > 1.0e-12:
+                    valid_cast = False
+        if not valid_cast:
+            raise common.GammaLoopError(
+                "The float value %s in the expression could not be cast to a rational number %s = %.16e", fl.group(), rationalized_fl, rationalized_fl_eval)
+
+        return rationalized_fl
+
+    modified_expression = re.sub(
+        r'(\d+\.\d+e[+-]?\d+)', lambda x: f'({rationalize_float(x)})', expression)
+    modified_expression = re.sub(
+        r'(\d+\.\d+)', lambda x: f'({rationalize_float(x)})', expression)
+    modified_expression = re.sub(r'(\d+)\.', r'\1', modified_expression)
 
     return modified_expression
 
 
+def replace_to_sqrt(expr: sb.Expression) -> sb.Expression:
+    expr = expr.replace_all(sb.Expression.parse(
+        'x__^(1/2)'), sb.Expression.parse('sqrt(x__)'))
+    expr = expr.replace_all(sb.Expression.parse(
+        'x__^(-1/2)'), sb.Expression.parse('(sqrt(x__))^-1'))
+    expr = expr.replace_all(sb.Expression.parse(
+        'x__^(1/4)'), sb.Expression.parse('sqrt(sqrt(x__))'))
+    expr = expr.replace_all(sb.Expression.parse(
+        'x__^(-1/4)'), sb.Expression.parse('(sqrt(sqrt(x__)))^-1'))
+    str_expr = expression_to_string(expr)
+    if str_expr is None or re.match(r'\^\(\d+/\d+\)', str_expr):
+        raise common.GammaLoopError(
+            "Expoentiation with real arguments not supported in model expressions: %s", str_expr)
+    return expr
+
+
 def parse_python_expression_safe(expr: str) -> sb.Expression:
 
-    santized_expr = expr.replace('**', '^')\
+    sanitized_expr = expr.replace('**', '^')\
         .replace('cmath.sqrt', 'sqrt')\
         .replace('cmath.pi', 'pi')\
         .replace('math.sqrt', 'sqrt')\
         .replace('math.pi', 'pi')
-    santized_expr = replace_pseudo_floats(santized_expr)
+    sanitized_expr = replace_pseudo_floats(sanitized_expr)
 
     try:
-        sb_expr = sb.Expression.parse(santized_expr)
+        sb_expr = sb.Expression.parse(sanitized_expr)
         # No longer needed since we automatically include a `complex(x,y)` function in the function map.
         # sb_expr = recursive_replace_all(sb_expr, lambda e: e.replace_all(
         #     SBE.parse('complex(x_,y_)'), SBE.parse('x_+I*y_')), max_recursion=1000)
     except Exception as exception:  # pylint: disable=broad-except
         raise common.GammaLoopError(
-            "Symbolica (@%s) failed to parse expression:\n%s\nwith exception:\n%s", sb.__file__, santized_expr, exception)
+            "Symbolica (@%s) failed to parse expression:\n%s\nwith exception:\n%s", sb.__file__, sanitized_expr, exception)
 
-    return sb_expr
+    sb_expr_processed = replace_to_sqrt(sb_expr)
+
+    return sb_expr_processed
 
 
 def expression_to_string(expr: sb.Expression | None) -> str | None:

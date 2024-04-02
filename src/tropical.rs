@@ -1,6 +1,6 @@
 use ahash::HashSet;
 use color_eyre::Report;
-use log::info;
+use log::debug;
 use num::traits::Zero;
 use serde::{Deserialize, Serialize};
 
@@ -434,7 +434,7 @@ impl TropicalSubgraphTable {
         graph: &Graph,
         tropical_edge_weights: &[f64],
     ) -> Result<Self, Report> {
-        info!("🌴🥥 Generating tropical subgraph table 🥥🌴");
+        debug!("🌴🥥 Generating tropical subgraph table 🥥🌴");
 
         let tropical_graph = TropicalGraph::from_graph(graph, tropical_edge_weights);
         Self::generate_from_tropical(&tropical_graph)

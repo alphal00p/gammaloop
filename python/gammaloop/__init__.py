@@ -7,6 +7,8 @@ __version__ = "0.0.1"
 
 GL_PATH = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
+DEPENDENCIES_CHECKED = False
+
 
 class CLIColour(StrEnum):
     PURPLE = '\033[95m'
@@ -22,6 +24,10 @@ class CLIColour(StrEnum):
 
 
 def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=False, no_gammaloop_python_venv=False):
+
+    global DEPENDENCIES_CHECKED
+    if DEPENDENCIES_CHECKED and all(opt is False for opt in [clean_dependencies, build_dependencies, no_gammaloop_python_venv]):
+        return
 
     gammaloop_root_path = os.path.abspath(GL_PATH)
 
@@ -58,28 +64,33 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
         gammaloop_root_path, 'dependencies', 'venv'))
 
     if venv_path != os.path.abspath(os.path.join(os.path.dirname(sys.executable), os.path.pardir)):
-        print("%sWARNING:%s It is recommended to run gammaloop within its Python virtual environment, by issuing the command:\n\n%ssource %s/bin/activate%s\n" % (
-            CLIColour.YELLOW, CLIColour.END, CLIColour.GREEN, venv_path, CLIColour.END))
-        if not no_gammaloop_python_venv:
-            if not os.path.isfile(os.path.join(venv_path, 'site_paths.txt')):
-                print("%sWARNING:%s Could not find Python virtual environment list of sites in file '%s'.\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
-                    os.path.join(venv_path, 'venv_site_paths.txt'), CLIColour.GREEN, CLIColour.END))
-            else:
-                try:
-                    with open(os.path.join(venv_path, 'site_paths.txt'), 'r') as f:
-                        site_paths = eval(f.read())
-                except Exception as e:
-                    site_paths = None
-                    print("%sWARNING:%s Could not extract list of site paths of the Python virtual environment of gammaloop from file '%s' (error: %s%s%s).\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
-                        os.path.join(venv_path, 'site_paths.txt'), CLIColour.RED, str(e), CLIColour.END, CLIColour.GREEN, CLIColour.END))
-                if site_paths is not None:
-                    site_paths = [sp for sp in site_paths if sp.startswith(
-                        venv_path) and sp not in sys.path]
-                    if len(site_paths) > 0:
-                        print("%sINFO:%s The following paths have been automatically and temporarily added by gammaloop to your PYTHONPATH:\n%s" % (
-                            CLIColour.GREEN, CLIColour.END, ', '.join(site_paths)))
-                        for site_path in site_paths:
-                            sys.path.insert(0, site_path)
+        # Do not warn about this for now as it is not strictly necessary as of now
+        # print("%sWARNING:%s It is recommended to run gammaloop within its Python virtual environment, by issuing the command:\n\n%ssource %s/bin/activate%s\n" % (
+        #    CLIColour.YELLOW, CLIColour.END, CLIColour.GREEN, venv_path, CLIColour.END))
+        pass
+
+    if not no_gammaloop_python_venv:
+        if not os.path.isfile(os.path.join(venv_path, 'site_paths.txt')):
+            print("%sWARNING:%s Could not find Python virtual environment list of sites in file '%s'.\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
+                CLIColour.YELLOW, CLIColour.END, os.path.join(venv_path, 'venv_site_paths.txt'), CLIColour.GREEN, CLIColour.END))
+        else:
+            try:
+                with open(os.path.join(venv_path, 'site_paths.txt'), 'r') as f:
+                    site_paths = eval(f.read())
+            except Exception as e:
+                site_paths = None
+                print("%sWARNING:%s Could not extract list of site paths of the Python virtual environment of gammaloop from file '%s' (error: %s%s%s).\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
+                    CLIColour.YELLOW, CLIColour.END, os.path.join(venv_path, 'site_paths.txt'), CLIColour.RED, str(e), CLIColour.END, CLIColour.GREEN, CLIColour.END))
+            if site_paths is not None:
+                site_paths = [sp for sp in site_paths if sp.startswith(
+                    venv_path) and (len(sys.path) == 0 or sp != sys.path[0])]
+                if len(site_paths) > 0:
+                    print("%sINFO:%s The following paths have been automatically and temporarily added by gammaloop to your PYTHONPATH:\n%s" % (
+                        CLIColour.GREEN, CLIColour.END, '\n'.join('%s%s%s' % (CLIColour.BLUE, site_path, CLIColour.END) for site_path in site_paths)))
+                    for site_path in site_paths:
+                        sys.path.insert(0, site_path)
+
+    DEPENDENCIES_CHECKED = True
 
 
 def cli():
@@ -120,7 +131,7 @@ def cli():
         if not os.path.isfile(venv_path):
             print("%sCould not find the gammaloop Python virtual environment activate script at '%s'.%s" % (
                 CLIColour.RED, venv_path, CLIColour.END))
-            print("Make sur to first run %sgammaloop --build_dependencies%s" %
+            print("Make sur to first run %sgammaloop --build_dependencies%s%s" %
                   (CLIColour.GREEN, venv_path, CLIColour.END))
             sys.exit(1)
         else:
@@ -133,7 +144,8 @@ def cli():
 
     from .interface.gammaloop_interface import CommandList
     from .interface.gammaloop_interface import GammaLoop
-    from .misc.common import GL_DEBUG, GL_CONSOLE_HANDLER, register_symbolica, logger, DATA_PATH, GammaLoopError
+    import gammaloop.misc.common as common
+    from .misc.common import GL_CONSOLE_HANDLER, register_symbolica, logger, DATA_PATH, GammaLoopError
 
     if args.command_file is None:
         logger.critical(
@@ -154,24 +166,38 @@ def cli():
     gamma_loop = GammaLoop()
 
     if args.debug:
-        GL_DEBUG = True  # pylint: disable=redefined-outer-name, unused-variable, invalid-name
+        common.GL_DEBUG = True
         GL_CONSOLE_HANDLER.setLevel(logging.DEBUG)
 
     if args.quiet:
-        GL_DEBUG = False  # pylint: disable=invalid-name
+        common.GL_DEBUG = False
         GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
 
     if args.run_command:
         commands = CommandList.from_string(args.command_file)
     else:
         if not os.path.isfile(args.command_file):
-            command_file = os.path.join(
-                DATA_PATH, 'run_cards', args.command_file)
-            if not os.path.isfile(command_file):
+            command_file = None
+            paths_to_try = [
+                os.path.abspath(os.path.join(
+                    GL_PATH, args.command_file)),
+                os.path.abspath(os.path.join(
+                    GL_PATH, 'examples', 'cards', args.command_file)),
+                os.path.abspath(os.path.join(
+                    DATA_PATH, 'run_cards', args.command_file)),
+            ]
+            for path in paths_to_try:
+                if os.path.isfile(path):
+                    command_file = path
+                    break
+            if command_file is None:
                 raise GammaLoopError(
                     f"File '{args.command_file}' does not exist.")
-        else:
+        elif args.command_file is not None:
             command_file = args.command_file
+        else:
+            raise GammaLoopError(
+                "No command file or string specified.")
         commands = CommandList.from_file(command_file)
 
     gamma_loop.run(commands)
