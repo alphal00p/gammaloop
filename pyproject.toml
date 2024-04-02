@@ -1,8 +1,12 @@
 [tool.poetry]
 name = "gammaloop"
-version = "0.0.1"
+version = "0.1.0"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
-authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
+authors = [
+  "Valentin Hirschi <valentin.hirschi@gmail.com>",
+  "Mathijs Fraaije <mathijsfraaije@gmail.com>",
+  "Lucien Huber <mail@lcnbr.ch>",
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -24,14 +28,15 @@ build-backend = "maturin"
 
 [project]
 name = "gammaloop"
-version = "0.0.1"
+version = "0.1.0"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 readme = "README.md"
 license = { file = "LICENSE.md" }
 keywords = ["physics", "collider", "cross-section", "perturbative", "loop"]
 authors = [
-  { email = "valentin.hirschi@gmail.com" },
-  { name = "Valentin Hirschi" },
+  { name = "Valentin Hirschi", email = "valentin.hirschi@gmail.com" },
+  { name = "Mathijs Fraaije", email = "mathijsfraaije@gmail.com" },
+  { name = "Lucien Huber", email = "mail@lcnbr.ch" },
 ]
 
 dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4"]
