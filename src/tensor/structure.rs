@@ -8,6 +8,7 @@ use duplicate::duplicate;
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde::Serialize;
+
 use smartstring::LazyCompact;
 use smartstring::SmartString;
 use std::borrow::Cow;
@@ -137,6 +138,7 @@ pub type ConcreteIndex = usize;
 
 pub const EUCLIDEAN: &str = "euc";
 pub const LORENTZ: &str = "lor";
+pub const BISPINOR: &str = "bis";
 pub const SPINFUND: &str = "spin";
 pub const SPINANTIFUND: &str = "spina";
 pub const COLORADJ: &str = "coad";
@@ -152,6 +154,7 @@ pub enum Representation {
     Euclidean(Dimension),
     /// Represents a Minkowski space of the given dimension, with metric diag(1,-1,-1,-1,...)
     Lorentz(Dimension),
+    Bispinor(Dimension),
     /// Represents a Spinor Fundamental space of the given dimension
     SpinFundamental(Dimension),
     /// Represents a Spinor Adjoint space of the given dimension
@@ -177,7 +180,7 @@ impl Representation {
     /// ```
     /// # use _gammaloop::tensor::Representation;
     /// # use _gammaloop::tensor::Dimension;
-    /// let spin = Representation::Spin(Dimension(5));
+    /// let spin = Representation::Bispinor(Dimension(5));
     ///
     /// let metric_diag = spin.negative();
     ///
@@ -198,6 +201,7 @@ impl Representation {
                 .chain(std::iter::repeat(true).take(value.0 - 1))
                 .collect::<Vec<_>>(),
             Self::Euclidean(value)
+            | Self::Bispinor(value)
             | Self::SpinFundamental(value)
             | Self::SpinAntiFundamental(value) => {
                 vec![false; value.into()]
@@ -230,6 +234,7 @@ impl Representation {
         let (value, id) = match *self {
             Self::Euclidean(value) => (value, State::get_symbol(EUCLIDEAN)),
             Self::Lorentz(value) => (value, State::get_symbol(LORENTZ)),
+            Self::Bispinor(value) => (value, State::get_symbol(BISPINOR)),
             Self::SpinFundamental(value) => (value, State::get_symbol(SPINFUND)),
             Self::SpinAntiFundamental(value) => (value, State::get_symbol(SPINANTIFUND)),
             Self::ColorAdjoint(value) => (value, State::get_symbol(COLORADJ)),
@@ -259,7 +264,7 @@ impl Representation {
     /// let mink = Representation::Lorentz(Dimension(4));
     ///
     /// assert_eq!("lor(4)",format!("{}",mink.to_symbolic()));
-    /// assert_eq!("l4",format!("{}",mink));
+    /// assert_eq!("lor4",format!("{}",mink));
     /// ```
     pub fn to_symbolic(&self) -> Atom {
         self.to_fnbuilder().finish()
@@ -291,6 +296,7 @@ impl From<&Representation> for Dimension {
         match rep {
             Representation::Euclidean(value)
             | Representation::Lorentz(value)
+            | Representation::Bispinor(value)
             | Representation::SpinFundamental(value)
             | Representation::SpinAntiFundamental(value) => *value,
             Representation::ColorAdjoint(value) => *value, //Dimension(8),
@@ -314,6 +320,7 @@ impl From<Representation> for Dimension {
         match rep {
             Representation::Euclidean(value)
             | Representation::Lorentz(value)
+            | Representation::Bispinor(value)
             | Representation::SpinFundamental(value)
             | Representation::SpinAntiFundamental(value) => value,
             Representation::ColorAdjoint(value) => value,
@@ -337,6 +344,7 @@ impl std::fmt::Display for Representation {
         match self {
             Self::Euclidean(value) => write!(f, "{EUCLIDEAN}{value}"),
             Self::Lorentz(value) => write!(f, "{LORENTZ}{value}"),
+            Self::Bispinor(value) => write!(f, "{BISPINOR}{value}"),
             Self::SpinFundamental(value) => write!(f, "{SPINFUND}{value}"),
             Self::SpinAntiFundamental(value) => write!(f, "{SPINANTIFUND}{value}"),
             Self::ColorAdjoint(value) => write!(f, "{COLORADJ}{value}"),
@@ -361,14 +369,14 @@ impl std::fmt::Display for Representation {
 /// let mink = Representation::Lorentz(Dimension(4));
 /// let mu = Slot::from((AbstractIndex(0),mink));
 ///
-/// assert_eq!("id0l4",format!("{}",mu));
+/// assert_eq!("id0lor4",format!("{}",mu));
 /// ```
 ///
 /// It can also be built from a tuple of `usize` and `usize`, where we default to `Representation::Euclidean`
 /// ```
 /// # use _gammaloop::tensor::{Representation,Slot};
 /// let mu = Slot::from((0,4));
-/// assert_eq!("id0e4",format!("{}",mu));
+/// assert_eq!("id0euc4",format!("{}",mu));
 /// ```
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot {
@@ -429,6 +437,7 @@ impl TryFrom<AtomView<'_>> for Slot {
         let euc = State::get_symbol(EUCLIDEAN);
 
         let lor = State::get_symbol(LORENTZ);
+        let bis = State::get_symbol(BISPINOR);
         let spin = State::get_symbol(SPINFUND);
         let spina = State::get_symbol(SPINANTIFUND);
         let coad = State::get_symbol(COLORADJ);
@@ -442,6 +451,7 @@ impl TryFrom<AtomView<'_>> for Slot {
             match sym {
                 _ if sym == euc => Representation::Euclidean(dim),
                 _ if sym == lor => Representation::Lorentz(dim),
+                _ if sym == bis => Representation::Bispinor(dim),
                 _ if sym == spin => Representation::SpinFundamental(dim),
                 _ if sym == spina => Representation::SpinAntiFundamental(dim),
                 _ if sym == coad => Representation::ColorAdjoint(dim),
@@ -507,7 +517,7 @@ impl Slot {
     /// let mu = Slot::from((AbstractIndex(0),mink));
     ///
     /// assert_eq!("lor(4,0)",format!("{}",mu.to_symbolic()));
-    /// assert_eq!("id0l4",format!("{}",mu));
+    /// assert_eq!("id0lor4",format!("{}",mu));
     /// ```
     pub fn to_symbolic(&self) -> Atom {
         let mut value_builder = self.representation.to_fnbuilder();

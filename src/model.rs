@@ -335,9 +335,9 @@ impl Particle {
             1 => Atom::parse("1").unwrap(),
             2 => {
                 if self.pdg_code > 0 {
-                    Atom::parse(&format!("u{num}(spin(4,{id}))")).unwrap()
+                    Atom::parse(&format!("u{num}(bis(4,{id}))")).unwrap()
                 } else {
-                    Atom::parse(&format!("vbar{num}(spin(4,{id}))")).unwrap()
+                    Atom::parse(&format!("vbar{num}(bis(4,{id}))")).unwrap()
                 }
             }
             3 => Atom::parse(&format!("ϵ{num}(lor(4,{id}))")).unwrap(),
@@ -351,9 +351,9 @@ impl Particle {
             1 => Atom::parse("1").unwrap(),
             2 => {
                 if self.pdg_code > 0 {
-                    Atom::parse(&format!("ubar{num}(spin(4,{id}))")).unwrap()
+                    Atom::parse(&format!("ubar{num}(bis(4,{id}))")).unwrap()
                 } else {
-                    Atom::parse(&format!("v{num}(spin(4,{id}))")).unwrap()
+                    Atom::parse(&format!("v{num}(bis(4,{id}))")).unwrap()
                 }
             }
             3 => Atom::parse(&format!("ϵbar{num}(lor(4,{id}))")).unwrap(),
