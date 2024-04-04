@@ -572,11 +572,11 @@ impl PythonWorker {
 impl PythonWorker {
     fn printer_options(format: &str) -> PrintOptions {
         match format {
+            "file" => PrintOptions::file(),
             "mathematica" => PrintOptions {
                 terms_on_new_line: false,
                 color_top_level_sum: false,
-                color: false,
-                color_builtin_functions: false,
+                color_builtin_symbols: false,
                 print_finite_field: true,
                 symmetric_representation_for_finite_field: false,
                 explicit_rational_polynomial: false,
@@ -588,9 +588,8 @@ impl PythonWorker {
             },
             "latex" => PrintOptions {
                 terms_on_new_line: false,
-                color: false,
                 color_top_level_sum: false,
-                color_builtin_functions: false,
+                color_builtin_symbols: false,
                 print_finite_field: true,
                 symmetric_representation_for_finite_field: false,
                 explicit_rational_polynomial: false,
@@ -603,8 +602,7 @@ impl PythonWorker {
             _ => PrintOptions {
                 terms_on_new_line: false,
                 color_top_level_sum: true,
-                color: false,
-                color_builtin_functions: true,
+                color_builtin_symbols: true,
                 print_finite_field: true,
                 symmetric_representation_for_finite_field: false,
                 explicit_rational_polynomial: false,

@@ -1888,6 +1888,7 @@ dependencies = [
  "colored",
  "dyn-clone",
  "once_cell",
+ "pyo3-build-config 0.19.2",
  "rand",
  "rand_xoshiro",
  "rayon",
