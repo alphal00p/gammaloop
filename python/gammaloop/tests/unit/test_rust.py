@@ -58,3 +58,7 @@ class TestRust:
     def test_rust_hexagon(self, compile_rust_tests: Path, scalar_hexagon_export: Path):
         assert run_rust_test(compile_rust_tests, scalar_hexagon_export,
                              'hexagon')
+
+    def test_rust_lbl_box(self, compile_rust_tests: Path, lbl_box_export: Path):
+        assert run_rust_test(compile_rust_tests, lbl_box_export,
+                             'lbl_box')

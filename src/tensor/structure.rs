@@ -8,6 +8,7 @@ use duplicate::duplicate;
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde::Serialize;
+
 use smartstring::LazyCompact;
 use smartstring::SmartString;
 use std::borrow::Cow;
@@ -55,6 +56,36 @@ use smartstring::alias::String;
 )]
 #[display(fmt = "id{}", _0)]
 pub struct AbstractIndex(pub usize);
+
+impl TryFrom<AtomView<'_>> for AbstractIndex {
+    type Error = String;
+
+    fn try_from(view: AtomView<'_>) -> Result<Self, Self::Error> {
+        if let AtomView::Var(v) = view {
+            Ok(AbstractIndex(v.get_symbol().get_id() as usize))
+        } else {
+            Err("Not a var".to_string().into())
+        }
+    }
+}
+
+impl TryFrom<std::string::String> for AbstractIndex {
+    type Error = String;
+
+    fn try_from(value: std::string::String) -> Result<Self, Self::Error> {
+        let atom = Atom::parse(&value)?;
+        Self::try_from(atom.as_view())
+    }
+}
+
+impl TryFrom<&'_ str> for AbstractIndex {
+    type Error = String;
+
+    fn try_from(value: &'_ str) -> Result<Self, Self::Error> {
+        let atom = Atom::parse(value)?;
+        Self::try_from(atom.as_view())
+    }
+}
 
 /// A Dimension
 #[derive(
@@ -105,6 +136,17 @@ impl PartialOrd<Dimension> for usize {
 
 pub type ConcreteIndex = usize;
 
+pub const EUCLIDEAN: &str = "euc";
+pub const LORENTZ: &str = "lor";
+pub const BISPINOR: &str = "bis";
+pub const SPINFUND: &str = "spin";
+pub const SPINANTIFUND: &str = "spina";
+pub const COLORADJ: &str = "coad";
+pub const COLORFUND: &str = "cof";
+pub const COLORANTIFUND: &str = "coaf";
+pub const COLORSEXT: &str = "cos";
+pub const COLORANTISEXT: &str = "coas";
+
 /// A Representation/Dimension of the index.
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Representation {
@@ -112,8 +154,11 @@ pub enum Representation {
     Euclidean(Dimension),
     /// Represents a Minkowski space of the given dimension, with metric diag(1,-1,-1,-1,...)
     Lorentz(Dimension),
-    /// Represents a Spinor space of the given dimension
-    Spin(Dimension),
+    Bispinor(Dimension),
+    /// Represents a Spinor Fundamental space of the given dimension
+    SpinFundamental(Dimension),
+    /// Represents a Spinor Adjoint space of the given dimension
+    SpinAntiFundamental(Dimension),
     /// Represents a Color Fundamental space of the given dimension
     ColorFundamental(Dimension),
     /// Represents a Color Anti-Fundamental space of the given dimension
@@ -135,7 +180,7 @@ impl Representation {
     /// ```
     /// # use _gammaloop::tensor::Representation;
     /// # use _gammaloop::tensor::Dimension;
-    /// let spin = Representation::Spin(Dimension(5));
+    /// let spin = Representation::Bispinor(Dimension(5));
     ///
     /// let metric_diag = spin.negative();
     ///
@@ -156,8 +201,12 @@ impl Representation {
                 .chain(std::iter::repeat(true).take(value.0 - 1))
                 .collect::<Vec<_>>(),
             Self::Euclidean(value)
-            | Self::Spin(value)
-            | Self::ColorAdjoint(value)
+            | Self::Bispinor(value)
+            | Self::SpinFundamental(value)
+            | Self::SpinAntiFundamental(value) => {
+                vec![false; value.into()]
+            }
+            Self::ColorAdjoint(value)
             | Self::ColorFundamental(value)
             | Self::ColorAntiFundamental(value)
             | Self::ColorSextet(value)
@@ -183,14 +232,16 @@ impl Representation {
     #[allow(clippy::cast_possible_wrap)]
     pub fn to_fnbuilder<'a, 'b: 'a>(&'a self) -> FunctionBuilder {
         let (value, id) = match *self {
-            Self::Euclidean(value) => (value, State::get_symbol("euc")),
-            Self::Lorentz(value) => (value, State::get_symbol("lor")),
-            Self::Spin(value) => (value, State::get_symbol("spin")),
-            Self::ColorAdjoint(value) => (value, State::get_symbol("CAdj")),
-            Self::ColorFundamental(value) => (value, State::get_symbol("CF")),
-            Self::ColorAntiFundamental(value) => (value, State::get_symbol("CAF")),
-            Self::ColorSextet(value) => (value, State::get_symbol("CS")),
-            Self::ColorAntiSextet(value) => (value, State::get_symbol("CAS")),
+            Self::Euclidean(value) => (value, State::get_symbol(EUCLIDEAN)),
+            Self::Lorentz(value) => (value, State::get_symbol(LORENTZ)),
+            Self::Bispinor(value) => (value, State::get_symbol(BISPINOR)),
+            Self::SpinFundamental(value) => (value, State::get_symbol(SPINFUND)),
+            Self::SpinAntiFundamental(value) => (value, State::get_symbol(SPINANTIFUND)),
+            Self::ColorAdjoint(value) => (value, State::get_symbol(COLORADJ)),
+            Self::ColorFundamental(value) => (value, State::get_symbol(COLORFUND)),
+            Self::ColorAntiFundamental(value) => (value, State::get_symbol(COLORANTIFUND)),
+            Self::ColorSextet(value) => (value, State::get_symbol(COLORSEXT)),
+            Self::ColorAntiSextet(value) => (value, State::get_symbol(COLORANTISEXT)),
         };
 
         let mut value_builder = FunctionBuilder::new(id);
@@ -213,7 +264,7 @@ impl Representation {
     /// let mink = Representation::Lorentz(Dimension(4));
     ///
     /// assert_eq!("lor(4)",format!("{}",mink.to_symbolic()));
-    /// assert_eq!("l4",format!("{}",mink));
+    /// assert_eq!("lor4",format!("{}",mink));
     /// ```
     pub fn to_symbolic(&self) -> Atom {
         self.to_fnbuilder().finish()
@@ -245,12 +296,15 @@ impl From<&Representation> for Dimension {
         match rep {
             Representation::Euclidean(value)
             | Representation::Lorentz(value)
-            | Representation::Spin(value)
-            | Representation::ColorAdjoint(value)
-            | Representation::ColorFundamental(value)
-            | Representation::ColorAntiFundamental(value)
-            | Representation::ColorSextet(value)
-            | Representation::ColorAntiSextet(value) => *value,
+            | Representation::Bispinor(value)
+            | Representation::SpinFundamental(value)
+            | Representation::SpinAntiFundamental(value) => *value,
+            Representation::ColorAdjoint(value) => *value, //Dimension(8),
+            Representation::ColorFundamental(value)
+            | Representation::ColorAntiFundamental(value) => {
+                *value // Dimension(3)
+            }
+            Representation::ColorSextet(value) | Representation::ColorAntiSextet(value) => *value,
         }
     }
 }
@@ -266,12 +320,15 @@ impl From<Representation> for Dimension {
         match rep {
             Representation::Euclidean(value)
             | Representation::Lorentz(value)
-            | Representation::Spin(value)
-            | Representation::ColorAdjoint(value)
-            | Representation::ColorFundamental(value)
-            | Representation::ColorAntiFundamental(value)
-            | Representation::ColorSextet(value)
-            | Representation::ColorAntiSextet(value) => value,
+            | Representation::Bispinor(value)
+            | Representation::SpinFundamental(value)
+            | Representation::SpinAntiFundamental(value) => value,
+            Representation::ColorAdjoint(value) => value,
+            Representation::ColorFundamental(value)
+            | Representation::ColorAntiFundamental(value) => {
+                value // Dimension(3)
+            }
+            Representation::ColorSextet(value) | Representation::ColorAntiSextet(value) => value, //Dimension(6),
         }
     }
 }
@@ -285,14 +342,16 @@ impl From<Representation> for usize {
 impl std::fmt::Display for Representation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Euclidean(value) => write!(f, "e{value}"),
-            Self::Lorentz(value) => write!(f, "l{value}"),
-            Self::Spin(value) => write!(f, "s{value}"),
-            Self::ColorAdjoint(value) => write!(f, "cad{value}"),
-            Self::ColorFundamental(value) => write!(f, "cf{value}"),
-            Self::ColorAntiFundamental(value) => write!(f, "caf{value}"),
-            Self::ColorSextet(value) => write!(f, "cs{value}"),
-            Self::ColorAntiSextet(value) => write!(f, "cas{value}"),
+            Self::Euclidean(value) => write!(f, "{EUCLIDEAN}{value}"),
+            Self::Lorentz(value) => write!(f, "{LORENTZ}{value}"),
+            Self::Bispinor(value) => write!(f, "{BISPINOR}{value}"),
+            Self::SpinFundamental(value) => write!(f, "{SPINFUND}{value}"),
+            Self::SpinAntiFundamental(value) => write!(f, "{SPINANTIFUND}{value}"),
+            Self::ColorAdjoint(value) => write!(f, "{COLORADJ}{value}"),
+            Self::ColorFundamental(value) => write!(f, "{COLORFUND}{value}"),
+            Self::ColorAntiFundamental(value) => write!(f, "{COLORANTIFUND}{value}"),
+            Self::ColorSextet(value) => write!(f, "{COLORSEXT}{value}"),
+            Self::ColorAntiSextet(value) => write!(f, "{COLORANTISEXT}{value}"),
         }
     }
 }
@@ -310,18 +369,18 @@ impl std::fmt::Display for Representation {
 /// let mink = Representation::Lorentz(Dimension(4));
 /// let mu = Slot::from((AbstractIndex(0),mink));
 ///
-/// assert_eq!("id0l4",format!("{}",mu));
+/// assert_eq!("id0lor4",format!("{}",mu));
 /// ```
 ///
 /// It can also be built from a tuple of `usize` and `usize`, where we default to `Representation::Euclidean`
 /// ```
 /// # use _gammaloop::tensor::{Representation,Slot};
 /// let mu = Slot::from((0,4));
-/// assert_eq!("id0e4",format!("{}",mu));
+/// assert_eq!("id0euc4",format!("{}",mu));
 /// ```
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot {
-    index: AbstractIndex,
+    pub index: AbstractIndex,
     pub representation: Representation,
 }
 
@@ -375,26 +434,31 @@ impl TryFrom<AtomView<'_>> for Slot {
             return Err("Too many arguments");
         }
 
-        let euc = State::get_symbol("euc");
-        let lor = State::get_symbol("lor");
-        let spin = State::get_symbol("spin");
-        let cadj = State::get_symbol("CAdj");
-        let cf = State::get_symbol("CF");
-        let caf = State::get_symbol("CAF");
-        let cs = State::get_symbol("CS");
-        let cas = State::get_symbol("CAS");
+        let euc = State::get_symbol(EUCLIDEAN);
+
+        let lor = State::get_symbol(LORENTZ);
+        let bis = State::get_symbol(BISPINOR);
+        let spin = State::get_symbol(SPINFUND);
+        let spina = State::get_symbol(SPINANTIFUND);
+        let coad = State::get_symbol(COLORADJ);
+        let cof = State::get_symbol(COLORFUND);
+        let coaf = State::get_symbol(COLORANTIFUND);
+        let cos = State::get_symbol(COLORSEXT);
+        let coas = State::get_symbol(COLORANTISEXT);
 
         let representation = if let AtomView::Fun(f) = value {
             let sym = f.get_symbol();
             match sym {
                 _ if sym == euc => Representation::Euclidean(dim),
                 _ if sym == lor => Representation::Lorentz(dim),
-                _ if sym == spin => Representation::Spin(dim),
-                _ if sym == cadj => Representation::ColorAdjoint(dim),
-                _ if sym == cf => Representation::ColorFundamental(dim),
-                _ if sym == caf => Representation::ColorAntiFundamental(dim),
-                _ if sym == cs => Representation::ColorSextet(dim),
-                _ if sym == cas => Representation::ColorAntiSextet(dim),
+                _ if sym == bis => Representation::Bispinor(dim),
+                _ if sym == spin => Representation::SpinFundamental(dim),
+                _ if sym == spina => Representation::SpinAntiFundamental(dim),
+                _ if sym == coad => Representation::ColorAdjoint(dim),
+                _ if sym == cof => Representation::ColorFundamental(dim),
+                _ if sym == coaf => Representation::ColorAntiFundamental(dim),
+                _ if sym == cos => Representation::ColorSextet(dim),
+                _ if sym == coas => Representation::ColorAntiSextet(dim),
                 _ => return Err("Not a slot, isn't a representation"),
             }
         } else {
@@ -453,7 +517,7 @@ impl Slot {
     /// let mu = Slot::from((AbstractIndex(0),mink));
     ///
     /// assert_eq!("lor(4,0)",format!("{}",mu.to_symbolic()));
-    /// assert_eq!("id0l4",format!("{}",mu));
+    /// assert_eq!("id0lor4",format!("{}",mu));
     /// ```
     pub fn to_symbolic(&self) -> Atom {
         let mut value_builder = self.representation.to_fnbuilder();
@@ -592,7 +656,7 @@ pub trait TensorStructure {
         set1 == set2
     }
 
-    /// find the permutation of the external indices that would make the two tensors the same
+    /// find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self
     fn find_permutation(&self, other: &Self) -> Option<Vec<ConcreteIndex>> {
         if self.external_structure().len() != other.external_structure().len() {
             return None;
@@ -746,10 +810,9 @@ pub trait TensorStructure {
         self.shape().iter().map(|x| usize::from(*x)).product()
     }
 
-    fn shadow_with(self, f_id: Symbol) -> DenseTensor<Atom, Self::Structure>
+    fn shadow_with(self, f_id: Symbol) -> DenseTensor<Atom, Self>
     where
-        Self: std::marker::Sized,
-        Self::Structure: Clone,
+        Self: std::marker::Sized + Clone,
     {
         let mut data = vec![];
         for index in self.index_iter() {
@@ -758,14 +821,13 @@ pub trait TensorStructure {
 
         DenseTensor {
             data,
-            structure: self.structure().clone(),
+            structure: self,
         }
     }
 
-    fn to_explicit_rep(self, f_id: Symbol) -> MixedTensor<Self::Structure>
+    fn to_explicit_rep(self, f_id: Symbol) -> MixedTensor<Self>
     where
-        Self: std::marker::Sized,
-        Self::Structure: Clone + TensorStructure,
+        Self: std::marker::Sized + Clone + TensorStructure,
     {
         let id = State::get_symbol("id");
         let gamma = State::get_symbol("γ");
@@ -775,15 +837,13 @@ pub trait TensorStructure {
         let sigma = State::get_symbol("σ");
 
         match f_id {
-            _ if f_id == id => {
-                ufo::identity_data::<f64, Self::Structure>(self.structure().clone()).into()
-            }
+            _ if f_id == id => ufo::identity_data::<f64, Self>(self).into(),
 
-            _ if f_id == gamma => ufo::gamma_data(self.structure().clone()).into(),
-            _ if f_id == gamma5 => ufo::gamma5_data(self.structure().clone()).into(),
-            _ if f_id == proj_m => ufo::proj_m_data(self.structure().clone()).into(),
-            _ if f_id == proj_p => ufo::proj_p_data(self.structure().clone()).into(),
-            _ if f_id == sigma => ufo::sigma_data(self.structure().clone()).into(),
+            _ if f_id == gamma => ufo::gamma_data(self).into(),
+            _ if f_id == gamma5 => ufo::gamma5_data(self).into(),
+            _ if f_id == proj_m => ufo::proj_m_data(self).into(),
+            _ if f_id == proj_p => ufo::proj_p_data(self).into(),
+            _ if f_id == sigma => ufo::sigma_data(self).into(),
             name => self.shadow_with(name).into(),
         }
     }
@@ -980,6 +1040,21 @@ where
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct VecStructure {
     pub structure: Vec<Slot>,
+}
+
+impl TryFrom<AtomView<'_>> for VecStructure {
+    type Error = &'static str;
+    fn try_from(value: AtomView) -> Result<Self, Self::Error> {
+        let mut structure: Vec<Slot> = vec![];
+        if let AtomView::Fun(f) = value {
+            for arg in f.iter() {
+                structure.push(arg.try_into()?);
+            }
+        } else {
+            return Err("Not a valid expression");
+        }
+        Ok(structure.into())
+    }
 }
 
 impl FromIterator<Slot> for VecStructure {
@@ -1633,11 +1708,11 @@ pub trait Shadowable: TensorStructure {
     fn shadow(self) -> Option<DenseTensor<Atom, Self::Structure>>
     where
         Self: std::marker::Sized + HasName<Name = <Self as Shadowable>::Name>,
-        Self::Structure: Clone,
+        Self::Structure: Clone + TensorStructure,
     {
         let name = self.name()?.into_owned();
 
-        Some(self.shadow_with(name.into_id()))
+        Some(self.structure().clone().shadow_with(name.into_id()))
     }
 
     fn smart_shadow(self) -> Option<MixedTensor<Self::Structure>>
@@ -1646,7 +1721,7 @@ pub trait Shadowable: TensorStructure {
         Self::Structure: Clone + TensorStructure,
     {
         let name = self.name()?.into_owned();
-        Some(self.to_explicit_rep(name.into_id()))
+        Some(self.structure().clone().to_explicit_rep(name.into_id()))
     }
 
     fn to_symbolic(&self) -> Option<Atom>

@@ -63,6 +63,10 @@ pip-delete-this-directory.txt
 # GammaLoop test outputs
 TEST_OUTPUT*/
 
+
+# General ignored directory
+ignore/
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -153,7 +157,7 @@ target/
 
 # Remove Cargo.lock from gitignore if creating an executable, leave it for libraries
 # More information here https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html
-Cargo.lock
+# Cargo.lock
 
 poetry.lock
 
@@ -165,7 +169,11 @@ rust_test_binaries
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
+default.nix
 
 # latex logs
 *.log
 # End of https://www.toptal.com/developers/gitignore/api/rust,python
+
+# Ignore the local test resources
+src/test_resources/qqddg/

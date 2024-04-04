@@ -18,6 +18,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use symbolica::printer::PrintOptions;
 
 const GIT_VERSION: &str = git_version!();
 
@@ -68,6 +69,8 @@ fn gammalooprs(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
     Ok(())
 }
+
+pub struct OutputOptions {}
 
 #[pyclass(name = "Worker")]
 pub struct PythonWorker {
@@ -220,6 +223,10 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
+    pub fn generate_numerators(&mut self) {
+        self.amplitudes.generate_numerator(&self.model);
+    }
+
     // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,
     // but since python already has its native class for this, it is better for now to pass a yaml representation
     // which will be deserialize in said native class.
@@ -305,6 +312,28 @@ impl PythonWorker {
             integrand_counter,
             self.amplitudes.container.len()
         ))
+    }
+
+    pub fn export_expressions(&mut self, export_root: &str, format: &str) -> PyResult<String> {
+        self.generate_numerators();
+
+        for amplitude in self.amplitudes.container.iter_mut() {
+            amplitude
+                .export_expressions(export_root, Self::printer_options(format))
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        }
+        Ok("Exported expressions".to_string())
+    }
+
+    pub fn export_coupling_replacement_rules(
+        &self,
+        export_root: &str,
+        format: &str,
+    ) -> PyResult<String> {
+        self.model
+            .export_coupling_replacement_rules(export_root, Self::printer_options(format))
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        Ok("Exported coupling substitutions".to_string())
     }
 
     pub fn inspect_integrand(
@@ -536,6 +565,55 @@ impl PythonWorker {
     pub fn update_iter(&mut self) {
         if let Some(master_node) = &mut self.master_node {
             master_node.update_iter();
+        }
+    }
+}
+
+impl PythonWorker {
+    fn printer_options(format: &str) -> PrintOptions {
+        match format {
+            "mathematica" => PrintOptions {
+                terms_on_new_line: false,
+                color_top_level_sum: false,
+                color: false,
+                color_builtin_functions: false,
+                print_finite_field: true,
+                symmetric_representation_for_finite_field: false,
+                explicit_rational_polynomial: false,
+                number_thousands_separator: None,
+                multiplication_operator: ' ',
+                square_brackets_for_function: true,
+                num_exp_as_superscript: false,
+                latex: false,
+            },
+            "latex" => PrintOptions {
+                terms_on_new_line: false,
+                color: false,
+                color_top_level_sum: false,
+                color_builtin_functions: false,
+                print_finite_field: true,
+                symmetric_representation_for_finite_field: false,
+                explicit_rational_polynomial: false,
+                number_thousands_separator: None,
+                multiplication_operator: ' ',
+                square_brackets_for_function: false,
+                num_exp_as_superscript: false,
+                latex: true,
+            },
+            _ => PrintOptions {
+                terms_on_new_line: false,
+                color_top_level_sum: true,
+                color: false,
+                color_builtin_functions: true,
+                print_finite_field: true,
+                symmetric_representation_for_finite_field: false,
+                explicit_rational_polynomial: false,
+                number_thousands_separator: None,
+                multiplication_operator: '*',
+                square_brackets_for_function: false,
+                num_exp_as_superscript: false,
+                latex: false,
+            },
         }
     }
 }

@@ -20,6 +20,7 @@ pub mod integrate;
 pub mod linalg;
 pub mod ltd;
 pub mod model;
+pub mod numerator;
 pub mod observables;
 pub mod subtraction;
 pub mod tensor;

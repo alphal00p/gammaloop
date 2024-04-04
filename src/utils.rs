@@ -9,7 +9,6 @@ use num::traits::{Inv, One, Zero};
 use num::Complex;
 use num::ToPrimitive;
 use serde::{Deserialize, Serialize};
-use smartstring::{LazyCompact, SmartString};
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::ops::Neg;
@@ -172,13 +171,14 @@ pub fn parse_python_expression(expression: &str) -> Atom {
         .unwrap()
 }
 
-pub fn to_str_expression(expression: &Atom) -> SmartString<LazyCompact> {
+pub fn to_str_expression(expression: &Atom) -> String {
     format!(
         "{}",
         AtomPrinter::new_with_options(
             expression.as_view(),
             PrintOptions {
                 terms_on_new_line: false,
+                color: false,
                 color_top_level_sum: false,
                 color_builtin_functions: false,
                 print_finite_field: false,
@@ -192,7 +192,6 @@ pub fn to_str_expression(expression: &Atom) -> SmartString<LazyCompact> {
             },
         )
     )
-    .into()
 }
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.

@@ -2,7 +2,7 @@
 use crate::cff::esurface::{get_existing_esurfaces, ExistingEsurfaceId, ExistingEsurfaces};
 use crate::cff::generation::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
-use crate::graph::{Edge, EdgeType};
+use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
 use crate::model::Model;
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
@@ -21,8 +21,8 @@ use symbolica;
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: f64 = 1.0e-12;
 
-pub fn load_amplitude_output(output_path: String) -> (Model, Amplitude) {
-    let path = Path::new(&output_path);
+pub fn load_amplitude_output(output_path: &str) -> (Model, Amplitude) {
+    let path = Path::new(output_path);
     let output_meta_data: OutputMetaData =
         serde_yaml::from_reader(File::open(path.join("output_metadata.yaml")).unwrap()).unwrap();
     assert_eq!(output_meta_data.output_type, OutputType::Amplitudes);
@@ -69,7 +69,7 @@ mod tests_scalar_massless_triangle {
         assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
         let (model, amplitude) =
-            load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+            load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
         assert_eq!(model.name, "scalars");
         assert!(amplitude.amplitude_graphs.len() == 1);
@@ -177,7 +177,7 @@ fn pytest_scalar_fishnet_2x2() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -295,7 +295,7 @@ fn pytest_scalar_sunrise() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -346,7 +346,7 @@ fn pytest_scalar_fishnet_2x3() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, mut amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -428,7 +428,7 @@ fn pytest_scalar_cube() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -503,7 +503,7 @@ fn pytest_scalar_bubble() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -551,7 +551,7 @@ fn pytest_massless_scalar_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -686,7 +686,7 @@ fn pytest_scalar_double_triangle() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -759,7 +759,7 @@ fn pytest_scalar_mercedes() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -826,7 +826,7 @@ fn pytest_scalar_triangle_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -903,7 +903,7 @@ fn pytest_scalar_isopod() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -1091,4 +1091,65 @@ fn pytest_hexagon() {
     assert_eq!(maximal_overlap[1].0.len(), 8);
     assert_eq!(maximal_overlap[2].0.len(), 7);
     assert_eq!(maximal_overlap[3].0.len(), 7);
+}
+
+#[test]
+#[ignore]
+
+fn pytest_lbl_box() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let (model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_numerator(&model);
+    println!();
+
+    // for v in graph
+    //     .vertices
+    //     .iter()
+    //     .filter(|v| v.vertex_info.get_type() == "interacton_vertex_info")
+    // {
+    //     println!("vertex: {}", v.name);
+
+    //     println!("From edges: ");
+    //     for (i, e) in v.edges.clone().iter().enumerate() {
+    //         println!("{} : {:?}", i, graph.edges[*e].particle.name)
+    //     }
+    //     println!("From vertex info: ");
+    //     if let VertexInfo::InteractonVertexInfo(s) = &v.vertex_info {
+    //         s.vertex_rule
+    //             .particles
+    //             .iter()
+    //             .enumerate()
+    //             .for_each(|(i, p)| println!("{} : {:?}", i, p.name));
+    //     }
+    // }
+
+    // for e in graph.edges.iter() {
+    //     println!("edge: {}", e.name);
+    //     for v in e.vertices {
+    //         if e.is_incoming_to(v) {
+    //             println!("incoming to vertex: {}", graph.vertices[v].name);
+    //         } else {
+    //             println!("outgoing to vertex: {}", graph.vertices[v].name);
+    //         }
+    //         let i = graph.vertices[v]
+    //             .edges
+    //             .iter()
+    //             .enumerate()
+    //             .filter(|(_, &es)| es == graph.get_edge_position(&e.name).unwrap())
+    //             .map(|(i, _)| i)
+    //             .collect::<Vec<usize>>();
+
+    //         if let VertexInfo::InteractonVertexInfo(s) = &graph.vertices[v].vertex_info {
+    //             let p = &s.vertex_rule.particles[i[0]];
+    //             println!("{:?}", p.name);
+    //         }
+    //     }
+    // }
+
+    println!("{}", graph.derived_data.numerator.unwrap());
 }

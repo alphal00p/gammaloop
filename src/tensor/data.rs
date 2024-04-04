@@ -7,6 +7,7 @@ use derive_more::From;
 use enum_try_as_inner::EnumTryAsInner;
 use indexmap::IndexMap;
 use num::Zero;
+
 use serde::{Deserialize, Serialize};
 use smartstring::alias::String;
 use std::{borrow::Cow, collections::HashMap};
@@ -176,10 +177,19 @@ where
 {
     type GetData = T;
     fn get(&self, indices: &[ConcreteIndex]) -> Result<&T, String> {
-        self.verify_indices(indices)?;
-        self.elements
-            .get(&self.flat_index(indices).unwrap())
-            .ok_or("No elements at that spot".into())
+        if let Ok(idx) = self.flat_index(indices) {
+            self.elements
+                .get(&idx)
+                .ok_or("No elements at that spot".into())
+        } else if self.structure.is_scalar() && indices.is_empty() {
+            self.elements
+                .iter()
+                .next()
+                .map(|(_, v)| v)
+                .ok_or("err".into())
+        } else {
+            Err("Index out of bounds".into())
+        }
     }
 
     fn get_linear(&self, index: usize) -> Option<&T> {
@@ -641,6 +651,31 @@ pub enum DataTensor<T, I: TensorStructure = VecStructure> {
     Sparse(SparseTensor<T, I>),
 }
 
+impl<T, I> DataTensor<T, I>
+where
+    I: TensorStructure + Clone,
+{
+    pub fn to_sparse(self) -> SparseTensor<T, I>
+    where
+        T: Clone + Default + PartialEq,
+    {
+        match self {
+            DataTensor::Dense(d) => d.to_sparse(),
+            DataTensor::Sparse(s) => s,
+        }
+    }
+
+    pub fn to_dense(self) -> DenseTensor<T, I>
+    where
+        T: Clone + Default + PartialEq,
+    {
+        match self {
+            DataTensor::Dense(d) => d,
+            DataTensor::Sparse(s) => s.to_dense(),
+        }
+    }
+}
+
 impl<T, I> HasTensorData for DataTensor<T, I>
 where
     I: TensorStructure,
@@ -735,6 +770,69 @@ where
         match self {
             DataTensor::Dense(d) => d.contractions_num(),
             DataTensor::Sparse(s) => s.contractions_num(),
+        }
+    }
+}
+
+impl<T, U> TrySmallestUpgrade<DataTensor<T>> for DataTensor<U>
+where
+    U: TrySmallestUpgrade<T>,
+    U::LCM: Clone,
+{
+    type LCM = DataTensor<U::LCM>;
+    fn try_upgrade(&self) -> Option<Cow<Self::LCM>>
+    where
+        Self::LCM: Clone,
+    {
+        match self {
+            DataTensor::Dense(d) => d
+                .try_upgrade()
+                .map(|x| Cow::Owned(DataTensor::Dense(x.into_owned()))),
+            DataTensor::Sparse(s) => s
+                .try_upgrade()
+                .map(|x| Cow::Owned(DataTensor::Sparse(x.into_owned()))),
+        }
+    }
+}
+
+impl<T, S> SetTensorData for DataTensor<T, S>
+where
+    S: TensorStructure,
+{
+    type SetData = T;
+
+    fn set(&mut self, indices: &[ConcreteIndex], value: Self::SetData) -> Result<(), String> {
+        match self {
+            DataTensor::Dense(d) => d.set(indices, value),
+            DataTensor::Sparse(s) => s.set(indices, value),
+        }
+    }
+
+    fn set_flat(&mut self, index: usize, value: Self::SetData) -> Result<(), String> {
+        match self {
+            DataTensor::Dense(d) => d.set_flat(index, value),
+            DataTensor::Sparse(s) => s.set_flat(index, value),
+        }
+    }
+}
+
+impl<T, S> GetTensorData for DataTensor<T, S>
+where
+    S: TensorStructure,
+{
+    type GetData = T;
+
+    fn get(&self, indices: &[ConcreteIndex]) -> Result<&Self::GetData, String> {
+        match self {
+            DataTensor::Dense(d) => d.get(indices),
+            DataTensor::Sparse(s) => s.get(indices),
+        }
+    }
+
+    fn get_linear(&self, index: usize) -> Option<&Self::GetData> {
+        match self {
+            DataTensor::Dense(d) => d.get_linear(index),
+            DataTensor::Sparse(s) => s.get_linear(index),
         }
     }
 }

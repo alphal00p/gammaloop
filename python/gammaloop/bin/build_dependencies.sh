@@ -42,7 +42,7 @@ build_dependencies () {
     if ! test -d venv; then
         PYTHON3BIN=$(which python3)
         echo "Setting up Python venv with "$PYTHON3BIN" ...";
-        $PYTHON3BIN -m venv venv --system-site-packages
+        $PYTHON3BIN -m venv venv --system-site-packages --prompt gammaloop_venv
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
