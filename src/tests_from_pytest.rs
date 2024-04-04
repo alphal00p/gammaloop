@@ -985,7 +985,7 @@ fn pytest_raised_triangle() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -1002,7 +1002,7 @@ fn pytest_hexagon() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
     let (model, amplitude) =
-        load_amplitude_output(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
