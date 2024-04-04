@@ -688,8 +688,8 @@ class GammaLoop(object):
                                help='Generate expression associated to the graph and output it to a text file')
     output_parser.add_argument('-mr', '--model_replacements', default=False, action='store_true',
                                help='Generate coupling replacements and output it to a text file')
-    output_parser.add_argument('-ef', '--expression_format', type=str, default='default',
-                               choices=['default', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
+    output_parser.add_argument('-ef', '--expression_format', type=str, default='file',
+                               choices=['file', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
 
     def do_output(self, str_args: str) -> None:
         if str_args == 'help':
