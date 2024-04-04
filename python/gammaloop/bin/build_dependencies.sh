@@ -59,9 +59,9 @@ build_dependencies () {
             exit $(($RETCODE))
         fi
         echo "Installing Python dependencies in venv ...";
-        pip install --upgrade pip &>> dependency_build.log
-        pip install maturin &>> dependency_build.log
-        pip install -r ../requirements.txt &>> dependency_build.log
+        pip install --upgrade pip >> dependency_build.log 2>&1
+        pip install maturin >> dependency_build.log 2>&1
+        pip install -r ../requirements.txt >> dependency_build.log 2>&1
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
@@ -84,13 +84,13 @@ build_dependencies () {
     if ! test -d symbolica; then
         echo "Cloning symbolica ...";
         ${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}
-        $CMD_TO_ACCESS_SYMBOLICA &>> dependency_build.log
+        $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
     fi
 
     if ! test -f symbolica/symbolica_path.txt; then
         cd symbolica
         echo "Building symbolica ...";
-        maturin develop --release &>> ../dependency_build.log
+        maturin develop --release >> ../dependency_build.log 2>&1
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
@@ -104,7 +104,7 @@ build_dependencies () {
     if ! test -f fjcore/libfjcore.a; then
         echo "Building fjcore ...";
         cd fjcore
-        make -j8 &>> ../dependency_build.log
+        make -j8 >> ../dependency_build.log 2>&1
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
