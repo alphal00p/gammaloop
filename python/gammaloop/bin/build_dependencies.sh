@@ -39,29 +39,59 @@ build_dependencies () {
     
     rm -f dependency_build.log
 
-    if ! test -d venv; then
-        PYTHON3BIN=$(which python3)
-        echo "Setting up Python venv with "$PYTHON3BIN" ...";
-        $PYTHON3BIN -m venv venv --system-site-packages --prompt gammaloop_venv
-        RETCODE=$RETCODE+$?
-        if [ ! $(($RETCODE)) == 0 ]
-        then
-            echo "ERROR: could not create Python venv";
-            rm -f LOCK
-            exit $(($RETCODE))
+    PYTHON3BIN=$(which python3)
+    if [ "$1" == "with_venv" ]
+    then
+
+        if ! test -d venv; then
+            echo "Setting up Python venv with "$PYTHON3BIN" ...";
+            $PYTHON3BIN -m venv venv --system-site-packages --prompt gammaloop_venv
+            RETCODE=$RETCODE+$?
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                echo "ERROR: could not create Python venv";
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
+            source venv/bin/activate
+            PYTHON3BIN="python"
+            RETCODE=$RETCODE+$?
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                echo "ERROR: could not activate Python venv";
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
+            echo "Installing Python dependencies in venv ...";
+            pip install --upgrade pip >> dependency_build.log 2>&1
+            RETCODE=$RETCODE+$?
+            pip install maturin >> dependency_build.log 2>&1
+            RETCODE=$RETCODE+$?
+            pip install -r ../requirements.txt >> dependency_build.log 2>&1
+            RETCODE=$RETCODE+$?
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                echo "ERROR: could not install python dependencies";
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
+            $PYTHON3BIN -c 'import site; print(site.getsitepackages())' > venv/site_paths.txt
+        else
+            echo "Activating Python venv with "$(PWD)"/venv/bin/activate ...";
+            source venv/bin/activate
+            RETCODE=$RETCODE+$?
+            PYTHON3BIN="python"
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                echo "ERROR: failed to activate Python venv";
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
         fi
-        source venv/bin/activate
-        RETCODE=$RETCODE+$?
-        if [ ! $(($RETCODE)) == 0 ]
-        then
-            echo "ERROR: could not activate Python venv";
-            rm -f LOCK
-            exit $(($RETCODE))
-        fi
-        echo "Installing Python dependencies in venv ...";
-        pip install --upgrade pip >> dependency_build.log 2>&1
-        pip install maturin >> dependency_build.log 2>&1
-        pip install -r ../requirements.txt >> dependency_build.log 2>&1
+
+    else
+
+        $PYTHON3BIN -m pip install -r ../requirements.txt >> dependency_build.log 2>&1
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
@@ -69,18 +99,9 @@ build_dependencies () {
             rm -f LOCK
             exit $(($RETCODE))
         fi
-        python -c 'import site; print(site.getsitepackages())' > venv/site_paths.txt
-    else
-        source venv/bin/activate
-        RETCODE=$RETCODE+$?
-        if [ ! $(($RETCODE)) == 0 ]
-        then
-            echo "ERROR: failed to activate Python venv";
-            rm -f LOCK
-            exit $(($RETCODE))
-        fi
+
     fi
-    
+
     if ! test -d symbolica; then
         echo "Cloning symbolica ...";
         ${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}
@@ -89,15 +110,57 @@ build_dependencies () {
 
     if ! test -f symbolica/symbolica_path.txt; then
         cd symbolica
-        echo "Building symbolica ...";
-        maturin develop --release >> ../dependency_build.log 2>&1
-        RETCODE=$RETCODE+$?
-        if [ ! $(($RETCODE)) == 0 ]
+
+        if [ "$1" == "with_venv" ]
         then
-            echo "ERROR: failed to install symbolica. Check the logs in dependencies/dependency_build.log for more information.";
-            rm -f LOCK
-            exit $(($RETCODE))
+
+            echo "Building symbolica ...";
+            maturin develop --release >> ../dependency_build.log 2>&1
+            RETCODE=$RETCODE+$?
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                cat ../dependency_build.log;
+                echo "ERROR: failed to install symbolica. Check the logs in dependencies/dependency_build.log for more information.";
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
+            $PYTHON3BIN -c "import os; import symbolica; print(os.path.abspath(os.path.join(os.path.dirname(symbolica.__file__),os.path.pardir)))" > symbolica_path.txt
+            RETCODE=$RETCODE+$?
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                cat ../dependency_build.log;
+                echo "ERROR: failed to load symbolica Python module built by maturin. Check the logs in dependencies/dependency_build.log for more information.";
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
+
+        else
+
+            PYO3_PYTHON=$PYTHON3BIN cargo build --release --features=python_api >> ../dependency_build.log 2>&1
+            RETCODE=$RETCODE+$?
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                cat ../dependency_build.log;
+                echo "ERROR: failed to manually build symbolica's python module. Check the logs in dependencies/dependency_build.log for more information.";
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
+
+            if test -f target/release/libsymbolica.so; then
+                ln -s target/release/libsymbolica.so symbolica.so
+            elif test -f target/release/libsymbolica.dylib; then
+                ln -s target/release/libsymbolica.dylib symbolica.so
+            elif test -f target/release/libsymbolica.dll; then
+                ln -s target/release/libsymbolica.dll symbolica.pyd
+            else
+                echo "ERROR: failed to find manually compiled symbolica's python module. Check the logs in dependencies/dependency_build.log for more information.";
+                rm -f LOCK
+                exit 1
+            fi
+            echo "." > symbolica_path.txt
+
         fi
+
         cd ..
     fi 
 
@@ -108,7 +171,8 @@ build_dependencies () {
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
-            echo "ERROR: failed to install fjcore..  Check the logs in dependencies/dependency_build.log for more information.";
+            cat ../dependency_build.log;
+            echo "ERROR: failed to install fjcore. Check the logs in dependencies/dependency_build.log for more information.";
             rm -f LOCK
             exit $(($RETCODE))
         fi
@@ -125,7 +189,11 @@ build_dependencies () {
 if [ $# -eq 0 ]
     then
         echo "Building all dependencies...";
-        build_dependencies
+        build_dependencies no_venv
+elif [ "$1" == "with_venv" ]
+    then
+        echo "Building all dependencies within a Python venv...";
+        build_dependencies with_venv
 elif [ "$1" == "clean" ]
     then
         echo "Cleaning all dependencies...";
