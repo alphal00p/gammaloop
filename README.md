@@ -25,9 +25,9 @@ git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
 
 * `Rust`: v1.77+ You can easily instal Rust with this [one-liner](https://www.rust-lang.org/tools/install)
 
-* `Python3`: v3.11+ (equipped with `pip`)
+* `Python3`: v3.11+ (equipped with `pip`, and the `python-devel`)
 
-* `GNU gcc`: v10+
+* `GNU gcc`: v10+ (*not* `clang`!)
 
 * `git`
 
