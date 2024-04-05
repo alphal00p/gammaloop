@@ -1,16 +1,24 @@
 import pytest
 import json
+import os
+import sys
 from subprocess import Popen, PIPE
 from pprint import pformat
 from gammaloop.misc.common import GL_PATH, logger, GammaLoopError
+from gammaloop import check_gammaloop_dependencies
 
 
 class TestCode:
 
     @pytest.mark.codecheck
     def test_pyright(self):
+        check_gammaloop_dependencies()
+        custom_env = dict(os.environ)
+        custom_env["PYTHONPATH"] = ':'.join(
+            sys.path+([custom_env['PYTHONPATH'],] if 'PYTHONPATH' in custom_env else []))
+        custom_env["PYRIGHT_PYTHON_FORCE_VERSION"] = "latest"
         process = Popen(['pyright', '--warnings'],
-                        cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
+                        cwd=GL_PATH, stdout=PIPE, stderr=PIPE, env=custom_env)
         output, error = process.communicate()
         stdout = output.decode("utf-8")
         stderr = error.decode("utf-8")
