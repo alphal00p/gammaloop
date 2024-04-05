@@ -8,12 +8,14 @@ clean_dependencies () {
     cd dependencies
 
     rm -f INSTALLED
+    rm -f LOCK
     rm -f dependency_build.log
+    rm -f test_quad_math/test_quad_math
     rm -rf venv
     rm -rf symbolica
     cd fjcore
     rm -f *.o
-    make clean
+    make clean >> /dev/null 2>&1
     cd ..
 
     cd ..
@@ -38,6 +40,31 @@ build_dependencies () {
     fi
     
     rm -f dependency_build.log
+
+    CPPCOMPILER="${CXX:-g++}"
+    if ! test -f test_quad_math/test_quad_math; then
+        echo "Testing quadruple precision support with C++ compiler "$CPPCOMPILER" ...";
+        cd test_quad_math
+        $CPPCOMPILER test_quad_math.cpp -o test_quad_math -lquadmath >> ../dependency_build.log 2>&1
+        RETCODE=$RETCODE+$?
+        if [ ! $(($RETCODE)) == 0 ]
+        then
+            cat ../dependency_build.log
+            echo "ERROR: could not compile with quadruple precision. Make sure you are using GNU GCC and not clang."
+            rm -f LOCK
+            exit $(($RETCODE))
+        fi
+        ./test_quad_math >> ../dependency_build.log 2>&1
+        RETCODE=$RETCODE+$?
+        if [ ! $(($RETCODE)) == 0 ]
+        then
+            cat ../dependency_build.log
+            echo "ERROR: could not run code testing quadruple precision."
+            rm -f LOCK
+            exit $(($RETCODE))
+        fi
+        cd ..
+    fi
 
     PYTHON3BIN=$(which python3)
     if [ "$1" == "with_venv" ]
@@ -104,7 +131,7 @@ build_dependencies () {
 
     if ! test -d symbolica; then
         echo "Cloning symbolica ...";
-        ${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}
+        CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}"
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
     fi
 
@@ -114,7 +141,7 @@ build_dependencies () {
         if [ "$1" == "with_venv" ]
         then
 
-            echo "Building symbolica ...";
+            echo "Building symbolica with maturin within a venv ...";
             maturin develop --release >> ../dependency_build.log 2>&1
             RETCODE=$RETCODE+$?
             if [ ! $(($RETCODE)) == 0 ]
@@ -135,6 +162,7 @@ build_dependencies () {
             fi
 
         else
+            echo "Building symbolica ...";
 
             PYO3_PYTHON=$PYTHON3BIN cargo build --release --features=python_api >> ../dependency_build.log 2>&1
             RETCODE=$RETCODE+$?

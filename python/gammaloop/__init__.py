@@ -96,7 +96,7 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
         sys.exit(1)
     else:
         with open(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt'), 'r') as f:
-            symbolica_path = f.read()
+            symbolica_path = f.read().strip()
         if symbolica_path == '.':
             symbolica_path = os.path.join(
                 gammaloop_root_path, 'dependencies', 'symbolica')
@@ -219,6 +219,10 @@ def cli():
         else:
             raise GammaLoopError(
                 "No command file or string specified.")
-        commands = CommandList.from_file(command_file)
+        if command_file is None:
+            raise GammaLoopError(
+                f"A command must me specified as argument.")
+        else:
+            commands = CommandList.from_file(command_file)
 
     gamma_loop.run(commands)

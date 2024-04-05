@@ -23,11 +23,13 @@ git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
 
 ### > Requirements
 
-* `Rust`: You can easily instal Rust with this [one-liner](https://www.rust-lang.org/tools/install)
+* `Rust`: v1.77+ You can easily instal Rust with this [one-liner](https://www.rust-lang.org/tools/install)
 
-* `Python3`: v3.10+ (equipped with `pip`)
+* `Python3`: v3.11+ (equipped with `pip`)
 
 * `GNU gcc`: v10+
+
+* `git`
 
 *Note*: The project has been tested on Linux and MacOS. However, on MacOS, the default `clang` compiler is not supported due to lack of `libquadmath` support, and `GNU gcc` must be installed and setup as default compiler.
 
