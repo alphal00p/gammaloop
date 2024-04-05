@@ -24,7 +24,7 @@ clean_dependencies () {
 build_dependencies () {
 
     if test -f LOCK; then
-        echo "ERROR: gammaloop dependencies are already being installed by another process. Please wait for the other process to finish before running this script again, or manually remove the dependencies/LOCK file.";
+        echo -e "\033[91mERROR: gammaloop dependencies are already being installed by another process. Please wait for the other process to finish before running this script again, or manually remove the dependencies/LOCK file.\033[0m";
         exit 1
     fi
 
@@ -35,7 +35,7 @@ build_dependencies () {
     RETCODE=$RETCODE+$?
     if [ ! $(($RETCODE)) == 0 ]
     then
-        echo "ERROR: You do not have write permissions to the dependencies directory. Please run the script with the appropriate permissions.";
+        echo -e "\033[91mERROR: You do not have write permissions to the dependencies directory. Please run the script with the appropriate permissions.\033[0m";
         exit $(($RETCODE))
     fi
     
@@ -50,7 +50,7 @@ build_dependencies () {
         if [ ! $(($RETCODE)) == 0 ]
         then
             cat ../dependency_build.log
-            echo "ERROR: could not compile with quadruple precision. Make sure you are using GNU GCC and not clang."
+            echo -e "\033[91mERROR: could not compile with quadruple precision. Make sure you are using GNU GCC and not clang.\033[0m"
             rm -f LOCK
             exit $(($RETCODE))
         fi
@@ -59,7 +59,7 @@ build_dependencies () {
         if [ ! $(($RETCODE)) == 0 ]
         then
             cat ../dependency_build.log
-            echo "ERROR: could not run code testing quadruple precision."
+            echo -e "\033[91mERROR: could not run code testing quadruple precision.\033[0m"
             rm -f LOCK
             exit $(($RETCODE))
         fi
@@ -76,7 +76,7 @@ build_dependencies () {
             RETCODE=$RETCODE+$?
             if [ ! $(($RETCODE)) == 0 ]
             then
-                echo "ERROR: could not create Python venv";
+                echo -e "\033[91mERROR: could not create Python venv\033[0m";
                 rm -f LOCK
                 exit $(($RETCODE))
             fi
@@ -85,7 +85,7 @@ build_dependencies () {
             RETCODE=$RETCODE+$?
             if [ ! $(($RETCODE)) == 0 ]
             then
-                echo "ERROR: could not activate Python venv";
+                echo -e "\033[91mERROR: could not activate Python venv\033[0m";
                 rm -f LOCK
                 exit $(($RETCODE))
             fi
@@ -98,7 +98,7 @@ build_dependencies () {
             RETCODE=$RETCODE+$?
             if [ ! $(($RETCODE)) == 0 ]
             then
-                echo "ERROR: could not install python dependencies";
+                echo -e "\033[91mERROR: could not install python dependencies\033[0m";
                 rm -f LOCK
                 exit $(($RETCODE))
             fi
@@ -110,23 +110,25 @@ build_dependencies () {
             PYTHON3BIN="python"
             if [ ! $(($RETCODE)) == 0 ]
             then
-                echo "ERROR: failed to activate Python venv";
+                echo -e "\033[91mERROR: failed to activate Python venv\033[0m";
                 rm -f LOCK
                 exit $(($RETCODE))
             fi
         fi
 
     else
-
-        $PYTHON3BIN -m pip install -r ../requirements.txt >> dependency_build.log 2>&1
-        RETCODE=$RETCODE+$?
-        if [ ! $(($RETCODE)) == 0 ]
+        $PYTHON3BIN check_python_dependencies.py >> dependency_build.log 2>&1
+        if [ ! $(($?)) == 0 ]
         then
-            echo "ERROR: could not install python dependencies";
-            rm -f LOCK
-            exit $(($RETCODE))
+            echo "Installing Python dependencies with pip...";
+            $PYTHON3BIN -m pip install -r ../requirements.txt >> dependency_build.log 2>&1
+            if [ ! $(($?)) == 0 ]
+            then
+                echo -e "\033[93mWARNING: could not install python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'.\033[0m";
+            fi
+        else
+            echo "All Python dependencies already installed.";
         fi
-
     fi
 
     if ! test -d symbolica; then
@@ -147,7 +149,7 @@ build_dependencies () {
             if [ ! $(($RETCODE)) == 0 ]
             then
                 cat ../dependency_build.log;
-                echo "ERROR: failed to install symbolica. Check the logs in dependencies/dependency_build.log for more information.";
+                echo -e "\033[91mERROR: failed to install symbolica. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
                 rm -f LOCK
                 exit $(($RETCODE))
             fi
@@ -156,7 +158,7 @@ build_dependencies () {
             if [ ! $(($RETCODE)) == 0 ]
             then
                 cat ../dependency_build.log;
-                echo "ERROR: failed to load symbolica Python module built by maturin. Check the logs in dependencies/dependency_build.log for more information.";
+                echo -e "\033[91mERROR: failed to load symbolica Python module built by maturin. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
                 rm -f LOCK
                 exit $(($RETCODE))
             fi
@@ -169,7 +171,7 @@ build_dependencies () {
             if [ ! $(($RETCODE)) == 0 ]
             then
                 cat ../dependency_build.log;
-                echo "ERROR: failed to manually build symbolica's python module. Check the logs in dependencies/dependency_build.log for more information.";
+                echo -e "\033[91mERROR: failed to manually build symbolica's python module. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
                 rm -f LOCK
                 exit $(($RETCODE))
             fi
@@ -181,7 +183,7 @@ build_dependencies () {
             elif test -f target/release/libsymbolica.dll; then
                 ln -s target/release/libsymbolica.dll symbolica.pyd
             else
-                echo "ERROR: failed to find manually compiled symbolica's python module. Check the logs in dependencies/dependency_build.log for more information.";
+                echo -e "\033[91mERROR: failed to find manually compiled symbolica's python module. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
                 rm -f LOCK
                 exit 1
             fi
@@ -200,7 +202,7 @@ build_dependencies () {
         if [ ! $(($RETCODE)) == 0 ]
         then
             cat ../dependency_build.log;
-            echo "ERROR: failed to install fjcore. Check the logs in dependencies/dependency_build.log for more information.";
+            echo -e "\033[91mERROR: failed to install fjcore. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
             rm -f LOCK
             exit $(($RETCODE))
         fi
@@ -210,7 +212,7 @@ build_dependencies () {
     touch INSTALLED
     rm -f LOCK
     
-    echo "All dependencies installed successfully.";
+    echo -e "\033[92mAll dependencies installed successfully.\033[0m";
     cd ..
 }
 
