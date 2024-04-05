@@ -28,7 +28,7 @@ build_dependencies () {
         exit 1
     fi
 
-    echo "Run 'tail -f "$(PWD)"/dependencies/dependency_build.log' to follow installation progress";
+    echo "Run 'tail -f "$(PWD)"/dependencies/dependency_build.log' to follow installation progress.";
 
     cd dependencies
     touch LOCK
@@ -42,15 +42,19 @@ build_dependencies () {
     rm -f dependency_build.log
 
     CPPCOMPILER="${CXX:-g++}"
+    CCOMPILER="${CC:-cc}"
+    # We must also test explictly cc as it is used *explicitely* when building some of quadruple precision rust crates
+    FORCEDCCOMPILER="cc"
     if ! test -f test_quad_math/test_quad_math; then
-        echo "Testing quadruple precision support with C++ compiler "$CPPCOMPILER" ...";
         cd test_quad_math
-        $CPPCOMPILER test_quad_math.cpp -o test_quad_math -lquadmath >> ../dependency_build.log 2>&1
+
+        echo "Testing quadruple precision support with C++ compiler "$CPPCOMPILER" ...";
+        $CPPCOMPILER test_quad_math.c -o test_quad_math -lquadmath >> ../dependency_build.log 2>&1
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
             cat ../dependency_build.log
-            echo -e "\033[91mERROR: could not compile with quadruple precision. Make sure you are using GNU GCC and not clang.\033[0m"
+            echo -e "\033[91mERROR: could not compile with quadruple precision with compiler "$CPPCOMPILER". Make sure you are using GNU GCC and not clang.\033[0m"
             rm -f LOCK
             exit $(($RETCODE))
         fi
@@ -59,10 +63,57 @@ build_dependencies () {
         if [ ! $(($RETCODE)) == 0 ]
         then
             cat ../dependency_build.log
-            echo -e "\033[91mERROR: could not run code testing quadruple precision.\033[0m"
+            echo -e "\033[91mERROR: could not run code testing quadruple precision compiled with compiler "$CPPCOMPILER".\033[0m"
             rm -f LOCK
             exit $(($RETCODE))
         fi
+        rm -f test_quad_math
+
+        echo "Testing quadruple precision support with C++ compiler "$CCOMPILER" ...";
+        $CCOMPILER test_quad_math.c -o test_quad_math -lquadmath >> ../dependency_build.log 2>&1
+        RETCODE=$RETCODE+$?
+        if [ ! $(($RETCODE)) == 0 ]
+        then
+            cat ../dependency_build.log
+            echo -e "\033[91mERROR: could not compile with quadruple precision with compiler "$CCOMPILER". Make sure you are using GNU GCC and not clang.\033[0m"
+            rm -f LOCK
+            exit $(($RETCODE))
+        fi
+        ./test_quad_math >> ../dependency_build.log 2>&1
+        RETCODE=$RETCODE+$?
+        if [ ! $(($RETCODE)) == 0 ]
+        then
+            cat ../dependency_build.log
+            echo -e "\033[91mERROR: could not run code testing quadruple precision compiled with compiler "$CCOMPILER".\033[0m"
+            rm -f LOCK
+            exit $(($RETCODE))
+        fi
+
+        if [ ! $FORCEDCCOMPILER == $CCOMPILER ]
+        then
+            rm -f test_quad_math
+
+            echo "Testing quadruple precision support with C++ compiler "$FORCEDCCOMPILER" ...";
+            $FORCEDCCOMPILER test_quad_math.c -o test_quad_math -lquadmath >> ../dependency_build.log 2>&1
+            RETCODE=$RETCODE+$?
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                cat ../dependency_build.log
+                echo -e "\033[91mERROR: could not compile with quadruple precision with compiler "$FORCEDCCOMPILER". Make sure you are using GNU GCC and not clang.\033[0m"
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
+            ./test_quad_math >> ../dependency_build.log 2>&1
+            RETCODE=$RETCODE+$?
+            if [ ! $(($RETCODE)) == 0 ]
+            then
+                cat ../dependency_build.log
+                echo -e "\033[91mERROR: could not run code testing quadruple precision compiled with compiler "$FORCEDCCOMPILER".\033[0m"
+                rm -f LOCK
+                exit $(($RETCODE))
+            fi
+        fi
+        
         cd ..
     fi
 
