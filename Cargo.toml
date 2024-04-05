@@ -123,6 +123,6 @@ bench = false
 extension-module = ["pyo3/extension-module"]
 default = ["python_api"]
 
-python_api = ["pyo3"]
+python_api = ["pyo3", "extension-module"]
 binary = []
 fail-on-warnings = []
