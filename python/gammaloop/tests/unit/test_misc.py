@@ -15,7 +15,7 @@ class TestCode:
         check_gammaloop_dependencies()
         custom_env = dict(os.environ)
         custom_env["PYTHONPATH"] = ':'.join(
-            sys.path+([custom_env['PYTHONPATH'],] if 'PYTHONPATH' not in custom_env else []))
+            sys.path+([custom_env['PYTHONPATH'],] if 'PYTHONPATH' in custom_env else []))
         custom_env["PYRIGHT_PYTHON_FORCE_VERSION"] = "latest"
         process = Popen(['pyright', '--warnings'],
                         cwd=GL_PATH, stdout=PIPE, stderr=PIPE, env=custom_env)
