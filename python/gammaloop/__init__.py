@@ -23,7 +23,7 @@ class CLIColour(StrEnum):
     END = '\033[0m'
 
 
-def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=False, no_gammaloop_python_venv=False):
+def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=False, no_gammaloop_python_venv=False, install_dependencies_with_venv=False):
 
     global DEPENDENCIES_CHECKED
     if DEPENDENCIES_CHECKED and all(opt is False for opt in [clean_dependencies, build_dependencies, no_gammaloop_python_venv]):
@@ -44,7 +44,7 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
     if build_dependencies:
         print("Building gammaloop dependencies in '%s' using the %s./bin/build_dependencies.sh%s script ..." % (
             os.path.abspath(os.path.join(gammaloop_root_path, 'dependencies')), CLIColour.GREEN, CLIColour.END))
-        Popen([f"bash {os.path.join('.', 'bin', 'build_dependencies.sh')}",],
+        Popen([f"bash {os.path.join('.', 'bin', 'build_dependencies.sh')}{' with_venv' if install_dependencies_with_venv else ''}",],
               shell=True, cwd=gammaloop_root_path).wait()
         if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'INSTALLED')):
             print("%sCould not build the dependencies. Find more information in '%s'.%s" % (
@@ -64,15 +64,20 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
         gammaloop_root_path, 'dependencies', 'venv'))
 
     if venv_path != os.path.abspath(os.path.join(os.path.dirname(sys.executable), os.path.pardir)):
-        # Do not warn about this for now as it is not strictly necessary as of now
+        # Do not warn about this for now as it is not strictly necessary
         # print("%sWARNING:%s It is recommended to run gammaloop within its Python virtual environment, by issuing the command:\n\n%ssource %s/bin/activate%s\n" % (
         #    CLIColour.YELLOW, CLIColour.END, CLIColour.GREEN, venv_path, CLIColour.END))
         pass
 
+    additional_python_paths = []
+
     if not no_gammaloop_python_venv:
+
         if not os.path.isfile(os.path.join(venv_path, 'site_paths.txt')):
-            print("%sWARNING:%s Could not find Python virtual environment list of sites in file '%s'.\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
-                CLIColour.YELLOW, CLIColour.END, os.path.join(venv_path, 'venv_site_paths.txt'), CLIColour.GREEN, CLIColour.END))
+            # Do not warn about this for now as it is not strictly necessary
+            # print("%sWARNING:%s Could not find Python virtual environment list of sites in file '%s'.\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
+            #     CLIColour.YELLOW, CLIColour.END, os.path.join(venv_path, 'venv_site_paths.txt'), CLIColour.GREEN, CLIColour.END))
+            pass
         else:
             try:
                 with open(os.path.join(venv_path, 'site_paths.txt'), 'r') as f:
@@ -82,13 +87,27 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
                 print("%sWARNING:%s Could not extract list of site paths of the Python virtual environment of gammaloop from file '%s' (error: %s%s%s).\nConsider running '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies.\n" % (
                     CLIColour.YELLOW, CLIColour.END, os.path.join(venv_path, 'site_paths.txt'), CLIColour.RED, str(e), CLIColour.END, CLIColour.GREEN, CLIColour.END))
             if site_paths is not None:
-                site_paths = [sp for sp in site_paths if sp.startswith(
-                    venv_path) and (len(sys.path) == 0 or sp != sys.path[0])]
-                if len(site_paths) > 0:
-                    print("%sINFO:%s The following paths have been automatically and temporarily added by gammaloop to your PYTHONPATH:\n%s" % (
-                        CLIColour.GREEN, CLIColour.END, '\n'.join('%s%s%s' % (CLIColour.BLUE, site_path, CLIColour.END) for site_path in site_paths)))
-                    for site_path in site_paths:
-                        sys.path.insert(0, site_path)
+                additional_python_paths.extend([sp for sp in site_paths if sp.startswith(
+                    venv_path) and (len(sys.path) == 0 or sp != sys.path[0])])
+
+    if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt')):
+        print("\nSymbolica dependency appears to be incorrectly %sinstalled%s. Run '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies. Exiting.\n" % (
+            CLIColour.RED, CLIColour.END, CLIColour.GREEN, CLIColour.END))
+        sys.exit(1)
+    else:
+        with open(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt'), 'r') as f:
+            symbolica_path = f.read().strip()
+        if symbolica_path == '.':
+            symbolica_path = os.path.join(
+                gammaloop_root_path, 'dependencies', 'symbolica')
+        if symbolica_path not in sys.path:
+            additional_python_paths.append(symbolica_path)
+
+    if len(additional_python_paths) > 0:
+        print("%sINFO:%s The following paths have been automatically and temporarily added by gammaloop to your PYTHONPATH:\n%s" % (
+            CLIColour.GREEN, CLIColour.END, '\n'.join('%s%s%s' % (CLIColour.BLUE, site_path, CLIColour.END) for site_path in additional_python_paths)))
+        for additional_python_path in additional_python_paths:
+            sys.path.insert(0, additional_python_path)
 
     DEPENDENCIES_CHECKED = True
 
@@ -106,6 +125,8 @@ def cli():
                            default=False, help='Enable debug mode')
     argparser.add_argument('--build_dependencies', '-bd', action='store_true',
                            default=False, help='Build dependencies')
+    argparser.add_argument('--install_dependencies_with_venv', '-wv', action='store_true',
+                           default=False, help='Install dependencies within a virtual environment')
     argparser.add_argument('--clean_dependencies', '-cd', action='store_true',
                            default=False, help='Clean dependencies build')
     argparser.add_argument('--no_gammaloop_python_venv', '-no_venv', action='store_true',
@@ -140,7 +161,7 @@ def cli():
 
     # Before importing anything of gammaloop, check the dependencies with proper arguments
     check_gammaloop_dependencies(args.clean_dependencies, args.build_dependencies,
-                                 args.no_gammaloop_python_venv)
+                                 args.no_gammaloop_python_venv, args.install_dependencies_with_venv)
 
     from .interface.gammaloop_interface import CommandList
     from .interface.gammaloop_interface import GammaLoop
@@ -198,6 +219,10 @@ def cli():
         else:
             raise GammaLoopError(
                 "No command file or string specified.")
-        commands = CommandList.from_file(command_file)
+        if command_file is None:
+            raise GammaLoopError(
+                f"A command must me specified as argument.")
+        else:
+            commands = CommandList.from_file(command_file)
 
     gamma_loop.run(commands)

@@ -40,13 +40,10 @@ jobs:
         ./bin/compile_lib.sh
     - name: Run code checks
       run: |
-        source `./bin/gammaloop -venv`
         ./bin/run_tests.sh python -m "codecheck"
     - name: Run python tests
       run: |
-        source `./bin/gammaloop -venv`
         ./bin/run_tests.sh python -m "not drawing"
     - name: Run native rust tests
       run: |
-        source `./bin/gammaloop -venv`
         ./bin/run_tests.sh rust

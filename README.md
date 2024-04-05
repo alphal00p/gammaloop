@@ -16,7 +16,6 @@ If you want to jump right in, run the following to immediately start integrating
 ```
 git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
 ./bin/compile.sh
-source python/gammaloop/dependencies/venv/bin/activate
 ./bin/gammaloop example/cards/scalar_mercedes.gL
 ```
 
@@ -24,13 +23,15 @@ source python/gammaloop/dependencies/venv/bin/activate
 
 ### > Requirements
 
-* `Rust`: You can easily instal Rust with this [one-liner](https://www.rust-lang.org/tools/install)
+* `Rust`: v1.77+ You can easily instal Rust with this [one-liner](https://www.rust-lang.org/tools/install)
 
-* `Python3`: v3.10+
+* `Python3`: v3.11+ (equipped with `pip`)
 
-* `gcc`: v10+
+* `GNU gcc`: v10+
 
-*Note*: The project has been tested on Linux and MacOS. 
+* `git`
+
+*Note*: The project has been tested on Linux and MacOS. However, on MacOS, the default `clang` compiler is not supported due to lack of `libquadmath` support, and `GNU gcc` must be installed and setup as default compiler.
 
 Windows users are encouraged to use [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/).
 
@@ -38,19 +39,25 @@ Windows users are encouraged to use [WSL 2](https://learn.microsoft.com/en-us/wi
 ```
 pip install gammaloop
 gammaloop --build_dependencies
-source `gammaloop -venv`
 ```
-
-*Note:* when using the `fish` shell, the last command should be replaced by: `. (./bin/gammaloop -venv).fish`
 
 ### > Installation from sources
 ```
 git clone https://github.com/alphal00p/gammaloop.git
 cd gammaloop
 ./bin/compile.sh
-source python/gammaloop/dependencies/venv/bin/activate
 ```
 The relevant binaries will then be in `./bin/` and the gammaloop python module is located at `./python/gammaloop`.
+
+*Note:* Alternatively, the dependencies can be built within a python virtual environment as follows:
+
+```
+./bin/build_dependencies.sh clean
+./bin/build_dependencies.sh with_venv
+source `./bin/gammaloop -venv`
+```
+
+and when using the `fish` shell, the last command should be replaced by: `. (./bin/gammaloop -venv).fish`
 
 ## Tests
 
