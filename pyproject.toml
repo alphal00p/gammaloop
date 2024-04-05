@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gammaloop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 authors = [
   "Valentin Hirschi <valentin.hirschi@gmail.com>",
@@ -28,7 +28,7 @@ build-backend = "maturin"
 
 [project]
 name = "gammaloop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 readme = "README.md"
 license = { file = "LICENSE.md" }
