@@ -8,10 +8,9 @@ use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use num::Complex;
 
+use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
-#[allow(unused_imports)]
-use crate::cff::esurface::{EsurfaceCollection, EsurfaceId};
 use crate::graph::LoopMomentumBasis;
 use crate::utils::compute_shift_part;
 use crate::utils::FloatLike;
@@ -545,48 +544,6 @@ fn to_real_mass_vector(edge_masses: &[Option<Complex<f64>>]) -> Vec<f64> {
         })
         .collect_vec()
 }
-#[allow(dead_code)]
-struct EsurfaceSubset {
-    subset: Vec<usize>,
-    num_esurfaces: usize,
-}
-
-impl EsurfaceSubset {
-    #[allow(dead_code)]
-    fn new(len: usize, num_esurfaces: usize) -> Self {
-        Self {
-            subset: (0..len).collect(),
-            num_esurfaces,
-        }
-    }
-
-    #[allow(dead_code)]
-    fn advance_nth_index(&mut self, n: usize) -> (bool, usize) {
-        let max_value_of_n = self.num_esurfaces - (self.subset.len() - n);
-
-        if self.subset[n] >= max_value_of_n {
-            if n == 0 {
-                (false, n)
-            } else {
-                self.advance_nth_index(n - 1)
-            }
-        } else {
-            self.subset[n] += 1;
-            for i in n + 1..self.subset.len() {
-                self.subset[i] = self.subset[i - 1] + 1;
-            }
-            (true, n)
-        }
-    }
-
-    #[allow(dead_code)]
-    fn as_ids(&self) -> Vec<ExistingEsurfaceId> {
-        self.subset
-            .iter()
-            .map(|&x| Into::<ExistingEsurfaceId>::into(x))
-            .collect()
-    }
-}
 
 #[cfg(test)]
 #[allow(dead_code, unused_variables)]
@@ -596,7 +553,10 @@ mod tests {
     use lorentz_vector::LorentzVector;
     use num::Complex;
 
-    use crate::{cff::esurface::Esurface, graph::LoopMomentumBasis};
+    use crate::{
+        cff::esurface::{Esurface, EsurfaceId},
+        graph::LoopMomentumBasis,
+    };
 
     struct HelperBoxStructure {
         external_momenta: [LorentzVector<f64>; 3],
