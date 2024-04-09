@@ -1,12 +1,12 @@
 use ahash::HashMap;
 use ahash::HashMapExt;
+use ahash::HashSet;
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use num::Complex;
-use std::collections::HashSet;
 
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
@@ -455,8 +455,8 @@ impl EsurfacePairs {
         existing_esurfaces: &ExistingEsurfaces,
         subset_len: usize,
         result: &[(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)],
-    ) -> Vec<Vec<ExistingEsurfaceId>> {
-        let mut res = vec![];
+    ) -> HashSet<Vec<ExistingEsurfaceId>> {
+        let mut res = HashSet::default();
         let existing_esurfaces_not_in_overlap =
             existing_esurfaces
                 .all_indices()
@@ -466,7 +466,7 @@ impl EsurfacePairs {
                         .any(|(overlap, _)| overlap.contains(&existing_esurface_id))
                 });
 
-        let mut possible_options_from_esurfaces_not_in_overlap = vec![];
+        let mut possible_options_from_esurfaces_not_in_overlap = HashSet::default();
 
         for esurface in existing_esurfaces_not_in_overlap.filter(|existing_esurface_id| {
             self.has_pair_with[Into::<usize>::into(*existing_esurface_id)].len() >= subset_len - 1
@@ -494,7 +494,8 @@ impl EsurfacePairs {
                 }
 
                 if is_valid {
-                    possible_options_from_esurfaces_not_in_overlap.push(option);
+                    option.sort_unstable();
+                    possible_options_from_esurfaces_not_in_overlap.insert(option);
                 }
             }
         }
@@ -507,7 +508,7 @@ impl EsurfacePairs {
                 && self.has_pair_with[Into::<usize>::into(*right)].len() >= subset_len - 1
         });
 
-        let mut possible_options_from_pairs_not_in_overlap = vec![];
+        let mut possible_options_from_pairs_not_in_overlap = HashSet::default();
 
         for pair in existing_pairs_not_in_overlap {
             let possible_additions = existing_esurfaces
@@ -523,24 +524,15 @@ impl EsurfacePairs {
             for possible_addition in possible_additions {
                 let mut option = vec![pair.0, pair.1];
                 option.extend(possible_addition.iter().copied());
-                possible_options_from_pairs_not_in_overlap.push(option);
+                option.sort_unstable();
+                possible_options_from_pairs_not_in_overlap.insert(option);
             }
         }
 
         res.extend(possible_options_from_esurfaces_not_in_overlap);
         res.extend(possible_options_from_pairs_not_in_overlap);
 
-        for option in res.iter_mut() {
-            option.sort_unstable();
-        }
-
-        let mut uniqe = HashSet::new();
-
-        for option in res {
-            uniqe.insert(option);
-        }
-
-        uniqe.into_iter().collect()
+        res
     }
 }
 
