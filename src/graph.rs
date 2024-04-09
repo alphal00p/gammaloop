@@ -10,6 +10,7 @@ use crate::{
     },
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
+    uv::UVGraph,
 };
 use ahash::RandomState;
 use color_eyre::{Help, Report};
@@ -1094,6 +1095,10 @@ impl Graph {
         self.derived_data.ltd_expression = Some(generate_ltd_expression(self));
     }
 
+    pub fn generate_uv(&mut self) {
+        self.derived_data.uv = Some(UVGraph::from_graph(self));
+    }
+
     pub fn denominator(self) -> Vec<(Atom, Atom)> {
         self.edges.iter().map(|e| e.denominator(&self)).collect()
     }
@@ -1346,6 +1351,7 @@ pub struct DerivedGraphData {
     pub ltd_expression: Option<LTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
     pub numerator: Option<Atom>,
+    pub uv: Option<UVGraph>,
 }
 
 impl DerivedGraphData {
@@ -1356,6 +1362,7 @@ impl DerivedGraphData {
             ltd_expression: None,
             tropical_subgraph_table: None,
             numerator: None,
+            uv: None,
         }
     }
 
@@ -1386,6 +1393,7 @@ impl DerivedGraphData {
                 .map(LTDExpression::from_serializable),
             tropical_subgraph_table: serializable.tropical_subgraph_table,
             numerator: None,
+            uv: None,
         }
     }
 
