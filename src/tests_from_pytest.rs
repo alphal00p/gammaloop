@@ -1195,7 +1195,8 @@ fn pytest_topology_c() {
 fn pytest_massless_pentabox() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
-    let (_, amplitude) = load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+    let (_model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
     graph.generate_ltd();
@@ -1255,7 +1256,6 @@ fn pytest_massless_pentabox() {
 
     assert_eq!(existing_esurfaces.len(), 17);
 
-    let now = std::time::Instant::now();
     let maximal_overlap = find_maximal_overlap(
         &graph.loop_momentum_basis,
         &existing_esurfaces,
@@ -1268,15 +1268,12 @@ fn pytest_massless_pentabox() {
         &edge_masses,
         &kinematics,
     );
-    let elapsed = now.elapsed();
-    println!("duration: {} ms", elapsed.as_millis());
 
     assert_eq!(maximal_overlap.len(), 3);
 
-    for overlap in maximal_overlap.iter() {
-        println!("overlap: {:?}", overlap.0.len());
-    }
-    panic!()
+    assert_eq!(maximal_overlap[0].0.len(), 16);
+    assert_eq!(maximal_overlap[1].0.len(), 13);
+    assert_eq!(maximal_overlap[2].0.len(), 13);
 }
 
 #[test]

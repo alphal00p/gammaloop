@@ -170,14 +170,10 @@ fn construct_solver(
             if *individual_loop_signature != 0 {
                 a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index] =
                     -*individual_loop_signature as f64;
-                vertical_offset += 1;
-                a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index + 1] =
+                a_matrix[vertical_offset + 1][loop_momentum_offset + 3 * loop_index + 1] =
                     -*individual_loop_signature as f64;
-                vertical_offset += 1;
-                a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index + 2] =
+                a_matrix[vertical_offset + 2][loop_momentum_offset + 3 * loop_index + 2] =
                     -*individual_loop_signature as f64;
-                vertical_offset += 1;
-                vertical_offset -= 3;
             }
         }
 
