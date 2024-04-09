@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use symbolica::representations::Atom;
 
 use crate::graph::{Graph, LoopMomentumBasis};
-use crate::utils::{compute_momentum, compute_t_part_of_shift_part, format_momentum, FloatLike};
+use crate::utils::{
+    compute_momentum, compute_shift_part, compute_t_part_of_shift_part, format_momentum, FloatLike,
+};
 
 /// Core esurface struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
@@ -303,7 +305,7 @@ impl ExistingEsurfaces {
 }
 
 /// Index in the list of all existing esurfaces, essentially a pointer to a pointer to an esurface
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ExistingEsurfaceId(usize);
 
 impl Index<ExistingEsurfaceId> for ExistingEsurfaces {
@@ -327,6 +329,8 @@ impl From<usize> for ExistingEsurfaceId {
 }
 
 const MAX_EXPECTED_CAPACITY: usize = 32; // Used to prevent reallocations during existence check
+const SHIFT_THRESHOLD: f64 = 1.0e-10;
+const EXISTENCE_THRESHOLD: f64 = 1.0e-10;
 
 /// Returns the list of esurfaces which may exist, must be called each time at evaluation if externals are not fixed.
 #[inline]
@@ -335,6 +339,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     esurface_derived_data: &EsurfaceDerivedData,
     externals: &[LorentzVector<T>],
     energy_cache: &[T],
+    debug: usize,
 ) -> ExistingEsurfaces {
     let mut existing_esurfaces = ExistingEsurfaces::with_capacity(MAX_EXPECTED_CAPACITY);
 
@@ -347,9 +352,9 @@ pub fn get_existing_esurfaces<T: FloatLike>(
             let shift_part = esurface.compute_shift_part(energy_cache);
             let shift_zero_sq = shift_part * shift_part;
 
-            if shift_part < T::zero() {
+            if shift_part < -Into::<T>::into(SHIFT_THRESHOLD) {
                 Some((*esurface_id, shift_zero_sq))
-            } else if shift_part > T::zero() {
+            } else if shift_part > Into::<T>::into(SHIFT_THRESHOLD) {
                 Some((*other_esurface_id, shift_zero_sq))
             } else {
                 None
@@ -357,21 +362,20 @@ pub fn get_existing_esurfaces<T: FloatLike>(
         } {
             let shift_signature = &esurface_derived_data[esurface_to_check_id].shift_signature;
 
-            let mut esurface_shift = LorentzVector::new();
-
-            for i in 0..shift_signature.len() - 1 {
-                match shift_signature[i] {
-                    1 => esurface_shift += externals[i],
-                    -1 => esurface_shift -= externals[i],
-                    0 => {}
-                    _ => unreachable!("Shift signature must be -1, 0 or 1"),
-                }
-            }
+            let esurface_shift = compute_shift_part(shift_signature, externals);
 
             let shift_spatial_sq = esurface_shift.spatial_squared();
             let mass_sum_squared = esurface_derived_data[esurface_to_check_id].mass_sum_squared;
 
-            if shift_zero_sq >= shift_spatial_sq + Into::<T>::into(mass_sum_squared) {
+            let existence_condition =
+                shift_zero_sq - shift_spatial_sq - Into::<T>::into(mass_sum_squared);
+
+            if debug > 1 && existence_condition > Into::<T>::into(EXISTENCE_THRESHOLD) {
+                println!("existence_condition: {}", existence_condition);
+                println!("shift part: {}", shift_zero_sq)
+            };
+
+            if existence_condition > Into::<T>::into(EXISTENCE_THRESHOLD) {
                 existing_esurfaces.push(esurface_to_check_id);
             }
         }

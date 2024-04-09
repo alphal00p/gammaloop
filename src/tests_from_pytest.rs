@@ -1,5 +1,7 @@
 #![allow(unused_imports)]
-use crate::cff::esurface::{get_existing_esurfaces, ExistingEsurfaceId, ExistingEsurfaces};
+use crate::cff::esurface::{
+    get_existing_esurfaces, Esurface, EsurfaceId, ExistingEsurfaceId, ExistingEsurfaces,
+};
 use crate::cff::generation::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
@@ -165,6 +167,7 @@ mod tests_scalar_massless_triangle {
             graph.derived_data.esurface_derived_data.as_ref().unwrap(),
             &[p1, p2],
             &energy_cache,
+            0,
         );
 
         assert_eq!(existing.len(), 0);
@@ -646,6 +649,7 @@ fn pytest_massless_scalar_box() {
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &box4_e,
         &cache,
+        0,
     );
 
     let edge_masses = graph
@@ -660,7 +664,6 @@ fn pytest_massless_scalar_box() {
         esurfaces,
         &edge_masses,
         &box4_e,
-        0,
     );
 
     assert_eq!(existing.len(), 4);
@@ -671,7 +674,6 @@ fn pytest_massless_scalar_box() {
         esurfaces,
         &edge_masses,
         &box4_e,
-        0,
     );
 
     assert_eq!(maximal_overlap.len(), 4);
@@ -1035,6 +1037,7 @@ fn pytest_hexagon() {
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
         &graph.compute_onshell_energies(&empty_loop_mom, &kinematics),
+        0,
     );
 
     assert_eq!(existing_esurface.len(), 6);
@@ -1045,14 +1048,16 @@ fn pytest_hexagon() {
         .map(|edge| edge.particle.mass.value)
         .collect_vec();
 
+    let now = std::time::Instant::now();
     let maximal_overlap = find_maximal_overlap(
         &graph.loop_momentum_basis,
         &existing_esurface,
         esurfaces,
         &edge_masses,
         &kinematics,
-        0,
     );
+    let duration = now.elapsed();
+    println!("duration: {}", duration.as_micros());
 
     assert_eq!(maximal_overlap.len(), 4);
     assert_eq!(maximal_overlap[0].0.len(), 3);
@@ -1073,24 +1078,205 @@ fn pytest_hexagon() {
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &hexagon_10_e,
         &graph.compute_onshell_energies(&empty_loop_mom, &hexagon_10_e),
+        0,
     );
 
     assert_eq!(existing_esurfaces.len(), 10);
 
+    let now = std::time::Instant::now();
     let maximal_overlap = find_maximal_overlap(
         &graph.loop_momentum_basis,
         &existing_esurfaces,
         esurfaces,
         &edge_masses,
         &hexagon_10_e,
-        0,
     );
+    let duration = now.elapsed();
+    println!("duration: {}", duration.as_micros());
 
     assert_eq!(maximal_overlap.len(), 4);
     assert_eq!(maximal_overlap[0].0.len(), 8);
     assert_eq!(maximal_overlap[1].0.len(), 8);
     assert_eq!(maximal_overlap[2].0.len(), 7);
     assert_eq!(maximal_overlap[3].0.len(), 7);
+
+    panic!();
+}
+
+#[test]
+#[ignore]
+fn pytest_topology_c() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let (model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    assert_eq!(model.name, "scalars");
+    assert!(amplitude.amplitude_graphs.len() == 1);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let esurfaces = &graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
+
+    let kinematics = [
+        LorentzVector::from_args(9.0, 0.0, 0.0, 8.94427190999916),
+        LorentzVector::from_args(9.0, 0.0, 0.0, -8.94427190999916),
+        -LorentzVector::from_args(
+            1.83442509122858,
+            -0.383828222192743,
+            0.69085529916260,
+            -1.31653190094982,
+        ),
+        -LorentzVector::from_args(
+            5.78920098524940,
+            -1.80358221330469,
+            -5.24375913342836,
+            1.328506453,
+        ),
+        -LorentzVector::from_args(2.82869, -1.83886, -1.6969477, 0.8605192),
+    ];
+
+    let _edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &kinematics,
+        &graph.compute_onshell_energies(&kinematics, &kinematics),
+        2,
+    );
+
+    let overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurfaces,
+        esurfaces,
+        &_edge_masses,
+        &kinematics,
+    );
+
+    assert_eq!(overlap.len(), 9);
+    assert_eq!(overlap[0].0.len(), 22);
+    assert_eq!(overlap[1].0.len(), 21);
+    assert_eq!(overlap[2].0.len(), 21);
+    assert_eq!(overlap[3].0.len(), 21);
+    assert_eq!(overlap[4].0.len(), 21);
+    assert_eq!(overlap[5].0.len(), 21);
+    assert_eq!(overlap[6].0.len(), 20);
+    assert_eq!(overlap[7].0.len(), 17);
+    assert_eq!(overlap[8].0.len(), 17);
+}
+
+#[test]
+#[ignore]
+fn pytest_massless_pentabox() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let (_, amplitude) = load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let rescaling = 1.0e-3;
+    let kinematics = [
+        LorentzVector::from_args(5.980_260_048_915_123e2, 0.0, 0.0, 5.724_562_014_045_295e2)
+            * rescaling,
+        LorentzVector::from_args(5.980_260_048_915_123e2, 0.0, 0.0, -5.724_562_014_045_295e2)
+            * rescaling,
+        LorentzVector::from_args(
+            -5.394_473_213_122_507e2,
+            -1.971_081_698_462_961e2,
+            -4.416_135_519_343_869e2,
+            2.250_822_886_064_787e2,
+        ) * rescaling,
+        LorentzVector::from_args(
+            -2.255_538_754_188_549e2,
+            1.757_868_459_829_899e2,
+            3.716_353_112_335_996e1,
+            -1.013_763_093_935_658e2,
+        ) * rescaling,
+    ];
+
+    let edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &kinematics,
+        &graph.compute_onshell_energies(&kinematics, &kinematics),
+        0,
+    );
+
+    assert_eq!(existing_esurfaces.len(), 17);
+
+    let now = std::time::Instant::now();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurfaces,
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        &edge_masses,
+        &kinematics,
+    );
+    let elapsed = now.elapsed();
+    println!("duration: {} ms", elapsed.as_millis());
+
+    assert_eq!(maximal_overlap.len(), 3);
+
+    for overlap in maximal_overlap.iter() {
+        println!("overlap: {:?}", overlap.0.len());
+    }
+    panic!()
 }
 
 #[test]

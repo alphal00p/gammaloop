@@ -62,3 +62,11 @@ class TestRust:
     def test_rust_lbl_box(self, compile_rust_tests: Path, lbl_box_export: Path):
         assert run_rust_test(compile_rust_tests, lbl_box_export,
                              'lbl_box')
+
+    def test_rust_topology_c(self, compile_rust_tests: Path, scalar_ltd_topology_c_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_ltd_topology_c_export,
+                             'topology_c')
+
+    def test_rust_massless_pentabox(self, compile_rust_tests: Path, scalar_massless_pentabox_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_massless_pentabox_export,
+                             'massless_pentabox')
