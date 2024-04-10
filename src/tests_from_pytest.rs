@@ -172,6 +172,15 @@ mod tests_scalar_massless_triangle {
         );
 
         assert_eq!(existing.len(), 0);
+
+        let cff = graph.get_cff();
+        let unfolded = cff.expand_terms();
+
+        assert_eq!(unfolded.len(), 6);
+
+        for term in unfolded.iter() {
+            assert_eq!(term.len(), 2);
+        }
     }
 }
 

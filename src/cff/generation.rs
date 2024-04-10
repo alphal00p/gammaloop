@@ -369,14 +369,48 @@ impl CFFExpression {
             .collect()
     }
 
-    pub fn unfold_tree(&self) -> Vec<Vec<EsurfaceId>> {
-        let mut res = vec![];
+    fn recursive_term_builder(
+        &self,
+        res: &mut Vec<Vec<EsurfaceId>>,
+        current_path: &mut Vec<EsurfaceId>,
+        term_id: usize,
+        node_id: usize,
+    ) {
+        let node = &self.terms[term_id].nodes[node_id];
 
-        for tree in self.terms.iter() {
-            let bottom_nodes = tree.get_bottom_layer();
+        match node {
+            CFFTreeNode::Data(data) => {
+                if let Some(esurface_id) = data.esurface_id {
+                    current_path.push(esurface_id);
+                }
+
+                if data.children.is_empty() {
+                    res.push(current_path.clone());
+                } else {
+                    for child in data.children.iter() {
+                        self.recursive_term_builder(res, current_path, term_id, *child);
+                    }
+                }
+            }
+            CFFTreeNode::Pointer(pointer) => {
+                self.recursive_term_builder(res, current_path, pointer.term_id, pointer.node_id);
+            }
         }
+    }
 
+    fn expand_term(&self, term_id: usize) -> Vec<Vec<EsurfaceId>> {
+        let mut res = vec![];
+        let mut current_path = vec![];
+
+        self.recursive_term_builder(&mut res, &mut current_path, term_id, 0);
         res
+    }
+
+    pub fn expand_terms(&self) -> Vec<Vec<EsurfaceId>> {
+        self.terms
+            .iter()
+            .flat_map(|t| self.expand_term(t.term_id))
+            .collect()
     }
 }
 
