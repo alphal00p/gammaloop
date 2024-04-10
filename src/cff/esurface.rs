@@ -151,7 +151,7 @@ impl Esurface {
             .map(|(sign, index)| {
                 let signature = &lmb.edge_signatures[*index];
                 let sign = if *sign { "+" } else { "-" };
-                format!(" {} {}^0", sign, format_momentum(signature))
+                format!(" {} ({})^0", sign, format_momentum(signature))
             })
             .join("");
 
@@ -329,8 +329,8 @@ impl From<usize> for ExistingEsurfaceId {
 }
 
 const MAX_EXPECTED_CAPACITY: usize = 32; // Used to prevent reallocations during existence check
-const SHIFT_THRESHOLD: f64 = 1.0e-10;
-const EXISTENCE_THRESHOLD: f64 = 1.0e-10;
+const SHIFT_THRESHOLD: f64 = 1.0e-13;
+const EXISTENCE_THRESHOLD: f64 = 1.0e-7;
 
 /// Returns the list of esurfaces which may exist, must be called each time at evaluation if externals are not fixed.
 #[inline]
@@ -340,6 +340,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     externals: &[LorentzVector<T>],
     energy_cache: &[T],
     debug: usize,
+    e_cm: f64,
 ) -> ExistingEsurfaces {
     let mut existing_esurfaces = ExistingEsurfaces::with_capacity(MAX_EXPECTED_CAPACITY);
 
@@ -352,9 +353,9 @@ pub fn get_existing_esurfaces<T: FloatLike>(
             let shift_part = esurface.compute_shift_part(energy_cache);
             let shift_zero_sq = shift_part * shift_part;
 
-            if shift_part < -Into::<T>::into(SHIFT_THRESHOLD) {
+            if shift_part < -Into::<T>::into(SHIFT_THRESHOLD * e_cm) {
                 Some((*esurface_id, shift_zero_sq))
-            } else if shift_part > Into::<T>::into(SHIFT_THRESHOLD) {
+            } else if shift_part > Into::<T>::into(SHIFT_THRESHOLD * e_cm) {
                 Some((*other_esurface_id, shift_zero_sq))
             } else {
                 None
@@ -370,12 +371,15 @@ pub fn get_existing_esurfaces<T: FloatLike>(
             let existence_condition =
                 shift_zero_sq - shift_spatial_sq - Into::<T>::into(mass_sum_squared);
 
-            if debug > 1 && existence_condition > Into::<T>::into(EXISTENCE_THRESHOLD) {
-                println!("existence_condition: {}", existence_condition);
-                println!("shift part: {}", shift_zero_sq)
-            };
-
-            if existence_condition > Into::<T>::into(EXISTENCE_THRESHOLD) {
+            if existence_condition
+                > Into::<T>::into(EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm)
+            {
+                if debug > 1 {
+                    println!(
+                        "existing esurface: {:?}, existence_condition: {}, shift_part_squared: {}",
+                        esurface_to_check_id, existence_condition, shift_zero_sq
+                    );
+                }
                 existing_esurfaces.push(esurface_to_check_id);
             }
         }
