@@ -131,6 +131,8 @@ fn construct_solver(
     }
 
     // write the constaint equations
+
+    // perhaps it is faster to build the sparse matrix directly, but it is also extremely unreadable
     let mut a_matrix = vec![vec![0.0; num_primal_variables]; num_constaints];
     let mut b_vector = vec![0.0; num_constaints];
 
@@ -188,7 +190,7 @@ fn construct_solver(
     if verbose {
         println!("problem");
         for (row_a, row_b) in a_matrix.iter().zip(b_vector.iter()) {
-            println!("{:?} = {:?}", row_a, row_b);
+            println!("{:?} - {:?}", row_a, row_b);
         }
     }
 
