@@ -70,3 +70,7 @@ class TestRust:
     def test_rust_massless_pentabox(self, compile_rust_tests: Path, scalar_massless_pentabox_export: Path):
         assert run_rust_test(compile_rust_tests, scalar_massless_pentabox_export,
                              'massless_pentabox')
+
+    def test_rust_massless_3l_pentabox(self, compile_rust_tests: Path, scalar_massless_3l_pentabox_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_massless_3l_pentabox_export,
+                             'massless_3l_pentabox')

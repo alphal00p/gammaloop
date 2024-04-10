@@ -306,6 +306,18 @@ output {output_path}"""))
 
 
 @pytest.fixture(scope="session")
+def scalar_massless_3l_pentabox_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_pentabox")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+generate_graph --name=massless_3l_pentabox -ve=[(1000,1,6),(1000,6,7),(1000,7,2),(1000,2,1),(1000,7,8),(1000,8,9),(1000,9,6),(1000,8,3),(1000,3,4),(1000,4,5),(1000,5,9)] -ee=[("in",1),("in",2),("in",3),("in",4),("out",5)]
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
 def compile_rust_tests() -> Path | None:
     process = Popen(['cargo', 'build', '--release', '--features=binary,fail-on-warnings', '--no-default-features',
                     '--tests', '--message-format=json'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)

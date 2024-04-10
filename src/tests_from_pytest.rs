@@ -168,6 +168,7 @@ mod tests_scalar_massless_triangle {
             &[p1, p2],
             &energy_cache,
             0,
+            2.0,
         );
 
         assert_eq!(existing.len(), 0);
@@ -650,6 +651,7 @@ fn pytest_massless_scalar_box() {
         &box4_e,
         &cache,
         0,
+        57.0,
     );
 
     let edge_masses = graph
@@ -1038,6 +1040,7 @@ fn pytest_hexagon() {
         &kinematics,
         &graph.compute_onshell_energies(&empty_loop_mom, &kinematics),
         0,
+        75.,
     );
 
     assert_eq!(existing_esurface.len(), 6);
@@ -1079,6 +1082,7 @@ fn pytest_hexagon() {
         &hexagon_10_e,
         &graph.compute_onshell_energies(&empty_loop_mom, &hexagon_10_e),
         0,
+        88.,
     );
 
     assert_eq!(existing_esurfaces.len(), 10);
@@ -1168,6 +1172,7 @@ fn pytest_topology_c() {
         &kinematics,
         &graph.compute_onshell_energies(&kinematics, &kinematics),
         2,
+        18.,
     );
 
     let overlap = find_maximal_overlap(
@@ -1252,6 +1257,7 @@ fn pytest_massless_pentabox() {
         &kinematics,
         &graph.compute_onshell_energies(&kinematics, &kinematics),
         0,
+        1.0,
     );
 
     assert_eq!(existing_esurfaces.len(), 17);
@@ -1278,7 +1284,102 @@ fn pytest_massless_pentabox() {
 
 #[test]
 #[ignore]
+fn pytest_massless_3l_pentabox() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
+    let (_model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let rescaling = 1.0e0;
+    let kinematics = [
+        LorentzVector::from_args(
+            0.149500000000000E+01,
+            0.000000000000000E+00,
+            0.000000000000000E+00,
+            0.149165176901313E+01,
+        ) * rescaling,
+        LorentzVector::from_args(
+            0.150500000000000E+01,
+            0.000000000000000E+00,
+            0.000000000000000E+00,
+            -0.149165176901313E+01,
+        ) * rescaling,
+        LorentzVector::from_args(
+            -0.126041949101381e+01,
+            -0.452362952912639e+00,
+            -0.101350243653045e+01,
+            0.516563513332600e+00,
+        ) * rescaling,
+        LorentzVector::from_args(
+            -0.105098730574850e+01,
+            0.489324061520790e-01,
+            0.928212188578101e+00,
+            -0.283905035967510e+00,
+        ) * rescaling,
+    ];
+
+    let edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &kinematics,
+        &graph.compute_onshell_energies(&kinematics, &kinematics),
+        0,
+        1.0,
+    );
+
+    assert_eq!(graph.loop_momentum_basis.basis.len(), 3);
+    assert_eq!(existing_esurfaces.len(), 28);
+
+    let now = std::time::Instant::now();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurfaces,
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        &edge_masses,
+        &kinematics,
+    );
+    let _elapsed = now.elapsed();
+
+    assert_eq!(maximal_overlap.len(), 2);
+    assert_eq!(maximal_overlap[0].0.len(), 27);
+    assert_eq!(maximal_overlap[1].0.len(), 26);
+}
+
+#[test]
+#[ignore]
 fn pytest_lbl_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
