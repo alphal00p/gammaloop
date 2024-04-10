@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use log::debug;
 
-use super::esurface::{Esurface, EsurfaceCollection};
+use super::esurface::{Esurface, EsurfaceCache, EsurfaceCollection, EsurfaceId};
 
 const MAX_VERTEX_COUNT: usize = 32;
 
@@ -86,7 +86,7 @@ impl CFFTree {
         }
     }
 
-    fn insert_esurface(&mut self, node_id: usize, esurface_id: usize) -> Result<(), Report> {
+    fn insert_esurface(&mut self, node_id: usize, esurface_id: EsurfaceId) -> Result<(), Report> {
         match self.nodes[node_id] {
             CFFTreeNode::Data(ref mut tree_node_data) => {
                 tree_node_data.esurface_id = Some(esurface_id);
@@ -147,7 +147,7 @@ impl CFFTree {
     fn recursive_eval_from_node<T: FloatLike>(
         &self,
         node_id: usize,
-        esurface_cache: &[T],
+        esurface_cache: &EsurfaceCache<T>,
         node_cache: &mut Vec<Vec<Option<T>>>,
     ) -> T {
         match &self.nodes[node_id] {
@@ -187,7 +187,7 @@ impl CFFTree {
 
     fn evaluate_tree<T: FloatLike>(
         &self,
-        esurface_cache: &[T],
+        esurface_cache: &EsurfaceCache<T>,
         node_cache: &mut Vec<Vec<Option<T>>>,
     ) -> T {
         self.recursive_eval_from_node(0, esurface_cache, node_cache)
@@ -208,7 +208,7 @@ struct CFFTreeNodeData {
     graph: CFFIntermediateGraph,
     children: Vec<usize>,
     _parent: Option<usize>,
-    esurface_id: Option<usize>,
+    esurface_id: Option<EsurfaceId>,
 }
 
 impl CFFTreeNodeData {
@@ -216,7 +216,7 @@ impl CFFTreeNodeData {
         let children = self.children.clone();
         let graph = self.graph.to_serializable();
         let node_id = self.node_id;
-        let esurface_id = self.esurface_id;
+        let esurface_id = self.esurface_id.map(Into::<usize>::into);
         let parent = self._parent;
 
         SerializableCFFTreeNodeData {
@@ -242,7 +242,7 @@ impl CFFTreeNodeData {
             graph: CFFIntermediateGraph::from_serializable(graph),
             children,
             _parent: parent,
-            esurface_id,
+            esurface_id: esurface_id.map(Into::<EsurfaceId>::into),
         }
     }
 }
@@ -362,11 +362,21 @@ impl CFFExpression {
     }
 
     #[inline]
-    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
+    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> EsurfaceCache<T> {
         self.esurfaces
             .iter()
             .map(|e| e.compute_value(energy_cache))
             .collect()
+    }
+
+    pub fn unfold_tree(&self) -> Vec<Vec<EsurfaceId>> {
+        let mut res = vec![];
+
+        for tree in self.terms.iter() {
+            let bottom_nodes = tree.get_bottom_layer();
+        }
+
+        res
     }
 }
 
@@ -1319,13 +1329,19 @@ fn generate_cff_from_orientations(
                     node.graph
                         .generate_children(position_map, external_data, &orientation)?;
 
-                let option_esurface_id =
-                    cff_expression.esurfaces.iter().position(|e| e == &esurface);
+                let option_esurface_id = cff_expression
+                    .esurfaces
+                    .iter()
+                    .position(|e| e == &esurface)
+                    .map(Into::<EsurfaceId>::into);
 
                 if let Some(esurface_id) = option_esurface_id {
                     tree.insert_esurface(node_id, esurface_id)?;
                 } else {
-                    tree.insert_esurface(node_id, cff_expression.esurfaces.len())?;
+                    tree.insert_esurface(
+                        node_id,
+                        Into::<EsurfaceId>::into(cff_expression.esurfaces.len()),
+                    )?;
                     cff_expression.esurfaces.push(esurface);
                 }
 

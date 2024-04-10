@@ -1342,6 +1342,12 @@ impl Graph {
     pub fn is_edge_incoming(&self, edge: usize, vertex: usize) -> bool {
         self.edges[edge].is_incoming_to(vertex)
     }
+
+    // helper function
+    #[inline]
+    pub fn get_cff(&self) -> &CFFExpression {
+        self.derived_data.cff_expression.as_ref().unwrap()
+    }
 }
 
 #[allow(dead_code)]
