@@ -50,9 +50,33 @@ impl<E> InvolutiveMapping<E> {
         InvolutiveMapping::Identity(Some(data))
     }
 
-    pub fn dot(
+    pub fn identity_dot(edge_id: usize, source: usize, attr: Option<&GVEdgeAttrs>) -> String {
+        let mut out = "".to_string();
+        out.push_str(&format!("ext{} [shape=none, label=\"\"];\n ", edge_id));
+        if let Some(attr) = attr {
+            out.push_str(&format!("{} -- ext{} {};\n ", source, edge_id, attr));
+        } else {
+            out.push_str(&format!("{} -- ext{} ;\n ", source, edge_id));
+        }
+        out
+    }
+
+    pub fn pair_dot(source: usize, sink: usize, attr: Option<&GVEdgeAttrs>) -> String {
+        let mut out = "".to_string();
+        if let Some(attr) = attr {
+            out.push_str(&format!("  {} -- {} {};\n", source, sink, attr));
+        } else {
+            out.push_str(&format!(
+                "  {} -- {} [color=\"red:blue;0.5 \" ];\n",
+                source, sink
+            ));
+        }
+        out
+    }
+
+    pub fn default_dot(
         &self,
-        edgeid: usize,
+        edge_id: usize,
         source: Option<usize>,
         sink: Option<usize>,
         attr: Option<&GVEdgeAttrs>,
@@ -60,33 +84,10 @@ impl<E> InvolutiveMapping<E> {
         let mut out = "".to_string();
         match self {
             InvolutiveMapping::Identity(_) => {
-                out.push_str(&format!("ext{} [shape=none, label=\"\"];\n ", edgeid));
-                if let Some(attr) = attr {
-                    out.push_str(&format!(
-                        "{} -- ext{} {};\n ",
-                        source.unwrap(),
-                        edgeid,
-                        attr
-                    ));
-                } else {
-                    out.push_str(&format!("{} -- ext{} ;\n ", source.unwrap(), edgeid));
-                }
+                out.push_str(&Self::identity_dot(edge_id, source.unwrap(), attr));
             }
             InvolutiveMapping::Source((_, _)) => {
-                if let Some(attr) = attr {
-                    out.push_str(&format!(
-                        "  {} -- {} {};\n",
-                        source.unwrap(),
-                        sink.unwrap(),
-                        attr
-                    ));
-                } else {
-                    out.push_str(&format!(
-                        "  {} -- {} [color=\"red:blue;0.5 \" ];\n",
-                        source.unwrap(),
-                        sink.unwrap()
-                    ));
-                }
+                out.push_str(&Self::pair_dot(source.unwrap(), sink.unwrap(), attr));
             }
             InvolutiveMapping::Sink(_) => {}
         }
@@ -269,6 +270,10 @@ impl SubGraph {
         self.filter |= &other.filter;
     }
 
+    pub fn sym_diff_with(&mut self, other: &SubGraph) {
+        self.filter ^= &other.filter;
+    }
+
     pub fn intersection(&self, other: &SubGraph) -> SubGraph {
         let mut new = self.clone();
         new.intersect_with(other);
@@ -278,6 +283,12 @@ impl SubGraph {
     pub fn union(&self, other: &SubGraph) -> SubGraph {
         let mut new = self.clone();
         new.union_with(other);
+        new
+    }
+
+    pub fn sym_diff(&self, other: &SubGraph) -> SubGraph {
+        let mut new = self.clone();
+        new.sym_diff_with(other);
         new
     }
 
@@ -614,7 +625,7 @@ impl<E, V> NestingGraph<E, V> {
         out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
         for (i, (n, e)) in self.involution.inv.iter().enumerate() {
             out.push_str(
-                &e.dot(
+                &e.default_dot(
                     i,
                     self.nodes.get_index_of(n),
                     self.involution
@@ -705,6 +716,25 @@ impl<E, V> NestingGraph<E, V> {
         self.paton_cycle_basis(i)
     }
 
+    fn all_cycles(&self) -> Vec<NestingNode> {
+        let mut cycles = Vec::new();
+
+        let mut i = 0;
+
+        while i < self.involution.len() {
+            let cycle = self.paton_cycle_basis(i);
+            cycles.extend(cycle);
+            i = self.involution.first_internal().unwrap();
+        }
+
+        cycles
+    }
+
+    fn all_cycles_with_basis(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
+        let mut cycles = Vec::new();
+        cycles
+    }
+
     fn paton_cycle_basis(&self, start: usize) -> Vec<NestingNode> {
         let mut cycle_basis = Vec::new();
 
@@ -762,36 +792,81 @@ impl<E, V> NestingGraph<E, V> {
         cycle_basis
     }
 
-    pub fn dot(&self, n: &NestingNode) -> String {
+    pub fn dot(&self, node_as_graph: &NestingNode) -> String {
         let mut out = "graph {\n ".to_string();
         out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
 
-        for (i, (incident_node, edge)) in self.involution.inv.iter().enumerate() {
-            if *n.internal_graph.filter.get(i).unwrap() {
-                out.push_str(
-                    &edge.dot(
-                        i,
-                        self.nodes.get_index_of(incident_node),
-                        self.involution
-                            .get_connected_node_id(i)
-                            .map(|x| self.nodes.get_index_of(x).unwrap()),
-                        None,
-                    ),
-                );
-            } else {
-                out.push_str(
-                    &edge.dot(
-                        i,
-                        self.nodes.get_index_of(incident_node),
-                        self.involution
-                            .get_connected_node_id(i)
-                            .map(|x| self.nodes.get_index_of(x).unwrap()),
-                        Some(&GVEdgeAttrs {
-                            color: Some("gray".to_string()),
+        for (edge_id, (incident_node, edge)) in self.involution.inv.iter().enumerate() {
+            match &edge {
+                //Internal graphs never have unpaired edges
+                InvolutiveMapping::Identity(_) => {
+                    let attr = if *node_as_graph.internal_graph.filter.get(edge_id).unwrap() {
+                        None
+                    } else if *node_as_graph.externalhedges.get(edge_id).unwrap() {
+                        Some(GVEdgeAttrs {
+                            color: Some("gray50".to_string()),
                             label: None,
-                        }),
-                    ),
-                );
+                        })
+                    } else {
+                        Some(GVEdgeAttrs {
+                            color: Some("gray75".to_string()),
+                            label: None,
+                        })
+                    };
+                    out.push_str(&InvolutiveMapping::<()>::identity_dot(
+                        edge_id,
+                        self.nodes.get_index_of(incident_node).unwrap(),
+                        attr.as_ref(),
+                    ));
+                }
+                InvolutiveMapping::Source((_, _)) => {
+                    let attr = if *node_as_graph.internal_graph.filter.get(edge_id).unwrap() {
+                        None
+                    } else if *node_as_graph.externalhedges.get(edge_id).unwrap() {
+                        Some(GVEdgeAttrs {
+                            color: Some("gray50:gray75;0.5".to_string()),
+                            label: None,
+                        })
+                    } else if *node_as_graph
+                        .externalhedges
+                        .get(self.involution.inv(edge_id))
+                        .unwrap()
+                    {
+                        continue;
+                    } else {
+                        Some(GVEdgeAttrs {
+                            color: Some("gray75".to_string()),
+                            label: None,
+                        })
+                    };
+                    out.push_str(&InvolutiveMapping::<()>::pair_dot(
+                        self.nodes.get_index_of(incident_node).unwrap(),
+                        self.nodes
+                            .get_index_of(self.involution.get_connected_node_id(edge_id).unwrap())
+                            .unwrap(),
+                        attr.as_ref(),
+                    ));
+                }
+                InvolutiveMapping::Sink(i) => {
+                    if *node_as_graph.internal_graph.filter.get(edge_id).unwrap() {
+                        if !*node_as_graph.internal_graph.filter.get(*i).unwrap() {
+                            panic!("Internal graph has a dangling sink edge")
+                        }
+                    } else if *node_as_graph.externalhedges.get(edge_id).unwrap() {
+                        out.push_str(&InvolutiveMapping::<()>::pair_dot(
+                            self.nodes
+                                .get_index_of(
+                                    self.involution.get_connected_node_id(edge_id).unwrap(),
+                                )
+                                .unwrap(),
+                            self.nodes.get_index_of(incident_node).unwrap(),
+                            Some(&GVEdgeAttrs {
+                                color: Some("gray75:gray50;0.5".to_string()),
+                                label: None,
+                            }),
+                        ));
+                    }
+                }
             }
         }
 
