@@ -2,6 +2,8 @@ use symbolica::{printer::PrintOptions, representations::Atom};
 
 use crate::tests_from_pytest::load_amplitude_output;
 
+use super::{Involution, NestingGraph, NestingGraphBuilder};
+
 #[test]
 #[allow(unused)]
 fn lbl() {
@@ -13,10 +15,22 @@ fn lbl() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     graph.generate_uv();
+    graph.generate_loop_momentum_bases();
 
-    let uv_graph = graph.derived_data.uv.unwrap();
+    let uv_graph = graph.derived_data.uv.clone().unwrap();
 
-    println!("{}", uv_graph.0.base_dot());
+    insta::assert_snapshot!("lbl_dot", uv_graph.0.base_dot());
+
+    let lmb = &graph.derived_data.loop_momentum_bases.clone().unwrap()[0];
+
+    let cycles = uv_graph.cycle_basis_from_lmb(lmb);
+
+    insta::assert_ron_snapshot!("lbl_cycles", cycles);
+
+    // for cycle in cycles {
+    //     println!("{:?}", cycle);
+    //     println!("{}", uv_graph.0.dot(&cycle));
+    // }
 
     // if let AtomView::Mul(mul) = numerator.as_view() {
     //     let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
@@ -26,4 +40,100 @@ fn lbl() {
     //         // println!("{}", t.structure());
     //     }
     // }
+}
+
+#[test]
+fn random_involution() {
+    let inv = Involution::<(), ()>::random(10, 1);
+
+    insta::assert_ron_snapshot!(inv);
+}
+
+#[test]
+fn nine_loop() {
+    let rand_graph = NestingGraph::<(), ()>::random(19, 30, 1);
+
+    insta::assert_snapshot!("nine_loop_dot", rand_graph.base_dot());
+    insta::assert_ron_snapshot!("nine_loop", rand_graph);
+    let cycles = rand_graph.paton_cycle_basis(0);
+
+    for i in rand_graph.full_node().internal_graph.filter.iter_ones() {
+        assert_eq!(9, rand_graph.paton_cycle_basis(i).len());
+    }
+
+    let cycle_dots: Vec<String> = cycles.iter().map(|c| rand_graph.dot(c)).collect();
+
+    insta::assert_toml_snapshot!("nine_loop_cycle_dots", cycle_dots);
+}
+
+#[test]
+fn threeloop() {
+    let mut builder: NestingGraphBuilder<(), ()> = NestingGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+
+    builder.add_edge(a, b, ());
+    builder.add_edge(b, a, ());
+    builder.add_edge(a, b, ());
+
+    builder.add_edge(b, c, ());
+    builder.add_edge(c, d, ());
+    builder.add_edge(d, a, ());
+
+    let graph = builder.build();
+
+    insta::assert_snapshot!("three_loop_dot", graph.base_dot());
+    insta::assert_ron_snapshot!("three_loop", graph);
+
+    for i in 0..graph.n_hedges() {
+        assert_eq!(3, graph.paton_cycle_basis(i).len());
+    }
+
+    let cycles = graph.paton_cycle_basis(1);
+
+    insta::assert_ron_snapshot!("three_loop_cycles", cycles);
+}
+
+#[test]
+fn hairythreeloop() {
+    let mut builder: NestingGraphBuilder<(), ()> = NestingGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+
+    builder.add_edge(a, b, ());
+    builder.add_edge(b, a, ());
+    builder.add_edge(a, b, ());
+    builder.add_external_edge(a, ());
+    builder.add_external_edge(b, ());
+    builder.add_external_edge(b, ());
+
+    builder.add_edge(b, c, ());
+    builder.add_edge(c, d, ());
+    builder.add_edge(d, a, ());
+
+    assert_eq!(builder.involution.len(), 15);
+    let graph = builder.build();
+
+    insta::assert_snapshot!("hairy_three_loop_dot", graph.base_dot());
+    insta::assert_ron_snapshot!("hairy_three_loop", graph);
+    insta::assert_snapshot!(
+        "hairy_three_loop_dot_internal",
+        graph.dot(&graph.full_node())
+    );
+
+    for i in graph.full_node().internal_graph.filter.iter_ones() {
+        assert_eq!(3, graph.paton_cycle_basis(i).len());
+    }
+
+    let cycles = graph.paton_cycle_basis(1);
+
+    // for cycle in &cycles {
+    //     println!("{}", graph.dot(cycle));
+    // }
+
+    insta::assert_ron_snapshot!("hairy_three_loop_cycles", cycles);
 }

@@ -21,6 +21,7 @@ lto = "fat"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 
 [[bench]]
 name = "gamma_net"
@@ -127,3 +128,7 @@ default = ["python_api"]
 python_api = ["pyo3", "extension-module"]
 binary = []
 fail-on-warnings = []
+
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3

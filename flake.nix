@@ -150,6 +150,7 @@
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
           # pkgs.ripgrep
+          cargo-insta
           openssl
           gnum4
           gmp.dev

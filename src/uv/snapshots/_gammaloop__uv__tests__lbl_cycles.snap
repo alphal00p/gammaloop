@@ -1,0 +1,32 @@
+---
+source: src/uv/tests.rs
+expression: cycles
+---
+[
+  NestingNode(
+    internal_graph: SubGraph(
+      filter: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 12,
+        data: [
+          4080,
+        ],
+      ),
+    ),
+    externalhedges: BitSeq(
+      order: "bitvec::order::Lsb0",
+      head: BitIdx(
+        width: 64,
+        index: 0,
+      ),
+      bits: 12,
+      data: [
+        15,
+      ],
+    ),
+  ),
+]

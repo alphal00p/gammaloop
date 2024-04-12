@@ -1,0 +1,428 @@
+---
+source: src/uv/tests.rs
+expression: graph
+---
+NestingGraph(
+  nodes: {
+    NestingNode(
+      internal_graph: SubGraph(
+        filter: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            0,
+          ],
+        ),
+      ),
+      externalhedges: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 12,
+        data: [
+          2073,
+        ],
+      ),
+    ): (),
+    NestingNode(
+      internal_graph: SubGraph(
+        filter: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            0,
+          ],
+        ),
+      ),
+      externalhedges: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 12,
+        data: [
+          102,
+        ],
+      ),
+    ): (),
+    NestingNode(
+      internal_graph: SubGraph(
+        filter: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            0,
+          ],
+        ),
+      ),
+      externalhedges: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 12,
+        data: [
+          384,
+        ],
+      ),
+    ): (),
+    NestingNode(
+      internal_graph: SubGraph(
+        filter: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            0,
+          ],
+        ),
+      ),
+      externalhedges: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 12,
+        data: [
+          1536,
+        ],
+      ),
+    ): (),
+  },
+  involution: Involution(
+    inv: [
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            2073,
+          ],
+        ),
+      ), Source((Some(()), 1))),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            102,
+          ],
+        ),
+      ), Sink(0)),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            102,
+          ],
+        ),
+      ), Source((Some(()), 3))),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            2073,
+          ],
+        ),
+      ), Sink(2)),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            2073,
+          ],
+        ),
+      ), Source((Some(()), 5))),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            102,
+          ],
+        ),
+      ), Sink(4)),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            102,
+          ],
+        ),
+      ), Source((Some(()), 7))),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            384,
+          ],
+        ),
+      ), Sink(6)),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            384,
+          ],
+        ),
+      ), Source((Some(()), 9))),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            1536,
+          ],
+        ),
+      ), Sink(8)),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            1536,
+          ],
+        ),
+      ), Source((Some(()), 11))),
+      (NestingNode(
+        internal_graph: SubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 12,
+            data: [
+              0,
+            ],
+          ),
+        ),
+        externalhedges: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 12,
+          data: [
+            2073,
+          ],
+        ),
+      ), Sink(10)),
+    ],
+  ),
+)

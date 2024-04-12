@@ -1,0 +1,19 @@
+---
+source: src/uv/tests.rs
+expression: graph.dot(&graph.full_node())
+---
+graph {
+   node [shape=circle,height=0.1,label=""];  overlap="scale";
+   0 -- 1 [color="red:blue;0.5 " ];
+  1 -- 0 [color="red:blue;0.5 " ];
+  0 -- 1 [color="red:blue;0.5 " ];
+ext6 [shape=none, label=""];
+ 0 -- ext6 [color="gray",];
+ ext7 [shape=none, label=""];
+ 1 -- ext7 [color="gray",];
+ ext8 [shape=none, label=""];
+ 1 -- ext8 [color="gray",];
+   1 -- 2 [color="red:blue;0.5 " ];
+  2 -- 3 [color="red:blue;0.5 " ];
+  3 -- 0 [color="red:blue;0.5 " ];
+}

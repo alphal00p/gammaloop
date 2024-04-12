@@ -1,173 +1,25 @@
-use std::{hash::Hash, path::Display};
+use std::hash::Hash;
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use indexmap::IndexMap;
-use num::traits::{ops::inv, Inv};
+use rand::{Rng, SeedableRng};
+use rand_xoshiro::Xoroshiro64Star;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    graph::{Edge, EdgeType, Graph, Vertex},
-    StabilityLevelSetting,
+    cross_section::SuperGraph,
+    graph::{Edge, EdgeType, Graph, LoopMomentumBasis, Vertex},
 };
 
 use bitvec::prelude::*;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-struct NodeIndex(usize);
+pub struct NodeIndex(usize);
 
 impl std::fmt::Display for NodeIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-struct LeafIndex(usize);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ForestNode<N, E> {
-    parent: Option<NodeIndex>,
-    label: N,
-    content: NodeContent<E>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-enum NodeContent<L> {
-    Internal(Vec<NodeIndex>),
-    Leaves(Vec<L>),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Forest<N, E = LeafIndex> {
-    nodes: AHashMap<NodeIndex, ForestNode<N, E>>,
-    base_nodes: usize,
-    base_leaves: usize,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-enum ForestError {
-    NodeNotFound,
-    NodeIsInternal,
-}
-
-impl<N, E> Forest<N, E> {
-    fn new() -> Self {
-        Forest {
-            nodes: AHashMap::new(),
-            base_nodes: 0,
-            base_leaves: 0,
-        }
-    }
-
-    // Add a new leaf node to the forest
-    fn add_leaf_node(&mut self, mut leaf_data: Vec<E>, node_data: N) -> NodeIndex {
-        let data_index = self.base_leaves;
-
-        let new_node = ForestNode {
-            parent: None,
-            label: node_data,
-            content: NodeContent::Leaves(leaf_data),
-        };
-        let new_node_index = Self::leaf_node_index_from_usize(self.base_nodes);
-        self.nodes.insert(new_node_index, new_node);
-        self.base_nodes += 1;
-        new_node_index
-    }
-
-    pub fn leaf_node_index_from_usize(i: usize) -> NodeIndex {
-        NodeIndex(1 << i)
-    }
-
-    fn insert_leaf_at(&mut self, node_index: usize, leaf_data: E) -> Result<(), ForestError> {
-        let node_id = Self::leaf_node_index_from_usize(node_index);
-        if let Some(v) = self.nodes.get_mut(&node_id) {
-            match &mut v.content {
-                NodeContent::Leaves(leaf_index) => leaf_index.push(leaf_data),
-                NodeContent::Internal(_) => {
-                    return Err(ForestError::NodeIsInternal);
-                }
-            }
-        } else {
-            return Err(ForestError::NodeNotFound);
-        }
-        Ok(())
-    }
-
-    fn add_leaf_to_node(&mut self, node_index: NodeIndex, leaf_data: E) -> Result<(), ForestError> {
-        if let Some(node) = self.nodes.get_mut(&node_index) {
-            match &mut node.content {
-                NodeContent::Leaves(leaf_index) => {
-                    leaf_index.push(leaf_data);
-                    Ok(())
-                }
-                NodeContent::Internal(_) => Err(ForestError::NodeIsInternal),
-            }
-        } else {
-            Err(ForestError::NodeNotFound)
-        }
-    }
-
-    fn collect_leaf_data(&self, node_index: NodeIndex) -> Vec<&E> {
-        let mut leaf_data = Vec::new();
-        self.dfs_collect_leaf_data(node_index, &mut leaf_data);
-        leaf_data
-    }
-
-    // Helper for recursively collecting leaf indices.
-    fn dfs_collect_leaf_data<'a>(&'a self, node_index: NodeIndex, leaf_data: &mut Vec<&'a E>) {
-        match &self.nodes[&node_index].content {
-            NodeContent::Leaves(leaf_index) => leaf_data.extend(leaf_index),
-            NodeContent::Internal(children) => {
-                for &child_index in children {
-                    self.dfs_collect_leaf_data(child_index, leaf_data);
-                }
-            }
-        }
-    }
-
-    // Access all leaves' data starting from a specific node.
-    pub fn get_leaves_from_node(&self, node_index: NodeIndex) -> Vec<&E> {
-        let leaf_indices = self.collect_leaf_data(node_index);
-        leaf_indices
-    }
-
-    // Generalized union function for n-ary unions, works for any node indices.
-    pub fn union(&mut self, node_indices: Vec<NodeIndex>, node_data: N) -> NodeIndex {
-        let new_node = ForestNode {
-            label: node_data,
-            parent: None,
-            content: NodeContent::Internal(node_indices.clone()),
-        };
-
-        let mut new_node_id = 0;
-        for n in &node_indices {
-            new_node_id += n.0;
-        }
-
-        let new_node_id = NodeIndex(new_node_id);
-
-        self.nodes.insert(new_node_id, new_node);
-
-        // Update parent references for each child node.
-        for node_index in node_indices {
-            if let Some(node) = self.nodes.get_mut(&node_index) {
-                node.parent = Some(new_node_id);
-            }
-        }
-
-        new_node_id
-    }
-
-    fn node_depth(&self, node_index: NodeIndex, current_depth: usize) -> usize {
-        if let Some(node) = self.nodes.get(&node_index) {
-            if let Some(parent_index) = node.parent {
-                return self.node_depth(parent_index, current_depth + 1);
-            }
-        }
-        current_depth
-    }
-
-    // Other methods as previously defined...
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -178,6 +30,14 @@ enum InvolutiveMapping<E> {
 }
 
 impl<E> InvolutiveMapping<E> {
+    pub fn is_identity(&self) -> bool {
+        matches!(self, InvolutiveMapping::Identity(_))
+    }
+
+    pub fn is_internal(&self) -> bool {
+        !matches!(self, InvolutiveMapping::Identity(_))
+    }
+
     pub fn make_source(&mut self, sink: usize) -> Option<InvolutiveMapping<E>> {
         let data = match self {
             InvolutiveMapping::Identity(d) => d.take(),
@@ -189,6 +49,49 @@ impl<E> InvolutiveMapping<E> {
     pub fn new_identity(data: E) -> Self {
         InvolutiveMapping::Identity(Some(data))
     }
+
+    pub fn dot(
+        &self,
+        edgeid: usize,
+        source: Option<usize>,
+        sink: Option<usize>,
+        attr: Option<&GVEdgeAttrs>,
+    ) -> String {
+        let mut out = "".to_string();
+        match self {
+            InvolutiveMapping::Identity(_) => {
+                out.push_str(&format!("ext{} [shape=none, label=\"\"];\n ", edgeid));
+                if let Some(attr) = attr {
+                    out.push_str(&format!(
+                        "{} -- ext{} {};\n ",
+                        source.unwrap(),
+                        edgeid,
+                        attr
+                    ));
+                } else {
+                    out.push_str(&format!("{} -- ext{} ;\n ", source.unwrap(), edgeid));
+                }
+            }
+            InvolutiveMapping::Source((_, _)) => {
+                if let Some(attr) = attr {
+                    out.push_str(&format!(
+                        "  {} -- {} {};\n",
+                        source.unwrap(),
+                        sink.unwrap(),
+                        attr
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        "  {} -- {} [color=\"red:blue;0.5 \" ];\n",
+                        source.unwrap(),
+                        sink.unwrap()
+                    ));
+                }
+            }
+            InvolutiveMapping::Sink(_) => {}
+        }
+        out
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -196,15 +99,43 @@ struct Involution<N, E> {
     inv: Vec<(N, InvolutiveMapping<E>)>,
 }
 
+#[allow(dead_code)]
 impl<N, E> Involution<N, E> {
     fn new() -> Self {
         Involution { inv: Vec::new() }
+    }
+
+    fn first_internal(&self) -> Option<usize> {
+        self.inv
+            .iter()
+            .position(|(_, e)| !matches!(e, InvolutiveMapping::Identity(_)))
+    }
+
+    fn random(len: usize, seed: u64) -> Involution<Option<N>, ()> {
+        let mut rng = Xoroshiro64Star::seed_from_u64(seed);
+
+        let mut inv = Involution::new();
+
+        for _ in 0..len {
+            let r = rng.gen_bool(0.1);
+            if r {
+                inv.add_identity((), None);
+            } else {
+                inv.add_pair((), None, None);
+            }
+        }
+
+        inv
     }
 
     fn add_identity(&mut self, data: E, id: N) -> usize {
         let index = self.inv.len();
         self.inv.push((id, InvolutiveMapping::new_identity(data)));
         index
+    }
+
+    fn set_id(&mut self, index: usize, id: N) {
+        self.inv[index].0 = id;
     }
 
     fn get_data(&self, index: usize) -> &E {
@@ -215,12 +146,23 @@ impl<N, E> Involution<N, E> {
         }
     }
 
+    pub fn find_from_data(&self, data: &E) -> Option<usize>
+    where
+        E: PartialEq,
+    {
+        (0..self.inv.len()).find(|&i| self.get_data(i) == data)
+    }
+
     pub fn get_node_id(&self, index: usize) -> &N {
         &self.inv[index].0
     }
 
-    pub fn get_connected_node_id(&self, index: usize) -> &N {
-        &self.inv[self.inv(index)].0
+    pub fn get_connected_node_id(&self, index: usize) -> Option<&N> {
+        match &self.inv[index].1 {
+            InvolutiveMapping::Source((_, i)) => Some(&self.inv[*i].0),
+            InvolutiveMapping::Sink(i) => Some(&self.inv[*i].0),
+            InvolutiveMapping::Identity(_) => None,
+        }
     }
     fn connect_to_identity(&mut self, source: usize, id: N) -> usize {
         let sink = self.inv.len();
@@ -262,30 +204,170 @@ impl<N, E> Involution<N, E> {
             InvolutiveMapping::Sink(i) => *i,
         }
     }
+
+    pub fn is_identity(&self, index: usize) -> bool {
+        matches!(&self.inv[index].1, InvolutiveMapping::Identity(_))
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct NestingGraph<E, V> {
+struct GVEdgeAttrs {
+    label: Option<String>,
+    color: Option<String>,
+}
+
+impl Default for GVEdgeAttrs {
+    fn default() -> Self {
+        GVEdgeAttrs {
+            label: None,
+            color: None,
+        }
+    }
+}
+
+impl std::fmt::Display for GVEdgeAttrs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = "[".to_string();
+        if let Some(label) = &self.label {
+            out.push_str(&format!("label=\"{}\",", label));
+        }
+        if let Some(color) = &self.color {
+            out.push_str(&format!("color=\"{}\",", color));
+        }
+        out.push(']');
+        write!(f, "{}", out)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NestingGraph<E, V> {
     nodes: IndexMap<NestingNode, V>, // Forest of nodes, that contain half-edges, with data E
     involution: Involution<NestingNode, E>, // Involution of half-edges
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-struct NestingNode {
-    internalhedges: BitVec,
-    externalhedges: BitVec,
+pub struct SubGraph {
+    filter: BitVec,
+}
+
+impl From<BitVec> for SubGraph {
+    fn from(filter: BitVec) -> Self {
+        SubGraph { filter }
+    }
+}
+
+impl SubGraph {
+    pub fn is_empty(&self) -> bool {
+        self.filter.count_ones() == 0
+    }
+
+    pub fn intersect_with(&mut self, other: &SubGraph) {
+        self.filter &= &other.filter;
+    }
+
+    pub fn union_with(&mut self, other: &SubGraph) {
+        self.filter |= &other.filter;
+    }
+
+    pub fn intersection(&self, other: &SubGraph) -> SubGraph {
+        let mut new = self.clone();
+        new.intersect_with(other);
+        new
+    }
+
+    pub fn union(&self, other: &SubGraph) -> SubGraph {
+        let mut new = self.clone();
+        new.union_with(other);
+        new
+    }
+
+    pub fn empty_intersection(&self, other: &SubGraph) -> bool {
+        (self.filter.clone() & &other.filter).count_ones() == 0
+    }
+
+    pub fn empty_union(&self, other: &SubGraph) -> bool {
+        (self.filter.clone() | &other.filter).count_ones() == 0
+    }
+
+    pub fn complement(&self) -> SubGraph {
+        SubGraph {
+            filter: !self.filter.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct NestingNode {
+    internal_graph: SubGraph,
+    externalhedges: BitVec, // essentially all hedges that are not in the internal graph, but are connected to it
 }
 
 impl NestingNode {
     pub fn new(len: usize) -> Self {
         NestingNode {
-            internalhedges: bitvec![usize, Lsb0; 0; len],
+            internal_graph: bitvec![usize, Lsb0; 0; len].into(),
             externalhedges: bitvec![usize, Lsb0; 0; len],
         }
     }
 
+    pub fn union_with(&mut self, other: &NestingNode) {
+        self.internal_graph.filter |= &other.internal_graph.filter;
+        self.externalhedges |= &other.externalhedges;
+        self.externalhedges &= !self.internal_graph.filter.clone();
+    }
+
+    pub fn intersect_with(&mut self, other: &NestingNode) {
+        self.internal_graph.filter &= &other.internal_graph.filter;
+        self.externalhedges &= &other.externalhedges;
+    }
+
+    #[must_use]
+    pub fn intersection(&self, other: &NestingNode) -> NestingNode {
+        let mut new = self.clone();
+        new.intersect_with(other);
+        new
+    }
+
+    #[must_use]
+    pub fn union(&self, other: &NestingNode) -> NestingNode {
+        let mut new = self.clone();
+        new.union_with(other);
+        new
+    }
+
+    pub fn empty_intersection(&self, other: &NestingNode) -> bool {
+        let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
+
+        let externals = self.externalhedges.clone() & &other.externalhedges;
+
+        internals.count_ones() == 0 && externals.count_ones() == 0
+    }
+
+    pub fn node_from_pos(pos: &[usize], len: usize) -> NestingNode {
+        NestingNode {
+            externalhedges: NestingNode::filter_from_pos(pos, len),
+            internal_graph: bitvec![usize, Lsb0; 0; len].into(),
+        }
+    }
+
+    pub fn filter_from_pos(pos: &[usize], len: usize) -> BitVec {
+        let mut filter = bitvec![usize, Lsb0; 0; len];
+
+        for &i in pos {
+            filter.set(i, true);
+        }
+
+        filter
+    }
+
+    pub fn internal_graph_union(&self, other: &NestingNode) -> SubGraph {
+        SubGraph {
+            filter: self.internal_graph.filter.clone() | &other.internal_graph.filter,
+        }
+    }
+
     pub fn from_builder<V>(builder: &NestingNodeBuilder<V>, len: usize) -> Self {
-        let internalhedges = bitvec![usize, Lsb0; 0; len];
+        let internal_graph = bitvec![usize, Lsb0; 0; len].into();
         let mut externalhedges = bitvec![usize, Lsb0; 0; len];
 
         for hedge in &builder.hedges {
@@ -294,27 +376,27 @@ impl NestingNode {
         }
 
         NestingNode {
-            internalhedges,
+            internal_graph,
             externalhedges,
         }
     }
 
     pub fn is_node(&self) -> bool {
-        self.internalhedges.len() == 0
+        self.internal_graph.is_empty()
     }
 
     pub fn is_subgraph(&self) -> bool {
-        self.internalhedges.len() > 0
+        !self.is_node()
     }
 }
 
 #[derive(Clone, Debug)]
-struct NestingNodeBuilder<V> {
+pub struct NestingNodeBuilder<V> {
     data: V,
     hedges: Vec<usize>,
 }
 
-struct NestingGraphBuilder<E, V> {
+pub struct NestingGraphBuilder<E, V> {
     nodes: Vec<NestingNodeBuilder<V>>,
     involution: Involution<NodeIndex, E>,
 }
@@ -325,6 +407,10 @@ impl<E, V> NestingGraphBuilder<E, V> {
             nodes: Vec::new(),
             involution: Involution::new(),
         }
+    }
+
+    pub fn build(self) -> NestingGraph<E, V> {
+        self.into()
     }
 
     pub fn add_node(&mut self, data: V) -> NodeIndex {
@@ -346,6 +432,12 @@ impl<E, V> NestingGraphBuilder<E, V> {
     pub fn add_external_edge(&mut self, source: NodeIndex, data: E) {
         let id = self.involution.add_identity(data, source);
         self.nodes[source.0].hedges.push(id);
+    }
+}
+
+impl<E, V> Default for NestingGraphBuilder<E, V> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -393,42 +485,363 @@ impl<E, V> NestingGraph<E, V> {
     //     self.node_out_edges(node_index).len()
     // }
 
-    pub fn base_dot(&self) -> String {
-        let mut out = "graph {".to_string();
-        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";");
-        for (i, (n, e)) in self.involution.inv.iter().enumerate() {
-            match e {
-                InvolutiveMapping::Identity(_) => {
-                    out.push_str(&format!("ext{} [shape=none, label=\"\"];", i));
-                    out.push_str(&format!(
-                        "\n {} -- ext{};",
-                        self.nodes.get_index_of(n).unwrap(),
-                        i
-                    ));
-                }
-                InvolutiveMapping::Source((_, _)) => {
-                    out.push_str(&format!(
-                        "  {} -- {};\n",
-                        self.nodes.get_index_of(n).unwrap(),
-                        self.nodes
-                            .get_index_of(self.involution.get_connected_node_id(i))
-                            .unwrap()
-                    ));
-                }
-                InvolutiveMapping::Sink(_) => {}
+    pub fn n_hedges(&self) -> usize {
+        self.involution.len()
+    }
+
+    pub fn n_nodes(&self) -> usize {
+        self.nodes.len()
+    }
+
+    pub fn n_externals(&self) -> usize {
+        self.involution
+            .inv
+            .iter()
+            .filter(|(_, e)| e.is_identity())
+            .count()
+    }
+
+    pub fn n_internals(&self) -> usize {
+        self.involution
+            .inv
+            .iter()
+            .filter(|(_, e)| e.is_internal())
+            .count()
+            / 2
+    }
+
+    pub fn n_base_nodes(&self) -> usize {
+        self.nodes.iter().filter(|(n, _)| n.is_node()).count()
+    }
+
+    pub fn random(nodes: usize, edges: usize, seed: u64) -> NestingGraph<(), ()> {
+        let mut inv: Involution<Option<NestingNode>, ()> =
+            Involution::<NestingNode, ()>::random(edges, seed);
+
+        let mut rng = Xoroshiro64Star::seed_from_u64(seed);
+
+        let mut externals = Vec::new();
+        let mut sources = Vec::new();
+        let mut sinks = Vec::new();
+
+        for (i, e) in inv.inv.iter().enumerate() {
+            let nodeid = NestingNode::node_from_pos(&[i], inv.inv.len());
+            match e.1 {
+                InvolutiveMapping::Identity(_) => externals.push(nodeid),
+                InvolutiveMapping::Source((_, _)) => sources.push(nodeid),
+                InvolutiveMapping::Sink(_) => sinks.push(nodeid),
             }
+        }
+
+        while !externals.is_empty() {
+            if rng.gen_bool(0.5) {
+                let source_i = rng.gen_range(0..sources.len());
+
+                sources[source_i].union_with(&externals.pop().unwrap());
+            } else {
+                let sink_i = rng.gen_range(0..sinks.len());
+
+                sinks[sink_i].union_with(&externals.pop().unwrap());
+            }
+        }
+
+        let mut lengthone = false;
+
+        while sources.len() + sinks.len() > nodes {
+            if rng.gen_bool(0.5) {
+                if sources.len() <= 1 {
+                    if lengthone {
+                        break;
+                    }
+                    lengthone = true;
+                    continue;
+                }
+
+                let idx1 = rng.gen_range(0..sources.len());
+                let idx2 = rng.gen_range(0..sources.len() - 1);
+
+                let n_i = sources.swap_remove(idx1);
+                sources[idx2].union_with(&n_i);
+            } else {
+                if sinks.len() <= 1 {
+                    if lengthone {
+                        break;
+                    }
+                    lengthone = true;
+                    continue;
+                }
+                let idx1 = rng.gen_range(0..sinks.len());
+                let idx2 = rng.gen_range(0..sinks.len() - 1);
+                let n_i = sinks.swap_remove(idx1);
+                sinks[idx2].union_with(&n_i);
+            }
+        }
+
+        for sink in &sinks {
+            for i in sink.externalhedges.iter_ones() {
+                inv.set_id(i, Some(sink.clone()));
+            }
+        }
+
+        for source in &sources {
+            for i in source.externalhedges.iter_ones() {
+                inv.set_id(i, Some(source.clone()));
+            }
+        }
+
+        let new_inv = Involution {
+            inv: inv.inv.into_iter().map(|(n, e)| (n.unwrap(), e)).collect(),
+        };
+
+        let mut nodes = IndexMap::new();
+
+        for n in sources {
+            nodes.insert(n.clone(), ());
+        }
+
+        for n in sinks {
+            nodes.insert(n.clone(), ());
+        }
+
+        NestingGraph {
+            nodes,
+            involution: new_inv,
+        }
+    }
+
+    pub fn base_dot(&self) -> String {
+        let mut out = "graph {\n ".to_string();
+        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
+        for (i, (n, e)) in self.involution.inv.iter().enumerate() {
+            out.push_str(
+                &e.dot(
+                    i,
+                    self.nodes.get_index_of(n),
+                    self.involution
+                        .get_connected_node_id(i)
+                        .map(|x| self.nodes.get_index_of(x).unwrap()),
+                    None,
+                ),
+            );
         }
         out += "}";
         out
     }
+
+    fn nesting_node_from_subgraph(&self, internal_graph: SubGraph) -> NestingNode {
+        let mut externalhedges = bitvec![usize, Lsb0; 0; self.involution.len()];
+
+        for i in internal_graph.filter.iter_ones() {
+            externalhedges |= &self.involution.inv[i].0.externalhedges;
+        }
+
+        NestingNode {
+            externalhedges: !(!externalhedges | &internal_graph.filter),
+            internal_graph,
+        }
+    }
+
+    fn nesting_node_fix(&self, node: &mut NestingNode) {
+        let mut externalhedges = bitvec![usize, Lsb0; 0; self.involution.len()];
+
+        for i in node.internal_graph.filter.iter_ones() {
+            externalhedges |= &self.involution.inv[i].0.externalhedges;
+        }
+
+        node.externalhedges = !(!externalhedges | &node.internal_graph.filter);
+    }
+
+    fn paired_filter_from_pos(&self, pos: &[usize]) -> BitVec {
+        let mut filter = bitvec![usize, Lsb0; 0; self.involution.len()];
+
+        for &i in pos {
+            filter.set(i, true);
+            filter.set(self.involution.inv(i), true);
+        }
+
+        filter
+    }
+
+    fn filter_from_pos(&self, pos: &[usize]) -> BitVec {
+        NestingNode::filter_from_pos(pos, self.involution.len())
+    }
+
+    fn nesting_node_from_pos(&self, pos: &[usize]) -> NestingNode {
+        self.nesting_node_from_subgraph(SubGraph::from(self.filter_from_pos(pos)))
+    }
+
+    fn remove_externals(&self, subgraph: &mut NestingNode) {
+        let externals = self.external_filter();
+
+        subgraph.internal_graph.filter &= !externals;
+    }
+
+    fn external_filter(&self) -> BitVec {
+        let mut filter = bitvec![usize, Lsb0; 0; self.involution.len()];
+
+        for (i, (_, edge)) in self.involution.inv.iter().enumerate() {
+            if let InvolutiveMapping::Identity(_) = edge {
+                filter.set(i, true);
+            }
+        }
+
+        filter
+    }
+
+    fn full_filter(&self) -> BitVec {
+        bitvec![usize, Lsb0; 1; self.involution.len()]
+    }
+
+    fn full_node(&self) -> NestingNode {
+        NestingNode {
+            internal_graph: (self.full_filter() & !self.external_filter()).into(),
+            externalhedges: self.external_filter(),
+        }
+    }
+
+    fn cycle_basis(&self) -> Vec<NestingNode> {
+        let i = self.involution.first_internal().unwrap();
+
+        self.paton_cycle_basis(i)
+    }
+
+    fn paton_cycle_basis(&self, start: usize) -> Vec<NestingNode> {
+        let mut cycle_basis = Vec::new();
+
+        let n = self.involution.get_node_id(start);
+
+        let mut tree: SubGraph = n.clone().externalhedges.into();
+
+        let mut left: SubGraph = (self.full_filter() & !self.external_filter()).into();
+
+        loop {
+            let z = tree
+                .filter
+                .iter()
+                .enumerate()
+                .find(|(i, x)| *x.as_ref() & left.filter[*i])
+                .map(|(i, _)| i);
+
+            if let Some(z) = z {
+                left.filter.set(z, false); // has been visited
+                left.filter.set(self.involution.inv(z), false);
+
+                let w: SubGraph = self
+                    .involution
+                    .get_connected_node_id(z)
+                    .unwrap()
+                    .externalhedges
+                    .clone()
+                    .into();
+
+                if w.empty_intersection(&tree) {
+                    // w is not yet in the tree
+                    tree.union_with(&w);
+                } else {
+                    let mut cycle = left.complement();
+                    cycle.intersect_with(&tree);
+                    let mut cycle = self.nesting_node_from_subgraph(cycle);
+                    cycle.internal_graph.filter.set(z, true);
+                    cycle
+                        .internal_graph
+                        .filter
+                        .set(self.involution.inv(z), true);
+
+                    self.cut_branches(&mut cycle);
+
+                    cycle_basis.push(cycle);
+
+                    tree.filter.set(self.involution.inv(z), false);
+                    tree.filter.set(z, false);
+                }
+            } else {
+                break;
+            }
+        }
+
+        cycle_basis
+    }
+
+    pub fn dot(&self, n: &NestingNode) -> String {
+        let mut out = "graph {\n ".to_string();
+        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
+
+        for (i, (incident_node, edge)) in self.involution.inv.iter().enumerate() {
+            if *n.internal_graph.filter.get(i).unwrap() {
+                out.push_str(
+                    &edge.dot(
+                        i,
+                        self.nodes.get_index_of(incident_node),
+                        self.involution
+                            .get_connected_node_id(i)
+                            .map(|x| self.nodes.get_index_of(x).unwrap()),
+                        None,
+                    ),
+                );
+            } else {
+                out.push_str(
+                    &edge.dot(
+                        i,
+                        self.nodes.get_index_of(incident_node),
+                        self.involution
+                            .get_connected_node_id(i)
+                            .map(|x| self.nodes.get_index_of(x).unwrap()),
+                        Some(&GVEdgeAttrs {
+                            color: Some("gray".to_string()),
+                            label: None,
+                        }),
+                    ),
+                );
+            }
+        }
+
+        out += "}";
+        out
+    }
+
+    fn cut_branches(&self, subgraph: &mut NestingNode) {
+        let nodes = AHashSet::<&NestingNode>::from_iter(
+            subgraph
+                .internal_graph
+                .filter
+                .iter_ones()
+                .map(|i| self.involution.get_node_id(i)),
+        );
+        self.remove_externals(subgraph);
+
+        let mut has_branch = true;
+        while has_branch {
+            has_branch = false;
+
+            for n in &nodes {
+                let int = n.externalhedges.clone() & &subgraph.internal_graph.filter;
+
+                if int.count_ones() == 1 {
+                    subgraph
+                        .internal_graph
+                        .filter
+                        .set(int.first_one().unwrap(), false);
+                    subgraph
+                        .internal_graph
+                        .filter
+                        .set(self.involution.inv(int.first_one().unwrap()), false);
+                    has_branch = true;
+                }
+            }
+        }
+
+        self.nesting_node_fix(subgraph);
+    }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct UVEdge {}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+struct UVEdge {
+    og_edge: usize,
+}
 
 impl UVEdge {
-    pub fn from_edge(edge: &Edge) -> Self {
-        UVEdge {}
+    pub fn from_edge(edge: &Edge, id: usize) -> Self {
+        UVEdge { og_edge: id }
     }
 }
 
@@ -444,6 +857,7 @@ impl UVNode {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UVGraph(NestingGraph<UVEdge, UVNode>);
 
+#[allow(dead_code)]
 impl UVGraph {
     pub fn from_graph(graph: &Graph) -> Self {
         let mut uv_graph = NestingGraphBuilder::new();
@@ -452,7 +866,7 @@ impl UVGraph {
             uv_graph.add_node(UVNode::from_vertex(n));
         }
 
-        for edge in &graph.edges {
+        for (i, edge) in graph.edges.iter().enumerate() {
             let ves = edge.vertices;
 
             let sink = NodeIndex(ves[1]);
@@ -460,18 +874,57 @@ impl UVGraph {
 
             match edge.edge_type {
                 EdgeType::Virtual => {
-                    uv_graph.add_edge(source, sink, UVEdge::from_edge(edge));
+                    uv_graph.add_edge(source, sink, UVEdge::from_edge(edge, i));
                 }
                 EdgeType::Outgoing => {
-                    uv_graph.add_external_edge(source, UVEdge::from_edge(edge));
+                    uv_graph.add_external_edge(source, UVEdge::from_edge(edge, i));
                 }
                 EdgeType::Incoming => {
-                    uv_graph.add_external_edge(sink, UVEdge::from_edge(edge));
+                    uv_graph.add_external_edge(sink, UVEdge::from_edge(edge, i));
                 }
             }
         }
 
         UVGraph(uv_graph.into())
+    }
+
+    pub fn half_edge_id(&self, g: &Graph, id: usize) -> usize {
+        self.0
+            .involution
+            .find_from_data(&UVEdge::from_edge(&g.edges[id], id))
+            .unwrap()
+    }
+
+    pub fn node_id(&self, g: &Graph, id: usize) -> NestingNode {
+        let e_id = g.vertices[id].edges.first().unwrap();
+        self.0
+            .involution
+            .get_node_id(self.half_edge_id(g, *e_id))
+            .clone()
+    }
+
+    pub fn cycle_basis_from_lmb(&self, lmb: &LoopMomentumBasis) -> Vec<NestingNode> {
+        let mut cycle_basis = Vec::new();
+        let cut_edges = self.0.paired_filter_from_pos(&lmb.basis);
+
+        for v in lmb.basis.iter() {
+            let loop_edge = self.0.paired_filter_from_pos(&[*v]);
+
+            let mut hairy_loop = self
+                .0
+                .nesting_node_from_subgraph(SubGraph::from(!cut_edges.clone() | &loop_edge));
+
+            self.0.cut_branches(&mut hairy_loop);
+            cycle_basis.push(hairy_loop);
+        }
+        cycle_basis
+    }
+
+    fn spanning_forest_from_lmb(&self, lmb: LoopMomentumBasis) -> NestingNode {
+        let cutting_edges = self.0.paired_filter_from_pos(&lmb.basis);
+
+        self.0
+            .nesting_node_from_subgraph(SubGraph::from(!cutting_edges))
     }
 }
 
