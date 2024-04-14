@@ -1,8 +1,10 @@
-use std::hash::Hash;
+use std::{hash::Hash, ops::Sub};
 
 use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use indexmap::IndexMap;
+use itertools::Itertools;
+use petgraph::algo::Cycle;
 use rand::{Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 use serde::{Deserialize, Serialize};
@@ -703,6 +705,10 @@ impl<E, V> NestingGraph<E, V> {
         bitvec![usize, Lsb0; 1; self.involution.len()]
     }
 
+    fn empty_filter(&self) -> BitVec {
+        bitvec![usize, Lsb0; 0; self.involution.len()]
+    }
+
     fn full_node(&self) -> NestingNode {
         NestingNode {
             internal_graph: (self.full_filter() & !self.external_filter()).into(),
@@ -714,6 +720,166 @@ impl<E, V> NestingGraph<E, V> {
         let i = self.involution.first_internal().unwrap();
 
         self.paton_cycle_basis(i)
+    }
+
+    ///Read, R.C. and Tarjan, R.E. (1975), Bounds on Backtrack Algorithms for Listing Cycles, Paths, and Spanning Trees. Networks, 5: 237-252. https://doi.org/10.1002/net.1975.5.3.237
+
+    fn read_tarjan(&self) -> Vec<NestingNode> {
+        let mut cycles = Vec::new();
+        for (i, (_, e)) in self.involution.inv.iter().enumerate() {
+            if matches!(e, InvolutiveMapping::Source(_)) {
+                cycles.extend(self.increasing_cycles_from(i));
+            }
+        }
+        cycles
+    }
+
+    fn backtrack(
+        &self,
+        options: &mut SubGraph,
+        tree: &mut SubGraph,
+        current: usize,
+    ) -> Option<usize> {
+        tree.filter.set(self.involution.inv(current), false);
+        tree.filter.set(current, false);
+
+        let current_node = &self.involution.get_node_id(current).externalhedges;
+
+        let current = current_node.iter_ones().find(|&i| options.filter[i]);
+
+        if let Some(current) = current {
+            tree.filter.set(current, true);
+            options.filter.set(current, false);
+            Some(current)
+        } else {
+            let current = current_node.iter_ones().find_map(|i| {
+                if tree.filter[i] {
+                    Some(self.involution.inv(i))
+                } else {
+                    None
+                }
+            });
+            self.backtrack(options, tree, current?)
+        }
+    }
+
+    fn increasing_cycles_from(&self, start: usize) -> Vec<NestingNode> {
+        let mut cycles = Vec::new();
+
+        let mut tree: SubGraph = self.empty_filter().into();
+        let mut options: SubGraph = SubGraph::from(self.external_filter()).complement();
+
+        for i in 0..=start {
+            options.filter.set(i, false);
+        }
+
+        tree.filter.set(start, true);
+        options.filter.set(start, false);
+
+        let mut current = start;
+
+        loop {
+            let next_possible = SubGraph::from(
+                self.involution
+                    .get_connected_node_id(current)
+                    .unwrap()
+                    .externalhedges
+                    .clone(),
+            );
+
+            if next_possible.empty_intersection(&tree) {
+                tree.filter.set(self.involution.inv(current), true);
+                options.filter.set(self.involution.inv(current), false);
+
+                if let Some(i) = next_possible
+                    .filter
+                    .iter_ones()
+                    .find(|&i| i != self.involution.inv(start) && options.filter[i])
+                {
+                    tree.filter.set(i, true);
+                    options.filter.set(i, false);
+
+                    current = i;
+                } else if current == start {
+                    //No edges greater than start-> abort
+                    break;
+                } else {
+                    current = self
+                        .backtrack(&mut options, &mut tree, current)
+                        .unwrap_or(start);
+
+                    if current == start {
+                        break;
+                    }
+                }
+            } else {
+                let int = next_possible.intersection(&tree);
+                if int.filter[start] {
+                    tree.filter.set(self.involution.inv(current), true);
+                    options.filter.set(self.involution.inv(current), false);
+
+                    let mut cycle = self.nesting_node_from_subgraph(tree.clone());
+
+                    self.cut_branches(&mut cycle);
+
+                    cycles.push(cycle);
+                }
+                current = self
+                    .backtrack(&mut options, &mut tree, current)
+                    .unwrap_or(start);
+
+                if current == start {
+                    break;
+                }
+            }
+        }
+
+        cycles
+    }
+
+    fn order_basis(&self, basis: &[NestingNode]) -> Vec<Vec<SubGraph>> {
+        let mut seen = vec![basis[0].internal_graph.clone()];
+        let mut partitions = vec![seen.clone()];
+
+        for cycle in basis.iter() {
+            if seen
+                .iter()
+                .any(|p| !p.empty_intersection(&cycle.internal_graph))
+            {
+                partitions
+                    .last_mut()
+                    .unwrap()
+                    .push(cycle.internal_graph.clone());
+            } else {
+                for p in partitions.last().unwrap() {
+                    seen.push(p.clone());
+                }
+                partitions.push(vec![cycle.internal_graph.clone()]);
+            }
+        }
+
+        partitions
+    }
+
+    fn welchs_violating(partitions: &[Vec<SubGraph>]) -> Vec<SubGraph> {
+        let mut violations = Vec::new();
+
+        for (b1, b2) in partitions.iter().tuple_windows() {
+            for (_, _, ck) in
+                b1.iter()
+                    .chain(b2.iter())
+                    .tuple_combinations()
+                    .filter(|(ci, cj, ck)| {
+                        ci.empty_intersection(cj)
+                            && !ci.empty_intersection(ck)
+                            && !cj.empty_intersection(ck)
+                    })
+            {
+                violations.push(ck.clone());
+            }
+        }
+
+        violations
     }
 
     fn all_cycles(&self) -> Vec<NestingNode> {
@@ -732,6 +898,7 @@ impl<E, V> NestingGraph<E, V> {
 
     fn all_cycles_with_basis(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
         let mut cycles = Vec::new();
+
         cycles
     }
 

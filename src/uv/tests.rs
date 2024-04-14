@@ -25,6 +25,14 @@ fn lbl() {
 
     let cycles = uv_graph.cycle_basis_from_lmb(lmb);
 
+    let all_cycles = uv_graph.0.read_tarjan();
+
+    println!("Number of cycles: {}", all_cycles.len());
+
+    // for cycle in all_cycles {
+    //     println!("{}", uv_graph.0.dot(&cycle));
+    // }
+
     insta::assert_ron_snapshot!("lbl_cycles", cycles);
 
     // for cycle in cycles {
@@ -63,6 +71,10 @@ fn nine_loop() {
 
     let cycle_dots: Vec<String> = cycles.iter().map(|c| rand_graph.dot(c)).collect();
 
+    let all_cycles = rand_graph.read_tarjan();
+
+    println!("Number of cycles: {}", all_cycles.len());
+
     insta::assert_toml_snapshot!("nine_loop_cycle_dots", cycle_dots);
 }
 
@@ -92,6 +104,10 @@ fn threeloop() {
     }
 
     let cycles = graph.paton_cycle_basis(1);
+
+    let all_cycles = graph.read_tarjan();
+
+    println!("Number of cycles: {}", all_cycles.len());
 
     insta::assert_ron_snapshot!("three_loop_cycles", cycles);
 }
