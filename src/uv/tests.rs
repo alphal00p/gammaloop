@@ -72,6 +72,10 @@ fn nine_loop() {
 
     let all_cycles = rand_graph.read_tarjan();
 
+    let all_spinneys = rand_graph.all_cycle_unions();
+
+    println!("all spinneys {}", all_spinneys.len());
+
     assert_eq!(all_cycles.len(), 20);
 
     insta::assert_toml_snapshot!("nine_loop_cycle_dots", cycle_dots);
@@ -107,6 +111,10 @@ fn threeloop() {
     let all_cycles = graph.read_tarjan();
 
     assert_eq!(6, all_cycles.len());
+
+    let all_spinneys = graph.all_cycle_unions();
+
+    println!("all spinneys {}", all_spinneys.len());
 
     insta::assert_ron_snapshot!("three_loop_cycles", cycles);
 }

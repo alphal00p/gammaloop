@@ -24,6 +24,35 @@ impl std::fmt::Display for NodeIndex {
     }
 }
 
+struct PowersetIterator {
+    size: usize,
+    current: usize,
+}
+
+impl PowersetIterator {
+    pub fn new(n_elements: u8) -> Self {
+        PowersetIterator {
+            size: 1 << n_elements,
+            current: 0,
+        }
+    }
+}
+
+impl Iterator for PowersetIterator {
+    type Item = BitVec;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current < self.size {
+            let out = BitVec::<_, Lsb0>::from_element(self.current);
+
+            self.current += 1;
+            Some(out)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum InvolutiveMapping<E> {
     Identity(Option<E>),
@@ -894,6 +923,39 @@ impl<E, V> NestingGraph<E, V> {
         }
 
         cycles
+    }
+
+    fn all_cycle_unions(&self) -> Vec<SubGraph> {
+        let cycles = self.read_tarjan();
+        let mut spinneys = Vec::with_capacity(1 << cycles.len());
+
+        let pset = PowersetIterator::new(cycles.len() as u8);
+
+        for p in pset {
+            // let union = p
+            //     .iter_ones()
+            //     .map(|i| cycles[i].clone())
+            //     .reduce(|acc, n| acc.union(&n));
+
+            // if let Some(union) = union {
+            //     spinneys.push(union);
+            // }
+            let mut union: Option<SubGraph> = None;
+
+            for i in p.iter_ones() {
+                if let Some(union) = &mut union {
+                    union.union_with(&cycles[i].internal_graph);
+                } else {
+                    union = Some(cycles[i].internal_graph.clone());
+                }
+            }
+
+            if let Some(union) = union {
+                spinneys.push(union);
+            }
+        }
+
+        spinneys
     }
 
     fn all_cycles_with_basis(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
