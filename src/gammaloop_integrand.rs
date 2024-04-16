@@ -64,6 +64,7 @@ trait GraphIntegrand {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<T>;
 }
@@ -228,6 +229,7 @@ impl GraphIntegrand for AmplitudeGraph {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<T> {
         let rep3d = if settings.general.use_ltd {
@@ -273,7 +275,22 @@ impl GraphIntegrand for AmplitudeGraph {
         let tree_product =
             tree_like_energies.fold(T::one(), |acc, x| acc * Into::<T>::into(2.) * x);
 
-        rep3d * energy_product / tree_product
+        let counterterm = match &self.get_graph().derived_data.static_counterterm {
+            Some(counterterm) => {
+                counterterm.evaluate(
+                    &sample.loop_moms,
+                    &sample.external_moms,
+                    self.get_graph(),
+                    rotate_overlap_centers,
+                    settings,
+                ) * self
+                    .graph
+                    .compute_energy_product(&sample.loop_moms, &sample.external_moms)
+            }
+            None => Complex::new(T::zero(), T::zero()),
+        };
+
+        (rep3d - counterterm) * energy_product / tree_product
     }
 }
 
@@ -326,6 +343,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<T> {
         // sum over channels
@@ -374,7 +392,9 @@ fn evaluate<T: GraphIntegrand, F: FloatLike>(
                 DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                     graph.evaluate_channel_sum(sample, *alpha, settings)
                 }
-                DiscreteGraphSample::Tropical(sample) => graph.evaluate_tropical(sample, settings),
+                DiscreteGraphSample::Tropical(sample) => {
+                    graph.evaluate_tropical(sample, rotate_overlap_centers, settings)
+                }
                 DiscreteGraphSample::DiscreteMultiChanneling {
                     alpha,
                     channel_id,
