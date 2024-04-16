@@ -140,6 +140,9 @@ class GammaLoopConfiguration(object):
                 },
                 'sampling': {
                     'type': 'default'
+                },
+                'subtraction': {
+                    'sliver_width': 1.0,
                 }
             }
         }

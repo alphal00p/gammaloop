@@ -9,7 +9,8 @@ use symbolica::representations::Atom;
 
 use crate::graph::{Graph, LoopMomentumBasis};
 use crate::utils::{
-    compute_momentum, compute_shift_part, compute_t_part_of_shift_part, format_momentum, FloatLike,
+    compute_loop_part, compute_momentum, compute_shift_part, compute_t_part_of_shift_part,
+    format_momentum, FloatLike,
 };
 
 /// Core esurface struct
@@ -133,6 +134,77 @@ impl Esurface {
             .sum::<T>()
     }
 
+    #[inline]
+    pub fn compute_self_and_r_derivative<T: FloatLike>(
+        &self,
+        radius: T,
+        shifted_unit_loops: &[LorentzVector<T>],
+        center: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &[T],
+    ) -> (T, T) {
+        let loops = shifted_unit_loops
+            .iter()
+            .zip(center)
+            .map(|(loop_mom, center)| loop_mom * radius + center)
+            .collect_vec();
+
+        let shift = self.compute_shift_part_from_momenta(lmb, external_moms);
+
+        let (derivative, energy_sum) = self
+            .energies
+            .iter()
+            .map(|&index| {
+                let signature = &lmb.edge_signatures[index];
+
+                let momentum = compute_momentum(signature, &loops, external_moms);
+                let unit_loop_part = compute_loop_part(&signature.0, shifted_unit_loops);
+
+                let energy = (momentum.spatial_squared()
+                    + real_mass_vector[index] * real_mass_vector[index])
+                    .sqrt();
+
+                let numerator = momentum.spatial_dot(&unit_loop_part);
+
+                (numerator / energy, energy)
+            })
+            .fold((T::zero(), T::zero()), |(der_sum, en_sum), (der, en)| {
+                (der_sum + der, en_sum + en)
+            });
+
+        (energy_sum + shift, derivative)
+    }
+
+    #[inline]
+    pub fn get_radius_guess<T: FloatLike>(
+        &self,
+        _unit_loops: &[LorentzVector<T>],
+        external_moms: &[LorentzVector<T>],
+        lmb: &LoopMomentumBasis,
+    ) -> T {
+        //let mut radius_guess = T::zero();
+        //let mut denominator = T::zero();
+
+        let esurface_shift = self.compute_shift_part_from_momenta(lmb, external_moms);
+        Into::<T>::into(2.0) * esurface_shift
+
+        //for energy in self.energies.iter() {
+        //    let signature = &lmb.edge_signatures[*energy];
+
+        //    let unit_loop_part = compute_loop_part(&signature.0, unit_loops);
+        //    let shift = compute_shift_part(&signature.1, external_moms);
+        //    let norm_unit_loop_part_squared = unit_loop_part.spatial_squared();
+        //    let loop_dot_shift = unit_loop_part.spatial_dot(&shift);
+
+        //    radius_guess += loop_dot_shift.abs() / norm_unit_loop_part_squared;
+        //    denominator += norm_unit_loop_part_squared.sqrt();
+        //}
+
+        //radius_guess += esurface_shift / denominator;
+        //radius_guess
+    }
+
     /// Write out the esurface expression in a given lmb
     pub fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
         let mut energy_sum = self
@@ -190,6 +262,16 @@ impl Esurface {
 #[derive(Debug, Clone)]
 pub struct EsurfaceCollection {
     esurfaces: Vec<Esurface>,
+}
+
+impl EsurfaceCollection {
+    #[inline]
+    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> EsurfaceCache<T> {
+        self.esurfaces
+            .iter()
+            .map(|esurface| esurface.compute_value(energy_cache))
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -359,7 +441,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
     esurface_derived_data: &EsurfaceDerivedData,
     externals: &[LorentzVector<T>],
-    energy_cache: &[T],
+    lmb: &LoopMomentumBasis,
     debug: usize,
     e_cm: f64,
 ) -> ExistingEsurfaces {
@@ -371,7 +453,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
 
             let esurface = &esurfaces[*esurface_id];
 
-            let shift_part = esurface.compute_shift_part(energy_cache);
+            let shift_part = esurface.compute_shift_part_from_momenta(lmb, externals);
             let shift_zero_sq = shift_part * shift_part;
 
             if shift_part < -Into::<T>::into(SHIFT_THRESHOLD * e_cm) {

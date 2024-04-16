@@ -1,11 +1,15 @@
 use crate::{
     cff::{
-        esurface::{generate_esurface_data, EsurfaceDerivedData},
+        esurface::{
+            generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData,
+            ExistingEsurfaceId, ExistingEsurfaces,
+        },
         generation::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
     },
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
     numerator::generate_numerator,
+    subtraction::{overlap::find_maximal_overlap, static_counterterm},
     tensor::{
         AbstractIndex, Contract, DataTensor, DenseTensor, GetTensorData, Representation,
         SetTensorData, Slot, SparseTensor, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT,
@@ -840,6 +844,22 @@ impl Graph {
     }
 
     #[inline]
+    pub fn get_mass_vector(&self) -> Vec<Option<Complex<f64>>> {
+        self.edges.iter().map(|e| e.particle.mass.value).collect()
+    }
+
+    #[inline]
+    pub fn get_real_mass_vector(&self) -> Vec<f64> {
+        self.edges
+            .iter()
+            .map(|e| match e.particle.mass.value {
+                Some(mass) => mass.re,
+                None => 0.0,
+            })
+            .collect()
+    }
+
+    #[inline]
     pub fn compute_onshell_energies_in_lmb<T: FloatLike>(
         &self,
         loop_moms: &[LorentzVector<T>],
@@ -1348,6 +1368,45 @@ impl Graph {
     pub fn get_cff(&self) -> &CFFExpression {
         self.derived_data.cff_expression.as_ref().unwrap()
     }
+
+    #[inline]
+    pub fn get_esurface_derived_data(&self) -> &EsurfaceDerivedData {
+        self.derived_data.esurface_derived_data.as_ref().unwrap()
+    }
+
+    #[inline]
+    pub fn get_existing_esurfaces<T: FloatLike>(
+        &self,
+        externals: &[LorentzVector<T>],
+        e_cm: f64,
+        debug: usize,
+    ) -> ExistingEsurfaces {
+        get_existing_esurfaces(
+            &self.get_cff().esurfaces,
+            self.get_esurface_derived_data(),
+            externals,
+            &self.loop_momentum_basis,
+            debug,
+            e_cm,
+        )
+    }
+
+    #[inline]
+    pub fn get_maximal_overlap(
+        &self,
+        externals: &[LorentzVector<f64>],
+        e_cm: f64,
+        debug: usize,
+    ) -> Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)> {
+        let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, debug);
+        find_maximal_overlap(
+            &self.loop_momentum_basis,
+            &existing_esurfaces,
+            &self.get_cff().esurfaces,
+            &self.get_mass_vector(),
+            externals,
+        )
+    }
 }
 
 #[allow(dead_code)]
@@ -1359,6 +1418,7 @@ pub struct DerivedGraphData {
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
+    pub static_counterterm: Option<static_counterterm::CounterTerm>,
     pub numerator: Option<Atom>,
 }
 
@@ -1372,6 +1432,7 @@ impl DerivedGraphData {
             edge_groups: None,
             esurface_derived_data: None,
             numerator: None,
+            static_counterterm: None,
         }
     }
 
@@ -1413,6 +1474,7 @@ impl DerivedGraphData {
                 .map(|groups| groups.into_iter().map(|group| group.into()).collect()),
             esurface_derived_data: serializable.esurface_derived_data,
             numerator: None,
+            static_counterterm: None,
         }
     }
 

@@ -363,10 +363,7 @@ impl CFFExpression {
 
     #[inline]
     pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> EsurfaceCache<T> {
-        self.esurfaces
-            .iter()
-            .map(|e| e.compute_value(energy_cache))
-            .collect()
+        self.esurfaces.compute_esurface_cache(energy_cache)
     }
 
     fn recursive_term_builder(
@@ -388,7 +385,12 @@ impl CFFExpression {
                     res.push(current_path.clone());
                 } else {
                     for child in data.children.iter() {
-                        self.recursive_term_builder(res, current_path, term_id, *child);
+                        self.recursive_term_builder(
+                            res,
+                            &mut current_path.clone(),
+                            term_id,
+                            *child,
+                        );
                     }
                 }
             }

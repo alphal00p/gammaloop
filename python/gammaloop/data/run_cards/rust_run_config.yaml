@@ -40,3 +40,5 @@ Stability:
       escalate_for_large_weight_threshold: -1.0
 sampling:
   type: default
+subtraction:
+  sliver_width: 1.0

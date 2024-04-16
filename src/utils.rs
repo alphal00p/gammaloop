@@ -657,6 +657,28 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
     false
 }
 
+pub fn compute_loop_part<T: FloatLike>(
+    loop_signature: &[isize],
+    loop_moms: &[LorentzVector<T>],
+) -> LorentzVector<T> {
+    let mut res = LorentzVector::default();
+
+    for i_l in loop_signature.iter().enumerate() {
+        match i_l.1 {
+            1 => {
+                res += loop_moms[i_l.0];
+            }
+            -1 => {
+                res -= loop_moms[i_l.0];
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
+    res
+}
+
 pub fn compute_shift_part<T: FloatLike>(
     external_signature: &[isize],
     external_moms: &[LorentzVector<T>],

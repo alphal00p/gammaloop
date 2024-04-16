@@ -7,14 +7,18 @@ use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
 use crate::model::Model;
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
+use crate::subtraction::static_counterterm;
 use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
 use colored::Colorize;
 use itertools::Itertools;
 use libc::__c_anonymous_ptrace_syscall_info_exit;
 use lorentz_vector::LorentzVector;
 use num::Complex;
+use petgraph::algo::greedy_matching;
+use petgraph::graph;
 use rayon::prelude::IndexedParallelIterator;
 use serde;
+use statrs::function::evaluate;
 use std::fs::File;
 use std::path::Path;
 use std::{clone, env};
@@ -155,8 +159,6 @@ mod tests_scalar_massless_triangle {
             panic!("Error: {}", e);
         }
 
-        let energy_cache = graph.compute_onshell_energies(&[k], &[p1, p2]);
-
         let existing = get_existing_esurfaces(
             &graph
                 .derived_data
@@ -166,7 +168,7 @@ mod tests_scalar_massless_triangle {
                 .esurfaces,
             graph.derived_data.esurface_derived_data.as_ref().unwrap(),
             &[p1, p2],
-            &energy_cache,
+            &graph.loop_momentum_basis,
             0,
             2.0,
         );
@@ -644,9 +646,6 @@ fn pytest_massless_scalar_box() {
         LorentzVector::from_args(17.9, 50.0, -11.8, 0.0),
     ];
 
-    let loop_mom = LorentzVector::from_args(0.0, 1.0, 2.0, 3.0);
-
-    let cache = graph.compute_onshell_energies(&[loop_mom], &box4_e);
     let esurfaces = &graph
         .derived_data
         .cff_expression
@@ -658,7 +657,7 @@ fn pytest_massless_scalar_box() {
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &box4_e,
-        &cache,
+        &graph.loop_momentum_basis,
         0,
         57.0,
     );
@@ -1041,13 +1040,11 @@ fn pytest_hexagon() {
         -LorentzVector::from_args(-80., -5.6, -40.0, 0.0),
     ];
 
-    let empty_loop_mom = [LorentzVector::from_args(0., 0., 0., 0.)];
-
     let existing_esurface = get_existing_esurfaces(
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.compute_onshell_energies(&empty_loop_mom, &kinematics),
+        &graph.loop_momentum_basis,
         0,
         75.,
     );
@@ -1089,7 +1086,7 @@ fn pytest_hexagon() {
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &hexagon_10_e,
-        &graph.compute_onshell_energies(&empty_loop_mom, &hexagon_10_e),
+        &graph.loop_momentum_basis,
         0,
         88.,
     );
@@ -1112,8 +1109,6 @@ fn pytest_hexagon() {
     assert_eq!(maximal_overlap[1].0.len(), 8);
     assert_eq!(maximal_overlap[2].0.len(), 7);
     assert_eq!(maximal_overlap[3].0.len(), 7);
-
-    panic!();
 }
 
 #[test]
@@ -1179,7 +1174,7 @@ fn pytest_topology_c() {
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.compute_onshell_energies(&kinematics, &kinematics),
+        &graph.loop_momentum_basis,
         2,
         18.,
     );
@@ -1264,7 +1259,7 @@ fn pytest_massless_pentabox() {
             .esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.compute_onshell_energies(&kinematics, &kinematics),
+        &graph.loop_momentum_basis,
         0,
         1.0,
     );
@@ -1359,7 +1354,7 @@ fn pytest_massless_3l_pentabox() {
             .esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.compute_onshell_energies(&kinematics, &kinematics),
+        &graph.loop_momentum_basis,
         0,
         1.0,
     );

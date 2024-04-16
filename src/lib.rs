@@ -216,6 +216,8 @@ pub struct Settings {
     pub stability: StabilitySettings,
     #[serde(rename = "sampling")]
     pub sampling: SamplingSettings,
+    #[serde(rename = "subtraction")]
+    pub subtraction: SubtractionSettings,
 }
 
 impl Settings {
@@ -293,6 +295,8 @@ pub enum RotationMethod {
     Pi2Y,
     #[serde(rename = "z")]
     Pi2Z,
+    #[serde(rename = "none")]
+    None,
 }
 
 impl RotationMethod {
@@ -301,6 +305,7 @@ impl RotationMethod {
             RotationMethod::Pi2X => utils::perform_pi2_rotation_x,
             RotationMethod::Pi2Y => utils::perform_pi2_rotation_y,
             RotationMethod::Pi2Z => utils::perform_pi2_rotation_z,
+            RotationMethod::None => |vector: &LorentzVector<T>| *vector,
         }
     }
 }
@@ -373,4 +378,9 @@ pub enum DiscreteGraphSamplingSettings {
     DiscreteMultiChanneling(MultiChannelingSettings),
     #[serde(rename = "tropical")]
     TropicalSampling,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct SubtractionSettings {
+    pub sliver_width: f64,
 }
