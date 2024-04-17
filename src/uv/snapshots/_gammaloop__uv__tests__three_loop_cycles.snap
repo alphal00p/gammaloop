@@ -16,6 +16,7 @@ expression: cycles
           15,
         ],
       ),
+      loopcount: Some(1),
     ),
     externalhedges: BitSeq(
       order: "bitvec::order::Lsb0",
@@ -42,6 +43,7 @@ expression: cycles
           51,
         ],
       ),
+      loopcount: Some(1),
     ),
     externalhedges: BitSeq(
       order: "bitvec::order::Lsb0",
@@ -68,6 +70,7 @@ expression: cycles
           4035,
         ],
       ),
+      loopcount: Some(1),
     ),
     externalhedges: BitSeq(
       order: "bitvec::order::Lsb0",

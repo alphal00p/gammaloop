@@ -62,10 +62,16 @@ fn nine_loop() {
 
     insta::assert_snapshot!("nine_loop_dot", rand_graph.base_dot());
     insta::assert_ron_snapshot!("nine_loop", rand_graph);
-    let cycles = rand_graph.paton_cycle_basis(0);
+    let cycles = rand_graph.cycle_basis();
 
     for i in rand_graph.full_node().internal_graph.filter.iter_ones() {
-        assert_eq!(9, rand_graph.paton_cycle_basis(i).len());
+        assert_eq!(
+            9,
+            rand_graph
+                .paton_cycle_basis(&rand_graph.full_filter().into(), i)
+                .unwrap()
+                .len()
+        );
     }
 
     let cycle_dots: Vec<String> = cycles.iter().map(|c| rand_graph.dot(c)).collect();
@@ -103,10 +109,16 @@ fn threeloop() {
     insta::assert_ron_snapshot!("three_loop", graph);
 
     for i in 0..graph.n_hedges() {
-        assert_eq!(3, graph.paton_cycle_basis(i).len());
+        assert_eq!(
+            3,
+            graph
+                .paton_cycle_basis(&graph.full_filter().into(), i)
+                .unwrap()
+                .len()
+        );
     }
 
-    let cycles = graph.paton_cycle_basis(1);
+    let cycles = graph.cycle_basis();
 
     let all_cycles = graph.read_tarjan();
 
@@ -149,10 +161,16 @@ fn hairythreeloop() {
     );
 
     for i in graph.full_node().internal_graph.filter.iter_ones() {
-        assert_eq!(3, graph.paton_cycle_basis(i).len());
+        assert_eq!(
+            3,
+            graph
+                .paton_cycle_basis(&graph.full_filter().into(), i)
+                .unwrap()
+                .len()
+        );
     }
 
-    let cycles = graph.paton_cycle_basis(1);
+    let cycles = graph.cycle_basis();
 
     // for cycle in &cycles {
     //     println!("{}", graph.dot(cycle));

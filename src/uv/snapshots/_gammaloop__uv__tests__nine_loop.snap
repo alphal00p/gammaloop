@@ -17,6 +17,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -43,6 +44,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -69,6 +71,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -95,6 +98,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -121,6 +125,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -147,6 +152,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -173,6 +179,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -199,6 +206,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -225,6 +233,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -251,6 +260,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -277,6 +287,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -303,6 +314,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -329,6 +341,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -355,6 +368,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -381,6 +395,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -407,6 +422,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -433,6 +449,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -459,6 +476,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -485,6 +503,7 @@ NestingGraph(
             0,
           ],
         ),
+        loopcount: None,
       ),
       externalhedges: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -499,6 +518,7 @@ NestingGraph(
       ),
     ): (),
   },
+  base_nodes: 19,
   involution: Involution(
     inv: [
       (NestingNode(
@@ -514,6 +534,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -540,6 +561,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -566,6 +588,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -592,6 +615,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -618,6 +642,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -644,6 +669,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -670,6 +696,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -696,6 +723,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -722,6 +750,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -748,6 +777,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -774,6 +804,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -800,6 +831,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -826,6 +858,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -852,6 +885,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -878,6 +912,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -904,6 +939,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -930,6 +966,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -956,6 +993,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -982,6 +1020,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1008,6 +1047,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1034,6 +1074,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1060,6 +1101,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1086,6 +1128,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1112,6 +1155,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1138,6 +1182,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1164,6 +1209,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1190,6 +1236,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1216,6 +1263,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1242,6 +1290,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1268,6 +1317,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1294,6 +1344,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1320,6 +1371,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1346,6 +1398,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1372,6 +1425,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1398,6 +1452,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1424,6 +1479,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1450,6 +1506,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1476,6 +1533,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1502,6 +1560,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1528,6 +1587,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1554,6 +1614,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1580,6 +1641,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1606,6 +1668,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1632,6 +1695,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1658,6 +1722,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1684,6 +1749,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1710,6 +1776,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1736,6 +1803,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1762,6 +1830,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1788,6 +1857,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1814,6 +1884,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1840,6 +1911,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1866,6 +1938,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1892,6 +1965,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1918,6 +1992,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1944,6 +2019,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -1970,6 +2046,7 @@ NestingGraph(
               0,
             ],
           ),
+          loopcount: None,
         ),
         externalhedges: BitSeq(
           order: "bitvec::order::Lsb0",

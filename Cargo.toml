@@ -103,6 +103,8 @@ serde_json = "1.0.115"
 ctrlc = "3.4.4"
 constcat = "0.5.0"
 bitvec = { version = "1.0.1", features = ["serde"] }
+anyhow = { version = "1.0.82", features = ["backtrace"] }
+thiserror = "1.0.58"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

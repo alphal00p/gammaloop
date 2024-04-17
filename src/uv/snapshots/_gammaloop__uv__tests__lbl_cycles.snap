@@ -16,6 +16,7 @@ expression: cycles
           4080,
         ],
       ),
+      loopcount: None,
     ),
     externalhedges: BitSeq(
       order: "bitvec::order::Lsb0",

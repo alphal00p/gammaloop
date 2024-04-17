@@ -1,10 +1,10 @@
-use std::{hash::Hash, ops::Sub};
+use std::{hash::Hash, iter::Map, ops::Sub};
 
 use ahash::AHashSet;
-use bitvec::vec::BitVec;
+use bitvec::{slice::IterOnes, vec::BitVec};
 use indexmap::IndexMap;
 use itertools::Itertools;
-use petgraph::algo::Cycle;
+use petgraph::{algo::Cycle, graph};
 use rand::{Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 use serde::{Deserialize, Serialize};
@@ -274,23 +274,36 @@ impl std::fmt::Display for GVEdgeAttrs {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NestingGraph<E, V> {
     nodes: IndexMap<NestingNode, V>, // Forest of nodes, that contain half-edges, with data E
+    base_nodes: usize,
     involution: Involution<NestingNode, E>, // Involution of half-edges
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct SubGraph {
     filter: BitVec,
+    loopcount: Option<usize>,
 }
 
 impl From<BitVec> for SubGraph {
     fn from(filter: BitVec) -> Self {
-        SubGraph { filter }
+        SubGraph {
+            filter,
+            loopcount: None,
+        }
     }
 }
 
 impl SubGraph {
     pub fn is_empty(&self) -> bool {
         self.filter.count_ones() == 0
+    }
+
+    pub fn set_loopcount<E, V>(&mut self, graph: &NestingGraph<E, V>) {
+        self.loopcount = Some(
+            graph
+                .paton_count_loops(self, self.filter.first_one().unwrap())
+                .unwrap(),
+        );
     }
 
     pub fn intersect_with(&mut self, other: &SubGraph) {
@@ -334,6 +347,7 @@ impl SubGraph {
     pub fn complement(&self) -> SubGraph {
         SubGraph {
             filter: !self.filter.clone(),
+            loopcount: None,
         }
     }
 }
@@ -405,6 +419,7 @@ impl NestingNode {
     pub fn internal_graph_union(&self, other: &NestingNode) -> SubGraph {
         SubGraph {
             filter: self.internal_graph.filter.clone() | &other.internal_graph.filter,
+            loopcount: None,
         }
     }
 
@@ -441,6 +456,32 @@ pub struct NestingNodeBuilder<V> {
 pub struct NestingGraphBuilder<E, V> {
     nodes: Vec<NestingNodeBuilder<V>>,
     involution: Involution<NodeIndex, E>,
+}
+
+pub struct NodeIterator<'a, E, V> {
+    graph: &'a NestingGraph<E, V>,
+    edges: IterOnes<'a, usize, Lsb0>,
+    seen: BitVec,
+}
+
+impl<'a, E, V> Iterator for NodeIterator<'a, E, V> {
+    type Item = (&'a NestingNode, &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next) = self.edges.next() {
+            let node = self.graph.get_incident_node_id(next);
+            let node_pos = self.graph.get_node_pos(node);
+
+            if self.seen[node_pos] {
+                self.next()
+            } else {
+                self.seen.set(node_pos, true);
+                Some((node, &self.graph.nodes[node_pos]))
+            }
+        } else {
+            None
+        }
+    }
 }
 
 impl<E, V> NestingGraphBuilder<E, V> {
@@ -494,13 +535,26 @@ impl<E, V> From<NestingGraphBuilder<E, V>> for NestingGraph<E, V> {
                 .map(|(n, i)| (NestingNode::from_builder(&builder.nodes[n.0], len), i))
                 .collect(),
         };
-        let nodes = builder
+        let nodes: IndexMap<NestingNode, V> = builder
             .nodes
             .into_iter()
             .map(|x| (NestingNode::from_builder(&x, len), x.data))
             .collect();
-        NestingGraph { nodes, involution }
+        NestingGraph {
+            base_nodes: nodes.len(),
+            nodes,
+            involution,
+        }
     }
+}
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+
+enum NestingNodeError {
+    #[error("Invalid start node")]
+    InvalidStart,
 }
 
 impl<E, V> NestingGraph<E, V> {
@@ -527,12 +581,45 @@ impl<E, V> NestingGraph<E, V> {
     //     self.node_out_edges(node_index).len()
     // }
 
+    pub fn iter_egde_data<'a>(&'a self, subgraph: &'a SubGraph) -> impl Iterator<Item = &E> + '_ {
+        subgraph
+            .filter
+            .iter_ones()
+            .map(|i| self.involution.get_data(i))
+    }
+
+    pub fn iter_egde_node<'a>(
+        &'a self,
+        subgraph: &'a SubGraph,
+    ) -> impl Iterator<Item = &NestingNode> + '_ {
+        subgraph
+            .filter
+            .iter_ones()
+            .map(|i| self.involution.get_node_id(i))
+    }
+
+    pub fn iter_node_data<'a>(&'a self, subgraph: &'a SubGraph) -> NodeIterator<'a, E, V> {
+        NodeIterator {
+            graph: self,
+            edges: subgraph.filter.iter_ones(),
+            seen: bitvec![usize, Lsb0; 0; self.base_nodes],
+        }
+    }
+
+    pub fn get_node_pos(&self, node: &NestingNode) -> usize {
+        self.nodes.get_index_of(node).unwrap()
+    }
+
+    pub fn get_incident_node_id(&self, edge: usize) -> &NestingNode {
+        self.involution.get_node_id(edge)
+    }
+
     pub fn n_hedges(&self) -> usize {
         self.involution.len()
     }
 
     pub fn n_nodes(&self) -> usize {
-        self.nodes.len()
+        self.base_nodes
     }
 
     pub fn n_externals(&self) -> usize {
@@ -646,6 +733,7 @@ impl<E, V> NestingGraph<E, V> {
         }
 
         NestingGraph {
+            base_nodes: nodes.len(),
             nodes,
             involution: new_inv,
         }
@@ -748,7 +836,8 @@ impl<E, V> NestingGraph<E, V> {
     fn cycle_basis(&self) -> Vec<NestingNode> {
         let i = self.involution.first_internal().unwrap();
 
-        self.paton_cycle_basis(i)
+        self.paton_cycle_basis(&self.full_filter().into(), i)
+            .unwrap()
     }
 
     ///Read, R.C. and Tarjan, R.E. (1975), Bounds on Backtrack Algorithms for Listing Cycles, Paths, and Spanning Trees. Networks, 5: 237-252. https://doi.org/10.1002/net.1975.5.3.237
@@ -851,6 +940,8 @@ impl<E, V> NestingGraph<E, V> {
 
                     self.cut_branches(&mut cycle);
 
+                    cycle.internal_graph.loopcount = Some(1);
+
                     cycles.push(cycle);
                 }
                 current = self
@@ -914,13 +1005,13 @@ impl<E, V> NestingGraph<E, V> {
     fn all_cycles(&self) -> Vec<NestingNode> {
         let mut cycles = Vec::new();
 
-        let mut i = 0;
+        // let mut i = 0;
 
-        while i < self.involution.len() {
-            let cycle = self.paton_cycle_basis(i);
-            cycles.extend(cycle);
-            i = self.involution.first_internal().unwrap();
-        }
+        // while i < self.involution.len() {
+        //     let cycle = self.paton_cycle_basis(i);
+        //     cycles.extend(cycle);
+        //     i = self.involution.first_internal().unwrap();
+        // }
 
         cycles
     }
@@ -964,7 +1055,66 @@ impl<E, V> NestingGraph<E, V> {
         cycles
     }
 
-    fn paton_cycle_basis(&self, start: usize) -> Vec<NestingNode> {
+    fn paton_count_loops(
+        &self,
+        subgraph: &SubGraph,
+        start: usize,
+    ) -> Result<usize, NestingNodeError> {
+        if !subgraph.filter[start] {
+            return Err(NestingNodeError::InvalidStart);
+        }
+        let mut loopcount = 0;
+
+        let n = self.involution.get_node_id(start);
+
+        let mut tree: SubGraph = n.clone().externalhedges.into();
+
+        let mut left: SubGraph = (self.full_filter() & !self.external_filter()).into();
+
+        loop {
+            let z = tree
+                .filter
+                .iter()
+                .enumerate()
+                .find(|(i, x)| *x.as_ref() & left.filter[*i])
+                .map(|(i, _)| i);
+
+            if let Some(z) = z {
+                left.filter.set(z, false); // has been visited
+                left.filter.set(self.involution.inv(z), false);
+
+                let w: SubGraph = self
+                    .involution
+                    .get_connected_node_id(z)
+                    .unwrap()
+                    .externalhedges
+                    .clone()
+                    .into();
+
+                if w.empty_intersection(&tree) {
+                    // w is not yet in the tree
+                    tree.union_with(&w);
+                } else {
+                    loopcount += 1;
+                    tree.filter.set(self.involution.inv(z), false);
+                    tree.filter.set(z, false);
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(loopcount)
+    }
+
+    fn paton_cycle_basis(
+        &self,
+        subgraph: &SubGraph,
+        start: usize,
+    ) -> Result<Vec<NestingNode>, NestingNodeError> {
+        if !subgraph.filter[start] {
+            return Err(NestingNodeError::InvalidStart);
+        }
         let mut cycle_basis = Vec::new();
 
         let n = self.involution.get_node_id(start);
@@ -1006,6 +1156,8 @@ impl<E, V> NestingGraph<E, V> {
                         .filter
                         .set(self.involution.inv(z), true);
 
+                    cycle.internal_graph.loopcount = Some(1);
+
                     self.cut_branches(&mut cycle);
 
                     cycle_basis.push(cycle);
@@ -1018,7 +1170,7 @@ impl<E, V> NestingGraph<E, V> {
             }
         }
 
-        cycle_basis
+        Ok(cycle_basis)
     }
 
     pub fn dot(&self, node_as_graph: &NestingNode) -> String {
@@ -1136,6 +1288,10 @@ impl<E, V> NestingGraph<E, V> {
 
         self.nesting_node_fix(subgraph);
     }
+
+    pub fn get_edge_data(&self, edge: usize) -> &E {
+        self.involution.get_data(edge)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -1147,6 +1303,10 @@ impl UVEdge {
     pub fn from_edge(edge: &Edge, id: usize) -> Self {
         UVEdge { og_edge: id }
     }
+
+    pub fn numerator_rank(&self) -> isize {
+        0
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1155,6 +1315,10 @@ struct UVNode {}
 impl UVNode {
     pub fn from_vertex(vertex: &Vertex) -> Self {
         UVNode {}
+    }
+
+    pub fn numerator_rank(&self) -> isize {
+        0
     }
 }
 
@@ -1229,6 +1393,33 @@ impl UVGraph {
 
         self.0
             .nesting_node_from_subgraph(SubGraph::from(!cutting_edges))
+    }
+
+    fn numerator_rank(&self, subgraph: &SubGraph) -> isize {
+        let mut rank = 0;
+
+        for (id, n) in self.0.iter_node_data(subgraph) {
+            rank += n.numerator_rank();
+            for e in id.externalhedges.iter_ones() {
+                rank += self.0.get_edge_data(e).numerator_rank();
+            }
+        }
+
+        rank
+    }
+
+    fn dod(&self, subgraph: &SubGraph) -> isize {
+        let loop_count = if let Some(loop_count) = subgraph.loopcount {
+            loop_count
+        } else {
+            self.0
+                .paton_count_loops(subgraph, subgraph.filter.first_one().unwrap())
+                .unwrap()
+        };
+
+        isize::try_from(4 * loop_count).unwrap() + isize::try_from(self.0.n_externals()).unwrap()
+            - isize::try_from(subgraph.filter.count_ones()).unwrap()
+            + self.numerator_rank(subgraph)
     }
 }
 
