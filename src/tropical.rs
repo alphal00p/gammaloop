@@ -20,9 +20,10 @@ pub struct TropicalGraph {
     pub topology: Vec<TropicalEdge>,
     num_massive_edges: usize,
     external_vertices: Vec<u8>,
-    _edge_map: Vec<usize>, // maps the edges in this graph to the edges in the parent graph
-    _inverse_edge_map: Vec<Option<usize>>, // maps the edges in the parent graph to the edges in this graph
+    edge_map: Vec<usize>, // maps the edges in this graph to the edges in the parent graph
+    inverse_edge_map: Vec<Option<usize>>, // maps the edges in the parent graph to the edges in this graph
     signature_matrix: Vec<Vec<isize>>,
+    edges_carrying_center: Vec<usize>,
 }
 
 impl TropicalGraph {
@@ -114,9 +115,10 @@ impl TropicalGraph {
             topology,
             num_massive_edges,
             external_vertices,
-            _edge_map: edge_map,
-            _inverse_edge_map,
+            edge_map,
+            inverse_edge_map: _inverse_edge_map,
             signature_matrix,
+            edges_carrying_center: Vec::new(),
         }
     }
 
@@ -534,9 +536,9 @@ pub mod tropical_parameterization {
     use statrs::function::gamma::gamma;
 
     use crate::{
-        graph::Graph,
+        graph::LoopMomentumBasis,
         linalg::SquareMatrix,
-        utils::{box_muller, inverse_gamma_lr, FloatLike},
+        utils::{box_muller, compute_shift_part, inverse_gamma_lr, FloatLike},
     };
 
     use super::{TropicalSubgraphTable, D};
@@ -762,10 +764,11 @@ pub mod tropical_parameterization {
     pub fn generate_tropical_sample<T: FloatLike + Into<f64>>(
         x_space_point: &[T],
         external_momenta: &[LorentzVector<T>],
-        graph: &Graph,
+        tropical_subgraph_table: &TropicalSubgraphTable,
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &[f64],
         debug: usize,
     ) -> Result<(Vec<LorentzVector<T>>, T), Report> {
-        let tropical_subgraph_table = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
         let signature_matrix = &tropical_subgraph_table.tropical_graph.signature_matrix;
         let _num_edges = signature_matrix.len();
         let num_loops = signature_matrix[0].len();
@@ -780,32 +783,13 @@ pub mod tropical_parameterization {
             .enumerate()
             .map(|(index, _edge)| {
                 let edge_mass = Into::<T>::into(
-                    match graph.edges[tropical_subgraph_table.tropical_graph._edge_map[index]]
-                        .particle
-                        .mass
-                        .value
-                    {
-                        Some(mass) => mass.re,
-                        None => 0.0,
-                    },
+                    real_mass_vector[tropical_subgraph_table.tropical_graph.edge_map[index]],
                 );
 
-                let external_signature = &graph.loop_momentum_basis.edge_signatures
-                    [tropical_subgraph_table.tropical_graph._edge_map[index]]
-                    .1;
+                let external_signature =
+                    &lmb.edge_signatures[tropical_subgraph_table.tropical_graph.edge_map[index]].1;
 
-                let edge_shift = external_momenta.iter().enumerate().fold(
-                    LorentzVector::<T>::new(),
-                    |acc, (i, external_momentum)| {
-                        let external_spatial = LorentzVector::from_args(
-                            T::zero(),
-                            external_momentum.x,
-                            external_momentum.y,
-                            external_momentum.z,
-                        );
-                        acc + external_spatial * Into::<T>::into(external_signature[i] as f64)
-                    },
-                );
+                let edge_shift = compute_shift_part(external_signature, external_momenta);
 
                 (edge_mass, edge_shift)
             })
@@ -1158,9 +1142,10 @@ mod tests {
             topology,
             num_massive_edges: 0,
             external_vertices: vec![0, 1, 2, 3],
-            _edge_map: vec![0, 1, 2, 3],
-            _inverse_edge_map: vec![], // not needed for this test
+            edge_map: vec![0, 1, 2, 3],
+            inverse_edge_map: vec![], // not needed for this test
             signature_matrix: vec![vec![0; 4]; 4], // not needed for this test
+            edges_carrying_center: vec![], // not needed for this test
         };
 
         let components = tropical_graph.get_connected_components(&[0, 1, 2, 3]);
@@ -1208,9 +1193,10 @@ mod tests {
             topology: topology1,
             num_massive_edges: 0,
             external_vertices: vec![0, 1, 2, 3],
-            _edge_map: vec![0, 1, 2, 3],
-            _inverse_edge_map: vec![], // not needed for this test
+            edge_map: vec![0, 1, 2, 3],
+            inverse_edge_map: vec![], // not needed for this test
             signature_matrix: vec![vec![0; 4]; 4], // not needed for this test
+            edges_carrying_center: vec![], // not needed for this test
         };
 
         let loop_number = tropical_graph1.get_loop_number(&[0, 1, 2, 3]);
@@ -1253,9 +1239,10 @@ mod tests {
             topology: triangle_topology,
             num_massive_edges: 0,
             external_vertices: vec![0, 1, 2],
-            _edge_map: vec![0, 1, 2],
-            _inverse_edge_map: vec![], // not needed for this test
+            edge_map: vec![0, 1, 2],
+            inverse_edge_map: vec![], // not needed for this test
             signature_matrix: vec![vec![0; 3]; 3], // not needed for this test
+            edges_carrying_center: vec![], // not needed for this test
         };
 
         let subgraph_table = TropicalSubgraphTable::generate_from_tropical(&triangle_graph)
@@ -1330,9 +1317,10 @@ mod tests {
             topology: sunrise_topology,
             num_massive_edges: 0,
             external_vertices: vec![0, 1],
-            _edge_map: vec![0, 1, 2],
-            _inverse_edge_map: vec![], // not needed for this test
+            edge_map: vec![0, 1, 2],
+            inverse_edge_map: vec![], // not needed for this test
             signature_matrix: vec![vec![0; 3]; 3], // not needed for this test
+            edges_carrying_center: vec![], // not needed for this test
         };
 
         let subgraph_table = TropicalSubgraphTable::generate_from_tropical(&sunrise_graph)
@@ -1429,9 +1417,10 @@ mod tests {
             is_edge_massive: vec![false; 7],
             topology: mercedes_topology,
             external_vertices: externals,
-            _edge_map: vec![0, 1, 2, 3, 4, 5, 6, 7],
-            _inverse_edge_map: vec![],
+            edge_map: vec![0, 1, 2, 3, 4, 5, 6, 7],
+            inverse_edge_map: vec![],
             signature_matrix: vec![vec![0; 3]; 3],
+            edges_carrying_center: vec![],
         };
 
         let subgraph_table = TropicalSubgraphTable::generate_from_tropical(&gr)

@@ -1370,6 +1370,11 @@ impl Graph {
     }
 
     #[inline]
+    pub fn get_tropical_subgraph_table(&self) -> &TropicalSubgraphTable {
+        self.derived_data.tropical_subgraph_table.as_ref().unwrap()
+    }
+
+    #[inline]
     pub fn get_esurface_derived_data(&self) -> &EsurfaceDerivedData {
         self.derived_data.esurface_derived_data.as_ref().unwrap()
     }

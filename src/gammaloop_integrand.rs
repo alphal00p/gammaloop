@@ -832,7 +832,9 @@ impl GammaLoopIntegrand {
                             tropical_parameterization::generate_tropical_sample(
                                 xs,
                                 &external_moms,
-                                graph,
+                                graph.get_tropical_subgraph_table(),
+                                &graph.loop_momentum_basis,
+                                &graph.get_real_mass_vector(),
                                 self.settings.general.debug,
                             )
                             .unwrap();
@@ -847,7 +849,9 @@ impl GammaLoopIntegrand {
                                     tropical_parameterization::generate_tropical_sample(
                                         &xs_f128,
                                         &external_moms_f128,
-                                        graph,
+                                        graph.get_tropical_subgraph_table(),
+                                        &graph.loop_momentum_basis,
+                                        &graph.get_real_mass_vector(),
                                         self.settings.general.debug,
                                     )
                                     .unwrap();
