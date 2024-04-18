@@ -187,7 +187,7 @@ impl Esurface {
         //let mut denominator = T::zero();
 
         let esurface_shift = self.compute_shift_part_from_momenta(lmb, external_moms);
-        Into::<T>::into(2.0) * esurface_shift
+        Into::<T>::into(2.0) * esurface_shift.abs()
 
         //for energy in self.energies.iter() {
         //    let signature = &lmb.edge_signatures[*energy];

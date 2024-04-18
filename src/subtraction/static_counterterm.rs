@@ -13,7 +13,7 @@ use crate::{
         },
         generation::CFFExpression,
     },
-    graph::Graph,
+    graph::{Graph, LoopMomentumBasis},
     utils::{cast_lorentz_vector, FloatLike},
     Settings,
 };
@@ -27,6 +27,43 @@ pub struct CounterTerm {
 }
 
 impl CounterTerm {
+    pub fn print_debug_data(
+        &self,
+        esurfaces: &EsurfaceCollection,
+        external_momenta: &[LorentzVector<f64>],
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &[f64],
+    ) {
+        let number_of_existing_esurfaces = self.existing_esurfaces.len();
+        let simplified_maximal_overlap_structure = self
+            .maximal_overlap
+            .iter()
+            .map(|(ids, _)| ids.len())
+            .collect_vec();
+
+        println!("number of thresholds: {}", number_of_existing_esurfaces);
+        println!(
+            "overlap structure: {:?}",
+            simplified_maximal_overlap_structure
+        );
+
+        for (overlap, center) in self.maximal_overlap.iter() {
+            println!("overlap size: {}", overlap.len());
+            println!("center: {:#?}", center);
+
+            println!("values of esurface at the center:");
+
+            for esurface_id in overlap.iter() {
+                let esurface = &esurfaces[self.existing_esurfaces[*esurface_id]];
+                println!("esurface equation: {}", esurface.string_format_in_lmb(lmb));
+                println!(
+                    "value: {:?}",
+                    esurface.compute_from_momenta(lmb, real_mass_vector, center, external_momenta)
+                );
+            }
+        }
+    }
+
     pub fn construct(
         maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)>,
         existing_esurfaces: &ExistingEsurfaces,
@@ -188,6 +225,13 @@ impl CounterTerm {
                     e_cm,
                 );
 
+                if settings.general.debug > 1 {
+                    println!(
+                        "radius_plus: {}, radius_minus: {}",
+                        radius_plus, radius_minus
+                    );
+                }
+
                 let (r_plus_eval, r_minus_eval) = (
                     self.radius_star_eval(
                         radius_plus,
@@ -297,7 +341,6 @@ impl CounterTerm {
             .sum::<T>();
 
         let r_minus_rstar = radius - rstar;
-
         let dampening_factor = (-r_minus_rstar * r_minus_rstar / (e_cm * e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
 
         let singularity_dampener = (T::one()

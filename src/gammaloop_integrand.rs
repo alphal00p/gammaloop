@@ -991,6 +991,14 @@ impl GammaLoopIntegrand {
                     settings.general.debug,
                 );
 
+                if settings.general.debug > 0 {
+                    println!(
+                        "#{} existing esurfaces for graph {}",
+                        existing_esurfaces.len(),
+                        graph.name
+                    )
+                }
+
                 if !existing_esurfaces.is_empty() {
                     let maximal_overlap = graph.get_maximal_overlap(
                         &external_moms,
@@ -998,8 +1006,24 @@ impl GammaLoopIntegrand {
                         settings.general.debug,
                     );
 
+                    if settings.general.debug > 0 {
+                        let maximal_overlap_structure =
+                            maximal_overlap.iter().map(|(x, _)| x.len()).collect_vec();
+
+                        println!("maximal overlap structure: {:?}", maximal_overlap_structure)
+                    }
+
                     let counter_term =
                         CounterTerm::construct(maximal_overlap, &existing_esurfaces, cff);
+
+                    if settings.general.debug > 1 {
+                        counter_term.print_debug_data(
+                            &graph.get_cff().esurfaces,
+                            &external_moms,
+                            &graph.loop_momentum_basis,
+                            &graph.get_real_mass_vector(),
+                        );
+                    }
 
                     graph.derived_data.static_counterterm = Some(counter_term);
                 }
