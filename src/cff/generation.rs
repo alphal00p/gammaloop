@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
+    cff::tree::Tree,
     graph::{EdgeType, Graph},
-    utils::FloatLike,
 };
 use ahash::{HashMap, HashMapExt, HashSet};
 use color_eyre::Report;
@@ -16,233 +16,46 @@ use serde::{Deserialize, Serialize};
 
 use log::debug;
 
-use super::esurface::{Esurface, EsurfaceCache, EsurfaceCollection, EsurfaceId};
+use super::{
+    esurface::{Esurface, EsurfaceCollection, EsurfaceId},
+    expression::{CFFExpression, CFFExpressionNode, TermId},
+    tree::NodeId,
+};
 
 const MAX_VERTEX_COUNT: usize = 32;
 
 #[derive(Debug, Clone)]
-pub struct CFFTree {
-    nodes: Vec<CFFTreeNode>,
-    orientation: Orientation,
-    term_id: usize,
-    num_data_nodes: usize,
-}
-
-impl CFFTree {
-    fn from_root_graph(
+enum GenerationData {
+    Data {
         graph: CFFIntermediateGraph,
-        orientation: Orientation,
+        esurface_id: Option<EsurfaceId>,
+    },
+    Pointer {
         term_id: usize,
-    ) -> Self {
-        let node = CFFTreeNodeData {
-            node_id: 0,
-            graph,
-            children: vec![],
-            _parent: None,
-            esurface_id: None,
-        };
-
-        let tree = vec![CFFTreeNode::Data(node)];
-        Self {
-            nodes: tree,
-            orientation,
-            term_id,
-            num_data_nodes: 1,
-        }
-    }
-
-    fn insert_graph(&mut self, parent: usize, graph: CFFIntermediateGraph) -> Result<(), Report> {
-        let node_id = self.nodes.len();
-
-        let node = CFFTreeNodeData {
-            node_id,
-            graph,
-            children: vec![],
-            _parent: Some(parent),
-            esurface_id: None,
-        };
-
-        self.nodes.push(CFFTreeNode::Data(node));
-        match self.nodes[parent] {
-            CFFTreeNode::Data(ref mut tree_node_data) => {
-                tree_node_data.children.push(node_id);
-                self.num_data_nodes += 1;
-                Ok(())
-            }
-            CFFTreeNode::Pointer(_) => Err(eyre!("Parent node is a pointer")),
-        }
-    }
-
-    fn insert_pointer(&mut self, parent: usize, pointer: CFFTreeNodePointer) -> Result<(), Report> {
-        let node_id = self.nodes.len();
-        self.nodes.push(CFFTreeNode::Pointer(pointer));
-
-        match self.nodes[parent] {
-            CFFTreeNode::Data(ref mut tree_node_data) => {
-                tree_node_data.children.push(node_id);
-                Ok(())
-            }
-            CFFTreeNode::Pointer(_) => Err(eyre!("Parent node is a pointer")),
-        }
-    }
-
-    fn insert_esurface(&mut self, node_id: usize, esurface_id: EsurfaceId) -> Result<(), Report> {
-        match self.nodes[node_id] {
-            CFFTreeNode::Data(ref mut tree_node_data) => {
-                tree_node_data.esurface_id = Some(esurface_id);
-                Ok(())
-            }
-            CFFTreeNode::Pointer(_) => Err(eyre!("Node is a pointer")),
-        }
-    }
-
-    fn get_bottom_layer(&self) -> Vec<usize> {
-        self.nodes
-            .iter()
-            .filter(|node| match node {
-                CFFTreeNode::Data(tree_node_data) => tree_node_data.children.is_empty(),
-                CFFTreeNode::Pointer(_) => false,
-            })
-            .map(|node| match node {
-                CFFTreeNode::Data(tree_node_data) => tree_node_data.node_id,
-                CFFTreeNode::Pointer(_) => unreachable!(),
-            })
-            .collect_vec()
-    }
-
-    fn to_serializable(&self) -> SerializableCFFTree {
-        let nodes = self.nodes.iter().map(|n| n.to_serializable()).collect_vec();
-        let orientation = self.orientation.to_serializable();
-        let term_id = self.term_id;
-        let num_data_nodes = self.num_data_nodes;
-
-        SerializableCFFTree {
-            nodes,
-            orientation,
-            term_id,
-            num_data_nodes,
-        }
-    }
-
-    fn from_serializable(serializable: SerializableCFFTree) -> Self {
-        let nodes = serializable
-            .nodes
-            .into_iter()
-            .map(CFFTreeNode::from_serializable)
-            .collect_vec();
-
-        let term_id = serializable.term_id;
-        let num_data_nodes = serializable.num_data_nodes;
-
-        let orientation = Orientation::from_serializable(serializable.orientation);
-
-        Self {
-            nodes,
-            orientation,
-            term_id,
-            num_data_nodes,
-        }
-    }
-
-    fn recursive_eval_from_node<T: FloatLike>(
-        &self,
         node_id: usize,
-        esurface_cache: &EsurfaceCache<T>,
-        node_cache: &mut Vec<Vec<Option<T>>>,
-    ) -> T {
-        match &self.nodes[node_id] {
-            CFFTreeNode::Data(tree_node_data) => {
-                let option_esurface_at_node = tree_node_data.esurface_id;
-                match option_esurface_at_node {
-                    None => {
-                        let res = Into::<T>::into(1.);
-                        node_cache[self.term_id][node_id] = Some(res);
-                        res
-                    }
-                    Some(esurface_id) => {
-                        let res = if !tree_node_data.children.is_empty() {
-                            esurface_cache[esurface_id].inv()
-                                * (tree_node_data
-                                    .children
-                                    .iter()
-                                    .map(|child_index| {
-                                        self.recursive_eval_from_node(
-                                            *child_index,
-                                            esurface_cache,
-                                            node_cache,
-                                        )
-                                    })
-                                    .sum::<T>())
-                        } else {
-                            esurface_cache[esurface_id].inv()
-                        };
-                        node_cache[self.term_id][node_id] = Some(res);
-                        res
-                    }
-                }
+    },
+}
+
+fn forget_graphs(data: GenerationData) -> CFFExpressionNode {
+    match data {
+        GenerationData::Data { esurface_id, .. } => CFFExpressionNode::Data(esurface_id.unwrap()),
+        GenerationData::Pointer { term_id, node_id } => CFFExpressionNode::Pointer {
+            term_id: Into::<TermId>::into(term_id),
+            node_id: Into::<NodeId>::into(node_id),
+        },
+    }
+}
+
+impl GenerationData {
+    fn insert_esurface(&mut self, esurface_id: EsurfaceId) {
+        match self {
+            GenerationData::Data {
+                esurface_id: ref mut id,
+                ..
+            } => {
+                *id = Some(esurface_id);
             }
-            CFFTreeNode::Pointer(pointer) => node_cache[pointer.term_id][pointer.node_id].unwrap(),
-        }
-    }
-
-    fn evaluate_tree<T: FloatLike>(
-        &self,
-        esurface_cache: &EsurfaceCache<T>,
-        node_cache: &mut Vec<Vec<Option<T>>>,
-    ) -> T {
-        self.recursive_eval_from_node(0, esurface_cache, node_cache)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct SerializableCFFTree {
-    nodes: Vec<SerializableCFFTreeNode>,
-    orientation: SerializableOrientation,
-    term_id: usize,
-    num_data_nodes: usize,
-}
-
-#[derive(Debug, Clone)]
-struct CFFTreeNodeData {
-    node_id: usize,
-    graph: CFFIntermediateGraph,
-    children: Vec<usize>,
-    _parent: Option<usize>,
-    esurface_id: Option<EsurfaceId>,
-}
-
-impl CFFTreeNodeData {
-    fn to_serializable(&self) -> SerializableCFFTreeNodeData {
-        let children = self.children.clone();
-        let graph = self.graph.to_serializable();
-        let node_id = self.node_id;
-        let esurface_id = self.esurface_id.map(Into::<usize>::into);
-        let parent = self._parent;
-
-        SerializableCFFTreeNodeData {
-            node_id,
-            graph,
-            children,
-            esurface_id,
-            parent,
-        }
-    }
-
-    fn from_serializable(serializable: SerializableCFFTreeNodeData) -> Self {
-        let SerializableCFFTreeNodeData {
-            node_id,
-            graph,
-            children,
-            esurface_id,
-            parent,
-        } = serializable;
-
-        Self {
-            node_id,
-            graph: CFFIntermediateGraph::from_serializable(graph),
-            children,
-            _parent: parent,
-            esurface_id: esurface_id.map(Into::<EsurfaceId>::into),
+            GenerationData::Pointer { .. } => {}
         }
     }
 }
@@ -253,175 +66,12 @@ struct CFFTreeNodePointer {
     node_id: usize,
 }
 
-#[derive(Debug, Clone)]
-enum CFFTreeNode {
-    Data(CFFTreeNodeData),
-    Pointer(CFFTreeNodePointer),
-}
-
-impl CFFTreeNode {
-    fn to_serializable(&self) -> SerializableCFFTreeNode {
-        match self {
-            CFFTreeNode::Data(data) => SerializableCFFTreeNode::Data(data.to_serializable()),
-            CFFTreeNode::Pointer(pointer) => SerializableCFFTreeNode::Pointer(*pointer),
-        }
-    }
-
-    fn from_serializable(serializable: SerializableCFFTreeNode) -> Self {
-        match serializable {
-            SerializableCFFTreeNode::Data(data) => {
-                CFFTreeNode::Data(CFFTreeNodeData::from_serializable(data))
-            }
-            SerializableCFFTreeNode::Pointer(pointer) => CFFTreeNode::Pointer(pointer),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct SerializableCFFTreeNodeData {
-    node_id: usize,
-    graph: SerializableCFFIntermediateGraph,
-    children: Vec<usize>,
-    parent: Option<usize>,
-    esurface_id: Option<usize>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-enum SerializableCFFTreeNode {
-    Data(SerializableCFFTreeNodeData),
-    Pointer(CFFTreeNodePointer),
-}
-
-#[derive(Debug, Clone)]
-pub struct CFFExpression {
-    pub terms: Vec<CFFTree>,
-    pub esurfaces: EsurfaceCollection,
+struct CFFGenerator {
+    terms: Vec<(Tree<GenerationData>, Orientation)>,
+    esurfaces: EsurfaceCollection,
     inequivalent_nodes: HashMap<HashableCFFIntermediateGraph, (usize, usize)>,
 }
 
-impl CFFExpression {
-    pub fn to_serializable(&self) -> SerializableCFFExpression {
-        let terms = self.terms.iter().map(|t| t.to_serializable()).collect_vec();
-        let esurfaces = self.esurfaces.clone();
-        let inequivalent_nodes = self
-            .inequivalent_nodes
-            .iter()
-            .map(|(k, v)| (k.clone(), v.0, v.1))
-            .collect_vec();
-
-        SerializableCFFExpression {
-            terms,
-            esurfaces: esurfaces.to_vec(),
-            inequivalent_nodes,
-        }
-    }
-
-    pub fn from_serializable(serializable: SerializableCFFExpression) -> Self {
-        let terms = serializable
-            .terms
-            .into_iter()
-            .map(CFFTree::from_serializable)
-            .collect_vec();
-
-        let esurfaces = serializable.esurfaces;
-
-        let inequivalent_nodes = serializable
-            .inequivalent_nodes
-            .into_iter()
-            .map(|(k, v1, v2)| (k, (v1, v2)))
-            .collect();
-
-        Self {
-            terms,
-            esurfaces: EsurfaceCollection::from_vec(esurfaces),
-            inequivalent_nodes,
-        }
-    }
-
-    #[inline]
-    pub fn evaluate_orientations<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
-        let esurface_cache = self.compute_esurface_cache(energy_cache);
-
-        let mut node_cache = self
-            .terms
-            .iter()
-            .map(|t| vec![None; t.nodes.len()])
-            .collect_vec();
-
-        self.terms
-            .iter()
-            .map(|tree| tree.evaluate_tree(&esurface_cache, &mut node_cache))
-            .collect()
-    }
-
-    #[inline]
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        self.evaluate_orientations(energy_cache)
-            .into_iter()
-            .sum::<T>()
-    }
-
-    #[inline]
-    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> EsurfaceCache<T> {
-        self.esurfaces.compute_esurface_cache(energy_cache)
-    }
-
-    fn recursive_term_builder(
-        &self,
-        res: &mut Vec<Vec<EsurfaceId>>,
-        current_path: &mut Vec<EsurfaceId>,
-        term_id: usize,
-        node_id: usize,
-    ) {
-        let node = &self.terms[term_id].nodes[node_id];
-
-        match node {
-            CFFTreeNode::Data(data) => {
-                if let Some(esurface_id) = data.esurface_id {
-                    current_path.push(esurface_id);
-                }
-
-                if data.children.is_empty() {
-                    res.push(current_path.clone());
-                } else {
-                    for child in data.children.iter() {
-                        self.recursive_term_builder(
-                            res,
-                            &mut current_path.clone(),
-                            term_id,
-                            *child,
-                        );
-                    }
-                }
-            }
-            CFFTreeNode::Pointer(pointer) => {
-                self.recursive_term_builder(res, current_path, pointer.term_id, pointer.node_id);
-            }
-        }
-    }
-
-    fn expand_term(&self, term_id: usize) -> Vec<Vec<EsurfaceId>> {
-        let mut res = vec![];
-        let mut current_path = vec![];
-
-        self.recursive_term_builder(&mut res, &mut current_path, term_id, 0);
-        res
-    }
-
-    pub fn expand_terms(&self) -> Vec<Vec<EsurfaceId>> {
-        self.terms
-            .iter()
-            .flat_map(|t| self.expand_term(t.term_id))
-            .collect()
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SerializableCFFExpression {
-    terms: Vec<SerializableCFFTree>,
-    esurfaces: Vec<Esurface>,
-    inequivalent_nodes: Vec<(HashableCFFIntermediateGraph, usize, usize)>,
-}
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Copy)]
 enum CFFVertexType {
     Source,
@@ -482,15 +132,6 @@ impl CFFVertex {
     fn iter(&self) -> impl Iterator<Item = u8> + '_ {
         self.identifier.iter().take(self.len).copied()
     }
-
-    fn to_serializable(self) -> ReadableCFFVertex {
-        let identifier = (0..self.len).map(|i| self.identifier[i]).collect_vec();
-        ReadableCFFVertex { identifier }
-    }
-
-    fn from_serializable(serializable: ReadableCFFVertex) -> Self {
-        Self::from_vec(serializable.identifier)
-    }
 }
 
 impl Display for CFFVertex {
@@ -524,27 +165,6 @@ impl Orientation {
     fn default(num_edges: usize) -> Self {
         Self {
             identifier: 0,
-            num_edges,
-        }
-    }
-
-    fn to_serializable(self) -> SerializableOrientation {
-        let orientation = self.into_iter().collect_vec();
-        SerializableOrientation { orientation }
-    }
-
-    fn from_serializable(serializable: SerializableOrientation) -> Self {
-        let num_edges = serializable.orientation.len();
-
-        let identifier = serializable
-            .orientation
-            .into_iter()
-            .enumerate()
-            .map(|(index, value)| if value { 0 } else { 1 << index })
-            .sum();
-
-        Self {
-            identifier,
             num_edges,
         }
     }
@@ -584,11 +204,6 @@ impl Iterator for OrientationIterator {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct SerializableOrientation {
-    orientation: Vec<bool>,
-}
-
 // This function returns an iterator over all possible orientations of a graph
 fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orientation> {
     if num_edges > 64 {
@@ -611,44 +226,6 @@ struct CFFIntermediateGraph {
 
 #[allow(unused)]
 impl CFFIntermediateGraph {
-    fn from_serializable(serializable: SerializableCFFIntermediateGraph) -> Self {
-        let mut edges = HashMap::default();
-        let mut vertices = HashMap::default();
-
-        for vertex in serializable.vertices.into_iter() {
-            let (outgoing, incoming) = (vertex.1, vertex.2);
-            vertices.insert(CFFVertex::from_serializable(vertex.0), (outgoing, incoming));
-        }
-
-        for edge in serializable.edges.into_iter() {
-            edges.insert(
-                edge.0,
-                (
-                    CFFVertex::from_serializable(edge.1),
-                    CFFVertex::from_serializable(edge.2),
-                ),
-            );
-        }
-
-        CFFIntermediateGraph { vertices, edges }
-    }
-
-    fn to_serializable(&self) -> SerializableCFFIntermediateGraph {
-        let vertices = self
-            .vertices
-            .iter()
-            .map(|(v, (o, i))| (v.to_serializable(), o.clone(), i.clone()))
-            .collect_vec();
-
-        let edges = self
-            .edges
-            .iter()
-            .map(|(i, (l, r))| (*i, l.to_serializable(), r.to_serializable()))
-            .collect_vec();
-
-        SerializableCFFIntermediateGraph { vertices, edges }
-    }
-
     // helper function for testing
     fn from_vec(edges: Vec<(usize, usize)>) -> Self {
         let num_edges = edges.len();
@@ -1152,12 +729,6 @@ impl Display for CFFIntermediateGraph {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct SerializableCFFIntermediateGraph {
-    edges: Vec<(usize, ReadableCFFVertex, ReadableCFFVertex)>,
-    vertices: Vec<(ReadableCFFVertex, Vec<usize>, Vec<usize>)>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 struct HashableCFFIntermediateGraph {
     edges: Vec<(usize, CFFVertex, CFFVertex)>,
 }
@@ -1326,7 +897,7 @@ fn generate_cff_from_orientations(
     position_map: &HashMap<usize, usize>,
     external_data: &HashMap<usize, Vec<usize>>,
 ) -> Result<CFFExpression, Report> {
-    let mut cff_expression = CFFExpression {
+    let mut cff_generator = CFFGenerator {
         terms: vec![],
         esurfaces: EsurfaceCollection::from_vec(vec![]),
         inequivalent_nodes: HashMap::default(),
@@ -1345,61 +916,82 @@ fn generate_cff_from_orientations(
 
     let mut cache_hits = 0;
     let mut non_cache_hits = 0;
+
     for (term_id, (orientation, graph)) in acyclic_orientations_and_graphs.into_iter().enumerate() {
-        let mut tree = CFFTree::from_root_graph(graph, orientation, term_id);
+        let root = GenerationData::Data {
+            graph,
+            esurface_id: None,
+        };
+
+        let mut tree = Tree::from_root(root);
         let mut tree_done = false;
 
         while !tree_done {
-            let bottom_layer = tree.get_bottom_layer();
+            let bottom_layer = tree
+                .get_bottom_layer()
+                .into_iter()
+                .filter(|&node_id| {
+                    let node = tree.get_node(node_id);
+                    matches!(node.data, GenerationData::Data { .. })
+                })
+                .collect_vec();
+
             if bottom_layer.is_empty() {
                 break;
             }
 
             for node_id in bottom_layer.into_iter() {
-                let node = match &tree.nodes[node_id] {
-                    CFFTreeNode::Data(tree_node_data) => tree_node_data,
-                    _ => unreachable!(), // this is impossible by definition of get_bottom_layer()
+                let node = tree.get_node(node_id);
+                let graph = match &node.data {
+                    GenerationData::Data { graph, .. } => graph,
+                    GenerationData::Pointer { .. } => {
+                        unreachable!("filtered")
+                    }
                 };
 
                 let (option_children, esurface) =
-                    node.graph
-                        .generate_children(position_map, external_data, &orientation)?;
+                    graph.generate_children(position_map, external_data, &orientation)?;
 
-                let option_esurface_id = cff_expression
+                let option_esurface_id = cff_generator
                     .esurfaces
                     .iter()
                     .position(|e| e == &esurface)
                     .map(Into::<EsurfaceId>::into);
 
                 if let Some(esurface_id) = option_esurface_id {
-                    tree.insert_esurface(node_id, esurface_id)?;
+                    tree.apply_mut_closure(node_id, |data| data.insert_esurface(esurface_id))
                 } else {
-                    tree.insert_esurface(
-                        node_id,
-                        Into::<EsurfaceId>::into(cff_expression.esurfaces.len()),
-                    )?;
-                    cff_expression.esurfaces.push(esurface);
+                    tree.apply_mut_closure(node_id, |data| {
+                        data.insert_esurface(Into::<EsurfaceId>::into(
+                            cff_generator.esurfaces.len(),
+                        ))
+                    });
+                    cff_generator.esurfaces.push(esurface);
                 }
 
                 if let Some(children) = option_children {
                     for child in children.into_iter() {
                         let hashable_child = child.to_hashable();
                         if let Some((cff_expression_term_id, cff_expression_node_id)) =
-                            cff_expression.inequivalent_nodes.get(&hashable_child)
+                            cff_generator.inequivalent_nodes.get(&hashable_child)
                         {
-                            let new_pointer = CFFTreeNodePointer {
+                            let new_pointer = GenerationData::Pointer {
                                 term_id: *cff_expression_term_id,
                                 node_id: *cff_expression_node_id,
                             };
-                            tree.insert_pointer(node_id, new_pointer)?;
+                            tree.insert_node(node_id, new_pointer);
                             cache_hits += 1;
                         } else {
-                            let child_node_id = tree.nodes.len();
+                            let child_node_id = tree.get_num_nodes();
+                            let child_node = GenerationData::Data {
+                                graph: child,
+                                esurface_id: None,
+                            };
 
-                            cff_expression
+                            cff_generator
                                 .inequivalent_nodes
                                 .insert(hashable_child, (term_id, child_node_id));
-                            tree.insert_graph(node_id, child)?;
+                            tree.insert_node(node_id, child_node);
                             non_cache_hits += 1;
                         }
                     }
@@ -1409,7 +1001,7 @@ fn generate_cff_from_orientations(
             }
         }
 
-        cff_expression.terms.push(tree);
+        cff_generator.terms.push((tree, orientation));
     }
 
     debug!("number of cache hits: {}", cache_hits);
@@ -1418,13 +1010,26 @@ fn generate_cff_from_orientations(
         cache_hits as f64 / (cache_hits + non_cache_hits) as f64 * 100.0
     );
 
-    Ok(cff_expression)
+    let (expression, orientations): (Vec<Tree<CFFExpressionNode>>, Vec<Vec<bool>>) = cff_generator
+        .terms
+        .into_iter()
+        .map(|(tree, orientation)| (tree.map(forget_graphs), orientation.into_iter().collect()))
+        .unzip();
+
+    Ok(CFFExpression {
+        expression,
+        orientations,
+        esurfaces: cff_generator.esurfaces,
+    })
 }
 
 #[cfg(test)]
 mod tests_cff {
     use lorentz_vector::LorentzVector;
     use num::traits::Inv;
+    use utils::FloatLike;
+
+    use crate::utils;
 
     use super::*;
 
@@ -1683,11 +1288,12 @@ mod tests_cff {
     fn test_tree_structure() {
         let triangle_edge_vec = vec![(0, 1), (1, 2), (0, 2)];
 
-        let stupid_test_graph = CFFIntermediateGraph::from_vec(triangle_edge_vec);
+        let _stupid_test_graph = CFFIntermediateGraph::from_vec(triangle_edge_vec);
+        todo!("move to tree.rs")
 
-        let test_tree = CFFTree::from_root_graph(stupid_test_graph, Orientation::default(3), 0);
-        let bottom_layer = test_tree.get_bottom_layer();
-        assert_eq!(bottom_layer.len(), 1);
+        //let test_tree = CFFTree::from_root_graph(stupid_test_graph, Orientation::default(3), 0);
+        //let bottom_layer = test_tree.get_bottom_layer();
+        //assert_eq!(bottom_layer.len(), 1);
         // needs more tests
     }
 
@@ -1909,14 +1515,13 @@ mod tests_cff {
         }
 
         let orientations = generate_orientations_for_testing(double_triangle_edges);
+
+        println!("here");
+
         let cff =
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
 
-        for tree in cff.terms.iter() {
-            for node in tree.nodes.iter() {
-                println!("{:?}", node);
-            }
-        }
+        println!("generated");
 
         let _edge_types = [
             EdgeType::Virtual,
@@ -2100,15 +1705,11 @@ mod tests_cff {
         // get time before cff generation
         let start = std::time::Instant::now();
 
-        let cff =
+        let _cff =
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
-        let num_terms = cff.terms.len();
-        let num_nodes = cff.terms.iter().map(|t| t.nodes.len()).sum::<usize>();
 
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
-        println!("number of cff terms: {}", num_terms);
-        println!("number of nodes: {}", num_nodes);
     }
 
     #[test]
@@ -2144,10 +1745,8 @@ mod tests_cff {
         // get time before cff generation
         let _start = std::time::Instant::now();
 
-        let cff =
+        let _cff =
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
-        let _num_terms = cff.terms.len();
-        let _num_nodes = cff.terms.iter().map(|t| t.nodes.len()).sum::<usize>();
 
         let _finish = std::time::Instant::now();
     }
@@ -2195,8 +1794,7 @@ mod tests_cff {
         println!("generating orientations");
         let orientations = generate_orientations_for_testing(edges);
         println!("orientations generated");
-        let cff =
+        let _cff =
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
-        println!("cff terms = {}", cff.terms.len());
     }
 }

@@ -244,12 +244,7 @@ impl GraphIntegrand for AmplitudeGraph {
             .get_graph()
             .compute_onshell_energies(&sample.loop_moms, &sample.external_moms);
 
-        let tropical_subgraph_table = self
-            .get_graph()
-            .derived_data
-            .tropical_subgraph_table
-            .as_ref()
-            .unwrap();
+        let tropical_subgraph_table = self.get_graph().get_tropical_subgraph_table();
 
         let virtual_loop_energies = self
             .get_graph()

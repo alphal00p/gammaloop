@@ -259,7 +259,7 @@ impl Esurface {
 }
 
 /// Container for esurfaces, supposed to be used for the list of all esurface of a graph
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EsurfaceCollection {
     esurfaces: Vec<Esurface>,
 }
@@ -550,7 +550,10 @@ impl EsurfaceData {
     }
 }
 
-pub fn generate_esurface_data(graph: &Graph) -> Result<EsurfaceDerivedData, Report> {
+pub fn generate_esurface_data(
+    graph: &Graph,
+    esurfaces: &EsurfaceCollection,
+) -> Result<EsurfaceDerivedData, Report> {
     let lmbs = graph
         .derived_data
         .loop_momentum_bases
@@ -558,13 +561,8 @@ pub fn generate_esurface_data(graph: &Graph) -> Result<EsurfaceDerivedData, Repo
         .ok_or_else(|| {
             eyre!("Could not generate esurface data, loop momentum bases not generated.")
         })?;
-    let cff =
-        graph.derived_data.cff_expression.as_ref().ok_or_else(|| {
-            eyre!("Could not generate esurface data, cff expression not generated.")
-        })?;
 
-    let data = cff
-        .esurfaces
+    let data = esurfaces
         .iter()
         .map(|esurface| {
             // find the cut momentum basis
@@ -601,7 +599,7 @@ pub fn generate_esurface_data(graph: &Graph) -> Result<EsurfaceDerivedData, Repo
         })
         .collect::<Result<Vec<_>, Report>>()?;
 
-    let mut esurface_ids = cff.esurfaces.iterate_all_ids().collect_vec();
+    let mut esurface_ids = esurfaces.iterate_all_ids().collect_vec();
     let mut orientation_pairs = Vec::with_capacity(esurface_ids.len() / 2);
 
     while let Some(esurface_id) = esurface_ids.pop() {
@@ -609,8 +607,8 @@ pub fn generate_esurface_data(graph: &Graph) -> Result<EsurfaceDerivedData, Repo
             .iter()
             .enumerate()
             .find(|(_pos, other_esurface_id)| {
-                let esurface = &cff.esurfaces[esurface_id];
-                let other_esurface = &cff.esurfaces[**other_esurface_id];
+                let esurface = &esurfaces[esurface_id];
+                let other_esurface = &esurfaces[**other_esurface_id];
 
                 let energies_match = esurface.energies == other_esurface.energies;
                 let orientation_flipped =

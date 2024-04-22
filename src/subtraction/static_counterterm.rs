@@ -11,7 +11,7 @@ use crate::{
         esurface::{
             EsurfaceCache, EsurfaceCollection, EsurfaceId, ExistingEsurfaceId, ExistingEsurfaces,
         },
-        generation::CFFExpression,
+        expression::CFFExpression,
     },
     graph::{Graph, LoopMomentumBasis},
     utils::{cast_lorentz_vector, FloatLike},
@@ -385,9 +385,7 @@ fn newton_iteration_and_derivative<T: FloatLike>(
 
     let mut iteration = 0;
 
-    while iteration < max_iterations
-        && val_f_x.abs() > T::epsilon() * tolerance * Into::<T>::into(10.0) * e_cm
-    {
+    while iteration < max_iterations && val_f_x.abs() > T::epsilon() * tolerance * e_cm {
         x -= val_f_x / val_df_x;
         (val_f_x, val_df_x) = f_x_and_df_x(x);
         // println!("x: {}, val_f_x: {}, val_df_x: {}", x, val_f_x, val_df_x);

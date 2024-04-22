@@ -4,7 +4,8 @@ use crate::{
             generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData,
             ExistingEsurfaceId, ExistingEsurfaces,
         },
-        generation::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
+        expression::CFFExpression,
+        generation::generate_cff_expression,
     },
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
@@ -1353,7 +1354,7 @@ impl Graph {
     }
 
     pub fn generate_esurface_data(&mut self) -> Result<(), Report> {
-        let data = generate_esurface_data(self)?;
+        let data = generate_esurface_data(self, &self.get_cff().esurfaces)?;
         self.derived_data.esurface_derived_data = Some(data);
 
         Ok(())
@@ -1447,7 +1448,7 @@ impl DerivedGraphData {
                 .loop_momentum_bases
                 .clone()
                 .map(|lmbs| lmbs.iter().map(|lmb| lmb.to_serializable()).collect_vec()),
-            cff_expression: self.cff_expression.clone().map(|cff| cff.to_serializable()),
+            cff_expression: self.cff_expression.clone(),
             ltd_expression: self.ltd_expression.clone().map(|ltd| ltd.to_serializable()),
             tropical_subgraph_table: self.tropical_subgraph_table.clone(),
             edge_groups: self.edge_groups.clone().map(|groups| {
@@ -1467,9 +1468,7 @@ impl DerivedGraphData {
                     .map(LoopMomentumBasis::from_serializable)
                     .collect_vec()
             }),
-            cff_expression: serializable
-                .cff_expression
-                .map(CFFExpression::from_serializable),
+            cff_expression: serializable.cff_expression,
             ltd_expression: serializable
                 .ltd_expression
                 .map(LTDExpression::from_serializable),
@@ -1520,7 +1519,7 @@ impl DerivedGraphData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableDerivedGraphData {
     pub loop_momentum_bases: Option<Vec<SerializableLoopMomentumBasis>>,
-    pub cff_expression: Option<SerializableCFFExpression>,
+    pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<SerializableLTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
     pub edge_groups: Option<Vec<Vec<usize>>>,
