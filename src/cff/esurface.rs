@@ -345,6 +345,13 @@ impl EsurfaceCollection {
     pub fn iterate_all_ids(&self) -> impl Iterator<Item = EsurfaceId> {
         (0..self.len()).map(EsurfaceId)
     }
+
+    pub fn search(&self, esurface: &Esurface) -> Option<EsurfaceId> {
+        self.esurfaces
+            .iter()
+            .position(|e| e == esurface)
+            .map(Into::<EsurfaceId>::into)
+    }
 }
 
 impl Index<EsurfaceId> for EsurfaceCollection {

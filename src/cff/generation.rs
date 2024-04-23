@@ -66,12 +66,6 @@ struct CFFTreeNodePointer {
     node_id: usize,
 }
 
-struct CFFGenerator {
-    terms: Vec<(Tree<GenerationData>, Orientation)>,
-    esurfaces: EsurfaceCollection,
-    inequivalent_nodes: HashMap<HashableCFFIntermediateGraph, (usize, usize)>,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Copy)]
 enum CFFVertexType {
     Source,
@@ -897,10 +891,14 @@ fn generate_cff_from_orientations(
     position_map: &HashMap<usize, usize>,
     external_data: &HashMap<usize, Vec<usize>>,
 ) -> Result<CFFExpression, Report> {
-    let mut cff_generator = CFFGenerator {
-        terms: vec![],
-        esurfaces: EsurfaceCollection::from_vec(vec![]),
-        inequivalent_nodes: HashMap::default(),
+    let esurface_cache = EsurfaceCollection::from_vec(vec![]);
+    let graph_cache = HashMap::default();
+
+    let mut generator_cache = GeneratorCache {
+        graph_cache,
+        esurface_cache,
+        cache_hits: 0,
+        non_cache_hits: 0,
     };
 
     // filter cyclic orientations beforehand
@@ -914,113 +912,175 @@ fn generate_cff_from_orientations(
         acyclic_orientations_and_graphs.len()
     );
 
-    let mut cache_hits = 0;
-    let mut non_cache_hits = 0;
+    let terms = acyclic_orientations_and_graphs.into_iter().enumerate().map(
+        |(term_id, (orientation, graph))| {
+            let tree = generate_tree_for_orientation(
+                graph,
+                &orientation,
+                position_map,
+                external_data,
+                term_id,
+                &mut generator_cache,
+            );
 
-    for (term_id, (orientation, graph)) in acyclic_orientations_and_graphs.into_iter().enumerate() {
-        let root = GenerationData::Data {
-            graph,
-            esurface_id: None,
-        };
-
-        let mut tree = Tree::from_root(root);
-        let mut tree_done = false;
-
-        while !tree_done {
-            let bottom_layer = tree
-                .get_bottom_layer()
-                .into_iter()
-                .filter(|&node_id| {
-                    let node = tree.get_node(node_id);
-                    matches!(node.data, GenerationData::Data { .. })
-                })
-                .collect_vec();
-
-            if bottom_layer.is_empty() {
-                break;
-            }
-
-            for node_id in bottom_layer.into_iter() {
-                let node = tree.get_node(node_id);
-                let graph = match &node.data {
-                    GenerationData::Data { graph, .. } => graph,
-                    GenerationData::Pointer { .. } => {
-                        unreachable!("filtered")
-                    }
-                };
-
-                let (option_children, esurface) =
-                    graph.generate_children(position_map, external_data, &orientation)?;
-
-                let option_esurface_id = cff_generator
-                    .esurfaces
-                    .iter()
-                    .position(|e| e == &esurface)
-                    .map(Into::<EsurfaceId>::into);
-
-                if let Some(esurface_id) = option_esurface_id {
-                    tree.apply_mut_closure(node_id, |data| data.insert_esurface(esurface_id))
-                } else {
-                    tree.apply_mut_closure(node_id, |data| {
-                        data.insert_esurface(Into::<EsurfaceId>::into(
-                            cff_generator.esurfaces.len(),
-                        ))
-                    });
-                    cff_generator.esurfaces.push(esurface);
-                }
-
-                if let Some(children) = option_children {
-                    for child in children.into_iter() {
-                        let hashable_child = child.to_hashable();
-                        if let Some((cff_expression_term_id, cff_expression_node_id)) =
-                            cff_generator.inequivalent_nodes.get(&hashable_child)
-                        {
-                            let new_pointer = GenerationData::Pointer {
-                                term_id: *cff_expression_term_id,
-                                node_id: *cff_expression_node_id,
-                            };
-                            tree.insert_node(node_id, new_pointer);
-                            cache_hits += 1;
-                        } else {
-                            let child_node_id = tree.get_num_nodes();
-                            let child_node = GenerationData::Data {
-                                graph: child,
-                                esurface_id: None,
-                            };
-
-                            cff_generator
-                                .inequivalent_nodes
-                                .insert(hashable_child, (term_id, child_node_id));
-                            tree.insert_node(node_id, child_node);
-                            non_cache_hits += 1;
-                        }
-                    }
-                } else {
-                    tree_done = true;
-                }
-            }
-        }
-
-        cff_generator.terms.push((tree, orientation));
-    }
-
-    debug!("number of cache hits: {}", cache_hits);
-    debug!(
-        "percentage of cache hits: {:.1}%",
-        cache_hits as f64 / (cache_hits + non_cache_hits) as f64 * 100.0
+            (tree, orientation)
+        },
     );
 
-    let (expression, orientations): (Vec<Tree<CFFExpressionNode>>, Vec<Vec<bool>>) = cff_generator
-        .terms
-        .into_iter()
+    let (expression, orientations): (Vec<Tree<CFFExpressionNode>>, Vec<Vec<bool>>) = terms
         .map(|(tree, orientation)| (tree.map(forget_graphs), orientation.into_iter().collect()))
         .unzip();
+
+    debug!("number of cache hits: {}", generator_cache.cache_hits);
+    debug!(
+        "percentage of cache hits: {:.1}%",
+        generator_cache.cache_hits as f64
+            / (generator_cache.cache_hits + generator_cache.non_cache_hits) as f64
+            * 100.0
+    );
 
     Ok(CFFExpression {
         expression,
         orientations,
-        esurfaces: cff_generator.esurfaces,
+        esurfaces: generator_cache.esurface_cache,
     })
+}
+
+struct GeneratorCache {
+    graph_cache: HashMap<HashableCFFIntermediateGraph, (usize, usize)>,
+    esurface_cache: EsurfaceCollection,
+    cache_hits: usize,
+    non_cache_hits: usize,
+}
+
+#[allow(clippy::type_complexity)]
+fn generate_tree_for_orientation(
+    graph: CFFIntermediateGraph,
+    orientation: &Orientation,
+    position_map: &HashMap<usize, usize>,
+    external_data: &HashMap<usize, Vec<usize>>,
+    term_id: usize,
+    generator_cache: &mut GeneratorCache,
+) -> Tree<GenerationData> {
+    let mut tree = Tree::from_root(GenerationData::Data {
+        graph,
+        esurface_id: None,
+    });
+
+    while let Some(()) = advance_tree(
+        &mut tree,
+        term_id,
+        position_map,
+        external_data,
+        orientation,
+        generator_cache,
+    ) {}
+
+    tree
+}
+
+fn advance_tree(
+    tree: &mut Tree<GenerationData>,
+    term_id: usize,
+    position_map: &HashMap<usize, usize>,
+    external_data: &HashMap<usize, Vec<usize>>,
+    orientation: &Orientation,
+    generator_cache: &mut GeneratorCache,
+) -> Option<()> {
+    let bottom_layer = tree
+        .get_bottom_layer()
+        .into_iter()
+        .filter(|&node_id| matches!(&tree.get_node(node_id).data, GenerationData::Data { .. }))
+        .collect_vec(); // allocation needed because tree is mutable
+
+    let (children_optional, new_esurfaces_for_tree): (
+        Vec<Option<Vec<CFFIntermediateGraph>>>,
+        Vec<EsurfaceId>,
+    ) = bottom_layer
+        .iter()
+        .map(|&node_id| {
+            let node = &tree.get_node(node_id);
+            let graph = match &node.data {
+                GenerationData::Data { graph, .. } => graph,
+                GenerationData::Pointer { .. } => {
+                    unreachable!("filtered")
+                }
+            };
+
+            let (option_children, esurface) = graph
+                .generate_children(position_map, external_data, orientation)
+                .unwrap_or_else(|_| panic!("Failure in cff generation"));
+
+            let option_esurface_id = generator_cache.esurface_cache.search(&esurface);
+
+            let esurface_id = match option_esurface_id {
+                Some(esurface_id) => esurface_id,
+                None => {
+                    generator_cache.esurface_cache.push(esurface);
+                    Into::<EsurfaceId>::into(generator_cache.esurface_cache.len() - 1)
+                }
+            };
+
+            (option_children, esurface_id)
+        })
+        .unzip();
+
+    bottom_layer
+        .iter()
+        .zip(new_esurfaces_for_tree)
+        .for_each(|(&node_id, esurface_id)| {
+            tree.apply_mut_closure(node_id, |data| data.insert_esurface(esurface_id))
+        });
+
+    let all_some = children_optional.iter().all(Option::is_some);
+    let all_none = children_optional.iter().all(Option::is_none);
+
+    assert!(
+        all_some || all_none,
+        "Some cff branches have finished earlier than others"
+    );
+
+    let children = if all_some && !all_none {
+        children_optional
+            .into_iter()
+            .map(Option::unwrap)
+            .collect_vec()
+    } else {
+        return None;
+    };
+
+    bottom_layer
+        .iter()
+        .zip(children)
+        .for_each(|(&node_id, children)| {
+            children.into_iter().for_each(|child| {
+                let hashable_child = child.to_hashable();
+                if let Some((cff_expression_term_id, cff_expression_node_id)) =
+                    generator_cache.graph_cache.get(&hashable_child)
+                {
+                    let new_pointer = GenerationData::Pointer {
+                        term_id: *cff_expression_term_id,
+                        node_id: *cff_expression_node_id,
+                    };
+                    tree.insert_node(node_id, new_pointer);
+                    generator_cache.cache_hits += 1;
+                } else {
+                    let child_node_id = tree.get_num_nodes();
+                    let child_node = GenerationData::Data {
+                        graph: child,
+                        esurface_id: None,
+                    };
+
+                    generator_cache
+                        .graph_cache
+                        .insert(hashable_child, (term_id, child_node_id));
+                    tree.insert_node(node_id, child_node);
+                    generator_cache.non_cache_hits += 1;
+                }
+            });
+        });
+
+    Some(())
 }
 
 #[cfg(test)]
