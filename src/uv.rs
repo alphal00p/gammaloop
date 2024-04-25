@@ -1,7 +1,10 @@
-use std::{hash::Hash, iter::Map, ops::Sub};
+use std::{clone, cmp::Ordering, collections::VecDeque, hash::Hash, iter::Map, ops::Sub};
 
 use ahash::AHashSet;
-use bitvec::{slice::IterOnes, vec::BitVec};
+use bitvec::{
+    slice::IterOnes,
+    vec::{self, BitVec},
+};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::Cycle, graph};
@@ -278,10 +281,22 @@ pub struct NestingGraph<E, V> {
     involution: Involution<NestingNode, E>, // Involution of half-edges
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq)]
 pub struct SubGraph {
     filter: BitVec,
     loopcount: Option<usize>,
+}
+
+impl Hash for SubGraph {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.filter.hash(state);
+    }
+}
+
+impl PartialEq for SubGraph {
+    fn eq(&self, other: &Self) -> bool {
+        self.filter == other.filter
+    }
 }
 
 impl From<BitVec> for SubGraph {
@@ -289,6 +304,20 @@ impl From<BitVec> for SubGraph {
         SubGraph {
             filter,
             loopcount: None,
+        }
+    }
+}
+
+impl PartialOrd for SubGraph {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self == other {
+            Some(std::cmp::Ordering::Equal)
+        } else if self.filter.clone() | &other.filter == self.filter {
+            Some(std::cmp::Ordering::Greater)
+        } else if self.filter.clone() | &other.filter == other.filter {
+            Some(std::cmp::Ordering::Less)
+        } else {
+            None
         }
     }
 }
@@ -358,12 +387,61 @@ pub struct NestingNode {
     externalhedges: BitVec, // essentially all hedges that are not in the internal graph, but are connected to it
 }
 
+impl PartialOrd for NestingNode {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self == other {
+            return Some(std::cmp::Ordering::Equal);
+        }
+
+        if self.internal_graph.filter.len() != other.internal_graph.filter.len() {
+            return None;
+        }
+
+        if self.externalhedges.len() != other.externalhedges.len() {
+            return None;
+        }
+
+        let self_all = self.all_edges();
+        let other_all = other.all_edges();
+
+        let all_order = if self_all == other_all {
+            Some(std::cmp::Ordering::Equal)
+        } else if self_all.clone() | &other_all == self_all {
+            Some(std::cmp::Ordering::Greater)
+        } else if self_all.clone() | &other_all == other_all {
+            Some(std::cmp::Ordering::Less)
+        } else {
+            None
+        };
+
+        let internal_order = self.internal_graph.partial_cmp(&other.internal_graph);
+
+        match (all_order, internal_order) {
+            (Some(std::cmp::Ordering::Equal), Some(std::cmp::Ordering::Equal)) => {
+                Some(std::cmp::Ordering::Equal)
+            }
+            (Some(all), Some(internal)) => {
+                if all == internal {
+                    Some(all)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
 impl NestingNode {
     pub fn new(len: usize) -> Self {
         NestingNode {
             internal_graph: bitvec![usize, Lsb0; 0; len].into(),
             externalhedges: bitvec![usize, Lsb0; 0; len],
         }
+    }
+
+    fn all_edges(&self) -> BitVec {
+        self.internal_graph.filter.clone() | &self.externalhedges
     }
 
     pub fn union_with(&mut self, other: &NestingNode) {
@@ -392,6 +470,20 @@ impl NestingNode {
     }
 
     pub fn empty_intersection(&self, other: &NestingNode) -> bool {
+        let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
+
+        let externals = self.externalhedges.clone() & &other.externalhedges;
+
+        internals.count_ones() == 0 && externals.count_ones() == 0
+    }
+
+    pub fn weakly_disjoint(&self, other: &NestingNode) -> bool {
+        let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
+
+        internals.count_ones() == 0
+    }
+
+    pub fn strongly_disjoint(&self, other: &NestingNode) -> bool {
         let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
 
         let externals = self.externalhedges.clone() & &other.externalhedges;
@@ -586,6 +678,38 @@ impl<E, V> NestingGraph<E, V> {
             .filter
             .iter_ones()
             .map(|i| self.involution.get_data(i))
+    }
+
+    pub fn is_connected(&self, subgraph: &SubGraph) -> bool {
+        let n_hedges = subgraph.filter.count_ones();
+        let start = subgraph.filter.first_one();
+
+        if let Some(start) = start {
+            self.dfs_reach(subgraph, start).len() == n_hedges
+        } else {
+            true
+        }
+    }
+
+    pub fn dfs_reach(&self, subgraph: &SubGraph, start: usize) -> Vec<usize> {
+        pathfinding::directed::dfs::dfs_reach(start, |i| self.succesors(subgraph, *i).into_iter())
+            .collect()
+    }
+
+    pub fn succesors(&self, subgraph: &SubGraph, start: usize) -> Vec<usize> {
+        let mut succesors = Vec::new();
+        if let Some(connected) = self.involution.get_connected_node_id(start) {
+            for i in connected
+                .externalhedges
+                .iter_ones()
+                .filter(|x| subgraph.filter[*x])
+            {
+                {
+                    succesors.push(i);
+                }
+            }
+        }
+        succesors
     }
 
     pub fn iter_egde_node<'a>(
@@ -1003,22 +1127,12 @@ impl<E, V> NestingGraph<E, V> {
     }
 
     fn all_cycles(&self) -> Vec<NestingNode> {
-        let mut cycles = Vec::new();
-
-        // let mut i = 0;
-
-        // while i < self.involution.len() {
-        //     let cycle = self.paton_cycle_basis(i);
-        //     cycles.extend(cycle);
-        //     i = self.involution.first_internal().unwrap();
-        // }
-
-        cycles
+        self.all_composite_cycles_with_basis(&self.cycle_basis())
     }
 
-    fn all_cycle_unions(&self) -> Vec<SubGraph> {
+    fn all_cycle_unions(&self) -> AHashSet<SubGraph> {
         let cycles = self.read_tarjan();
-        let mut spinneys = Vec::with_capacity(1 << cycles.len());
+        let mut spinneys = AHashSet::new();
 
         let pset = PowersetIterator::new(cycles.len() as u8);
 
@@ -1042,17 +1156,47 @@ impl<E, V> NestingGraph<E, V> {
             }
 
             if let Some(union) = union {
-                spinneys.push(union);
+                spinneys.insert(union);
             }
         }
 
         spinneys
     }
 
-    fn all_cycles_with_basis(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
+    fn all_composite_cycles_with_basis(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
         let mut cycles = Vec::new();
 
+        // println!("loops: {}", basis.len());
+
+        let mut pset = PowersetIterator::new(basis.len() as u8);
+
+        pset.next(); //Skip empty set
+
+        for p in pset {
+            let mut cycle: SubGraph = self.empty_filter().into();
+            for c in p.iter_ones().map(|i| &basis[i]) {
+                cycle.sym_diff_with(&c.internal_graph);
+            }
+
+            if self.is_cycle(&cycle) {
+                let cycle = self.nesting_node_from_subgraph(cycle);
+                cycles.push(cycle);
+            }
+        }
+
         cycles
+    }
+
+    fn is_cycle(&self, subgraph: &SubGraph) -> bool {
+        let mut is = true;
+        for e in self.iter_egde_node(subgraph) {
+            let adgacent = subgraph.filter.clone() & &e.externalhedges;
+            if adgacent.count_ones() != 2 {
+                is = false;
+                break;
+            }
+        }
+        is
     }
 
     fn paton_count_loops(
@@ -1177,13 +1321,13 @@ impl<E, V> NestingGraph<E, V> {
         let mut out = "graph {\n ".to_string();
         out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
 
-        for (edge_id, (incident_node, edge)) in self.involution.inv.iter().enumerate() {
+        for (hedge_id, (incident_node, edge)) in self.involution.inv.iter().enumerate() {
             match &edge {
                 //Internal graphs never have unpaired edges
                 InvolutiveMapping::Identity(_) => {
-                    let attr = if *node_as_graph.internal_graph.filter.get(edge_id).unwrap() {
+                    let attr = if *node_as_graph.internal_graph.filter.get(hedge_id).unwrap() {
                         None
-                    } else if *node_as_graph.externalhedges.get(edge_id).unwrap() {
+                    } else if *node_as_graph.externalhedges.get(hedge_id).unwrap() {
                         Some(GVEdgeAttrs {
                             color: Some("gray50".to_string()),
                             label: None,
@@ -1195,25 +1339,44 @@ impl<E, V> NestingGraph<E, V> {
                         })
                     };
                     out.push_str(&InvolutiveMapping::<()>::identity_dot(
-                        edge_id,
+                        hedge_id,
                         self.nodes.get_index_of(incident_node).unwrap(),
                         attr.as_ref(),
                     ));
                 }
                 InvolutiveMapping::Source((_, _)) => {
-                    let attr = if *node_as_graph.internal_graph.filter.get(edge_id).unwrap() {
+                    let attr = if *node_as_graph.internal_graph.filter.get(hedge_id).unwrap() {
                         None
-                    } else if *node_as_graph.externalhedges.get(edge_id).unwrap() {
+                    } else if *node_as_graph.externalhedges.get(hedge_id).unwrap()
+                        && !*node_as_graph
+                            .externalhedges
+                            .get(self.involution.inv(hedge_id))
+                            .unwrap()
+                    {
                         Some(GVEdgeAttrs {
                             color: Some("gray50:gray75;0.5".to_string()),
                             label: None,
                         })
                     } else if *node_as_graph
                         .externalhedges
-                        .get(self.involution.inv(edge_id))
+                        .get(self.involution.inv(hedge_id))
                         .unwrap()
+                        && !*node_as_graph.externalhedges.get(hedge_id).unwrap()
                     {
-                        continue;
+                        Some(GVEdgeAttrs {
+                            color: Some("gray75:gray50;0.5".to_string()),
+                            label: None,
+                        })
+                    } else if *node_as_graph
+                        .externalhedges
+                        .get(self.involution.inv(hedge_id))
+                        .unwrap()
+                        && *node_as_graph.externalhedges.get(hedge_id).unwrap()
+                    {
+                        Some(GVEdgeAttrs {
+                            color: Some("gray50".to_string()),
+                            label: None,
+                        })
                     } else {
                         Some(GVEdgeAttrs {
                             color: Some("gray75".to_string()),
@@ -1223,29 +1386,16 @@ impl<E, V> NestingGraph<E, V> {
                     out.push_str(&InvolutiveMapping::<()>::pair_dot(
                         self.nodes.get_index_of(incident_node).unwrap(),
                         self.nodes
-                            .get_index_of(self.involution.get_connected_node_id(edge_id).unwrap())
+                            .get_index_of(self.involution.get_connected_node_id(hedge_id).unwrap())
                             .unwrap(),
                         attr.as_ref(),
                     ));
                 }
                 InvolutiveMapping::Sink(i) => {
-                    if *node_as_graph.internal_graph.filter.get(edge_id).unwrap() {
-                        if !*node_as_graph.internal_graph.filter.get(*i).unwrap() {
-                            panic!("Internal graph has a dangling sink edge")
-                        }
-                    } else if *node_as_graph.externalhedges.get(edge_id).unwrap() {
-                        out.push_str(&InvolutiveMapping::<()>::pair_dot(
-                            self.nodes
-                                .get_index_of(
-                                    self.involution.get_connected_node_id(edge_id).unwrap(),
-                                )
-                                .unwrap(),
-                            self.nodes.get_index_of(incident_node).unwrap(),
-                            Some(&GVEdgeAttrs {
-                                color: Some("gray75:gray50;0.5".to_string()),
-                                label: None,
-                            }),
-                        ));
+                    if *node_as_graph.internal_graph.filter.get(hedge_id).unwrap()
+                        && !*node_as_graph.internal_graph.filter.get(*i).unwrap()
+                    {
+                        panic!("Internal graph has a dangling sink edge")
                     }
                 }
             }
@@ -1291,6 +1441,268 @@ impl<E, V> NestingGraph<E, V> {
 
     pub fn get_edge_data(&self, edge: usize) -> &E {
         self.involution.get_data(edge)
+    }
+
+    pub fn nesting_poset(&self) -> PoSet<NestingNode> {
+        let iter = self.nodes.keys().cloned();
+
+        PoSet::from_iter(iter)
+    }
+
+    fn all_spinneys_with_basis(&self, basis: &[&SubGraph]) -> AHashSet<NestingNode> {
+        let mut spinneys = AHashSet::new();
+        let mut base_cycle: SubGraph = self.empty_filter().into();
+
+        for cycle in basis {
+            base_cycle.sym_diff_with(cycle);
+        }
+
+        spinneys.insert(self.nesting_node_from_subgraph(base_cycle.clone()));
+
+        if basis.len() == 1 {
+            return spinneys;
+        }
+
+        for i in 0..basis.len() {
+            for s in self.all_spinneys_with_basis(
+                &basis
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(j, s)| if j != i { Some(*s) } else { None })
+                    .collect_vec(),
+            ) {
+                spinneys
+                    .insert(self.nesting_node_from_subgraph(s.internal_graph.union(&base_cycle)));
+                spinneys.insert(s);
+            }
+        }
+
+        spinneys
+    }
+
+    fn all_spinneys(&self) -> AHashSet<SubGraph> {
+        let mut cycles = self.cycle_basis();
+
+        let mut all_combinations = PowersetIterator::new(cycles.len() as u8);
+        all_combinations.next(); //Skip empty set
+
+        let mut spinneys = AHashSet::new();
+
+        for p in all_combinations {
+            let mut base_cycle: SubGraph = self.empty_filter().into();
+
+            for i in p.iter_ones() {
+                base_cycle.sym_diff_with(&cycles[i].internal_graph);
+            }
+
+            cycles.push(self.nesting_node_from_subgraph(base_cycle.clone()));
+        }
+
+        for (ci, cj) in cycles.iter().tuple_combinations() {
+            spinneys.insert(ci.internal_graph.union(&cj.internal_graph));
+        }
+
+        for c in cycles {
+            spinneys.insert(c.internal_graph);
+        }
+        spinneys
+    }
+
+    fn all_spinneys_alt(&self) -> AHashSet<SubGraph> {
+        let mut spinneys = AHashSet::new();
+        let mut cycles = self.all_cycles();
+
+        let mut pset = PowersetIterator::new(cycles.len() as u8);
+        pset.next(); //Skip empty set
+
+        for p in pset {
+            let mut union: SubGraph = self.empty_filter().into();
+
+            for i in p.iter_ones() {
+                union.union_with(&cycles[i].internal_graph);
+            }
+
+            spinneys.insert(union);
+        }
+
+        for c in cycles {
+            spinneys.insert(c.internal_graph);
+        }
+        spinneys
+    }
+}
+
+pub struct PoSet<N>
+where
+    N: PartialOrd,
+{
+    greater_than: Vec<Vec<usize>>,
+    nodes: Vec<N>,
+}
+
+pub struct CoverSet<N>
+where
+    N: PartialOrd,
+{
+    covers: Vec<Vec<usize>>,
+    nodes: Vec<N>,
+}
+
+impl<N: PartialOrd> CoverSet<N> {
+    pub fn covers(&self, a: usize, b: usize) -> bool {
+        self.covers[a].contains(&b)
+    }
+
+    pub fn dot(&self) -> String {
+        let mut out = "digraph {\n ".to_string();
+        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
+
+        for (i, c) in self.covers.iter().enumerate() {
+            for j in c {
+                out.push_str(&format!("{} -> {};\n", i, j));
+            }
+        }
+
+        out += "}";
+        out
+    }
+
+    pub fn bfs(&self, start: usize) -> Vec<usize> {
+        let mut visited = bitvec![usize, Lsb0; 0; self.nodes.len()];
+        let mut queue = VecDeque::new();
+        let mut order = Vec::new();
+
+        queue.push_back(start);
+
+        while let Some(node) = queue.pop_front() {
+            if visited[node] {
+                continue;
+            }
+
+            visited.set(node, true);
+            order.push(node);
+
+            for &n in &self.covers[node] {
+                queue.push_back(n);
+            }
+        }
+
+        order
+    }
+}
+
+impl<N> PoSet<N>
+where
+    N: Clone + PartialOrd,
+{
+    /// Returns true if a covers b
+    /// a covers b if a > b and there is no c such that a > c > b
+    ///
+    pub fn covers(&self, a: usize, b: usize) -> bool {
+        let mut covers = false;
+        let mut has_c = false;
+        for c in &self.greater_than[b] {
+            if *c == a {
+                covers = true;
+            }
+
+            if self.nodes[a] > self.nodes[*c] {
+                has_c = true;
+            }
+        }
+        covers && !has_c
+    }
+    pub fn to_cover_set(&self) -> CoverSet<N> {
+        let mut covers: Vec<Vec<usize>> = Vec::new();
+        let nodes = self.nodes.clone();
+
+        for (i, _) in nodes.iter().enumerate() {
+            let mut coversacents = Vec::new();
+
+            for j in (i + 1)..nodes.len() {
+                if self.covers(j, i) {
+                    coversacents.push(j);
+                }
+            }
+            covers.push(coversacents);
+        }
+
+        CoverSet { covers, nodes }
+    }
+
+    pub fn dot(&self) -> String {
+        let mut out = "digraph {\n ".to_string();
+        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
+
+        for (i, c) in self.greater_than.iter().enumerate() {
+            for j in c {
+                out.push_str(&format!("{} -> {};\n", i, j));
+            }
+        }
+
+        out += "}";
+        out
+    }
+
+    pub fn greater_than(&self, a: usize) -> Vec<usize> {
+        self.greater_than[a].clone()
+    }
+}
+
+impl<N> FromIterator<N> for PoSet<N>
+where
+    N: PartialOrd,
+{
+    fn from_iter<T: IntoIterator<Item = N>>(iter: T) -> Self {
+        let mut nodes = Vec::new();
+        let mut greater_than: Vec<Vec<usize>> = Vec::new();
+
+        // Insert topologically
+        // we want that if n < m then n comes before m in the nodes list
+        for n in iter {
+            let mut pos = nodes.len();
+            for (i, m) in nodes.iter().enumerate().rev() {
+                if n < *m {
+                    pos = i;
+                }
+            }
+            nodes.insert(pos, n);
+        }
+
+        for (i, n) in nodes.iter().enumerate() {
+            let mut greater_thanacents = Vec::new();
+
+            for (j, m) in nodes.iter().enumerate().skip(i) {
+                if *m > *n {
+                    greater_thanacents.push(j);
+                }
+            }
+            greater_than.push(greater_thanacents);
+        }
+
+        PoSet {
+            greater_than,
+            nodes,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct BitFilter {
+    data: u128,
+}
+
+impl PartialOrd for BitFilter {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.eq(other) {
+            Some(Ordering::Equal)
+        } else if self.data & other.data == self.data {
+            Some(Ordering::Greater)
+        } else if self.data & other.data == other.data {
+            Some(Ordering::Less)
+        } else {
+            None
+        }
     }
 }
 
@@ -1406,6 +1818,33 @@ impl UVGraph {
         }
 
         rank
+    }
+
+    fn wood(&self) -> Vec<SubGraph> {
+        let cycles = self.0.read_tarjan();
+        let mut spinneys = Vec::with_capacity(1 << cycles.len());
+
+        let pset = PowersetIterator::new(cycles.len() as u8);
+
+        for p in pset {
+            let mut union: Option<SubGraph> = None;
+
+            for i in p.iter_ones() {
+                if let Some(union) = &mut union {
+                    union.union_with(&cycles[i].internal_graph);
+                } else {
+                    union = Some(cycles[i].internal_graph.clone());
+                }
+            }
+
+            if let Some(union) = union {
+                if self.dod(&union) >= 0 {
+                    spinneys.push(union);
+                }
+            }
+        }
+
+        spinneys
     }
 
     fn dod(&self, subgraph: &SubGraph) -> isize {

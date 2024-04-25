@@ -105,6 +105,7 @@ constcat = "0.5.0"
 bitvec = { version = "1.0.1", features = ["serde"] }
 anyhow = { version = "1.0.82", features = ["backtrace"] }
 thiserror = "1.0.58"
+pathfinding = "4.9.1"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
