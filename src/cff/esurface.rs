@@ -634,3 +634,49 @@ pub fn generate_esurface_data(
         orientation_pairs,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{cff::esurface::Esurface, graph::EdgeType};
+
+    #[test]
+    fn test_esurface() {
+        let energies_cache = [1., 2., 3., 4., 5.];
+        let shift = vec![3, 4];
+        let energies = vec![0, 1, 2];
+        let shift_signature = vec![true; 2];
+        let sub_orientation = vec![true, false, true];
+
+        let esurface = Esurface {
+            sub_orientation: sub_orientation.clone(),
+            energies,
+            shift,
+            shift_signature,
+        };
+
+        let _edge_types = [
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Virtual,
+            EdgeType::Incoming,
+            EdgeType::Incoming,
+        ];
+
+        let res = esurface.compute_value(&energies_cache);
+        assert_eq!(res, 15.);
+
+        let shift_signature = vec![false; 1];
+        let energies = vec![0, 2];
+        let shift = vec![1];
+
+        let esurface = Esurface {
+            energies,
+            sub_orientation: sub_orientation.clone(),
+            shift,
+            shift_signature,
+        };
+
+        let res = esurface.compute_value(&energies_cache);
+        assert_eq!(res, 2.);
+    }
+}
