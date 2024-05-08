@@ -23,29 +23,13 @@ lto = "fat"
 criterion = { version = "0.5", features = ["html_reports"] }
 insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 
-[[bench]]
-name = "gamma_net"
-harness = false
-
-[[bench]]
-name = "evaluate_net"
-harness = false
-
-[[example]]
-name = "gamma_chains"
-path = "examples/rust/tensors/gamma_chain.rs"
-
-[[example]]
-name = "gamma_network"
-path = "examples/rust/tensors/gamma_network.rs"
-
-[[example]]
-name = "evaluate_network"
-path = "examples/rust/tensors/evaluate_network.rs"
 
 [dependencies]
-symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-#symbolica = { git = "https://github.com/alphal00p/symbolica" }
+# symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
+symbolica = { git = "https://github.com/alphal00p/symbolica" }
+spencer = { git = "https://github.com/alphal00p/spencer" }
+# spencer = { path = "../spencer" }
+
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = "1.3.3"
@@ -135,3 +119,7 @@ fail-on-warnings = []
 [profile.dev.package]
 insta.opt-level = 3
 similar.opt-level = 3
+
+
+[patch."https://github.com/alphal00p/symbolica"]
+symbolica = { path = "./python/gammaloop/dependencies/symbolica" }

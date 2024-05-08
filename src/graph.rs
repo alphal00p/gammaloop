@@ -3,15 +3,11 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
     numerator::generate_numerator,
-    tensor::{
-        AbstractIndex, Contract, DataTensor, DenseTensor, GetTensorData, Representation,
-        SetTensorData, Slot, SparseTensor, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT,
-        COLORFUND, COLORSEXT, EUCLIDEAN,
-    },
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
     uv::UVGraph,
 };
+
 use ahash::RandomState;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
@@ -23,6 +19,7 @@ use nalgebra::DMatrix;
 #[allow(unused_imports)]
 use num::traits::Float;
 use num::Complex;
+use spencer::*;
 
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};

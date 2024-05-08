@@ -1,6 +1,6 @@
 use std::{clone, cmp::Ordering, collections::VecDeque, hash::Hash, iter::Map, ops::Sub};
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use bitvec::{
     slice::IterOnes,
     vec::{self, BitVec},
@@ -1163,6 +1163,26 @@ impl<E, V> NestingGraph<E, V> {
         spinneys
     }
 
+    fn all_basis_sym_diffs(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
+        let mut diffs = Vec::new();
+
+        let mut pset = PowersetIterator::new(basis.len() as u8);
+
+        pset.next(); //Skip empty set
+
+        for p in pset {
+            let mut cycle: SubGraph = self.empty_filter().into();
+            for c in p.iter_ones().map(|i| &basis[i]) {
+                cycle.sym_diff_with(&c.internal_graph);
+            }
+
+            let cycle = self.nesting_node_from_subgraph(cycle);
+            diffs.push(cycle);
+        }
+
+        diffs
+    }
+
     fn all_composite_cycles_with_basis(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
         let mut cycles = Vec::new();
 
@@ -1480,13 +1500,28 @@ impl<E, V> NestingGraph<E, V> {
         spinneys
     }
 
-    fn all_spinneys(&self) -> AHashSet<SubGraph> {
+    fn all_spinneys_rec(&self, spinneys: &mut AHashSet<NestingNode>, cycle_sums: Vec<NestingNode>) {
+        let len = spinneys.len();
+
+        let mut pset = PowersetIterator::new(cycle_sums.len() as u8);
+
+        pset.next(); //Skip empty set
+
+        for (ci, cj) in cycle_sums.iter().tuple_combinations() {
+            let union = ci.internal_graph.union(&cj.internal_graph);
+
+            // spinneys.insert(union);
+        }
+    }
+
+    fn all_spinneys(&self) -> AHashMap<SubGraph, Vec<(NestingNode, Option<NestingNode>)>> {
         let mut cycles = self.cycle_basis();
 
         let mut all_combinations = PowersetIterator::new(cycles.len() as u8);
         all_combinations.next(); //Skip empty set
 
-        let mut spinneys = AHashSet::new();
+        let mut spinneys: AHashMap<SubGraph, Vec<(NestingNode, Option<NestingNode>)>> =
+            AHashMap::new();
 
         for p in all_combinations {
             let mut base_cycle: SubGraph = self.empty_filter().into();
@@ -1499,11 +1534,17 @@ impl<E, V> NestingGraph<E, V> {
         }
 
         for (ci, cj) in cycles.iter().tuple_combinations() {
-            spinneys.insert(ci.internal_graph.union(&cj.internal_graph));
+            let union = ci.internal_graph.union(&cj.internal_graph);
+
+            if let Some(v) = spinneys.get_mut(&union) {
+                v.push((ci.clone(), Some(cj.clone())));
+            } else {
+                spinneys.insert(union, vec![(ci.clone(), Some(cj.clone()))]);
+            }
         }
 
         for c in cycles {
-            spinneys.insert(c.internal_graph);
+            spinneys.insert(c.internal_graph.clone(), vec![(c.clone(), None)]);
         }
         spinneys
     }
@@ -1820,31 +1861,37 @@ impl UVGraph {
         rank
     }
 
-    fn wood(&self) -> Vec<SubGraph> {
-        let cycles = self.0.read_tarjan();
-        let mut spinneys = Vec::with_capacity(1 << cycles.len());
+    fn wood(&self) -> PoSet<SubGraph> {
+        let mut cycles = self.0.cycle_basis();
 
-        let pset = PowersetIterator::new(cycles.len() as u8);
+        let mut all_combinations = PowersetIterator::new(cycles.len() as u8);
+        all_combinations.next(); //Skip empty set
 
-        for p in pset {
-            let mut union: Option<SubGraph> = None;
+        let mut spinneys = AHashSet::new();
+
+        for p in all_combinations {
+            let mut base_cycle: SubGraph = self.0.empty_filter().into();
 
             for i in p.iter_ones() {
-                if let Some(union) = &mut union {
-                    union.union_with(&cycles[i].internal_graph);
-                } else {
-                    union = Some(cycles[i].internal_graph.clone());
-                }
+                base_cycle.sym_diff_with(&cycles[i].internal_graph);
             }
 
-            if let Some(union) = union {
-                if self.dod(&union) >= 0 {
-                    spinneys.push(union);
-                }
+            cycles.push(self.0.nesting_node_from_subgraph(base_cycle.clone()));
+        }
+
+        for (ci, cj) in cycles.iter().tuple_combinations() {
+            let union = ci.internal_graph.union(&cj.internal_graph);
+            if self.dod(&union) >= 0 {
+                spinneys.insert(union);
             }
         }
 
-        spinneys
+        for c in cycles {
+            if self.dod(&c.internal_graph) >= 0 {
+                spinneys.insert(c.internal_graph);
+            }
+        }
+        spinneys.into_iter().collect()
     }
 
     fn dod(&self, subgraph: &SubGraph) -> isize {

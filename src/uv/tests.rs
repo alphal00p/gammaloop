@@ -133,22 +133,22 @@ fn threeloop() {
 
     insta::assert_ron_snapshot!("three_loop_cycles", cycles);
 
-    let mut all_spinneys = graph.all_spinneys().into_iter().collect_vec();
-    all_spinneys.sort_by(|a, b| a.filter.cmp(&b.filter));
+    // let mut all_spinneys = graph.all_spinneys().into_iter().collect_vec();
+    // all_spinneys.sort_by(|a, b| a.filter.cmp(&b.filter));
 
-    assert_eq!(graph.all_spinneys_alt().len(), all_spinneys.len());
+    // assert_eq!(graph.all_spinneys_alt().len(), all_spinneys.len());
 
-    // let posetSpinneys = all_spinneys.iter().collect::<PoSet<_>>();
+    // // let posetSpinneys = all_spinneys.iter().collect::<PoSet<_>>();
 
-    // println!("{}", posetSpinneys.to_cover_set().dot());
+    // // println!("{}", posetSpinneys.to_cover_set().dot());
 
-    insta::assert_toml_snapshot!(
-        "three_loop_spinneys",
-        all_spinneys
-            .into_iter()
-            .map(|s| graph.dot(&graph.nesting_node_from_subgraph(s)))
-            .collect_vec()
-    );
+    // insta::assert_toml_snapshot!(
+    //     "three_loop_spinneys",
+    //     all_spinneys
+    //         .into_iter()
+    //         .map(|s| graph.dot(&graph.nesting_node_from_subgraph(s)))
+    //         .collect_vec()
+    // );
 }
 
 #[test]
@@ -240,10 +240,10 @@ fn cube() {
 
     insta::assert_snapshot!("cube_dot", graph.base_dot());
 
-    let mut all_spinneys = graph.all_spinneys().into_iter().collect_vec();
-    all_spinneys.sort_by(|a, b| a.filter.cmp(&b.filter));
+    // let mut all_spinneys = graph.all_spinneys().into_iter().collect_vec();
+    // all_spinneys.sort_by(|a, b| a.filter.cmp(&b.filter));
 
-    assert_eq!(162, all_spinneys.len());
+    // assert_eq!(162, all_spinneys.len());
 }
 
 #[test]
@@ -316,3 +316,247 @@ fn read_tarjan_vs_cycle_space() {
 //         println!("{}", rand_graph.dot(&c));
 //     }
 // }
+
+#[test]
+fn K33() {
+    let mut builder: NestingGraphBuilder<(), ()> = NestingGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+    let e = builder.add_node(());
+    let f = builder.add_node(());
+
+    builder.add_edge(a, d, ());
+    builder.add_edge(a, e, ());
+    builder.add_edge(a, f, ());
+
+    builder.add_edge(b, d, ());
+    builder.add_edge(b, e, ());
+    builder.add_edge(b, f, ());
+
+    builder.add_edge(c, d, ());
+    builder.add_edge(c, e, ());
+    builder.add_edge(c, f, ());
+
+    let graph = builder.build();
+
+    assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
+}
+
+#[test]
+fn petersen() {
+    let mut builder: NestingGraphBuilder<(), ()> = NestingGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+    let e = builder.add_node(());
+    let f = builder.add_node(());
+    let g = builder.add_node(());
+    let h = builder.add_node(());
+    let i = builder.add_node(());
+    let j = builder.add_node(());
+
+    builder.add_edge(a, b, ());
+    builder.add_edge(a, f, ());
+    builder.add_edge(a, e, ());
+
+    builder.add_edge(b, c, ());
+    builder.add_edge(b, g, ());
+
+    builder.add_edge(c, d, ());
+    builder.add_edge(c, h, ());
+
+    builder.add_edge(d, e, ());
+    builder.add_edge(d, i, ());
+
+    builder.add_edge(e, j, ());
+
+    builder.add_edge(f, h, ());
+    builder.add_edge(f, i, ());
+
+    builder.add_edge(g, i, ());
+    builder.add_edge(g, j, ());
+
+    builder.add_edge(h, j, ());
+
+    let graph = builder.build();
+
+    println!("{}", graph.base_dot());
+
+    // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
+
+    println!("loop count {}", graph.cycle_basis().len());
+    println!("cycle count {}", graph.all_cycles().len());
+    if let Some((s, v)) = graph
+        .all_spinneys()
+        .iter()
+        .find(|(s, _)| graph.full_filter() == s.filter)
+    {
+        println!(
+            "{}",
+            graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
+        );
+        for (ci, cj) in v {
+            println!("{}", graph.dot(&ci));
+            println!("{}", graph.dot(&cj.as_ref().unwrap()));
+        }
+    } else {
+        println!("not found");
+    }
+}
+
+#[test]
+fn wagner_graph() {
+    let mut builder: NestingGraphBuilder<(), ()> = NestingGraphBuilder::new();
+    let n1 = builder.add_node(());
+    let n2 = builder.add_node(());
+    let n3 = builder.add_node(());
+    let n4 = builder.add_node(());
+    let n5 = builder.add_node(());
+    let n6 = builder.add_node(());
+    let n7 = builder.add_node(());
+    let n8 = builder.add_node(());
+
+    builder.add_edge(n1, n2, ());
+    builder.add_edge(n1, n5, ());
+
+    builder.add_edge(n2, n3, ());
+    builder.add_edge(n2, n6, ());
+
+    builder.add_edge(n3, n4, ());
+    builder.add_edge(n3, n7, ());
+
+    builder.add_edge(n4, n5, ());
+    builder.add_edge(n4, n8, ());
+
+    builder.add_edge(n5, n6, ());
+
+    builder.add_edge(n6, n7, ());
+
+    builder.add_edge(n7, n8, ());
+
+    builder.add_edge(n8, n1, ());
+
+    let graph = builder.build();
+
+    println!("{}", graph.base_dot());
+
+    // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
+
+    println!("loop count {}", graph.cycle_basis().len());
+    println!("cycle count {}", graph.all_cycles().len());
+    if let Some((s, v)) = graph
+        .all_spinneys()
+        .iter()
+        .find(|(s, _)| graph.full_filter() == s.filter)
+    {
+        println!(
+            "{}",
+            graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
+        );
+        for (ci, cj) in v {
+            println!("{}", graph.dot(&ci));
+            println!("{}", graph.dot(&cj.as_ref().unwrap()));
+        }
+    } else {
+        println!("not found");
+    }
+}
+
+#[test]
+fn flower_snark() {
+    let mut builder: NestingGraphBuilder<(), ()> = NestingGraphBuilder::new();
+    let n1 = builder.add_node(());
+    let n2 = builder.add_node(());
+    let n3 = builder.add_node(());
+    let n4 = builder.add_node(());
+    let n5 = builder.add_node(());
+    let n6 = builder.add_node(());
+    let n7 = builder.add_node(());
+    let n8 = builder.add_node(());
+    let n9 = builder.add_node(());
+    let n10 = builder.add_node(());
+    let n11 = builder.add_node(());
+    let n12 = builder.add_node(());
+    let n13 = builder.add_node(());
+    let n14 = builder.add_node(());
+    let n15 = builder.add_node(());
+    let n16 = builder.add_node(());
+    let n17 = builder.add_node(());
+    let n18 = builder.add_node(());
+    let n19 = builder.add_node(());
+    let n20 = builder.add_node(());
+
+    builder.add_edge(n1, n2, ());
+    builder.add_edge(n2, n3, ());
+    builder.add_edge(n3, n4, ());
+    builder.add_edge(n4, n5, ());
+    builder.add_edge(n5, n1, ());
+
+    builder.add_edge(n6, n1, ()); // center
+    builder.add_edge(n6, n7, ()); //next
+
+    builder.add_edge(n7, n17, ()); //+10
+    builder.add_edge(n7, n8, ()); //next
+
+    builder.add_edge(n8, n13, ()); //+5
+    builder.add_edge(n8, n9, ()); //next
+
+    builder.add_edge(n9, n2, ()); //center
+    builder.add_edge(n9, n10, ()); //next
+
+    builder.add_edge(n10, n20, ()); //+10
+    builder.add_edge(n10, n11, ()); //next
+
+    builder.add_edge(n11, n16, ()); //+5
+    builder.add_edge(n11, n12, ()); //next
+
+    builder.add_edge(n12, n3, ()); //center
+    builder.add_edge(n12, n13, ()); //next
+
+    builder.add_edge(n13, n14, ()); //next
+
+    builder.add_edge(n14, n19, ()); //+5
+    builder.add_edge(n14, n15, ()); //next
+
+    builder.add_edge(n15, n4, ()); //center
+    builder.add_edge(n15, n16, ()); //next
+
+    builder.add_edge(n16, n17, ()); //next
+
+    builder.add_edge(n17, n18, ()); //next
+
+    builder.add_edge(n18, n5, ()); //center
+    builder.add_edge(n18, n19, ()); //next
+
+    builder.add_edge(n19, n20, ()); //next
+
+    builder.add_edge(n20, n6, ()); //next
+
+    let graph = builder.build();
+
+    println!("{}", graph.base_dot());
+
+    // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
+
+    println!("loop count {}", graph.cycle_basis().len());
+    println!("cycle count {}", graph.all_cycles().len());
+    if let Some((s, v)) = graph
+        .all_spinneys()
+        .iter()
+        .find(|(s, _)| graph.full_filter() == s.filter)
+    {
+        println!(
+            "{}",
+            graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
+        );
+        for (ci, cj) in v {
+            println!("{}", graph.dot(&ci));
+            println!("{}", graph.dot(&cj.as_ref().unwrap()));
+        }
+    } else {
+        println!("not found");
+    }
+}

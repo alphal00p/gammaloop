@@ -22,7 +22,7 @@ pub mod ltd;
 pub mod model;
 pub mod numerator;
 pub mod observables;
-pub mod tensor;
+
 pub mod tests;
 pub mod tests_from_pytest;
 pub mod tropical;
