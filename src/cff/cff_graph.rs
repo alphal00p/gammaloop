@@ -1,5 +1,7 @@
 use ahash::{HashMap, HashSet, HashSetExt};
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use std::hash::Hash;
 
 use crate::graph::{EdgeType, Graph};
 
@@ -83,8 +85,8 @@ impl CFFVertex {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct VertexSet {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct VertexSet {
     vertex_set: u64,
 }
 
@@ -106,6 +108,18 @@ impl VertexSet {
         VertexSet {
             vertex_set: self.vertex_set | other.vertex_set,
         }
+    }
+
+    fn contains_vertices(&self) -> Vec<VertexSet> {
+        (0..MAX_VERTEX_COUNT)
+            .filter(|id| self.vertex_set & (1 << id) != 0)
+            .map(VertexSet::from_usize)
+            .collect()
+    }
+
+    #[cfg(test)]
+    pub fn dummy() -> Self {
+        VertexSet { vertex_set: 0 }
     }
 }
 
@@ -131,10 +145,24 @@ enum VertexType {
     None,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct CFFGenerationGraph {
     vertices: Vec<CFFVertex>,
     pub global_orientation: Vec<bool>,
+}
+
+impl PartialEq for CFFGenerationGraph {
+    fn eq(&self, other: &Self) -> bool {
+        self.vertices == other.vertices
+    }
+}
+
+impl Eq for CFFGenerationGraph {}
+
+impl Hash for CFFGenerationGraph {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.vertices.hash(state);
+    }
 }
 
 impl CFFGenerationGraph {
@@ -149,17 +177,12 @@ impl CFFGenerationGraph {
         let left_vertex = self.get_vertex(left);
         let right_vertex = self.get_vertex(right);
 
-        for outgoing_edge in left_vertex.outgoing_edges.iter() {
-            if right_vertex
+        left_vertex.outgoing_edges.iter().any(|outgoing_edge| {
+            right_vertex
                 .incoming_edges
                 .iter()
                 .any(|right_incoming| right_incoming.edge_id == outgoing_edge.edge_id)
-            {
-                return true;
-            }
-        }
-
-        false
+        })
     }
 
     fn are_adjacent(&self, vertex_1: &VertexSet, vertex_2: &VertexSet) -> bool {
@@ -172,7 +195,7 @@ impl CFFGenerationGraph {
     pub fn from_vec(
         edges: Vec<(usize, usize)>,
         incoming_vertices: Vec<usize>,
-        global_orientation: Vec<bool>,
+        virtual_orientation: Vec<bool>,
     ) -> Self {
         let edges = edges
             .into_iter()
@@ -180,6 +203,7 @@ impl CFFGenerationGraph {
             .collect_vec();
 
         let mut unique_vertex_ids = HashSet::new();
+        let mut global_orientation = vec![];
 
         for edge in edges.iter() {
             unique_vertex_ids.insert(edge.0);
@@ -206,6 +230,7 @@ impl CFFGenerationGraph {
                 edge_type: CFFEdgeType::External,
             };
             cff_vertex.incoming_edges.push(incoming_edge);
+            global_orientation.push(true);
         }
 
         for (edge_id, (left, right)) in edges.iter().enumerate() {
@@ -222,6 +247,7 @@ impl CFFGenerationGraph {
             right_vertex.incoming_edges.push(cff_edge);
         }
 
+        global_orientation.extend(virtual_orientation);
         let nodes = unique_vertices.into_values().collect_vec();
 
         CFFGenerationGraph {
@@ -337,6 +363,17 @@ impl CFFGenerationGraph {
         vertex.get_vertex_type()
     }
 
+    fn is_valid_source_or_sink(&self, vertex: VertexSet) -> bool {
+        let vertex = self.get_vertex(&vertex);
+        let vertex_type = vertex.get_vertex_type();
+        if vertex_type == VertexType::None {
+            return false;
+        }
+
+        self.has_connected_complement(&vertex.vertex_set)
+    }
+
+    #[allow(unused)]
     fn get_source_sink_candidate_list(&self) -> Vec<&CFFVertex> {
         self.vertices
             .iter()
@@ -347,6 +384,20 @@ impl CFFGenerationGraph {
                     && has_connected_complement
             })
             .collect()
+    }
+
+    fn get_source_sink_greedy(&self) -> &CFFVertex {
+        self.vertices
+            .iter()
+            .find(|vertex| {
+                let vertex_type = vertex.get_vertex_type();
+                if vertex_type != VertexType::Sink && vertex_type != VertexType::Source {
+                    false
+                } else {
+                    self.has_connected_complement(&vertex.vertex_set)
+                }
+            })
+            .unwrap_or_else(|| panic!("No source or sink candidates found"))
     }
 
     fn contract_vertices(&self, vertex_1: &VertexSet, vertex_2: &VertexSet) -> Self {
@@ -369,7 +420,8 @@ impl CFFGenerationGraph {
         }
     }
 
-    fn get_source_or_sink(&self) -> &CFFVertex {
+    #[allow(unused)]
+    fn get_source_or_sink_slow(&self) -> &CFFVertex {
         let mut source_sink_candidates = self.get_source_sink_candidate_list();
 
         source_sink_candidates
@@ -382,8 +434,50 @@ impl CFFGenerationGraph {
         source_sink_candidates[0]
     }
 
-    pub fn generate_children(&self) -> (Option<Vec<Self>>, Esurface) {
-        let vertex = self.get_source_or_sink();
+    fn get_source_or_sink_smart(&self, vertices_used: &mut Vec<VertexSet>) -> &CFFVertex {
+        let mut vertices_checked = vec![];
+
+        for vertex in vertices_used.iter() {
+            if !self.vertices.iter().any(|v| v.vertex_set == *vertex) {
+                continue;
+            }
+
+            let neighbours_of_vertex = self.get_undirected_neighbours(vertex);
+
+            for candidate in neighbours_of_vertex.iter() {
+                if vertices_checked.contains(&candidate.vertex_set) {
+                    continue;
+                } else {
+                    let is_valid = self.is_valid_source_or_sink(candidate.vertex_set);
+                    if is_valid {
+                        vertices_used.push(candidate.vertex_set);
+                        return candidate;
+                    } else {
+                        vertices_checked.push(candidate.vertex_set);
+                    }
+                }
+            }
+        }
+
+        for vertex in self.vertices.iter() {
+            if vertices_used.contains(&vertex.vertex_set) {
+                continue;
+            }
+
+            let is_valid = self.is_valid_source_or_sink(vertex.vertex_set);
+            if is_valid {
+                return vertex;
+            }
+        }
+
+        panic!("No source or sink candidates found for graph {:#?}", self);
+    }
+
+    pub fn generate_children(
+        &self,
+        vertices_used: &mut Vec<VertexSet>,
+    ) -> (Option<Vec<Self>>, Esurface) {
+        let vertex = self.get_source_or_sink_smart(vertices_used);
         let vertex_type = vertex.get_vertex_type();
 
         let (shift, shift_orientation): (Vec<usize>, Vec<bool>) = vertex
@@ -441,6 +535,7 @@ impl CFFGenerationGraph {
             sub_orientation,
             shift,
             shift_signature: shift_orientation,
+            circled_vertices: vertex.vertex_set,
         };
 
         if self.vertices.len() > 2 {
@@ -567,6 +662,34 @@ impl CFFGenerationGraph {
             vertices,
             global_orientation,
         }
+    }
+
+    fn generate_cut(&self, circled_vertices: VertexSet) -> (Self, Self) {
+        let vertices_in_cut = circled_vertices.contains_vertices();
+        let mut vertices = self.vertices.clone();
+
+        let mut left = vec![];
+
+        for vertex_in_cut in vertices_in_cut.iter() {
+            let vertex_position = vertices
+                .iter()
+                .position(|vertex| vertex.vertex_set == *vertex_in_cut)
+                .unwrap();
+
+            left.push(vertices.remove(vertex_position));
+        }
+
+        let left_graph = CFFGenerationGraph {
+            vertices: left,
+            global_orientation: self.global_orientation.clone(),
+        };
+
+        let right_graph = CFFGenerationGraph {
+            vertices,
+            global_orientation: self.global_orientation.clone(),
+        };
+
+        (left_graph, right_graph)
     }
 }
 

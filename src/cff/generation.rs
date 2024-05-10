@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use log::debug;
 
 use super::{
-    cff_graph::CFFGenerationGraph,
+    cff_graph::{CFFGenerationGraph, VertexSet},
     esurface::{EsurfaceCollection, EsurfaceId},
     expression::{CFFExpression, CFFExpressionNode, TermId},
     tree::NodeId,
@@ -194,6 +194,7 @@ fn generate_cff_from_orientations(
     let mut generator_cache = GeneratorCache {
         graph_cache,
         esurface_cache,
+        vertices_used: vec![],
         cache_hits: 0,
         non_cache_hits: 0,
     };
@@ -231,6 +232,17 @@ fn generate_cff_from_orientations(
             * 100.0
     );
 
+    #[cfg(test)]
+    {
+        println!("number of cache hits: {}", generator_cache.cache_hits);
+        println!(
+            "percentage of cache hits: {:.1}%",
+            generator_cache.cache_hits as f64
+                / (generator_cache.cache_hits + generator_cache.non_cache_hits) as f64
+                * 100.0
+        );
+    }
+
     Ok(CFFExpression {
         expression,
         orientations,
@@ -241,6 +253,7 @@ fn generate_cff_from_orientations(
 struct GeneratorCache {
     graph_cache: HashMap<CFFGenerationGraph, (usize, usize)>,
     esurface_cache: EsurfaceCollection,
+    vertices_used: Vec<VertexSet>,
     cache_hits: usize,
     non_cache_hits: usize,
 }
@@ -286,7 +299,8 @@ fn advance_tree(
                 }
             };
 
-            let (option_children, esurface) = graph.generate_children();
+            let (option_children, esurface) =
+                graph.generate_children(&mut generator_cache.vertices_used);
 
             let option_esurface_id = generator_cache.esurface_cache.search(&esurface);
 
@@ -372,7 +386,10 @@ mod tests_cff {
 
     // helper function to do some quick tests
     #[allow(unused)]
-    fn generate_orientations_for_testing(edges: Vec<(usize, usize)>) -> Vec<CFFGenerationGraph> {
+    fn generate_orientations_for_testing(
+        edges: Vec<(usize, usize)>,
+        incoming_vertices: Vec<usize>,
+    ) -> Vec<CFFGenerationGraph> {
         let num_edges = edges.len();
 
         iterate_possible_orientations(num_edges)
@@ -388,7 +405,11 @@ mod tests_cff {
                     }
                 }
 
-                CFFGenerationGraph::from_vec(new_edges, vec![], orientation_vector)
+                CFFGenerationGraph::from_vec(
+                    new_edges,
+                    incoming_vertices.clone(),
+                    orientation_vector,
+                )
             })
             .filter(|graph| !graph.has_directed_cycle_initial())
             .collect_vec()
@@ -432,17 +453,10 @@ mod tests_cff {
     #[test]
     fn test_cff_generation_triangle() {
         let triangle = vec![(2, 0), (0, 1), (1, 2)];
-        let orientations = generate_orientations_for_testing(triangle);
-        let mut external_data = HashMap::default();
-        external_data.insert(0, vec![3]);
-        external_data.insert(1, vec![4]);
-        external_data.insert(2, vec![5]);
-        assert_eq!(orientations.len(), 6);
 
-        let mut position_map = HashMap::default();
-        for i in 0..3 {
-            position_map.insert(i, i);
-        }
+        let incoming_vertices = vec![0, 1, 2];
+        let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
+        assert_eq!(orientations.len(), 6);
 
         let cff = generate_cff_from_orientations(orientations).unwrap();
         assert_eq!(cff.esurfaces.len(), 6);
@@ -464,8 +478,8 @@ mod tests_cff {
         let external_energy_cache = [p1.t, p2.t, p3.t];
 
         // combine the virtual and external energies
-        let mut energy_cache = virtual_energy_cache.to_vec();
-        energy_cache.extend(external_energy_cache);
+        let mut energy_cache = external_energy_cache.to_vec();
+        energy_cache.extend(virtual_energy_cache);
 
         let _edge_types = [
             EdgeType::Virtual,
@@ -500,33 +514,12 @@ mod tests_cff {
     #[test]
     fn test_cff_test_double_triangle() {
         let double_triangle_edges = vec![(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)];
+        let incoming_vertices = vec![0, 3];
 
-        let mut external_data = HashMap::default();
-        external_data.insert(0, vec![5]);
-        external_data.insert(3, vec![6]);
-
-        let mut position_map = HashMap::default();
-        for i in 0..5 {
-            position_map.insert(i, i);
-        }
-
-        let orientations = generate_orientations_for_testing(double_triangle_edges);
-
-        println!("here");
+        let orientations =
+            generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
 
         let cff = generate_cff_from_orientations(orientations).unwrap();
-
-        println!("generated");
-
-        let _edge_types = [
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Incoming,
-            EdgeType::Incoming,
-        ];
 
         let q = LorentzVector::from_args(1., 2., 3., 4.);
         let zero = LorentzVector::from_args(0., 0., 0., 0.);
@@ -544,8 +537,8 @@ mod tests_cff {
 
         let external_energy_cache = [q.t, -q.t];
 
-        let mut energy_cache = virtual_energy_cache.to_vec();
-        energy_cache.extend(external_energy_cache);
+        let mut energy_cache = external_energy_cache.to_vec();
+        energy_cache.extend(virtual_energy_cache);
 
         let energy_prefactor = virtual_energy_cache
             .iter()
@@ -579,29 +572,9 @@ mod tests_cff {
             (5, 4),
         ];
 
-        let _edge_types = [
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Incoming,
-            EdgeType::Incoming,
-        ];
+        let incoming_vertices = vec![0, 5];
 
-        let mut external_data = HashMap::default();
-        external_data.insert(0, vec![8]);
-        external_data.insert(5, vec![9]);
-
-        let mut position_map = HashMap::default();
-        for i in 0..tbt_edges.len() {
-            position_map.insert(i, i);
-        }
-
-        let orientataions = generate_orientations_for_testing(tbt_edges);
+        let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
         let cff = generate_cff_from_orientations(orientataions).unwrap();
 
         let q = LorentzVector::from_args(1.0, 2.0, 3.0, 4.0);
@@ -617,6 +590,8 @@ mod tests_cff {
         let mass = 0.;
 
         let energies_cache = [
+            p0.t,
+            p5.t,
             compute_one_loop_energy(k, zero_vector, mass),
             compute_one_loop_energy(k - q, zero_vector, mass),
             compute_one_loop_energy(k - l, zero_vector, mass),
@@ -625,11 +600,9 @@ mod tests_cff {
             compute_one_loop_energy(l - m, zero_vector, mass),
             compute_one_loop_energy(m, zero_vector, mass),
             compute_one_loop_energy(m - q, zero_vector, mass),
-            p0.t,
-            p5.t,
         ];
 
-        let virtual_energy_cache = energies_cache[0..8].to_vec();
+        let virtual_energy_cache = energies_cache[2..].to_vec();
 
         let energy_prefactor = virtual_energy_cache
             .iter()
@@ -664,37 +637,9 @@ mod tests_cff {
             (5, 8),
         ];
 
-        let _edge_types = [
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Incoming,
-            EdgeType::Incoming,
-            EdgeType::Incoming,
-            EdgeType::Incoming,
-        ];
+        let incoming_vertices = vec![0, 2, 6, 8];
 
-        let mut external_data = HashMap::default();
-        external_data.insert(0, vec![12]);
-        external_data.insert(2, vec![13]);
-        external_data.insert(6, vec![14]);
-        external_data.insert(8, vec![15]);
-
-        let mut position_map = HashMap::default();
-        for i in 0..edges.len() {
-            position_map.insert(i, i);
-        }
-
-        let orientations = generate_orientations_for_testing(edges);
+        let orientations = generate_orientations_for_testing(edges, incoming_vertices);
 
         // get time before cff generation
         let start = std::time::Instant::now();
@@ -733,7 +678,9 @@ mod tests_cff {
             position_map.insert(i, i);
         }
 
-        let orientations = generate_orientations_for_testing(edges);
+        let incoming_vertices = vec![0, 1, 2, 3, 4, 5, 6, 7];
+
+        let orientations = generate_orientations_for_testing(edges, incoming_vertices);
 
         // get time before cff generation
         let _start = std::time::Instant::now();
@@ -744,7 +691,6 @@ mod tests_cff {
     }
 
     #[test]
-    #[ignore] // this is now in the python tests
     fn fishnet2b3() {
         let edges = vec![
             (0, 1),
@@ -776,11 +722,20 @@ mod tests_cff {
             edge_types.push(EdgeType::Incoming);
         }
 
+        let incoming_vertices = vec![];
+
         let _energy_cache = [3.0; 17];
 
-        println!("generating orientations");
-        let orientations = generate_orientations_for_testing(edges);
-        println!("orientations generated");
-        let _cff = generate_cff_from_orientations(orientations).unwrap();
+        let orientations = generate_orientations_for_testing(edges, incoming_vertices);
+        let energy_cache = [3.0; 17];
+
+        let cff = generate_cff_from_orientations(orientations).unwrap();
+
+        let start = std::time::Instant::now();
+        for _ in 0..100 {
+            let _res = cff.evaluate(&energy_cache);
+        }
+        let finish = std::time::Instant::now();
+        println!("time to evaluate cff: {:?}", (finish - start) / 100);
     }
 }

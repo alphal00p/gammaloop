@@ -13,6 +13,8 @@ use crate::utils::{
     format_momentum, FloatLike,
 };
 
+use super::cff_graph::VertexSet;
+
 /// Core esurface struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Esurface {
@@ -20,6 +22,7 @@ pub struct Esurface {
     pub sub_orientation: Vec<bool>,
     pub shift: Vec<usize>,
     pub shift_signature: Vec<bool>,
+    pub circled_vertices: VertexSet,
 }
 
 // This equality is naive in the presence of raised propagators
@@ -637,7 +640,10 @@ pub fn generate_esurface_data(
 
 #[cfg(test)]
 mod tests {
-    use crate::{cff::esurface::Esurface, graph::EdgeType};
+    use crate::{
+        cff::{cff_graph::VertexSet, esurface::Esurface},
+        graph::EdgeType,
+    };
 
     #[test]
     fn test_esurface() {
@@ -647,11 +653,14 @@ mod tests {
         let shift_signature = vec![true; 2];
         let sub_orientation = vec![true, false, true];
 
+        let dummy_circled_vertices = VertexSet::dummy();
+
         let esurface = Esurface {
             sub_orientation: sub_orientation.clone(),
             energies,
             shift,
             shift_signature,
+            circled_vertices: dummy_circled_vertices,
         };
 
         let _edge_types = [
@@ -674,6 +683,7 @@ mod tests {
             sub_orientation: sub_orientation.clone(),
             shift,
             shift_signature,
+            circled_vertices: dummy_circled_vertices,
         };
 
         let res = esurface.compute_value(&energies_cache);

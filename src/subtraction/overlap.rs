@@ -552,7 +552,10 @@ mod tests {
     use num::Complex;
 
     use crate::{
-        cff::esurface::{Esurface, EsurfaceId},
+        cff::{
+            cff_graph::VertexSet,
+            esurface::{Esurface, EsurfaceId},
+        },
         graph::LoopMomentumBasis,
     };
 
@@ -597,30 +600,36 @@ mod tests {
                 edge_signatures: box_signatures,
             };
 
+            let circled_vertices = VertexSet::dummy();
+
             let esurfaces_array = [
                 Esurface {
                     energies: vec![5, 6],
                     sub_orientation: vec![],
                     shift: vec![1],
                     shift_signature: vec![true],
+                    circled_vertices,
                 },
                 Esurface {
                     energies: vec![5, 7],
                     sub_orientation: vec![],
                     shift: vec![1, 2],
                     shift_signature: vec![true, true],
+                    circled_vertices,
                 },
                 Esurface {
                     energies: vec![4, 6],
                     sub_orientation: vec![],
                     shift: vec![0, 1],
                     shift_signature: vec![true, true],
+                    circled_vertices,
                 },
                 Esurface {
                     energies: vec![4, 7],
                     sub_orientation: vec![],
                     shift: vec![0, 1, 2],
                     shift_signature: vec![true, true, true],
+                    circled_vertices,
                 },
             ];
 
@@ -675,6 +684,7 @@ mod tests {
                 sub_orientation: vec![],
                 shift: vec![0],
                 shift_signature: vec![false],
+                circled_vertices: VertexSet::dummy(),
             };
 
             let esurfaces = EsurfaceCollection::from_vec(vec![only_esurface]);
