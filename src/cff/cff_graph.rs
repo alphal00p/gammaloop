@@ -62,6 +62,7 @@ impl CFFVertex {
                     .filter(|edge| !self.outgoing_edges.contains(edge)),
             )
             .copied()
+            .sorted_by(|edge_1, edge_2| edge_1.edge_id.cmp(&edge_2.edge_id))
             .collect_vec();
 
         let outgoing_edges_of_new = self
@@ -75,6 +76,7 @@ impl CFFVertex {
                     .filter(|edge| !self.incoming_edges.contains(edge)),
             )
             .copied()
+            .sorted_by(|edge_1, edge_2| edge_1.edge_id.cmp(&edge_2.edge_id))
             .collect_vec();
 
         CFFVertex {
@@ -477,7 +479,7 @@ impl CFFGenerationGraph {
         &self,
         vertices_used: &mut Vec<VertexSet>,
     ) -> (Option<Vec<Self>>, Esurface) {
-        let vertex = self.get_source_or_sink_smart(vertices_used);
+        let vertex = self.get_source_sink_greedy();
         let vertex_type = vertex.get_vertex_type();
 
         let (shift, shift_orientation): (Vec<usize>, Vec<bool>) = vertex
