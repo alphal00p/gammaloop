@@ -9,7 +9,7 @@ use super::esurface::Esurface;
 
 const MAX_VERTEX_COUNT: usize = 64;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct CFFVertex {
     vertex_set: VertexSet,
     pub incoming_edges: Vec<CFFEdge>,
@@ -128,13 +128,13 @@ impl VertexSet {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct EdgeId(usize);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct CFFEdge {
     edge_id: usize,
     edge_type: CFFEdgeType,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 enum CFFEdgeType {
     External,
     Virtual,
@@ -147,7 +147,7 @@ enum VertexType {
     None,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CFFGenerationGraph {
     vertices: Vec<CFFVertex>,
     pub global_orientation: Vec<bool>,
@@ -388,6 +388,7 @@ impl CFFGenerationGraph {
             .collect()
     }
 
+    #[allow(unused)]
     fn get_source_sink_greedy(&self) -> &CFFVertex {
         self.vertices
             .iter()
@@ -399,7 +400,7 @@ impl CFFGenerationGraph {
                     self.has_connected_complement(&vertex.vertex_set)
                 }
             })
-            .unwrap_or_else(|| panic!("No source or sink candidates found"))
+            .unwrap_or_else(|| panic!("No source or sink candidates found for graph {:#?}", self))
     }
 
     fn contract_vertices(&self, vertex_1: &VertexSet, vertex_2: &VertexSet) -> Self {
@@ -436,6 +437,7 @@ impl CFFGenerationGraph {
         source_sink_candidates[0]
     }
 
+    #[allow(unused)]
     fn get_source_or_sink_smart(&self, vertices_used: &mut Vec<VertexSet>) -> &CFFVertex {
         let mut vertices_checked = vec![];
 
@@ -475,6 +477,8 @@ impl CFFGenerationGraph {
         panic!("No source or sink candidates found for graph {:#?}", self);
     }
 
+    #[allow(unused_variables)]
+    #[allow(clippy::ptr_arg)]
     pub fn generate_children(
         &self,
         vertices_used: &mut Vec<VertexSet>,
@@ -666,7 +670,7 @@ impl CFFGenerationGraph {
         }
     }
 
-    fn generate_cut(&self, circled_vertices: VertexSet) -> (Self, Self) {
+    pub fn generate_cut(&self, circled_vertices: VertexSet) -> (Self, Self) {
         let vertices_in_cut = circled_vertices.contains_vertices();
         let mut vertices = self.vertices.clone();
 

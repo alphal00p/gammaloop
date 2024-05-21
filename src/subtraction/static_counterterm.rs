@@ -8,10 +8,9 @@ const TOLERANCE: f64 = 10.0;
 
 use crate::{
     cff::{
-        esurface::{
-            EsurfaceCache, EsurfaceCollection, EsurfaceId, ExistingEsurfaceId, ExistingEsurfaces,
-        },
-        expression::CFFExpression,
+        esurface::{EsurfaceCache, EsurfaceCollection, ExistingEsurfaceId, ExistingEsurfaces},
+        expression::{CFFExpression, CFFLimit},
+        generation::generate_cff_limit,
     },
     graph::{Graph, LoopMomentumBasis},
     utils::{cast_lorentz_vector, FloatLike},
@@ -23,7 +22,7 @@ pub struct CounterTerm {
     existing_esurfaces: ExistingEsurfaces,
     maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)>,
     complements_of_overlap: Vec<Vec<ExistingEsurfaceId>>,
-    terms_in_counterterms: Vec<Vec<Vec<EsurfaceId>>>,
+    terms_in_counterterms: Vec<CFFLimit>,
 }
 
 impl CounterTerm {
@@ -79,22 +78,23 @@ impl CounterTerm {
             })
             .collect_vec();
 
-        let unfolded_cff = cff.expand_terms();
-
         let terms_in_counterterms = existing_esurfaces
             .iter()
             .map(|existing_esurface| {
-                unfolded_cff
-                    .iter()
-                    .filter(|cff_term| cff_term.contains(existing_esurface))
-                    .map(|cff_term| {
-                        cff_term
-                            .iter()
-                            .filter(|esurface_id| *esurface_id != existing_esurface)
-                            .copied()
-                            .collect_vec()
+                let circling = cff.esurfaces[*existing_esurface].circled_vertices;
+
+                let terms_with_esurface = cff
+                    .iter_term_ids()
+                    .filter(|&term_id| cff.term_has_esurface(term_id, *existing_esurface));
+
+                let (dag_left, dag_right) = terms_with_esurface
+                    .map(|term_id| {
+                        let term_dag = &cff[term_id].dag;
+                        term_dag.generate_cut(circling)
                     })
-                    .collect_vec()
+                    .unzip();
+
+                generate_cff_limit(dag_left, dag_right, &cff.esurfaces)
             })
             .collect_vec();
 
@@ -328,17 +328,9 @@ impl CounterTerm {
             * multichanneling_numerator_root
             / multichanneling_denominator;
 
-        let terms_in_counterterm_for_esurface =
-            &self.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
+        let terms = &self.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
 
-        let eval_terms = terms_in_counterterm_for_esurface
-            .iter()
-            .map(|term| {
-                term.iter()
-                    .fold(T::one(), |acc, id| acc * esurface_cache[*id])
-                    .inv()
-            })
-            .sum::<T>();
+        let eval_terms = terms.evaluate(&esurface_cache);
 
         let r_minus_rstar = radius - rstar;
         let dampening_factor = (-r_minus_rstar * r_minus_rstar / (e_cm * e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*

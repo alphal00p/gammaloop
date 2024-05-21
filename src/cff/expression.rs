@@ -14,14 +14,21 @@ impl From<usize> for TermId {
 }
 
 use super::{
+    cff_graph::CFFGenerationGraph,
     esurface::{EsurfaceCache, EsurfaceCollection, EsurfaceId},
     tree::{NodeCache, NodeId, Tree},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrientationExpression {
+    pub orientation: Vec<bool>,
+    pub dag: CFFGenerationGraph,
+    pub expression: Tree<CFFExpressionNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CFFExpression {
-    pub expression: Vec<Tree<CFFExpressionNode>>,
-    pub orientations: Vec<Vec<bool>>,
+    pub orientations: Vec<OrientationExpression>,
     pub esurfaces: EsurfaceCollection,
 }
 
@@ -38,13 +45,49 @@ impl CFFExpression {
         let mut term_cache = self.build_term_cache();
 
         self.iter_term_ids()
-            .map(|t| evaluate_tree(&self.expression[t.0], t, &esurface_cache, &mut term_cache))
+            .map(|t| {
+                evaluate_tree(
+                    &self.orientations[t.0].expression,
+                    t,
+                    &esurface_cache,
+                    &mut term_cache,
+                )
+            })
             .collect()
     }
 
     #[inline]
     pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         self.evaluate_orientations(energy_cache)
+            .into_iter()
+            .sum::<T>()
+    }
+
+    #[inline]
+    pub fn evaluate_orientations_from_esurface_cache<T: FloatLike>(
+        &self,
+        esurface_cache: &EsurfaceCache<T>,
+    ) -> Vec<T> {
+        let mut term_cache = self.build_term_cache();
+
+        self.iter_term_ids()
+            .map(|t| {
+                evaluate_tree(
+                    &self.orientations[t.0].expression,
+                    t,
+                    esurface_cache,
+                    &mut term_cache,
+                )
+            })
+            .collect()
+    }
+
+    #[inline]
+    pub fn evaluate_from_esurface_cache<T: FloatLike>(
+        &self,
+        esurface_cache: &EsurfaceCache<T>,
+    ) -> T {
+        self.evaluate_orientations_from_esurface_cache(esurface_cache)
             .into_iter()
             .sum::<T>()
     }
@@ -61,7 +104,7 @@ impl CFFExpression {
         term_id: TermId,
         node_id: NodeId,
     ) {
-        let node = &self.expression[term_id.0].get_node(node_id);
+        let node = &self.orientations[term_id.0].expression.get_node(node_id);
 
         match node.data {
             CFFExpressionNode::Data(esurface_id) => {
@@ -100,16 +143,18 @@ impl CFFExpression {
             .collect()
     }
 
-    fn iter_term_ids(&self) -> impl Iterator<Item = TermId> {
-        (0..self.expression.len()).map(TermId)
+    pub fn iter_term_ids(&self) -> impl Iterator<Item = TermId> {
+        (0..self.orientations.len()).map(TermId)
     }
 
     #[inline]
     fn build_term_cache<T: FloatLike>(&self) -> TermCache<Option<T>> {
         let cache = self
-            .expression
+            .orientations
             .iter()
-            .map(|tree| NodeCache::<Option<T>>::new_default(tree.get_num_nodes(), None))
+            .map(|orientation| {
+                NodeCache::<Option<T>>::new_default(orientation.expression.get_num_nodes(), None)
+            })
             .collect();
 
         TermCache { cache }
@@ -117,7 +162,39 @@ impl CFFExpression {
 
     #[inline]
     pub fn get_num_trees(&self) -> usize {
-        self.expression.len()
+        self.orientations.len()
+    }
+
+    fn recursive_esurface_search(
+        &self,
+        term_id: TermId,
+        node_id: NodeId,
+        esurface_id: EsurfaceId,
+    ) -> bool {
+        let node = self.orientations[term_id.0].expression.get_node(node_id);
+
+        match node.data {
+            CFFExpressionNode::Data(data_esurface_id) => {
+                if data_esurface_id == esurface_id {
+                    return true;
+                }
+
+                if node.children.is_empty() {
+                    return false;
+                }
+
+                node.children
+                    .iter()
+                    .any(|child| self.recursive_esurface_search(term_id, *child, esurface_id))
+            }
+            CFFExpressionNode::Pointer { term_id, node_id } => {
+                self.recursive_esurface_search(term_id, node_id, esurface_id)
+            }
+        }
+    }
+
+    pub fn term_has_esurface(&self, term_id: TermId, esurface_id: EsurfaceId) -> bool {
+        self.recursive_esurface_search(term_id, NodeId::root(), esurface_id)
     }
 }
 
@@ -180,5 +257,36 @@ impl<T> Index<(TermId, NodeId)> for TermCache<T> {
 impl<T> IndexMut<(TermId, NodeId)> for TermCache<T> {
     fn index_mut(&mut self, (term_id, node_id): (TermId, NodeId)) -> &mut Self::Output {
         &mut self.cache[term_id.0][node_id]
+    }
+}
+
+impl Index<TermId> for CFFExpression {
+    type Output = OrientationExpression;
+
+    fn index(&self, term_id: TermId) -> &Self::Output {
+        &self.orientations[term_id.0]
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CFFLimit {
+    pub left: CFFExpression,
+    pub right: CFFExpression,
+}
+
+impl CFFLimit {
+    pub fn evaluate<T: FloatLike>(&self, esurface_cache: &EsurfaceCache<T>) -> T {
+        let left_orientations = self
+            .left
+            .evaluate_orientations_from_esurface_cache(esurface_cache);
+        let right_orientations = self
+            .right
+            .evaluate_orientations_from_esurface_cache(esurface_cache);
+
+        left_orientations
+            .into_iter()
+            .zip(right_orientations)
+            .map(|(l, r)| l * r)
+            .sum()
     }
 }

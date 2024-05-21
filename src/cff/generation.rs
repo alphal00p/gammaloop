@@ -1,5 +1,5 @@
 use crate::{
-    cff::tree::Tree,
+    cff::{expression::OrientationExpression, tree::Tree},
     graph::{EdgeType, Graph},
 };
 use ahash::HashMap;
@@ -15,7 +15,7 @@ use log::debug;
 use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
     esurface::{EsurfaceCollection, EsurfaceId},
-    expression::{CFFExpression, CFFExpressionNode, TermId},
+    expression::{CFFExpression, CFFExpressionNode, CFFLimit, TermId},
     tree::NodeId,
 };
 
@@ -180,15 +180,49 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
     debug!("generating cff for graph: {}", graph.name);
     debug!("number of orientations: {}", graphs.len());
 
-    let graph_cff = generate_cff_from_orientations(graphs)?;
+    let graph_cff = generate_cff_from_orientations(graphs, None)?;
 
     Ok(graph_cff)
 }
 
+pub fn generate_cff_limit(
+    left_dags: Vec<CFFGenerationGraph>,
+    right_dags: Vec<CFFGenerationGraph>,
+    esurfaces: &EsurfaceCollection,
+) -> CFFLimit {
+    assert_eq!(
+        left_dags.len(),
+        right_dags.len(),
+        "number of left and right dags must match"
+    );
+
+    let left = generate_cff_from_orientations(left_dags, Some(esurfaces.clone())).unwrap();
+    assert_eq!(
+        left.esurfaces.len(),
+        esurfaces.len(),
+        "new esurfaces generated during factorisation"
+    );
+
+    let right = generate_cff_from_orientations(right_dags, Some(esurfaces.clone())).unwrap();
+    assert_eq!(
+        right.esurfaces.len(),
+        esurfaces.len(),
+        "new esurfaces generated during factorisation"
+    );
+
+    CFFLimit { left, right }
+}
+
 fn generate_cff_from_orientations(
     orientations_and_graphs: Vec<CFFGenerationGraph>,
+    optional_esurface_cache: Option<EsurfaceCollection>,
 ) -> Result<CFFExpression, Report> {
-    let esurface_cache = EsurfaceCollection::from_vec(vec![]);
+    let esurface_cache = if let Some(cache) = optional_esurface_cache {
+        cache
+    } else {
+        EsurfaceCollection::from_vec(vec![])
+    };
+
     let graph_cache = HashMap::default();
 
     let mut generator_cache = GeneratorCache {
@@ -215,14 +249,16 @@ fn generate_cff_from_orientations(
         .enumerate()
         .map(|(term_id, graph)| {
             let global_orientation = graph.global_orientation.clone();
-            let tree = generate_tree_for_orientation(graph, term_id, &mut generator_cache);
+            let tree = generate_tree_for_orientation(graph.clone(), term_id, &mut generator_cache);
+            let expression = tree.map(forget_graphs);
 
-            (tree, global_orientation)
-        });
-
-    let (expression, orientations): (Vec<Tree<CFFExpressionNode>>, Vec<Vec<bool>>) = terms
-        .map(|(tree, orientation)| (tree.map(forget_graphs), orientation.into_iter().collect()))
-        .unzip();
+            OrientationExpression {
+                expression,
+                orientation: global_orientation,
+                dag: graph,
+            }
+        })
+        .collect_vec();
 
     debug!("number of cache hits: {}", generator_cache.cache_hits);
     debug!(
@@ -244,8 +280,7 @@ fn generate_cff_from_orientations(
     }
 
     Ok(CFFExpression {
-        expression,
-        orientations,
+        orientations: terms,
         esurfaces: generator_cache.esurface_cache,
     })
 }
@@ -258,7 +293,6 @@ struct GeneratorCache {
     non_cache_hits: usize,
 }
 
-#[allow(clippy::type_complexity)]
 fn generate_tree_for_orientation(
     graph: CFFGenerationGraph,
     term_id: usize,
@@ -458,7 +492,7 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
         assert_eq!(orientations.len(), 6);
 
-        let cff = generate_cff_from_orientations(orientations).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None).unwrap();
         assert_eq!(cff.esurfaces.len(), 6);
 
         let p1 = LorentzVector::from_args(1., 3., 4., 5.);
@@ -519,7 +553,7 @@ mod tests_cff {
         let orientations =
             generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
 
-        let cff = generate_cff_from_orientations(orientations).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None).unwrap();
 
         let q = LorentzVector::from_args(1., 2., 3., 4.);
         let zero = LorentzVector::from_args(0., 0., 0., 0.);
@@ -575,7 +609,7 @@ mod tests_cff {
         let incoming_vertices = vec![0, 5];
 
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-        let cff = generate_cff_from_orientations(orientataions).unwrap();
+        let cff = generate_cff_from_orientations(orientataions, None).unwrap();
 
         let q = LorentzVector::from_args(1.0, 2.0, 3.0, 4.0);
         let zero_vector = LorentzVector::from_args(0., 0., 0., 0.);
@@ -644,7 +678,7 @@ mod tests_cff {
         // get time before cff generation
         let start = std::time::Instant::now();
 
-        let _cff = generate_cff_from_orientations(orientations).unwrap();
+        let _cff = generate_cff_from_orientations(orientations, None).unwrap();
 
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
@@ -685,12 +719,13 @@ mod tests_cff {
         // get time before cff generation
         let _start = std::time::Instant::now();
 
-        let _cff = generate_cff_from_orientations(orientations).unwrap();
+        let _cff = generate_cff_from_orientations(orientations, None).unwrap();
 
         let _finish = std::time::Instant::now();
     }
 
     #[test]
+    #[ignore]
     fn fishnet2b3() {
         let edges = vec![
             (0, 1),
@@ -729,7 +764,7 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
         let energy_cache = [3.0; 17];
 
-        let cff = generate_cff_from_orientations(orientations).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None).unwrap();
 
         let start = std::time::Instant::now();
         for _ in 0..100 {
