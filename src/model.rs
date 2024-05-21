@@ -1,4 +1,3 @@
-use crate::tensor::AbstractIndex;
 use crate::utils;
 use ahash::RandomState;
 use color_eyre::{Help, Report};
@@ -7,6 +6,7 @@ use num::Complex;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
+use spenso::AbstractIndex;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -356,7 +356,7 @@ impl Particle {
                     Atom::parse(&format!("v{num}(bis(4,{id}))")).unwrap()
                 }
             }
-            3 => Atom::parse(&format!("ϵbar{num}(lor(4,{id}))")).unwrap(),
+            3 => Atom::parse(&format!("ϵ̅{num}(lor(4,{id}))")).unwrap(),
             _ => Atom::parse("1").unwrap(),
         }
     }
