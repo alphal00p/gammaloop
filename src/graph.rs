@@ -19,7 +19,7 @@ use nalgebra::DMatrix;
 #[allow(unused_imports)]
 use num::traits::Float;
 use num::Complex;
-use spencer::*;
+use spenso::*;
 
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};

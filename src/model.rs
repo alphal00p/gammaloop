@@ -6,7 +6,7 @@ use num::Complex;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
-use spencer::AbstractIndex;
+use spenso::AbstractIndex;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;

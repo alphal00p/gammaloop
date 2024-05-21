@@ -763,7 +763,7 @@ dependencies = [
  "slotmap",
  "smallvec",
  "smartstring",
- "spencer",
+ "spenso",
  "statrs",
  "symbolica",
  "tabled",
@@ -1950,11 +1950,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "spencer"
+name = "spenso"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/spencer#0e6f740a976f989d52bfdca82bc34f43b2d4054a"
+source = "git+https://github.com/alphal00p/spenso#ee94e779cfbaa3bab47f4d5fbf37fff1f2eaa75f"
 dependencies = [
  "ahash",
+ "bitvec",
  "derive_more",
  "duplicate",
  "enum-try-as-inner",
@@ -1967,6 +1968,7 @@ dependencies = [
  "slotmap",
  "smartstring",
  "symbolica",
+ "thiserror",
 ]
 
 [[package]]

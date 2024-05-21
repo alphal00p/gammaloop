@@ -27,7 +27,7 @@ insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 [dependencies]
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 symbolica = { git = "https://github.com/alphal00p/symbolica" }
-spencer = { git = "https://github.com/alphal00p/spencer" }
+spenso = { git = "https://github.com/alphal00p/spenso" }
 # spencer = { path = "../spencer" }
 
 serde = { version = "1.0", features = ["derive"] }
