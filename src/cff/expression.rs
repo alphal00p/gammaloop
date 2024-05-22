@@ -15,7 +15,7 @@ impl From<usize> for TermId {
 
 use super::{
     cff_graph::CFFGenerationGraph,
-    esurface::{EsurfaceCache, EsurfaceCollection, EsurfaceId},
+    esurface::{EsurfaceCache, EsurfaceCollection, EsurfaceID},
     tree::{NodeCache, NodeId, Tree},
 };
 
@@ -34,7 +34,7 @@ pub struct CFFExpression {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CFFExpressionNode {
-    Data(EsurfaceId),
+    Data(EsurfaceID),
     Pointer { term_id: TermId, node_id: NodeId },
 }
 
@@ -99,8 +99,8 @@ impl CFFExpression {
 
     fn recursive_term_builder(
         &self,
-        res: &mut Vec<Vec<EsurfaceId>>,
-        current_path: &mut Vec<EsurfaceId>,
+        res: &mut Vec<Vec<EsurfaceID>>,
+        current_path: &mut Vec<EsurfaceID>,
         term_id: TermId,
         node_id: NodeId,
     ) {
@@ -129,7 +129,7 @@ impl CFFExpression {
         }
     }
 
-    fn expand_term(&self, term_id: TermId) -> Vec<Vec<EsurfaceId>> {
+    fn expand_term(&self, term_id: TermId) -> Vec<Vec<EsurfaceID>> {
         let mut res = vec![];
         let mut current_path = vec![];
 
@@ -137,7 +137,7 @@ impl CFFExpression {
         res
     }
 
-    pub fn expand_terms(&self) -> Vec<Vec<EsurfaceId>> {
+    pub fn expand_terms(&self) -> Vec<Vec<EsurfaceID>> {
         self.iter_term_ids()
             .flat_map(|t| self.expand_term(t))
             .collect()
@@ -169,7 +169,7 @@ impl CFFExpression {
         &self,
         term_id: TermId,
         node_id: NodeId,
-        esurface_id: EsurfaceId,
+        esurface_id: EsurfaceID,
     ) -> bool {
         let node = self.orientations[term_id.0].expression.get_node(node_id);
 
@@ -193,7 +193,7 @@ impl CFFExpression {
         }
     }
 
-    pub fn term_has_esurface(&self, term_id: TermId, esurface_id: EsurfaceId) -> bool {
+    pub fn term_has_esurface(&self, term_id: TermId, esurface_id: EsurfaceID) -> bool {
         self.recursive_esurface_search(term_id, NodeId::root(), esurface_id)
     }
 }

@@ -554,7 +554,7 @@ mod tests {
     use crate::{
         cff::{
             cff_graph::VertexSet,
-            esurface::{Esurface, EsurfaceId},
+            esurface::{Esurface, EsurfaceID},
         },
         graph::LoopMomentumBasis,
     };
@@ -650,7 +650,7 @@ mod tests {
             };
 
             let existing_esurfaces =
-                ExistingEsurfaces::from_vec((0..4).map(Into::<EsurfaceId>::into).collect());
+                ExistingEsurfaces::from_vec((0..4).map(Into::<EsurfaceID>::into).collect());
 
             Self {
                 external_momenta,
@@ -689,7 +689,7 @@ mod tests {
 
             let esurfaces = EsurfaceCollection::from_vec(vec![only_esurface]);
 
-            let existing_esurfaces = ExistingEsurfaces::from_vec(vec![Into::<EsurfaceId>::into(0)]);
+            let existing_esurfaces = ExistingEsurfaces::from_vec(vec![Into::<EsurfaceID>::into(0)]);
             let edge_masses = vec![None; 5];
 
             Self {
@@ -865,7 +865,7 @@ mod tests {
 
         println!(
             "{}",
-            banana.esurfaces[Into::<EsurfaceId>::into(0)].string_format_in_lmb(&banana.lmb)
+            banana.esurfaces[Into::<EsurfaceID>::into(0)].string_format_in_lmb(&banana.lmb)
         );
 
         let maximal_overlap = find_maximal_overlap(

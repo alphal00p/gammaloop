@@ -2,8 +2,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::FloatLike;
 
+use crate::cff::surface::Surface;
+
+use super::surface;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct HSurface {
+pub struct Hsurface {
     pub positive_energies: Vec<usize>,
     pub negative_energies: Vec<usize>,
     pub sub_orientation: Vec<bool>,
@@ -11,54 +15,46 @@ pub struct HSurface {
     pub shift_signature: Vec<bool>,
 }
 
-impl PartialEq for HSurface {
+impl Surface for Hsurface {
+    fn get_positive_energies(&self) -> impl Iterator<Item = &usize> {
+        self.positive_energies.iter()
+    }
+
+    fn get_negative_energies(&self) -> impl Iterator<Item = &usize> {
+        self.negative_energies.iter()
+    }
+
+    fn get_external_shift(&self) -> impl Iterator<Item = (&usize, &bool)> {
+        self.shift.iter().zip(&self.shift_signature)
+    }
+}
+
+impl PartialEq for Hsurface {
     fn eq(&self, other: &Self) -> bool {
         self.positive_energies == other.positive_energies
             && self.sub_orientation == other.sub_orientation
     }
 }
 
-impl HSurface {
+impl Hsurface {
     #[inline]
     pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        let positive_energy_sum = self
-            .positive_energies
-            .iter()
-            .map(|index| energy_cache[*index])
-            .sum::<T>();
-
-        let negative_energy_sum = self
-            .negative_energies
-            .iter()
-            .map(|index| energy_cache[*index])
-            .sum::<T>();
-
-        let shift_part = self.compute_shift_part(energy_cache);
-
-        positive_energy_sum - negative_energy_sum + shift_part
+        surface::compute_value(self, energy_cache)
     }
 
     #[inline]
     pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        let shift_sum = self.shift.iter().zip(self.shift_signature.iter()).fold(
-            T::zero(),
-            |acc, (index, sign)| match sign {
-                true => acc + energy_cache[*index],
-                false => acc - energy_cache[*index],
-            },
-        );
-
-        shift_sum
+        surface::compute_shift_part(self, energy_cache)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::HSurface;
+    use super::Hsurface;
 
     #[test]
     fn test_compute_shift_part() {
-        let h_surface = HSurface {
+        let h_surface = Hsurface {
             positive_energies: vec![0],
             negative_energies: vec![1],
             sub_orientation: vec![true, true],
@@ -73,7 +69,7 @@ mod tests {
 
     #[test]
     fn test_compute_value() {
-        let h_surface = HSurface {
+        let h_surface = Hsurface {
             positive_energies: vec![0, 1],
             negative_energies: vec![2, 3],
             sub_orientation: vec![true, true, true, true],

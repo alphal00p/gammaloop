@@ -14,7 +14,7 @@ use log::debug;
 
 use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
-    esurface::{EsurfaceCollection, EsurfaceId},
+    esurface::{EsurfaceCollection, EsurfaceID},
     expression::{CFFExpression, CFFExpressionNode, CFFLimit, TermId},
     tree::NodeId,
 };
@@ -23,7 +23,7 @@ use super::{
 enum GenerationData {
     Data {
         graph: CFFGenerationGraph,
-        esurface_id: Option<EsurfaceId>,
+        esurface_id: Option<EsurfaceID>,
     },
     Pointer {
         term_id: usize,
@@ -42,7 +42,7 @@ fn forget_graphs(data: GenerationData) -> CFFExpressionNode {
 }
 
 impl GenerationData {
-    fn insert_esurface(&mut self, esurface_id: EsurfaceId) {
+    fn insert_esurface(&mut self, esurface_id: EsurfaceID) {
         match self {
             GenerationData::Data {
                 esurface_id: ref mut id,
@@ -321,7 +321,7 @@ fn advance_tree(
 
     let (children_optional, new_esurfaces_for_tree): (
         Vec<Option<Vec<CFFGenerationGraph>>>,
-        Vec<EsurfaceId>,
+        Vec<EsurfaceID>,
     ) = bottom_layer
         .iter()
         .map(|&node_id| {
@@ -342,7 +342,7 @@ fn advance_tree(
                 Some(esurface_id) => esurface_id,
                 None => {
                     generator_cache.esurface_cache.push(esurface);
-                    Into::<EsurfaceId>::into(generator_cache.esurface_cache.len() - 1)
+                    Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
                 }
             };
 

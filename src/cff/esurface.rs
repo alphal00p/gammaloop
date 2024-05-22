@@ -14,6 +14,7 @@ use crate::utils::{
 };
 
 use super::cff_graph::VertexSet;
+use super::surface::{self, Surface};
 
 /// Core esurface struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
@@ -23,6 +24,16 @@ pub struct Esurface {
     pub shift: Vec<usize>,
     pub shift_signature: Vec<bool>,
     pub circled_vertices: VertexSet,
+}
+
+impl Surface for Esurface {
+    fn get_positive_energies(&self) -> impl Iterator<Item = &usize> {
+        self.energies.iter()
+    }
+
+    fn get_external_shift(&self) -> impl Iterator<Item = (&usize, &bool)> {
+        self.shift.iter().zip(&self.shift_signature)
+    }
 }
 
 // This equality is naive in the presence of raised propagators
@@ -69,27 +80,13 @@ impl Esurface {
     /// This is the fastest way to compute the value of all esurfaces in a full evaluation
     #[inline]
     pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        let energy_sum = self
-            .energies
-            .iter()
-            .map(|index| energy_cache[*index])
-            .sum::<T>();
-
-        energy_sum + self.compute_shift_part(energy_cache)
+        surface::compute_value(self, energy_cache)
     }
 
     /// Only compute the shift part, useful for existence checks
     #[inline]
     pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
-        let shift_sum = self.shift.iter().zip(self.shift_signature.iter()).fold(
-            T::zero(),
-            |acc, (index, sign)| match sign {
-                true => acc + energy_cache[*index],
-                false => acc - energy_cache[*index],
-            },
-        );
-
-        shift_sum
+        surface::compute_shift_part(self, energy_cache)
     }
 
     /// Compute the value of the esurface from the momenta, needed to check if an arbitrary point
@@ -236,24 +233,7 @@ impl Esurface {
 
     /// Write out the esurface expression in a generic way
     pub fn string_format(&self) -> String {
-        let mut energy_sum = self
-            .energies
-            .iter()
-            .map(|index| format!("E{}", index))
-            .join(" + ");
-
-        let shift_part = self
-            .shift_signature
-            .iter()
-            .zip(self.shift.iter())
-            .map(|(sign, index)| {
-                let sign = if *sign { "+" } else { "-" };
-                format!(" {} p{}", sign, index)
-            })
-            .join("");
-
-        energy_sum.push_str(&shift_part);
-        energy_sum
+        surface::string_format(self)
     }
 
     pub fn get_point_inside(&self) -> Vec<LorentzVector<f64>> {
@@ -282,10 +262,10 @@ pub struct EsurfaceCache<T> {
     cache: Vec<T>,
 }
 
-impl<T> Index<EsurfaceId> for EsurfaceCache<T> {
+impl<T> Index<EsurfaceID> for EsurfaceCache<T> {
     type Output = T;
 
-    fn index(&self, index: EsurfaceId) -> &Self::Output {
+    fn index(&self, index: EsurfaceID) -> &Self::Output {
         &self.cache[index.0]
     }
 }
@@ -300,15 +280,15 @@ impl<T> FromIterator<T> for EsurfaceCache<T> {
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
-pub struct EsurfaceId(usize);
+pub struct EsurfaceID(usize);
 
-impl From<EsurfaceId> for usize {
-    fn from(id: EsurfaceId) -> Self {
+impl From<EsurfaceID> for usize {
+    fn from(id: EsurfaceID) -> Self {
         id.0
     }
 }
 
-impl From<usize> for EsurfaceId {
+impl From<usize> for EsurfaceID {
     fn from(id: usize) -> Self {
         Self(id)
     }
@@ -345,22 +325,22 @@ impl EsurfaceCollection {
         self.esurfaces.push(esurface);
     }
 
-    pub fn iterate_all_ids(&self) -> impl Iterator<Item = EsurfaceId> {
-        (0..self.len()).map(EsurfaceId)
+    pub fn iterate_all_ids(&self) -> impl Iterator<Item = EsurfaceID> {
+        (0..self.len()).map(EsurfaceID)
     }
 
-    pub fn search(&self, esurface: &Esurface) -> Option<EsurfaceId> {
+    pub fn search(&self, esurface: &Esurface) -> Option<EsurfaceID> {
         self.esurfaces
             .iter()
             .position(|e| e == esurface)
-            .map(Into::<EsurfaceId>::into)
+            .map(Into::<EsurfaceID>::into)
     }
 }
 
-impl Index<EsurfaceId> for EsurfaceCollection {
+impl Index<EsurfaceID> for EsurfaceCollection {
     type Output = Esurface;
 
-    fn index(&self, index: EsurfaceId) -> &Self::Output {
+    fn index(&self, index: EsurfaceID) -> &Self::Output {
         &self.esurfaces[index.0]
     }
 }
@@ -368,7 +348,7 @@ impl Index<EsurfaceId> for EsurfaceCollection {
 /// Container for esurfaces that exist at a given point in the phase space
 #[derive(Debug, Clone)]
 pub struct ExistingEsurfaces {
-    existing_esurfaces: Vec<EsurfaceId>,
+    existing_esurfaces: Vec<EsurfaceID>,
 }
 
 impl ExistingEsurfaces {
@@ -378,7 +358,7 @@ impl ExistingEsurfaces {
         }
     }
 
-    pub fn push(&mut self, esurface_id: EsurfaceId) {
+    pub fn push(&mut self, esurface_id: EsurfaceID) {
         self.existing_esurfaces.push(esurface_id);
     }
 
@@ -390,19 +370,19 @@ impl ExistingEsurfaces {
         self.existing_esurfaces.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &EsurfaceId> {
+    pub fn iter(&self) -> impl Iterator<Item = &EsurfaceID> {
         self.existing_esurfaces.iter()
     }
 
-    pub fn to_vec(self) -> Vec<EsurfaceId> {
+    pub fn to_vec(self) -> Vec<EsurfaceID> {
         self.existing_esurfaces
     }
 
-    pub fn from_vec(existing_esurfaces: Vec<EsurfaceId>) -> Self {
+    pub fn from_vec(existing_esurfaces: Vec<EsurfaceID>) -> Self {
         Self { existing_esurfaces }
     }
 
-    pub fn as_slice(&self) -> &[EsurfaceId] {
+    pub fn as_slice(&self) -> &[EsurfaceID] {
         &self.existing_esurfaces
     }
 
@@ -410,7 +390,7 @@ impl ExistingEsurfaces {
         (0..self.len()).map(ExistingEsurfaceId)
     }
 
-    pub fn iter_enumerate(&self) -> impl Iterator<Item = (ExistingEsurfaceId, &EsurfaceId)> {
+    pub fn iter_enumerate(&self) -> impl Iterator<Item = (ExistingEsurfaceId, &EsurfaceID)> {
         self.iter()
             .enumerate()
             .map(|(i, id)| (ExistingEsurfaceId(i), id))
@@ -422,7 +402,7 @@ impl ExistingEsurfaces {
 pub struct ExistingEsurfaceId(usize);
 
 impl Index<ExistingEsurfaceId> for ExistingEsurfaces {
-    type Output = EsurfaceId;
+    type Output = EsurfaceID;
 
     fn index(&self, index: ExistingEsurfaceId) -> &Self::Output {
         &self.existing_esurfaces[index.0]
@@ -503,13 +483,13 @@ pub fn get_existing_esurfaces<T: FloatLike>(
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct EsurfaceDerivedData {
     esurface_data: Vec<EsurfaceData>,
-    orientation_pairs: Vec<(EsurfaceId, EsurfaceId)>,
+    orientation_pairs: Vec<(EsurfaceID, EsurfaceID)>,
 }
 
-impl Index<EsurfaceId> for EsurfaceDerivedData {
+impl Index<EsurfaceID> for EsurfaceDerivedData {
     type Output = EsurfaceData;
 
-    fn index(&self, index: EsurfaceId) -> &Self::Output {
+    fn index(&self, index: EsurfaceID) -> &Self::Output {
         &self.esurface_data[index.0]
     }
 }
@@ -640,10 +620,7 @@ pub fn generate_esurface_data(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        cff::{cff_graph::VertexSet, esurface::Esurface},
-        graph::EdgeType,
-    };
+    use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
 
     #[test]
     fn test_esurface() {
@@ -662,14 +639,6 @@ mod tests {
             shift_signature,
             circled_vertices: dummy_circled_vertices,
         };
-
-        let _edge_types = [
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Incoming,
-            EdgeType::Incoming,
-        ];
 
         let res = esurface.compute_value(&energies_cache);
         assert_eq!(res, 15.);
