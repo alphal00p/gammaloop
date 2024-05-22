@@ -6,6 +6,7 @@ use ahash::HashMap;
 use color_eyre::Report;
 use eyre::Result;
 use itertools::Itertools;
+use rayon::iter;
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
@@ -220,7 +221,7 @@ fn generate_cff_from_orientations(
     let esurface_cache = if let Some(cache) = optional_esurface_cache {
         cache
     } else {
-        EsurfaceCollection::from_vec(vec![])
+        EsurfaceCollection::from_iter(std::iter::empty())
     };
 
     let graph_cache = HashMap::default();
@@ -336,7 +337,9 @@ fn advance_tree(
             let (option_children, esurface) =
                 graph.generate_children(&mut generator_cache.vertices_used);
 
-            let option_esurface_id = generator_cache.esurface_cache.search(&esurface);
+            let option_esurface_id = generator_cache
+                .esurface_cache
+                .position(|val| val == &esurface);
 
             let esurface_id = match option_esurface_id {
                 Some(esurface_id) => esurface_id,

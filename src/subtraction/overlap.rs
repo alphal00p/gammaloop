@@ -633,7 +633,7 @@ mod tests {
                 },
             ];
 
-            let esurfaces = EsurfaceCollection::from_vec(esurfaces_array.to_vec());
+            let esurfaces = esurfaces_array.to_vec().into();
 
             let edge_masses = match masses {
                 Some(masses) => {
@@ -687,7 +687,7 @@ mod tests {
                 circled_vertices: VertexSet::dummy(),
             };
 
-            let esurfaces = EsurfaceCollection::from_vec(vec![only_esurface]);
+            let esurfaces = vec![only_esurface].into();
 
             let existing_esurfaces = ExistingEsurfaces::from_vec(vec![Into::<EsurfaceID>::into(0)]);
             let edge_masses = vec![None; 5];

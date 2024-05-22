@@ -1,11 +1,13 @@
 use std::ops::Index;
 
 use color_eyre::Report;
+use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
 use symbolica::representations::Atom;
+use typed_index_collections::TiVec;
 
 use crate::graph::{Graph, LoopMomentumBasis};
 use crate::utils::{
@@ -241,19 +243,17 @@ impl Esurface {
     }
 }
 
-/// Container for esurfaces, supposed to be used for the list of all esurface of a graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EsurfaceCollection {
-    esurfaces: Vec<Esurface>,
-}
+pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
-impl EsurfaceCollection {
-    #[inline]
-    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> EsurfaceCache<T> {
-        self.esurfaces
+pub fn compute_esurface_cache<T: FloatLike>(
+    esurfaces: &EsurfaceCollection,
+    energy_cache: &[T],
+) -> EsurfaceCache<T> {
+    EsurfaceCache {
+        cache: esurfaces
             .iter()
             .map(|esurface| esurface.compute_value(energy_cache))
-            .collect()
+            .collect(),
     }
 }
 
@@ -279,71 +279,8 @@ impl<T> FromIterator<T> for EsurfaceCache<T> {
 }
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into)]
 pub struct EsurfaceID(usize);
-
-impl From<EsurfaceID> for usize {
-    fn from(id: EsurfaceID) -> Self {
-        id.0
-    }
-}
-
-impl From<usize> for EsurfaceID {
-    fn from(id: usize) -> Self {
-        Self(id)
-    }
-}
-
-impl EsurfaceCollection {
-    pub fn to_vec(self) -> Vec<Esurface> {
-        self.esurfaces
-    }
-
-    pub fn from_vec(esurfaces: Vec<Esurface>) -> Self {
-        Self { esurfaces }
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.esurfaces.len()
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.esurfaces.is_empty()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &Esurface> {
-        self.esurfaces.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Esurface> {
-        self.esurfaces.iter_mut()
-    }
-
-    pub fn push(&mut self, esurface: Esurface) {
-        self.esurfaces.push(esurface);
-    }
-
-    pub fn iterate_all_ids(&self) -> impl Iterator<Item = EsurfaceID> {
-        (0..self.len()).map(EsurfaceID)
-    }
-
-    pub fn search(&self, esurface: &Esurface) -> Option<EsurfaceID> {
-        self.esurfaces
-            .iter()
-            .position(|e| e == esurface)
-            .map(Into::<EsurfaceID>::into)
-    }
-}
-
-impl Index<EsurfaceID> for EsurfaceCollection {
-    type Output = Esurface;
-
-    fn index(&self, index: EsurfaceID) -> &Self::Output {
-        &self.esurfaces[index.0]
-    }
-}
 
 /// Container for esurfaces that exist at a given point in the phase space
 #[derive(Debug, Clone)]
@@ -589,7 +526,9 @@ pub fn generate_esurface_data(
         })
         .collect::<Result<Vec<_>, Report>>()?;
 
-    let mut esurface_ids = esurfaces.iterate_all_ids().collect_vec();
+    let mut esurface_ids = (0..esurfaces.len())
+        .map(Into::<EsurfaceID>::into)
+        .collect_vec();
     let mut orientation_pairs = Vec::with_capacity(esurface_ids.len() / 2);
 
     while let Some(esurface_id) = esurface_ids.pop() {

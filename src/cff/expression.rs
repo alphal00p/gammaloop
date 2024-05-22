@@ -15,7 +15,7 @@ impl From<usize> for TermId {
 
 use super::{
     cff_graph::CFFGenerationGraph,
-    esurface::{EsurfaceCache, EsurfaceCollection, EsurfaceID},
+    esurface::{compute_esurface_cache, EsurfaceCache, EsurfaceCollection, EsurfaceID},
     tree::{NodeCache, NodeId, Tree},
 };
 
@@ -94,7 +94,7 @@ impl CFFExpression {
 
     #[inline]
     pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> EsurfaceCache<T> {
-        self.esurfaces.compute_esurface_cache(energy_cache)
+        compute_esurface_cache(&self.esurfaces, energy_cache)
     }
 
     fn recursive_term_builder(

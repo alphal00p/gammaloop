@@ -8,7 +8,10 @@ const TOLERANCE: f64 = 10.0;
 
 use crate::{
     cff::{
-        esurface::{EsurfaceCache, EsurfaceCollection, ExistingEsurfaceId, ExistingEsurfaces},
+        esurface::{
+            compute_esurface_cache, EsurfaceCache, EsurfaceCollection, ExistingEsurfaceId,
+            ExistingEsurfaces,
+        },
         expression::{CFFExpression, CFFLimit},
         generation::generate_cff_limit,
     },
@@ -311,7 +314,7 @@ impl CounterTerm {
             .collect_vec();
 
         let energy_cache = graph.compute_onshell_energies(&loop_momenta_at_star, external_momenta);
-        let esurface_cache = esurfaces.compute_esurface_cache(&energy_cache);
+        let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
         let rstar_energy_product = graph
             .get_virtual_edges_iterator()
             .map(|(edge_id, _)| Into::<T>::into(2.0) * energy_cache[edge_id])
