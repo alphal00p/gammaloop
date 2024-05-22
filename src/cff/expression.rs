@@ -152,9 +152,7 @@ impl CFFExpression {
         let cache = self
             .orientations
             .iter()
-            .map(|orientation| {
-                NodeCache::<Option<T>>::new_default(orientation.expression.get_num_nodes(), None)
-            })
+            .map(|orientation| vec![None; orientation.expression.get_num_nodes()].into())
             .collect();
 
         TermCache { cache }

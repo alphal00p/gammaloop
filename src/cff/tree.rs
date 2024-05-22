@@ -1,6 +1,5 @@
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
-use std::ops::{Index, IndexMut};
 use typed_index_collections::TiVec;
 
 /// data structure for a tree
@@ -93,32 +92,4 @@ impl<T> Tree<T> {
     }
 }
 
-pub struct NodeCache<T> {
-    cache: Vec<T>,
-}
-
-impl<T: Clone> NodeCache<T> {
-    pub fn new_default(num_nodes: usize, default: T) -> Self {
-        NodeCache {
-            cache: vec![default; num_nodes],
-        }
-    }
-
-    pub fn insert(&mut self, node_id: NodeId, data: T) {
-        self.cache[node_id.0] = data;
-    }
-}
-
-impl<T> Index<NodeId> for NodeCache<T> {
-    type Output = T;
-
-    fn index(&self, node_id: NodeId) -> &T {
-        &self.cache[node_id.0]
-    }
-}
-
-impl<T> IndexMut<NodeId> for NodeCache<T> {
-    fn index_mut(&mut self, node_id: NodeId) -> &mut T {
-        &mut self.cache[node_id.0]
-    }
-}
+pub type NodeCache<T> = TiVec<NodeId, T>;
