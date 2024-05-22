@@ -249,34 +249,14 @@ pub fn compute_esurface_cache<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
     energy_cache: &[T],
 ) -> EsurfaceCache<T> {
-    EsurfaceCache {
-        cache: esurfaces
-            .iter()
-            .map(|esurface| esurface.compute_value(energy_cache))
-            .collect(),
-    }
+    esurfaces
+        .iter()
+        .map(|esurface| esurface.compute_value(energy_cache))
+        .collect::<Vec<T>>()
+        .into()
 }
 
-#[derive(Debug, Clone)]
-pub struct EsurfaceCache<T> {
-    cache: Vec<T>,
-}
-
-impl<T> Index<EsurfaceID> for EsurfaceCache<T> {
-    type Output = T;
-
-    fn index(&self, index: EsurfaceID) -> &Self::Output {
-        &self.cache[index.0]
-    }
-}
-
-impl<T> FromIterator<T> for EsurfaceCache<T> {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        Self {
-            cache: iter.into_iter().collect(),
-        }
-    }
-}
+pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into)]
