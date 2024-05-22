@@ -6,7 +6,6 @@ use ahash::HashMap;
 use color_eyre::Report;
 use eyre::Result;
 use itertools::Itertools;
-use rayon::iter;
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
