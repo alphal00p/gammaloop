@@ -1,21 +1,16 @@
-use std::ops::{Index, IndexMut};
-
+use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
+use std::ops::{Index, IndexMut};
+use typed_index_collections::TiVec;
 
 /// data structure for a tree
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize)]
 pub struct NodeId(usize);
 
 impl NodeId {
     pub const fn root() -> Self {
         NodeId(0)
-    }
-}
-
-impl From<usize> for NodeId {
-    fn from(value: usize) -> Self {
-        NodeId(value)
     }
 }
 
@@ -29,7 +24,7 @@ pub struct TreeNode<T> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tree<T> {
-    nodes: Vec<TreeNode<T>>,
+    nodes: TiVec<NodeId, TreeNode<T>>,
 }
 
 impl<T> Tree<T> {
@@ -42,7 +37,7 @@ impl<T> Tree<T> {
             parent: None,
         };
         Tree {
-            nodes: vec![root_node],
+            nodes: vec![root_node].into(),
         }
     }
 
@@ -55,19 +50,19 @@ impl<T> Tree<T> {
             parent: Some(parent_id),
         };
         self.nodes.push(new_node);
-        self.nodes[parent_id.0].children.push(node_id);
+        self.nodes[parent_id].children.push(node_id);
     }
 
     pub fn get_node(&self, node_id: NodeId) -> &TreeNode<T> {
-        &self.nodes[node_id.0]
+        &self.nodes[node_id]
     }
 
     pub fn get_data_node_mut(&mut self, node_id: NodeId) -> &mut T {
-        &mut self.nodes[node_id.0].data
+        &mut self.nodes[node_id].data
     }
 
     pub fn apply_mut_closure(&mut self, node_id: NodeId, closure: impl Fn(&mut T)) {
-        closure(&mut self.nodes[node_id.0].data);
+        closure(&mut self.nodes[node_id].data);
     }
 
     pub fn get_bottom_layer(&self) -> Vec<NodeId> {
