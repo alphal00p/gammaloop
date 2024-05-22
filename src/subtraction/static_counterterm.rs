@@ -75,7 +75,8 @@ impl CounterTerm {
             .iter()
             .map(|(esurface_ids, _)| {
                 existing_esurfaces
-                    .all_indices()
+                    .iter_enumerated()
+                    .map(|a| a.0)
                     .filter(|id| !esurface_ids.contains(id))
                     .collect_vec()
             })

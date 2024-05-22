@@ -276,7 +276,10 @@ pub fn find_maximal_overlap(
 ) -> Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)> {
     let mut res = vec![];
 
-    let all_existing_esurfaces = existing_esurfaces.all_indices().collect_vec();
+    let all_existing_esurfaces = existing_esurfaces
+        .iter_enumerated()
+        .map(|a| a.0)
+        .collect_vec();
 
     // first try if all esurfaces have a single center, we explitely seach a center instead of trying the
     // origin. This is because the origin might not be optimal.
@@ -306,7 +309,7 @@ pub fn find_maximal_overlap(
 
     let mut num_disconnected_surfaces = 0;
 
-    for (existing_esurface_id, &esurface_id) in existing_esurfaces.iter_enumerate() {
+    for (existing_esurface_id, &esurface_id) in existing_esurfaces.iter_enumerated() {
         // if an esurface overlaps with no other esurface, it is part of the maximal overlap structure
         if esurface_pairs.has_no_overlap(existing_esurface_id) {
             let center = find_center(
@@ -418,7 +421,10 @@ impl EsurfacePairs {
     ) -> Self {
         let mut res = Self::new_empty(existing_esurfaces.len());
 
-        let all_existing_esurfaces = existing_esurfaces.all_indices().collect_vec();
+        let all_existing_esurfaces = existing_esurfaces
+            .iter_enumerated()
+            .map(|a| a.0)
+            .collect_vec();
 
         for (i, &esurface_id_1) in all_existing_esurfaces.iter().enumerate() {
             for &esurface_id_2 in all_existing_esurfaces.iter().skip(i + 1) {
@@ -454,14 +460,14 @@ impl EsurfacePairs {
         result: &[(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)],
     ) -> HashSet<Vec<ExistingEsurfaceId>> {
         let mut res = HashSet::default();
-        let existing_esurfaces_not_in_overlap =
-            existing_esurfaces
-                .all_indices()
-                .filter(|&existing_esurface_id| {
-                    !result
-                        .iter()
-                        .any(|(overlap, _)| overlap.contains(&existing_esurface_id))
-                });
+        let existing_esurfaces_not_in_overlap = existing_esurfaces
+            .iter_enumerated()
+            .map(|a| a.0)
+            .filter(|&existing_esurface_id| {
+                !result
+                    .iter()
+                    .any(|(overlap, _)| overlap.contains(&existing_esurface_id))
+            });
 
         let mut possible_options_from_esurfaces_not_in_overlap = HashSet::default();
 
@@ -509,7 +515,8 @@ impl EsurfacePairs {
 
         for pair in existing_pairs_not_in_overlap {
             let possible_additions = existing_esurfaces
-                .all_indices()
+                .iter_enumerated()
+                .map(|a| a.0)
                 .filter(|&id| {
                     id != pair.0
                         && id != pair.1
@@ -649,8 +656,7 @@ mod tests {
                 None => vec![None; 8],
             };
 
-            let existing_esurfaces =
-                ExistingEsurfaces::from_vec((0..4).map(Into::<EsurfaceID>::into).collect());
+            let existing_esurfaces = (0..4).map(Into::<EsurfaceID>::into).collect_vec().into();
 
             Self {
                 external_momenta,
@@ -689,7 +695,7 @@ mod tests {
 
             let esurfaces = vec![only_esurface].into();
 
-            let existing_esurfaces = ExistingEsurfaces::from_vec(vec![Into::<EsurfaceID>::into(0)]);
+            let existing_esurfaces = vec![Into::<EsurfaceID>::into(0)].into();
             let edge_masses = vec![None; 5];
 
             Self {

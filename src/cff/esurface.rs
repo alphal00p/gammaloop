@@ -262,81 +262,15 @@ pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into)]
 pub struct EsurfaceID(usize);
 
+pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
+
 /// Container for esurfaces that exist at a given point in the phase space
-#[derive(Debug, Clone)]
-pub struct ExistingEsurfaces {
-    existing_esurfaces: Vec<EsurfaceID>,
-}
-
-impl ExistingEsurfaces {
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            existing_esurfaces: Vec::with_capacity(capacity),
-        }
-    }
-
-    pub fn push(&mut self, esurface_id: EsurfaceID) {
-        self.existing_esurfaces.push(esurface_id);
-    }
-
-    pub fn len(&self) -> usize {
-        self.existing_esurfaces.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.existing_esurfaces.is_empty()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &EsurfaceID> {
-        self.existing_esurfaces.iter()
-    }
-
-    pub fn to_vec(self) -> Vec<EsurfaceID> {
-        self.existing_esurfaces
-    }
-
-    pub fn from_vec(existing_esurfaces: Vec<EsurfaceID>) -> Self {
-        Self { existing_esurfaces }
-    }
-
-    pub fn as_slice(&self) -> &[EsurfaceID] {
-        &self.existing_esurfaces
-    }
-
-    pub fn all_indices(&self) -> impl Iterator<Item = ExistingEsurfaceId> {
-        (0..self.len()).map(ExistingEsurfaceId)
-    }
-
-    pub fn iter_enumerate(&self) -> impl Iterator<Item = (ExistingEsurfaceId, &EsurfaceID)> {
-        self.iter()
-            .enumerate()
-            .map(|(i, id)| (ExistingEsurfaceId(i), id))
-    }
-}
 
 /// Index in the list of all existing esurfaces, essentially a pointer to a pointer to an esurface
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, From, Into, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
 pub struct ExistingEsurfaceId(usize);
-
-impl Index<ExistingEsurfaceId> for ExistingEsurfaces {
-    type Output = EsurfaceID;
-
-    fn index(&self, index: ExistingEsurfaceId) -> &Self::Output {
-        &self.existing_esurfaces[index.0]
-    }
-}
-
-impl From<ExistingEsurfaceId> for usize {
-    fn from(id: ExistingEsurfaceId) -> Self {
-        id.0
-    }
-}
-
-impl From<usize> for ExistingEsurfaceId {
-    fn from(id: usize) -> Self {
-        Self(id)
-    }
-}
 
 const MAX_EXPECTED_CAPACITY: usize = 32; // Used to prevent reallocations during existence check
 const SHIFT_THRESHOLD: f64 = 1.0e-13;
