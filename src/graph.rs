@@ -1176,6 +1176,7 @@ impl Graph {
     }
 
     #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_orientations<T: FloatLike>(
         &self,
         loop_moms: &[LorentzVector<T>],
@@ -1251,6 +1252,18 @@ impl Graph {
     }
 
     #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_numerator_orientations<T: FloatLike>(
+        &self,
+        loop_moms: &[LorentzVector<T>],
+        independent_external_momenta: &[LorentzVector<T>],
+        lmb_specification: &LoopMomentumBasisSpecification,
+    ) -> Vec<T> {
+        vec![T::zero(); self.edges.len()]
+    }
+
+    #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &self,
         loop_moms: &[LorentzVector<T>],
@@ -1268,8 +1281,19 @@ impl Graph {
             * self
                 .evaluate_cff_orientations(loop_moms, external_moms, lmb_specification)
                 .into_iter()
+                .zip(
+                    self.evaluate_numerator_orientations(
+                        loop_moms,
+                        external_moms,
+                        lmb_specification,
+                    )
+                    .into_iter(),
+                )
+                .map(|(cff, num)| cff * num)
                 .sum::<T>()
     }
+
+    fn on_shell_energies<T: FloatLike>() {}
 
     #[inline]
     pub fn evaluate_cff_expression<T: FloatLike>(
