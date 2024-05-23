@@ -6,14 +6,14 @@ use num::Complex;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
-use spencer::AbstractIndex;
+use spenso::AbstractIndex;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
+use symbolica::atom::{Atom, FunctionBuilder};
 use symbolica::fun;
 use symbolica::printer::{AtomPrinter, PrintOptions};
-use symbolica::representations::{Atom, FunctionBuilder};
 use symbolica::state::State;
 
 #[allow(unused)]

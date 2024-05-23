@@ -1,4 +1,4 @@
-use symbolica::{id::Pattern, representations::Atom};
+use symbolica::{atom::Atom, id::Pattern};
 
 use crate::{graph::Graph, model::Model};
 

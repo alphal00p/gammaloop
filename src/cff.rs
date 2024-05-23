@@ -12,7 +12,7 @@ use color_eyre::Report;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use symbolica::representations::Atom;
+use symbolica::atom::Atom;
 
 use log::debug;
 
