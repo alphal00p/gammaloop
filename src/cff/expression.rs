@@ -1,17 +1,11 @@
-use std::ops::{Index, IndexMut};
-
-use serde::{Deserialize, Serialize};
-
 use crate::utils::FloatLike;
+use derive_more::{From, Into};
+use serde::{Deserialize, Serialize};
+use std::ops::{Index, IndexMut};
+use typed_index_collections::TiVec;
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize)]
 pub struct TermId(usize);
-
-impl From<usize> for TermId {
-    fn from(value: usize) -> Self {
-        TermId(value)
-    }
-}
 
 use super::{
     cff_graph::CFFGenerationGraph,
@@ -28,7 +22,7 @@ pub struct OrientationExpression {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CFFExpression {
-    pub orientations: Vec<OrientationExpression>,
+    pub orientations: TiVec<TermId, OrientationExpression>,
     pub esurfaces: EsurfaceCollection,
 }
 
@@ -47,7 +41,7 @@ impl CFFExpression {
         self.iter_term_ids()
             .map(|t| {
                 evaluate_tree(
-                    &self.orientations[t.0].expression,
+                    &self.orientations[t].expression,
                     t,
                     &esurface_cache,
                     &mut term_cache,
@@ -73,7 +67,7 @@ impl CFFExpression {
         self.iter_term_ids()
             .map(|t| {
                 evaluate_tree(
-                    &self.orientations[t.0].expression,
+                    &self.orientations[t].expression,
                     t,
                     esurface_cache,
                     &mut term_cache,
@@ -104,7 +98,7 @@ impl CFFExpression {
         term_id: TermId,
         node_id: NodeId,
     ) {
-        let node = &self.orientations[term_id.0].expression.get_node(node_id);
+        let node = &self.orientations[term_id].expression.get_node(node_id);
 
         match node.data {
             CFFExpressionNode::Data(esurface_id) => {
@@ -169,7 +163,7 @@ impl CFFExpression {
         node_id: NodeId,
         esurface_id: EsurfaceID,
     ) -> bool {
-        let node = self.orientations[term_id.0].expression.get_node(node_id);
+        let node = self.orientations[term_id].expression.get_node(node_id);
 
         match node.data {
             CFFExpressionNode::Data(data_esurface_id) => {
@@ -262,7 +256,7 @@ impl Index<TermId> for CFFExpression {
     type Output = OrientationExpression;
 
     fn index(&self, term_id: TermId) -> &Self::Output {
-        &self.orientations[term_id.0]
+        &self.orientations[term_id]
     }
 }
 

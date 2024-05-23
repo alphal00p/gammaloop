@@ -280,7 +280,7 @@ fn generate_cff_from_orientations(
     }
 
     Ok(CFFExpression {
-        orientations: terms,
+        orientations: terms.into(),
         esurfaces: generator_cache.esurface_cache,
     })
 }
