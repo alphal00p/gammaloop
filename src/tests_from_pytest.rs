@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 use crate::cff::esurface::{
-    get_existing_esurfaces, Esurface, EsurfaceId, ExistingEsurfaceId, ExistingEsurfaces,
+    get_existing_esurfaces, Esurface, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
 };
 use crate::cff::generation::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};

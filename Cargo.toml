@@ -102,6 +102,7 @@ treena = "0.0.5"
 serde_json = "1.0.115"
 ctrlc = "3.4.4"
 constcat = "0.5.0"
+typed-index-collections = { version = "3.1.0", features = ["serde", "serde-alloc"] }
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
