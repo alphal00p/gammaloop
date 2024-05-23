@@ -21,10 +21,6 @@ use super::{
     VecStructure,
 };
 
-trait Average {
-    fn mean(a: Self, b: Self) -> Self;
-}
-
 fn test_tensor<D, S>(structure: S, seed: u64, range: Option<(D, D)>) -> SparseTensor<D, S>
 where
     S: TensorStructure,
