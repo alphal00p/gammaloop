@@ -1,7 +1,8 @@
 use crate::utils::FloatLike;
 use derive_more::{From, Into};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::ops::{Index, IndexMut};
+use std::ops::Index;
 use typed_index_collections::TiVec;
 
 #[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize)]
@@ -143,13 +144,11 @@ impl CFFExpression {
 
     #[inline]
     fn build_term_cache<T: FloatLike>(&self) -> TermCache<Option<T>> {
-        let cache = self
-            .orientations
+        self.orientations
             .iter()
             .map(|orientation| vec![None; orientation.expression.get_num_nodes()].into())
-            .collect();
-
-        TermCache { cache }
+            .collect_vec()
+            .into()
     }
 
     #[inline]
@@ -199,7 +198,7 @@ fn recursive_eval_from_node<T: FloatLike>(
 ) -> T {
     let node = tree.get_node(node_id);
     match node.data {
-        CFFExpressionNode::Pointer { term_id, node_id } => term_cache[(term_id, node_id)].unwrap(),
+        CFFExpressionNode::Pointer { term_id, node_id } => term_cache[term_id][node_id].unwrap(),
         CFFExpressionNode::Data(esurface_id) => {
             let res = if !node.children.is_empty() {
                 esurface_cache[esurface_id].inv()
@@ -219,7 +218,7 @@ fn recursive_eval_from_node<T: FloatLike>(
             } else {
                 esurface_cache[esurface_id].inv()
             };
-            term_cache[(term_id, node_id)] = Some(res);
+            term_cache[term_id][node_id] = Some(res);
             res
         }
     }
@@ -234,23 +233,7 @@ fn evaluate_tree<T: FloatLike>(
     recursive_eval_from_node(tree, NodeId::root(), term_id, esurface_cache, term_cache)
 }
 
-struct TermCache<T> {
-    cache: Vec<NodeCache<T>>,
-}
-
-impl<T> Index<(TermId, NodeId)> for TermCache<T> {
-    type Output = T;
-
-    fn index(&self, (term_id, node_id): (TermId, NodeId)) -> &Self::Output {
-        &self.cache[term_id.0][node_id]
-    }
-}
-
-impl<T> IndexMut<(TermId, NodeId)> for TermCache<T> {
-    fn index_mut(&mut self, (term_id, node_id): (TermId, NodeId)) -> &mut Self::Output {
-        &mut self.cache[term_id.0][node_id]
-    }
-}
+pub type TermCache<T> = TiVec<TermId, NodeCache<T>>;
 
 impl Index<TermId> for CFFExpression {
     type Output = OrientationExpression;
