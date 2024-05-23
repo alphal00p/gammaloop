@@ -669,18 +669,18 @@ class Model(object):
     @classmethod
     def set_model_functions(cls):
         cls.model_functions: dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]] = {
-            SBE.fun('Theta'): lambda xs: 0. if xs[0].real < 0. else 1.,
-            SBE.fun('tan'): lambda xs: cmath.tan(xs[0]),
-            SBE.fun('acos'): lambda xs: cmath.acos(xs[0]),
-            SBE.fun('asin'): lambda xs: cmath.asin(xs[0]),
-            SBE.fun('atan'): lambda xs: cmath.atan(xs[0]),
-            SBE.fun('complexconjugate'): lambda xs: xs[0].conjugate(),
-            SBE.fun('complex'): lambda xs: xs[0]+complex(0, 1)*xs[1],
+            SBE.symbol('Theta'): lambda xs: 0. if xs[0].real < 0. else 1.,
+            SBE.symbol('tan'): lambda xs: cmath.tan(xs[0]),
+            SBE.symbol('acos'): lambda xs: cmath.acos(xs[0]),
+            SBE.symbol('asin'): lambda xs: cmath.asin(xs[0]),
+            SBE.symbol('atan'): lambda xs: cmath.atan(xs[0]),
+            SBE.symbol('complexconjugate'): lambda xs: xs[0].conjugate(),
+            SBE.symbol('complex'): lambda xs: xs[0]+complex(0, 1)*xs[1],
             # These functions are typically only used in NLO models
-            SBE.fun('cond'): lambda xs: xs[1] if abs(xs[0]) == 0. else xs[2],
-            SBE.fun('reglog'): lambda xs: Model.model_function_reglog(xs),
-            SBE.fun('reglogp'): lambda xs: Model.model_function_reglogp(xs),
-            SBE.fun('reglogm'): lambda xs: Model.model_function_reglogm(xs),
+            SBE.symbol('cond'): lambda xs: xs[1] if abs(xs[0]) == 0. else xs[2],
+            SBE.symbol('reglog'): lambda xs: Model.model_function_reglog(xs),
+            SBE.symbol('reglogp'): lambda xs: Model.model_function_reglogp(xs),
+            SBE.symbol('reglogm'): lambda xs: Model.model_function_reglogm(xs),
         }
 
     @classmethod
@@ -692,8 +692,8 @@ class Model(object):
     @classmethod
     def set_model_variables(cls):
         cls.model_variables: dict[SBE, complex] = {
-            SBE.var('I'): complex(0, 1),
-            SBE.var('pi'): cmath.pi
+            SBE.symbol('I'): complex(0, 1),
+            SBE.symbol('pi'): cmath.pi
         }
 
     @classmethod
@@ -726,10 +726,10 @@ class Model(object):
                     sorted_parameters.append(
                         remaining_parameters.pop(remaining_parameters.index(p)))
 
-        x_ = SBE.var('x_')
+        x_ = SBE.symbol('x_')
         param_variables: dict[str, dict[str, Any]] = {
             p.name: {
-                'var': SBE.var(p.name),
+                'var': SBE.symbol(p.name),
                 'dependent_params': [m[x_]  # type: ignore
                                      for m in p.expression.match(x_, x_.req_type(AtomType.Var))]
             } for p in remaining_parameters if p.expression is not None
@@ -949,7 +949,7 @@ class Model(object):
             if parameter.value is None:
                 raise GammaLoopError(
                     f"The value of parameter {parameter.name} has not been set yet")
-            parameter_map[SBE.var(parameter.name)] = parameter.value
+            parameter_map[SBE.symbol(parameter.name)] = parameter.value
         return parameter_map
 
     def update_coupling_values(self) -> None:
@@ -963,7 +963,7 @@ class Model(object):
         evaluation_variables: dict[SBE, complex] = self.get_model_variables()
         for parameter in self.get_external_parameters():
             parameter.value = input_card[parameter.name.lower()]
-            evaluation_variables[SBE.var(parameter.name)] = parameter.value
+            evaluation_variables[SBE.symbol(parameter.name)] = parameter.value
 
         # Collect constant internal parameters such as ZERO
         for parameter in self.get_internal_parameters():
@@ -971,7 +971,8 @@ class Model(object):
                 if parameter.value is None:
                     raise GammaLoopError(
                         "Internal parameter '{parameter.name}' has no value nor expression.")
-                evaluation_variables[SBE.var(parameter.name)] = parameter.value
+                evaluation_variables[SBE.symbol(
+                    parameter.name)] = parameter.value
 
         # Now update all other dependent variables
         # Note that this is done in a loop because some parameters may depend on other parameters
@@ -981,12 +982,12 @@ class Model(object):
             found_new_evaluation = False
             found_unevaluated = False
             for parameter in self.get_internal_parameters():
-                parameter_SBE = SBE.var(parameter.name)
+                parameter_SBE = SBE.symbol(parameter.name)
                 if parameter_SBE not in evaluation_variables:
                     if parameter.expression is None:
                         raise GammaLoopError(
                             f"Internal parameter '{parameter.name}' has no value nor expression.")
-                    # print([utils.expression_to_string_safe(f(SBE.var('x')))
+                    # print([utils.expression_to_string_safe(f(SBE.symbol('x')))
                     #       for f in self.get_model_functions()])
                     # print(parameter.expression)
                     if evaluation_round == Model.MAX_ALLOWED_RECURSION_IN_PARAMETER_EVALUATION:
