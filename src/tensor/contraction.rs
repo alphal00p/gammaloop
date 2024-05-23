@@ -12,6 +12,7 @@ use std::{
     ops::Neg,
 };
 
+#[allow(dead_code)]
 trait LeastCommonStorage<Other: HasTensorData + SetTensorData>: HasTensorData + SetTensorData {
     type OutStorage<LCMData>: SetTensorData<SetData = LCMData>;
     fn least_common_storage<LCMData>(&self, other: &Other) -> Self::OutStorage<LCMData>

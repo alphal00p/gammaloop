@@ -736,7 +736,7 @@ impl CFFIntermediateGraph {
                 }
             }
 
-            current_vertices = vertices_found_in_previous_iteration.clone();
+            current_vertices.clone_from(&vertices_found_in_previous_iteration);
             vertices_found_in_previous_iteration.clear();
         }
 

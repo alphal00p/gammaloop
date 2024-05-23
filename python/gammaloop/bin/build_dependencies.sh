@@ -186,6 +186,8 @@ build_dependencies () {
         echo "Cloning symbolica ...";
         CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}"
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
+        cd symbolica && git reset --hard f6fc622 >> ../dependency_build.log 2>&1
+        cd ..
     fi
 
     if ! test -f symbolica/symbolica_path.txt; then

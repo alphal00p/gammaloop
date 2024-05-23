@@ -768,7 +768,7 @@ where
                 }
             }
             if self.map.is_empty() {
-                self.map = self.fiber_iter.reset().to_owned();
+                self.fiber_iter.reset().clone_into(&mut self.map);
             } else {
                 self.fiber_iter.reset();
             }
@@ -801,7 +801,7 @@ where
                 }
             }
             if self.map.is_empty() {
-                self.map = self.fiber_iter.reset().to_owned();
+                self.fiber_iter.reset().clone_into(&mut self.map);
             } else {
                 self.fiber_iter.reset();
             }

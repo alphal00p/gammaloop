@@ -37,7 +37,9 @@
 
       inherit (pkgs) lib;
 
-      craneLib = crane.lib.${system};
+      craneLib =
+        crane.lib.${system}.overrideToolchain
+        fenix.packages.${system}.stable.toolchain;
       src = craneLib.cleanCargoSource (craneLib.path ./.);
 
       # Common arguments can be set here to avoid repeating them later
@@ -60,7 +62,7 @@
 
       craneLibLLvmTools =
         craneLib.overrideToolchain
-        (fenix.packages.${system}.complete.withComponents [
+        (fenix.packages.${system}.stable.withComponents [
           "cargo"
           "llvm-tools"
           "rustc"
