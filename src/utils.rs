@@ -17,8 +17,8 @@ use symbolica::numerical_integration::Sample;
 
 #[allow(unused_imports)]
 use log::{debug, info};
+use symbolica::atom::Atom;
 use symbolica::printer::{AtomPrinter, PrintOptions};
-use symbolica::representations::Atom;
 
 use git_version::git_version;
 pub const GIT_VERSION: &str = git_version!();

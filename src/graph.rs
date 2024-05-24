@@ -3,14 +3,10 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
     numerator::generate_numerator,
-    tensor::{
-        AbstractIndex, Contract, DataTensor, DenseTensor, GetTensorData, Representation,
-        SetTensorData, Slot, SparseTensor, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT,
-        COLORFUND, COLORSEXT, EUCLIDEAN,
-    },
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_momentum, FloatLike},
 };
+
 use ahash::RandomState;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
@@ -22,11 +18,13 @@ use nalgebra::DMatrix;
 #[allow(unused_imports)]
 use num::traits::Float;
 use num::Complex;
+use spenso::Contract;
+use spenso::*;
 
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
-use symbolica::{id::Pattern, representations::Atom};
+use symbolica::{atom::Atom, id::Pattern};
 
 use constcat::concat;
 
@@ -580,7 +578,6 @@ impl Vertex {
 
     pub fn contracted_vertex_rule(&self, graph: &Graph) -> Option<Atom> {
         let all = self.apply_vertex_rule(graph)?;
-
         let scalar = all
             .into_iter()
             .reduce(|acc, tensor| acc.contract(&tensor).unwrap())
