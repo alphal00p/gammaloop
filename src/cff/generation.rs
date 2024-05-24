@@ -1,6 +1,11 @@
 use crate::{
-    cff::{expression::OrientationExpression, tree::Tree},
-    graph::{EdgeType, Graph},
+    cff::{
+        expression::OrientationExpression,
+        hsurface::HsurfaceID,
+        surface::{HybridSurface, HybridSurfaceID},
+        tree::Tree,
+    },
+    graph::Graph,
 };
 use ahash::HashMap;
 use color_eyre::Report;
@@ -16,6 +21,7 @@ use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
     esurface::{EsurfaceCollection, EsurfaceID},
     expression::{CFFExpression, CFFExpressionNode, CFFLimit, TermId},
+    hsurface::HsurfaceCollection,
     tree::NodeId,
 };
 
@@ -23,7 +29,7 @@ use super::{
 enum GenerationData {
     Data {
         graph: CFFGenerationGraph,
-        esurface_id: Option<EsurfaceID>,
+        surface_id: Option<HybridSurfaceID>,
     },
     Pointer {
         term_id: usize,
@@ -33,7 +39,10 @@ enum GenerationData {
 
 fn forget_graphs(data: GenerationData) -> CFFExpressionNode {
     match data {
-        GenerationData::Data { esurface_id, .. } => CFFExpressionNode::Data(esurface_id.unwrap()),
+        GenerationData::Data {
+            surface_id: esurface_id,
+            ..
+        } => CFFExpressionNode::Data(esurface_id.unwrap()),
         GenerationData::Pointer { term_id, node_id } => CFFExpressionNode::Pointer {
             term_id: Into::<TermId>::into(term_id),
             node_id: Into::<NodeId>::into(node_id),
@@ -42,13 +51,13 @@ fn forget_graphs(data: GenerationData) -> CFFExpressionNode {
 }
 
 impl GenerationData {
-    fn insert_esurface(&mut self, esurface_id: EsurfaceID) {
+    fn insert_esurface(&mut self, surface_id: HybridSurfaceID) {
         match self {
             GenerationData::Data {
-                esurface_id: ref mut id,
+                surface_id: ref mut id,
                 ..
             } => {
-                *id = Some(esurface_id);
+                *id = Some(surface_id);
             }
             GenerationData::Pointer { .. } => {}
         }
@@ -139,48 +148,18 @@ fn get_orientations(graph: &Graph) -> Vec<CFFGenerationGraph> {
         .collect()
 }
 
-pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
+pub fn generate_cff_expression(
+    graph: &Graph,
+    allow_hsurface: bool,
+) -> Result<CFFExpression, Report> {
     // construct a hashmap that contains as keys all vertices that connect to external edges
     // and as values those external edges that it connects to
-    let mut external_data: HashMap<usize, Vec<usize>> = HashMap::default();
-
-    for external_edge in graph.edges.iter() {
-        let edge_position = graph.get_edge_position(&external_edge.name).unwrap();
-        match external_edge.edge_type {
-            EdgeType::Incoming => {
-                if let std::collections::hash_map::Entry::Vacant(e) =
-                    external_data.entry(external_edge.vertices[1])
-                {
-                    e.insert(vec![edge_position]);
-                } else {
-                    external_data
-                        .get_mut(&external_edge.vertices[1])
-                        .unwrap_or_else(|| unreachable!())
-                        .push(edge_position);
-                }
-            }
-            EdgeType::Outgoing => {
-                if let std::collections::hash_map::Entry::Vacant(e) =
-                    external_data.entry(external_edge.vertices[0])
-                {
-                    e.insert(vec![edge_position]);
-                } else {
-                    external_data
-                        .get_mut(&external_edge.vertices[0])
-                        .unwrap_or_else(|| unreachable!())
-                        .push(edge_position);
-                }
-            }
-
-            EdgeType::Virtual => (),
-        }
-    }
 
     let graphs = get_orientations(graph);
     debug!("generating cff for graph: {}", graph.name);
     debug!("number of orientations: {}", graphs.len());
 
-    let graph_cff = generate_cff_from_orientations(graphs, None)?;
+    let graph_cff = generate_cff_from_orientations(graphs, None, None, allow_hsurface)?;
 
     Ok(graph_cff)
 }
@@ -196,14 +175,16 @@ pub fn generate_cff_limit(
         "number of left and right dags must match"
     );
 
-    let left = generate_cff_from_orientations(left_dags, Some(esurfaces.clone())).unwrap();
+    let left =
+        generate_cff_from_orientations(left_dags, Some(esurfaces.clone()), None, true).unwrap();
     assert_eq!(
         left.esurfaces.len(),
         esurfaces.len(),
         "new esurfaces generated during factorisation"
     );
 
-    let right = generate_cff_from_orientations(right_dags, Some(esurfaces.clone())).unwrap();
+    let right =
+        generate_cff_from_orientations(right_dags, Some(esurfaces.clone()), None, true).unwrap();
     assert_eq!(
         right.esurfaces.len(),
         esurfaces.len(),
@@ -216,6 +197,8 @@ pub fn generate_cff_limit(
 fn generate_cff_from_orientations(
     orientations_and_graphs: Vec<CFFGenerationGraph>,
     optional_esurface_cache: Option<EsurfaceCollection>,
+    optional_hsurface_cache: Option<HsurfaceCollection>,
+    allow_hsurface: bool,
 ) -> Result<CFFExpression, Report> {
     let esurface_cache = if let Some(cache) = optional_esurface_cache {
         cache
@@ -223,11 +206,18 @@ fn generate_cff_from_orientations(
         EsurfaceCollection::from_iter(std::iter::empty())
     };
 
+    let hsurface_cache = if let Some(cache) = optional_hsurface_cache {
+        cache
+    } else {
+        HsurfaceCollection::from_iter(std::iter::empty())
+    };
+
     let graph_cache = HashMap::default();
 
     let mut generator_cache = GeneratorCache {
         graph_cache,
         esurface_cache,
+        hsurface_cache,
         vertices_used: vec![],
         cache_hits: 0,
         non_cache_hits: 0,
@@ -249,7 +239,12 @@ fn generate_cff_from_orientations(
         .enumerate()
         .map(|(term_id, graph)| {
             let global_orientation = graph.global_orientation.clone();
-            let tree = generate_tree_for_orientation(graph.clone(), term_id, &mut generator_cache);
+            let tree = generate_tree_for_orientation(
+                graph.clone(),
+                term_id,
+                &mut generator_cache,
+                allow_hsurface,
+            );
             let expression = tree.map(forget_graphs);
 
             OrientationExpression {
@@ -282,12 +277,14 @@ fn generate_cff_from_orientations(
     Ok(CFFExpression {
         orientations: terms.into(),
         esurfaces: generator_cache.esurface_cache,
+        hsurfaces: generator_cache.hsurface_cache,
     })
 }
 
 struct GeneratorCache {
     graph_cache: HashMap<CFFGenerationGraph, (usize, usize)>,
     esurface_cache: EsurfaceCollection,
+    hsurface_cache: HsurfaceCollection,
     vertices_used: Vec<VertexSet>,
     cache_hits: usize,
     non_cache_hits: usize,
@@ -297,13 +294,14 @@ fn generate_tree_for_orientation(
     graph: CFFGenerationGraph,
     term_id: usize,
     generator_cache: &mut GeneratorCache,
+    allow_hsurface: bool,
 ) -> Tree<GenerationData> {
     let mut tree = Tree::from_root(GenerationData::Data {
         graph,
-        esurface_id: None,
+        surface_id: None,
     });
 
-    while let Some(()) = advance_tree(&mut tree, term_id, generator_cache) {}
+    while let Some(()) = advance_tree(&mut tree, term_id, generator_cache, allow_hsurface) {}
 
     tree
 }
@@ -312,6 +310,7 @@ fn advance_tree(
     tree: &mut Tree<GenerationData>,
     term_id: usize,
     generator_cache: &mut GeneratorCache,
+    allow_hsurface: bool,
 ) -> Option<()> {
     let bottom_layer = tree
         .get_bottom_layer()
@@ -319,9 +318,9 @@ fn advance_tree(
         .filter(|&node_id| matches!(&tree.get_node(node_id).data, GenerationData::Data { .. }))
         .collect_vec(); // allocation needed because tree is mutable
 
-    let (children_optional, new_esurfaces_for_tree): (
+    let (children_optional, new_surfaces_for_tree): (
         Vec<Option<Vec<CFFGenerationGraph>>>,
-        Vec<EsurfaceID>,
+        Vec<HybridSurfaceID>,
     ) = bottom_layer
         .iter()
         .map(|&node_id| {
@@ -333,28 +332,49 @@ fn advance_tree(
                 }
             };
 
-            let (option_children, esurface) =
-                graph.generate_children(&mut generator_cache.vertices_used);
+            let (option_children, surface) =
+                graph.generate_children(&mut generator_cache.vertices_used, allow_hsurface);
 
-            let option_esurface_id = generator_cache
-                .esurface_cache
-                .position(|val| val == &esurface);
+            let surface_id = match surface {
+                HybridSurface::Esurface(esurface) => {
+                    let option_esurface_id = generator_cache
+                        .esurface_cache
+                        .position(|val| val == &esurface);
 
-            let esurface_id = match option_esurface_id {
-                Some(esurface_id) => esurface_id,
-                None => {
-                    generator_cache.esurface_cache.push(esurface);
-                    Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
+                    let esurface_id = match option_esurface_id {
+                        Some(esurface_id) => esurface_id,
+                        None => {
+                            generator_cache.esurface_cache.push(esurface);
+                            Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
+                        }
+                    };
+
+                    HybridSurfaceID::Esurface(esurface_id)
+                }
+                HybridSurface::Hsurface(hsurface) => {
+                    let option_hsurface_id = generator_cache
+                        .hsurface_cache
+                        .position(|val| val == &hsurface);
+
+                    let hsurface_id = match option_hsurface_id {
+                        Some(hsurface_id) => hsurface_id,
+                        None => {
+                            generator_cache.hsurface_cache.push(hsurface);
+                            Into::<HsurfaceID>::into(generator_cache.hsurface_cache.len() - 1)
+                        }
+                    };
+
+                    HybridSurfaceID::Hsurface(hsurface_id)
                 }
             };
 
-            (option_children, esurface_id)
+            (option_children, surface_id)
         })
         .unzip();
 
     bottom_layer
         .iter()
-        .zip(new_esurfaces_for_tree)
+        .zip(new_surfaces_for_tree)
         .for_each(|(&node_id, esurface_id)| {
             tree.apply_mut_closure(node_id, |data| data.insert_esurface(esurface_id))
         });
@@ -395,7 +415,7 @@ fn advance_tree(
                     let child_node_id = tree.get_num_nodes();
                     let child_node = GenerationData::Data {
                         graph: child,
-                        esurface_id: None,
+                        surface_id: None,
                     };
 
                     generator_cache
@@ -494,7 +514,7 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
         assert_eq!(orientations.len(), 6);
 
-        let cff = generate_cff_from_orientations(orientations, None).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None, None, false).unwrap();
         assert_eq!(cff.esurfaces.len(), 6);
 
         let p1 = LorentzVector::from_args(1., 3., 4., 5.);
@@ -516,15 +536,6 @@ mod tests_cff {
         // combine the virtual and external energies
         let mut energy_cache = external_energy_cache.to_vec();
         energy_cache.extend(virtual_energy_cache);
-
-        let _edge_types = [
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Virtual,
-            EdgeType::Incoming,
-            EdgeType::Incoming,
-            EdgeType::Incoming,
-        ];
 
         let energy_prefactor = virtual_energy_cache
             .iter()
@@ -555,7 +566,7 @@ mod tests_cff {
         let orientations =
             generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
 
-        let cff = generate_cff_from_orientations(orientations, None).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None, None, false).unwrap();
 
         let q = LorentzVector::from_args(1., 2., 3., 4.);
         let zero = LorentzVector::from_args(0., 0., 0., 0.);
@@ -611,7 +622,7 @@ mod tests_cff {
         let incoming_vertices = vec![0, 5];
 
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-        let cff = generate_cff_from_orientations(orientataions, None).unwrap();
+        let cff = generate_cff_from_orientations(orientataions, None, None, false).unwrap();
 
         let q = LorentzVector::from_args(1.0, 2.0, 3.0, 4.0);
         let zero_vector = LorentzVector::from_args(0., 0., 0., 0.);
@@ -680,7 +691,7 @@ mod tests_cff {
         // get time before cff generation
         let start = std::time::Instant::now();
 
-        let _cff = generate_cff_from_orientations(orientations, None).unwrap();
+        let _cff = generate_cff_from_orientations(orientations, None, None, false).unwrap();
 
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
@@ -721,7 +732,7 @@ mod tests_cff {
         // get time before cff generation
         let _start = std::time::Instant::now();
 
-        let _cff = generate_cff_from_orientations(orientations, None).unwrap();
+        let _cff = generate_cff_from_orientations(orientations, None, None, false).unwrap();
 
         let _finish = std::time::Instant::now();
     }
@@ -749,16 +760,6 @@ mod tests_cff {
             (8, 11),
         ];
 
-        // vector with 17 virtuals and 4 incoming
-        let mut edge_types = vec![];
-        for _i in 0..17 {
-            edge_types.push(EdgeType::Virtual);
-        }
-
-        for _i in 0..4 {
-            edge_types.push(EdgeType::Incoming);
-        }
-
         let incoming_vertices = vec![];
 
         let _energy_cache = [3.0; 17];
@@ -766,7 +767,7 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
         let energy_cache = [3.0; 17];
 
-        let cff = generate_cff_from_orientations(orientations, None).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None, None, false).unwrap();
 
         let start = std::time::Instant::now();
         for _ in 0..100 {

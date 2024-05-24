@@ -1,8 +1,13 @@
+use super::{
+    esurface::{Esurface, EsurfaceID},
+    hsurface::{Hsurface, HsurfaceID},
+};
 use crate::utils::FloatLike;
+use derive_more::From;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
-
-use super::{esurface::Esurface, hsurface::Hsurface};
+use serde::{Deserialize, Serialize};
+use typed_index_collections::TiVec;
 
 pub trait Surface {
     fn get_positive_energies(&self) -> impl Iterator<Item = &usize>;
@@ -76,3 +81,12 @@ pub enum HybridSurface {
     Esurface(Esurface),
     Hsurface(Hsurface),
 }
+
+#[derive(From, Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum HybridSurfaceID {
+    Esurface(EsurfaceID),
+    Hsurface(HsurfaceID),
+}
+
+pub type HybridSurfaceCollection = TiVec<HybridSurfaceID, HybridSurface>;
+pub type HybridSurfaceCache<T> = TiVec<HybridSurfaceID, T>;

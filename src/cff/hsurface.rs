@@ -1,16 +1,21 @@
-use serde::{Deserialize, Serialize};
-
-use crate::utils::FloatLike;
-
 use crate::cff::surface::Surface;
+use crate::utils::FloatLike;
+use derive_more::{From, Into};
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use typed_index_collections::TiVec;
 
 use super::surface;
+
+#[derive(From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct HsurfaceID(usize);
+pub type HsurfaceCollection = TiVec<HsurfaceID, Hsurface>;
+pub type HsurfaceCache<T> = TiVec<HsurfaceID, T>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Hsurface {
     pub positive_energies: Vec<usize>,
     pub negative_energies: Vec<usize>,
-    pub sub_orientation: Vec<bool>,
     pub shift: Vec<usize>,
     pub shift_signature: Vec<bool>,
 }
@@ -32,7 +37,7 @@ impl Surface for Hsurface {
 impl PartialEq for Hsurface {
     fn eq(&self, other: &Self) -> bool {
         self.positive_energies == other.positive_energies
-            && self.sub_orientation == other.sub_orientation
+            && self.negative_energies == other.negative_energies
     }
 }
 
@@ -48,6 +53,17 @@ impl Hsurface {
     }
 }
 
+pub fn compute_hsurface_cache<T: FloatLike>(
+    hsurfaces: &HsurfaceCollection,
+    energy_cache: &[T],
+) -> HsurfaceCache<T> {
+    hsurfaces
+        .iter()
+        .map(|hsurface| hsurface.compute_value(energy_cache))
+        .collect_vec()
+        .into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::Hsurface;
@@ -57,7 +73,6 @@ mod tests {
         let h_surface = Hsurface {
             positive_energies: vec![0],
             negative_energies: vec![1],
-            sub_orientation: vec![true, true],
             shift: vec![2, 3],
             shift_signature: vec![true, false],
         };
@@ -72,7 +87,6 @@ mod tests {
         let h_surface = Hsurface {
             positive_energies: vec![0, 1],
             negative_energies: vec![2, 3],
-            sub_orientation: vec![true, true, true, true],
             shift: vec![4, 5],
             shift_signature: vec![false, true],
         };

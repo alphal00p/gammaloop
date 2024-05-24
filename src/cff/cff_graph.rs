@@ -3,9 +3,12 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
-use crate::graph::{EdgeType, Graph};
+use crate::{
+    cff::hsurface::Hsurface,
+    graph::{EdgeType, Graph},
+};
 
-use super::esurface::Esurface;
+use super::{esurface::Esurface, surface::HybridSurface};
 
 const MAX_VERTEX_COUNT: usize = 64;
 
@@ -325,6 +328,10 @@ impl CFFGenerationGraph {
     }
 
     fn has_connected_complement(&self, vertex: &VertexSet) -> bool {
+        if self.vertices.len() == 1 {
+            return true;
+        }
+
         let vertex_that_is_not_v = self.get_vertex_that_is_not_v(vertex);
 
         let mut current_vertices = HashSet::default();
@@ -389,18 +396,15 @@ impl CFFGenerationGraph {
     }
 
     #[allow(unused)]
-    fn get_source_sink_greedy(&self) -> &CFFVertex {
-        self.vertices
-            .iter()
-            .find(|vertex| {
-                let vertex_type = vertex.get_vertex_type();
-                if vertex_type != VertexType::Sink && vertex_type != VertexType::Source {
-                    false
-                } else {
-                    self.has_connected_complement(&vertex.vertex_set)
-                }
-            })
-            .unwrap_or_else(|| panic!("No source or sink candidates found for graph {:#?}", self))
+    fn get_source_sink_greedy(&self) -> Option<&CFFVertex> {
+        self.vertices.iter().find(|vertex| {
+            let vertex_type = vertex.get_vertex_type();
+            if vertex_type != VertexType::Sink && vertex_type != VertexType::Source {
+                false
+            } else {
+                self.has_connected_complement(&vertex.vertex_set)
+            }
+        })
     }
 
     fn contract_vertices(&self, vertex_1: &VertexSet, vertex_2: &VertexSet) -> Self {
@@ -477,13 +481,28 @@ impl CFFGenerationGraph {
         panic!("No source or sink candidates found for graph {:#?}", self);
     }
 
+    fn get_vertex_with_conn_complement(&self) -> &CFFVertex {
+        self.vertices
+            .iter()
+            .find(|vertex| self.has_connected_complement(&vertex.vertex_set))
+            .unwrap_or_else(|| panic!("Could not find vertex with connected complement"))
+    }
+
     #[allow(unused_variables)]
     #[allow(clippy::ptr_arg)]
     pub fn generate_children(
         &self,
         vertices_used: &mut Vec<VertexSet>,
-    ) -> (Option<Vec<Self>>, Esurface) {
-        let vertex = self.get_source_sink_greedy();
+        allow_hsurface: bool,
+    ) -> (Option<Vec<Self>>, HybridSurface) {
+        let vertex = if let Some(vertex) = self.get_source_sink_greedy() {
+            vertex
+        } else if allow_hsurface {
+            self.get_vertex_with_conn_complement()
+        } else {
+            panic!("could not find vertex to contract from")
+        };
+
         let vertex_type = vertex.get_vertex_type();
 
         let (shift, shift_orientation): (Vec<usize>, Vec<bool>) = vertex
@@ -495,7 +514,7 @@ impl CFFGenerationGraph {
                 let shift_sign = match vertex_type {
                     VertexType::Source => false,
                     VertexType::Sink => true,
-                    _ => panic!("Vertex type is not source or sink"),
+                    VertexType::None => true,
                 };
                 (edge_id, shift_sign)
             })
@@ -509,7 +528,7 @@ impl CFFGenerationGraph {
                         let shift_sign = match vertex_type {
                             VertexType::Source => true,
                             VertexType::Sink => false,
-                            _ => panic!("Vertex type is not source or sink"),
+                            VertexType::None => false,
                         };
                         (edge_id, shift_sign)
                     }),
@@ -517,31 +536,58 @@ impl CFFGenerationGraph {
             .sorted_by(|(edge_1, _), (edge_2, _)| edge_1.cmp(edge_2))
             .unzip();
 
-        let energy_sum = vertex
-            .incoming_edges
-            .iter()
-            .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
-            .chain(
-                vertex
-                    .outgoing_edges
+        let surface = if vertex_type != VertexType::None {
+            let energy_sum = vertex
+                .incoming_edges
+                .iter()
+                .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+                .chain(
+                    vertex
+                        .outgoing_edges
+                        .iter()
+                        .filter(|edge| edge.edge_type == CFFEdgeType::Virtual),
+                )
+                .map(|edge| edge.edge_id)
+                .sorted()
+                .collect_vec();
+
+            let sub_orientation = energy_sum
+                .iter()
+                .map(|id| self.global_orientation[*id])
+                .collect();
+
+            let esurface = Esurface {
+                energies: energy_sum,
+                sub_orientation,
+                shift,
+                shift_signature: shift_orientation,
+                circled_vertices: vertex.vertex_set,
+            };
+
+            HybridSurface::Esurface(esurface)
+        } else {
+            let (positive_energies, negative_energies) =
+                [&vertex.incoming_edges, &vertex.outgoing_edges]
                     .iter()
-                    .filter(|edge| edge.edge_type == CFFEdgeType::Virtual),
-            )
-            .map(|edge| edge.edge_id)
-            .sorted()
-            .collect_vec();
+                    .map(|edges| {
+                        edges
+                            .iter()
+                            .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+                            .map(|edge| edge.edge_id)
+                            .sorted()
+                            .collect_vec()
+                    })
+                    .collect_tuple()
+                    .unwrap_or_else(|| unreachable!());
 
-        let sub_orientation = energy_sum
-            .iter()
-            .map(|id| self.global_orientation[*id])
-            .collect();
+            let hsurface = Hsurface {
+                positive_energies,
+                negative_energies,
+                shift,
+                shift_signature: shift_orientation,
+            };
 
-        let esurface = Esurface {
-            energies: energy_sum,
-            sub_orientation,
-            shift,
-            shift_signature: shift_orientation,
-            circled_vertices: vertex.vertex_set,
+            HybridSurface::Hsurface(hsurface)
         };
 
         if self.vertices.len() > 2 {
@@ -559,9 +605,9 @@ impl CFFGenerationGraph {
                 .map(|(graph, _)| graph)
                 .collect_vec();
 
-            (Some(children), esurface)
+            (Some(children), surface)
         } else {
-            (None, esurface)
+            (None, surface)
         }
     }
 

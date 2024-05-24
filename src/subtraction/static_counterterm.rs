@@ -334,7 +334,7 @@ impl CounterTerm {
 
         let terms = &self.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
 
-        let eval_terms = terms.evaluate(&esurface_cache);
+        let eval_terms = terms.evaluate_from_esurface_cache(&esurface_cache, &energy_cache);
 
         let r_minus_rstar = radius - rstar;
         let dampening_factor = (-r_minus_rstar * r_minus_rstar / (e_cm * e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
