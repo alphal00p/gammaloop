@@ -1124,7 +1124,7 @@ impl Graph {
     }
 
     pub fn generate_cff(&mut self) {
-        self.derived_data.cff_expression = Some(generate_cff_expression(self).unwrap());
+        self.derived_data.cff_expression = Some(generate_cff_expression(self, false).unwrap());
     }
 
     pub fn generate_tropical_subgraph_table(&mut self) {
