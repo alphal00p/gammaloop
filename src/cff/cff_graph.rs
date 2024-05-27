@@ -88,6 +88,20 @@ impl CFFVertex {
             outgoing_edges: outgoing_edges_of_new,
         }
     }
+
+    fn iter_all_edges(&self) -> impl Iterator<Item = &CFFEdge> {
+        self.incoming_edges.iter().chain(self.outgoing_edges.iter())
+    }
+
+    fn iter_all_edges_mut(&mut self) -> impl Iterator<Item = &mut CFFEdge> {
+        self.incoming_edges
+            .iter_mut()
+            .chain(self.outgoing_edges.iter_mut())
+    }
+
+    fn has_edge(&self, edge_id: usize) -> bool {
+        self.iter_all_edges().any(|edge| edge.edge_id == edge_id)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -128,9 +142,6 @@ impl VertexSet {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct EdgeId(usize);
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct CFFEdge {
     edge_id: usize,
@@ -141,6 +152,7 @@ struct CFFEdge {
 enum CFFEdgeType {
     External,
     Virtual,
+    VirtualExternal,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -731,24 +743,71 @@ impl CFFGenerationGraph {
             left.push(vertices.remove(vertex_position));
         }
 
-        let left_graph = CFFGenerationGraph {
+        let mut left_graph = CFFGenerationGraph {
             vertices: left,
             global_orientation: self.global_orientation.clone(),
         };
 
-        let right_graph = CFFGenerationGraph {
+        let mut right_graph = CFFGenerationGraph {
             vertices,
             global_orientation: self.global_orientation.clone(),
         };
 
+        let edges_of_left_graph = left_graph.get_edges();
+
+        let cut_edges = edges_of_left_graph
+            .iter()
+            .filter(|&&edge_id| right_graph.has_edge(edge_id))
+            .copied()
+            .collect_vec();
+
+        left_graph
+            .iter_all_edges_mut()
+            .chain(right_graph.iter_all_edges_mut())
+            .filter(|edge| cut_edges.contains(&edge.edge_id))
+            .for_each(|edge_to_edit| edge_to_edit.edge_type = CFFEdgeType::VirtualExternal);
+
         (left_graph, right_graph)
+    }
+
+    fn get_edges(&self) -> Vec<usize> {
+        let mut unique_edges = vec![];
+
+        for vertex in self.vertices.iter() {
+            for edge in vertex.iter_all_edges() {
+                if !unique_edges.contains(&edge.edge_id) {
+                    unique_edges.push(edge.edge_id)
+                }
+            }
+        }
+
+        // sort is always good
+        unique_edges.sort();
+        unique_edges
+    }
+
+    #[cfg(test)]
+    fn iter_all_edges(&self) -> impl Iterator<Item = &CFFEdge> {
+        self.vertices
+            .iter()
+            .flat_map(|vertex| vertex.iter_all_edges())
+    }
+
+    fn iter_all_edges_mut(&mut self) -> impl Iterator<Item = &mut CFFEdge> {
+        self.vertices
+            .iter_mut()
+            .flat_map(|vertex| vertex.iter_all_edges_mut())
+    }
+
+    fn has_edge(&self, edge_id: usize) -> bool {
+        self.vertices.iter().any(|vertex| vertex.has_edge(edge_id))
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::CFFGenerationGraph;
-    use crate::cff::cff_graph::VertexSet;
+    use crate::cff::cff_graph::{CFFEdgeType, VertexSet};
     use itertools::Itertools;
 
     #[test]
@@ -1079,5 +1138,102 @@ mod test {
         let contracted_vertex = contracted_graph.get_vertex(&joined_vertex);
         assert_eq!(contracted_vertex.incoming_edges.len(), 3);
         assert_eq!(contracted_vertex.outgoing_edges.len(), 1);
+    }
+
+    #[test]
+    fn test_get_edges() {
+        let triangle = vec![(0, 1), (2, 1), (0, 2)];
+        let incoming_vertices = vec![0, 1, 2];
+
+        let dummy_orientation = vec![true; triangle.len() + incoming_vertices.len()];
+
+        let cff_triangle =
+            CFFGenerationGraph::from_vec(triangle, incoming_vertices, dummy_orientation);
+
+        let edges = cff_triangle.get_edges();
+        assert_eq!(edges, vec![0, 1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_has_edge() {
+        let triangle = vec![(0, 1), (2, 1), (0, 2)];
+        let incoming_vertices = vec![0, 1, 2];
+
+        let dummy_orientation = vec![true; triangle.len() + incoming_vertices.len()];
+
+        let cff_triangle =
+            CFFGenerationGraph::from_vec(triangle, incoming_vertices, dummy_orientation);
+
+        for edge in 0..6 {
+            assert!(cff_triangle.has_edge(edge))
+        }
+
+        for edge in 6..12 {
+            assert!(!cff_triangle.has_edge(edge))
+        }
+    }
+
+    #[test]
+    fn test_generate_cut() {
+        let box_edges = vec![(0, 1), (1, 2), (2, 3), (3, 0)];
+        let incoming_vertices = vec![0, 1, 2, 3];
+        let incoming_vertices_len = incoming_vertices.len();
+
+        let dummy_orientation = vec![true; box_edges.len() + incoming_vertices.len()];
+
+        let cff_box = CFFGenerationGraph::from_vec(box_edges, incoming_vertices, dummy_orientation);
+
+        let vertex_sets = [
+            VertexSet::from_usize(0),
+            VertexSet::from_usize(1),
+            VertexSet::from_usize(2),
+            VertexSet::from_usize(3),
+        ];
+
+        let circled = vertex_sets[0].join(&vertex_sets[1]);
+
+        let (left_cut, right_cut) = cff_box.generate_cut(circled);
+
+        assert_eq!(left_cut.vertices.len(), 2);
+        assert_eq!(right_cut.vertices.len(), 2);
+
+        assert!(left_cut.has_edge(incoming_vertices_len));
+        assert!(left_cut.has_edge(1 + incoming_vertices_len));
+        assert!(left_cut.has_edge(3 + incoming_vertices_len));
+        assert!(!left_cut.has_edge(2 + incoming_vertices_len));
+
+        assert!(right_cut.has_edge(1 + incoming_vertices_len));
+        assert!(right_cut.has_edge(2 + incoming_vertices_len));
+        assert!(right_cut.has_edge(3 + incoming_vertices_len));
+        assert!(!right_cut.has_edge(incoming_vertices_len));
+
+        #[allow(clippy::if_same_then_else)]
+        for edge in left_cut.iter_all_edges() {
+            if edge.edge_id == incoming_vertices_len {
+                assert_eq!(edge.edge_type, CFFEdgeType::Virtual)
+            } else if edge.edge_id == 1 + incoming_vertices_len {
+                assert_eq!(edge.edge_type, CFFEdgeType::VirtualExternal)
+            } else if edge.edge_id == 3 + incoming_vertices_len {
+                assert_eq!(edge.edge_type, CFFEdgeType::VirtualExternal)
+            } else {
+                assert_eq!(edge.edge_type, CFFEdgeType::External)
+            }
+        }
+
+        #[allow(clippy::if_same_then_else)]
+        for edge in right_cut.iter_all_edges() {
+            if edge.edge_id == 2 + incoming_vertices_len {
+                assert_eq!(edge.edge_type, CFFEdgeType::Virtual)
+            } else if edge.edge_id == 1 + incoming_vertices_len {
+                assert_eq!(edge.edge_type, CFFEdgeType::VirtualExternal)
+            } else if edge.edge_id == 3 + incoming_vertices_len {
+                assert_eq!(edge.edge_type, CFFEdgeType::VirtualExternal)
+            } else {
+                assert_eq!(edge.edge_type, CFFEdgeType::External)
+            }
+        }
+
+        //println!("left {:#?}", left_cut);
+        //println!("right {:#?}", right_cut);
     }
 }
