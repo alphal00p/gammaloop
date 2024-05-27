@@ -493,6 +493,7 @@ impl CFFGenerationGraph {
         panic!("No source or sink candidates found for graph {:#?}", self);
     }
 
+    #[allow(unused)]
     fn get_vertex_with_conn_complement(&self) -> &CFFVertex {
         self.vertices
             .iter()
@@ -505,12 +506,9 @@ impl CFFGenerationGraph {
     pub fn generate_children(
         &self,
         vertices_used: &mut Vec<VertexSet>,
-        allow_hsurface: bool,
     ) -> (Option<Vec<Self>>, HybridSurface) {
         let vertex = if let Some(vertex) = self.get_source_sink_greedy() {
             vertex
-        } else if allow_hsurface {
-            self.get_vertex_with_conn_complement()
         } else {
             panic!("could not find vertex to contract from")
         };

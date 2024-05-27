@@ -206,7 +206,7 @@ fn pytest_scalar_fishnet_2x2() {
     );
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-    let cff = generate_cff_expression(&graph, false).unwrap();
+    let cff = generate_cff_expression(&graph).unwrap();
     assert!(!cff.esurfaces.is_empty());
 
     // println!("basis size: {:?}", graph.loop_momentum_basis.basis);
