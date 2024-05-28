@@ -5,7 +5,14 @@ use std::{
 
 use num::Float;
 
-use crate::tensor::{AbstractIndex, DenseTensor, Representation, VecStructure};
+use rand::seq::index;
+use spenso::{AbstractIndex, DenseTensor, Representation, VecStructure};
+use symbolica::{
+    atom::Atom,
+    coefficient::Coefficient,
+    domains::rational::RationalField,
+    poly::{polynomial::MultivariatePolynomial, Exponent},
+};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Energy<T> {
@@ -28,6 +35,13 @@ impl<T> Energy<T> {
     //     let value = (p2 + T::default()).sqrt();
     //     Energy { value }
     // }
+}
+
+impl Energy<Atom> {
+    pub fn new_parametric(id: usize) -> Self {
+        let value = Atom::parse(&format!("E_{}", id)).unwrap();
+        Energy { value }
+    }
 }
 
 impl<T: Display> Display for Energy<T> {
@@ -55,6 +69,26 @@ pub struct ThreeMomentum<T> {
     pub px: T,
     pub py: T,
     pub pz: T,
+}
+
+impl<T> ThreeMomentum<T> {
+    pub fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, VecStructure>
+    where
+        T: Clone,
+    {
+        let structure =
+            VecStructure::new(vec![(index, Representation::Euclidean(3.into())).into()]);
+        DenseTensor::from_data(&[self.px, self.py, self.pz], structure).unwrap()
+    }
+
+    pub fn into_dense_param(self, index: AbstractIndex) -> DenseTensor<T, VecStructure>
+    where
+        T: Clone,
+    {
+        let structure =
+            VecStructure::new(vec![(index, Representation::Euclidean(3.into())).into()]);
+        DenseTensor::from_data(&[self.px, self.py, self.pz], structure).unwrap()
+    }
 }
 
 impl<T> Add<ThreeMomentum<T>> for ThreeMomentum<T>
@@ -153,19 +187,6 @@ impl<T: Default> Default for ThreeMomentum<T> {
     }
 }
 
-impl<T: Clone> From<(ThreeMomentum<T>, AbstractIndex)> for DenseTensor<T, VecStructure> {
-    fn from(value: (ThreeMomentum<T>, AbstractIndex)) -> Self {
-        let (three_momentum, index) = value;
-        let structure =
-            VecStructure::new(vec![(index, Representation::Euclidean(3.into())).into()]);
-        DenseTensor::from_data(
-            &[three_momentum.px, three_momentum.py, three_momentum.pz],
-            structure,
-        )
-        .unwrap()
-    }
-}
-
 impl<T> ThreeMomentum<T> {
     pub fn norm_squared(self) -> T
     where
@@ -189,22 +210,38 @@ impl<T> ThreeMomentum<T> {
     {
         self.norm_squared().sqrt()
     }
+
+    pub fn into_four_momentum_parametric(self, id: usize) -> FourMomentum<T, Atom> {
+        let energy = Energy::new_parametric(id);
+        FourMomentum {
+            energy,
+            three_momentum: self,
+        }
+    }
+
+    pub fn into_on_shell_four_momentum(self, mass: T) -> FourMomentum<T, T>
+    where
+        T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Float,
+    {
+        FourMomentum::new_on_shell(self, mass)
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
-pub struct FourMomentum<T> {
-    pub energy: Energy<T>,
+pub struct FourMomentum<T, U> {
+    pub energy: Energy<U>,
     pub three_momentum: ThreeMomentum<T>,
 }
 
-impl<T> FourMomentum<T> {
-    pub fn new(energy: Energy<T>, three_momentum: ThreeMomentum<T>) -> Self {
+impl<T, U> FourMomentum<T, U> {
+    pub fn new(energy: Energy<U>, three_momentum: ThreeMomentum<T>) -> Self {
         FourMomentum {
             energy,
             three_momentum,
         }
     }
-
+}
+impl<T> FourMomentum<T, T> {
     pub fn new_on_shell(three_momentum: ThreeMomentum<T>, mass: T) -> Self
     where
         T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Float,
@@ -215,33 +252,53 @@ impl<T> FourMomentum<T> {
             three_momentum,
         }
     }
+
+    pub fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, VecStructure>
+    where
+        T: Clone,
+    {
+        let structure = VecStructure::new(vec![(index, Representation::Lorentz(4.into())).into()]);
+        DenseTensor::from_data(
+            &[
+                self.energy.value,
+                self.three_momentum.px,
+                self.three_momentum.py,
+                self.three_momentum.pz,
+            ],
+            structure,
+        )
+        .unwrap()
+    }
 }
 
-impl<T: Display> Display for FourMomentum<T> {
+impl<T> FourMomentum<T, Atom> {
+    pub fn into_dense_param(
+        self,
+        index: AbstractIndex,
+    ) -> DenseTensor<MultivariatePolynomial<RationalField, T>, VecStructure>
+    where
+        T: Clone + Into<Coefficient> + Exponent,
+    {
+        let structure = VecStructure::new(vec![(index, Representation::Lorentz(4.into())).into()]);
+        let energy = self.energy.value.to_polynomial(&RationalField::new(), None);
+
+        let px: MultivariatePolynomial<RationalField, _> =
+            Atom::new_num(self.three_momentum.px).to_polynomial(&RationalField::new(), None);
+        let py = Atom::new_num(self.three_momentum.py).to_polynomial(&RationalField::new(), None);
+        let pz = Atom::new_num(self.three_momentum.pz).to_polynomial(&RationalField::new(), None);
+
+        DenseTensor::from_data(&[energy, px, py, pz], structure).unwrap()
+    }
+}
+
+impl<T: Display, U: Display> Display for FourMomentum<T, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}, {}", self.energy, self.three_momentum)
     }
 }
 
-impl<T: LowerExp> LowerExp for FourMomentum<T> {
+impl<T: LowerExp, U: LowerExp> LowerExp for FourMomentum<T, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:e}, {:e}", self.energy, self.three_momentum)
-    }
-}
-
-impl<T: Clone> From<(FourMomentum<T>, AbstractIndex)> for DenseTensor<T, VecStructure> {
-    fn from(value: (FourMomentum<T>, AbstractIndex)) -> Self {
-        let (four_mom, index) = value;
-        let structure = VecStructure::new(vec![(index, Representation::Lorentz(4.into())).into()]);
-        DenseTensor::from_data(
-            &[
-                four_mom.energy.value,
-                four_mom.three_momentum.px,
-                four_mom.three_momentum.py,
-                four_mom.three_momentum.pz,
-            ],
-            structure,
-        )
-        .unwrap()
     }
 }
