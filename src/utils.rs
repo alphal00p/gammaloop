@@ -1,3 +1,4 @@
+use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use colored::Colorize;
@@ -11,7 +12,7 @@ use num::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
-use std::ops::Neg;
+use std::ops::{AddAssign, Neg, SubAssign};
 use std::time::Duration;
 use symbolica::numerical_integration::Sample;
 
@@ -656,20 +657,23 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
     false
 }
 
-#[allow(unused)]
-pub fn compute_momentum<T: FloatLike>(
+pub fn compute_momentum<'a, 'b: 'a, T>(
     signature: &(Vec<isize>, Vec<isize>),
-    loop_moms: &[LorentzVector<T>],
-    external_moms: &[LorentzVector<T>],
-) -> LorentzVector<T> {
-    let mut res = LorentzVector::default();
+    loop_moms: &'a [T],
+    external_moms: &'b [T],
+) -> T
+where
+    T: Default + Clone,
+    T: AddAssign<T> + SubAssign<T>,
+{
+    let mut res = T::default();
     for (i_l, sign) in signature.0.iter().enumerate() {
         match sign {
             1 => {
-                res += loop_moms[i_l];
+                res += loop_moms[i_l].clone();
             }
             -1 => {
-                res -= loop_moms[i_l];
+                res -= loop_moms[i_l].clone();
             }
             0 => {}
             _ => unreachable!("Sign should be -1,0,1"),
@@ -678,16 +682,38 @@ pub fn compute_momentum<T: FloatLike>(
     for (i_l, sign) in signature.1.iter().enumerate() {
         match sign {
             1 => {
-                res += external_moms[i_l];
+                res += external_moms[i_l].clone();
             }
             -1 => {
-                res -= external_moms[i_l];
+                res -= external_moms[i_l].clone();
             }
             0 => {}
             _ => unreachable!("Sign should be, -1,0,1"),
         }
     }
     res
+}
+
+#[allow(unused)]
+pub fn compute_four_momentum_from_three<T: FloatLike>(
+    signature: &(Vec<isize>, Vec<isize>),
+    loop_moms: &[ThreeMomentum<T>],
+    external_moms: &[FourMomentum<T>],
+) -> FourMomentum<T> {
+    let loop_moms = loop_moms
+        .iter()
+        .map(|m| m.into_on_shell_four_momentum(None))
+        .collect_vec();
+    compute_momentum(signature, &loop_moms, external_moms)
+}
+
+pub fn compute_three_momentum_from_four<T: FloatLike>(
+    signature: &(Vec<isize>, Vec<isize>),
+    loop_moms: &[ThreeMomentum<T>],
+    external_moms: &[FourMomentum<T>],
+) -> ThreeMomentum<T> {
+    let external_moms = external_moms.iter().map(|m| m.spatial).collect_vec();
+    compute_momentum(signature, &loop_moms, &external_moms)
 }
 
 // Bilinear form for E-surface defined as sqrt[(k+p1)^2+m1sq] + sqrt[(k+p2)^2+m2sq] + e_shift

@@ -2,6 +2,7 @@ use core::panic;
 
 use crate::{
     graph::{EdgeType, Graph, LoopMomentumBasisSpecification},
+    momentum::{Energy, FourMomentum, ThreeMomentum},
     utils::{compute_momentum, FloatLike},
 };
 use itertools::Itertools;
@@ -413,8 +414,8 @@ struct LTDTerm {
 impl LTDTerm {
     fn evaluate<T: FloatLike>(
         &self,
-        external_moms: &[LorentzVector<T>],
-        emr: &[LorentzVector<T>],
+        external_moms: &[FourMomentum<T>],
+        emr: &[ThreeMomentum<T>],
         graph: &Graph,
     ) -> T {
         // compute on shell energies of the momenta in associated_lmb
@@ -423,17 +424,11 @@ impl LTDTerm {
             .associated_lmb
             .iter()
             .map(|(i, s)| {
-                let mut momentum = emr[*i];
-                match graph.edges[*i].particle.mass.value {
-                    Some(mass) => {
-                        momentum.t =
-                            (emr[*i].spatial_squared() + Into::<T>::into(mass.re * mass.re)).sqrt()
-                                * Into::<T>::into(*s)
-                    }
-                    None => {
-                        momentum.t = emr[*i].spatial_distance() * Into::<T>::into(*s);
-                    }
-                }
+                let mut momentum = emr[*i].into_on_shell_four_momentum(
+                    graph.edges[*i].particle.mass.value.map(|m| m.re.into()),
+                );
+
+                momentum.temporal *= Energy::new((*s).into());
                 momentum
             })
             .collect_vec();
@@ -456,11 +451,12 @@ impl LTDTerm {
                     inv_res *=
                         momentum.square() - Into::<T>::into(mass.re) * Into::<T>::into(mass.re);
                     energy_product *= Into::<T>::into(2.)
-                        * (momentum.spatial_squared() + Into::<T>::into(mass.re * mass.re)).sqrt();
+                        * (momentum.spatial.norm_squared() + Into::<T>::into(mass.re * mass.re))
+                            .sqrt();
                 }
                 None => {
                     inv_res *= momentum.square();
-                    energy_product *= Into::<T>::into(2.) * momentum.spatial_distance();
+                    energy_product *= Into::<T>::into(2.) * momentum.spatial.norm();
                 }
             }
         }
@@ -497,8 +493,8 @@ pub struct LTDExpression {
 impl LTDExpression {
     pub fn evaluate<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        loop_moms: &[ThreeMomentum<T>],
+        external_moms: &[FourMomentum<T>],
         graph: &Graph,
     ) -> T {
         let emr = graph.compute_emr(loop_moms, external_moms);
@@ -511,8 +507,8 @@ impl LTDExpression {
 
     pub fn evaluate_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        loop_moms: &[ThreeMomentum<T>],
+        external_moms: &[FourMomentum<T>],
         graph: &Graph,
         lmb_specification: &LoopMomentumBasisSpecification,
     ) -> T {

@@ -536,6 +536,7 @@ pub mod tropical_parameterization {
     use crate::{
         graph::Graph,
         linalg::SquareMatrix,
+        momentum::{FourMomentum, ThreeMomentum},
         utils::{box_muller, inverse_gamma_lr, FloatLike},
     };
 
@@ -761,10 +762,10 @@ pub mod tropical_parameterization {
     /// This function is called from the paramatrization stage of evaluate_sample
     pub fn generate_tropical_sample<T: FloatLike + Into<f64>>(
         x_space_point: &[T],
-        external_momenta: &[LorentzVector<T>],
+        external_momenta: &[FourMomentum<T>],
         graph: &Graph,
         debug: usize,
-    ) -> Result<(Vec<LorentzVector<T>>, T), Report> {
+    ) -> Result<(Vec<ThreeMomentum<T>>, T), Report> {
         let tropical_subgraph_table = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
         let signature_matrix = &tropical_subgraph_table.tropical_graph.signature_matrix;
         let _num_edges = signature_matrix.len();
@@ -773,7 +774,7 @@ pub mod tropical_parameterization {
         let mut rng = MimicRng::new(x_space_point);
 
         // perhaps this data should be stored in some cache in the integrand.
-        let (edge_masses, edge_shifts): (Vec<T>, Vec<LorentzVector<T>>) = tropical_subgraph_table
+        let (edge_masses, edge_shifts): (Vec<T>, Vec<ThreeMomentum<T>>) = tropical_subgraph_table
             .tropical_graph
             .topology
             .iter()
@@ -795,14 +796,9 @@ pub mod tropical_parameterization {
                     .1;
 
                 let edge_shift = external_momenta.iter().enumerate().fold(
-                    LorentzVector::<T>::new(),
+                    ThreeMomentum::<T>::default(),
                     |acc, (i, external_momentum)| {
-                        let external_spatial = LorentzVector::from_args(
-                            T::zero(),
-                            external_momentum.x,
-                            external_momentum.y,
-                            external_momentum.z,
-                        );
+                        let external_spatial = external_momentum.spatial;
                         acc + external_spatial * Into::<T>::into(external_signature[i] as f64)
                     },
                 );
@@ -927,7 +923,7 @@ pub mod tropical_parameterization {
     fn sample_q_vectors<T: FloatLike>(
         rng: &mut MimicRng<T>,
         num_loops: usize,
-    ) -> Vec<LorentzVector<T>> {
+    ) -> Vec<ThreeMomentum<T>> {
         let token = Some("box muller");
         let num_variables = D * num_loops;
 
@@ -943,8 +939,7 @@ pub mod tropical_parameterization {
         (0..num_loops)
             .zip(gaussians.chunks(3).into_iter())
             .map(|(_, mut chunk)| {
-                LorentzVector::from_args(
-                    T::zero(),
+                ThreeMomentum::new(
                     chunk.next().unwrap(),
                     chunk.next().unwrap(),
                     chunk.next().unwrap(),
@@ -958,14 +953,14 @@ pub mod tropical_parameterization {
     fn compute_u_vectors<T: FloatLike>(
         x_vec: &[T],
         signature_marix: &[Vec<isize>],
-        edge_shifts: &[LorentzVector<T>],
-    ) -> Vec<LorentzVector<T>> {
+        edge_shifts: &[ThreeMomentum<T>],
+    ) -> Vec<ThreeMomentum<T>> {
         let num_loops = signature_marix[0].len();
         let num_edges = signature_marix.len();
 
         (0..num_loops)
             .map(|l| {
-                (0..num_edges).fold(LorentzVector::new(), |acc: LorentzVector<T>, e| {
+                (0..num_edges).fold(ThreeMomentum::default(), |acc: ThreeMomentum<T>, e| {
                     acc + edge_shifts[e] * x_vec[e] * Into::<T>::into(signature_marix[e][l] as f64)
                 })
             })
@@ -976,9 +971,9 @@ pub mod tropical_parameterization {
     #[inline]
     fn compute_v_polynomial<T: FloatLike>(
         x_vec: &[T],
-        u_vectors: &[LorentzVector<T>],
+        u_vectors: &[ThreeMomentum<T>],
         inverse_l: &SquareMatrix<T>,
-        edge_shifts: &[LorentzVector<T>],
+        edge_shifts: &[ThreeMomentum<T>],
         edge_masses: &[T],
         debug: usize,
     ) -> T {
@@ -988,7 +983,7 @@ pub mod tropical_parameterization {
             println!("analyzing computation_of_polynomial");
             let mut term_1 = T::zero();
             for (&x_e, &mass, &shift) in izip!(x_vec, edge_masses, edge_shifts) {
-                let quant = x_e * (mass * mass + shift.spatial_squared());
+                let quant = x_e * (mass * mass + shift.norm_squared());
                 println!("x_e: {x_e}, mass: {mass}, shift: {shift}");
                 println!("quant: {quant}");
                 term_1 += quant;
@@ -998,7 +993,7 @@ pub mod tropical_parameterization {
 
             let mut term_2 = T::zero();
             for (i, j) in (0..num_loops).cartesian_product(0..num_loops) {
-                let quant = u_vectors[i].spatial_dot(&u_vectors[j]) * inverse_l[(i, j)];
+                let quant = u_vectors[i] * u_vectors[j] * inverse_l[(i, j)];
                 println!(
                     "u_i: {}, u_j: {}, inverse_l: {}",
                     u_vectors[i],
@@ -1015,12 +1010,12 @@ pub mod tropical_parameterization {
             res
         } else {
             let term_1 = izip!(x_vec, edge_masses, edge_shifts)
-                .map(|(&x_e, &mass, &shift)| x_e * (mass * mass + shift.spatial_squared()))
+                .map(|(&x_e, &mass, &shift)| x_e * (mass * mass + shift.norm_squared()))
                 .sum::<T>();
 
             let term_2 = (0..num_loops)
                 .cartesian_product(0..num_loops)
-                .map(|(i, j)| u_vectors[i].spatial_dot(&u_vectors[j]) * inverse_l[(i, j)])
+                .map(|(i, j)| u_vectors[i] * u_vectors[j] * inverse_l[(i, j)])
                 .sum::<T>();
 
             term_1 - term_2
@@ -1033,17 +1028,17 @@ pub mod tropical_parameterization {
         v: T,
         lambda: T,
         q_t_inverse: &SquareMatrix<T>,
-        q_vectors: &[LorentzVector<T>],
+        q_vectors: &[ThreeMomentum<T>],
         l_inverse: &SquareMatrix<T>,
-        u_vectors: &[LorentzVector<T>],
+        u_vectors: &[ThreeMomentum<T>],
         debug: usize,
-    ) -> Vec<LorentzVector<T>> {
+    ) -> Vec<ThreeMomentum<T>> {
         let num_loops = q_t_inverse.get_dim();
         let prefactor = (v / lambda * Into::<T>::into(0.5)).sqrt();
 
         if debug > 6 {
             for l in 0..num_loops {
-                let mut weird_shift: LorentzVector<T> = LorentzVector::new();
+                let mut weird_shift = ThreeMomentum::default();
                 for j in 0..num_loops {
                     let term_in_weird_shift = u_vectors[j] * l_inverse[(l, j)];
                     println!("term in weird shift: {term_in_weird_shift}");
@@ -1055,7 +1050,7 @@ pub mod tropical_parameterization {
         (0..num_loops)
             .map(|l| {
                 q_vectors.iter().zip(u_vectors.iter()).enumerate().fold(
-                    LorentzVector::new(),
+                    ThreeMomentum::default(),
                     |acc, (l_prime, (q, u))| {
                         acc + q * prefactor * q_t_inverse[(l, l_prime)]
                             - u * l_inverse[(l, l_prime)]

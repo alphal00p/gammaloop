@@ -3,9 +3,13 @@ use crate::cff::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
 use crate::model::Model;
-use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
+use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::utils::{
+    assert_approx_eq, compute_momentum, compute_three_momentum_from_four, upgrade_lorentz_vector,
+};
 use colored::Colorize;
-use itertools::Itertools;
+use f128::f128;
+use itertools::{FormatWith, Itertools};
 use lorentz_vector::LorentzVector;
 use num::Complex;
 use rayon::prelude::IndexedParallelIterator;
@@ -56,7 +60,11 @@ mod tests_scalar_massless_triangle {
     use rayon::prelude::IndexedParallelIterator;
     use smartstring::SmartString;
 
-    use crate::{graph::EdgeType, observables::AFBSettings};
+    use crate::{
+        graph::EdgeType,
+        momentum::{FourMomentum, ThreeMomentum},
+        observables::AFBSettings,
+    };
 
     use super::*;
 
@@ -104,10 +112,10 @@ mod tests_scalar_massless_triangle {
             6
         );
 
-        let p1 = LorentzVector::from_args(1.0, 3.0, 4.0, 5.0);
-        let p2 = LorentzVector::from_args(1.0, 6.0, 7.0, 8.0);
+        let p1 = FourMomentum::from_args(1.0, 3.0, 4.0, 5.0);
+        let p2 = FourMomentum::from_args(1.0, 6.0, 7.0, 8.0);
 
-        let k = LorentzVector::from_args(0.0, 1.0, 2.0, 3.0);
+        let k = ThreeMomentum::new(1.0, 2.0, 3.0);
 
         let energy_product = graph.compute_energy_product(&[k], &[p1, p2]);
 
@@ -171,13 +179,13 @@ fn pytest_scalar_fishnet_2x2() {
     // println!("basis size: {:?}", graph.loop_momentum_basis.basis);
     graph.generate_loop_momentum_bases();
 
-    let k1 = LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.);
-    let k2 = LorentzVector::from_args(0., 7. / 11., 11. / 13., 13. / 17.);
-    let k3 = LorentzVector::from_args(0., 17. / 19., 19. / 23., 23. / 29.);
-    let k4 = LorentzVector::from_args(0., 29. / 31., 31. / 37., 37. / 41.);
-    let p1 = LorentzVector::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.);
-    let p2 = LorentzVector::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.);
-    let p3 = LorentzVector::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.);
+    let k1 = ThreeMomentum::new(2. / 3., 3. / 5., 5. / 7.);
+    let k2 = ThreeMomentum::new(7. / 11., 11. / 13., 13. / 17.);
+    let k3 = ThreeMomentum::new(17. / 19., 19. / 23., 23. / 29.);
+    let k4 = ThreeMomentum::new(29. / 31., 31. / 37., 37. / 41.);
+    let p1 = FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.);
+    let p2 = FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.);
+    let p3 = FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.);
 
     let emr = graph.compute_emr(&[k1, k2, k3, k4], &[p1, p2, p3]);
     let n_lmb = graph
@@ -203,27 +211,26 @@ fn pytest_scalar_fishnet_2x2() {
         let new_emr = basis
             .edge_signatures
             .iter()
-            .map(|s| compute_momentum(s, &momenta_in_basis, &[p1, p2, p3]))
+            .map(|s| compute_three_momentum_from_four(s, &momenta_in_basis, &[p1, p2, p3]))
             .collect_vec();
         assert_eq!(emr.len(), new_emr.len());
 
         for (e1, e2) in emr.iter().zip(new_emr.iter()) {
-            assert_approx_eq(e1.t, e2.t, LTD_COMPARISON_TOLERANCE);
-            assert_approx_eq(e1.x, e2.x, LTD_COMPARISON_TOLERANCE);
-            assert_approx_eq(e1.y, e2.y, LTD_COMPARISON_TOLERANCE);
-            assert_approx_eq(e1.z, e2.z, LTD_COMPARISON_TOLERANCE);
+            assert_approx_eq(e1.px, e2.px, LTD_COMPARISON_TOLERANCE);
+            assert_approx_eq(e1.py, e2.py, LTD_COMPARISON_TOLERANCE);
+            assert_approx_eq(e1.pz, e2.pz, LTD_COMPARISON_TOLERANCE);
         }
     }
 
     //println!("lmb consistency check passed");
 
-    let k1_f128 = upgrade_lorentz_vector(&k1);
-    let k2_f128 = upgrade_lorentz_vector(&k2);
-    let k3_f128 = upgrade_lorentz_vector(&k3);
-    let k4_f128 = upgrade_lorentz_vector(&k4);
-    let p1_f128 = upgrade_lorentz_vector(&p1);
-    let p2_f128 = upgrade_lorentz_vector(&p2);
-    let p3_f128 = upgrade_lorentz_vector(&p3);
+    let k1_f128: ThreeMomentum<f128> = k1.cast();
+    let k2_f128: ThreeMomentum<f128> = k2.cast();
+    let k3_f128: ThreeMomentum<f128> = k3.cast();
+    let k4_f128: ThreeMomentum<f128> = k4.cast();
+    let p1_f128: FourMomentum<f128> = p1.cast();
+    let p2_f128: FourMomentum<f128> = p2.cast();
+    let p3_f128: FourMomentum<f128> = p3.cast();
 
     let loop_moms_f128 = [k1_f128, k2_f128, k3_f128, k4_f128];
     let externals_f128 = [p1_f128, p2_f128, p3_f128];
@@ -279,10 +286,10 @@ fn pytest_scalar_sunrise() {
             == 2
     );
 
-    let k1 = LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.);
-    let k2 = LorentzVector::from_args(0., 7. / 11., 11. / 13., 13. / 17.);
+    let k1 = ThreeMomentum::new(2. / 3., 3. / 5., 5. / 7.);
+    let k2 = ThreeMomentum::new(7. / 11., 11. / 13., 13. / 17.);
 
-    let p1 = LorentzVector::from_args(0., 0., 0., 0.);
+    let p1 = FourMomentum::from_args(0., 0., 0., 0.);
 
     let absolute_truth = Complex::new(0.24380172488169907, 0.);
 
@@ -331,26 +338,14 @@ fn pytest_scalar_fishnet_2x3() {
     amplitude.amplitude_graphs[0].graph.generate_cff();
     amplitude.amplitude_graphs[0].graph.generate_ltd();
 
-    let externals = (0..3)
+    let externals: Vec<FourMomentum<f128>> = (0..3)
         .map(|i| {
-            upgrade_lorentz_vector(&LorentzVector::from_args(
-                1.0,
-                i as f64 + 2.0,
-                i as f64 + 3.0,
-                i as f64 + 4.0,
-            ))
+            FourMomentum::from_args(1.0, i as f64 + 2.0, i as f64 + 3.0, i as f64 + 4.0).cast()
         })
         .collect_vec();
 
-    let loop_moms = (0..6)
-        .map(|i| {
-            upgrade_lorentz_vector(&LorentzVector::from_args(
-                1.0,
-                i as f64 - 2.0,
-                i as f64 + 3.5,
-                i as f64 + 4.5001,
-            ))
-        })
+    let loop_moms: Vec<ThreeMomentum<f128>> = (0..6)
+        .map(|i| ThreeMomentum::new(i as f64 - 2.0, i as f64 + 3.5, i as f64 + 4.5001).cast())
         .collect_vec();
 
     // let before_cff = std::time::Instant::now();
@@ -417,28 +412,21 @@ fn pytest_scalar_cube() {
 
     assert_eq!(ext, 8);
 
-    let mut external_momenta = Vec::with_capacity(7);
+    let mut external_momenta: Vec<FourMomentum<f128>> = Vec::with_capacity(7);
     for i in 0..7 {
-        external_momenta.push(upgrade_lorentz_vector(&LorentzVector::from_args(
-            1.0,
-            3.0 + i as f64,
-            5.0 + i as f64,
-            4.0 + i as f64,
-        )));
+        external_momenta.push(
+            FourMomentum::from_args(1.0, 3.0 + i as f64, 5.0 + i as f64, 4.0 + i as f64).cast(),
+        );
     }
 
     assert_eq!(graph.loop_momentum_basis.edge_signatures[0].1.len(), 8);
 
     assert_eq!(graph.loop_momentum_basis.edge_signatures[0].0.len(), 5);
 
-    let mut loop_momenta = Vec::with_capacity(5);
+    let mut loop_momenta: Vec<ThreeMomentum<f128>> = Vec::with_capacity(5);
     for i in 0..5 {
-        loop_momenta.push(upgrade_lorentz_vector(&LorentzVector::from_args(
-            0.0,
-            1.5 + i as f64,
-            2.5 + i as f64,
-            4.5 + i as f64,
-        )));
+        loop_momenta
+            .push(ThreeMomentum::new(1.0 + i as f64, 2.0 + i as f64, 3.0 + i as f64).cast());
     }
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_momenta, &external_momenta);
@@ -478,8 +466,8 @@ fn pytest_scalar_bubble() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    let p1 = LorentzVector::from_args(17. / 19., 7. / 11., 11. / 13., 13. / 17.);
-    let k = LorentzVector::from_args(0.0, 2. / 3., 3. / 5., 5. / 7.);
+    let p1 = FourMomentum::from_args(17. / 19., 7. / 11., 11. / 13., 13. / 17.);
+    let k = ThreeMomentum::new(2. / 3., 3. / 5., 5. / 7.);
 
     let onshell_energies = graph.compute_onshell_energies(&[k], &[p1, p1]);
 
@@ -526,30 +514,18 @@ fn pytest_massless_scalar_box() {
     graph.generate_ltd();
     graph.generate_cff();
 
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        79. / 83.,
-        41. / 43.,
-        43. / 47.,
-        47. / 53.,
-    ));
-    let p2 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        83. / 89.,
-        53. / 59.,
-        59. / 61.,
-        61. / 67.,
-    ));
-    let p3 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        89. / 97.,
-        67. / 71.,
-        71. / 73.,
-        73. / 79.,
-    ));
+    let p1: FourMomentum<f128> =
+        FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.).cast();
+    let p2: FourMomentum<f128> =
+        FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.).cast();
+    let p3: FourMomentum<f128> =
+        FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.).cast();
 
     let externals = [p1, p2, p3];
 
     let absolute_truth = Complex::new(0.0, -1.5735382832053006e-6);
 
-    let k = upgrade_lorentz_vector(&LorentzVector::from_args(0.0, 1.0, 2.0, 3.0));
+    let k: ThreeMomentum<f128> = ThreeMomentum::new(1.0, 2.0, 3.0).cast();
 
     let energy_product = graph.compute_energy_product(&[k], &externals);
 
@@ -605,20 +581,10 @@ fn pytest_scalar_double_triangle() {
 
     let absolute_truth = Complex::new(0.00009115369712210525, 0.0);
 
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        53. / 59.,
-        41. / 43.,
-        43. / 47.,
-        47. / 53.,
-    ));
+    let p1 = FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.).cast();
 
-    let k0 = upgrade_lorentz_vector(&LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.));
-    let k1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        0.,
-        7. / 11.,
-        11. / 13.,
-        13. / 17.,
-    ));
+    let k0: ThreeMomentum<f128> = ThreeMomentum::new(2. / 3., 3. / 5., 5. / 7.).cast();
+    let k1 = ThreeMomentum::new(7. / 11., 11. / 13., 13. / 17.).cast();
 
     let energy_product = graph.compute_energy_product(&[k0, k1], &[p1]);
 
@@ -675,12 +641,12 @@ fn pytest_scalar_mercedes() {
 
     let absolute_truth = Complex::new(0.0, 2.3081733247975594e-13);
 
-    let k0 = upgrade_lorentz_vector(&LorentzVector::from_args(0.0, 3., 4., 5.));
-    let k1 = upgrade_lorentz_vector(&LorentzVector::from_args(0.0, 7., 7., 9.));
-    let k2 = upgrade_lorentz_vector(&LorentzVector::from_args(0.0, 9., 3., 1.));
+    let k0: ThreeMomentum<f128> = ThreeMomentum::new(3., 4., 5.).cast();
+    let k1: ThreeMomentum<f128> = ThreeMomentum::new(7., 7., 9.).cast();
+    let k2: ThreeMomentum<f128> = ThreeMomentum::new(9., 3., 1.).cast();
 
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(1.0, 12., 13., 14.));
-    let p2 = upgrade_lorentz_vector(&LorentzVector::from_args(2.0, 15., 17., 19.));
+    let p1: FourMomentum<f128> = FourMomentum::from_args(1.0, 12., 13., 14.).cast();
+    let p2: FourMomentum<f128> = FourMomentum::from_args(2.0, 15., 17., 19.).cast();
 
     let energy_product = graph.compute_energy_product(&[k0, k1, k2], &[p1, p2]);
 
@@ -739,22 +705,13 @@ fn pytest_scalar_triangle_box() {
 
     let absolute_truth = Complex::new(-1.264_354_742_167_213_3e-7, 0.0);
 
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        53. / 59.,
-        41. / 43.,
-        43. / 47.,
-        47. / 53.,
-    ));
+    let p1: FourMomentum<f128> =
+        FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.).cast();
 
-    let p2 = upgrade_lorentz_vector(&LorentzVector::from_args(2., 15., 17., 19.));
+    let p2: FourMomentum<f128> = FourMomentum::from_args(2., 15., 17., 19.).cast();
 
-    let k0 = upgrade_lorentz_vector(&LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.));
-    let k1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        0.,
-        7. / 11.,
-        11. / 13.,
-        13. / 17.,
-    ));
+    let k0: ThreeMomentum<f128> = ThreeMomentum::new(2. / 3., 3. / 5., 5. / 7.).cast();
+    let k1: ThreeMomentum<f128> = ThreeMomentum::new(7. / 11., 11. / 13., 13. / 17.).cast();
 
     let energy_product = graph.compute_energy_product(&[k0, k1], &[p1, p2]);
 
@@ -813,24 +770,15 @@ fn pytest_scalar_isopod() {
 
     let absolute_truth = Complex::new(0.0, -2.9299520787585056e-23);
 
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        53. / 59.,
-        41. / 43.,
-        43. / 47.,
-        47. / 53.,
-    ));
+    let p1: FourMomentum<f128> =
+        FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.).cast();
 
-    let p2 = upgrade_lorentz_vector(&LorentzVector::from_args(2., 15., 17., 19.));
+    let p2: FourMomentum<f128> = FourMomentum::from_args(2., 15., 17., 19.).cast();
 
-    let k0 = upgrade_lorentz_vector(&LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.));
-    let k1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        0.,
-        7. / 11.,
-        11. / 13.,
-        13. / 17.,
-    ));
+    let k0: ThreeMomentum<f128> = ThreeMomentum::new(2. / 3., 3. / 5., 5. / 7.).cast();
+    let k1: ThreeMomentum<f128> = ThreeMomentum::new(2. / 11., 11. / 13., 13. / 17.).cast();
 
-    let k2 = upgrade_lorentz_vector(&LorentzVector::from_args(0., 8., 9., 10.));
+    let k2: ThreeMomentum<f128> = ThreeMomentum::new(8., 9., 10.).cast();
 
     let energy_product = graph.compute_energy_product(&[k0, k1, k2], &[p1, p2]);
 

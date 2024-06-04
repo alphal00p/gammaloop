@@ -36,6 +36,8 @@ use eyre::WrapErr;
 
 use integrands::*;
 use lorentz_vector::LorentzVector;
+use momentum::FourMomentum;
+use momentum::ThreeMomentum;
 use num::Complex;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
@@ -296,11 +298,11 @@ pub enum RotationMethod {
 }
 
 impl RotationMethod {
-    fn rotation_function<T: FloatLike>(&self) -> impl Fn(&LorentzVector<T>) -> LorentzVector<T> {
+    fn rotation_function<T: FloatLike>(&self) -> impl Fn(&ThreeMomentum<T>) -> ThreeMomentum<T> {
         match self {
-            RotationMethod::Pi2X => utils::perform_pi2_rotation_x,
-            RotationMethod::Pi2Y => utils::perform_pi2_rotation_y,
-            RotationMethod::Pi2Z => utils::perform_pi2_rotation_z,
+            RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x,
+            RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y,
+            RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z,
         }
     }
 }
@@ -325,12 +327,12 @@ pub enum Externals {
 impl Externals {
     #[allow(unused_variables)]
     #[inline]
-    pub fn get_externals(&self, x_space_point: &[f64]) -> (Vec<LorentzVector<f64>>, f64) {
+    pub fn get_externals(&self, x_space_point: &[f64]) -> (Vec<FourMomentum<f64>>, f64) {
         match self {
             Externals::Constant(externals) => (
                 externals
                     .iter()
-                    .map(|[e0, e1, e2, e3]| LorentzVector::from_args(*e0, *e1, *e2, *e3))
+                    .map(|[e0, e1, e2, e3]| FourMomentum::from_args(*e0, *e1, *e2, *e3))
                     .collect(),
                 1.0,
             ),

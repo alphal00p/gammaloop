@@ -9,6 +9,7 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
+use crate::momentum::{Energy, FourMomentum, ThreeMomentum};
 use crate::tropical::tropical_parameterization::{self};
 use crate::utils::{
     cast_complex, cast_lorentz_vector, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
@@ -777,29 +778,28 @@ impl GammaLoopIntegrand {
                             )
                             .unwrap();
 
-                        let (loop_moms, jacobian) =
-                            if loop_moms_f64[0].t.is_nan() || jacobian_f64.is_nan() {
-                                let xs_f128 = xs.iter().map(|x| f128::f128::from(*x)).collect_vec();
-                                let external_moms_f128 =
-                                    external_moms.iter().map(cast_lorentz_vector).collect_vec();
+                        let (loop_moms, jacobian) = if jacobian_f64.is_nan() {
+                            let xs_f128 = xs.iter().map(|x| f128::f128::from(*x)).collect_vec();
+                            let external_moms_f128 =
+                                external_moms.iter().map(FourMomentum::cast).collect_vec();
 
-                                let (loop_moms_f128, jacobian_f128) =
-                                    tropical_parameterization::generate_tropical_sample(
-                                        &xs_f128,
-                                        &external_moms_f128,
-                                        graph,
-                                        self.settings.general.debug,
-                                    )
-                                    .unwrap();
+                            let (loop_moms_f128, jacobian_f128) =
+                                tropical_parameterization::generate_tropical_sample(
+                                    &xs_f128,
+                                    &external_moms_f128,
+                                    graph,
+                                    self.settings.general.debug,
+                                )
+                                .unwrap();
 
-                                let loop_moms =
-                                    loop_moms_f128.iter().map(cast_lorentz_vector).collect_vec();
-                                let jacobian = Into::<f64>::into(jacobian_f128);
+                            let loop_moms =
+                                loop_moms_f128.iter().map(ThreeMomentum::cast).collect_vec();
+                            let jacobian = Into::<f64>::into(jacobian_f128);
 
-                                (loop_moms, jacobian)
-                            } else {
-                                (loop_moms_f64, jacobian_f64)
-                            };
+                            (loop_moms, jacobian)
+                        } else {
+                            (loop_moms_f64, jacobian_f64)
+                        };
 
                         let default_sample = DefaultSample {
                             loop_moms,
@@ -843,8 +843,8 @@ impl GammaLoopIntegrand {
         );
 
         let loop_moms = loop_moms_vec
-            .iter()
-            .map(|x| LorentzVector::from_args(0., x[0], x[1], x[2]))
+            .into_iter()
+            .map(|x| ThreeMomentum::from(x))
             .collect_vec();
 
         let jacobian = param_jacobian * pdf;
@@ -951,7 +951,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
     #[inline]
     fn get_rotated_sample(
         &self,
-        rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
+        rotation_function: impl Fn(&ThreeMomentum<T>) -> ThreeMomentum<T>,
     ) -> Self {
         match self {
             GammaLoopSample::Default(sample) => {
@@ -1003,8 +1003,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
 /// External momenta are part of the sample in order to facilitate the use of non-constant externals.
 #[derive(Debug, Clone)]
 struct DefaultSample<T: FloatLike> {
-    loop_moms: Vec<LorentzVector<T>>,
-    external_moms: Vec<LorentzVector<T>>,
+    loop_moms: Vec<ThreeMomentum<T>>,
+    external_moms: Vec<FourMomentum<T>>,
     jacobian: f64,
 }
 
@@ -1013,14 +1013,18 @@ impl<T: FloatLike> DefaultSample<T> {
     /// Rotation for stability checks
     fn get_rotated_sample(
         &self,
-        rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
+        rotation_function: impl Fn(&ThreeMomentum<T>) -> ThreeMomentum<T>,
     ) -> Self {
         Self {
             loop_moms: self.loop_moms.iter().map(&rotation_function).collect_vec(),
             external_moms: self
                 .external_moms
                 .iter()
-                .map(&rotation_function)
+                .cloned()
+                .map(|mut p| {
+                    p.spatial = rotation_function(&p.spatial);
+                    p
+                })
                 .collect_vec(),
             jacobian: self.jacobian,
         }
@@ -1030,15 +1034,11 @@ impl<T: FloatLike> DefaultSample<T> {
     #[inline]
     fn cast_sample<T2: FloatLike + From<T>>(&self) -> DefaultSample<T2> {
         DefaultSample {
-            loop_moms: self
-                .loop_moms
-                .iter()
-                .map(cast_lorentz_vector::<T, T2>)
-                .collect_vec(),
+            loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect_vec(),
             external_moms: self
                 .external_moms
                 .iter()
-                .map(cast_lorentz_vector::<T, T2>)
+                .map(FourMomentum::cast)
                 .collect_vec(),
             jacobian: self.jacobian,
         }
@@ -1067,7 +1067,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
     #[inline]
     fn get_rotated_sample(
         &self,
-        rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
+        rotation_function: impl Fn(&ThreeMomentum<T>) -> ThreeMomentum<T>,
     ) -> Self {
         match self {
             DiscreteGraphSample::Default(sample) => {
