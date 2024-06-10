@@ -1080,7 +1080,7 @@ class InputParamCard(dict[str, complex]):
         return input_param_card
 
     @staticmethod
-    def default_from_model(model: Model) -> InputParamCard:
+    def from_model(model: Model) -> InputParamCard:
         input_param_card = InputParamCard()
         for param in model.get_external_parameters():
             if param.value is not None:
