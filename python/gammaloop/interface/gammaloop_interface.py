@@ -798,8 +798,8 @@ class GammaLoop(object):
         'path_to_launch', type=str, help='Path to launch a given run command to')
     launch_parser.add_argument('--no_overwrite_model', '-nom', action='store_true', default=False,
                                help='Do not overwrite model with the new parameter and coupling values derived from the param card.')
-    launch_parser.add_argument('--no_overwrite_run_settings', '-nors', action='store_true', default=False,
-                               help='Do not overwrite the run settings with the new settings derived from the run card.')
+    launch_parser.add_argument('--load_run_settings', '-lrs', action='store_true', default=False,
+                               help='Load the run settings from the run_card.yaml in the process output.')
 
     def do_launch(self, str_args: str) -> None:
         if str_args == 'help':
@@ -826,13 +826,15 @@ class GammaLoop(object):
         self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
 
         # Sync the run_settings from the interface to the output or vice-versa
-        if not args.no_overwrite_run_settings:
+        if args.load_run_settings:
             run_settings = load_configuration(
                 pjoin(args.path_to_launch, 'cards', 'run_card.yaml'), True)
             # Do not overwrite the external momenta setting in gammaLoop if they are set constant in the process dir
             if run_settings['Kinematics']['externals']['type'] == 'constant':
                 del run_settings['Kinematics']
             self.config.update({'run_settings': run_settings})
+        else:
+            update_run_card_in_output(args.path_to_launch, self.config)
 
         # Depending on the type of output, sync cross-section or amplitude
         if output_metadata['output_type'] == 'amplitudes':
@@ -915,7 +917,6 @@ class GammaLoop(object):
         processed_yaml_model = self.model.to_yaml()
         self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
 
-        update_run_card_in_output(self.launched_output, self.config)
         run_settings = load_configuration(
             pjoin(self.launched_output, 'cards', 'run_card.yaml'), True)
         # Do not overwrite the external momenta setting in gammaLoop if they are set constant in the process dir

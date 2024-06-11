@@ -11,8 +11,6 @@ class TestScalarTopologies:
         gl = get_gamma_loop_interpreter()
 
         command_list = gl_interface.CommandList()
-        command_list.add_command("launch {}".format(
-            scalar_3L_6P_topology_A_export))
         command_list.add_command(
             "set externals.momenta [\
 [5.,0.,0.,5.],\
@@ -25,6 +23,9 @@ class TestScalarTopologies:
         command_list.add_command("set integrated_phase 'imag'")
         command_list.add_command("set e_cm 1.")
         command_list.add_command("set sampling {'type':'default'}")
+
+        command_list.add_command("launch {}".format(
+            scalar_3L_6P_topology_A_export))
         command_list.add_command("set_model_param mass_scalar_1 172.0")
 
         gl.run(command_list)
