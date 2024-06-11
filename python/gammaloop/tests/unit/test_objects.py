@@ -35,7 +35,7 @@ class TestParamCard:
                 input_param_card = InputParamCard.from_param_card(
                     param_card, model)
             else:
-                input_param_card = InputParamCard.default_from_model(model)
+                input_param_card = InputParamCard.from_model(model)
                 model.apply_input_param_card(input_param_card, simplify=False)
                 default_card_path = Path(tmpdir_factory.mktemp(
                     "default_param_card_tmp_directory")).joinpath("sm_model_default_lha_param_card.dat")
@@ -70,7 +70,7 @@ class TestParamCard:
                 input_param_card = InputParamCard.from_param_card(
                     param_card, model)
             else:
-                input_param_card = InputParamCard.default_from_model(model)
+                input_param_card = InputParamCard.from_model(model)
                 model.apply_input_param_card(input_param_card, simplify=False)
                 default_card_path = Path(tmpdir_factory.mktemp(
                     "default_param_card_tmp_directory")).joinpath("scalars_model_default_lha_param_card.dat")

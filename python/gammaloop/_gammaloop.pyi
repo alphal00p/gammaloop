@@ -60,11 +60,10 @@ class Worker:
     def export_amplitudes(self, export_root: str, amplitude_names: list[str]) -> None:
         """ Exports the amplitudes given in argument to the export root given in argument. """
 
-    def export_expressions(self,export_root:str,format:str)->None:
+    def export_expressions(self, export_root: str, format: str) -> None:
         """Exports the numerator and denominator to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
 
-
-    def export_coupling_replacement_rules(self,export_root:str,format:str)->None:
+    def export_coupling_replacement_rules(self, export_root: str, format: str) -> None:
         """Exports the coupling replacement rules to the export root given in argument. The format can be 'default' or 'mathematica' or 'latex'."""
 
     def load_amplitude_integrands(self, path_to_settings: str) -> None:
@@ -73,10 +72,10 @@ class Worker:
     def write_default_settings(self, export_root: str) -> None:
         """ Writes the default settings to the export root given in argument. """
 
-    def inspect_integrand(self, integrand: str, pt: list[float], term: list[int], force_radius: bool, is_momentum_space: bool, use_f128: bool) -> None:
+    def inspect_integrand(self, integrand: str, pt: list[float], term: list[int], force_radius: bool, is_momentum_space: bool, use_f128: bool) -> tuple[float, float]:
         """ Inspects the integrand given in argument at the point given in argument. """
 
-    def integrate_integrand(self, integrand: str, num_cores: int, result_path: str, workspace_path: str, target: tuple[float, float] | None) -> None:
+    def integrate_integrand(self, integrand: str, num_cores: int, result_path: str, workspace_path: str, target: tuple[float, float] | None) -> list[tuple[float, float]]:
         """ Integrates the integrand given in argument over the target given in argument. """
 
     def load_master_node(self, integrand: str) -> None:
