@@ -786,7 +786,7 @@ dependencies = [
  "portrait",
  "pprof",
  "pyo3",
- "pyo3-build-config 0.21.2",
+ "pyo3-build-config",
  "pyo3-log",
  "rand",
  "rand_xoshiro",
@@ -1464,7 +1464,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "portable-atomic"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7170ef9988bc169ba16dd36a7fa041e5c4cbeb6a35b76d4c03daded371eae7c0"
 
+[[package]]
 name = "portrait"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1594,18 +1599,6 @@ dependencies = [
 name = "pyo3-build-config"
 version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-checksum = "076c73d0bc438f7a4ef6fdd0c3bb4732149136abd952b110ac93e4edb13a6ba5"
-dependencies = [
- "once_cell",
- "target-lexicon",
-]
-
-[[package]]
-name = "pyo3-build-config"
-version = "0.21.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
 checksum = "7883df5835fafdad87c0d888b266c8ec0f4c9ca48a5bed6bbb592e8dedee1b50"
 dependencies = [
  "once_cell",
@@ -2024,10 +2017,8 @@ dependencies = [
 
 [[package]]
 name = "spenso"
-
 version = "0.2.0"
 source = "git+https://github.com/alphal00p/spenso?branch=master#118db512f07f63106233f8c0be6384cff31b3310"
-
 dependencies = [
  "ahash",
  "ambassador",
@@ -2110,9 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-
 version = "0.7.0"
-
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -2122,10 +2111,7 @@ dependencies = [
  "colored",
  "dyn-clone",
  "once_cell",
-
- "pyo3-build-config 0.19.2",
- "pyo3-build-config 0.21.2",
-
+ "pyo3-build-config",
  "rand",
  "rand_xoshiro",
  "rayon",
