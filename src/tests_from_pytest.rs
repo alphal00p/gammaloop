@@ -4,7 +4,9 @@ use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
 use crate::model::Model;
 use crate::momentum::{FourMomentum, ThreeMomentum};
-use crate::utils::{assert_approx_eq, compute_momentum, compute_three_momentum_from_four};
+use crate::utils::{
+    assert_approx_eq, compute_momentum, compute_three_momentum_from_four, PrecisionUpgradable,
+};
 use crate::utils::{f128, F};
 use colored::Colorize;
 use itertools::{FormatWith, Itertools};
@@ -223,44 +225,49 @@ fn pytest_scalar_fishnet_2x2() {
 
     //println!("lmb consistency check passed");
 
-    let k1_f128: ThreeMomentum<F<f128>> = k1.cast();
-    let k2_f128: ThreeMomentum<F<f128>> = k2.cast();
-    let k3_f128: ThreeMomentum<F<f128>> = k3.cast();
-    let k4_f128: ThreeMomentum<F<f128>> = k4.cast();
-    let p1_f128: FourMomentum<F<f128>> = p1.cast();
-    let p2_f128: FourMomentum<F<f128>> = p2.cast();
-    let p3_f128: FourMomentum<F<f128>> = p3.cast();
+    let k1_f128: ThreeMomentum<F<f128>> = k1.cast().higher();
+    let k2_f128: ThreeMomentum<F<f128>> = k2.cast().higher();
+    let k3_f128: ThreeMomentum<F<f128>> = k3.cast().higher();
+    let k4_f128: ThreeMomentum<F<f128>> = k4.cast().higher();
+    let p1_f128: FourMomentum<F<f128>> = p1.cast().higher();
+    let p2_f128: FourMomentum<F<f128>> = p2.cast().higher();
+    let p3_f128: FourMomentum<F<f128>> = p3.cast().higher();
 
     let loop_moms_f128 = [k1_f128, k2_f128, k3_f128, k4_f128];
     let externals_f128 = [p1_f128, p2_f128, p3_f128];
 
     let energy_product = graph.compute_energy_product(&loop_moms_f128, &externals_f128);
 
-    let cff_res = graph.evaluate_cff_expression(&loop_moms_f128, &externals_f128) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&loop_moms_f128, &externals_f128) / energy_product;
+    let cff_res = graph.evaluate_cff_expression(&loop_moms_f128, &externals_f128) / &energy_product;
+    let ltd_res = graph.evaluate_ltd_expression(&loop_moms_f128, &externals_f128) / &energy_product;
 
-    let absolute_truth: Complex<F<f64>> = Complex::new(F(0.000019991301832169422), F(0.0));
+    let absolute_truth: Complex<F<f128>> = Complex::new(
+        F::<f128>::from_f64(0.000019991301832169422),
+        F::<f128>::from_f64(0.0),
+    );
+
+    let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
     assert_approx_eq(
-        &cff_res.re.into(),
+        &cff_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
     assert_approx_eq(
-        &cff_res.im.into(),
+        &cff_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
     assert_approx_eq(
-        &ltd_res.re.into(),
+        &ltd_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &ltd_res.im.into(),
+        &ltd_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
     // TODO: @Mathijs, you can put your own checks there
 }
@@ -288,7 +295,7 @@ fn pytest_scalar_sunrise() {
     let k1 = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.));
     let k2 = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.));
 
-    let p1 = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.)).into();
+    let p1 = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
 
     let absolute_truth = Complex::new(F(0.24380172488169907), F(0.));
 
@@ -346,6 +353,7 @@ fn pytest_scalar_fishnet_2x3() {
                 F(i as f64) + F(4.0),
             )
             .cast()
+            .higher()
         })
         .collect_vec();
 
@@ -357,6 +365,7 @@ fn pytest_scalar_fishnet_2x3() {
                 F(i as f64) + F(4.5001),
             )
             .cast()
+            .higher()
         })
         .collect_vec();
 
@@ -377,17 +386,11 @@ fn pytest_scalar_fishnet_2x3() {
     // let ltd_duration = before_ltd.elapsed();
     // println!("ltd_duration: {}", ltd_duration.as_micros());
 
-    assert_approx_eq(
-        &cff_res.re.into(),
-        &ltd_res.re.into(),
-        &LTD_COMPARISON_TOLERANCE,
-    );
+    let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
-    assert_approx_eq(
-        &cff_res.im.into(),
-        &ltd_res.im.into(),
-        &LTD_COMPARISON_TOLERANCE,
-    );
+    assert_approx_eq(&cff_res.re, &ltd_res.re, &ltd_comparison_tolerance128);
+
+    assert_approx_eq(&cff_res.im, &ltd_res.im, &ltd_comparison_tolerance128);
     // TODO: @Mathijs, you can put your own checks there
 }
 
@@ -433,7 +436,8 @@ fn pytest_scalar_cube() {
                 F(5.0) + F(i as f64),
                 F(4.0) + F(i as f64),
             )
-            .cast(),
+            .cast()
+            .higher(),
         );
     }
 
@@ -449,23 +453,17 @@ fn pytest_scalar_cube() {
                 F(2.) + F(i as f64),
                 F(3.) + F(i as f64),
             )
-            .cast(),
+            .cast()
+            .higher(),
         );
     }
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_momenta, &external_momenta);
     let cff_res = graph.evaluate_cff_expression(&loop_momenta, &external_momenta);
-    assert_approx_eq(
-        &cff_res.re.into(),
-        &ltd_res.re.into(),
-        &LTD_COMPARISON_TOLERANCE,
-    );
+    let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
+    assert_approx_eq(&cff_res.re, &ltd_res.re, &ltd_comparison_tolerance128);
 
-    assert_approx_eq(
-        &cff_res.im.into(),
-        &ltd_res.im.into(),
-        &LTD_COMPARISON_TOLERANCE,
-    );
+    assert_approx_eq(&cff_res.im, &ltd_res.im, &ltd_comparison_tolerance128);
 }
 
 #[test]
@@ -539,42 +537,60 @@ fn pytest_massless_scalar_box() {
     graph.generate_cff();
 
     let p1: FourMomentum<F<f128>> =
-        FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.).cast();
+        FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.)
+            .cast()
+            .higher();
     let p2: FourMomentum<F<f128>> =
-        FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.).cast();
+        FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.)
+            .cast()
+            .higher();
     let p3: FourMomentum<F<f128>> =
-        FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.).cast();
+        FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.)
+            .cast()
+            .higher();
 
     let externals = [p1, p2, p3];
 
-    let absolute_truth = Complex::new(F(0.0), F(-1.5735382832053006e-6));
+    let absolute_truth = Complex::new(
+        F::<f128>::from_f64(0.0),
+        F::<f128>::from_f64(-1.5735382832053006e-6),
+    );
 
-    let k: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(1.), F(2.), F(3.)).cast();
+    let k: ThreeMomentum<F<f128>> = ThreeMomentum::new(
+        F::<f128>::from_f64(1.),
+        F::<f128>::from_f64(2.),
+        F::<f128>::from_f64(3.),
+    )
+    .cast();
 
-    let energy_product = graph.compute_energy_product(&[k], &externals);
+    let loop_moms = [k];
 
-    let cff_res = graph.evaluate_cff_expression(&[k], &externals) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k], &externals) / energy_product;
+    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+
+    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
+    let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+
+    let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
     assert_approx_eq(
-        &cff_res.re.into(),
+        &cff_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
     assert_approx_eq(
-        &cff_res.im.into(),
+        &cff_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
     assert_approx_eq(
-        &ltd_res.re.into(),
+        &ltd_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
     assert_approx_eq(
-        &ltd_res.im.into(),
+        &ltd_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 }
 
@@ -603,38 +619,49 @@ fn pytest_scalar_double_triangle() {
     graph.generate_ltd();
     graph.generate_cff();
 
-    let absolute_truth = Complex::new(F(0.00009115369712210525), F(0.));
+    let absolute_truth = Complex::new(F(0.00009115369712210525), F(0.)).higher();
 
-    let p1 = FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.).cast();
+    let p1 = FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.)
+        .cast()
+        .higher();
 
-    let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.)).cast();
-    let k1 = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.)).cast();
+    let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.))
+        .cast()
+        .higher();
+    let k1 = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.))
+        .cast()
+        .higher();
 
-    let energy_product = graph.compute_energy_product(&[k0, k1], &[p1]);
+    let loop_moms = [k0, k1];
+    let externals = [p1];
 
-    let cff_res = graph.evaluate_cff_expression(&[k0, k1], &[p1]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k0, k1], &[p1]) / energy_product;
+    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+
+    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
+    let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+
+    let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
     assert_approx_eq(
-        &cff_res.re.into(),
+        &cff_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
     assert_approx_eq(
-        &cff_res.im.into(),
+        &cff_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &ltd_res.re.into(),
+        &ltd_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
     assert_approx_eq(
-        &ltd_res.im.into(),
+        &ltd_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 }
 
@@ -663,42 +690,47 @@ fn pytest_scalar_mercedes() {
     graph.generate_ltd();
     graph.generate_cff();
 
-    let absolute_truth = Complex::new(F(0.0), F(2.3081733247975594e-13));
+    let absolute_truth = Complex::new(F(0.0), F(2.3081733247975594e-13)).higher();
 
-    let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(3., 4., 5.).cast();
-    let k1: ThreeMomentum<F<f128>> = ThreeMomentum::new(7., 7., 9.).cast();
-    let k2: ThreeMomentum<F<f128>> = ThreeMomentum::new(9., 3., 1.).cast();
+    let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(3., 4., 5.).cast().higher();
+    let k1: ThreeMomentum<F<f128>> = ThreeMomentum::new(7., 7., 9.).cast().higher();
+    let k2: ThreeMomentum<F<f128>> = ThreeMomentum::new(9., 3., 1.).cast().higher();
 
-    let p1: FourMomentum<F<f128>> = FourMomentum::from_args(1., 12., 13., 14.).cast();
-    let p2: FourMomentum<F<f128>> = FourMomentum::from_args(2., 15., 17., 19.).cast();
+    let p1: FourMomentum<F<f128>> = FourMomentum::from_args(1., 12., 13., 14.).cast().higher();
+    let p2: FourMomentum<F<f128>> = FourMomentum::from_args(2., 15., 17., 19.).cast().higher();
 
-    let energy_product = graph.compute_energy_product(&[k0, k1, k2], &[p1, p2]);
+    let loop_moms = [k0, k1, k2];
+    let externals = [p1, p2];
 
-    let cff_res = graph.evaluate_cff_expression(&[k0, k1, k2], &[p1, p2]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k0, k1, k2], &[p1, p2]) / energy_product;
+    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+
+    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
+    let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+
+    let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
     assert_approx_eq(
-        &cff_res.re.into(),
+        &cff_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &cff_res.im.into(),
+        &cff_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &ltd_res.re.into(),
+        &ltd_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &ltd_res.im.into(),
+        &ltd_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 }
 
@@ -727,44 +759,57 @@ fn pytest_scalar_triangle_box() {
     graph.generate_ltd();
     graph.generate_cff();
 
-    let absolute_truth = Complex::new(F(-1.264_354_742_167_213_3e-7), F(0.));
+    let absolute_truth = Complex::new(
+        F::<f128>::from_f64(-1.264_354_742_167_213_3e-7),
+        F::<f128>::from_f64(0.),
+    );
 
     let p1: FourMomentum<F<f128>> =
-        FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.).cast();
+        FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.)
+            .cast()
+            .higher();
 
-    let p2: FourMomentum<F<f128>> = FourMomentum::from_args(2., 15., 17., 19.).cast();
+    let p2: FourMomentum<F<f128>> = FourMomentum::from_args(2., 15., 17., 19.).cast().higher();
 
-    let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.)).cast();
-    let k1: ThreeMomentum<F<f128>> =
-        ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.)).cast();
+    let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.))
+        .cast()
+        .higher();
+    let k1: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.))
+        .cast()
+        .higher();
 
-    let energy_product = graph.compute_energy_product(&[k0, k1], &[p1, p2]);
+    let loop_moms = [k0, k1];
+    let externals = [p1, p2];
 
-    let cff_res = graph.evaluate_cff_expression(&[k0, k1], &[p1, p2]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k0, k1], &[p1, p2]) / energy_product;
+    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+
+    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
+    let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+
+    let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
     assert_approx_eq(
-        &cff_res.re.into(),
+        &cff_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &cff_res.im.into(),
+        &cff_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &ltd_res.re.into(),
+        &ltd_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &ltd_res.im.into(),
+        &ltd_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 }
 
@@ -793,49 +838,59 @@ fn pytest_scalar_isopod() {
     graph.generate_ltd();
     graph.generate_cff();
 
-    let absolute_truth = Complex::new(F(0.0), F(-2.9299520787585056e-23));
+    let absolute_truth = Complex::new(F(0.0), F(-2.9299520787585056e-23)).higher();
 
     let p1: FourMomentum<F<f128>> =
-        FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.).cast();
+        FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.)
+            .cast()
+            .higher();
 
-    let p2: FourMomentum<F<f128>> = FourMomentum::from_args(2., 15., 17., 19.).cast();
+    let p2: FourMomentum<F<f128>> = FourMomentum::from_args(2., 15., 17., 19.).cast().higher();
 
-    let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.)).cast();
-    let k1: ThreeMomentum<F<f128>> =
-        ThreeMomentum::new(F(2. / 11.), F(11. / 13.), F(13. / 17.)).cast();
+    let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.))
+        .cast()
+        .higher();
+    let k1: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 11.), F(11. / 13.), F(13. / 17.))
+        .cast()
+        .higher();
 
-    let k2: ThreeMomentum<F<f128>> = ThreeMomentum::new(8., 9., 10.).cast();
+    let k2: ThreeMomentum<F<f128>> = ThreeMomentum::new(8., 9., 10.).cast().higher();
 
-    let energy_product = graph.compute_energy_product(&[k0, k1, k2], &[p1, p2]);
+    let loop_moms = [k0, k1, k2];
+    let externals = [p1, p2];
 
-    let cff_res = graph.evaluate_cff_expression(&[k0, k1, k2], &[p1, p2]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k0, k1, k2], &[p1, p2]) / energy_product;
+    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+
+    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
+    let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
 
     println!("cff_res = {:+e}", cff_res);
     println!("ltd_res = {:+e}", ltd_res);
 
+    let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
+
     assert_approx_eq(
-        &cff_res.re.into(),
+        &cff_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &cff_res.im.into(),
+        &cff_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &ltd_res.re.into(),
+        &ltd_res.re,
         &absolute_truth.re,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 
     assert_approx_eq(
-        &ltd_res.im.into(),
+        &ltd_res.im,
         &absolute_truth.im,
-        &LTD_COMPARISON_TOLERANCE,
+        &ltd_comparison_tolerance128,
     );
 }
 

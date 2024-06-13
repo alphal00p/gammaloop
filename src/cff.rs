@@ -1883,7 +1883,6 @@ mod tests_cff {
             EdgeType::Incoming,
             EdgeType::Incoming,
         ];
-        let one = F(1.);
 
         let energy_prefactor = virtual_energy_cache
             .iter()

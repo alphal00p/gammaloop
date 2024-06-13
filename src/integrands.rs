@@ -8,7 +8,6 @@ use crate::{utils, IntegratorSettings, Precision, Settings};
 use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use symbolica::domains::float::{Complex, NumericalFloatLike, Real};
@@ -339,7 +338,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
         let (moms, jac) = self.parameterize(xs);
         let mut loop_momenta = vec![];
         for m in &moms {
-            loop_momenta.push(FourMomentum::new(F(0.).into(), m.clone().into()));
+            loop_momenta.push(FourMomentum::new(F(0.).into(), (*m).into()));
         }
 
         let parameterization_time = before_parameterization.elapsed();

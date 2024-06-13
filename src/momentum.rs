@@ -18,6 +18,26 @@ pub struct Energy<T> {
     pub value: T,
 }
 
+impl<T: FloatLike> Energy<F<T>> {
+    pub fn higher(&self) -> Energy<F<T::Higher>>
+    where
+        T::Higher: FloatLike,
+    {
+        Energy {
+            value: self.value.higher(),
+        }
+    }
+
+    pub fn lower(&self) -> Energy<F<T::Lower>>
+    where
+        T::Lower: FloatLike,
+    {
+        Energy {
+            value: self.value.lower(),
+        }
+    }
+}
+
 impl<T: FloatLike> From<Energy<T>> for Energy<F<T>> {
     fn from(value: Energy<T>) -> Self {
         Energy {
@@ -212,6 +232,30 @@ pub struct ThreeMomentum<T> {
     pub px: T,
     pub py: T,
     pub pz: T,
+}
+
+impl<T: FloatLike> ThreeMomentum<F<T>> {
+    pub fn higher(&self) -> ThreeMomentum<F<T::Higher>>
+    where
+        T::Higher: FloatLike,
+    {
+        ThreeMomentum {
+            px: self.px.higher(),
+            py: self.py.higher(),
+            pz: self.pz.higher(),
+        }
+    }
+
+    pub fn lower(&self) -> ThreeMomentum<F<T::Lower>>
+    where
+        T::Lower: FloatLike,
+    {
+        ThreeMomentum {
+            px: self.px.lower(),
+            py: self.py.lower(),
+            pz: self.pz.lower(),
+        }
+    }
 }
 
 impl<T: FloatLike> From<ThreeMomentum<T>> for ThreeMomentum<F<T>> {
@@ -778,6 +822,30 @@ impl<T: FloatLike, U: FloatLike> From<FourMomentum<T, U>> for FourMomentum<F<T>,
     }
 }
 
+impl<T: FloatLike, U: FloatLike> FourMomentum<F<T>, F<U>> {
+    pub fn higher(&self) -> FourMomentum<F<T::Higher>, F<U::Higher>>
+    where
+        T::Higher: FloatLike,
+        U::Higher: FloatLike,
+    {
+        FourMomentum {
+            temporal: self.temporal.higher(),
+            spatial: self.spatial.higher(),
+        }
+    }
+
+    pub fn lower(&self) -> FourMomentum<F<T::Lower>, F<U::Lower>>
+    where
+        T::Lower: FloatLike,
+        U::Lower: FloatLike,
+    {
+        FourMomentum {
+            temporal: self.temporal.lower(),
+            spatial: self.spatial.lower(),
+        }
+    }
+}
+
 impl<T, U> FourMomentum<T, U> {
     pub fn new(energy: Energy<U>, three_momentum: ThreeMomentum<T>) -> Self {
         FourMomentum {
@@ -952,13 +1020,13 @@ impl<T> IntoIterator for FourMomentum<T> {
     type IntoIter = std::array::IntoIter<T, 4>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let [E, px, py, pz] = [
+        let [e, px, py, pz] = [
             self.spatial.px,
             self.spatial.py,
             self.spatial.pz,
             self.temporal.value,
         ];
-        [E, px, py, pz].into_iter()
+        [e, px, py, pz].into_iter()
     }
 }
 

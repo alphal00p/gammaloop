@@ -1,5 +1,4 @@
 use color_eyre::Report;
-use nalgebra::Scalar;
 use smallvec::SmallVec;
 use std::ops::{Add, Index, IndexMut, Mul, Sub};
 use symbolica::domains::float::{NumericalFloatComparison, NumericalFloatLike, Real};
@@ -243,7 +242,7 @@ pub struct DecompositionResult<T> {
 #[cfg(test)]
 mod tests {
     use crate::utils::assert_approx_eq;
-    use crate::utils::f128; //FIXME: add f128 back
+     //FIXME: add f128 back
 
     use super::*;
     const EPSILON: F<f64> = F(1e-12);
@@ -322,7 +321,7 @@ mod tests {
                 assert_approx_eq(
                     &identity[(row, col)],
                     if row == col { &one } else { &zero },
-                    &EPSILON.into(),
+                    &EPSILON,
                 );
             }
         }

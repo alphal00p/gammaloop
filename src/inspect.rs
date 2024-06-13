@@ -2,10 +2,10 @@ use colored::Colorize;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use symbolica::domains::float::Complex;
+use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::Sample;
 
 use crate::integrands::HasIntegrand;
-use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
 use crate::utils;
 use crate::utils::f128;
@@ -30,16 +30,16 @@ pub fn inspect(
     let xs_f128 = if is_momentum_space {
         let (xs, inv_jac) = utils::global_inv_parameterize::<f128>(
             &pt.chunks_exact_mut(3)
-                .map(|x| ThreeMomentum::new(x[0], x[1], x[2]))
+                .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
                 .collect::<Vec<ThreeMomentum<F<f128>>>>(),
-            (settings.kinematics.e_cm * settings.kinematics.e_cm).into(),
+            settings.kinematics.e_cm.square().higher(),
             settings,
             force_radius,
         );
         if settings.general.debug > 1 {
             info!(
                 "f128 sampling jacobian for this point = {:+.32e}",
-                F(1.) / inv_jac
+                inv_jac.inv()
             );
         };
         xs

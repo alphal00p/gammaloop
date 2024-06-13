@@ -137,7 +137,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
                         "f128 Upcasted x-space sample : ( {} )",
                         sample_xs_f128
                             .iter()
-                            .map(|&x| format!("{:+e}", x))
+                            .map(|x| format!("{:+e}", x))
                             .collect::<Vec<_>>()
                             .join(", ")
                     );

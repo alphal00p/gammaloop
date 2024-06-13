@@ -562,6 +562,7 @@ pub mod tropical_parameterization {
             random_number
         }
 
+        #[allow(dead_code)]
         fn one(&self) -> T
         where
             T: Real,

@@ -13,15 +13,14 @@ use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::tropical::tropical_parameterization::{self};
 use crate::utils::{
     f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
-    F,
+    PrecisionUpgradable, F,
 };
 use crate::{DiscreteGraphSamplingSettings, IntegratedPhase, SamplingSettings, Settings};
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
 use spenso::IsZero;
-use symbolica::domains::float::{Complex, NumericalFloatComparison, NumericalFloatLike, Real};
-use symbolica::domains::rational::Rational;
+use symbolica::domains::float::{Complex, NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 
 /// Trait to capture the common behaviour of amplitudes and cross sections
@@ -688,8 +687,8 @@ impl GammaLoopIntegrand {
                 }
             },
             Precision::Quad => {
-                let sample_point_f128 = sample_point.cast_sample::<f128>();
-                let rotated_sample_point_f128 = rotated_sample_point.cast_sample::<f128>();
+                let sample_point_f128 = sample_point.higher_precision();
+                let rotated_sample_point_f128 = rotated_sample_point.higher_precision();
 
                 match &self.graph_integrands {
                     GraphIntegrands::Amplitude(graph_integrands) => {
@@ -698,7 +697,7 @@ impl GammaLoopIntegrand {
                         let rotated_result =
                             evaluate(graph_integrands, &rotated_sample_point_f128, &self.settings);
 
-                        (result.into(), rotated_result.into())
+                        (result.lower(), rotated_result.lower())
                     }
                     GraphIntegrands::CrossSection(graph_integrands) => {
                         let result = evaluate(graph_integrands, &sample_point_f128, &self.settings);
@@ -706,7 +705,7 @@ impl GammaLoopIntegrand {
                         let rotated_result =
                             evaluate(graph_integrands, &sample_point_f128, &self.settings);
 
-                        (result.into(), rotated_result.into())
+                        (result.lower(), rotated_result.lower())
                     }
                 }
             }
@@ -803,7 +802,7 @@ impl GammaLoopIntegrand {
                         let (loop_moms, jacobian) = if jacobian_f64.is_nan() {
                             let xs_f128 = xs.iter().map(|x| F::<f128>::from_ff64(*x)).collect_vec();
                             let external_moms_f128 =
-                                external_moms.iter().map(FourMomentum::cast).collect_vec();
+                                external_moms.iter().map(FourMomentum::higher).collect_vec();
 
                             let (loop_moms_f128, jacobian_f128) =
                                 tropical_parameterization::generate_tropical_sample(
@@ -814,8 +813,10 @@ impl GammaLoopIntegrand {
                                 )
                                 .unwrap();
 
-                            let loop_moms =
-                                loop_moms_f128.iter().map(ThreeMomentum::cast).collect_vec();
+                            let loop_moms = loop_moms_f128
+                                .iter()
+                                .map(ThreeMomentum::lower)
+                                .collect_vec();
                             let jacobian = (jacobian_f128).into_ff64();
 
                             (loop_moms, jacobian)
@@ -979,6 +980,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn one(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.one(),
@@ -1026,6 +1028,44 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
                 graph_id: *graph_id,
                 sample: sample.cast_sample(),
+            },
+        }
+    }
+
+    fn higher_precision(&self) -> GammaLoopSample<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.higher_precision()),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.higher_precision(),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
+                graph_id: *graph_id,
+                sample: sample.higher_precision(),
+            },
+        }
+    }
+
+    fn lower_precision(&self) -> GammaLoopSample<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.lower_precision()),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.lower_precision(),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
+                graph_id: *graph_id,
+                sample: sample.lower_precision(),
             },
         }
     }
@@ -1092,6 +1132,44 @@ impl<T: FloatLike> DefaultSample<T> {
                 .external_moms
                 .iter()
                 .map(FourMomentum::cast)
+                .collect_vec(),
+            jacobian: self.jacobian,
+        }
+    }
+
+    fn higher_precision(&self) -> DefaultSample<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
+        DefaultSample {
+            loop_moms: self
+                .loop_moms
+                .iter()
+                .map(ThreeMomentum::higher)
+                .collect_vec(),
+            external_moms: self
+                .external_moms
+                .iter()
+                .map(FourMomentum::higher)
+                .collect_vec(),
+            jacobian: self.jacobian,
+        }
+    }
+
+    fn lower_precision(&self) -> DefaultSample<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
+        DefaultSample {
+            loop_moms: self
+                .loop_moms
+                .iter()
+                .map(ThreeMomentum::lower)
+                .collect_vec(),
+            external_moms: self
+                .external_moms
+                .iter()
+                .map(FourMomentum::lower)
                 .collect_vec(),
             jacobian: self.jacobian,
         }
@@ -1191,6 +1269,64 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 alpha: *alpha,
                 channel_id: *channel_id,
                 sample: sample.cast_sample(),
+            },
+        }
+    }
+
+    fn higher_precision(&self) -> DiscreteGraphSample<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
+        match self {
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.higher_precision())
+            }
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.higher_precision(),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.higher_precision())
+            }
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: *alpha,
+                channel_id: *channel_id,
+                sample: sample.higher_precision(),
+            },
+        }
+    }
+
+    fn lower_precision(&self) -> DiscreteGraphSample<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
+        match self {
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.lower_precision())
+            }
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.lower_precision(),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.lower_precision())
+            }
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: *alpha,
+                channel_id: *channel_id,
+                sample: sample.lower_precision(),
             },
         }
     }

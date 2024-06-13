@@ -3,10 +3,10 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
     momentum::{Energy, FourMomentum, ThreeMomentum},
-    numerator::{apply_replacements, generate_numerator},
+    numerator::{generate_numerator},
     tropical::{self, TropicalSubgraphTable},
     utils::{
-        compute_four_momentum_from_three, compute_three_momentum_from_four, powi, FloatLike, F,
+        compute_four_momentum_from_three, compute_three_momentum_from_four, FloatLike, F,
     },
 };
 
@@ -28,8 +28,7 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use symbolica::{
     atom::{Atom, AtomView, Symbol},
     domains::{
-        atom,
-        float::{Complex, NumericalFloatComparison, NumericalFloatLike, Real},
+        float::{Complex, NumericalFloatLike},
     },
     id::Pattern,
     state::State,
@@ -1284,7 +1283,7 @@ impl Graph {
             })
             .collect_vec();
 
-        let mut numerator = self.derived_data.numerator.as_ref().unwrap().clone();
+        let numerator = self.derived_data.numerator.as_ref().unwrap().clone();
 
         let numerator_network = if let AtomView::Mul(mul) = numerator.as_view() {
             SymbolicTensor::mul_to_network(mul)
@@ -1390,8 +1389,7 @@ impl Graph {
                         loop_moms,
                         external_moms,
                         lmb_specification,
-                    )
-                    .into_iter(),
+                    ),
                 )
                 .map(|(cff, num)| cff * num)
                 .reduce(|acc, e| acc + &e)

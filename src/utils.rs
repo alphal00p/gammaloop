@@ -2,30 +2,29 @@ use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use colored::Colorize;
-use funty::Fundamental;
-use hyperdual::Hyperdual;
+
 use itertools::{izip, Itertools};
-use pprof::flamegraph::defaults::SEARCH_COLOR;
 use rand::Rng;
 use ref_ops::{
-    RefAdd, RefDiv, RefMul, RefMutAdd, RefMutDiv, RefMutMul, RefMutNeg, RefMutSub, RefNeg, RefSub,
+    RefAdd, RefDiv, RefMul, RefNeg, RefSub,
 };
+use rug::float::Constant;
+use rug::ops::CompleteRound;
+use rug::Float;
 use serde::{Deserialize, Serialize};
-use spenso::{ContractableWith, RefZero, TrySmallestUpgrade};
+use spenso::{RefZero, TrySmallestUpgrade};
 use symbolica::domains::float::{
     Complex, ConstructibleFloat, NumericalFloatComparison, NumericalFloatLike,
 };
 // use spenso::Complex;
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
+
 use std::fmt::Debug;
-use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use std::path::Display;
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
-use symbolica::poly::groebner::Echelonize;
 // use symbolica::domains::Field;
 use symbolica::numerical_integration::Sample;
 
@@ -62,13 +61,6 @@ pub trait FloatConvertFrom<U> {
     fn convert_from(x: &U) -> Self;
 }
 
-impl FloatConvertFrom<f64> for f64 {
-    fn convert_from(x: &f64) -> f64 {
-        *x
-    }
-}
-
-// impl FloatConvertFrom<f128::f128> for f64 {
 //     fn convert_from(x: &f128::f128) -> f64 {
 //         (*x).to_f64().unwrap()
 //     }
@@ -86,12 +78,407 @@ impl FloatConvertFrom<f64> for f64 {
 //     }
 // }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq,PartialOrd)]
 pub struct VarFloat<const N: u32> {
     float: rug::Float,
 }
 
+impl<const N:u32> From<Float> for VarFloat<N> {
+    fn from(x: Float) -> Self {
+        VarFloat {
+            float: rug::Float::with_val(N, x),
+        }
+    }
+}
+
+impl<const N: u32> std::ops::Mul for VarFloat<N> {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        (self.float * rhs.float).into()
+    }
+}
+
+impl<const N: u32> std::ops::Mul<&VarFloat<N>> for VarFloat<N> {
+    type Output = Self;
+
+    fn mul(self, rhs: &Self) -> Self::Output {
+        (self.float * &rhs.float).into()
+    }
+}
+
+impl<'a,const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn mul(self, rhs: VarFloat<N>) -> Self::Output {
+        (rhs.float*&self.float).into()
+    }
+}
+
+impl<'a,const N: u32> std::ops::Mul<&VarFloat<N>> for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn mul(self, rhs: &VarFloat<N>) -> Self::Output {
+        (&rhs.float*&self.float).complete(N).into()
+    }
+}
+
+impl<const N: u32> std::ops::MulAssign for VarFloat<N> {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.float *= rhs.float;
+        self.float.set_prec(N);
+    }
+}
+
+impl<const N: u32> std::ops::MulAssign<&VarFloat<N>> for VarFloat<N> {
+    fn mul_assign(&mut self, rhs: &Self) {
+        self.float *= &rhs.float;
+        self.float.set_prec(N);
+    }
+}
+
+impl<const N: u32> std::ops::Add for VarFloat<N> {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        (self.float + rhs.float).into()
+    }
+}
+
+impl<const N: u32> std::ops::Add<&VarFloat<N>> for VarFloat<N> {
+    type Output = Self;
+
+    fn add(self, rhs: &Self) -> Self::Output {
+        (self.float + &rhs.float).into()
+    }
+}
+
+impl<'a,const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn add(self, rhs: VarFloat<N>) -> Self::Output {
+        (rhs.float+&self.float).into()
+    }
+}
+
+impl<'a,const N: u32> std::ops::Add<&VarFloat<N>> for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn add(self, rhs: &VarFloat<N>) -> Self::Output {
+        (&rhs.float+&self.float).complete(N).into()
+    }
+}
+
+impl<const N: u32> std::ops::AddAssign for VarFloat<N> {
+    fn add_assign(&mut self, rhs: Self) {
+        self.float += rhs.float;
+        self.float.set_prec(N);
+    }
+}
+
+impl<const N: u32> std::ops::AddAssign<&VarFloat<N>> for VarFloat<N> {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.float += &rhs.float;
+        self.float.set_prec(N);
+    }
+}
+
+impl<const N: u32> std::ops::Sub for VarFloat<N> {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        (self.float - rhs.float).into()
+    }
+}
+
+impl<const N: u32> std::ops::Sub<&VarFloat<N>> for VarFloat<N> {
+    type Output = Self;
+
+    fn sub(self, rhs: &Self) -> Self::Output {
+        (self.float - &rhs.float).into()
+    }
+}
+
+impl<'a,const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn sub(self, rhs: VarFloat<N>) -> Self::Output {
+        (rhs.float-&self.float).into()
+    }
+}
+
+impl<'a,const N: u32> std::ops::Sub<&VarFloat<N>> for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn sub(self, rhs: &VarFloat<N>) -> Self::Output {
+        (&rhs.float-&self.float).complete(N).into()
+    }
+}
+
+impl<const N: u32> std::ops::SubAssign for VarFloat<N> {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.float -= rhs.float;
+        self.float.set_prec(N);
+    }
+}
+
+impl<const N: u32> std::ops::SubAssign<&VarFloat<N>> for VarFloat<N> {
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.float -= &rhs.float;
+        self.float.set_prec(N);
+    }
+}
+
+impl<const N: u32> Div for VarFloat<N> {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        (self.float / rhs.float).into()
+    }
+}
+
+impl<const N: u32> Div<&VarFloat<N>> for VarFloat<N> {
+    type Output = Self;
+
+    fn div(self, rhs: &Self) -> Self::Output {
+        (self.float / &rhs.float).into()
+    }
+}
+
+impl<'a,const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn div(self, rhs: VarFloat<N>) -> Self::Output {
+        (rhs.float/&self.float).into()
+    }
+}
+
+impl<'a,const N: u32> Div<&VarFloat<N>> for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn div(self, rhs: &VarFloat<N>) -> Self::Output {
+        (&rhs.float/&self.float).complete(N).into()
+    }
+}
+
+impl<const N: u32> std::ops::DivAssign for VarFloat<N> {
+    fn div_assign(&mut self, rhs: Self) {
+        self.float /= rhs.float;
+        self.float.set_prec(N);
+    }
+}
+
+impl<const N: u32> std::ops::DivAssign<&VarFloat<N>> for VarFloat<N> {
+    fn div_assign(&mut self, rhs: &Self) {
+        self.float /= &rhs.float;
+        self.float.set_prec(N);
+    }
+}
+
+impl<const N: u32> std::ops::Neg for VarFloat<N> {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        (-self.float).into()
+    }
+}
+
+impl<'a,const N: u32> std::ops::Neg for &'a VarFloat<N> {
+    type Output = VarFloat<N>;
+
+    fn neg(self) -> Self::Output {
+        (-&self.float).complete(N).into()
+    }
+}
+
+impl<const N: u32> std::fmt::Display for VarFloat<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.float)
+    }
+}
+
+impl<const N: u32> std::fmt::LowerExp for VarFloat<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:e}", self.float)
+    }
+}
+
+
+
+
+impl<const N:u32> NumericalFloatLike for VarFloat<N>{
+    fn mul_add(&self, a: &Self, b: &Self) -> Self {
+        (&self.float*&a.float+&b.float).complete(N).into()  
+    }
+
+    fn norm(&self) -> Self {
+        self.float.norm().into()
+    }
+
+    fn from_i64(&self, a: i64) -> Self {
+        self.float.from_i64(a).into()  
+    }
+
+    fn from_usize(&self, a: usize) -> Self {
+        self.float.from_usize(a).into()  
+    }
+
+    fn get_precision(&self) -> u32 {
+        N
+    }
+
+    fn zero(&self) -> Self {
+        self.float.zero().into()
+    }
+
+    fn one(&self) -> Self {
+        self.float.one().into()
+    }   
+
+    fn new_zero() -> Self {
+        Float::new_zero().into()
+    }
+
+    fn inv(&self) -> Self {
+        self.float.inv().into()
+    }
+
+    fn pow(&self, e: u64) -> Self {
+        self.float.pow(e).into()
+    }
+
+    fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
+        self.float.sample_unit(rng).into()  
+    }
+
+}
+
+impl<const N:u32> NumericalFloatComparison for VarFloat<N> {
+    fn is_finite(&self) -> bool {
+        self.float.is_finite()
+    }
+
+    fn is_one(&self) -> bool {
+        self.float.is_one()
+    }
+
+    fn is_zero(&self) -> bool {
+        self.float.is_zero()
+    }
+
+    fn max(&self, other: &Self) -> Self {
+        self.float.clone().max(&other.float).into() 
+    }
+
+    fn to_f64(&self) -> f64 {
+        self.float.to_f64()
+    }
+
+    fn to_usize_clamped(&self) -> usize {
+        self.float.to_usize_clamped()
+    }
+    
+}
+
+
+impl<const N:u32> Real for VarFloat<N> {
+
+    fn atan2(&self, x: &Self) -> Self {
+        self.float.clone().atan2(&x.float).into()
+    }
+
+    fn powf(&self, e: Self) -> Self {
+        self.float.powf(e.float).into()
+    }
+
+    delegate! {
+        #[into]
+        to self.float.clone(){
+            fn sqrt(&self) -> Self;
+            fn log(&self) -> Self;
+            fn exp(&self) -> Self;
+            fn sin(&self) -> Self;
+            fn cos(&self) -> Self;
+            fn tan(&self) -> Self;
+            fn asin(&self) -> Self;
+            fn acos(&self) -> Self;
+            fn sinh(&self) -> Self;
+            fn cosh(&self) -> Self;
+            fn tanh(&self) -> Self;
+            fn asinh(&self) -> Self;
+            fn acosh(&self) -> Self;
+            fn atanh(&self) -> Self;    
+        }
+    }
+}
+
+impl FloatLike for VarFloat<113>{
+    fn E(&self) -> Self {
+        Self::E()
+    }
+
+    fn FRAC_1_PI(&self) -> Self {
+        Self::FRAC_1_PI()
+    }
+
+    fn PI(&self) -> Self {
+        Self::PI()
+    }
+
+    fn TAU(&self) -> Self {
+        Self::TAU()
+    }
+
+    fn from_f64(x: f64) -> Self {
+        VarFloat::from_f64(x)
+    }
+
+    fn into_f64(&self) -> f64 {
+        self.to_f64()
+    }
+
+    fn is_nan(&self) -> bool {
+        self.float.is_nan()
+    }
+
+    fn is_infinite(&self) -> bool {
+        self.float.is_infinite()
+    }
+
+    fn floor(&self) -> Self {
+        self.float.clone().floor().into()
+    }
+}
+
 impl<const N: u32> VarFloat<N> {
+
+    fn one() -> Self {
+        VarFloat {
+            float: rug::Float::with_val(N, 1.0),
+        }
+    }
+
+    fn E() -> Self {
+        Self::one().exp()
+    }
+
+    fn PI() -> Self {
+        VarFloat {
+            float: rug::Float::with_val(N, Constant::Pi),
+        }
+    }
+
+    fn TAU() -> Self {
+        Self::PI()+Self::PI()
+    }
+
+    fn FRAC_1_PI() -> Self {
+        Self::PI().inv()
+    }
+
+
+
+
     pub fn from_f64(x: f64) -> Self {
         VarFloat {
             float: rug::Float::with_val(N, x),
@@ -111,56 +498,46 @@ impl<const N: u32> Default for VarFloat<N> {
     }
 }
 
-impl<const N: u32> std::ops::Mul for VarFloat<N> {
-    type Output = Self;
+impl PrecisionUpgradable for f128 {
+    type Higher = f128;
+    type Lower = f64;
 
-    fn mul(self, rhs: Self) -> Self::Output {
-        VarFloat {
-            float: rug::Float::with_val(N, self.float * rhs.float),
-        }
+    fn higher(&self) -> Self::Higher {
+        self.clone()
+    }
+
+    fn lower(&self) -> Self::Lower {
+        self.to_f64()
+    }
+    
+}
+
+impl<T:Real+PrecisionUpgradable,H:Real,L:Real> PrecisionUpgradable for Complex<T> where T: PrecisionUpgradable<Higher = H, Lower = L> {
+    type Higher = Complex<H>;
+    type Lower = Complex<L>;
+
+    fn higher(&self) -> Self::Higher {
+        Complex::new(self.re.higher(),self.im.higher())
+    }
+
+    fn lower(&self) -> Self::Lower {
+        Complex::new(self.re.lower(),self.im.lower())
     }
 }
 
-impl<const N: u32> std::ops::Add for VarFloat<N> {
-    type Output = Self;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        VarFloat {
-            float: rug::Float::with_val(N, self.float + rhs.float),
-        }
-    }
-}
-
-impl<const N: u32> std::iter::Sum for VarFloat<N> {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Self::default(), |a, b| a + b)
-    }
-}
 
 // #[allow(non_camel_case_types)]
 // pub type f128 = VarFloat<113>;
 
-pub trait EvalFloat: Debug {
-    type Higher: EvalFloat;
-    type Lower: EvalFloat;
-    fn from_f64(x: f64) -> Self;
-    fn higher(self) -> Self::Higher;
-    fn lower(self) -> Self::Lower;
+pub trait PrecisionUpgradable {
+    type Higher;
+    type Lower;
+
+    fn higher(&self) -> Self::Higher;
+    fn lower(&self) -> Self::Lower;
 }
 
-impl EvalFloat for f64 {
-    type Higher = f128;
-    type Lower = f64;
-    fn from_f64(x: f64) -> Self {
-        x
-    }
-    fn higher(self) -> Self::Higher {
-        <Self::Higher as EvalFloat>::from_f64(self)
-    }
-    fn lower(self) -> Self::Lower {
-        self
-    }
-}
 
 pub trait FloatLike:
     Real
@@ -183,12 +560,9 @@ pub trait FloatLike:
     // + RefMutDiv<Self, Output = Self>
     + RefNeg<Output = Self>
     // + RefMutNeg<Output = Self> f64 doesn't have RefMutNeg
+    + PrecisionUpgradable
 {
-    type Higher: FloatLike;
-    type Lower: FloatLike;
-
-    fn higher(&self) -> Self::Higher;
-    fn lower(&self) -> Self::Lower;
+    
 
     
     #[allow(non_snake_case)]
@@ -215,7 +589,7 @@ pub trait FloatLike:
     }
 
     fn powi(&self, n: i32) -> Self {
-        let absn = n.abs() as u64;
+        let absn = n.unsigned_abs() as u64;
         if n.is_negative() {
             self.pow(absn).inv()
         } else {
@@ -248,8 +622,24 @@ pub trait FloatLike:
     }
 }
 
+
+
+
 #[derive(Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize)]
 pub struct F<T: FloatLike>(pub T);
+
+impl<T: FloatLike> PrecisionUpgradable for F<T> where T::Higher: FloatLike, T::Lower: FloatLike{
+    type Higher = F<T::Higher>;
+    type Lower = F<T::Lower>;
+
+    fn higher(&self) -> Self::Higher {
+        F(self.0.higher())
+    }
+
+    fn lower(&self) -> Self::Lower {
+        F(self.0.lower())
+    }
+}
 
 
 impl<T:FloatLike> RefZero for F<T> {
@@ -387,11 +777,11 @@ impl<T: FloatLike> F<T> {
         F(T::from_f64(x.0))
     }
 
-    pub fn higher(&self) -> F<T::Higher> {
+    pub fn higher(&self) -> F<T::Higher> where T::Higher: FloatLike {
         F(self.0.higher())
     }
 
-    pub fn lower(&self) -> F<T::Lower> {
+    pub fn lower(&self) -> F<T::Lower> where T::Lower: FloatLike{
         F(self.0.lower())
     }
 
@@ -456,14 +846,14 @@ impl<T: FloatLike> Add<&F<T>> for F<T> {
 impl<'a, T: FloatLike> Add<&F<T>> for &'a F<T> {
     type Output = F<T>;
     fn add(self, rhs: &F<T>) -> Self::Output {
-        F((&self.0).ref_add(&rhs.0))
+        F(self.0.ref_add(&rhs.0))
     }
 }
 
 impl<'a, T: FloatLike> Add<F<T>> for &'a F<T> {
     type Output = F<T>;
     fn add(self, rhs: F<T>) -> Self::Output {
-        F((&self.0).ref_add(rhs.0))
+        F(self.0.ref_add(rhs.0))
     }
 }
 
@@ -496,14 +886,14 @@ impl<T: FloatLike> Sub<&F<T>> for F<T> {
 impl<'a, T: FloatLike> Sub<&F<T>> for &'a F<T> {
     type Output = F<T>;
     fn sub(self, rhs: &F<T>) -> Self::Output {
-        F((&self.0).ref_sub(&rhs.0))
+        F(self.0.ref_sub(&rhs.0))
     }
 }
 
 impl<'a, T: FloatLike> Sub<F<T>> for &'a F<T> {
     type Output = F<T>;
     fn sub(self, rhs: F<T>) -> Self::Output {
-        F((&self.0).ref_sub(rhs.0))
+        F(self.0.ref_sub(rhs.0))
     }
 }
 
@@ -536,14 +926,14 @@ impl<T: FloatLike> Mul<&F<T>> for F<T> {
 impl<'a, T: FloatLike> Mul<&F<T>> for &'a F<T> {
     type Output = F<T>;
     fn mul(self, rhs: &F<T>) -> Self::Output {
-        F((&self.0).ref_mul(&rhs.0))
+        F(self.0.ref_mul(&rhs.0))
     }
 }
 
 impl<'a, T: FloatLike> Mul<F<T>> for &'a F<T> {
     type Output = F<T>;
     fn mul(self, rhs: F<T>) -> Self::Output {
-        F((&self.0).ref_mul(rhs.0))
+        F(self.0.ref_mul(rhs.0))
     }
 }
 
@@ -576,14 +966,14 @@ impl<T: FloatLike> Div<&F<T>> for F<T> {
 impl<'a, T: FloatLike> Div<&F<T>> for &'a F<T> {
     type Output = F<T>;
     fn div(self, rhs: &F<T>) -> Self::Output {
-        F((&self.0).ref_div(&rhs.0))
+        F(self.0.ref_div(&rhs.0))
     }
 }
 
 impl<'a, T: FloatLike> Div<F<T>> for &'a F<T> {
     type Output = F<T>;
     fn div(self, rhs: F<T>) -> Self::Output {
-        F((&self.0).ref_div(rhs.0))
+        F(self.0.ref_div(rhs.0))
     }
 }
 
@@ -628,19 +1018,23 @@ impl<T: FloatLike> RefDefault for F<T> {
         F(self.0.default())
     }
 }
-
-impl FloatLike for f64 {
-
+impl PrecisionUpgradable for f64 {
     type Higher = f128;
     type Lower = f64;
 
     fn higher(&self) -> Self::Higher {
-        self.to_f64()
+        f128::from_f64(*self)
     }
 
     fn lower(&self) -> Self::Lower {
         *self
     }
+    
+}
+
+impl FloatLike for f64 {
+
+    
 
     fn PI(&self) -> Self {
         std::f64::consts::PI
@@ -680,7 +1074,7 @@ impl FloatLike for f64 {
 }
 
 #[allow(non_camel_case_types)]
-pub type f128 = f64;
+pub type f128 = VarFloat<113>;  
 
 /// An iterator which iterates two other iterators simultaneously
 #[derive(Clone, Debug)]
@@ -1034,7 +1428,7 @@ pub fn h<T: FloatLike>(
     let power = h_function_settings.power;
     match h_function_settings.function {
         crate::HFunction::Exponential => {
-            (-((&t).square()) / ((&sig).square())).exp() * F::<T>::from_f64(2_f64) / (sqrt_pi * &sig)
+            (-(t.square()) / (sig.square())).exp() * F::<T>::from_f64(2_f64) / (sqrt_pi * &sig)
         }
         crate::HFunction::PolyExponential => {
             // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
@@ -1290,7 +1684,7 @@ pub fn compute_three_momentum_from_four<T: FloatLike>(
         .iter()
         .map(|m| m.spatial.clone())
         .collect_vec();
-    compute_momentum(signature, &loop_moms, &external_moms)
+    compute_momentum(signature, loop_moms, &external_moms)
 }
 
 // Bilinear form for E-surface defined as sqrt[(k+p1)^2+m1sq] + sqrt[(k+p2)^2+m2sq] + e_shift
