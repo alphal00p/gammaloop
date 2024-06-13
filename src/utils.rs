@@ -111,7 +111,7 @@ impl<'a,const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: VarFloat<N>) -> Self::Output {
-        (rhs.float*&self.float).into()
+        (&self.float*&rhs.float).complete(N).into()
     }
 }
 
@@ -119,7 +119,7 @@ impl<'a,const N: u32> std::ops::Mul<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&rhs.float*&self.float).complete(N).into()
+        (&self.float*&rhs.float).complete(N).into()
     }
 }
 
@@ -157,7 +157,7 @@ impl<'a,const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: VarFloat<N>) -> Self::Output {
-        (rhs.float+&self.float).into()
+        (&self.float+&rhs.float).complete(N).into()
     }
 }
 
@@ -165,7 +165,7 @@ impl<'a,const N: u32> std::ops::Add<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&rhs.float+&self.float).complete(N).into()
+        (&self.float+&rhs.float).complete(N).into()
     }
 }
 
@@ -203,7 +203,7 @@ impl<'a,const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: VarFloat<N>) -> Self::Output {
-        (rhs.float-&self.float).into()
+        (&self.float-&rhs.float).complete(N).into()
     }
 }
 
@@ -211,7 +211,7 @@ impl<'a,const N: u32> std::ops::Sub<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&rhs.float-&self.float).complete(N).into()
+        (&self.float-&rhs.float).complete(N).into()
     }
 }
 
@@ -249,7 +249,7 @@ impl<'a,const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: VarFloat<N>) -> Self::Output {
-        (rhs.float/&self.float).into()
+        (&self.float/&rhs.float).complete(N).into()
     }
 }
 
@@ -257,7 +257,7 @@ impl<'a,const N: u32> Div<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&rhs.float/&self.float).complete(N).into()
+        (&self.float/&rhs.float).complete(N).into()
     }
 }
 
@@ -528,7 +528,7 @@ impl<T:Real+PrecisionUpgradable,H:Real,L:Real> PrecisionUpgradable for Complex<T
 
 
 // #[allow(non_camel_case_types)]
-// pub type f128 = VarFloat<113>;
+// pub type f256 = VarFloat<243>;
 
 pub trait PrecisionUpgradable {
     type Higher;
@@ -1480,10 +1480,19 @@ pub fn h<T: FloatLike>(
                     power.unwrap()
                 ),
             };
+
+            println!("normalisation: {}", normalisation);
+            println!("t: {}", t);
+            println!("sig: {}", sig);
+            println!("power: {:?}", power);
+
+
             let prefactor = match power {
                 None | Some(0) => normalisation.inv(),
                 Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
             };
+
+            println!("prefactor: {}", prefactor);
             prefactor
                 * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig)).exp()
         }
