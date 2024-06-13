@@ -12,7 +12,9 @@ use color_eyre::Report;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+
 use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
+
 
 use log::debug;
 

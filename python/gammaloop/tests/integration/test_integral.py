@@ -2,11 +2,7 @@
 from gammaloop.tests.common import get_gamma_loop_interpreter, check_integration_result
 import gammaloop.interface.gammaloop_interface as gl_interface
 from pathlib import Path
-
-
-max_mc_error_dif = 5.0
-max_rel_error_dif = 0.01
-max_percent_error = 0.01
+import pytest
 
 
 class TestScalarTopologies:
@@ -34,7 +30,7 @@ class TestScalarTopologies:
 
         gl.run(command_list)
         check_integration_result(
-            True, target, scalar_massless_triangle_export)
+            target, scalar_massless_triangle_export, imag_phase=True)
 
     def test_tree_triangle(self, scalar_tree_triangle_export: Path):
         target = 0.00009765455799148221 / -49
@@ -54,7 +50,7 @@ class TestScalarTopologies:
 
         gl.run(command_list)
         check_integration_result(
-            True, target, scalar_tree_triangle_export)
+            target, scalar_tree_triangle_export, imag_phase=True)
 
     def test_ltd_topology_f(self, scalar_ltd_topology_f_export: Path):
         target = -0.00000526647
@@ -74,7 +70,7 @@ class TestScalarTopologies:
         gl.run(command_list)
 
         check_integration_result(
-            True, target, scalar_ltd_topology_f_export)
+            target, scalar_ltd_topology_f_export, imag_phase=True)
 
     def test_ltd_topology_h(self, scalar_ltd_topology_h_export: Path):
         target = -8.36515e-8
@@ -93,4 +89,81 @@ class TestScalarTopologies:
 
         gl.run(command_list)
         check_integration_result(
-            False, target, scalar_ltd_topology_h_export)
+            target, scalar_ltd_topology_h_export, imag_phase=False)
+
+    def test_scalar_3L_6P_topology_A_with_tropical_sampling(self, scalar_3L_6P_topology_A_export: Path):
+
+        gl = get_gamma_loop_interpreter()
+
+        command_list = gl_interface.CommandList.from_string(
+            "launch {}".format(scalar_3L_6P_topology_A_export))
+
+        command_list.add_command(
+            "set externals.momenta [\
+[5.,0.,0.,5.],\
+[-5.,0.,0.,5.],\
+[8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\
+[3.283294192270986e0,-1.038496118834563e0,-3.019337553895401e0,7.649492138716588e-1],\
+[1.523581094674306e0,-1.058809596665922e0,-9.770963832697570e-1,4.954838522679282e-1],\
+[4.307611382509676e0,2.318312618377385e0,3.595630405248305e0,-5.023787565702210e-1],\
+]")
+        command_list.add_command("set_model_param mass_scalar_1 172.0")
+
+        command_list.add_command("set integrated_phase 'imag'")
+        command_list.add_command("set e_cm 1.")
+        command_list.add_command(
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
+        command_list.add_command("set n_start 5000")
+        command_list.add_command("set n_max 10000")
+        command_list.add_command("set seed 1")
+        command_list.add_command("integrate scalar_3L_6P_topology_A -r")
+
+        gl.run(command_list)
+        check_integration_result(
+            0., scalar_3L_6P_topology_A_export, imag_phase=False)
+        # This target is approximate, actual reference run showed 2.8555(17)e-36
+        check_integration_result(
+            2.8555e-36, scalar_3L_6P_topology_A_export, imag_phase=True, max_mc_error_diff=5.0, max_rel_error_diff=0.2, max_percent_error=0.2)
+
+
+class TestPhysicalTopologies:
+
+    @pytest.mark.slow
+    def test_physical_3L_6photons_topology_A_with_tropical_sampling(self, physical_3L_6photons_topology_A_export: Path):
+        ######################################################################
+        # TODO This test will need to be updated once numerators are supported!
+        ######################################################################
+
+        gl = get_gamma_loop_interpreter()
+
+        command_list = gl_interface.CommandList.from_string(
+            "launch {}".format(physical_3L_6photons_topology_A_export))
+        command_list.add_command(
+            "set externals.momenta [\
+[5.,0.,0.,5.],\
+[-5.,0.,0.,5.],\
+[8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\
+[3.283294192270986e0,-1.038496118834563e0,-3.019337553895401e0,7.649492138716588e-1],\
+[1.523581094674306e0,-1.058809596665922e0,-9.770963832697570e-1,4.954838522679282e-1],\
+[4.307611382509676e0,2.318312618377385e0,3.595630405248305e0,-5.023787565702210e-1],\
+]")
+        ######################################################################
+        # TODO Helicity data choice will need to be supplied here as well.
+        ######################################################################
+        command_list.add_command("set integrated_phase 'imag'")
+        command_list.add_command("set e_cm 1.")
+        command_list.add_command(
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
+        command_list.add_command("set n_start 5000")
+        command_list.add_command("set n_max 10000")
+        command_list.add_command("set seed 1")
+        command_list.add_command(
+            "integrate physical_3L_6photons_topology_A -r")
+
+        gl.run(command_list)
+
+        check_integration_result(
+            0., physical_3L_6photons_topology_A_export, imag_phase=False)
+        # TODO UPDATE This target is approximate, actual reference run showed 2.8555(17)e-36
+        check_integration_result(
+            2.8555e-36, physical_3L_6photons_topology_A_export, imag_phase=True, max_mc_error_diff=5.0, max_rel_error_diff=0.2, max_percent_error=0.2)

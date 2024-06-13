@@ -1,4 +1,6 @@
+
 use crate::utils::{self, F};
+
 use ahash::RandomState;
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
@@ -11,7 +13,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
 use symbolica::atom::{Atom, FunctionBuilder};
+
 use symbolica::domains::float::Complex;
+
 use symbolica::fun;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::State;

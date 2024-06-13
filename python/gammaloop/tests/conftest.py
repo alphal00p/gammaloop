@@ -258,6 +258,30 @@ output {output_path}"""))
 
 
 @pytest.fixture(scope="session")
+def scalar_3L_6P_topology_A_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_scalar_3L_6P_topology_A_export")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model scalars;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','scalar_3L_6P_topology_A.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def physical_3L_6photons_topology_A_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    output_path = Path(tmpdir_factory.mktemp(
+        "TEST_AMPLITUDE_scalar_3L_6P_topology_A_export")).joinpath("OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','physical_3L_6photons_topology_A.py')} -f qgraph --no_compile
+output {output_path}"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
 def compile_rust_tests() -> Path | None:
     process = Popen(['cargo', 'build', '--release', '--features=binary,fail-on-warnings', '--no-default-features',
                     '--tests', '--message-format=json'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)

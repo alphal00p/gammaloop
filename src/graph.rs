@@ -11,6 +11,7 @@ use crate::{
 };
 
 use ahash::{AHashMap, RandomState};
+
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
@@ -18,6 +19,7 @@ use itertools::Itertools;
 use log::warn;
 use nalgebra::DMatrix;
 #[allow(unused_imports)]
+
 use spenso::Contract;
 use spenso::*;
 
@@ -25,6 +27,7 @@ use core::panic;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
+
 use symbolica::{
     atom::{Atom, AtomView, Symbol},
     domains::{
@@ -33,6 +36,7 @@ use symbolica::{
     id::Pattern,
     state::State,
 };
+
 
 use constcat::concat;
 
