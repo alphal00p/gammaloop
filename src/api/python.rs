@@ -8,6 +8,7 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
+    utils::F,
     HasIntegrand, Settings,
 };
 use ahash::HashMap;
@@ -18,7 +19,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use symbolica::printer::PrintOptions;
+use symbolica::{domains::float::Complex, printer::PrintOptions};
 
 const GIT_VERSION: &str = git_version!();
 
@@ -345,6 +346,7 @@ impl PythonWorker {
         is_momentum_space: bool,
         use_f128: bool,
     ) -> PyResult<String> {
+        let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
         match self.integrands.get_mut(integrand) {
             Some(integrand) => {
                 let settings = match integrand {
@@ -381,11 +383,12 @@ impl PythonWorker {
         workspace_path: &str,
         target: Option<(f64, f64)>,
     ) -> PyResult<String> {
+        let target = target.map(|(re, im)| (F(re), F(im)));
         match self.integrands.get_mut(integrand) {
             Some(integrand_enum) => match integrand_enum {
                 Integrand::GammaLoopIntegrand(gloop_integrand) => {
                     let target = match target {
-                        Some((re, im)) => Some(num::Complex::new(re, im)),
+                        Some((re, im)) => Some(Complex::new(re, im)),
                         _ => None,
                     };
 

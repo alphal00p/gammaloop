@@ -3,13 +3,13 @@ use core::panic;
 use crate::{
     graph::{EdgeType, Graph, LoopMomentumBasisSpecification},
     momentum::{Energy, FourMomentum, ThreeMomentum},
-    utils::{compute_momentum, FloatLike},
+    utils::{compute_momentum, FloatLike, F},
 };
 use itertools::Itertools;
 use log::debug;
-use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
+use symbolica::domains::float::{NumericalFloatLike, Real};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ContourClosure {
@@ -414,28 +414,36 @@ struct LTDTerm {
 impl LTDTerm {
     fn evaluate<T: FloatLike>(
         &self,
-        external_moms: &[FourMomentum<T>],
-        emr: &[ThreeMomentum<T>],
+        external_moms: &[FourMomentum<F<T>>],
+        emr: &[ThreeMomentum<F<T>>],
         graph: &Graph,
-    ) -> T {
+    ) -> F<T> {
         // compute on shell energies of the momenta in associated_lmb
+
+        let zero = external_moms[0].temporal.value.zero();
+        let one = zero.one();
+        let two = zero.from_i64(2);
 
         let edge_momenta_of_associated_lmb = self
             .associated_lmb
             .iter()
             .map(|(i, s)| {
-                let mut momentum = emr[*i].into_on_shell_four_momentum(
-                    graph.edges[*i].particle.mass.value.map(|m| m.re.into()),
+                let mut momentum = emr[*i].clone().into_on_shell_four_momentum(
+                    graph.edges[*i]
+                        .particle
+                        .mass
+                        .value
+                        .map(|m| F::<T>::from_ff64(m.re)),
                 );
 
-                momentum.temporal *= Energy::new((*s).into());
+                momentum.temporal *= Energy::new(F::<T>::from_f64(*s));
                 momentum
             })
             .collect_vec();
 
         // iterate over remaining propagators
-        let mut inv_res = Into::<T>::into(1.);
-        let mut energy_product = Into::<T>::into(1.);
+        let mut inv_res = one.clone();
+        let mut energy_product = one.clone();
 
         for (index, edge) in graph.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && self.associated_lmb.iter().all(|(i, _)| i != index)
@@ -448,20 +456,20 @@ impl LTDTerm {
 
             match edge.particle.mass.value {
                 Some(mass) => {
-                    inv_res *=
-                        momentum.square() - Into::<T>::into(mass.re) * Into::<T>::into(mass.re);
-                    energy_product *= Into::<T>::into(2.)
-                        * (momentum.spatial.norm_squared() + Into::<T>::into(mass.re * mass.re))
-                            .sqrt();
+                    inv_res *= momentum.clone().square() - F::<T>::from_ff64(mass.re).square();
+                    energy_product *= (momentum.spatial.norm_squared()
+                        + F::<T>::from_ff64(mass.re).square())
+                    .sqrt()
+                        * &two;
                 }
                 None => {
-                    inv_res *= momentum.square();
-                    energy_product *= Into::<T>::into(2.) * momentum.spatial.norm();
+                    inv_res *= momentum.clone().square();
+                    energy_product *= momentum.spatial.norm() * &two;
                 }
             }
         }
 
-        inv_res.recip() * energy_product
+        inv_res.inv() * energy_product
     }
 
     fn to_serializable(&self) -> SerializableLTDTerm {
@@ -493,31 +501,35 @@ pub struct LTDExpression {
 impl LTDExpression {
     pub fn evaluate<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         graph: &Graph,
-    ) -> T {
+    ) -> F<T> {
+        let zero = external_moms[0].temporal.value.zero();
         let emr = graph.compute_emr(loop_moms, external_moms);
 
         self.terms
             .iter()
             .map(|term| term.evaluate(external_moms, &emr, graph))
-            .sum()
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(zero.clone())
     }
 
     pub fn evaluate_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         graph: &Graph,
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> T {
+    ) -> F<T> {
+        let zero = external_moms[0].temporal.value.zero();
         let emr = graph.compute_emr_in_lmb(loop_moms, external_moms, lmb_specification);
 
         self.terms
             .iter()
             .map(|term| term.evaluate(external_moms, &emr, graph))
-            .sum()
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(zero.clone())
     }
 
     pub fn to_serializable(&self) -> SerializableLTDExpression {

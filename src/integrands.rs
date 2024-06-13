@@ -1,16 +1,17 @@
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
+use crate::momentum::FourMomentum;
 use crate::observables::EventManager;
-use crate::utils::FloatLike;
+use crate::utils::{FloatLike, F};
 use crate::{utils, IntegratorSettings, Precision, Settings};
 use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use lorentz_vector::LorentzVector;
-use num::Complex;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use symbolica::domains::float::{Complex, NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,15 +49,15 @@ impl Default for IntegrandSettings {
 
 #[enum_dispatch]
 pub trait HasIntegrand {
-    fn create_grid(&self) -> Grid<f64>;
+    fn create_grid(&self) -> Grid<F<f64>>;
 
     fn evaluate_sample(
         &self,
-        sample: &Sample<f64>,
-        wgt: f64,
+        sample: &Sample<F<f64>>,
+        wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: f64,
+        max_eval: F<f64>,
     ) -> EvaluationResult;
 
     fn get_n_dim(&self) -> usize;
@@ -113,7 +114,7 @@ pub struct UnitSurfaceIntegrand {
     pub settings: Settings,
     pub n_dim: usize,
     pub n_3d_momenta: usize,
-    pub surface: f64,
+    pub surface: F<f64>,
 }
 
 #[allow(unused)]
@@ -141,14 +142,15 @@ impl UnitSurfaceIntegrand {
         }
     }
 
-    fn evaluate_numerator<T: FloatLike>(&self, loop_momenta: &[LorentzVector<T>]) -> T {
-        T::from_f64(1.0).unwrap()
+    fn evaluate_numerator<T: FloatLike>(&self, loop_momenta: &[FourMomentum<F<T>>]) -> F<T> {
+        loop_momenta[0].temporal.value.one()
     }
 
-    fn parameterize<T: FloatLike>(&self, xs: &[T]) -> (Vec<[T; 3]>, T) {
+    fn parameterize<T: FloatLike>(&self, xs: &[F<T>]) -> (Vec<[F<T>; 3]>, F<T>) {
+        let zero = xs[0].zero();
         utils::global_parameterize(
             xs,
-            Into::<T>::into(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
+            F::<T>::from_ff64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
             &self.settings,
             true,
         )
@@ -157,7 +159,7 @@ impl UnitSurfaceIntegrand {
 
 #[allow(unused)]
 impl HasIntegrand for UnitSurfaceIntegrand {
-    fn create_grid(&self) -> Grid<f64> {
+    fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(ContinuousGrid::new(
             self.n_dim,
             self.settings.integrator.n_bins,
@@ -173,11 +175,11 @@ impl HasIntegrand for UnitSurfaceIntegrand {
 
     fn evaluate_sample(
         &self,
-        sample: &Sample<f64>,
-        wgt: f64,
+        sample: &Sample<F<f64>>,
+        wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: f64,
+        max_eval: F<f64>,
     ) -> EvaluationResult {
         let start_evaluate_sample = std::time::Instant::now();
 
@@ -192,12 +194,12 @@ impl HasIntegrand for UnitSurfaceIntegrand {
         let (moms, jac) = self.parameterize(sample_xs.as_slice());
         let mut loop_momenta = vec![];
         for m in &moms {
-            loop_momenta.push(LorentzVector {
-                t: ((m[0] + m[1] + m[2]) * (m[0] + m[1] + m[2])).sqrt(),
-                x: m[0],
-                y: m[1],
-                z: m[2],
-            });
+            loop_momenta.push(FourMomentum::from_args(
+                ((m[0] + m[1] + m[2]) * (m[0] + m[1] + m[2])).sqrt(),
+                m[0],
+                m[1],
+                m[2],
+            ));
         }
 
         let parameterization_time = before_parameterization.elapsed();
@@ -209,14 +211,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
         if self.settings.general.debug > 1 {
             info!("Sampled loop momenta:");
             for (i, l) in loop_momenta.iter().enumerate() {
-                info!(
-                    "k{} = ( {:-23}, {:-23}, {:-23}, {:-23} )",
-                    i,
-                    format!("{:+.16e}", l.t),
-                    format!("{:+.16e}", l.x),
-                    format!("{:+.16e}", l.y),
-                    format!("{:+.16e}", l.z)
-                );
+                info!("k{} = ( {:-23})", i, format!("{:+.16e}", l),);
             }
             info!("Integrator weight : {:+.16e}", wgt);
             info!("Integrand weight  : {:+.16e}", itg_wgt);
@@ -232,13 +227,13 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             total_timing: start_evaluate_sample.elapsed(),
             rep3d_evaluation_time: evaluation_time,
             parameterization_time,
-            relative_instability_error: Complex::new(0., 0.),
+            relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan,
         };
 
         EvaluationResult {
-            integrand_result: Complex::new(itg_wgt, 0.) * jac,
+            integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
             integrator_weight: wgt,
             event_buffer: vec![],
             evaluation_metadata,
@@ -256,7 +251,7 @@ pub struct UnitVolumeIntegrand {
     pub settings: Settings,
     pub n_dim: usize,
     pub n_3d_momenta: usize,
-    pub volume: f64,
+    pub volume: F<f64>,
 }
 
 #[allow(unused)]
@@ -281,24 +276,27 @@ impl UnitVolumeIntegrand {
         }
     }
 
-    fn evaluate_numerator<T: FloatLike>(&self, loop_momenta: &[LorentzVector<T>]) -> T {
+    fn evaluate_numerator<T: FloatLike>(&self, loop_momenta: &[FourMomentum<F<T>>]) -> F<T> {
+        let zero = loop_momenta[0].temporal.value.zero();
         if loop_momenta
             .iter()
-            .map(|l| l.spatial_squared())
-            .sum::<T>()
+            .map(|l| l.spatial.norm_squared())
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(zero.clone())
             .sqrt()
-            > Into::<T>::into(self.settings.kinematics.e_cm)
+            > F::<T>::from_ff64(self.settings.kinematics.e_cm)
         {
-            T::from_f64(0.0).unwrap()
+            zero
         } else {
-            T::from_f64(1.0).unwrap()
+            zero.one()
         }
     }
 
-    fn parameterize<T: FloatLike>(&self, xs: &[T]) -> (Vec<[T; 3]>, T) {
+    fn parameterize<T: FloatLike>(&self, xs: &[F<T>]) -> (Vec<[F<T>; 3]>, F<T>) {
+        let zero = xs[0].zero();
         utils::global_parameterize(
             xs,
-            Into::<T>::into(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
+            F::<T>::from_ff64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
             &self.settings,
             false,
         )
@@ -307,7 +305,7 @@ impl UnitVolumeIntegrand {
 
 #[allow(unused)]
 impl HasIntegrand for UnitVolumeIntegrand {
-    fn create_grid(&self) -> Grid<f64> {
+    fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(ContinuousGrid::new(
             self.n_dim,
             self.settings.integrator.n_bins,
@@ -323,11 +321,11 @@ impl HasIntegrand for UnitVolumeIntegrand {
 
     fn evaluate_sample(
         &self,
-        sample: &Sample<f64>,
-        wgt: f64,
+        sample: &Sample<F<f64>>,
+        wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: f64,
+        max_eval: F<f64>,
     ) -> EvaluationResult {
         let start_evaluate_sample = std::time::Instant::now();
 
@@ -341,12 +339,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
         let (moms, jac) = self.parameterize(xs);
         let mut loop_momenta = vec![];
         for m in &moms {
-            loop_momenta.push(LorentzVector {
-                t: 0.,
-                x: m[0],
-                y: m[1],
-                z: m[2],
-            });
+            loop_momenta.push(FourMomentum::new(F(0.).into(), m.clone().into()));
         }
 
         let parameterization_time = before_parameterization.elapsed();
@@ -358,14 +351,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
         if self.settings.general.debug > 1 {
             info!("Sampled loop momenta:");
             for (i, l) in loop_momenta.iter().enumerate() {
-                info!(
-                    "k{} = ( {:-23}, {:-23}, {:-23}, {:-23} )",
-                    i,
-                    format!("{:+.16e}", l.t),
-                    format!("{:+.16e}", l.x),
-                    format!("{:+.16e}", l.y),
-                    format!("{:+.16e}", l.z)
-                );
+                info!("k{} = ( {:-23})", i, format!("{:+.16e}", l),);
             }
             info!("Integrator weight : {:+.16e}", wgt);
             info!("Integrand weight  : {:+.16e}", itg_wgt);
@@ -381,13 +367,13 @@ impl HasIntegrand for UnitVolumeIntegrand {
             total_timing: start_evaluate_sample.elapsed(),
             rep3d_evaluation_time: evaluation_time,
             parameterization_time,
-            relative_instability_error: Complex::new(0., 0.),
+            relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan,
         };
 
         EvaluationResult {
-            integrand_result: Complex::new(itg_wgt, 0.) * jac,
+            integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
             integrator_weight: wgt,
             event_buffer: vec![],
             evaluation_metadata,

@@ -1,8 +1,7 @@
-use crate::utils;
+use crate::utils::{self, F};
 use ahash::RandomState;
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
-use num::Complex;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -12,6 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
 use symbolica::atom::{Atom, FunctionBuilder};
+use symbolica::domains::float::Complex;
 use symbolica::fun;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::State;
@@ -405,7 +405,7 @@ pub struct SerializableParameter {
     lhacode: Option<Vec<usize>>,
     nature: ParameterNature,
     parameter_type: ParameterType,
-    value: Option<(f64, f64)>,
+    value: Option<(F<f64>, F<f64>)>,
     expression: Option<SmartString<LazyCompact>>,
 }
 
@@ -434,7 +434,7 @@ pub struct Parameter {
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
     pub parameter_type: ParameterType,
-    pub value: Option<Complex<f64>>,
+    pub value: Option<Complex<F<f64>>>,
     pub expression: Option<Atom>,
 }
 
@@ -598,6 +598,20 @@ impl Default for Model {
     }
 }
 impl Model {
+    pub fn substitute_model_params(&self, mut atom: Atom) -> Atom {
+        for cpl in self.couplings.iter() {
+            let [pattern, rhs] = cpl.rep_rule();
+
+            atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+        }
+
+        for para in self.parameters.iter() {
+            if let Some([pattern, rhs]) = para.rep_rule() {
+                atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+            }
+        }
+        atom
+    }
     pub fn is_empty(&self) -> bool {
         self.name == "ModelNotLoaded" || self.particles.is_empty()
     }

@@ -28,7 +28,7 @@ build_dependencies () {
         exit 1
     fi
 
-    echo "Run 'tail -f "$(PWD)"/dependencies/dependency_build.log' to follow installation progress.";
+    echo "Run 'tail -f "$(pwd)"/dependencies/dependency_build.log' to follow installation progress.";
 
     cd dependencies
     touch LOCK
@@ -186,7 +186,7 @@ build_dependencies () {
         echo "Cloning symbolica ...";
         CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}"
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
-        cd symbolica && git reset --hard a260306 >> ../dependency_build.log 2>&1
+        cd symbolica && git reset --hard 82d19d3 >> ../dependency_build.log 2>&1
         cd ..
     fi
 

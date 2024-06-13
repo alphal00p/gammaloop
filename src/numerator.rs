@@ -1,6 +1,23 @@
 use symbolica::{atom::Atom, id::Pattern};
 
-use crate::{graph::Graph, model::Model};
+use crate::{
+    graph::{Graph, LoopMomentumBasis},
+    model::Model,
+};
+
+pub fn apply_replacements(
+    graph: &Graph,
+    model: &Model,
+    lmb: &LoopMomentumBasis,
+    mut atom: Atom,
+) -> Atom {
+    atom = model.substitute_model_params(atom);
+
+    for edge in &graph.edges {
+        atom = edge.substitute_lmb(atom, graph, lmb);
+    }
+    atom
+}
 
 pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let _ = model;

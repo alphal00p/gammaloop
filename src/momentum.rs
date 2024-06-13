@@ -3,21 +3,35 @@ use std::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use num::{Float, Zero};
-
-use spenso::{AbstractIndex, DenseTensor, Representation, VecStructure};
+use spenso::{AbstractIndex, DenseTensor, NamedStructure, Representation, VecStructure};
 use symbolica::{
     atom::Atom,
     coefficient::Coefficient,
-    domains::rational::RationalField,
+    domains::{float::Real, rational::RationalField},
     poly::{polynomial::MultivariatePolynomial, Exponent},
 };
 
-use crate::utils::FloatLike;
+use crate::utils::{FloatLike, RefDefault, F};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Energy<T> {
     pub value: T,
+}
+
+impl<T: FloatLike> From<Energy<T>> for Energy<F<T>> {
+    fn from(value: Energy<T>) -> Self {
+        Energy {
+            value: F(value.value),
+        }
+    }
+}
+
+impl<T: Real> Energy<T> {
+    pub fn zero(&self) -> Self {
+        Energy {
+            value: self.value.zero(),
+        }
+    }
 }
 
 impl<T> Add<Energy<T>> for Energy<T>
@@ -29,6 +43,40 @@ where
         Energy {
             value: self.value + rhs.value,
         }
+    }
+}
+
+impl<T> Add<&Energy<T>> for Energy<T>
+where
+    T: for<'a> Add<&'a T, Output = T>,
+{
+    type Output = Energy<T>;
+    fn add(self, rhs: &Energy<T>) -> Self::Output {
+        Energy {
+            value: self.value + &rhs.value,
+        }
+    }
+}
+
+impl<'b, T> Add<&Energy<T>> for &'b Energy<T>
+where
+    &'b T: for<'a> Add<&'a T, Output = T>,
+{
+    type Output = Energy<T>;
+    fn add(self, rhs: &Energy<T>) -> Self::Output {
+        Energy {
+            value: &self.value + &rhs.value,
+        }
+    }
+}
+
+impl<'b, T> Add<Energy<T>> for &'b Energy<T>
+where
+    T: for<'a> Add<&'a T, Output = T>,
+{
+    type Output = Energy<T>;
+    fn add(self, rhs: Energy<T>) -> Self::Output {
+        rhs + self
     }
 }
 
@@ -108,19 +156,6 @@ where
     }
 }
 
-impl<T> Zero for Energy<T>
-where
-    T: Zero,
-{
-    fn zero() -> Self {
-        Energy { value: T::zero() }
-    }
-
-    fn is_zero(&self) -> bool {
-        self.value.is_zero()
-    }
-}
-
 impl<T> Energy<T> {
     pub fn new(value: T) -> Self {
         Energy { value }
@@ -166,6 +201,12 @@ impl<T: Default> Default for Energy<T> {
     }
 }
 
+impl<T> From<T> for Energy<T> {
+    fn from(value: T) -> Self {
+        Energy { value }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ThreeMomentum<T> {
     pub px: T,
@@ -173,12 +214,44 @@ pub struct ThreeMomentum<T> {
     pub pz: T,
 }
 
-impl<T: Clone> From<[T; 3]> for ThreeMomentum<T> {
-    fn from(data: [T; 3]) -> Self {
+impl<T: FloatLike> From<ThreeMomentum<T>> for ThreeMomentum<F<T>> {
+    fn from(value: ThreeMomentum<T>) -> Self {
         ThreeMomentum {
-            px: data[0].clone(),
-            py: data[1].clone(),
-            pz: data[2].clone(),
+            px: value.px.into(),
+            py: value.py.into(),
+            pz: value.pz.into(),
+        }
+    }
+}
+
+impl<T> IntoIterator for ThreeMomentum<T> {
+    type Item = T;
+    type IntoIter = std::array::IntoIter<T, 3>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let [px, py, pz] = [self.px, self.py, self.pz];
+        [px, py, pz].into_iter()
+    }
+}
+
+impl<T: Real> RefDefault for ThreeMomentum<T> {
+    fn default(&self) -> Self {
+        let zero = self.px.zero();
+        ThreeMomentum {
+            px: zero.clone(),
+            py: zero.clone(),
+            pz: zero.clone(),
+        }
+    }
+}
+
+impl<T: Real> ThreeMomentum<T> {
+    pub fn zero(&self) -> Self {
+        let zero = self.px.zero();
+        ThreeMomentum {
+            px: zero.clone(),
+            py: zero.clone(),
+            pz: zero.clone(),
         }
     }
 }
@@ -220,21 +293,45 @@ impl<T: FloatLike> ThreeMomentum<T> {
         let py = self.py.clone();
         let pz = self.pz.clone();
 
-        self.px = cos_alpha * cos_beta * px
-            + (-cos_alpha * sin_gamma + sin_alpha * sin_beta * cos_gamma) * py
-            + (sin_alpha * sin_gamma + cos_alpha * sin_beta * cos_gamma) * pz;
+        self.px = cos_alpha.clone() * &cos_beta * &px
+            + (-(cos_alpha.clone()) * &sin_gamma + sin_alpha.clone() * &sin_beta * &cos_gamma)
+                * &py
+            + (sin_alpha.clone() * &sin_gamma + cos_alpha.clone() * &sin_beta * &cos_gamma) * &pz;
 
-        self.py = sin_gamma * cos_beta * px
-            + (cos_alpha * cos_gamma + sin_alpha * sin_beta * sin_gamma) * py
-            + (-sin_alpha * cos_gamma + cos_alpha * sin_beta * sin_gamma) * pz;
+        self.py = sin_gamma.clone() * &cos_beta * &px
+            + (cos_alpha.clone() * &cos_gamma + sin_alpha.clone() * &sin_beta * &sin_gamma) * &py
+            + (-sin_alpha.clone() * &cos_gamma + cos_alpha.clone() * &sin_beta * &sin_gamma) * &pz;
 
-        self.pz = -sin_beta * px + cos_beta * sin_alpha * py + cos_alpha * cos_beta * pz;
+        self.pz =
+            -sin_beta * &px + cos_beta.clone() * &sin_alpha * &py + cos_alpha * &cos_beta * &pz;
     }
 
     pub fn rotate(&self, alpha: T, beta: T, gamma: T) -> Self {
         let mut result = self.clone();
         result.rotate_mut(alpha, beta, gamma);
         result
+    }
+
+    /// Compute transverse momentum.
+    #[inline]
+    pub fn pt(&self) -> T {
+        (self.px.square() + self.py.square()).sqrt()
+    }
+
+    /// Compute pseudorapidity.
+    #[inline]
+    pub fn pseudo_rap(&self) -> T {
+        let pt = self.pt();
+        if pt.less_than_epsilon() && self.pz.norm().less_than_epsilon() {
+            if self.pz.positive() {
+                return pt.max_value();
+            } else {
+                return pt.min_value();
+            }
+        }
+        let th = pt.atan2(&self.pz);
+        let two = pt.from_i64(2);
+        -(th / two).tan().ln()
     }
 }
 
@@ -290,6 +387,44 @@ where
             py: self.py + rhs.py,
             pz: self.pz + rhs.pz,
         }
+    }
+}
+
+impl<T> Add<&ThreeMomentum<T>> for ThreeMomentum<T>
+where
+    T: for<'a> Add<&'a T, Output = T>,
+{
+    type Output = ThreeMomentum<T>;
+    fn add(self, rhs: &ThreeMomentum<T>) -> Self::Output {
+        ThreeMomentum {
+            px: self.px + &rhs.px,
+            py: self.py + &rhs.py,
+            pz: self.pz + &rhs.pz,
+        }
+    }
+}
+
+impl<'b, T> Add<&ThreeMomentum<T>> for &'b ThreeMomentum<T>
+where
+    &'b T: for<'a> Add<&'a T, Output = T>,
+{
+    type Output = ThreeMomentum<T>;
+    fn add(self, rhs: &ThreeMomentum<T>) -> Self::Output {
+        ThreeMomentum {
+            px: &self.px + &rhs.px,
+            py: &self.py + &rhs.py,
+            pz: &self.pz + &rhs.pz,
+        }
+    }
+}
+
+impl<'b, T> Add<ThreeMomentum<T>> for &'b ThreeMomentum<T>
+where
+    T: for<'a> Add<&'a T, Output = T>,
+{
+    type Output = ThreeMomentum<T>;
+    fn add(self, rhs: ThreeMomentum<T>) -> Self::Output {
+        rhs + self
     }
 }
 
@@ -361,6 +496,26 @@ where
     }
 }
 
+impl<T> Mul<&ThreeMomentum<T>> for ThreeMomentum<T>
+where
+    T: for<'a> Mul<&'a T, Output = T> + Add<T, Output = T>,
+{
+    type Output = T;
+    fn mul(self, rhs: &ThreeMomentum<T>) -> Self::Output {
+        self.px * &rhs.px + self.py * &rhs.py + self.pz * &rhs.pz
+    }
+}
+
+impl<'a, T> Mul<ThreeMomentum<T>> for &'a ThreeMomentum<T>
+where
+    T: for<'b> Mul<&'b T, Output = T> + Add<T, Output = T>,
+{
+    type Output = T;
+    fn mul(self, rhs: ThreeMomentum<T>) -> Self::Output {
+        rhs * self
+    }
+}
+
 impl<T> Mul<T> for ThreeMomentum<T>
 where
     T: Mul<T, Output = T> + Clone,
@@ -370,6 +525,20 @@ where
         ThreeMomentum {
             px: self.px * rhs.clone(),
             py: self.py * rhs.clone(),
+            pz: self.pz * rhs,
+        }
+    }
+}
+
+impl<T> Mul<&T> for ThreeMomentum<T>
+where
+    T: for<'a> Mul<&'a T, Output = T> + Clone,
+{
+    type Output = ThreeMomentum<T>;
+    fn mul(self, rhs: &T) -> Self::Output {
+        ThreeMomentum {
+            px: self.px * rhs,
+            py: self.py * rhs,
             pz: self.pz * rhs,
         }
     }
@@ -385,6 +554,48 @@ where
             px: self.px.clone() * rhs.clone(),
             py: self.py.clone() * rhs.clone(),
             pz: self.pz.clone() * rhs,
+        }
+    }
+}
+
+impl<'a, T> Mul<&T> for &'a ThreeMomentum<T>
+where
+    T: for<'b> Mul<&'b T, Output = T> + Clone,
+{
+    type Output = ThreeMomentum<T>;
+    fn mul(self, rhs: &T) -> Self::Output {
+        ThreeMomentum {
+            px: self.px.clone() * rhs,
+            py: self.py.clone() * rhs,
+            pz: self.pz.clone() * rhs,
+        }
+    }
+}
+
+impl<T> Neg for ThreeMomentum<T>
+where
+    T: Neg<Output = T>,
+{
+    type Output = ThreeMomentum<T>;
+    fn neg(self) -> Self::Output {
+        ThreeMomentum {
+            px: -self.px,
+            py: -self.py,
+            pz: -self.pz,
+        }
+    }
+}
+
+impl<'a, T> Neg for &'a ThreeMomentum<T>
+where
+    T: Neg<Output = T> + Clone,
+{
+    type Output = ThreeMomentum<T>;
+    fn neg(self) -> Self::Output {
+        ThreeMomentum {
+            px: -self.px.clone(),
+            py: -self.py.clone(),
+            pz: -self.pz.clone(),
         }
     }
 }
@@ -412,16 +623,16 @@ impl<T: Default> Default for ThreeMomentum<T> {
 }
 
 impl<T> ThreeMomentum<T> {
-    pub fn norm_squared(self) -> T
+    pub fn norm_squared(&self) -> T
     where
-        T: Mul<T, Output = T> + Add<T, Output = T> + Clone,
+        T: for<'a> Mul<&'a T, Output = T> + Add<T, Output = T> + Clone,
     {
-        self.px.clone() * self.px + self.py.clone() * self.py + self.pz.clone() * self.pz
+        self.px.clone() * &self.px + self.py.clone() * &self.py + self.pz.clone() * &self.pz
     }
 
-    pub fn on_shell_energy(self, mass: Option<T>) -> Energy<T>
+    pub fn on_shell_energy(&self, mass: Option<T>) -> Energy<T>
     where
-        T: Mul<T, Output = T> + Add<T, Output = T> + Clone + std::ops::Add<Output = T> + Float,
+        T: Mul<T, Output = T> + Add<T, Output = T> + Clone + std::ops::Add<Output = T> + Real,
     {
         let energy_squared = self.on_shell_energy_squared(mass);
         Energy {
@@ -429,23 +640,61 @@ impl<T> ThreeMomentum<T> {
         }
     }
 
-    pub fn on_shell_energy_squared(self, mass: Option<T>) -> Energy<T>
+    pub fn on_shell_energy_squared(&self, mass: Option<T>) -> Energy<T>
     where
-        T: Mul<T, Output = T> + Add<T, Output = T> + Clone + std::ops::Add<Output = T> + Float,
+        T: for<'a> Mul<&'a T, Output = T> + Add<T, Output = T> + Clone + std::ops::Add<Output = T>,
     {
         let p2 = self.norm_squared();
         if let Some(mass) = mass {
             Energy {
-                value: p2 + mass * mass,
+                value: p2 + mass.clone() * &mass,
             }
         } else {
             Energy { value: p2 }
         }
     }
 
+    /// Compute the phi-angle separation with p2.
+    pub fn getdelphi(&self, p2: &ThreeMomentum<T>) -> T
+    where
+        T: FloatLike,
+    {
+        let pt1 = self.pt();
+        let pt2 = p2.pt();
+        if pt1.is_zero() {
+            return pt1.max_value();
+        }
+        if pt2.is_zero() {
+            return pt2.max_value();
+        }
+
+        let mut tmp = self.px.clone() * &p2.px + self.py.clone() * &p2.py;
+
+        tmp /= pt1 * pt2;
+        if tmp.norm() > tmp.one() + tmp.epsilon() {
+            panic!("Cosine larger than 1. in phase-space cuts.")
+        }
+        if tmp.norm() > tmp.one() {
+            (tmp.clone() / tmp.norm()).acos()
+        } else {
+            tmp.acos()
+        }
+    }
+
+    /// Compute the deltaR separation with momentum p2.
+    #[inline]
+    pub fn delta_r(&self, p2: &ThreeMomentum<T>) -> T
+    where
+        T: FloatLike,
+    {
+        let delta_eta = self.pseudo_rap() - p2.pseudo_rap();
+        let delta_phi = self.getdelphi(p2);
+        (delta_eta.square() + delta_phi.square()).sqrt()
+    }
+
     pub fn norm(self) -> T
     where
-        T: Mul<T> + Add<T> + Float,
+        T: for<'a> Mul<&'a T, Output = T> + Add<T> + Real,
     {
         self.norm_squared().sqrt()
     }
@@ -460,7 +709,7 @@ impl<T> ThreeMomentum<T> {
 
     pub fn into_on_shell_four_momentum(self, mass: Option<T>) -> FourMomentum<T, T>
     where
-        T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Float,
+        T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Real,
     {
         FourMomentum::new_on_shell(self, mass)
     }
@@ -475,12 +724,58 @@ impl<T> ThreeMomentum<T> {
             pz: (self.pz.clone()).into(),
         }
     }
+
+    pub fn into_f64(&self) -> ThreeMomentum<f64>
+    where
+        T: FloatLike,
+    {
+        ThreeMomentum {
+            px: self.px.to_f64(),
+            py: self.py.to_f64(),
+            pz: self.pz.to_f64(),
+        }
+    }
+}
+
+impl<T> From<[T; 3]> for ThreeMomentum<T> {
+    fn from(data: [T; 3]) -> Self {
+        let [px, py, pz] = data;
+        ThreeMomentum { px, py, pz }
+    }
+}
+
+impl<T> From<ThreeMomentum<T>> for [T; 3] {
+    fn from(data: ThreeMomentum<T>) -> Self {
+        [data.px, data.py, data.pz]
+    }
+}
+
+impl<T> From<(T, T, T)> for ThreeMomentum<T> {
+    fn from(data: (T, T, T)) -> Self {
+        let (px, py, pz) = data;
+        ThreeMomentum { px, py, pz }
+    }
+}
+
+impl<T> From<ThreeMomentum<T>> for (T, T, T) {
+    fn from(data: ThreeMomentum<T>) -> Self {
+        (data.px, data.py, data.pz)
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FourMomentum<T, U = T> {
     pub temporal: Energy<U>,
     pub spatial: ThreeMomentum<T>,
+}
+
+impl<T: FloatLike, U: FloatLike> From<FourMomentum<T, U>> for FourMomentum<F<T>, F<U>> {
+    fn from(value: FourMomentum<T, U>) -> Self {
+        FourMomentum {
+            temporal: value.temporal.into(),
+            spatial: value.spatial.into(),
+        }
+    }
 }
 
 impl<T, U> FourMomentum<T, U> {
@@ -491,14 +786,48 @@ impl<T, U> FourMomentum<T, U> {
         }
     }
 }
+
+impl<T: Real> RefDefault for FourMomentum<T, T> {
+    fn default(&self) -> Self {
+        let zero = self.temporal.value.zero();
+        FourMomentum {
+            temporal: Energy::new(zero.clone()),
+            spatial: ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone()),
+        }
+    }
+}
+
 impl<T> FourMomentum<T, T> {
+    pub fn zero(&self) -> Self
+    where
+        T: Real,
+    {
+        let zero = self.temporal.value.zero();
+        FourMomentum {
+            temporal: Energy::new(zero.clone()),
+            spatial: ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone()),
+        }
+    }
+
+    pub fn to_f64(&self) -> FourMomentum<f64, f64>
+    where
+        T: FloatLike,
+    {
+        FourMomentum {
+            temporal: Energy {
+                value: self.temporal.value.to_f64(),
+            },
+            spatial: self.spatial.into_f64(),
+        }
+    }
+
     pub fn square(self) -> T
     where
-        T: Mul<T, Output = T> + Add<T, Output = T> + Clone + Sub<T, Output = T>,
+        T: for<'a> Mul<&'a T, Output = T> + Add<T, Output = T> + Clone + Sub<T, Output = T>,
     {
         let temporal = self.temporal.value.clone();
         let spatial = self.spatial.norm_squared();
-        temporal * self.temporal.value - spatial
+        temporal * &self.temporal.value - spatial
     }
 
     pub fn from_args(energy: T, px: T, py: T, pz: T) -> Self {
@@ -511,7 +840,7 @@ impl<T> FourMomentum<T, T> {
     }
     pub fn new_on_shell(three_momentum: ThreeMomentum<T>, mass: Option<T>) -> Self
     where
-        T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Float,
+        T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Real,
     {
         let energy = three_momentum.on_shell_energy(mass);
         FourMomentum {
@@ -537,6 +866,28 @@ impl<T> FourMomentum<T, T> {
         .unwrap()
     }
 
+    pub fn into_dense_named(
+        self,
+        index: AbstractIndex,
+        name: &str,
+    ) -> DenseTensor<T, NamedStructure>
+    where
+        T: Clone,
+    {
+        let structure = VecStructure::new(vec![(index, Representation::Lorentz(4.into())).into()])
+            .to_named(name);
+        DenseTensor::from_data(
+            &[
+                self.temporal.value,
+                self.spatial.px,
+                self.spatial.py,
+                self.spatial.pz,
+            ],
+            structure,
+        )
+        .unwrap()
+    }
+
     pub fn cast<U>(&self) -> FourMomentum<U, U>
     where
         T: Clone + Into<U>,
@@ -545,6 +896,111 @@ impl<T> FourMomentum<T, T> {
             temporal: Energy::new((self.temporal.value.clone()).into()),
             spatial: ThreeMomentum::cast(&self.spatial),
         }
+    }
+
+    pub fn boost(&self, boost_vector: &FourMomentum<T>) -> FourMomentum<T>
+    where
+        T: FloatLike,
+    {
+        let b2 = boost_vector.spatial.norm_squared();
+        let one = b2.one();
+        let zero = one.zero();
+        let gamma = (one.clone() - &b2).sqrt().inv();
+
+        let bp = self.spatial.clone() * &boost_vector.spatial;
+        let gamma2 = if b2 > zero {
+            (gamma.clone() - &one) / b2
+        } else {
+            zero
+        };
+        let factor = gamma2 * &bp + gamma.clone() * &self.temporal.value;
+        FourMomentum::from_args(
+            (bp + &self.temporal.value) * &gamma,
+            boost_vector.spatial.px.mul_add(&factor, &self.spatial.px),
+            boost_vector.spatial.py.mul_add(&factor, &self.spatial.py),
+            boost_vector.spatial.pz.mul_add(&factor, &self.spatial.pz),
+        )
+    }
+
+    /// Compute the phi-angle separation with p2.
+    pub fn getdelphi(&self, p2: &FourMomentum<T>) -> T
+    where
+        T: FloatLike,
+    {
+        self.spatial.getdelphi(&p2.spatial)
+    }
+
+    /// Compute the deltaR separation with momentum p2.
+    #[inline]
+    pub fn delta_r(&self, p2: &FourMomentum<T>) -> T
+    where
+        T: FloatLike,
+    {
+        self.spatial.delta_r(&p2.spatial)
+    }
+
+    pub fn pt(&self) -> T
+    where
+        T: FloatLike,
+    {
+        self.spatial.pt()
+    }
+}
+
+impl<T> IntoIterator for FourMomentum<T> {
+    type Item = T;
+    type IntoIter = std::array::IntoIter<T, 4>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let [E, px, py, pz] = [
+            self.spatial.px,
+            self.spatial.py,
+            self.spatial.pz,
+            self.temporal.value,
+        ];
+        [E, px, py, pz].into_iter()
+    }
+}
+
+impl<T> From<[T; 4]> for FourMomentum<T, T> {
+    fn from(data: [T; 4]) -> Self {
+        let [t, px, py, pz] = data;
+        FourMomentum {
+            temporal: Energy::new(t),
+            spatial: ThreeMomentum { px, py, pz },
+        }
+    }
+}
+
+impl<T> From<FourMomentum<T, T>> for [T; 4] {
+    fn from(data: FourMomentum<T, T>) -> Self {
+        [
+            data.temporal.value,
+            data.spatial.px,
+            data.spatial.py,
+            data.spatial.pz,
+        ]
+    }
+}
+
+impl<T> From<(T, T, T, T)> for FourMomentum<T, T> {
+    fn from(data: (T, T, T, T)) -> Self {
+        let (t, px, py, pz) = data;
+        FourMomentum {
+            temporal: Energy::new(t),
+            spatial: ThreeMomentum { px, py, pz },
+        }
+    }
+}
+
+impl<T> From<FourMomentum<T, T>> for (T, T, T, T) {
+    fn from(data: FourMomentum<T, T>) -> Self {
+        (
+            data.temporal.value,
+            data.spatial.px,
+            data.spatial.py,
+            data.spatial.pz,
+        )
     }
 }
 
@@ -617,6 +1073,34 @@ where
         FourMomentum {
             temporal: self.temporal - rhs.temporal,
             spatial: self.spatial - rhs.spatial,
+        }
+    }
+}
+
+impl<T, U> Neg for FourMomentum<T, U>
+where
+    T: Neg<Output = T>,
+    U: Neg<Output = U>,
+{
+    type Output = FourMomentum<T, U>;
+    fn neg(self) -> Self::Output {
+        FourMomentum {
+            temporal: -self.temporal,
+            spatial: -self.spatial,
+        }
+    }
+}
+
+impl<'a, T, U> Neg for &'a FourMomentum<T, U>
+where
+    T: Neg<Output = T> + Clone,
+    U: Neg<Output = U> + Clone,
+{
+    type Output = FourMomentum<T, U>;
+    fn neg(self) -> Self::Output {
+        FourMomentum {
+            temporal: -self.temporal.clone(),
+            spatial: -self.spatial.clone(),
         }
     }
 }

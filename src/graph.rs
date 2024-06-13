@@ -3,32 +3,37 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
     momentum::{Energy, FourMomentum, ThreeMomentum},
-    numerator::generate_numerator,
+    numerator::{apply_replacements, generate_numerator},
     tropical::{self, TropicalSubgraphTable},
     utils::{
-        compute_four_momentum_from_three, compute_momentum, compute_three_momentum_from_four,
-        FloatLike,
+        compute_four_momentum_from_three, compute_three_momentum_from_four, powi, FloatLike, F,
     },
 };
 
-use ahash::RandomState;
+use ahash::{AHashMap, RandomState};
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use itertools::Itertools;
 use log::warn;
-use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
 #[allow(unused_imports)]
-use num::traits::Float;
-use num::{Complex, Zero};
 use spenso::Contract;
 use spenso::*;
 
+use core::panic;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
-use symbolica::{atom::Atom, id::Pattern};
+use symbolica::{
+    atom::{Atom, AtomView, Symbol},
+    domains::{
+        atom,
+        float::{Complex, NumericalFloatComparison, NumericalFloatLike, Real},
+    },
+    id::Pattern,
+    state::State,
+};
 
 use constcat::concat;
 
@@ -470,6 +475,18 @@ impl Edge {
         (mom, mass)
     }
 
+    pub fn substitute_lmb(&self, atom: Atom, graph: &Graph, lmb: &LoopMomentumBasis) -> Atom {
+        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+        let mom = Pattern::parse(&format!("Q{num}(x_)")).unwrap();
+        let mom_rep = lmb.pattern(num);
+        atom.replace_all(&mom, &mom_rep, None, None)
+    }
+
+    pub fn edge_momentum_symbol(&self, graph: &Graph) -> Symbol {
+        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+        State::get_symbol(format!("Q{num}"))
+    }
+
     pub fn numerator(&self, graph: &Graph) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         match self.edge_type {
@@ -797,9 +814,9 @@ impl Graph {
     #[inline]
     pub fn compute_emr<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
-    ) -> Vec<ThreeMomentum<T>> {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> Vec<ThreeMomentum<F<T>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
         self.compute_emr_in_lmb(loop_moms, external_moms, &lmb_specification)
     }
@@ -807,10 +824,10 @@ impl Graph {
     #[inline]
     pub fn compute_emr_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<ThreeMomentum<T>> {
+    ) -> Vec<ThreeMomentum<F<T>>> {
         //do we really want 4-momenta here? -lucien
         let lmb = lmb_specification.basis(self);
 
@@ -823,9 +840,9 @@ impl Graph {
     #[inline]
     pub fn compute_onshell_energies<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
-    ) -> Vec<T> {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> Vec<F<T>> {
         let lmb_sepcification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
         self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &lmb_sepcification)
     }
@@ -833,10 +850,10 @@ impl Graph {
     #[inline]
     pub fn compute_onshell_energies_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<T> {
+    ) -> Vec<F<T>> {
         let lmb = lmb_specification.basis(self);
 
         lmb.edge_signatures
@@ -848,10 +865,10 @@ impl Graph {
                     emr_mom
                         .spatial
                         .on_shell_energy(edge.particle.mass.value.map(|m| {
-                            if m.im != 0. {
+                            if m.im.is_non_zero() {
                                 panic!("Complex masses not yet supported in gammaLoop")
                             }
-                            m.re.into()
+                            F::<T>::from_ff64(m.re)
                         }))
                         .value
                 }
@@ -863,9 +880,9 @@ impl Graph {
     #[inline]
     pub fn compute_energy_product<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
-    ) -> T {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> F<T> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
         self.compute_energy_product_in_lmb(loop_moms, external_moms, &lmb_specification)
     }
@@ -873,10 +890,10 @@ impl Graph {
     #[inline]
     pub fn compute_energy_product_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> T {
+    ) -> F<T> {
         let all_energies =
             self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_specification);
 
@@ -884,8 +901,8 @@ impl Graph {
             .iter()
             .zip(all_energies.iter())
             .filter(|(e, _)| e.edge_type == EdgeType::Virtual)
-            .map(|(_, val)| Into::<T>::into(2.) * val) // why times 2? -lucien
-            .fold(1.0.into(), |acc, x| acc * x)
+            .map(|(_, val)| F::<T>::from_f64(2.) * val) // why times 2? -lucien
+            .fold(F::<T>::from_f64(1.), |acc, x| acc * x)
     }
 
     #[inline]
@@ -1129,11 +1146,14 @@ impl Graph {
     #[inline]
     pub fn evaluate_ltd_expression<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
-    ) -> Complex<T> {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> Complex<F<T>> {
+        let one = loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero, one);
         let loop_number = self.loop_momentum_basis.basis.len();
-        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32);
+        let prefactor = i.pow(loop_number as u64);
 
         prefactor
             * self.derived_data.ltd_expression.as_ref().unwrap().evaluate(
@@ -1146,12 +1166,15 @@ impl Graph {
     #[inline]
     pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
+        let one = loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero, one);
         let loop_number = self.loop_momentum_basis.basis.len();
-        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32);
+        let prefactor = i.pow(loop_number as u64);
 
         prefactor
             * self
@@ -1166,23 +1189,18 @@ impl Graph {
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_orientations<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        independent_external_momenta: &[FourMomentum<T, T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        independent_external_momenta: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<T> {
-        let lmb = match lmb_specification {
-            LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
-                .derived_data
-                .loop_momentum_bases
-                .as_ref()
-                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*lmb_idx],
-            LoopMomentumBasisSpecification::Literal(basis) => basis,
-        };
+    ) -> Vec<F<T>> {
+        let one = loop_moms[0].px.one();
+        let zero = one.zero();
+        let lmb = lmb_specification.basis(self);
 
-        let mut energy_cache = vec![T::zero(); self.edges.len()];
+        let mut energy_cache = vec![zero.clone(); self.edges.len()];
         // some gymnastics to account for the sign of outgoing momenta
 
-        let mut flipped_externals = Vec::with_capacity(independent_external_momenta.len() + 1);
+        let mut flipped_externals = Vec::with_capacity(independent_external_momenta.len() + 1); // there is one more external energy that depends on the others
 
         for (index, edge) in self
             .edges
@@ -1193,10 +1211,12 @@ impl Graph {
             if index < independent_external_momenta.len() {
                 match edge.edge_type {
                     EdgeType::Incoming => {
-                        flipped_externals.push(independent_external_momenta[index].temporal);
+                        flipped_externals
+                            .push(independent_external_momenta[index].temporal.clone());
                     }
                     EdgeType::Outgoing => {
-                        flipped_externals.push(-independent_external_momenta[index].temporal);
+                        flipped_externals
+                            .push(-independent_external_momenta[index].temporal.clone());
                     }
                     _ => unreachable!(),
                 }
@@ -1204,7 +1224,7 @@ impl Graph {
                 flipped_externals.push(
                     -flipped_externals
                         .iter()
-                        .fold(Energy::zero(), |acc, x| acc + *x),
+                        .fold(Energy::new(zero.clone()), |acc, x| acc + x), // energy conservation
                 );
             }
         }
@@ -1218,10 +1238,10 @@ impl Graph {
                         loop_moms,
                         independent_external_momenta,
                     )
-                    .on_shell_energy(edge.particle.mass.value.map(|m| m.re.into()))
+                    .on_shell_energy(edge.particle.mass.value.map(|m| F::<T>::from_ff64(m.re)))
                     .value
                 }
-                _ => flipped_externals[index].value,
+                _ => flipped_externals[index].value.clone(),
             };
         }
 
@@ -1232,30 +1252,133 @@ impl Graph {
             .evaluate_orientations(&energy_cache)
     }
 
+    pub fn numerator_substitute_model_params(&mut self, model: &Model) {
+        self.derived_data.numerator = Some(
+            model.substitute_model_params(self.derived_data.numerator.as_ref().unwrap().clone()),
+        );
+    }
+
     #[inline]
-    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_numerator_orientations<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        independent_external_momenta: &[FourMomentum<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        independent_external_momenta: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<T> {
-        vec![T::zero(); self.edges.len()]
+    ) -> Vec<F<T>> {
+        let zero = loop_moms[0].px.zero();
+        let mut out = vec![zero.clone(); self.edges.len()];
+        let lmb = lmb_specification.basis(self);
+
+        let on_shell_momenta = self
+            .edges
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                compute_three_momentum_from_four(
+                    &lmb.edge_signatures[i],
+                    loop_moms,
+                    independent_external_momenta,
+                )
+                .into_on_shell_four_momentum(e.particle.mass.value.map(|m| F::<T>::from_ff64(m.re)))
+            })
+            .collect_vec();
+
+        let mut numerator = self.derived_data.numerator.as_ref().unwrap().clone();
+
+        let numerator_network = if let AtomView::Mul(mul) = numerator.as_view() {
+            SymbolicTensor::mul_to_network(mul)
+                .unwrap()
+                .to_fully_parametric()
+        } else {
+            panic!("Numerator is not a product")
+        };
+
+        let emr = self
+            .compute_emr(loop_moms, independent_external_momenta)
+            .into_iter()
+            .enumerate()
+            .map(|(i, m)| {
+                m.into_on_shell_four_momentum(
+                    self.edges[i]
+                        .particle
+                        .mass
+                        .value
+                        .map(|m| F::<T>::from_ff64(m.re)),
+                )
+            })
+            .collect_vec();
+
+        let emr_params = self
+            .edges
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                let named_structur = NamedStructure::from_slots(
+                    vec![(AbstractIndex(i), Representation::Lorentz(4.into())).into()],
+                    &format!("Q{}", i),
+                );
+                named_structur.shadow().unwrap()
+            })
+            .collect_vec();
+
+        let mut constmap = AHashMap::new();
+
+        for orient in self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .terms
+            .iter()
+            .map(|e| e.orientation)
+        {
+            for (i, sign) in orient.into_iter().enumerate() {
+                constmap.insert(emr_params[i][1.into()].as_view(), emr[i].spatial.px.clone());
+
+                constmap.insert(emr_params[i][2.into()].as_view(), emr[i].spatial.py.clone());
+
+                constmap.insert(emr_params[i][3.into()].as_view(), emr[i].spatial.pz.clone());
+
+                if sign {
+                    constmap.insert(
+                        emr_params[i][0.into()].as_view(),
+                        emr[i].temporal.value.clone(),
+                    );
+                } else {
+                    constmap.insert(
+                        emr_params[i][0.into()].as_view(),
+                        -emr[i].temporal.value.clone(),
+                    );
+                }
+            }
+
+            let mut evaluated = numerator_network.evaluate::<F<T>, _>(|c| c.into(), &constmap);
+
+            evaluated.contract();
+            out.push(evaluated.result().get_linear(0.into()).unwrap().clone());
+        }
+
+        out
     }
 
     #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
+        let one = loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero.clone(), one);
+
         let loop_number = self.loop_momentum_basis.basis.len();
         let internal_vertex_number = self.vertices.len() - self.external_connections.len();
 
-        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32)
-            * Complex::new(-T::one(), T::zero()).powi(internal_vertex_number as i32 - 1);
+        let prefactor =
+            i.pow(loop_number as u64) * (-i.one()).pow(internal_vertex_number as u64 - 1);
 
         // here numerator evaluation can be weaved into the summation
         prefactor
@@ -1271,17 +1394,16 @@ impl Graph {
                     .into_iter(),
                 )
                 .map(|(cff, num)| cff * num)
-                .sum::<T>()
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or(zero.clone())
     }
-
-    fn on_shell_energies<T: FloatLike>() {}
 
     #[inline]
     pub fn evaluate_cff_expression<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<T>],
-        external_moms: &[FourMomentum<T>],
-    ) -> Complex<T> {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> Complex<F<T>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
         self.evaluate_cff_expression_in_lmb(loop_moms, external_moms, &lmb_specification)
     }
@@ -1455,6 +1577,38 @@ impl LoopMomentumBasis {
             basis: serializable.basis.clone(),
             edge_signatures: serializable.edge_signatures.clone(),
         }
+    }
+
+    pub fn pattern(&self, edge_id: usize) -> Pattern {
+        let (loop_signature, external_signature) = self.edge_signatures[edge_id].clone();
+
+        let mut atom = Atom::new_num(0);
+
+        for (i, sign) in loop_signature.iter().enumerate() {
+            match sign {
+                1 => {
+                    atom = &atom + &Atom::parse(&format!("K{}(x{}__)", i, edge_id)).unwrap();
+                }
+                -1 => {
+                    atom = &atom - &Atom::parse(&format!("K{}(x{}__)", i, edge_id)).unwrap();
+                }
+                _ => {}
+            }
+        }
+
+        for (i, sign) in external_signature.iter().enumerate() {
+            match sign {
+                1 => {
+                    atom = &atom + &Atom::parse(&format!("P{}(x{}__)", i, edge_id)).unwrap();
+                }
+                -1 => {
+                    atom = &atom - &Atom::parse(&format!("P{}(x{}__)", i, edge_id)).unwrap();
+                }
+                _ => {}
+            }
+        }
+
+        atom.into_pattern()
     }
 }
 

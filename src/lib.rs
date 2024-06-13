@@ -35,15 +35,14 @@ use colored::Colorize;
 use eyre::WrapErr;
 
 use integrands::*;
-use lorentz_vector::LorentzVector;
 use momentum::FourMomentum;
 use momentum::ThreeMomentum;
-use num::Complex;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
 use utils::FloatLike;
+use utils::F;
 
 use serde::{Deserialize, Serialize};
 
@@ -153,7 +152,7 @@ pub enum IntegratedPhase {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct KinematicsSettings {
-    pub e_cm: f64,
+    pub e_cm: F<f64>,
     #[serde(default = "Externals::default")]
     pub externals: Externals,
 }
@@ -167,10 +166,10 @@ pub struct IntegratorSettings {
     pub n_increase: usize,
     pub n_max: usize,
     pub integrated_phase: IntegratedPhase,
-    pub learning_rate: f64,
+    pub learning_rate: F<f64>,
     pub train_on_avg: bool,
     pub show_max_wgt_info: bool,
-    pub max_prob_ratio: f64,
+    pub max_prob_ratio: F<f64>,
     pub seed: u64,
 }
 
@@ -235,9 +234,9 @@ impl Settings {
 pub struct IntegrationResult {
     pub neval: i64,
     pub fail: i32,
-    pub result: Vec<f64>,
-    pub error: Vec<f64>,
-    pub prob: Vec<f64>,
+    pub result: Vec<F<f64>>,
+    pub error: Vec<F<f64>>,
+    pub prob: Vec<F<f64>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -261,27 +260,27 @@ impl Default for StabilitySettings {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct StabilityLevelSetting {
     precision: Precision,
-    required_precision_for_re: f64,
-    required_precision_for_im: f64,
-    escalate_for_large_weight_threshold: f64,
+    required_precision_for_re: F<f64>,
+    required_precision_for_im: F<f64>,
+    escalate_for_large_weight_threshold: F<f64>,
 }
 
 impl StabilityLevelSetting {
     fn default_double() -> Self {
         Self {
             precision: Precision::Double,
-            required_precision_for_re: 1e-15,
-            required_precision_for_im: 1e-15,
-            escalate_for_large_weight_threshold: 0.9,
+            required_precision_for_re: F(1e-15),
+            required_precision_for_im: F(1e-15),
+            escalate_for_large_weight_threshold: F(0.9),
         }
     }
 
     fn default_quad() -> Self {
         Self {
             precision: Precision::Quad,
-            required_precision_for_re: 1e-15,
-            required_precision_for_im: 1e-15,
-            escalate_for_large_weight_threshold: -1.0,
+            required_precision_for_re: F(1e-15),
+            required_precision_for_im: F(1e-15),
+            escalate_for_large_weight_threshold: F(-1.0),
         }
     }
 }
@@ -298,7 +297,9 @@ pub enum RotationMethod {
 }
 
 impl RotationMethod {
-    fn rotation_function<T: FloatLike>(&self) -> impl Fn(&ThreeMomentum<T>) -> ThreeMomentum<T> {
+    fn rotation_function<T: FloatLike>(
+        &self,
+    ) -> impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> {
         match self {
             RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x,
             RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y,
@@ -320,21 +321,21 @@ pub enum Precision {
 #[serde(tag = "type", content = "momenta")]
 pub enum Externals {
     #[serde(rename = "constant")]
-    Constant(Vec<[f64; 4]>),
+    Constant(Vec<[F<f64>; 4]>),
     // add different type of pdfs here when needed
 }
 
 impl Externals {
     #[allow(unused_variables)]
     #[inline]
-    pub fn get_externals(&self, x_space_point: &[f64]) -> (Vec<FourMomentum<f64>>, f64) {
+    pub fn get_externals(&self, x_space_point: &[F<f64>]) -> (Vec<FourMomentum<F<f64>>>, F<f64>) {
         match self {
             Externals::Constant(externals) => (
                 externals
                     .iter()
                     .map(|[e0, e1, e2, e3]| FourMomentum::from_args(*e0, *e1, *e2, *e3))
                     .collect(),
-                1.0,
+                F(1.0),
             ),
         }
     }
@@ -342,7 +343,7 @@ impl Externals {
 
 impl Default for Externals {
     fn default() -> Self {
-        Externals::Constant(vec![[0.0; 4]; 15])
+        Externals::Constant(vec![[F(0.0); 4]; 15])
     }
 }
 

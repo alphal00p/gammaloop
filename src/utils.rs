@@ -2,18 +2,31 @@ use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use colored::Colorize;
+use funty::Fundamental;
 use hyperdual::Hyperdual;
 use itertools::{izip, Itertools};
-use lorentz_vector::{Field, LorentzVector, RealNumberLike};
-use num::traits::{Float, FloatConst, FromPrimitive, Num, NumAssign, NumCast, Signed};
-use num::traits::{Inv, One, Zero};
-use num::Complex;
-use num::ToPrimitive;
+use pprof::flamegraph::defaults::SEARCH_COLOR;
+use rand::Rng;
+use ref_ops::{
+    RefAdd, RefDiv, RefMul, RefMutAdd, RefMutDiv, RefMutMul, RefMutNeg, RefMutSub, RefNeg, RefSub,
+};
 use serde::{Deserialize, Serialize};
+use spenso::{ContractableWith, RefZero, TrySmallestUpgrade};
+use symbolica::domains::float::{
+    Complex, ConstructibleFloat, NumericalFloatComparison, NumericalFloatLike,
+};
+// use spenso::Complex;
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
-use std::ops::{AddAssign, Neg, SubAssign};
+use std::fmt::Debug;
+use std::iter::Sum;
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::path::Display;
 use std::time::Duration;
+use symbolica::domains::float::Real;
+use symbolica::domains::rational::Rational;
+use symbolica::poly::groebner::Echelonize;
+// use symbolica::domains::Field;
 use symbolica::numerical_integration::Sample;
 
 #[allow(unused_imports)]
@@ -55,43 +68,619 @@ impl FloatConvertFrom<f64> for f64 {
     }
 }
 
-impl FloatConvertFrom<f128::f128> for f64 {
-    fn convert_from(x: &f128::f128) -> f64 {
-        (*x).to_f64().unwrap()
+// impl FloatConvertFrom<f128::f128> for f64 {
+//     fn convert_from(x: &f128::f128) -> f64 {
+//         (*x).to_f64().unwrap()
+//     }
+// }
+
+// impl FloatConvertFrom<f128::f128> for f128::f128 {
+//     fn convert_from(x: &f128::f128) -> f128::f128 {
+//         *x
+//     }
+// }
+
+// impl FloatConvertFrom<f64> for f128::f128 {
+//     fn convert_from(x: &f64) -> f128::f128 {
+//         f128::f128::from_f64(*x).unwrap()
+//     }
+// }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarFloat<const N: u32> {
+    float: rug::Float,
+}
+
+impl<const N: u32> VarFloat<N> {
+    pub fn from_f64(x: f64) -> Self {
+        VarFloat {
+            float: rug::Float::with_val(N, x),
+        }
+    }
+
+    pub fn to_f64(&self) -> f64 {
+        self.float.to_f64()
     }
 }
 
-impl FloatConvertFrom<f128::f128> for f128::f128 {
-    fn convert_from(x: &f128::f128) -> f128::f128 {
-        *x
+impl<const N: u32> Default for VarFloat<N> {
+    fn default() -> Self {
+        VarFloat {
+            float: rug::Float::with_val(N, 0.0),
+        }
     }
 }
 
-impl FloatConvertFrom<f64> for f128::f128 {
-    fn convert_from(x: &f64) -> f128::f128 {
-        f128::f128::from_f64(*x).unwrap()
+impl<const N: u32> std::ops::Mul for VarFloat<N> {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        VarFloat {
+            float: rug::Float::with_val(N, self.float * rhs.float),
+        }
+    }
+}
+
+impl<const N: u32> std::ops::Add for VarFloat<N> {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        VarFloat {
+            float: rug::Float::with_val(N, self.float + rhs.float),
+        }
+    }
+}
+
+impl<const N: u32> std::iter::Sum for VarFloat<N> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::default(), |a, b| a + b)
+    }
+}
+
+// #[allow(non_camel_case_types)]
+// pub type f128 = VarFloat<113>;
+
+pub trait EvalFloat: Debug {
+    type Higher: EvalFloat;
+    type Lower: EvalFloat;
+    fn from_f64(x: f64) -> Self;
+    fn higher(self) -> Self::Higher;
+    fn lower(self) -> Self::Lower;
+}
+
+impl EvalFloat for f64 {
+    type Higher = f128;
+    type Lower = f64;
+    fn from_f64(x: f64) -> Self {
+        x
+    }
+    fn higher(self) -> Self::Higher {
+        <Self::Higher as EvalFloat>::from_f64(self)
+    }
+    fn lower(self) -> Self::Lower {
+        self
     }
 }
 
 pub trait FloatLike:
-    From<f64>
-    + FloatConvertFrom<f64>
-    + FloatConvertFrom<f128::f128>
-    + Num
-    + FromPrimitive
-    + Float
-    + Field
-    + RealNumberLike
-    + Signed
-    + FloatConst
-    + std::fmt::LowerExp
-    + 'static
-    + Signum
+    Real
+    + NumericalFloatComparison
+    + for<'a> RefAdd<&'a Self, Output = Self>
+    // + for<'a> RefMutAdd<&'a Self, Output = Self>
+    + RefAdd<Self, Output = Self>
+    // + RefMutAdd<Self, Output = Self>
+    + for<'a> RefMul<&'a Self, Output = Self>
+    // + for<'a> RefMutMul<&'a Self, Output = Self>
+    + RefMul<Self, Output = Self>
+    // + RefMutMul<Self, Output = Self>
+    + for<'a> RefSub<&'a Self, Output = Self>
+    // + for<'a> RefMutSub<&'a Self, Output = Self>
+    + RefSub<Self, Output = Self>
+    // + RefMutSub<Self, Output = Self>
+    + for<'a> RefDiv<&'a Self, Output = Self>
+    // + for<'a> RefMutDiv<&'a Self, Output = Self> f64 doesn't have RefMutDiv
+    + RefDiv<Self, Output = Self>
+    // + RefMutDiv<Self, Output = Self>
+    + RefNeg<Output = Self>
+    // + RefMutNeg<Output = Self> f64 doesn't have RefMutNeg
 {
+    type Higher: FloatLike;
+    type Lower: FloatLike;
+
+    fn higher(&self) -> Self::Higher;
+    fn lower(&self) -> Self::Lower;
+
+    
+    #[allow(non_snake_case)]
+    fn PI(&self) -> Self;
+    #[allow(non_snake_case)]
+    fn E(&self) -> Self;
+    #[allow(non_snake_case)]
+    fn TAU(&self) -> Self;
+    #[allow(non_snake_case)]
+    fn FRAC_1_PI(&self) -> Self;
+
+    fn from_f64(x: f64) -> Self;
+
+    fn into_f64(&self) -> f64; // for inverse gamma in tropical sampling
+
+    fn is_nan(&self) -> bool;
+
+    fn is_infinite(&self) -> bool;
+
+    fn floor(&self) -> Self;
+
+    fn square(&self) -> Self {
+        self.pow(2)
+    }
+
+    fn powi(&self, n: i32) -> Self {
+        let absn = n.abs() as u64;
+        if n.is_negative() {
+            self.pow(absn).inv()
+        } else {
+            self.pow(absn)
+        }
+    }
+
+    fn epsilon(&self) -> Self {
+        Self::from_f64(std::f64::EPSILON)
+    }
+
+    fn less_than_epsilon(&self) -> bool {
+        self < &self.epsilon()
+    }
+
+    fn positive(&self) -> bool {
+        self > &self.zero()
+    }
+
+    fn max_value(&self) -> Self {
+        Self::from_f64(std::f64::MAX)
+    }
+
+    fn min_value(&self) -> Self {
+        Self::from_f64(std::f64::MIN)
+    }
+
+    fn ln(&self) -> Self {
+        self.log() //FIXME
+    }
 }
 
-impl FloatLike for f64 {}
-impl FloatLike for f128::f128 {}
+#[derive(Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize)]
+pub struct F<T: FloatLike>(pub T);
+
+
+impl<T:FloatLike> RefZero for F<T> {
+   fn ref_zero(&self) -> Self {
+         F(self.0.zero())
+   }
+}
+
+impl<T:FloatLike> TrySmallestUpgrade<F<T>> for F<T> {
+    type LCM = F<T>;
+    fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
+        Some(std::borrow::Cow::Borrowed(self))
+    }
+}
+
+impl<'a,T:FloatLike> From<&'a Rational> for F<T>{
+    fn from(x: &'a Rational) -> Self {
+        F(T::from_f64(x.to_f64()))
+    }
+}
+
+impl<T: FloatLike> From<T> for F<T> {
+    fn from(x: T) -> Self {
+        F(x)
+    }
+}
+
+impl<T: FloatLike> std::fmt::Display for F<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl<T: FloatLike> std::fmt::LowerExp for F<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:e}", self.0)
+    }
+}
+
+impl<T: FloatLike> NumericalFloatLike for F<T> {
+    fn mul_add(&self, a: &Self, b: &Self) -> Self {
+        F(self.0.mul_add(&a.0, &b.0))
+    }
+    fn new_zero() -> Self {
+        F(T::new_zero())
+    }
+    fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
+        F(self.0.sample_unit(rng))
+    }
+
+    delegate! {
+        #[into]
+        to self.0{
+            fn zero(&self) -> Self;
+            fn one(&self) -> Self;
+            fn norm(&self) -> Self;
+            fn from_usize(&self, x: usize) -> Self;
+            fn from_i64(&self, x: i64) -> Self;
+            fn pow(&self, n: u64) -> Self;
+            fn inv(&self) -> Self;
+            fn get_precision(&self) -> u32;
+        }
+    }
+}
+
+impl<T: FloatLike + ConstructibleFloat> ConstructibleFloat for F<T> {
+    fn new_from_i64(a: i64) -> Self {
+        F(T::new_from_i64(a))
+    }
+
+    fn new_from_usize(a: usize) -> Self {
+        F(T::new_from_usize(a))
+    }
+
+    fn new_one() -> Self {
+        F(T::new_one())
+    }
+
+    fn new_sample_unit<R: Rng + ?Sized>(rng: &mut R) -> Self {
+        F(T::new_sample_unit(rng))
+    }
+}
+
+impl<T: FloatLike> NumericalFloatComparison for F<T> {
+    fn max(&self, other: &Self) -> Self {
+        F(self.0.max(&other.0))
+    }
+    delegate! {
+        #[into]
+        to self.0{
+            fn is_zero(&self) -> bool;
+            fn is_one(&self) -> bool;
+            fn is_finite(&self) -> bool;
+            fn to_usize_clamped(&self) -> usize;
+            fn to_f64(&self) -> f64;
+        }
+    }
+}
+
+impl<T: FloatLike> Real for F<T> {
+    fn atan2(&self, x: &Self) -> Self {
+        F(self.0.atan2(&x.0))
+    }
+
+    fn powf(&self, e: Self) -> Self {
+        F(self.0.powf(e.0))
+    }
+    delegate! {
+        #[into]
+        to self.0{
+            fn sqrt(&self) -> Self;
+            fn log(&self) -> Self;
+            fn exp(&self) -> Self;
+            fn sin(&self) -> Self;
+            fn cos(&self) -> Self;
+            fn tan(&self) -> Self;
+            fn asin(&self) -> Self;
+            fn acos(&self) -> Self;
+            fn sinh(&self) -> Self;
+            fn cosh(&self) -> Self;
+            fn tanh(&self) -> Self;
+            fn asinh(&self) -> Self;
+            fn acosh(&self) -> Self;
+            fn atanh(&self) -> Self;
+
+        }
+    }
+}
+
+
+use delegate::delegate;
+
+impl<T: FloatLike> F<T> {
+    pub fn from_ff64( x: F<f64>) -> Self {
+        F(T::from_f64(x.0))
+    }
+
+    pub fn higher(&self) -> F<T::Higher> {
+        F(self.0.higher())
+    }
+
+    pub fn lower(&self) -> F<T::Lower> {
+        F(self.0.lower())
+    }
+
+
+    pub fn from_f64(x: f64) -> Self{
+        F(T::from_f64(x))
+    }
+
+    pub fn into_ff64(&self) -> F<f64> {
+        F(self.0.into_f64())
+    }
+
+    pub fn abs(&self) -> Self {
+        F(self.0.norm())
+    }
+
+
+    pub fn log10(&self) -> Self {
+        self.ln()
+    }
+    delegate! {
+        #[into]
+        to self.0 {
+            #[allow(non_snake_case)]
+            pub fn PI(&self) -> Self;
+            #[allow(non_snake_case)]
+            pub fn E(&self) -> Self;
+            #[allow(non_snake_case)]
+            pub fn TAU(&self) -> Self;
+            #[allow(non_snake_case)]
+            pub fn FRAC_1_PI(&self) -> Self;
+            pub fn into_f64(&self) -> f64;
+            pub fn square(&self) -> Self;
+            pub fn powi(&self, n: i32) -> Self;
+            pub fn epsilon(&self) -> Self;
+            pub fn less_than_epsilon(&self) -> bool;
+            pub fn positive(&self) -> bool;
+            pub fn max_value(&self) -> Self;
+            pub fn min_value(&self) -> Self;
+            pub fn ln(&self) -> Self;
+            pub fn is_nan(&self) -> bool;
+            pub fn is_infinite(&self) -> bool;
+            pub fn floor(&self) -> Self;
+        }
+    }
+}
+
+impl<T: FloatLike> Add<F<T>> for F<T> {
+    type Output = F<T>;
+    fn add(self, rhs: F<T>) -> Self::Output {
+        F(self.0 + rhs.0)
+    }
+}
+
+impl<T: FloatLike> Add<&F<T>> for F<T> {
+    type Output = F<T>;
+    fn add(self, rhs: &F<T>) -> Self::Output {
+        F(self.0 + &rhs.0)
+    }
+}
+
+impl<'a, T: FloatLike> Add<&F<T>> for &'a F<T> {
+    type Output = F<T>;
+    fn add(self, rhs: &F<T>) -> Self::Output {
+        F((&self.0).ref_add(&rhs.0))
+    }
+}
+
+impl<'a, T: FloatLike> Add<F<T>> for &'a F<T> {
+    type Output = F<T>;
+    fn add(self, rhs: F<T>) -> Self::Output {
+        F((&self.0).ref_add(rhs.0))
+    }
+}
+
+impl<T: FloatLike> AddAssign<&F<T>> for F<T> {
+    fn add_assign(&mut self, rhs: &F<T>) {
+        self.0 += &rhs.0;
+    }
+}
+
+impl<T: FloatLike> AddAssign<F<T>> for F<T> {
+    fn add_assign(&mut self, rhs: F<T>) {
+        self.0 += rhs.0;
+    }
+}
+
+impl<T: FloatLike> Sub<F<T>> for F<T> {
+    type Output = F<T>;
+    fn sub(self, rhs: F<T>) -> Self::Output {
+        F(self.0 - rhs.0)
+    }
+}
+
+impl<T: FloatLike> Sub<&F<T>> for F<T> {
+    type Output = F<T>;
+    fn sub(self, rhs: &F<T>) -> Self::Output {
+        F(self.0 - &rhs.0)
+    }
+}
+
+impl<'a, T: FloatLike> Sub<&F<T>> for &'a F<T> {
+    type Output = F<T>;
+    fn sub(self, rhs: &F<T>) -> Self::Output {
+        F((&self.0).ref_sub(&rhs.0))
+    }
+}
+
+impl<'a, T: FloatLike> Sub<F<T>> for &'a F<T> {
+    type Output = F<T>;
+    fn sub(self, rhs: F<T>) -> Self::Output {
+        F((&self.0).ref_sub(rhs.0))
+    }
+}
+
+impl<T: FloatLike> SubAssign<&F<T>> for F<T> {
+    fn sub_assign(&mut self, rhs: &F<T>) {
+        self.0 -= &rhs.0;
+    }
+}
+
+impl<T: FloatLike> SubAssign<F<T>> for F<T> {
+    fn sub_assign(&mut self, rhs: F<T>) {
+        self.0 -= rhs.0;
+    }
+}
+
+impl<T: FloatLike> Mul<F<T>> for F<T> {
+    type Output = F<T>;
+    fn mul(self, rhs: F<T>) -> Self::Output {
+        F(self.0 * rhs.0)
+    }
+}
+
+impl<T: FloatLike> Mul<&F<T>> for F<T> {
+    type Output = F<T>;
+    fn mul(self, rhs: &F<T>) -> Self::Output {
+        F(self.0 * &rhs.0)
+    }
+}
+
+impl<'a, T: FloatLike> Mul<&F<T>> for &'a F<T> {
+    type Output = F<T>;
+    fn mul(self, rhs: &F<T>) -> Self::Output {
+        F((&self.0).ref_mul(&rhs.0))
+    }
+}
+
+impl<'a, T: FloatLike> Mul<F<T>> for &'a F<T> {
+    type Output = F<T>;
+    fn mul(self, rhs: F<T>) -> Self::Output {
+        F((&self.0).ref_mul(rhs.0))
+    }
+}
+
+impl<T: FloatLike> MulAssign<&F<T>> for F<T> {
+    fn mul_assign(&mut self, rhs: &F<T>) {
+        self.0 *= &rhs.0;
+    }
+}
+
+impl<T: FloatLike> MulAssign<F<T>> for F<T> {
+    fn mul_assign(&mut self, rhs: F<T>) {
+        self.0 *= rhs.0;
+    }
+}
+
+impl<T: FloatLike> Div<F<T>> for F<T> {
+    type Output = F<T>;
+    fn div(self, rhs: F<T>) -> Self::Output {
+        F(self.0 / rhs.0)
+    }
+}
+
+impl<T: FloatLike> Div<&F<T>> for F<T> {
+    type Output = F<T>;
+    fn div(self, rhs: &F<T>) -> Self::Output {
+        F(self.0 / &rhs.0)
+    }
+}
+
+impl<'a, T: FloatLike> Div<&F<T>> for &'a F<T> {
+    type Output = F<T>;
+    fn div(self, rhs: &F<T>) -> Self::Output {
+        F((&self.0).ref_div(&rhs.0))
+    }
+}
+
+impl<'a, T: FloatLike> Div<F<T>> for &'a F<T> {
+    type Output = F<T>;
+    fn div(self, rhs: F<T>) -> Self::Output {
+        F((&self.0).ref_div(rhs.0))
+    }
+}
+
+impl<T: FloatLike> DivAssign<&F<T>> for F<T> {
+    fn div_assign(&mut self, rhs: &F<T>) {
+        self.0 /= &rhs.0;
+    }
+}
+
+impl<T: FloatLike> DivAssign<F<T>> for F<T> {
+    fn div_assign(&mut self, rhs: F<T>) {
+        self.0 /= rhs.0;
+    }
+}
+
+impl<T: FloatLike> Neg for F<T> {
+    type Output = F<T>;
+    fn neg(self) -> Self::Output {
+        F(-self.0)
+    }
+}
+
+impl<'a, T: FloatLike> Neg for &'a F<T> {
+    type Output = F<T>;
+    fn neg(self) -> Self::Output {
+        F(self.0.ref_neg())
+    }
+}
+
+pub trait RefDefault {
+    fn default(&self) -> Self;
+}
+
+impl<T: FloatLike> RefDefault for T {
+    fn default(&self) -> Self {
+        self.zero()
+    }
+}
+
+impl<T: FloatLike> RefDefault for F<T> {
+    fn default(&self) -> Self {
+        F(self.0.default())
+    }
+}
+
+impl FloatLike for f64 {
+
+    type Higher = f128;
+    type Lower = f64;
+
+    fn higher(&self) -> Self::Higher {
+        self.to_f64()
+    }
+
+    fn lower(&self) -> Self::Lower {
+        *self
+    }
+
+    fn PI(&self) -> Self {
+        std::f64::consts::PI
+    }
+
+    fn E(&self) -> Self {
+        std::f64::consts::E
+    }
+
+    fn TAU(&self) -> Self {
+        std::f64::consts::TAU
+    }
+
+    fn FRAC_1_PI(&self) -> Self {
+        std::f64::consts::FRAC_1_PI
+    }
+
+    fn from_f64(x: f64) -> Self {
+        x
+    }
+
+    fn into_f64(&self) -> f64 {
+        *self
+    }
+
+    fn is_nan(&self) -> bool {
+        f64::is_nan(*self)
+    }
+
+    fn is_infinite(&self) -> bool {
+        f64::is_infinite(*self)
+    }
+
+    fn floor(&self) -> Self {
+        f64::floor(*self)
+    }
+}
+
+#[allow(non_camel_case_types)]
+pub type f128 = f64;
 
 /// An iterator which iterates two other iterators simultaneously
 #[derive(Clone, Debug)]
@@ -196,10 +785,10 @@ pub fn to_str_expression(expression: &Atom) -> String {
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
 /// Based on the Python package gvar.
-pub fn format_uncertainty(mean: f64, sdev: f64) -> String {
-    fn ndec(x: f64, offset: usize) -> i32 {
-        let mut ans = (offset as f64 - x.log10()) as i32;
-        if ans > 0 && x * 10.0.powi(ans) >= [0.5, 9.5, 99.5][offset] {
+pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
+    fn ndec(x: F<f64>, offset: usize) -> i32 {
+        let mut ans = (offset as f64 - x.0.log10()) as i32;
+        if ans > 0 && x.0 * 10.0.powi(ans) >= [0.5, 9.5, 99.5][offset] {
             ans -= 1;
         }
         if ans < 0 {
@@ -216,8 +805,8 @@ pub fn format_uncertainty(mean: f64, sdev: f64) -> String {
         format!("{:e} ± {:e}", v, dv)
     } else if dv.is_infinite() {
         format!("{:e} ± inf", v)
-    } else if v == 0. && !(1e-4..1e5).contains(&dv) {
-        if dv == 0. {
+    } else if v.is_zero() && !(F(1e-4)..F(1e5)).contains(&dv) {
+        if dv.is_zero() {
             "0(0)".to_owned()
         } else {
             let e = format!("{:.1e}", dv);
@@ -226,10 +815,10 @@ pub fn format_uncertainty(mean: f64, sdev: f64) -> String {
             let e2 = ans.next().unwrap();
             "0.0(".to_owned() + e1 + ")e" + e2
         }
-    } else if v == 0. {
-        if dv >= 9.95 {
+    } else if v.is_zero() {
+        if dv >= F(9.95) {
             format!("0({:.0})", dv)
-        } else if dv >= 0.995 {
+        } else if dv >= F(0.995) {
             format!("0.0({:.1})", dv)
         } else {
             let ndecimal = ndec(dv, 2);
@@ -237,10 +826,10 @@ pub fn format_uncertainty(mean: f64, sdev: f64) -> String {
                 "{:.*}({:.0})",
                 ndecimal as usize,
                 v,
-                dv * 10.0.powi(ndecimal)
+                dv * F(10.).powi(ndecimal)
             )
         }
-    } else if dv == 0. {
+    } else if dv.is_zero() {
         let e = format!("{:e}", v);
         let mut ans = e.split('e');
         let e1 = ans.next().unwrap();
@@ -250,27 +839,27 @@ pub fn format_uncertainty(mean: f64, sdev: f64) -> String {
         } else {
             e1.to_owned() + "(0)"
         }
-    } else if dv > 1e4 * v.abs() {
+    } else if dv > F(1e4) * v.abs() {
         format!("{:.1e} ± {:.2e}", v, dv)
-    } else if v.abs() >= 1e6 || v.abs() < 1e-5 {
+    } else if v.abs() >= F(1e6) || v.abs() < F(1e-5) {
         // exponential notation for large |self.mean|
         let exponent = v.abs().log10().floor();
-        let fac = 10.0.powf(exponent);
+        let fac = F(10.0).powf(exponent);
         let mantissa = format_uncertainty(v / fac, dv / fac);
         let e = format!("{:.0e}", fac);
         let mut ee = e.split('e');
         mantissa + "e" + ee.nth(1).unwrap()
     }
     // normal cases
-    else if dv >= 9.95 {
-        if v.abs() >= 9.5 {
+    else if dv >= F(9.95) {
+        if v.abs() >= F(9.5) {
             format!("{:.0}({:.0})", v, dv)
         } else {
             let ndecimal = ndec(v.abs(), 1);
             format!("{:.*}({:.*})", ndecimal as usize, v, ndecimal as usize, dv)
         }
-    } else if dv >= 0.995 {
-        if v.abs() >= 0.95 {
+    } else if dv >= F(0.995) {
+        if v.abs() >= F(0.95) {
             format!("{:.1}({:.1})", v, dv)
         } else {
             let ndecimal = ndec(v.abs(), 1);
@@ -282,7 +871,7 @@ pub fn format_uncertainty(mean: f64, sdev: f64) -> String {
             "{:.*}({:.0})",
             ndecimal as usize,
             v,
-            dv * 10.0.powi(ndecimal)
+            dv * F(10.).powi(ndecimal)
         )
     }
 }
@@ -315,25 +904,25 @@ pub trait Signum {
     fn multiply_sign(&self, sign: i8) -> Self;
 }
 
-impl Signum for f128::f128 {
-    #[inline]
-    fn multiply_sign(&self, sign: i8) -> f128::f128 {
-        match sign {
-            1 => *self,
-            0 => f128::f128::zero(),
-            -1 => self.neg(),
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-}
+// impl Signum for f128::f128 {
+//     #[inline]
+//     fn multiply_sign(&self, sign: i8) -> f128::f128 {
+//         match sign {
+//             1 => *self,
+//             0 => f128::f128::zero(),
+//             -1 => self.neg(),
+//             _ => unreachable!("Sign should be -1,0,1"),
+//         }
+//     }
+// }
 
 impl Signum for f64 {
     #[inline]
     fn multiply_sign(&self, sign: i8) -> f64 {
         match sign {
             1 => *self,
-            0 => f64::zero(),
-            -1 => self.neg(),
+            0 => self.zero(),
+            -1 => -self,
             _ => unreachable!("Sign should be -1,0,1"),
         }
     }
@@ -344,43 +933,31 @@ impl Signum for f32 {
     fn multiply_sign(&self, sign: i8) -> Self {
         match sign {
             1 => *self,
-            0 => f32::zero(),
+            0 => 0.0,
             -1 => self.neg(),
             _ => unreachable!("Sign should be -1,0,1"),
         }
     }
 }
 
-impl<T: Num + Neg<Output = T> + Copy> Signum for Complex<T> {
+impl<T: FloatLike> Signum for Complex<F<T>> {
     #[inline]
-    fn multiply_sign(&self, sign: i8) -> Complex<T> {
+    fn multiply_sign(&self, sign: i8) -> Complex<F<T>> {
         match sign {
-            1 => *self,
-            0 => Complex::zero(),
-            -1 => Complex::new(-self.re, -self.im),
+            1 => self.clone(),
+            0 => self.zero(),
+            -1 => -self.clone(),
             _ => unreachable!("Sign should be -1,0,1"),
         }
     }
 }
 
-impl<T: FloatLike, const U: usize> Signum for Hyperdual<T, U> {
+impl<T: FloatLike> Signum for FourMomentum<F<T>> {
     #[inline]
-    fn multiply_sign(&self, sign: i8) -> Hyperdual<T, U> {
+    fn multiply_sign(&self, sign: i8) -> FourMomentum<F<T>> {
         match sign {
-            1 => *self,
-            0 => Hyperdual::zero(),
-            -1 => -*self,
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-}
-
-impl<T: Field> Signum for LorentzVector<T> {
-    #[inline]
-    fn multiply_sign(&self, sign: i8) -> LorentzVector<T> {
-        match sign {
-            1 => *self,
-            0 => LorentzVector::default(),
+            1 => self.clone(),
+            0 => self.zero(),
             -1 => -self,
             _ => unreachable!("Sign should be -1,0,1"),
         }
@@ -390,38 +967,29 @@ impl<T: Field> Signum for LorentzVector<T> {
 #[allow(unused)]
 #[inline]
 /// Invert with better precision
-pub fn finv<T: Float>(c: Complex<T>) -> Complex<T> {
-    let norm = c.norm();
-    c.conj() / norm / norm
+pub fn finv<T: FloatLike>(c: Complex<F<T>>) -> Complex<F<T>> {
+    let norm = c.norm_squared();
+    c.conj() / norm
 }
 
 #[allow(unused)]
 #[inline]
-pub fn powi<T: Float + NumAssign>(c: Complex<T>, n: usize) -> Complex<T> {
-    let mut c1 = Complex::<T>::one();
-    for _ in 0..n {
-        c1 *= c;
+pub fn powi<T: FloatLike>(c: Complex<F<T>>, n: i32) -> Complex<F<T>> {
+    if n.is_negative() {
+        let u = -n as u64;
+        finv(c.pow(u))
+    } else {
+        let u = n as u64;
+        c.pow(u)
     }
-    c1
 }
 
 #[allow(unused)]
-#[inline]
-pub fn powf<T: 'static + Float + NumAssign + std::fmt::Debug, const N: usize>(
-    h: Hyperdual<T, N>,
-    n: T,
-) -> Hyperdual<T, N> {
-    let r = Float::powf(h.real(), n - T::one());
-    let rr = n * r;
-    h.map_dual(r * h.real(), |x| *x * rr)
-}
-
-#[allow(unused)]
-pub fn evaluate_signature<T: Field>(
-    signature: &[i8],
-    momenta: &[LorentzVector<T>],
-) -> LorentzVector<T> {
-    let mut momentum = LorentzVector::default();
+pub fn evaluate_signature<T>(signature: &[i8], momenta: &[FourMomentum<F<T>>]) -> FourMomentum<F<T>>
+where
+    T: FloatLike,
+{
+    let mut momentum = momenta[0].zero();
     for (&sign, mom) in zip_eq(signature, momenta) {
         match sign {
             0 => {}
@@ -440,49 +1008,49 @@ pub fn evaluate_signature<T: Field>(
 #[allow(unused)]
 #[inline]
 pub fn pinch_dampening_function<T: FloatLike>(
-    dampening_arg: T,
-    delta_t: T,
-    powers: (i32, i32),
+    dampening_arg: F<T>,
+    delta_t: F<T>,
+    powers: (u64, u64),
     multiplier: f64,
-) -> T {
+) -> F<T> {
     // Make sure the function is even in t-tstar
     assert!(powers.1 % 2 == 0);
-    let a = dampening_arg.powi(powers.0);
-    a / (a + Into::<T>::into(multiplier) * delta_t.powi(powers.1))
+    let a = dampening_arg.pow(powers.0);
+    &a / (&a + F::<T>::from_f64(multiplier) * delta_t.pow(powers.1))
 }
 
 pub fn h<T: FloatLike>(
-    t: T,
-    tstar: Option<T>,
-    sigma: Option<T>,
+    t: F<T>,
+    tstar: Option<F<T>>,
+    sigma: Option<F<T>>,
     h_function_settings: &crate::HFunctionSettings,
-) -> T {
+) -> F<T> {
+    let sqrt_pi = t.PI().sqrt();
     let sig = if let Some(s) = sigma {
         s
     } else {
-        Into::<T>::into(h_function_settings.sigma)
+        F::<T>::from_f64(h_function_settings.sigma)
     };
     let power = h_function_settings.power;
     match h_function_settings.function {
         crate::HFunction::Exponential => {
-            (-(t * t) / (sig * sig)).exp() * Into::<T>::into(2_f64)
-                / (<T as FloatConst>::PI().sqrt() * sig)
+            (-((&t).square()) / ((&sig).square())).exp() * F::<T>::from_f64(2_f64) / (sqrt_pi * &sig)
         }
         crate::HFunction::PolyExponential => {
             // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
             let normalisation = match power {
-                None | Some(0) => <T as FloatConst>::PI().sqrt() * sig / Into::<T>::into(2_f64),
-                Some(1) => Into::<T>::into(0.841_568_215_070_771_4) * sig,
-                Some(3) => Into::<T>::into(1.033_476_847_068_688_6) * sig,
-                Some(4) => Into::<T>::into(1.329_340_388_179_137) * sig,
-                Some(6) => Into::<T>::into(2.880_237_507_721_463_7) * sig,
-                Some(7) => Into::<T>::into(4.783_566_971_347_609) * sig,
-                Some(9) => Into::<T>::into(16.225_745_976_182_285) * sig,
-                Some(10) => Into::<T>::into(32.735_007_058_911_25) * sig,
-                Some(12) => Into::<T>::into(155.837_465_922_583_42) * sig,
-                Some(13) => Into::<T>::into(364.658_500_356_566_04) * sig,
-                Some(15) => Into::<T>::into(2_257.637_553_015_473) * sig,
-                Some(16) => Into::<T>::into(5_939.804_418_537_864) * sig,
+                None | Some(0) => sqrt_pi * &sig / F::<T>::from_f64(2_f64),
+                Some(1) => F::<T>::from_f64(0.841_568_215_070_771_4) * &sig,
+                Some(3) => F::<T>::from_f64(1.033_476_847_068_688_6) * &sig,
+                Some(4) => F::<T>::from_f64(1.329_340_388_179_137) * &sig,
+                Some(6) => F::<T>::from_f64(2.880_237_507_721_463_7) * &sig,
+                Some(7) => F::<T>::from_f64(4.783_566_971_347_609) * &sig,
+                Some(9) => F::<T>::from_f64(16.225_745_976_182_285) * &sig,
+                Some(10) => F::<T>::from_f64(32.735_007_058_911_25) * &sig,
+                Some(12) => F::<T>::from_f64(155.837_465_922_583_42) * &sig,
+                Some(13) => F::<T>::from_f64(364.658_500_356_566_04) * &sig,
+                Some(15) => F::<T>::from_f64(2_257.637_553_015_473) * &sig,
+                Some(16) => F::<T>::from_f64(5_939.804_418_537_864) * &sig,
                 _ => panic!(
                     "Value {} of power in poly exponential h function not supported",
                     power.unwrap()
@@ -490,26 +1058,29 @@ pub fn h<T: FloatLike>(
             };
             let prefactor = match power {
                 None | Some(0) => normalisation.inv(),
-                Some(p) => (t / sig).powi(-(p as i32)) / normalisation,
+                Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
             };
             prefactor
-                * (Into::<T>::into(2_f64) - (t * t) / (sig * sig) - (sig * sig) / (t * t)).exp()
+                * (F::<T>::from_f64(2_f64)
+                    - (t.square()) / (sig.square())
+                    - (sig.square()) / (t.square()))
+                .exp()
         }
         crate::HFunction::PolyLeftRightExponential => {
             // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp( -((t^2/sigma^2 +1)/ (t/sigma) -2) )
             let normalisation = match power {
-                None | Some(0) => Into::<T>::into(2.066_953_694_137_377) * sig,
-                Some(1) => Into::<T>::into(1.683_136_430_141_542_8) * sig,
-                Some(3) => Into::<T>::into(3.750_090_124_278_92) * sig,
-                Some(4) => Into::<T>::into(9.567_133_942_695_218) * sig,
-                Some(6) => Into::<T>::into(139.373_101_752_153_5) * sig,
-                Some(7) => Into::<T>::into(729.317_000_713_132_1) * sig,
-                Some(9) => Into::<T>::into(32_336.242_742_929_753) * sig,
-                Some(10) => Into::<T>::into(263_205.217_049_469) * sig,
-                Some(12) => Into::<T>::into(2.427_503_717_893_097_5e7) * sig,
-                Some(13) => Into::<T>::into(2.694_265_921_644_289e8) * sig,
-                Some(15) => Into::<T>::into(9.040_742_057_760_125e12) * sig,
-                Some(16) => Into::<T>::into(1.452_517_480_246_491_3e14) * sig,
+                None | Some(0) => F::<T>::from_f64(2.066_953_694_137_377) * &sig,
+                Some(1) => F::<T>::from_f64(1.683_136_430_141_542_8) * &sig,
+                Some(3) => F::<T>::from_f64(3.750_090_124_278_92) * &sig,
+                Some(4) => F::<T>::from_f64(9.567_133_942_695_218) * &sig,
+                Some(6) => F::<T>::from_f64(139.373_101_752_153_5) * &sig,
+                Some(7) => F::<T>::from_f64(729.317_000_713_132_1) * &sig,
+                Some(9) => F::<T>::from_f64(32_336.242_742_929_753) * &sig,
+                Some(10) => F::<T>::from_f64(263_205.217_049_469) * &sig,
+                Some(12) => F::<T>::from_f64(2.427_503_717_893_097_5e7) * &sig,
+                Some(13) => F::<T>::from_f64(2.694_265_921_644_289e8) * &sig,
+                Some(15) => F::<T>::from_f64(9.040_742_057_760_125e12) * &sig,
+                Some(16) => F::<T>::from_f64(1.452_517_480_246_491_3e14) * &sig,
                 _ => panic!(
                     "Value {} of power in poly exponential h function not supported",
                     power.unwrap()
@@ -517,14 +1088,14 @@ pub fn h<T: FloatLike>(
             };
             let prefactor = match power {
                 None | Some(0) => normalisation.inv(),
-                Some(p) => (t / sig).powi(-(p as i32)) / normalisation,
+                Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
             };
             prefactor
-                * (Into::<T>::into(2_f64) - ((t * t) / (sig * sig) + T::one()) / (t / sig)).exp()
+                * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig)).exp()
         }
         crate::HFunction::ExponentialCT => {
-            let delta_t_sq = (t - tstar.unwrap()) * (t - tstar.unwrap());
-            let tstar_sq = tstar.unwrap() * tstar.unwrap();
+            let delta_t_sq = (tstar.clone().unwrap() - &t).square();
+            let tstar_sq = tstar.unwrap().square();
             // info!("dampener: {}", dampener);
             // info!("delta_t_sq: {}", delta_t_sq);
             // info!("tstar_sq: {}", tstar_sq);
@@ -537,8 +1108,9 @@ pub fn h<T: FloatLike>(
             //     (-sig.inv() * (delta_t_sq / tstar_sq + sig * sig * (dampener * dampener))).exp()
             // );
             if h_function_settings.enabled_dampening {
-                let dampener = delta_t_sq / (delta_t_sq - tstar_sq);
-                (-sig.inv() * (delta_t_sq / tstar_sq + sig * sig * (dampener * dampener))).exp()
+                let dampener = delta_t_sq.clone() / (delta_t_sq.clone() - &tstar_sq);
+                (-sig.inv() * (delta_t_sq.clone() / tstar_sq + sig.square() * (dampener.square())))
+                    .exp()
             } else {
                 (-sig.inv() * (delta_t_sq / tstar_sq)).exp()
             }
@@ -549,9 +1121,11 @@ pub fn h<T: FloatLike>(
 /// Calculate the determinant of any complex-valued input matrix using LU-decomposition.
 /// Original C-code by W. Gong and D.E. Soper.
 #[allow(unused)]
-pub fn determinant<T: Float + RealNumberLike>(bb: &[Complex<T>], dimension: usize) -> Complex<T> {
+pub fn determinant<T: FloatLike>(bb: &[Complex<F<T>>], dimension: usize) -> Complex<F<T>> {
+    let one = bb[0].re.one();
+    let zero = one.zero();
     // Define matrix related variables.
-    let mut determinant = Complex::new(T::one(), T::zero());
+    let mut determinant = Complex::new(one.clone(), zero.clone());
     let mut indx = [0; MAX_DIMENSION];
     let mut d = 1; // initialize parity parameter
 
@@ -566,13 +1140,13 @@ pub fn determinant<T: Float + RealNumberLike>(bb: &[Complex<T>], dimension: usiz
 
     let mut aamax;
     let mut dumr;
-    let mut vv = [T::zero(); MAX_DIMENSION];
+    let mut vv = vec![zero.clone(); MAX_DIMENSION];
 
     // Get the implicit scaling information.
     for i in 0..dimension {
-        aamax = T::zero();
+        aamax = zero.clone();
         for j in 0..dimension {
-            let r = aa[i * dimension + j].norm_sqr();
+            let r = aa[i * dimension + j].norm_squared();
             if r > aamax {
                 aamax = r;
             }
@@ -587,22 +1161,22 @@ pub fn determinant<T: Float + RealNumberLike>(bb: &[Complex<T>], dimension: usiz
     if flag == 1 {
         for j in 0..dimension {
             for i in 0..j {
-                sum = aa[i * dimension + j];
+                sum = aa[i * dimension + j].clone();
                 for k in 0..i {
-                    sum -= aa[i * dimension + k] * aa[k * dimension + j];
+                    sum -= &aa[i * dimension + k] * &aa[k * dimension + j];
                 }
                 aa[i * dimension + j] = sum;
             }
             //Initialize for the search for largest pivot element.
-            aamax = T::zero();
+            aamax = zero.clone();
             for i in j..dimension {
-                sum = aa[i * dimension + j];
+                sum = aa[i * dimension + j].clone();
                 for k in 0..j {
-                    sum -= aa[i * dimension + k] * aa[k * dimension + j];
+                    sum -= &aa[i * dimension + k] * &aa[k * dimension + j];
                 }
-                aa[i * dimension + j] = sum;
+                aa[i * dimension + j] = sum.clone();
                 // Figure of merit for the pivot.
-                dumr = vv[i] * sum.norm_sqr();
+                dumr = &vv[i] * sum.norm_squared();
                 // Is it better than the best so far?
                 if dumr >= aamax {
                     imax = i;
@@ -612,33 +1186,33 @@ pub fn determinant<T: Float + RealNumberLike>(bb: &[Complex<T>], dimension: usiz
             // See if we need to interchange rows.
             if j != imax {
                 for k in 0..dimension {
-                    dumc = aa[imax * dimension + k];
-                    aa[imax * dimension + k] = aa[j * dimension + k];
-                    aa[j * dimension + k] = dumc;
+                    dumc = aa[imax * dimension + k].clone();
+                    aa[imax * dimension + k] = aa[j * dimension + k].clone();
+                    aa[j * dimension + k] = dumc.clone();
                 }
                 // Change the parity of d.
                 d = -d;
                 // Interchange the scale factor.
-                vv[imax] = vv[j];
+                vv[imax] = vv[j].clone();
             }
             indx[j] = imax;
             if j + 1 != dimension {
                 dumc = aa[j * dimension + j].inv();
                 for i in j + 1..dimension {
-                    aa[i * dimension + j] *= dumc;
+                    aa[i * dimension + j] *= &dumc;
                 }
             }
         }
     }
     // Calculate the determinant using the decomposed matrix.
     if flag == 0 {
-        determinant = Complex::default();
+        determinant = Complex::new(zero.clone(), zero.clone());
     } else {
         // Multiply the diagonal elements.
         for diagonal in 0..dimension {
-            determinant *= aa[diagonal * dimension + diagonal];
+            determinant *= &aa[diagonal * dimension + diagonal];
         }
-        determinant *= <T as NumCast>::from(d).unwrap();
+        determinant *= &zero.from_i64(d);
     }
     determinant
 }
@@ -663,10 +1237,10 @@ pub fn compute_momentum<'a, 'b: 'a, T>(
     external_moms: &'b [T],
 ) -> T
 where
-    T: Default + Clone,
+    T: RefDefault + Clone,
     T: AddAssign<T> + SubAssign<T>,
 {
-    let mut res = T::default();
+    let mut res = loop_moms[0].default();
     for (i_l, sign) in signature.0.iter().enumerate() {
         match sign {
             1 => {
@@ -697,22 +1271,25 @@ where
 #[allow(unused)]
 pub fn compute_four_momentum_from_three<T: FloatLike>(
     signature: &(Vec<isize>, Vec<isize>),
-    loop_moms: &[ThreeMomentum<T>],
-    external_moms: &[FourMomentum<T>],
-) -> FourMomentum<T> {
+    loop_moms: &[ThreeMomentum<F<T>>],
+    external_moms: &[FourMomentum<F<T>>],
+) -> FourMomentum<F<T>> {
     let loop_moms = loop_moms
         .iter()
-        .map(|m| m.into_on_shell_four_momentum(None))
+        .map(|m| m.clone().into_on_shell_four_momentum(None))
         .collect_vec();
     compute_momentum(signature, &loop_moms, external_moms)
 }
 
 pub fn compute_three_momentum_from_four<T: FloatLike>(
     signature: &(Vec<isize>, Vec<isize>),
-    loop_moms: &[ThreeMomentum<T>],
-    external_moms: &[FourMomentum<T>],
-) -> ThreeMomentum<T> {
-    let external_moms = external_moms.iter().map(|m| m.spatial).collect_vec();
+    loop_moms: &[ThreeMomentum<F<T>>],
+    external_moms: &[FourMomentum<F<T>>],
+) -> ThreeMomentum<F<T>> {
+    let external_moms = external_moms
+        .iter()
+        .map(|m| m.spatial.clone())
+        .collect_vec();
     compute_momentum(signature, &loop_moms, &external_moms)
 }
 
@@ -720,79 +1297,84 @@ pub fn compute_three_momentum_from_four<T: FloatLike>(
 // The Bilinear system then reads 4 k.a.k + 4 k.n + C = 0
 #[allow(unused)]
 pub fn one_loop_e_surface_bilinear_form<T: FloatLike>(
-    p1: &[T; 3],
-    p2: &[T; 3],
-    m1_sq: T,
-    m2_sq: T,
-    e_shift: T,
-) -> ([[T; 3]; 3], [T; 3], T) {
-    let two = Into::<T>::into(2_f64);
-    let e_shift_sq = e_shift * e_shift;
-    let p1_sq = p1[0] * p1[0] + p1[1] * p1[1] + p1[2] * p1[2];
-    let p2_sq = p2[0] * p2[0] + p2[1] * p2[1] + p2[2] * p2[2];
+    p1: &[F<T>; 3],
+    p2: &[F<T>; 3],
+    m1_sq: F<T>,
+    m2_sq: F<T>,
+    e_shift: F<T>,
+) -> ([[F<T>; 3]; 3], [F<T>; 3], F<T>) {
+    let zero = e_shift.zero();
+    let two = zero.from_i64(2);
+    let e_shift_sq = e_shift.square();
+    let p1_sq = p1[0].square() + p1[1].square() + p1[2].square();
+    let p2_sq = p2[0].square() + p2[1].square() + p2[2].square();
 
-    let mut a = [[T::zero(); 3]; 3];
-    a[0][0] = (p1[0] - p2[0] - e_shift) * (p2[0] - p1[0] - e_shift);
-    a[0][1] = (p1[0] - p2[0]) * (p2[1] - p1[1]);
-    a[1][0] = a[0][1];
-    a[0][2] = (p1[0] - p2[0]) * (p2[2] - p1[2]);
-    a[2][0] = a[0][2];
-    a[1][1] = (p1[1] - p2[1] - e_shift) * (p2[1] - p1[1] - e_shift);
-    a[1][2] = (p1[1] - p2[1]) * (p2[2] - p1[2]);
-    a[2][1] = a[1][2];
-    a[2][2] = (p1[2] - p2[2] - e_shift) * (p2[2] - p1[2] - e_shift);
+    let zeros = [zero.clone(), zero.clone(), zero.clone()];
+    let mut a = [zeros.clone(), zeros.clone(), zeros.clone()];
+    a[0][0] = (&p1[0] - &p2[0] - &e_shift) * (&p2[0] - &p1[0] - &e_shift);
+    a[0][1] = (&p1[0] - &p2[0]) * (&p2[1] - &p1[1]);
+    a[1][0] = a[0][1].clone();
+    a[0][2] = (&p1[0] - &p2[0]) * (&p2[2] - &p1[2]);
+    a[2][0] = a[0][2].clone();
+    a[1][1] = (&p1[1] - &p2[1] - &e_shift) * (&p2[1] - &p1[1] - &e_shift);
+    a[1][2] = (&p1[1] - &p2[1]) * (&p2[2] - &p1[2]);
+    a[2][1] = a[1][2].clone();
+    a[2][2] = (&p1[2] - &p2[2] - &e_shift) * (&p2[2] - &p1[2] - &e_shift);
 
-    let mut b = [T::zero(); 3];
-    b[0] = (p2[0] - p1[0]) * (m1_sq - m2_sq + p1_sq - p2_sq) + e_shift_sq * (p1[0] + p2[0]);
-    b[1] = (p2[1] - p1[1]) * (m1_sq - m2_sq + p1_sq - p2_sq) + e_shift_sq * (p1[1] + p2[1]);
-    b[2] = (p2[2] - p1[2]) * (m1_sq - m2_sq + p1_sq - p2_sq) + e_shift_sq * (p1[2] + p2[2]);
+    let mut b = zeros.clone();
+    b[0] =
+        (&p2[0] - &p1[0]) * (&m1_sq - &m2_sq + &p1_sq - &p2_sq) + &e_shift_sq * (&p1[0] + &p2[0]);
+    b[1] =
+        (&p2[1] - &p1[1]) * (&m1_sq - &m2_sq + &p1_sq - &p2_sq) + &e_shift_sq * (&p1[1] + &p2[1]);
+    b[2] =
+        (&p2[2] - &p1[2]) * (&m1_sq - &m2_sq + &p1_sq - &p2_sq) + &e_shift_sq * (&p1[2] + &p2[2]);
 
-    let c = -e_shift_sq * e_shift_sq + two * e_shift_sq * (m1_sq + m2_sq + p1_sq + p2_sq)
-        - (m1_sq - m2_sq + p1_sq - p2_sq) * (m1_sq - m2_sq + p1_sq - p2_sq);
+    let c = -&e_shift_sq * &e_shift_sq + &two * &e_shift_sq * (&m1_sq + &m2_sq + &p1_sq + &p2_sq)
+        - (&m1_sq - &m2_sq + &p1_sq - &p2_sq) * (&m1_sq - &m2_sq + &p1_sq - &p2_sq);
 
     (a, b, c)
 }
 
 #[allow(unused)]
 pub fn one_loop_e_surface_exists<T: FloatLike>(
-    p1: &[T; 3],
-    p2: &[T; 3],
-    m1_sq: T,
-    m2_sq: T,
-    e_shift: T,
+    p1: &[F<T>; 3],
+    p2: &[F<T>; 3],
+    m1_sq: F<T>,
+    m2_sq: F<T>,
+    e_shift: F<T>,
 ) -> (bool, bool) {
-    let p_norm_sq = (p1[0] - p2[0]) * (p1[0] - p2[0])
-        + (p1[1] - p2[1]) * (p1[1] - p2[1])
-        + (p1[2] - p2[2]) * (p1[2] - p2[2]);
+    let p_norm_sq = (&p1[0] - &p2[0]) * (&p1[0] - &p2[0])
+        + (&p1[1] - &p2[1]) * (&p1[1] - &p2[1])
+        + (&p1[2] - &p2[2]) * (&p1[2] - &p2[2]);
 
     // /!\ In alphaLoop this should be done without numerical check but purely symbolically, or at least
-    // one must make sure there is no weird transition from non-pinched to pinched for the 2->2 massless E-surface sandwich,
+    // mul_unit must make sure there is no weird transition from non-pinched to pinched for the 2->2 massless E-surface sandwich,
     // i.e. such cases should be *both* existing and pinched!
-    if e_shift > Into::<T>::into(PINCH_TEST_THRESHOLD) {
+    if e_shift > F::<T>::from_f64(PINCH_TEST_THRESHOLD) {
         return (false, false);
     }
-    let test = (e_shift * e_shift - p_norm_sq)
+    let test = (e_shift.square() - &p_norm_sq)
         - (m1_sq.sqrt() + m2_sq.sqrt()) * (m1_sq.sqrt() + m2_sq.sqrt());
-    if test.abs() < Into::<T>::into(PINCH_TEST_THRESHOLD) {
+    if test.norm() < F::<T>::from_f64(PINCH_TEST_THRESHOLD) {
         (false, true)
-    } else if test < T::zero() {
+    } else if test < e_shift.zero() {
         (false, false)
     } else {
         (true, false)
     }
 }
 
-pub fn approx_eq(res: f64, target: f64, tolerance: f64) -> bool {
-    if target == 0.0 {
-        res.abs() < tolerance
+pub fn approx_eq<T: FloatLike>(res: &F<T>, target: &F<T>, tolerance: &F<T>) -> bool {
+    if target.is_zero() {
+        res.norm() < tolerance.clone()
     } else {
-        ((res - target) / target).abs() < tolerance
+        ((res - target) / target).norm() < tolerance.clone()
     }
 }
 
 // panics with useful error message
 #[allow(unused)]
-pub fn assert_approx_eq(res: f64, target: f64, tolerance: f64) {
+pub fn assert_approx_eq<T: FloatLike>(res: &F<T>, target: &F<T>, tolerance: &F<T>) {
     if approx_eq(res, target, tolerance) {
     } else {
         panic!(
@@ -804,21 +1386,21 @@ pub fn assert_approx_eq(res: f64, target: f64, tolerance: f64) {
 
 #[allow(unused)]
 pub fn one_loop_eval_e_surf<T: FloatLike>(
-    k: &[T; 3],
-    p1: &[T; 3],
-    p2: &[T; 3],
-    m1_sq: T,
-    m2_sq: T,
-    e_shift: T,
-) -> T {
-    ((k[0] + p1[0]) * (k[0] + p1[0])
-        + (k[1] + p1[1]) * (k[1] + p1[1])
-        + (k[2] + p1[2]) * (k[2] + p1[2])
+    k: &[F<T>; 3],
+    p1: &[F<T>; 3],
+    p2: &[F<T>; 3],
+    m1_sq: F<T>,
+    m2_sq: F<T>,
+    e_shift: F<T>,
+) -> F<T> {
+    ((&k[0] + &p1[0]) * (&k[0] + &p1[0])
+        + (&k[1] + &p1[1]) * (&k[1] + &p1[1])
+        + (&k[2] + &p1[2]) * (&k[2] + &p1[2])
         + m1_sq)
         .sqrt()
-        + ((k[0] + p2[0]) * (k[0] + p2[0])
-            + (k[1] + p2[1]) * (k[1] + p2[1])
-            + (k[2] + p2[2]) * (k[2] + p2[2])
+        + ((&k[0] + &p2[0]) * (&k[0] + &p2[0])
+            + (&k[1] + &p2[1]) * (&k[1] + &p2[1])
+            + (&k[2] + &p2[2]) * (&k[2] + &p2[2])
             + m2_sq)
             .sqrt()
         + e_shift
@@ -826,80 +1408,83 @@ pub fn one_loop_eval_e_surf<T: FloatLike>(
 
 #[allow(unused)]
 pub fn one_loop_eval_e_surf_k_derivative<T: FloatLike>(
-    k: &[T; 3],
-    p1: &[T; 3],
-    p2: &[T; 3],
-    m1_sq: T,
-    m2_sq: T,
-) -> [T; 3] {
-    let e1 = ((k[0] + p1[0]) * (k[0] + p1[0])
-        + (k[1] + p1[1]) * (k[1] + p1[1])
-        + (k[2] + p1[2]) * (k[2] + p1[2])
+    k: &[F<T>; 3],
+    p1: &[F<T>; 3],
+    p2: &[F<T>; 3],
+    m1_sq: F<T>,
+    m2_sq: F<T>,
+) -> [F<T>; 3] {
+    let e1 = ((&k[0] + &p1[0]) * (&k[0] + &p1[0])
+        + (&k[1] + &p1[1]) * (&k[1] + &p1[1])
+        + (&k[2] + &p1[2]) * (&k[2] + &p1[2])
         + m1_sq)
         .sqrt();
-    let e2 = ((k[0] + p2[0]) * (k[0] + p2[0])
-        + (k[1] + p2[1]) * (k[1] + p2[1])
-        + (k[2] + p2[2]) * (k[2] + p2[2])
+    let e2 = ((&k[0] + &p2[0]) * (&k[0] + &p2[0])
+        + (&k[1] + &p2[1]) * (&k[1] + &p2[1])
+        + (&k[2] + &p2[2]) * (&k[2] + &p2[2])
         + m2_sq)
         .sqrt();
     [
-        (k[0] + p1[0]) / e1 + (k[0] + p2[0]) / e2,
-        (k[1] + p1[1]) / e1 + (k[1] + p2[1]) / e2,
-        (k[2] + p1[2]) / e1 + (k[2] + p2[2]) / e2,
+        (&k[0] + &p1[0]) / &e1 + (&k[0] + &p2[0]) / &e2,
+        (&k[1] + &p1[1]) / &e1 + (&k[1] + &p2[1]) / &e2,
+        (&k[2] + &p1[2]) / &e1 + (&k[2] + &p2[2]) / &e2,
     ]
 }
 
 #[allow(unused)]
 pub fn one_loop_get_e_surf_t_scaling<T: FloatLike>(
-    k: &[T; 3],
-    p1: &[T; 3],
-    p2: &[T; 3],
-    m1_sq: T,
-    m2_sq: T,
-    e_shift: T,
-) -> [T; 2] {
+    k: &[F<T>; 3],
+    p1: &[F<T>; 3],
+    p2: &[F<T>; 3],
+    m1_sq: F<T>,
+    m2_sq: F<T>,
+    e_shift: F<T>,
+) -> [F<T>; 2] {
+    let zero = e_shift.zero();
+    let one = zero.one();
     let (a, b, c_coef) = one_loop_e_surface_bilinear_form(p1, p2, m1_sq, m2_sq, e_shift);
-    let mut a_coef = T::zero();
+    let mut a_coef = zero.clone();
     for i in 0..=2 {
         for j in 0..=2 {
-            a_coef += k[i] * a[i][j] * k[j];
+            a_coef += &k[i] * &a[i][j] * &k[j];
         }
     }
-    a_coef *= Into::<T>::into(4_f64);
-    let mut b_coef = T::zero();
+    a_coef *= zero.from_i64(4);
+    let mut b_coef = zero.clone();
     for i in 0..=2 {
-        b_coef += k[i] * b[i];
+        b_coef += &k[i] * &b[i];
     }
-    b_coef *= Into::<T>::into(4_f64);
-    let discr = b_coef * b_coef - Into::<T>::into(4_f64) * a_coef * c_coef;
-    if discr < T::zero() {
-        [T::zero(), T::zero()]
+    b_coef *= zero.from_i64(4);
+    let discr = b_coef.square() - zero.from_i64(4) * &a_coef * &c_coef;
+    if discr < zero {
+        [zero.clone(), zero.clone()]
     } else {
         [
-            (-b_coef + discr.sqrt()) / (Into::<T>::into(2_f64) * a_coef),
-            (-b_coef - discr.sqrt()) / (Into::<T>::into(2_f64) * a_coef),
+            (-&b_coef + discr.sqrt()) / (zero.from_i64(2) * &a_coef),
+            (-&b_coef - discr.sqrt()) / (zero.from_i64(2) * &a_coef),
         ]
     }
 }
 
-pub fn box_muller<T: FloatLike>(x1: T, x2: T) -> (T, T) {
-    let r = (-Into::<T>::into(2.) * x1.ln()).sqrt();
-    let theta = Into::<T>::into(2.) * T::PI() * x2;
-    (r * theta.cos(), r * theta.sin())
+pub fn box_muller<T: FloatLike>(x1: F<T>, x2: F<T>) -> (F<T>, F<T>) {
+    let r = (-x1.from_i64(2) * x1.log()).sqrt();
+    let theta = r.from_i64(2) * r.PI() * x2;
+    (r.clone() * theta.cos(), r * theta.sin())
 }
 
-pub fn compute_surface_and_volume<T: FloatLike>(n_dim: usize, radius: T) -> (T, T) {
-    let mut surface = Into::<T>::into(2.0);
-    let mut volume = T::one();
+pub fn compute_surface_and_volume<T: FloatLike>(n_dim: usize, radius: F<T>) -> (F<T>, F<T>) {
+    let mut surface = radius.from_i64(2);
+    let one = radius.one();
+    let mut volume = one.clone();
     for i in 1..n_dim + 1 {
         (surface, volume) = (
-            Into::<T>::into(2.0) * <T as FloatConst>::PI() * volume,
-            surface / Into::<T>::into(i as f64),
+            one.from_i64(2) * one.PI() * volume,
+            surface / one.from_i64(i as i64),
         );
     }
     (
-        surface * radius.powi(n_dim as i32),
-        volume * radius.powi(n_dim as i32),
+        surface * radius.pow(n_dim as u64),
+        volume * radius.pow(n_dim as u64),
     )
 }
 
@@ -927,7 +1512,7 @@ pub fn get_n_dim_for_n_loop_momenta(
             if n_dim % 2 == 1 {
                 n_dim += 1;
             }
-            // Then if the radius is not forced, then we need to add one more dimension
+            // Then if the radius is not forced, then we need to add mul_unit more dimension
             if !force_radius {
                 n_dim += 1;
             }
@@ -946,91 +1531,92 @@ pub fn get_n_dim_for_n_loop_momenta(
 }
 
 pub fn global_parameterize<T: FloatLike>(
-    x: &[T],
-    e_cm_squared: T,
+    x: &[F<T>],
+    e_cm_squared: F<T>,
     settings: &Settings,
     force_radius: bool,
-) -> (Vec<[T; 3]>, T) {
+) -> (Vec<[F<T>; 3]>, F<T>) {
+    let zero = e_cm_squared.zero();
+    let one = zero.one();
     match settings.parameterization.mode {
         ParameterizationMode::HyperSpherical | ParameterizationMode::HyperSphericalFlat => {
-            let e_cm = e_cm_squared.sqrt() * Into::<T>::into(settings.parameterization.shifts[0].0);
-            let mut jac = T::one();
+            let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[0].0);
+            let mut jac = one.clone();
             // rescale the input to the desired range
             let mut x_r = Vec::with_capacity(x.len());
             if !force_radius {
-                x_r.push(x[0]);
+                x_r.push(x[0].clone());
             } else {
-                let lo = Into::<T>::into(settings.parameterization.input_rescaling[0][0].0);
-                let hi = Into::<T>::into(settings.parameterization.input_rescaling[0][0].1);
-                x_r.push(lo + x[0] * (hi - lo));
-                jac *= Into::<T>::into(hi - lo);
+                let lo = F::<T>::from_f64(settings.parameterization.input_rescaling[0][0].0);
+                let hi = F::<T>::from_f64(settings.parameterization.input_rescaling[0][0].1);
+                x_r.push(&lo + &x[0] * (&hi - &lo));
+                jac *= &hi - &lo;
             }
-            let lo = Into::<T>::into(settings.parameterization.input_rescaling[0][1].0);
-            let hi = Into::<T>::into(settings.parameterization.input_rescaling[0][1].1);
-            x_r.push(lo + x[1] * (hi - lo));
-            jac *= Into::<T>::into(hi - lo);
+            let lo = F::<T>::from_f64(settings.parameterization.input_rescaling[0][1].0);
+            let hi = F::<T>::from_f64(settings.parameterization.input_rescaling[0][1].1);
+            x_r.push(&lo + &x[1] * (&hi - &lo));
+            jac *= &hi - &lo;
             for xi in &x[2..] {
-                let lo = Into::<T>::into(settings.parameterization.input_rescaling[0][2].0);
-                let hi = Into::<T>::into(settings.parameterization.input_rescaling[0][2].1);
-                x_r.push(lo + *xi * (hi - lo));
-                jac *= Into::<T>::into(hi - lo);
+                let lo = F::<T>::from_f64(settings.parameterization.input_rescaling[0][2].0);
+                let hi = F::<T>::from_f64(settings.parameterization.input_rescaling[0][2].1);
+                x_r.push(&lo + xi * (&hi - &lo));
+                jac *= &hi - &lo;
             }
 
-            let radius: T = if force_radius {
-                x[0]
+            let radius: F<T> = if force_radius {
+                x[0].clone()
             } else {
                 match settings.parameterization.mapping {
                     ParameterizationMapping::Log => {
                         // r = e_cm * ln(1 + b*x/(1-x))
-                        let b = Into::<T>::into(settings.parameterization.b);
-                        let radius = e_cm * (T::one() + b * x_r[0] / (T::one() - x_r[0])).ln();
-                        jac *=
-                            e_cm * b / (T::one() - x_r[0]) / (T::one() + x_r[0] * (b - T::one()));
+                        let b = F::<T>::from_f64(settings.parameterization.b);
+                        let radius = &e_cm * (&one + &b * &x_r[0] / (&one - &x_r[0])).log();
+                        jac *= &e_cm * &b / (&one - &x_r[0]) / (&one + &x_r[0] * (&b - &one));
                         radius
                     }
                     ParameterizationMapping::Linear => {
                         // r = e_cm * b * x/(1-x)
-                        let b = Into::<T>::into(settings.parameterization.b);
-                        let radius = e_cm * b * x_r[0] / (T::one() - x_r[0]);
-                        jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                        let b = F::<T>::from_f64(settings.parameterization.b);
+                        let radius = &e_cm * &b * &x_r[0] / (&one - &x_r[0]);
+                        jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
                         radius
                     }
                 }
             };
             match settings.parameterization.mode {
                 ParameterizationMode::HyperSpherical => {
-                    let phi = Into::<T>::into(2.) * <T as FloatConst>::PI() * x_r[1];
-                    jac *= Into::<T>::into(2.) * <T as FloatConst>::PI();
+                    let phi = zero.from_i64(2) * zero.PI() * &x_r[1];
+                    jac *= zero.from_i64(2) * zero.PI();
 
                     let mut cos_thetas = Vec::with_capacity(x.len() - 2);
                     let mut sin_thetas = Vec::with_capacity(x.len() - 2);
 
                     for (i, xi) in x_r[2..].iter().enumerate() {
-                        let cos_theta = -T::one() + Into::<T>::into(2.) * *xi;
-                        jac *= Into::<T>::into(2.);
-                        let sin_theta = (T::one() - cos_theta * cos_theta).sqrt();
+                        let cos_theta = -&one + zero.from_i64(2) * xi;
+                        jac *= zero.from_i64(2);
+                        let sin_theta = (&one - cos_theta.square()).sqrt();
                         if i > 0 {
-                            jac *= sin_theta.powi(i as i32);
+                            jac *= sin_theta.pow(i as u64);
                         }
                         cos_thetas.push(cos_theta);
                         sin_thetas.push(sin_theta);
                     }
 
                     let mut concatenated_vecs = Vec::with_capacity(x.len() / 3);
-                    let mut base = radius;
+                    let mut base = radius.clone();
                     for (cos_theta, sin_theta) in cos_thetas.iter().zip(sin_thetas.iter()) {
-                        concatenated_vecs.push(base * cos_theta);
-                        base *= *sin_theta;
+                        concatenated_vecs.push(&base * cos_theta);
+                        base *= sin_theta;
                     }
-                    concatenated_vecs.push(base * phi.cos());
-                    concatenated_vecs.push(base * phi.sin());
+                    concatenated_vecs.push(&base * phi.cos());
+                    concatenated_vecs.push(&base * phi.sin());
 
-                    jac *= radius.powi((x.len() - 1) as i32); // hyperspherical coords
+                    jac *= radius.pow((x.len() - 1) as u64); // hyperspherical coords
 
                     (
                         concatenated_vecs
                             .chunks(3)
-                            .map(|v| [v[0], v[1], v[2]])
+                            .map(|v| [v[0].clone(), v[1].clone(), v[2].clone()])
                             .collect(),
                         jac,
                     )
@@ -1040,7 +1626,7 @@ pub fn global_parameterize<T: FloatLike>(
                     assert!(x_r[1..].len() % 2 == 0);
                     let mut normal_distributed_xs = vec![];
                     for x_pair in x_r[1..].chunks(2) {
-                        let (z1, z2) = box_muller(x_pair[0], x_pair[1]);
+                        let (z1, z2) = box_muller(x_pair[0].clone(), x_pair[1].clone());
                         normal_distributed_xs.push(z1);
                         normal_distributed_xs.push(z2);
                     }
@@ -1050,21 +1636,22 @@ pub fn global_parameterize<T: FloatLike>(
                     }
                     let curr_norm = normal_distributed_xs[..]
                         .iter()
-                        .map(|&x| x * x)
-                        .sum::<T>()
+                        .map(|x| x.square())
+                        .reduce(|acc,e| acc+&e).unwrap_or(zero.clone())
                         .sqrt();
                     let surface =
-                        compute_surface_and_volume(normal_distributed_xs.len() - 1, radius).0;
+                        compute_surface_and_volume(normal_distributed_xs.len() - 1, radius.clone())
+                            .0;
                     jac *= surface;
-                    let rescaling_factor = radius / curr_norm;
+                    let rescaling_factor = &radius / &curr_norm;
                     (
                         normal_distributed_xs
                             .chunks(3)
                             .map(|v| {
                                 [
-                                    v[0] * rescaling_factor,
-                                    v[1] * rescaling_factor,
-                                    v[2] * rescaling_factor,
+                                    &v[0] * &rescaling_factor,
+                                    &v[1] * &rescaling_factor,
+                                    &v[2] * &rescaling_factor,
                                 ]
                             })
                             .collect(),
@@ -1078,10 +1665,10 @@ pub fn global_parameterize<T: FloatLike>(
             if force_radius {
                 panic!("Cannot force radius for non-hyperspherical parameterization.");
             }
-            let mut jac = T::one();
+            let mut jac = one.clone();
             let mut vecs = Vec::with_capacity(x.len() / 3);
             for (i, xi) in x.chunks(3).enumerate() {
-                let (vec_i, jac_i) = parameterize3d(xi, e_cm_squared, i, settings);
+                let (vec_i, jac_i) = parameterize3d(xi, e_cm_squared.clone(), i, settings);
                 vecs.push(vec_i);
                 jac *= jac_i;
             }
@@ -1092,11 +1679,13 @@ pub fn global_parameterize<T: FloatLike>(
 
 #[allow(unused)]
 pub fn global_inv_parameterize<T: FloatLike>(
-    moms: &[LorentzVector<T>],
-    e_cm_squared: T,
+    moms: &[ThreeMomentum<F<T>>],
+    e_cm_squared: F<T>,
     settings: &Settings,
     force_radius: bool,
-) -> (Vec<T>, T) {
+) -> (Vec<F<T>>, F<T>) {
+    let one = e_cm_squared.one();
+    let zero = one.zero();
     if settings.sampling
         == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
     {
@@ -1104,75 +1693,75 @@ pub fn global_inv_parameterize<T: FloatLike>(
     }
     match settings.parameterization.mode {
         ParameterizationMode::HyperSpherical => {
-            let e_cm = e_cm_squared.sqrt() * Into::<T>::into(settings.parameterization.shifts[0].0);
-            let mut inv_jac = T::one();
+            let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[0].0);
+            let mut inv_jac = one.clone();
             let mut xs = Vec::with_capacity(moms.len() * 3);
 
             let cartesian_xs = moms
                 .iter()
-                .flat_map(|lv| [lv.x, lv.y, lv.z])
-                .collect::<Vec<_>>();
+                .flat_map(|lv| lv.clone().into_iter())
+                .collect::<Vec<F<T>>>();
 
-            let mut k_r_sq = cartesian_xs.iter().map(|xi| *xi * xi).sum::<T>();
+            let mut k_r_sq = cartesian_xs.iter().map(|xi| xi.square()).reduce(|acc,e| acc+&e).unwrap_or(zero.clone());
             // cover the degenerate case
             if k_r_sq.is_zero() {
-                return (vec![T::zero(); cartesian_xs.len()], T::zero());
+                return (vec![zero.clone(); cartesian_xs.len()], zero);
             }
             let k_r = k_r_sq.sqrt();
             if force_radius {
-                xs.push(k_r);
+                xs.push(k_r.clone());
             } else {
                 match settings.parameterization.mapping {
                     ParameterizationMapping::Log => {
-                        let b = Into::<T>::into(settings.parameterization.b);
-                        let x1 = T::one() - b / (-T::one() + b + (k_r / e_cm).exp());
-                        inv_jac /= e_cm * b / (T::one() - x1) / (T::one() + x1 * (b - T::one()));
+                        let b = F::<T>::from_f64(settings.parameterization.b);
+                        let x1 = &one - &b / (-&one + &b + (&k_r / &e_cm).exp());
+                        inv_jac /= e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
                         xs.push(x1);
                     }
                     ParameterizationMapping::Linear => {
-                        let b = Into::<T>::into(settings.parameterization.b);
-                        inv_jac /= <T as num::traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
-                        xs.push(k_r / (e_cm * b + k_r));
+                        let b = F::<T>::from_f64(settings.parameterization.b);
+                        inv_jac /= (&e_cm * &b + &k_r).powi(2) / &e_cm / &b;
+                        xs.push(&k_r / (&e_cm * &b + &k_r));
                     }
                 }
             };
 
-            let y = cartesian_xs[cartesian_xs.len() - 2];
-            let x = cartesian_xs[cartesian_xs.len() - 1];
-            let xphi = if x < T::zero() {
-                T::one() + Into::<T>::into(0.5) * T::FRAC_1_PI() * T::atan2(x, y)
+            let y = cartesian_xs[cartesian_xs.len() - 2].clone();
+            let x = cartesian_xs[cartesian_xs.len() - 1].clone();
+            let xphi = if x < zero {
+                &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * x.atan2(&y)
             } else {
-                Into::<T>::into(0.5) * T::FRAC_1_PI() * T::atan2(x, y)
+                F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * x.atan2(&y)
             };
             xs.push(xphi);
-            inv_jac /= Into::<T>::into(2.) * <T as FloatConst>::PI();
+            inv_jac /= F::<T>::from_f64(2.) * zero.PI();
 
-            for (i, &x) in cartesian_xs[..cartesian_xs.len() - 2].iter().enumerate() {
-                xs.push(Into::<T>::into(0.5) * (T::one() + x / k_r_sq.sqrt()));
-                inv_jac /= Into::<T>::into(2.);
+            for (i, x) in cartesian_xs[..cartesian_xs.len() - 2].iter().enumerate() {
+                xs.push(F::<T>::from_f64(0.5) * (&one + x / k_r_sq.sqrt()));
+                inv_jac /= F::<T>::from_f64(2.);
                 if i > 0 {
-                    inv_jac /= (T::one() - (x * x / k_r_sq)).sqrt().powi(i as i32);
+                    inv_jac /= (&one - (x * x / &k_r_sq)).sqrt().powi(i as i32);
                 }
                 k_r_sq -= x * x;
             }
 
             inv_jac /= k_r.powi((cartesian_xs.len() - 1) as i32);
 
-            let lo = Into::<T>::into(settings.parameterization.input_rescaling[0][0].0);
-            let hi = Into::<T>::into(settings.parameterization.input_rescaling[0][0].1);
-            xs[0] = (xs[0] - Into::<T>::into(lo)) / Into::<T>::into(hi - lo);
-            inv_jac /= Into::<T>::into(hi - lo);
+            let lo = F::<T>::from_f64(settings.parameterization.input_rescaling[0][0].0);
+            let hi = F::<T>::from_f64(settings.parameterization.input_rescaling[0][0].1);
+            xs[0] = (&xs[0] - &lo) / (&hi - &lo);
+            inv_jac /= (&hi - &lo);
 
-            let lo = Into::<T>::into(settings.parameterization.input_rescaling[0][1].0);
-            let hi = Into::<T>::into(settings.parameterization.input_rescaling[0][1].1);
-            xs[1] = (xs[1] - Into::<T>::into(lo)) / Into::<T>::into(hi - lo);
-            inv_jac /= Into::<T>::into(hi - lo);
+            let lo = F::<T>::from_f64(settings.parameterization.input_rescaling[0][1].0);
+            let hi = F::<T>::from_f64(settings.parameterization.input_rescaling[0][1].1);
+            xs[1] = (&xs[1] - &lo) / (&hi - &lo);
+            inv_jac /= &hi - &lo;
 
-            let lo = Into::<T>::into(settings.parameterization.input_rescaling[0][2].0);
-            let hi = Into::<T>::into(settings.parameterization.input_rescaling[0][2].1);
+            let lo = F::<T>::from_f64(settings.parameterization.input_rescaling[0][2].0);
+            let hi = F::<T>::from_f64(settings.parameterization.input_rescaling[0][2].1);
             for x in &mut xs[2..] {
-                *x -= Into::<T>::into(lo) / Into::<T>::into(hi - lo);
-                inv_jac /= Into::<T>::into(hi - lo);
+                *x -= &lo / &hi - &lo;
+                inv_jac /= (&hi - &lo);
             }
             (xs, inv_jac)
         }
@@ -1183,10 +1772,10 @@ pub fn global_inv_parameterize<T: FloatLike>(
             if force_radius {
                 panic!("Cannot force radius for non-hyperspherical parameterization.");
             }
-            let mut inv_jac = T::one();
+            let mut inv_jac = one;
             let mut xs = Vec::with_capacity(moms.len() * 3);
             for (i, mom) in moms.iter().enumerate() {
-                let (xs_i, inv_jac_i) = inv_parametrize3d(mom, e_cm_squared, i, settings);
+                let (xs_i, inv_jac_i) = inv_parametrize3d(mom, e_cm_squared.clone(), i, settings);
                 xs.extend(xs_i);
                 inv_jac *= inv_jac_i;
             }
@@ -1198,78 +1787,78 @@ pub fn global_inv_parameterize<T: FloatLike>(
 /// Map a vector in the unit hypercube to the infinite hypercube.
 /// Also compute the Jacobian.
 pub fn parameterize3d<T: FloatLike>(
-    x: &[T],
-    e_cm_squared: T,
+    x: &[F<T>],
+    e_cm_squared: F<T>,
     loop_index: usize,
     settings: &Settings,
-) -> ([T; 3], T) {
-    let e_cm =
-        e_cm_squared.sqrt() * Into::<T>::into(settings.parameterization.shifts[loop_index].0);
-    let mut l_space = [T::zero(); 3];
-    let mut jac = T::one();
+) -> ([F<T>; 3], F<T>) {
+    let zero = e_cm_squared.zero();
+    let one = zero.one();
+    let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[loop_index].0);
+    let mut l_space = [zero.clone(), zero.clone(), zero.clone()];
+    let mut jac = one.clone();
 
     // rescale the input to the desired range
-    let mut x_r = [T::zero(); 3];
+    let mut x_r = [zero.clone(), zero.clone(), zero.clone()];
     for (xd, xi, &(lo, hi)) in izip!(
         &mut x_r,
         x,
         &settings.parameterization.input_rescaling[loop_index]
     ) {
-        let lo = Into::<T>::into(lo);
-        let hi = Into::<T>::into(hi);
-        *xd = lo + *xi * (hi - lo);
-        jac *= Into::<T>::into(hi - lo);
+        let lo = F::<T>::from_f64(lo);
+        let hi = F::<T>::from_f64(hi);
+        *xd = &lo + xi * (&hi - &lo);
+        jac *= &hi - &lo;
     }
 
     match settings.parameterization.mode {
         ParameterizationMode::Cartesian => match settings.parameterization.mapping {
             ParameterizationMapping::Log => {
                 for i in 0..3 {
-                    let x = x_r[i];
-                    l_space[i] = e_cm * (x / (T::one() - x)).ln();
-                    jac *= e_cm / (x - x * x);
+                    let x = x_r[i].clone();
+                    l_space[i] = &e_cm * (&x / (&one - &x)).log();
+                    jac *= &e_cm / (&x - &x * &x);
                 }
             }
             ParameterizationMapping::Linear => {
                 for i in 0..3 {
-                    let x = x_r[i];
-                    l_space[i] = e_cm * (T::one() / (T::one() - x) - T::one() / x);
-                    jac *=
-                        e_cm * (T::one() / (x * x) + T::one() / ((T::one() - x) * (T::one() - x)));
+                    let x = x_r[i].clone();
+                    l_space[i] = &e_cm * (&one / (&one - &x) - &one / &x);
+                    jac *= &e_cm * (&one / (&x * &x) + &one / ((&one - &x) * (&one - &x)));
                 }
             }
         },
         ParameterizationMode::Spherical => {
             let radius = match settings.parameterization.mapping {
                 ParameterizationMapping::Log => {
-                    // r = e_cm * ln(1 + b*x/(1-x))
-                    let x = x_r[0];
-                    let b = Into::<T>::into(settings.parameterization.b);
-                    let radius = e_cm * (T::one() + b * x / (T::one() - x)).ln();
-                    jac *= e_cm * b / (T::one() - x) / (T::one() + x * (b - T::one()));
+                    // r = &e_cm * ln(1 + b*&x/(1-&x))
+                    let x = x_r[0].clone();
+                    let b = F::<T>::from_f64(settings.parameterization.b);
+                    let radius = &e_cm * (&one + &b * &x / (&one - &x)).log();
+                    jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
 
                     radius
                 }
                 ParameterizationMapping::Linear => {
-                    // r = e_cm * b * x/(1-x)
-                    let b = Into::<T>::into(settings.parameterization.b);
-                    let radius = e_cm * b * x_r[0] / (T::one() - x_r[0]);
-                    jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                    // r = &e_cm * b * x/(1-x)
+                    let b = F::<T>::from_f64(settings.parameterization.b);
+                    let radius = &e_cm * &b * &x_r[0] / (&one - &x_r[0]);
+                    jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
                     radius
                 }
             };
-            let phi = Into::<T>::into(2.) * <T as FloatConst>::PI() * x_r[1];
-            jac *= Into::<T>::into(2.) * <T as FloatConst>::PI();
+            let phi = F::<T>::from_f64(2.) * zero.PI() * &x_r[1];
+            jac *= F::<T>::from_f64(2.) * zero.PI();
 
-            let cos_theta = -T::one() + Into::<T>::into(2.) * x_r[2]; // out of range
-            jac *= Into::<T>::into(2.);
-            let sin_theta = (T::one() - cos_theta * cos_theta).sqrt();
+            let cos_theta = -&one + F::<T>::from_f64(2.) * &x_r[2]; // out of range
+            jac *= F::<T>::from_f64(2.);
+            let sin_theta = (&one - cos_theta.square()).sqrt();
 
-            l_space[0] = radius * sin_theta * phi.cos();
-            l_space[1] = radius * sin_theta * phi.sin();
-            l_space[2] = radius * cos_theta;
+            l_space[0] = &radius * &sin_theta * phi.cos();
+            l_space[1] = &radius * &sin_theta * phi.sin();
+            l_space[2] = &radius * &cos_theta;
 
-            jac *= radius * radius; // spherical coord
+            jac *= radius.square(); // spherical coord
         }
         _ => {
             panic!(
@@ -1280,72 +1869,73 @@ pub fn parameterize3d<T: FloatLike>(
     }
 
     // add a shift such that k=l is harder to be picked up by integrators such as cuhre
-    l_space[0] += e_cm * Into::<T>::into(settings.parameterization.shifts[loop_index].1);
-    l_space[1] += e_cm * Into::<T>::into(settings.parameterization.shifts[loop_index].2);
-    l_space[2] += e_cm * Into::<T>::into(settings.parameterization.shifts[loop_index].3);
+    l_space[0] += &e_cm * F::<T>::from_f64(settings.parameterization.shifts[loop_index].1);
+    l_space[1] += &e_cm * F::<T>::from_f64(settings.parameterization.shifts[loop_index].2);
+    l_space[2] += &e_cm * F::<T>::from_f64(settings.parameterization.shifts[loop_index].3);
 
     (l_space, jac)
 }
 
 pub fn inv_parametrize3d<T: FloatLike>(
-    mom: &LorentzVector<T>,
-    e_cm_squared: T,
+    mom: &ThreeMomentum<F<T>>,
+    e_cm_squared: F<T>,
     loop_index: usize,
     settings: &Settings,
-) -> ([T; 3], T) {
+) -> ([F<T>; 3], F<T>) {
+    let one = e_cm_squared.one();
+    let zero = one.zero();
     if settings.parameterization.mode != ParameterizationMode::Spherical {
         panic!("Inverse mapping is only implemented for spherical coordinates");
     }
 
-    let mut jac = T::one();
-    let e_cm =
-        e_cm_squared.sqrt() * Into::<T>::into(settings.parameterization.shifts[loop_index].0);
+    let mut jac = one.clone();
+    let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[loop_index].0);
 
-    let x: T = mom.x - e_cm * Into::<T>::into(settings.parameterization.shifts[loop_index].1);
-    let y: T = mom.y - e_cm * Into::<T>::into(settings.parameterization.shifts[loop_index].2);
-    let z: T = mom.z - e_cm * Into::<T>::into(settings.parameterization.shifts[loop_index].3);
+    let x = &mom.px - &e_cm * F::<T>::from_f64(settings.parameterization.shifts[loop_index].1);
+    let y = &mom.py - &e_cm * F::<T>::from_f64(settings.parameterization.shifts[loop_index].2);
+    let z = &mom.pz - &e_cm * F::<T>::from_f64(settings.parameterization.shifts[loop_index].3);
 
-    let k_r_sq = x * x + y * y + z * z;
+    let k_r_sq = x.square() + y.square() + z.square();
     let k_r = k_r_sq.sqrt();
 
-    let x2 = if y < T::zero() {
-        T::one() + Into::<T>::into(0.5) * T::FRAC_1_PI() * T::atan2(y, x)
+    let x2 = if y < zero {
+        &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(&x)
     } else {
-        Into::<T>::into(0.5) * T::FRAC_1_PI() * T::atan2(y, x)
+        F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(&x)
     };
 
     // cover the degenerate case
     if k_r_sq.is_zero() {
-        return ([T::zero(), x2, T::zero()], T::zero());
+        return ([zero.clone(), x2.clone(), zero.clone()], zero.clone());
     }
 
     let x1 = match settings.parameterization.mapping {
         ParameterizationMapping::Log => {
-            let b = Into::<T>::into(settings.parameterization.b);
-            let x1 = T::one() - b / (-T::one() + b + (k_r / e_cm).exp());
-            jac /= e_cm * b / (T::one() - x1) / (T::one() + x1 * (b - T::one()));
+            let b = F::<T>::from_f64(settings.parameterization.b);
+            let x1 = &one - &b / (-&one + &b + (&k_r / &e_cm).exp());
+            jac /= &e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
             x1
         }
         ParameterizationMapping::Linear => {
-            let b = Into::<T>::into(settings.parameterization.b);
-            jac /= <T as num::traits::Float>::powi(e_cm * b + k_r, 2) / e_cm / b;
-            k_r / (e_cm * b + k_r)
+            let b = F::<T>::from_f64(settings.parameterization.b);
+            jac /= (&e_cm * &b + &k_r).powi(2) / &e_cm / &b;
+            &k_r / (&e_cm * &b + &k_r)
         }
     };
 
-    let x3 = Into::<T>::into(0.5) * (T::one() + z / k_r);
+    let x3 = F::<T>::from_f64(0.5) * (&one + &z / &k_r);
 
-    jac /= Into::<T>::into(2.) * <T as FloatConst>::PI();
-    jac /= Into::<T>::into(2.);
-    jac /= k_r * k_r;
+    jac /= F::<T>::from_f64(2.) * zero.PI();
+    jac /= F::<T>::from_f64(2.);
+    jac /= k_r.square();
 
     let mut x = [x1, x2, x3];
     for (xi, &(lo, hi)) in x
         .iter_mut()
         .zip_eq(&settings.parameterization.input_rescaling[loop_index])
     {
-        *xi = (*xi - Into::<T>::into(lo)) / Into::<T>::into(hi - lo);
-        jac /= Into::<T>::into(hi - lo);
+        *xi = (xi.clone() - F::<T>::from_f64(lo)) / F::<T>::from_f64(&hi - &lo);
+        jac /= F::<T>::from_f64(&hi - &lo);
     }
 
     (x, jac)
@@ -1611,73 +2201,7 @@ pub fn print_banner() {
 }
 
 #[allow(unused)]
-#[inline]
-pub fn upgrade_lorentz_vector(k: &LorentzVector<f64>) -> LorentzVector<f128::f128> {
-    cast_lorentz_vector(k)
-}
-
-#[allow(unused)]
-#[inline]
-pub fn cast_lorentz_vector<T1: Into<T2> + Field, T2: Field>(
-    k: &LorentzVector<T1>,
-) -> LorentzVector<T2> {
-    LorentzVector::from_args(
-        Into::<T2>::into(k.t),
-        Into::<T2>::into(k.x),
-        Into::<T2>::into(k.y),
-        Into::<T2>::into(k.z),
-    )
-}
-
-#[allow(unused)]
-#[inline]
-pub fn cast_complex<T1: Into<T2>, T2>(z: Complex<T1>) -> Complex<T2> {
-    Complex::new(Into::<T2>::into(z.re), Into::<T2>::into(z.im))
-}
-
-#[allow(unused)]
-pub fn perform_spatial_rotation<T: FloatLike>(
-    k: &LorentzVector<T>,
-    alpha: f64,
-    beta: f64,
-    gamma: f64,
-) -> LorentzVector<T> {
-    let sin_alpha = Into::<T>::into(alpha).sin();
-    let cos_alpha = Into::<T>::into(alpha).cos();
-    let sin_beta = Into::<T>::into(beta).sin();
-    let cos_beta = Into::<T>::into(beta).cos();
-    let sin_gamma = Into::<T>::into(gamma).sin();
-    let cos_gamma = Into::<T>::into(gamma).cos();
-
-    LorentzVector::from_args(
-        k.t,
-        cos_beta * cos_gamma * k.x
-            + (-cos_alpha * sin_gamma + sin_alpha * sin_beta * cos_gamma) * k.y
-            + (sin_alpha * sin_gamma + cos_alpha * sin_beta * cos_gamma) * k.z,
-        cos_beta * sin_gamma * k.x
-            + (cos_alpha * cos_gamma + sin_alpha * sin_beta * sin_gamma) * k.y
-            + (-sin_alpha * cos_gamma + cos_alpha * sin_beta * sin_gamma) * k.z,
-        -sin_beta * k.x + sin_alpha * cos_beta * k.y + cos_alpha * cos_beta * k.z,
-    )
-}
-
-#[allow(unused)]
-pub fn perform_pi2_rotation_x<T: FloatLike>(k: &LorentzVector<T>) -> LorentzVector<T> {
-    LorentzVector::from_args(k.t, k.x, -k.z, k.y)
-}
-
-#[allow(unused)]
-pub fn perform_pi2_rotation_y<T: FloatLike>(k: &LorentzVector<T>) -> LorentzVector<T> {
-    LorentzVector::from_args(k.t, k.z, k.y, -k.x)
-}
-
-#[allow(unused)]
-pub fn perform_pi2_rotation_z<T: FloatLike>(k: &LorentzVector<T>) -> LorentzVector<T> {
-    LorentzVector::from_args(k.t, -k.y, k.x, k.z)
-}
-
-#[allow(unused)]
-pub fn format_for_compare_digits(x: f64, y: f64) -> (String, String) {
+pub fn format_for_compare_digits(x: F<f64>, y: F<f64>) -> (String, String) {
     let string_x = format!("{:.16e}", x);
     let string_y = format!("{:.16e}", y);
 
@@ -1717,7 +2241,7 @@ pub fn format_evaluation_time_from_f64(time: f64) -> String {
     format_evaluation_time(Duration::from_secs_f64(time))
 }
 
-pub fn format_sample(sample: &Sample<f64>) -> String {
+pub fn format_sample(sample: &Sample<F<f64>>) -> String {
     match sample {
         Sample::Continuous(_, xs) => {
             let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
