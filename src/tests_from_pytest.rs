@@ -92,6 +92,10 @@ mod tests_scalar_massless_triangle {
         graph.generate_loop_momentum_bases();
 
         graph.generate_cff();
+        graph.generate_numerator(&model);
+        graph.numerator_substitute_model_params(&model);
+        // graph.evaluate_model_params(&model);
+        graph.generate_coupling_map(&model);
         assert_eq!(
             graph
                 .derived_data

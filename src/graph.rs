@@ -3,11 +3,9 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
     momentum::{Energy, FourMomentum, ThreeMomentum},
-    numerator::{generate_numerator},
+    numerator::generate_numerator,
     tropical::{self, TropicalSubgraphTable},
-    utils::{
-        compute_four_momentum_from_three, compute_three_momentum_from_four, FloatLike, F,
-    },
+    utils::{compute_four_momentum_from_three, compute_three_momentum_from_four, FloatLike, F},
 };
 
 use ahash::{AHashMap, RandomState};
@@ -16,10 +14,9 @@ use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use itertools::Itertools;
-use log::warn;
+use log::{debug, warn};
 use nalgebra::DMatrix;
 #[allow(unused_imports)]
-
 use spenso::Contract;
 use spenso::*;
 
@@ -30,13 +27,10 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 
 use symbolica::{
     atom::{Atom, AtomView, Symbol},
-    domains::{
-        float::{Complex, NumericalFloatLike},
-    },
-    id::Pattern,
+    domains::float::{Complex, NumericalFloatLike},
+    id::{MatchSettings, Pattern},
     state::State,
 };
-
 
 use constcat::concat;
 
@@ -122,7 +116,7 @@ impl InteractionVertexInfo {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern =
-                        Pattern::parse(&format!("Q{}(lor(4,x_))", e)).unwrap();
+                        Pattern::parse(&format!("Q{}(lor(4,indexid(x_)))", e)).unwrap();
 
                     atom = momentum_in_pattern.replace_all(
                         atom.as_view(),
@@ -133,7 +127,9 @@ impl InteractionVertexInfo {
                 }
 
                 for (i, e) in edges.iter().enumerate() {
-                    let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
+                    let pat: Pattern = Atom::parse(&format!("indexid({})", i + 1))
+                        .unwrap()
+                        .into_pattern();
 
                     let dir = if graph.is_edge_incoming(*e, vertex_pos) {
                         "in"
@@ -165,50 +161,67 @@ impl InteractionVertexInfo {
 
                 let t_pat = Pattern::parse("T(a_,i_,ia_)").unwrap();
 
-                let t_rep = Pattern::parse("T(coad(a_),cof(i_),coaf(ia_))").unwrap();
+                let t_rep =
+                    Pattern::parse("T(coad(indexid(a_)),cof(indexid(i_)),coaf(indexid(ia_)))")
+                        .unwrap();
 
                 atom = t_pat.replace_all(atom.as_view(), &t_rep, None, None);
 
                 let f_pat = Pattern::parse("f(a1_,a2_,a3_)").unwrap();
 
-                let f_rep = Pattern::parse("f(coad(a1_),coad(a2_),coad(a3_))").unwrap();
+                let f_rep =
+                    Pattern::parse("f(coad(indexid(a1_)),coad(indexid(a2_)),coad(indexid(a3_)))")
+                        .unwrap();
 
                 atom = f_pat.replace_all(atom.as_view(), &f_rep, None, None);
 
                 let d_pat = Pattern::parse("d(a1_,a2_,a3_)").unwrap();
 
-                let d_rep = Pattern::parse("d(coad(a1_),coad(a2_),coad(a3_))").unwrap();
+                let d_rep =
+                    Pattern::parse("d(coad(indexid(a1_)),coad(indexid(a2_)),coad(indexid(a3_)))")
+                        .unwrap();
 
                 atom = d_pat.replace_all(atom.as_view(), &d_rep, None, None);
 
                 let eps_pat = Pattern::parse("Epsilon(i1_,i2_,i3_)").unwrap();
 
-                let eps_rep = Pattern::parse("EpsilonBar(cof(i1_),cof(i2_),cof(i3_))").unwrap();
+                let eps_rep = Pattern::parse(
+                    "EpsilonBar(cof(indexid(i1_)),cof(indexid(i2_)),cof(indexid(i3_)))",
+                )
+                .unwrap();
 
                 atom = eps_pat.replace_all(atom.as_view(), &eps_rep, None, None);
 
-                let eps_bar_pat = Pattern::parse("EpsilonBar(ia_1,ia_2,ia_3)").unwrap();
+                let eps_bar_pat = Pattern::parse("EpsilonBar(ia1_,ia2_,ia3_)").unwrap();
 
-                let eps_bar_rep =
-                    Pattern::parse("Epsilon(coaf(ia_1),coaf(ia_2),coaf(ia_3))").unwrap();
+                let eps_bar_rep = Pattern::parse(
+                    "Epsilon(coaf(indexid(ia1_)),coaf(indexid(ia2_)),coaf(indexid(ia3_)))",
+                )
+                .unwrap();
 
                 atom = eps_bar_pat.replace_all(atom.as_view(), &eps_bar_rep, None, None);
 
                 let t6_pat = Pattern::parse("T6(a_,s_,as_)").unwrap();
 
-                let t6_rep = Pattern::parse("T6(coad(a_),cos(s_),coas(as_))").unwrap();
+                let t6_rep =
+                    Pattern::parse("T6(coad(indexid(a_)),cos(indexid(s_)),coas(indexid(as_)))")
+                        .unwrap();
 
                 atom = t6_pat.replace_all(atom.as_view(), &t6_rep, None, None);
 
                 let k6_pat = Pattern::parse("K6(ia1_,ia2_,s_)").unwrap();
 
-                let k6_rep = Pattern::parse("K6(coaf(ia1_),coaf(ia2_),cos(s_))").unwrap();
+                let k6_rep =
+                    Pattern::parse("K6(coaf(indexid(ia1)_),coaf(indexid(ia2)_),cos(indexid(s_)))")
+                        .unwrap();
 
                 atom = k6_pat.replace_all(atom.as_view(), &k6_rep, None, None);
 
                 let k6_bar_pat = Pattern::parse("K6Bar(as_,i1_,i2_)").unwrap();
 
-                let k6_bar_rep = Pattern::parse("K6Bar(coas(as_),cof(i1_),cof(i2_))").unwrap();
+                let k6_bar_rep =
+                    Pattern::parse("K6Bar(coas(indexid(as_)),cof(indexid(i1_)),cof(indexid(i2_)))")
+                        .unwrap();
 
                 atom = k6_bar_pat.replace_all(atom.as_view(), &k6_bar_rep, None, None);
 
@@ -241,14 +254,16 @@ impl InteractionVertexInfo {
 
                     atom = id1.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("Identity({}{}),x_)", ind, i + 1)).unwrap(),
+                        &Pattern::parse(&format!("Identity({}indexid({})),x_)", ind, i + 1))
+                            .unwrap(),
                         None,
                         None,
                     );
 
                     atom = id2.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("Identity(x_,{}{}))", ind, i + 1)).unwrap(),
+                        &Pattern::parse(&format!("Identity(x_,{}indexid({})))", ind, i + 1))
+                            .unwrap(),
                         None,
                         None,
                     );
@@ -264,7 +279,9 @@ impl InteractionVertexInfo {
                 );
 
                 for (i, e) in edges.iter().enumerate() {
-                    let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
+                    let pat: Pattern = Atom::parse(&format!("indexid({})", i + 1))
+                        .unwrap()
+                        .into_pattern();
 
                     let dir = if graph.is_edge_incoming(*e, vertex_pos) {
                         "in"
@@ -502,16 +519,16 @@ impl Edge {
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 atom = pfun.replace_all(
                     atom.as_view(),
-                    &Pattern::parse(&format!("Q{}(lor(4,x_))", num)).unwrap(),
+                    &Pattern::parse(&format!("Q{}(lor(4,indexid(x_)))", num)).unwrap(),
                     None,
                     None,
                 );
 
-                let pslashfun = Pattern::parse("PSlash(x__)").unwrap();
+                let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
                 atom = pslashfun.replace_all(
                     atom.as_view(),
                     &Pattern::parse(&format!(
-                        "Q{}(lor(4,{}))Gamma({},x__)",
+                        "Q{}(lor(4,{}))Gamma({},indexid(i_),indexid(j_))",
                         num, pindex_num, pindex_num
                     ))
                     .unwrap(),
@@ -519,25 +536,31 @@ impl Edge {
                     None,
                 );
 
-                let pat: Pattern = Atom::new_num(1).into_pattern();
+                let pat: Pattern = Atom::parse("indexid(1)").unwrap().into_pattern();
 
                 let in_index_num = AbstractIndex::try_from(format!("in{}", num)).unwrap().0;
+
+                let settings = MatchSettings {
+                    non_greedy_wildcards: vec![],
+                    level_is_tree_depth: false,
+                    level_range: (1, None),
+                };
 
                 atom = pat.replace_all(
                     atom.as_view(),
                     &Pattern::parse(&format!("{in_index_num}")).unwrap(),
                     None,
-                    None,
+                    Some(&settings),
                 );
 
-                let pat: Pattern = Atom::new_num(2).into_pattern();
+                let pat: Pattern = Atom::parse("indexid(2)").unwrap().into_pattern();
 
                 let out_index_num = AbstractIndex::try_from(format!("out{}", num)).unwrap().0;
                 atom = pat.replace_all(
                     atom.as_view(),
                     &Pattern::parse(&format!("{out_index_num}")).unwrap(),
                     None,
-                    None,
+                    Some(&settings),
                 );
 
                 atom
@@ -1261,6 +1284,8 @@ impl Graph {
         );
     }
 
+    pub fn evaluate_model_params(&mut self, model: &Model) {}
+
     #[inline]
     /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_numerator_orientations<T: FloatLike>(
@@ -1268,12 +1293,12 @@ impl Graph {
         loop_moms: &[ThreeMomentum<F<T>>],
         independent_external_momenta: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<F<T>> {
+    ) -> Vec<Complex<F<T>>> {
         let zero = loop_moms[0].px.zero();
-        let mut out = vec![zero.clone(); self.edges.len()];
+        let mut out = vec![Complex::new(zero.clone(), zero.clone()); self.edges.len()];
         let lmb = lmb_specification.basis(self);
 
-        let on_shell_momenta = self
+        let _on_shell_momenta = self
             .edges
             .iter()
             .enumerate()
@@ -1288,6 +1313,8 @@ impl Graph {
             .collect_vec();
 
         let numerator = self.derived_data.numerator.as_ref().unwrap().clone();
+        debug!("Numerator: {}", numerator);
+        println!("Numerator: {}", numerator);
 
         let numerator_network = if let AtomView::Mul(mul) = numerator.as_view() {
             SymbolicTensor::mul_to_network(mul)
@@ -1327,6 +1354,19 @@ impl Graph {
 
         let mut constmap = AHashMap::new();
 
+        let one = zero.one();
+        let i_float = Complex::new(zero.clone(), one.clone());
+        let i = Atom::new_var(State::I);
+        constmap.insert(i.as_view(), i_float);
+
+        if let Some(ref map) = self.derived_data.const_map {
+            for (key, value) in map.iter() {
+                let v = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
+                println!("{}: {}", key, v);
+                constmap.insert(key.as_view(), v);
+            }
+        }
+
         for orient in self
             .derived_data
             .cff_expression
@@ -1337,29 +1377,39 @@ impl Graph {
             .map(|e| e.orientation)
         {
             for (i, sign) in orient.into_iter().enumerate() {
-                constmap.insert(emr_params[i][1.into()].as_view(), emr[i].spatial.px.clone());
+                constmap.insert(
+                    emr_params[i][1.into()].as_view(),
+                    emr[i].spatial.px.clone().into(),
+                );
 
-                constmap.insert(emr_params[i][2.into()].as_view(), emr[i].spatial.py.clone());
+                constmap.insert(
+                    emr_params[i][2.into()].as_view(),
+                    emr[i].spatial.py.clone().into(),
+                );
 
-                constmap.insert(emr_params[i][3.into()].as_view(), emr[i].spatial.pz.clone());
+                constmap.insert(
+                    emr_params[i][3.into()].as_view(),
+                    emr[i].spatial.pz.clone().into(),
+                );
 
                 if sign {
                     constmap.insert(
                         emr_params[i][0.into()].as_view(),
-                        emr[i].temporal.value.clone(),
+                        emr[i].temporal.value.clone().into(),
                     );
                 } else {
                     constmap.insert(
                         emr_params[i][0.into()].as_view(),
-                        -emr[i].temporal.value.clone(),
+                        (-emr[i].temporal.value.clone()).into(),
                     );
                 }
             }
 
-            let mut evaluated = numerator_network.evaluate::<F<T>, _>(|c| c.into(), &constmap);
+            let mut evaluated =
+                numerator_network.evaluate::<Complex<F<T>>, _>(|c| c.into(), &constmap);
 
             evaluated.contract();
-            out.push(evaluated.result().get_linear(0.into()).unwrap().clone());
+            out.push(evaluated.result());
         }
 
         out
@@ -1375,7 +1425,7 @@ impl Graph {
     ) -> Complex<F<T>> {
         let one = loop_moms[0].px.one();
         let zero = one.zero();
-        let i = Complex::new(zero.clone(), one);
+        let i = Complex::new(zero.clone(), one.clone());
 
         let loop_number = self.loop_momentum_basis.basis.len();
         let internal_vertex_number = self.vertices.len() - self.external_connections.len();
@@ -1388,16 +1438,14 @@ impl Graph {
             * self
                 .evaluate_cff_orientations(loop_moms, external_moms, lmb_specification)
                 .into_iter()
-                .zip(
-                    self.evaluate_numerator_orientations(
-                        loop_moms,
-                        external_moms,
-                        lmb_specification,
-                    ),
-                )
-                .map(|(cff, num)| cff * num)
+                .zip(self.evaluate_numerator_orientations(
+                    loop_moms,
+                    external_moms,
+                    lmb_specification,
+                ))
+                .map(|(cff, num)| num * cff)
                 .reduce(|acc, e| acc + &e)
-                .unwrap_or(zero.clone())
+                .unwrap_or(Complex::new(one.clone(), one.clone()))
     }
 
     #[inline]
@@ -1408,6 +1456,13 @@ impl Graph {
     ) -> Complex<F<T>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
         self.evaluate_cff_expression_in_lmb(loop_moms, external_moms, &lmb_specification)
+    }
+
+    pub fn generate_coupling_map(&mut self, model: &Model) {
+        let mut coupling_map = AHashMap::new();
+        model.append_coupling_map(&mut coupling_map);
+
+        self.derived_data.const_map = Some(coupling_map);
     }
 
     pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
@@ -1475,6 +1530,7 @@ pub struct DerivedGraphData {
     pub ltd_expression: Option<LTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
     pub numerator: Option<Atom>,
+    pub const_map: Option<AHashMap<Atom, Complex<F<f64>>>>,
 }
 
 impl DerivedGraphData {
@@ -1485,6 +1541,7 @@ impl DerivedGraphData {
             ltd_expression: None,
             tropical_subgraph_table: None,
             numerator: None,
+            const_map: None,
         }
     }
 
@@ -1515,6 +1572,7 @@ impl DerivedGraphData {
                 .map(LTDExpression::from_serializable),
             tropical_subgraph_table: serializable.tropical_subgraph_table,
             numerator: None,
+            const_map: None,
         }
     }
 

@@ -347,8 +347,7 @@ impl PythonWorker {
         is_momentum_space: bool,
         use_f128: bool,
     ) -> PyResult<(f64, f64)> {
-
-      let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
+        let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
         match self.integrands.get_mut(integrand) {
             Some(integrand) => {
                 let settings = match integrand {
@@ -366,7 +365,7 @@ impl PythonWorker {
                     use_f128,
                 );
 
-                Ok((res.re, res.im))
+                Ok((res.re.0, res.im.0))
             }
             None => Err(exceptions::PyException::new_err(format!(
                 "Could not find integrand {}",
@@ -472,7 +471,7 @@ impl PythonWorker {
                         .result
                         .iter()
                         .tuple_windows()
-                        .map(|(re, im)| (*re, *im))
+                        .map(|(re, im)| (re.0, im.0))
                         .collect())
                 }
                 _ => unimplemented!("unsupported integrand type"),

@@ -142,7 +142,7 @@ impl<T: FloatLike> SquareMatrix<F<T>> {
             for j in i + 1..self.dim {
                 let mut entry = self[(i, j)].clone();
                 for k in 0..i {
-                    entry -= q[(i, k)].square();
+                    entry -= &q[(i, k)] * &q[(j, k)];
                 }
                 q[(j, i)] = entry / &diagonal_entry;
             }
@@ -171,7 +171,7 @@ impl<T: FloatLike> SquareMatrix<F<T>> {
         for row in 1..self.dim {
             let inverse_diagonal_element = inverse_diagonal_entries[row].clone();
             for col in 0..row {
-                n_matrix[(row, col)] = inverse_diagonal_element.clone() * &q[(row, col)];
+                n_matrix[(row, col)] = &inverse_diagonal_element * &q[(row, col)];
             }
         }
 
@@ -242,7 +242,7 @@ pub struct DecompositionResult<T> {
 #[cfg(test)]
 mod tests {
     use crate::utils::assert_approx_eq;
-     //FIXME: add f128 back
+    //FIXME: add f128 back
 
     use super::*;
     const EPSILON: F<f64> = F(1e-12);

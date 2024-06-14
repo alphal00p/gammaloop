@@ -1,4 +1,8 @@
-use symbolica::{atom::Atom, id::Pattern};
+use symbolica::{
+    atom::{AsAtomView, Atom, FunctionBuilder, Symbol},
+    id::Pattern,
+    state::State,
+};
 
 use crate::{
     graph::{Graph, LoopMomentumBasis},
@@ -35,12 +39,30 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let mut builder = Atom::new_num(1);
 
     for v in &vatoms {
+        println!("vatom: {}", v);
         builder = builder * v;
     }
 
     for e in &eatoms {
+        println!("eatom: {}", e);
         builder = builder * e;
     }
+
+    let i = Atom::new_var(State::I);
+    let a = Atom::new_var(State::get_symbol("a_"));
+    let b = Atom::new_var(State::get_symbol("b_"));
+
+    let complex = FunctionBuilder::new(State::get_symbol("complex"))
+        .add_arg(&a)
+        .add_arg(&b)
+        .finish();
+
+    builder = complex.into_pattern().replace_all(
+        builder.as_view(),
+        &(&a + &b * &i).into_pattern(),
+        None,
+        None,
+    );
 
     let identity = Pattern::parse("Identity(i_,j_)").unwrap();
     builder = identity.replace_all(

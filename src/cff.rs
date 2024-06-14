@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 
 use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
 
-
 use log::debug;
 
 const MAX_VERTEX_COUNT: usize = 32;
@@ -1961,7 +1960,7 @@ mod tests_cff {
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
-            .fold(F(1.), |a, f| a + f);
+            .fold(F(1.), |a, f| a * f);
         let cff_res = energy_prefactor * cff.evaluate(&energy_cache);
 
         let target = F(1.0794792137096797e-13);
@@ -2046,7 +2045,7 @@ mod tests_cff {
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
-            .fold(F(1.), |a, f| a + f);
+            .fold(F(1.), |a, f| a * f);
         let res = cff.evaluate(&energies_cache) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);

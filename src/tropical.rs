@@ -783,14 +783,15 @@ pub mod tropical_parameterization {
     }
 
     /// This function is called from the paramatrization stage of evaluate_sample
+    #[allow(clippy::type_complexity)]
+
     pub fn generate_tropical_sample<T: FloatLike>(
         x_space_point: &[F<T>],
         external_momenta: &[FourMomentum<F<T>>],
         graph: &Graph,
         debug: usize,
     ) -> Result<(Vec<ThreeMomentum<F<T>>>, F<T>), Report> {
-        let zero = x_space_point[0].zero();
-        let one = zero.one();
+        // let zero = x_space_point[0].zero();
         let tropical_subgraph_table = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
         let signature_matrix = &tropical_subgraph_table.tropical_graph.signature_matrix;
         let _num_edges = signature_matrix.len();
@@ -988,7 +989,6 @@ pub mod tropical_parameterization {
         let num_edges = signature_marix.len();
 
         let accumulator = edge_shifts[0].zero();
-        let zero = accumulator.pz.zero();
 
         (0..num_loops)
             .map(|l| {
@@ -1013,7 +1013,7 @@ pub mod tropical_parameterization {
     ) -> F<T> {
         let num_loops = inverse_l.get_dim();
         let zero = x_vec[0].zero();
-        let one = zero.one();
+        // let one = zero.one();
 
         if debug > 6 {
             println!("analyzing computation_of_polynomial");
@@ -1071,7 +1071,7 @@ pub mod tropical_parameterization {
         u_vectors: &[ThreeMomentum<F<T>>],
         debug: usize,
     ) -> Vec<ThreeMomentum<F<T>>> {
-        let zero = v.zero();
+        // let zero = v.zero();
         let zero_mom = q_vectors[0].zero();
         let num_loops = q_t_inverse.get_dim();
         let prefactor = (v / lambda * F::<T>::from_f64(0.5)).sqrt();
@@ -1112,7 +1112,7 @@ pub mod tropical_parameterization {
         num_loops: usize,
         debug: usize,
     ) -> F<T> {
-        let zero = v.zero();
+        // let zero = v.zero();
         let polynomial_ratio = (v_trop / v)
             .powf(F::<T>::from_f64(tropical_subgraph_table.tropical_graph.dod))
             * (u_trop / u).powf(F::<T>::from_f64(DHALF));

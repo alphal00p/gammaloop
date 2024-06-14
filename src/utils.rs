@@ -457,21 +457,24 @@ impl<const N: u32> VarFloat<N> {
             float: rug::Float::with_val(N, 1.0),
         }
     }
-
+    #[allow(non_snake_case)]
     fn E() -> Self {
         Self::one().exp()
     }
 
+    #[allow(non_snake_case)]
     fn PI() -> Self {
         VarFloat {
             float: rug::Float::with_val(N, Constant::Pi),
         }
     }
 
+    #[allow(non_snake_case)]
     fn TAU() -> Self {
         Self::PI()+Self::PI()
     }
 
+    #[allow(non_snake_case)]
     fn FRAC_1_PI() -> Self {
         Self::PI().inv()
     }
@@ -576,6 +579,7 @@ pub trait FloatLike:
 
     fn from_f64(x: f64) -> Self;
 
+    #[allow(clippy::wrong_self_convention)]
     fn into_f64(&self) -> f64; // for inverse gamma in tropical sampling
 
     fn is_nan(&self) -> bool;
@@ -640,6 +644,8 @@ impl<T: FloatLike> PrecisionUpgradable for F<T> where T::Higher: FloatLike, T::L
         F(self.0.lower())
     }
 }
+
+
 
 
 impl<T:FloatLike> RefZero for F<T> {
@@ -1698,7 +1704,7 @@ pub fn compute_three_momentum_from_four<T: FloatLike>(
 
 // Bilinear form for E-surface defined as sqrt[(k+p1)^2+m1sq] + sqrt[(k+p2)^2+m2sq] + e_shift
 // The Bilinear system then reads 4 k.a.k + 4 k.n + C = 0
-#[allow(unused)]
+#[allow(unused,clippy::type_complexity)]
 pub fn one_loop_e_surface_bilinear_form<T: FloatLike>(
     p1: &[F<T>; 3],
     p2: &[F<T>; 3],
@@ -2337,8 +2343,8 @@ pub fn inv_parametrize3d<T: FloatLike>(
         .iter_mut()
         .zip_eq(&settings.parameterization.input_rescaling[loop_index])
     {
-        *xi = (xi.clone() - F::<T>::from_f64(lo)) / F::<T>::from_f64(&hi - &lo);
-        jac /= F::<T>::from_f64(&hi - &lo);
+        *xi = (xi.clone() - F::<T>::from_f64(lo)) / F::<T>::from_f64(hi - lo);
+        jac /= F::<T>::from_f64(hi - lo);
     }
 
     (x, jac)

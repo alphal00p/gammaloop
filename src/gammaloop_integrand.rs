@@ -1012,6 +1012,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
     }
 
     /// Cast the sample to a different precision
+    #[allow(dead_code)]
     #[inline]
     fn cast_sample<T2: FloatLike>(&self) -> GammaLoopSample<T2>
     where
@@ -1051,6 +1052,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
     }
 
+    #[allow(dead_code)]
     fn lower_precision(&self) -> GammaLoopSample<T::Lower>
     where
         T::Lower: FloatLike,
