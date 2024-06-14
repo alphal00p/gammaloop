@@ -1295,7 +1295,7 @@ impl Graph {
         lmb_specification: &LoopMomentumBasisSpecification,
     ) -> Vec<Complex<F<T>>> {
         let zero = loop_moms[0].px.zero();
-        let mut out = vec![Complex::new(zero.clone(), zero.clone()); self.edges.len()];
+        let mut out = vec![];
         let lmb = lmb_specification.basis(self);
 
         let _on_shell_momenta = self
@@ -1362,7 +1362,6 @@ impl Graph {
         if let Some(ref map) = self.derived_data.const_map {
             for (key, value) in map.iter() {
                 let v = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
-                println!("{}: {}", key, v);
                 constmap.insert(key.as_view(), v);
             }
         }
@@ -1405,12 +1404,17 @@ impl Graph {
                 }
             }
 
+            println!(
+                "Numerator evaluated: {}",
+                numerator_network.scalar.as_ref().unwrap()
+            );
             let mut evaluated =
                 numerator_network.evaluate::<Complex<F<T>>, _>(|c| c.into(), &constmap);
 
             evaluated.contract();
             out.push(evaluated.result());
         }
+        println!("Numerator evaluated: {:?}", out);
 
         out
     }
@@ -1434,18 +1438,14 @@ impl Graph {
             i.pow(loop_number as u64) * (-i.one()).pow(internal_vertex_number as u64 - 1);
 
         // here numerator evaluation can be weaved into the summation
-        prefactor
-            * self
-                .evaluate_cff_orientations(loop_moms, external_moms, lmb_specification)
-                .into_iter()
-                .zip(self.evaluate_numerator_orientations(
-                    loop_moms,
-                    external_moms,
-                    lmb_specification,
-                ))
-                .map(|(cff, num)| num * cff)
-                .reduce(|acc, e| acc + &e)
-                .unwrap_or(Complex::new(one.clone(), one.clone()))
+        // prefactor
+        //     *
+        self.evaluate_cff_orientations(loop_moms, external_moms, lmb_specification)
+            .into_iter()
+            .zip(self.evaluate_numerator_orientations(loop_moms, external_moms, lmb_specification))
+            .map(|(cff, num)| num * cff)
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(Complex::new(one.clone(), one.clone()))
     }
 
     #[inline]

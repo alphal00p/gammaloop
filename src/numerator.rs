@@ -39,12 +39,10 @@ pub fn generate_numerator(graph: &Graph, model: &Model) -> Atom {
     let mut builder = Atom::new_num(1);
 
     for v in &vatoms {
-        println!("vatom: {}", v);
         builder = builder * v;
     }
 
     for e in &eatoms {
-        println!("eatom: {}", e);
         builder = builder * e;
     }
 
