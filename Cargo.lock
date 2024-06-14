@@ -562,6 +562,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "delegate"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e018fccbeeb50ff26562ece792ed06659b9c2dae79ece77c4456bb10d9bf79b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -748,6 +759,7 @@ dependencies = [
  "constcat",
  "criterion",
  "ctrlc",
+ "delegate",
  "derive_more",
  "duplicate",
  "enum-try-as-inner",
@@ -765,13 +777,13 @@ dependencies = [
  "libc",
  "log",
  "lorentz_vector",
- "nalgebra 0.32.5",
+ "nalgebra 0.32.6",
  "nohash-hasher",
- "num 0.4.3",
  "num-complex 0.4.6",
  "once_cell",
  "permutation",
  "petgraph",
+ "portrait",
  "pprof",
  "pyo3",
  "pyo3-build-config",
@@ -779,6 +791,7 @@ dependencies = [
  "rand",
  "rand_xoshiro",
  "rayon",
+ "ref-ops",
  "rug",
  "rustc-hash",
  "serde",
@@ -1092,9 +1105,9 @@ dependencies = [
 
 [[package]]
 name = "memchr"
-version = "2.7.2"
+version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
+checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "memmap2"
@@ -1143,9 +1156,9 @@ dependencies = [
 
 [[package]]
 name = "nalgebra"
-version = "0.32.5"
+version = "0.32.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ea4908d4f23254adda3daa60ffef0f1ac7b8c3e9a864cf3cc154b251908a2ef"
+checksum = "7b5c17de023a86f59ed79891b2e5d5a94c705dbe904a5b5c9c952ea6221b03e4"
 dependencies = [
  "approx",
  "matrixmultiply",
@@ -1457,6 +1470,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7170ef9988bc169ba16dd36a7fa041e5c4cbeb6a35b76d4c03daded371eae7c0"
 
 [[package]]
+name = "portrait"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef45976c13e2ca4bbf64fb52680c41ab0100484bb22038f1bb282f2d7ca4b841"
+dependencies = [
+ "portrait-codegen",
+]
+
+[[package]]
+name = "portrait-codegen"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbe79b0b5142c1f347958fae033fee42a50c35ed502a1dc8e13901f88cbdc001"
+dependencies = [
+ "heck",
+ "itertools 0.11.0",
+ "portrait-framework",
+ "proc-macro2",
+ "quote",
+ "rand",
+ "syn 2.0.66",
+]
+
+[[package]]
+name = "portrait-framework"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c7d0ce33f82397dcd87769f5df2636e0c40397c073b7ae71c8a5bb93f966ef"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rand",
+ "syn 2.0.66",
+]
+
+[[package]]
 name = "pprof"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1711,12 +1761,18 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "469052894dcb553421e483e4209ee581a45100d31b4018de03e5a7ad86374a7e"
+checksum = "c82cf8cff14456045f55ec4241383baeff27af886adb72ffb2162f99911de0fd"
 dependencies = [
  "bitflags 2.5.0",
 ]
+
+[[package]]
+name = "ref-ops"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a743269eaa4c6f18021903a3627f6031b4ae3e2dddda3c5ab8d7a8c7e723d103"
 
 [[package]]
 name = "regex"
@@ -1961,9 +2017,8 @@ dependencies = [
 
 [[package]]
 name = "spenso"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15c5d84118cd8f52b54d870e7bd4affbb7e75b47af875196f7caf5a2c287fc4b"
+version = "0.2.0"
+source = "git+https://github.com/alphal00p/spenso?branch=master#e48710240bea962741eeb29ba7140121c4e7167a"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2046,7 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "0.5.0"
+version = "0.7.0"
 dependencies = [
  "ahash",
  "append-only-vec",

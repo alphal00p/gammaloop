@@ -5,14 +5,15 @@ use std::{
 
 use crate::{
     graph::{EdgeType, Graph},
-    utils::FloatLike,
+    utils::{FloatLike, F},
 };
 use ahash::{HashMap, HashMapExt, HashSet};
 use color_eyre::Report;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use symbolica::atom::Atom;
+
+use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
 
 use log::debug;
 
@@ -65,22 +66,24 @@ impl Esurface {
 
     // the energy cache contains the energies of external edges as well as the virtual,
     // use the location in the supergraph to determine the index
-    fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    fn compute_value<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
+        let zero = energy_cache[0].zero();
         let energy_sum = self
             .energies
             .iter()
-            .map(|index| energy_cache[*index])
-            .sum::<T>();
+            .map(|index| energy_cache[*index].clone())
+            .reduce(|a, b| a + b)
+            .unwrap_or(zero.clone());
 
         let shift_sum = self
             .shift
             .iter()
-            .map(|index| energy_cache[*index])
-            .sum::<T>();
+            .map(|index| energy_cache[*index].clone())
+            .fold(zero, |a, f| a + f);
 
         let shift_sign = match self.shift_signature {
-            true => Into::<T>::into(1.),
-            false => Into::<T>::into(-1.),
+            true => energy_sum.from_i64(1),
+            false => energy_sum.from_i64(-1),
         };
 
         energy_sum + shift_sign * shift_sum
@@ -90,7 +93,7 @@ impl Esurface {
 #[derive(Debug, Clone)]
 pub struct CFFTree {
     nodes: Vec<CFFTreeNode>,
-    orientation: Orientation,
+    pub orientation: Orientation,
     term_id: usize,
     num_data_nodes: usize,
 }
@@ -214,16 +217,17 @@ impl CFFTree {
     fn recursive_eval_from_node<T: FloatLike>(
         &self,
         node_id: usize,
-        esurface_cache: &[T],
-        node_cache: &mut Vec<Vec<Option<T>>>,
-    ) -> T {
+        esurface_cache: &[F<T>],
+        node_cache: &mut Vec<Vec<Option<F<T>>>>,
+    ) -> F<T> {
+        let zero = esurface_cache[0].zero();
         match &self.nodes[node_id] {
             CFFTreeNode::Data(tree_node_data) => {
                 let option_esurface_at_node = tree_node_data.esurface_id;
                 match option_esurface_at_node {
                     None => {
-                        let res = Into::<T>::into(1.);
-                        node_cache[self.term_id][node_id] = Some(res);
+                        let res = esurface_cache[0].one();
+                        node_cache[self.term_id][node_id] = Some(res.clone());
                         res
                     }
                     Some(esurface_id) => {
@@ -239,24 +243,26 @@ impl CFFTree {
                                             node_cache,
                                         )
                                     })
-                                    .sum::<T>())
+                                    .fold(zero, |a, f| a + f))
                         } else {
                             esurface_cache[esurface_id].inv()
                         };
-                        node_cache[self.term_id][node_id] = Some(res);
+                        node_cache[self.term_id][node_id] = Some(res.clone());
                         res
                     }
                 }
             }
-            CFFTreeNode::Pointer(pointer) => node_cache[pointer.term_id][pointer.node_id].unwrap(),
+            CFFTreeNode::Pointer(pointer) => node_cache[pointer.term_id][pointer.node_id]
+                .clone()
+                .unwrap(),
         }
     }
 
     fn evaluate_tree<T: FloatLike>(
         &self,
-        esurface_cache: &[T],
-        node_cache: &mut Vec<Vec<Option<T>>>,
-    ) -> T {
+        esurface_cache: &[F<T>],
+        node_cache: &mut Vec<Vec<Option<F<T>>>>,
+    ) -> F<T> {
         self.recursive_eval_from_node(0, esurface_cache, node_cache)
     }
 }
@@ -406,7 +412,7 @@ impl CFFExpression {
     }
 
     #[inline]
-    pub fn evaluate_orientations<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
+    pub fn evaluate_orientations<T: FloatLike>(&self, energy_cache: &[F<T>]) -> Vec<F<T>> {
         let esurface_cache = self.compute_esurface_cache(energy_cache);
 
         let mut node_cache = self
@@ -422,14 +428,15 @@ impl CFFExpression {
     }
 
     #[inline]
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
+        let zero = energy_cache[0].zero();
         self.evaluate_orientations(energy_cache)
             .into_iter()
-            .sum::<T>()
+            .fold(zero, |a, f| a + f)
     }
 
     #[inline]
-    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
+    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[F<T>]) -> Vec<F<T>> {
         self.esurfaces
             .iter()
             .map(|e| e.compute_value(energy_cache))
@@ -535,7 +542,7 @@ impl Debug for CFFVertex {
 // Orientation is a bitset that represents the orientation of the edges in a graph.
 // 0 means +, 1 means -, in this representation the original graph is represented by the number 0
 #[derive(Debug, Clone, Copy)]
-struct Orientation {
+pub struct Orientation {
     identifier: usize,
     num_edges: usize,
 }
@@ -586,7 +593,7 @@ impl IntoIterator for Orientation {
 
 // OrientationIterator allows us to iterate over the edges in a graph, and
 // view their orientation as a boolean
-struct OrientationIterator {
+pub struct OrientationIterator {
     identifier: usize,
     current_location: usize,
     num_edges: usize,
@@ -1421,8 +1428,10 @@ fn generate_cff_from_orientations(
 
 #[cfg(test)]
 mod tests_cff {
-    use lorentz_vector::LorentzVector;
-    use num::traits::Inv;
+
+    use symbolica::domains::float::{NumericalFloatLike, Real};
+
+    use crate::momentum::{FourMomentum, ThreeMomentum};
 
     use super::*;
 
@@ -1453,8 +1462,12 @@ mod tests_cff {
     }
 
     #[allow(unused)]
-    fn compute_one_loop_energy<T: FloatLike>(k: LorentzVector<T>, p: LorentzVector<T>, m: T) -> T {
-        ((k + p).spatial_squared() + m * m).sqrt()
+    fn compute_one_loop_energy<T: FloatLike>(
+        k: ThreeMomentum<F<T>>,
+        p: ThreeMomentum<F<T>>,
+        m: F<T>,
+    ) -> F<T> {
+        ((k + p).norm_squared() + m.square()).sqrt()
     }
 
     #[test]
@@ -1766,7 +1779,7 @@ mod tests_cff {
 
     #[test]
     fn test_esurface() {
-        let energies_cache = [1., 2., 3., 4., 5.];
+        let energies_cache = [F(1.), F(2.), F(3.), F(4.), F(5.)];
         let shift = vec![3, 4];
         let energies = vec![0, 1, 2];
         let shift_signature = true;
@@ -1788,7 +1801,7 @@ mod tests_cff {
         ];
 
         let res = esurface.compute_value(&energies_cache);
-        assert_eq!(res, 15.);
+        assert_eq!(res, F(15.));
 
         let shift_signature = false;
         let energies = vec![0, 2];
@@ -1802,7 +1815,7 @@ mod tests_cff {
         };
 
         let res = esurface.compute_value(&energies_cache);
-        assert_eq!(res, 2.);
+        assert_eq!(res, F(2.));
     }
 
     #[test]
@@ -1843,21 +1856,21 @@ mod tests_cff {
             generate_cff_from_orientations(orientations, &position_map, &external_data).unwrap();
         assert_eq!(cff.esurfaces.len(), 6);
 
-        let p1 = LorentzVector::from_args(1., 3., 4., 5.);
-        let p2 = LorentzVector::from_args(1., 6., 7., 8.);
+        let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
+        let p2 = FourMomentum::from_args(F(1.), F(6.), F(7.), F(8.));
         let p3 = -p1 - p2;
-        let zero = LorentzVector::from_args(0., 0., 0., 0.);
-        let m = 0.;
+        let zero: FourMomentum<F<f64>> = FourMomentum::default();
+        let m = F(0.);
 
-        let k = LorentzVector::from_args(0., 1., 2., 3.);
+        let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
 
         let virtual_energy_cache = [
-            compute_one_loop_energy(k, zero, m),
-            compute_one_loop_energy(k, p1, m),
-            compute_one_loop_energy(k, p1 + p2, m),
+            compute_one_loop_energy(k, zero.spatial, m),
+            compute_one_loop_energy(k, p1.spatial, m),
+            compute_one_loop_energy(k, p1.spatial + p2.spatial, m),
         ];
 
-        let external_energy_cache = [p1.t, p2.t, p3.t];
+        let external_energy_cache = [p1.temporal.value, p2.temporal.value, p3.temporal.value];
 
         // combine the virtual and external energies
         let mut energy_cache = virtual_energy_cache.to_vec();
@@ -1874,18 +1887,18 @@ mod tests_cff {
 
         let energy_prefactor = virtual_energy_cache
             .iter()
-            .map(|e| (2. * e).inv())
-            .product::<f64>();
+            .map(|e| (F(2.) * e).inv())
+            .fold(F(1.), |a, f| a * f);
 
-        let cff_res: f64 =
-            energy_prefactor * cff.evaluate(&energy_cache) * (2. * std::f64::consts::PI).powi(-3);
+        let cff_res =
+            energy_prefactor * cff.evaluate(&energy_cache) * F(2. * std::f64::consts::PI).powi(-3);
 
-        let target_res = 6.333_549_225_536_17e-9_f64;
-        let absolute_error: f64 = cff_res - target_res;
+        let target_res = F(6.333_549_225_536_17e-9_f64);
+        let absolute_error = cff_res - target_res;
         let relative_error = absolute_error.abs() / cff_res.abs();
 
         assert!(
-            relative_error.abs() < 1.0e-15,
+            relative_error.abs() < F(1.0e-15),
             "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
             relative_error,
             target_res,
@@ -1926,37 +1939,36 @@ mod tests_cff {
             EdgeType::Incoming,
         ];
 
-        let q = LorentzVector::from_args(1., 2., 3., 4.);
-        let zero = LorentzVector::from_args(0., 0., 0., 0.);
-
-        let k = LorentzVector::from_args(3., 6., 23., 9.);
-        let l = LorentzVector::from_args(0., 3., 12., 34.);
+        let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
+        let zero: FourMomentum<F<f64>> = FourMomentum::default();
+        let k = FourMomentum::from_args(F(3.), F(6.), F(23.), F(9.));
+        let l = FourMomentum::from_args(F(0.), F(3.), F(12.), F(34.));
 
         let virtual_energy_cache = [
-            compute_one_loop_energy(k, zero, 0.),
-            compute_one_loop_energy(q - k, zero, 0.),
-            compute_one_loop_energy(k - l, zero, 0.),
-            compute_one_loop_energy(l, zero, 0.),
-            compute_one_loop_energy(q - l, zero, 0.),
+            compute_one_loop_energy(k.spatial, zero.spatial, F(0.)),
+            compute_one_loop_energy((q - k).spatial, zero.spatial, F(0.)),
+            compute_one_loop_energy((k - l).spatial, zero.spatial, F(0.)),
+            compute_one_loop_energy(l.spatial, zero.spatial, F(0.)),
+            compute_one_loop_energy((q - l).spatial, zero.spatial, F(0.)),
         ];
 
-        let external_energy_cache = [q.t, -q.t];
+        let external_energy_cache = [q.temporal.value, -q.temporal.value];
 
         let mut energy_cache = virtual_energy_cache.to_vec();
         energy_cache.extend(external_energy_cache);
 
         let energy_prefactor = virtual_energy_cache
             .iter()
-            .map(|e| (2. * e).inv())
-            .product::<f64>();
+            .map(|e| (F(2.) * e).inv())
+            .fold(F(1.), |a, f| a * f);
         let cff_res = energy_prefactor * cff.evaluate(&energy_cache);
 
-        let target = 1.0794792137096797e-13;
+        let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
         let relative_error = absolute_error / cff_res;
 
         assert!(
-            relative_error.abs() < 1.0e-15,
+            relative_error.abs() < F(1.0e-15),
             "relative error: {:+e}, target: {:+e}, result: {:+e}",
             relative_error,
             target,
@@ -2003,43 +2015,43 @@ mod tests_cff {
         let cff =
             generate_cff_from_orientations(orientataions, &position_map, &external_data).unwrap();
 
-        let q = LorentzVector::from_args(1.0, 2.0, 3.0, 4.0);
-        let zero_vector = LorentzVector::from_args(0., 0., 0., 0.);
+        let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
+        let zero_vector: FourMomentum<F<f64>> = FourMomentum::default();
 
         let p0 = q;
         let p5 = -q;
 
-        let k = LorentzVector::from_args(3., 6., 23., 9.);
-        let l = LorentzVector::from_args(0., 3., 12., 34.);
-        let m = LorentzVector::from_args(0., 7., 24., 1.);
+        let k = FourMomentum::from_args(F(3.), F(6.), F(23.), F(9.));
+        let l = FourMomentum::from_args(F(0.), F(3.), F(12.), F(34.));
+        let m = FourMomentum::from_args(F(0.), F(7.), F(24.), F(1.));
 
-        let mass = 0.;
+        let mass = F(0.);
 
         let energies_cache = [
-            compute_one_loop_energy(k, zero_vector, mass),
-            compute_one_loop_energy(k - q, zero_vector, mass),
-            compute_one_loop_energy(k - l, zero_vector, mass),
-            compute_one_loop_energy(l, zero_vector, mass),
-            compute_one_loop_energy(q - l, zero_vector, mass),
-            compute_one_loop_energy(l - m, zero_vector, mass),
-            compute_one_loop_energy(m, zero_vector, mass),
-            compute_one_loop_energy(m - q, zero_vector, mass),
-            p0.t,
-            p5.t,
+            compute_one_loop_energy(k.spatial, zero_vector.spatial, mass),
+            compute_one_loop_energy((k - q).spatial, zero_vector.spatial, mass),
+            compute_one_loop_energy((k - l).spatial, zero_vector.spatial, mass),
+            compute_one_loop_energy(l.spatial, zero_vector.spatial, mass),
+            compute_one_loop_energy((q - l).spatial, zero_vector.spatial, mass),
+            compute_one_loop_energy((l - m).spatial, zero_vector.spatial, mass),
+            compute_one_loop_energy(m.spatial, zero_vector.spatial, mass),
+            compute_one_loop_energy((m - q).spatial, zero_vector.spatial, mass),
+            p0.temporal.value,
+            p5.temporal.value,
         ];
 
         let virtual_energy_cache = energies_cache[0..8].to_vec();
 
         let energy_prefactor = virtual_energy_cache
             .iter()
-            .map(|e| (2. * e).inv())
-            .product::<f64>();
+            .map(|e| (F(2.) * e).inv())
+            .fold(F(1.), |a, f| a * f);
         let res = cff.evaluate(&energies_cache) * energy_prefactor;
 
-        let absolute_error = res - 1.2625322619777278e-21;
+        let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
         assert!(
-            relative_error.abs() < 1.0e-15,
+            relative_error.abs() < F(1.0e-15),
             "relative error: {:+e}",
             relative_error
         );

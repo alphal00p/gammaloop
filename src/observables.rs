@@ -1,3 +1,4 @@
+use crate::momentum::FourMomentum;
 use crate::utils::FloatLike;
 use crate::Settings;
 use itertools::Itertools;
@@ -5,13 +6,13 @@ use libc::{c_double, c_int, c_void};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use lorentz_vector::LorentzVector;
-use num::Complex;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+use symbolica::domains::float::Complex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
@@ -336,16 +337,16 @@ impl EventManager {
 
     pub fn create_event<T: FloatLike>(
         &self,
-        orig_incoming_momenta: Vec<LorentzVector<T>>,
-        cut_momenta: Vec<LorentzVector<T>>,
+        orig_incoming_momenta: Vec<FourMomentum<T>>,
+        cut_momenta: Vec<FourMomentum<T>>,
     ) -> Event {
         let mut incoming_momenta = SmallVec::new();
         for p in orig_incoming_momenta.iter() {
-            incoming_momenta.push(p.cast::<f64>())
+            incoming_momenta.push(p.to_f64())
         }
-        let mut outgoing_momenta: SmallVec<[LorentzVector<f64>; 4]> = SmallVec::new();
+        let mut outgoing_momenta: SmallVec<[FourMomentum<f64>; 4]> = SmallVec::new();
         for p in cut_momenta.iter() {
-            outgoing_momenta.push(p.cast::<f64>())
+            outgoing_momenta.push(p.to_f64())
         }
         let final_state_particle_ids = SmallVec::from(vec![0; outgoing_momenta.len()]);
         Event {
@@ -459,8 +460,8 @@ impl EventManager {
 pub struct Event {
     #[allow(clippy::type_complexity)]
     pub kinematic_configuration: (
-        SmallVec<[LorentzVector<f64>; 2]>,
-        SmallVec<[LorentzVector<f64>; 4]>,
+        SmallVec<[FourMomentum<f64>; 2]>,
+        SmallVec<[FourMomentum<f64>; 4]>,
     ),
     pub final_state_particle_ids: SmallVec<[isize; 5]>,
     pub integrand: Complex<f64>,
@@ -482,13 +483,13 @@ impl SerializableEvent {
                 .kinematic_configuration
                 .0
                 .iter()
-                .map(|k| [k.t, k.x, k.y, k.z])
+                .map(|k| (*k).into())
                 .collect::<Vec<_>>(),
             event
                 .kinematic_configuration
                 .1
                 .iter()
-                .map(|k| [k.t, k.x, k.y, k.z])
+                .map(|k| (*k).into())
                 .collect::<Vec<_>>(),
         );
 
@@ -509,13 +510,13 @@ impl SerializableEvent {
             self.kinematic_configuration
                 .0
                 .iter()
-                .map(|k| LorentzVector::from_args(k[0], k[1], k[2], k[3]))
-                .collect::<SmallVec<[LorentzVector<f64>; 2]>>(),
+                .map(|k| (*k).into())
+                .collect::<SmallVec<_>>(),
             self.kinematic_configuration
                 .1
                 .iter()
-                .map(|k| LorentzVector::from_args(k[0], k[1], k[2], k[3]))
-                .collect::<SmallVec<[LorentzVector<f64>; 4]>>(),
+                .map(|k| (*k).into())
+                .collect::<SmallVec<_>>(),
         );
 
         let final_state_particle_ids: SmallVec<[isize; 5]> = self.final_state_particle_ids.into();
@@ -583,8 +584,8 @@ impl EventSelector for RangedSelector {
         {
             if self.pdgs.contains(pdg) {
                 let value = match self.filter {
-                    FilterQuantity::Energy => mom.t,
-                    FilterQuantity::CosThetaP => mom.z / mom.spatial_distance(),
+                    FilterQuantity::Energy => mom.temporal.value,
+                    FilterQuantity::CosThetaP => mom.spatial.pz / mom.spatial.norm(),
                     FilterQuantity::PT => mom.pt(),
                 };
 
@@ -661,7 +662,7 @@ impl JetClustering {
                 || (id.abs() >= 3370 && id.abs() < 3380)
                 || id.abs() == 0
             {
-                self.fastjet_jets_in.extend(&[e.t, e.x, e.y, e.z]);
+                self.fastjet_jets_in.extend(e.into_iter());
                 len += 1;
             }
         }
@@ -1092,7 +1093,7 @@ impl Observable for AFBObservable {
                 .unwrap();
 
             let costheta =
-                pin.spatial_dot(&pout) / (pin.spatial_distance() * pout.spatial_distance());
+                pin.spatial * (pout.spatial) / (pin.spatial.norm() * pout.spatial.norm());
 
             let index = ((costheta - self.x_min) / (self.x_max - self.x_min)
                 * self.bins.len() as f64) as isize;
@@ -1252,9 +1253,9 @@ impl Observable for SingleParticleObservable {
             for pout in pout_iter {
                 let mut obs_evaluated = match self.quantity {
                     FilterQuantity::CosThetaP => {
-                        pin.spatial_dot(&pout) / (pin.spatial_distance() * pout.spatial_distance())
+                        pin.spatial * pout.spatial / (pin.spatial.norm() * pout.spatial.norm())
                     }
-                    FilterQuantity::Energy => pout.t,
+                    FilterQuantity::Energy => pout.temporal.value,
                     FilterQuantity::PT => pout.pt(),
                 };
                 if self.log_obs {

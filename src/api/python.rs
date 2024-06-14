@@ -8,6 +8,7 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
+    utils::F,
     HasIntegrand, Settings,
 };
 use ahash::HashMap;
@@ -19,7 +20,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use symbolica::printer::PrintOptions;
+use symbolica::{domains::float::Complex, printer::PrintOptions};
 
 const GIT_VERSION: &str = git_version!();
 
@@ -346,6 +347,7 @@ impl PythonWorker {
         is_momentum_space: bool,
         use_f128: bool,
     ) -> PyResult<(f64, f64)> {
+        let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
         match self.integrands.get_mut(integrand) {
             Some(integrand) => {
                 let settings = match integrand {
@@ -363,7 +365,7 @@ impl PythonWorker {
                     use_f128,
                 );
 
-                Ok((res.re, res.im))
+                Ok((res.re.0, res.im.0))
             }
             None => Err(exceptions::PyException::new_err(format!(
                 "Could not find integrand {}",
@@ -380,11 +382,12 @@ impl PythonWorker {
         workspace_path: &str,
         target: Option<(f64, f64)>,
     ) -> PyResult<Vec<(f64, f64)>> {
+        let target = target.map(|(re, im)| (F(re), F(im)));
         match self.integrands.get_mut(integrand) {
             Some(integrand_enum) => match integrand_enum {
                 Integrand::GammaLoopIntegrand(gloop_integrand) => {
                     let target = match target {
-                        Some((re, im)) => Some(num::Complex::new(re, im)),
+                        Some((re, im)) => Some(Complex::new(re, im)),
                         _ => None,
                     };
 
@@ -468,7 +471,7 @@ impl PythonWorker {
                         .result
                         .iter()
                         .tuple_windows()
-                        .map(|(re, im)| (*re, *im))
+                        .map(|(re, im)| (re.0, im.0))
                         .collect())
                 }
                 _ => unimplemented!("unsupported integrand type"),

@@ -8,6 +8,9 @@ use colored::Colorize;
 use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
+use symbolica::domains::float::ConstructibleFloat;
+use symbolica::domains::float::NumericalFloatComparison;
+use symbolica::domains::float::Real;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
 use crate::evaluation_result::EvaluationResult;
@@ -17,6 +20,7 @@ use crate::observables::Event;
 use crate::observables::SerializableEvent;
 use crate::utils;
 use crate::utils::format_sample;
+use crate::utils::F;
 use crate::DiscreteGraphSamplingSettings;
 use crate::Integrand;
 use crate::IntegratorSettings;
@@ -27,7 +31,6 @@ use crate::{is_interrupted, set_interrupted};
 use crate::{IntegratedPhase, IntegrationResult};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use num::Complex;
 use rayon::prelude::*;
 use std::fs;
 use std::fs::File;
@@ -36,6 +39,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
+use symbolica::domains::float::Complex;
 use tabled::{Style, Table, Tabled};
 
 const N_INTEGRAND_ACCUMULATORS: usize = 2;
@@ -66,18 +70,18 @@ pub struct IntegralResult {
 /// the idea is to save this to disk after each iteration, so that the integration can be resumed
 pub struct IntegrationState {
     pub num_points: usize,
-    pub integral: StatisticsAccumulator<f64>,
-    pub all_integrals: Vec<StatisticsAccumulator<f64>>,
+    pub integral: StatisticsAccumulator<F<f64>>,
+    pub all_integrals: Vec<StatisticsAccumulator<F<f64>>>,
     pub stats: StatisticsCounter,
     pub rng: MonteCarloRng,
-    pub grid: Grid<f64>,
+    pub grid: Grid<F<f64>>,
     pub iter: usize,
 }
 
 impl IntegrationState {
     fn new_from_settings<GridGenerator>(settings: &Settings, create_grid: GridGenerator) -> Self
     where
-        GridGenerator: Fn() -> Grid<f64>,
+        GridGenerator: Fn() -> Grid<F<f64>>,
     {
         let num_points = 0;
         let iter = 0;
@@ -106,10 +110,10 @@ impl IntegrationState {
 #[derive(Serialize, Deserialize)]
 pub struct SerializableIntegrationState {
     num_points: usize,
-    integral: StatisticsAccumulator<f64>,
-    all_integrals: Vec<StatisticsAccumulator<f64>>,
+    integral: StatisticsAccumulator<F<f64>>,
+    all_integrals: Vec<StatisticsAccumulator<F<f64>>>,
     stats: StatisticsCounter,
-    grid: Grid<f64>,
+    grid: Grid<F<f64>>,
     iter: usize,
 }
 
@@ -139,15 +143,15 @@ impl SerializableIntegrationState {
 }
 
 /// Integrate function used for local runs
-pub fn havana_integrate<F>(
+pub fn havana_integrate<T>(
     settings: &Settings,
-    user_data_generator: F,
-    target: Option<Complex<f64>>,
+    user_data_generator: T,
+    target: Option<Complex<F<f64>>>,
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
 ) -> crate::IntegrationResult
 where
-    F: Fn(&Settings) -> UserData,
+    T: Fn(&Settings) -> UserData,
 {
     let mut user_data = user_data_generator(settings);
 
@@ -158,7 +162,8 @@ where
     };
 
     let mut samples = vec![Sample::new(); settings.integrator.n_start];
-    let mut f_evals = vec![vec![0.; N_INTEGRAND_ACCUMULATORS]; settings.integrator.n_start];
+    let mut f_evals: Vec<Vec<F<f64>>> =
+        vec![vec![F(0.); N_INTEGRAND_ACCUMULATORS]; settings.integrator.n_start];
     let mut evaluation_results = vec![EvaluationResult::zero(); settings.integrator.n_start];
 
     let grid_str = match &settings.sampling {
@@ -232,7 +237,7 @@ where
         let cur_points =
             settings.integrator.n_start + settings.integrator.n_increase * integration_state.iter;
         samples.resize(cur_points, Sample::new());
-        f_evals.resize(cur_points, vec![0.; N_INTEGRAND_ACCUMULATORS]);
+        f_evals.resize(cur_points, vec![F(0.); N_INTEGRAND_ACCUMULATORS]);
         evaluation_results.resize(cur_points, EvaluationResult::zero());
 
         for sample in &mut samples[..cur_points] {
@@ -248,7 +253,7 @@ where
             .integral
             .max_eval_positive
             .abs()
-            .max(integration_state.integral.max_eval_negative.abs());
+            .max(&integration_state.integral.max_eval_negative.abs());
 
         user_data.integrand[..cores]
             .par_iter_mut()
@@ -329,15 +334,18 @@ where
                 variance: format!(
                     "{:.8e}",
                     integration_state.integral.err
-                        * ((integration_state.integral.processed_samples - 1).max(0) as f64).sqrt()
+                        * F::<f64>::new_from_usize(
+                            (integration_state.integral.processed_samples - 1).max(0)
+                        )
+                        .sqrt()
                 ),
                 err: format!("{:.8e}", integration_state.integral.err),
                 err_perc: format!(
                     "{:.3e}%",
                     (integration_state.integral.err
-                        / (integration_state.integral.avg.abs()).max(1.0e-99))
+                        / (integration_state.integral.avg.abs()).max(&F(1.0e-99)))
                     .abs()
-                        * 100.
+                        * F(100.)
                 ),
                 pdf: String::from_str("N/A").unwrap(),
             });
@@ -356,13 +364,16 @@ where
                         variance: format!(
                             "{:.8e}",
                             b.accumulator.err
-                                * ((b.accumulator.processed_samples - 1).max(0) as f64).sqrt()
+                                * F::<f64>::new_from_usize(
+                                    (b.accumulator.processed_samples - 1).max(0)
+                                )
+                                .sqrt()
                         ),
                         err: format!("{:.8e}", b.accumulator.err),
                         err_perc: format!(
                             "{:.3e}%",
-                            (b.accumulator.err / (b.accumulator.avg.abs()).max(1.0e-99)).abs()
-                                * 100.
+                            (b.accumulator.err / (b.accumulator.avg.abs()).max(&F(1.0e-99))).abs()
+                                * F(100.)
                         ),
                         pdf: format!("{:.8e}", b.pdf),
                     });
@@ -534,7 +545,7 @@ pub fn batch_integrate(integrand: &Integrand, input: BatchIntegrateInput) -> Bat
 fn generate_integrand_output(
     integrand: &Integrand,
     evaluation_results: &[EvaluationResult],
-    samples: &[Sample<f64>],
+    samples: &[Sample<F<f64>>],
     integrand_output_settings: IntegralOutputSettings,
     integrated_phase: IntegratedPhase,
 ) -> BatchIntegrateOutput {
@@ -604,10 +615,10 @@ fn generate_event_output(
 /// This function actually evaluates the list of samples in parallel.
 fn evaluate_sample_list(
     integrand: &Integrand,
-    samples: &[Sample<f64>],
+    samples: &[Sample<F<f64>>],
     num_cores: usize,
     iter: usize,
-    max_eval: f64,
+    max_eval: F<f64>,
 ) -> (Vec<EvaluationResult>, StatisticsCounter) {
     let list_size = samples.len();
     let nvec_per_core = (list_size - 1) / num_cores + 1;
@@ -644,10 +655,10 @@ fn evaluate_sample_list(
 #[derive(Serialize, Deserialize)]
 pub enum SampleInput {
     SampleList {
-        samples: Vec<Sample<f64>>,
+        samples: Vec<Sample<F<f64>>>,
     },
     Grid {
-        grid: Grid<f64>,
+        grid: Grid<F<f64>>,
         num_points: usize,
         seed: u64,
         thread_id: usize,
@@ -655,19 +666,19 @@ pub enum SampleInput {
 }
 
 pub enum BatchIntegrateOutput {
-    Default(Vec<Complex<f64>>, Vec<Sample<f64>>),
+    Default(Vec<Complex<F<f64>>>, Vec<Sample<F<f64>>>),
     Accumulator(
-        (StatisticsAccumulator<f64>, StatisticsAccumulator<f64>),
-        Grid<f64>,
+        (StatisticsAccumulator<F<f64>>, StatisticsAccumulator<F<f64>>),
+        Grid<F<f64>>,
     ),
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum SerializableBatchIntegrateOutput {
-    Default(Vec<(f64, f64)>, Vec<Sample<f64>>),
+    Default(Vec<(F<f64>, F<f64>)>, Vec<Sample<F<f64>>>),
     Accumulator(
-        (StatisticsAccumulator<f64>, StatisticsAccumulator<f64>),
-        Grid<f64>,
+        (StatisticsAccumulator<F<f64>>, StatisticsAccumulator<F<f64>>),
+        Grid<F<f64>>,
     ),
 }
 
@@ -784,7 +795,7 @@ impl SerializableBatchResult {
 /// Input for the batch_integrate function, created by the master node
 pub struct BatchIntegrateInput<'a> {
     // global run info:
-    pub max_eval: f64,
+    pub max_eval: F<f64>,
     pub iter: usize,
     pub settings: &'a Settings,
     // input data:
@@ -811,7 +822,7 @@ pub enum EventOutputSettings {
 
 #[derive(Serialize, Deserialize)]
 pub struct SerializableBatchIntegrateInput {
-    pub max_eval: f64,
+    pub max_eval: F<f64>,
     pub iter: usize,
     pub samples: SampleInput,
     pub integrand_output_settings: IntegralOutputSettings,
@@ -836,16 +847,16 @@ impl SerializableBatchIntegrateInput {
 /// Master node which accumulates data from jobs, and creates the input for jobs
 #[derive(Clone)]
 pub struct MasterNode {
-    grid: Grid<f64>,
+    grid: Grid<F<f64>>,
     integrator_settings: IntegratorSettings,
-    master_accumulator_re: StatisticsAccumulator<f64>,
-    master_accumulator_im: StatisticsAccumulator<f64>,
+    master_accumulator_re: StatisticsAccumulator<F<f64>>,
+    master_accumulator_im: StatisticsAccumulator<F<f64>>,
     statistics: StatisticsCounter,
     current_iter: usize,
 }
 
 impl MasterNode {
-    pub fn new(grid: Grid<f64>, integrator_settings: IntegratorSettings) -> Self {
+    pub fn new(grid: Grid<F<f64>>, integrator_settings: IntegratorSettings) -> Self {
         MasterNode {
             grid,
             integrator_settings,
@@ -857,15 +868,15 @@ impl MasterNode {
     }
 
     /// Update the grid with the data from another grid.
-    fn update_grid_with_grid(&mut self, other_grid: &Grid<f64>) -> Result<(), String> {
+    fn update_grid_with_grid(&mut self, other_grid: &Grid<F<f64>>) -> Result<(), String> {
         self.grid.merge(other_grid)
     }
 
     /// Update the grid with the data from a set of samples.
     fn update_grid_with_samples(
         &mut self,
-        samples_points: &[Sample<f64>],
-        results: &[Complex<f64>],
+        samples_points: &[Sample<F<f64>>],
+        results: &[Complex<F<f64>>],
     ) -> Result<(), String> {
         let integrated_phase = self.integrator_settings.integrated_phase;
 
@@ -885,8 +896,8 @@ impl MasterNode {
     /// Update the accumulators with the data from another set of accumulators.
     pub fn update_accumulators_with_accumulators(
         &mut self,
-        mut real_accumulator: StatisticsAccumulator<f64>,
-        mut imaginary_accumulator: StatisticsAccumulator<f64>,
+        mut real_accumulator: StatisticsAccumulator<F<f64>>,
+        mut imaginary_accumulator: StatisticsAccumulator<F<f64>>,
     ) {
         self.master_accumulator_re
             .merge_samples(&mut real_accumulator);
@@ -898,8 +909,8 @@ impl MasterNode {
     /// Update the accumulators with the data from a set of samples.
     fn update_accumuators_with_samples(
         &mut self,
-        sample_points: &[Sample<f64>],
-        results: &[Complex<f64>],
+        sample_points: &[Sample<F<f64>>],
+        results: &[Complex<F<f64>>],
     ) {
         for (sample_point, result) in sample_points.iter().zip(results.iter()) {
             self.master_accumulator_re
@@ -1039,7 +1050,7 @@ pub fn show_integration_status(
     elapsed_time: Duration,
     cur_points: usize,
     n_samples_evaluated: usize,
-    target: &Option<Complex<f64>>,
+    target: &Option<Complex<F<f64>>>,
     show_max_wgt_info: bool,
 ) {
     info!(
@@ -1122,7 +1133,8 @@ pub fn show_integration_status(
                         integration_state.all_integrals[2 * i_integrand + part].max_eval_positive
                     } else {
                         integration_state.all_integrals[2 * i_integrand + part].max_eval_negative
-                    }) == 0.
+                    })
+                    .is_zero()
                     {
                         continue;
                     }
@@ -1170,11 +1182,11 @@ pub fn show_integration_status(
 }
 
 pub fn print_integral_result(
-    itg: &StatisticsAccumulator<f64>,
+    itg: &StatisticsAccumulator<F<f64>>,
     i_itg: usize,
     i_iter: usize,
     tag: &str,
-    trgt: Option<f64>,
+    trgt: Option<F<f64>>,
 ) {
     info!(
         "|  itg #{:-3} {}: {} {} {} {} {}",
@@ -1183,38 +1195,46 @@ pub fn print_integral_result(
         format!("{:-19}", utils::format_uncertainty(itg.avg, itg.err))
             .blue()
             .bold(),
-        if itg.avg != 0. {
-            if (itg.err / itg.avg).abs() > 0.01 {
+        if !itg.avg.is_zero() {
+            if (itg.err / itg.avg).abs() > F(0.01) {
                 format!(
                     "{:-8}",
-                    format!("{:.3}%", (itg.err / itg.avg).abs() * 100.).red()
+                    format!("{:.3}%", (itg.err / itg.avg).abs() * F(100.)).red()
                 )
             } else {
                 format!(
                     "{:-8}",
-                    format!("{:.3}%", (itg.err / itg.avg).abs() * 100.).green()
+                    format!("{:.3}%", (itg.err / itg.avg).abs() * F(100.)).green()
                 )
             }
         } else {
             format!("{:-8}", "")
         },
-        if itg.chi_sq / (i_iter as f64) > 5. {
-            format!("{:-6.3} χ²/dof", itg.chi_sq / (i_iter as f64)).red()
+        if itg.chi_sq / (F::<f64>::new_from_usize(i_iter)) > F(5.) {
+            format!(
+                "{:-6.3} χ²/dof",
+                itg.chi_sq / (F::<f64>::new_from_usize(i_iter))
+            )
+            .red()
         } else {
-            format!("{:-6.3} χ²/dof", itg.chi_sq / (i_iter as f64)).normal()
+            format!(
+                "{:-6.3} χ²/dof",
+                itg.chi_sq / (F::<f64>::new_from_usize(i_iter))
+            )
+            .normal()
         },
         if i_itg == 1 {
             if let Some(t) = trgt {
-                if (t - itg.avg).abs() / itg.err > 5.
-                    || (t.abs() != 0. && (t - itg.avg).abs() / t.abs() > 0.01)
+                if (t - itg.avg).abs() / itg.err > F(5.)
+                    || (!t.abs().is_zero() && (t - itg.avg).abs() / t.abs() > F(0.01))
                 {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
                         (t - itg.avg).abs() / itg.err,
-                        if t.abs() > 0. {
-                            (t - itg.avg).abs() / t.abs() * 100.
+                        if t.abs() > F(0.) {
+                            (t - itg.avg).abs() / t.abs() * F(100.)
                         } else {
-                            0.
+                            F(0.)
                         }
                     )
                     .red()
@@ -1222,10 +1242,10 @@ pub fn print_integral_result(
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
                         (t - itg.avg).abs() / itg.err,
-                        if t.abs() > 0. {
-                            (t - itg.avg).abs() / t.abs() * 100.
+                        if t.abs() > F(0.) {
+                            (t - itg.avg).abs() / t.abs() * F(100.)
                         } else {
-                            0.
+                            F(0.)
                         }
                     )
                     .green()
@@ -1236,10 +1256,13 @@ pub fn print_integral_result(
         } else {
             "".to_string().normal()
         },
-        if itg.avg.abs() != 0. {
-            let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
-                / (itg.avg.abs() * (itg.processed_samples as f64));
-            if mwi > 1. {
+        if itg.avg.abs() != F(0.) {
+            let mwi = itg
+                .max_eval_negative
+                .abs()
+                .max(&itg.max_eval_positive.abs())
+                / (itg.avg.abs() * (F::<f64>::new_from_usize(itg.processed_samples)));
+            if mwi > F(1.) {
                 format!("  mwi: {:<10.4e}", mwi).red()
             } else {
                 format!("  mwi: {:<10.4e}", mwi).normal()
