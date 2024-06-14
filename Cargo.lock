@@ -2018,6 +2018,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
+source = "git+https://github.com/alphal00p/spenso?branch=master#e48710240bea962741eeb29ba7140121c4e7167a"
 dependencies = [
  "ahash",
  "ambassador",

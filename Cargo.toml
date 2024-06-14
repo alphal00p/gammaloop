@@ -28,10 +28,10 @@ insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 
 symbolica = { version = "0.7.0" }
-spenso = { version = "0.2.0", features = ["shadowing"] }
-# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
-#     "shadowing",
-# ] }
+# spenso = { version = "0.2.0", features = ["shadowing"] }
+spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
+    "shadowing",
+] }
 
 # spencer = { path = "../spencer" }
 
@@ -129,5 +129,5 @@ similar.opt-level = 3
 
 # spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
 
-spenso = { path = "../spenso" }
+# spenso = { path = "../spenso" }
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
