@@ -613,29 +613,25 @@ mod tests {
                 Esurface {
                     energies: vec![5, 6],
                     sub_orientation: vec![],
-                    shift: vec![1],
-                    shift_signature: vec![true],
+                    external_shift: vec![(1, 1)],
                     circled_vertices,
                 },
                 Esurface {
                     energies: vec![5, 7],
                     sub_orientation: vec![],
-                    shift: vec![1, 2],
-                    shift_signature: vec![true, true],
+                    external_shift: vec![(1, 1), (2, 1)],
                     circled_vertices,
                 },
                 Esurface {
                     energies: vec![4, 6],
                     sub_orientation: vec![],
-                    shift: vec![0, 1],
-                    shift_signature: vec![true, true],
+                    external_shift: vec![(0, 1), (1, 1)],
                     circled_vertices,
                 },
                 Esurface {
                     energies: vec![4, 7],
                     sub_orientation: vec![],
-                    shift: vec![0, 1, 2],
-                    shift_signature: vec![true, true, true],
+                    external_shift: vec![(0, 1), (1, 1), (2, 1)],
                     circled_vertices,
                 },
             ];
@@ -688,8 +684,7 @@ mod tests {
             let only_esurface = Esurface {
                 energies: vec![2, 3, 4],
                 sub_orientation: vec![],
-                shift: vec![0],
-                shift_signature: vec![false],
+                external_shift: vec![(0, -1)],
                 circled_vertices: VertexSet::dummy(),
             };
 

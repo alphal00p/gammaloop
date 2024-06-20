@@ -15,7 +15,7 @@ pub trait Surface {
         std::iter::empty::<&usize>()
     }
 
-    fn get_external_shift(&self) -> impl Iterator<Item = (&usize, &bool)>;
+    fn get_external_shift(&self) -> impl Iterator<Item = &(usize, i64)>;
 }
 
 pub type UnitSurface = ();
@@ -25,8 +25,8 @@ impl Surface for UnitSurface {
         std::iter::empty::<&usize>()
     }
 
-    fn get_external_shift(&self) -> impl Iterator<Item = (&usize, &bool)> {
-        std::iter::empty::<(&usize, &bool)>()
+    fn get_external_shift(&self) -> impl Iterator<Item = &(usize, i64)> {
+        std::iter::empty::<&(usize, i64)>()
     }
 }
 
@@ -52,10 +52,7 @@ pub fn compute_value<T: FloatLike, S: Surface>(surface: &S, energy_cache: &[T]) 
 pub fn compute_shift_part<T: FloatLike, S: Surface>(surface: &S, energy_cache: &[T]) -> T {
     surface
         .get_external_shift()
-        .map(|(&index, &sign)| match sign {
-            true => energy_cache[index],
-            false => -energy_cache[index],
-        })
+        .map(|&(index, sign)| Into::<T>::into(sign as f64) * energy_cache[index])
         .sum::<T>()
 }
 
@@ -72,8 +69,15 @@ pub fn string_format<S: Surface>(surface: &S) -> String {
 
     let shift_part = surface
         .get_external_shift()
-        .map(|(index, &sign)| {
-            let sign = if sign { "+" } else { "-" };
+        .map(|&(index, sign)| {
+            let sign = if sign == 1 {
+                "+".to_owned()
+            } else if sign == -1 {
+                "-".to_owned()
+            } else {
+                format!("+{}", sign)
+            };
+
             format!(" {} p{}", sign, index)
         })
         .join("");

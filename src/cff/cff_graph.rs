@@ -8,7 +8,10 @@ use crate::{
     graph::{EdgeType, Graph},
 };
 
-use super::{esurface::Esurface, surface::HybridSurface};
+use super::{
+    esurface::{Esurface, ExternalShift},
+    surface::HybridSurface,
+};
 
 const MAX_VERTEX_COUNT: usize = 64;
 
@@ -536,15 +539,15 @@ impl CFFGenerationGraph {
 
         let vertex_type = vertex.get_vertex_type();
 
-        let (shift, shift_orientation): (Vec<usize>, Vec<bool>) = vertex
+        let external_shift: ExternalShift = vertex
             .incoming_edges
             .iter()
             .filter(|edge| edge.edge_type == CFFEdgeType::External)
             .map(|edge| {
                 let edge_id = edge.edge_id;
                 let shift_sign = match vertex_type {
-                    VertexType::Source => false,
-                    VertexType::Sink => true,
+                    VertexType::Source => -1,
+                    VertexType::Sink => 1,
                     VertexType::None => panic!("vertex is not a source or a sink"),
                 };
                 (edge_id, shift_sign)
@@ -557,15 +560,15 @@ impl CFFGenerationGraph {
                     .map(|edge| {
                         let edge_id = edge.edge_id;
                         let shift_sign = match vertex_type {
-                            VertexType::Source => true,
-                            VertexType::Sink => false,
+                            VertexType::Source => 1,
+                            VertexType::Sink => -1,
                             VertexType::None => panic!("vertex is not a source or a sink"),
                         };
                         (edge_id, shift_sign)
                     }),
             )
             .sorted_by(|(edge_1, _), (edge_2, _)| edge_1.cmp(edge_2))
-            .unzip();
+            .collect_vec();
 
         let positive_energies = vertex
             .incoming_edges
@@ -595,8 +598,7 @@ impl CFFGenerationGraph {
             let esurface = Esurface {
                 energies: positive_energies,
                 sub_orientation,
-                shift,
-                shift_signature: shift_orientation,
+                external_shift,
                 circled_vertices: vertex.vertex_set,
             };
 
@@ -645,8 +647,7 @@ impl CFFGenerationGraph {
             let hsurface = Hsurface {
                 positive_energies,
                 negative_energies,
-                shift,
-                shift_signature: shift_orientation,
+                external_shift,
             };
 
             HybridSurface::Hsurface(hsurface)

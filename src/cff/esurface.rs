@@ -23,8 +23,7 @@ use super::surface::{self, Surface};
 pub struct Esurface {
     pub energies: Vec<usize>,
     pub sub_orientation: Vec<bool>,
-    pub shift: Vec<usize>,
-    pub shift_signature: Vec<bool>,
+    pub external_shift: ExternalShift,
     pub circled_vertices: VertexSet,
 }
 
@@ -33,8 +32,8 @@ impl Surface for Esurface {
         self.energies.iter()
     }
 
-    fn get_external_shift(&self) -> impl Iterator<Item = (&usize, &bool)> {
-        self.shift.iter().zip(&self.shift_signature)
+    fn get_external_shift(&self) -> impl Iterator<Item = &(usize, i64)> {
+        self.external_shift.iter()
     }
 }
 
@@ -54,28 +53,18 @@ impl Esurface {
             .collect_vec();
 
         let symbolic_shift = self
-            .shift
+            .external_shift
             .iter()
-            .map(|i| Atom::parse(&format!("p{}", i)).unwrap())
-            .collect_vec();
+            .fold(Atom::new(), |sum, (i, sign)| {
+                Atom::parse(&format!("p{}", i)).unwrap() * &Atom::new_num(*sign) + &sum
+            });
 
         let builder_atom = Atom::new();
         let energy_sum = symbolic_energies
             .iter()
             .fold(builder_atom, |acc, energy| acc + energy);
 
-        let esurf = symbolic_shift.iter().zip(self.shift_signature.iter()).fold(
-            energy_sum,
-            |acc, (shift, &shift_signature)| {
-                if shift_signature {
-                    acc + shift
-                } else {
-                    acc - shift
-                }
-            },
-        );
-
-        esurf
+        energy_sum + &symbolic_shift
     }
 
     /// Compute the value of the esurface from an energy cache that can be computed from the underlying graph
@@ -123,15 +112,12 @@ impl Esurface {
         lmb: &LoopMomentumBasis,
         external_moms: &[LorentzVector<T>],
     ) -> T {
-        self.shift
+        self.external_shift
             .iter()
-            .zip(self.shift_signature.iter())
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].1;
-                match sign {
-                    true => compute_t_part_of_shift_part(external_signature, external_moms),
-                    false => -compute_t_part_of_shift_part(external_signature, external_moms),
-                }
+                Into::<T>::into(*sign as f64)
+                    * compute_t_part_of_shift_part(external_signature, external_moms)
             })
             .sum::<T>()
     }
@@ -219,12 +205,18 @@ impl Esurface {
             .join(" + ");
 
         let shift_part = self
-            .shift_signature
+            .external_shift
             .iter()
-            .zip(self.shift.iter())
-            .map(|(sign, index)| {
+            .map(|(index, sign)| {
                 let signature = &lmb.edge_signatures[*index];
-                let sign = if *sign { "+" } else { "-" };
+
+                let sign = if *sign == 1 {
+                    "+".to_owned()
+                } else if *sign == -1 {
+                    "-".to_owned()
+                } else {
+                    format!("+{}", sign)
+                };
                 format!(" {} ({})^0", sign, format_momentum(signature))
             })
             .join("");
@@ -471,18 +463,43 @@ pub fn generate_esurface_data(
     })
 }
 
+pub type ExternalShift = Vec<(usize, i64)>;
+
+/// writes into lhs while emptying rhs
+pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> ExternalShift {
+    let mut res = lhs.clone();
+
+    for rhs_element in rhs.iter() {
+        if let Some(lhs_element) = res
+            .iter_mut()
+            .find(|lhs_element| rhs_element.0 == lhs_element.0)
+        {
+            lhs_element.1 += rhs_element.1;
+        } else {
+            res.push(*rhs_element)
+        }
+    }
+
+    res.retain(|(_index, sign)| *sign != 0);
+    res.sort_by(|(index_1, _), (index_2, _)| index_1.cmp(index_2));
+    res
+}
+
 #[cfg(test)]
 mod tests {
     use symbolica::representations::Atom;
 
     use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
 
+    use super::add_external_shifts;
+
     #[test]
     fn test_esurface() {
         let energies_cache = [1., 2., 3., 4., 5.];
-        let shift = vec![3, 4];
         let energies = vec![0, 1, 2];
-        let shift_signature = vec![true; 2];
+
+        let external_shift = vec![(3, 1), (4, 1)];
+
         let sub_orientation = vec![true, false, true];
 
         let dummy_circled_vertices = VertexSet::dummy();
@@ -490,23 +507,21 @@ mod tests {
         let esurface = Esurface {
             sub_orientation: sub_orientation.clone(),
             energies,
-            shift,
-            shift_signature,
+            external_shift,
             circled_vertices: dummy_circled_vertices,
         };
 
         let res = esurface.compute_value(&energies_cache);
         assert_eq!(res, 15.);
 
-        let shift_signature = vec![false; 1];
         let energies = vec![0, 2];
-        let shift = vec![1];
+
+        let external_shift = vec![(1, -1)];
 
         let esurface = Esurface {
             energies,
             sub_orientation: sub_orientation.clone(),
-            shift,
-            shift_signature,
+            external_shift,
             circled_vertices: dummy_circled_vertices,
         };
 
@@ -516,11 +531,12 @@ mod tests {
 
     #[test]
     fn test_to_atom() {
+        let external_shift = vec![(1, -1)];
+
         let esurface = Esurface {
             sub_orientation: vec![true, true],
             energies: vec![2, 3],
-            shift: vec![1],
-            shift_signature: vec![false],
+            external_shift,
             circled_vertices: VertexSet::dummy(),
         };
 
@@ -530,5 +546,22 @@ mod tests {
         let diff = esurface_atom - &expected_atom;
         let diff = diff.expand();
         assert_eq!(diff, Atom::new());
+    }
+
+    #[test]
+    fn test_add_external_shifts() {
+        let shift_1 = vec![(0, 1), (1, 1), (2, -1)];
+        let shift_2 = vec![(1, -1), (2, 1)];
+
+        let add = add_external_shifts(&shift_1, &shift_2);
+
+        assert_eq!(add, vec![(0, 1)]);
+
+        let shift_3 = vec![(3, 1), (4, -1)];
+        let shift_4 = vec![(0, 1), (1, 1), (2, 1), (4, 1)];
+
+        let add = add_external_shifts(&shift_3, &shift_4);
+
+        assert_eq!(add, vec![(0, 1), (1, 1), (2, 1), (3, 1)]);
     }
 }

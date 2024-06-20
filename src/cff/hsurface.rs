@@ -1,4 +1,6 @@
-use crate::cff::{cff_graph::VertexSet, surface::Surface};
+use crate::cff::cff_graph::VertexSet;
+use crate::cff::esurface::add_external_shifts;
+use crate::cff::surface::Surface;
 use crate::utils::FloatLike;
 use derive_more::{From, Into};
 use itertools::Itertools;
@@ -6,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::representations::Atom;
 use typed_index_collections::TiVec;
 
+use super::esurface::ExternalShift;
 use super::{esurface::Esurface, surface};
 
 #[derive(From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -17,8 +20,7 @@ pub type HsurfaceCache<T> = TiVec<HsurfaceID, T>;
 pub struct Hsurface {
     pub positive_energies: Vec<usize>,
     pub negative_energies: Vec<usize>,
-    pub shift: Vec<usize>,
-    pub shift_signature: Vec<bool>,
+    pub external_shift: ExternalShift,
 }
 
 impl Surface for Hsurface {
@@ -30,8 +32,8 @@ impl Surface for Hsurface {
         self.negative_energies.iter()
     }
 
-    fn get_external_shift(&self) -> impl Iterator<Item = (&usize, &bool)> {
-        self.shift.iter().zip(&self.shift_signature)
+    fn get_external_shift(&self) -> impl Iterator<Item = &(usize, i64)> {
+        self.external_shift.iter()
     }
 }
 
@@ -66,11 +68,12 @@ impl Hsurface {
                 .collect_tuple()
                 .unwrap_or_else(|| unreachable!());
 
-        let symbolic_shifts = self
-            .shift
+        let symbolic_shift = self
+            .external_shift
             .iter()
-            .map(|i| Atom::parse(&format!("p{}", i)).unwrap())
-            .collect_vec();
+            .fold(Atom::new(), |sum, (i, sign)| {
+                Atom::new_num(*sign) * &Atom::parse(&format!("p{}", i)).unwrap() + &sum
+            });
 
         let symbolic_sum_positive_energies = symbolic_positive_energies
             .iter()
@@ -80,21 +83,7 @@ impl Hsurface {
             .iter()
             .fold(Atom::new(), |sum, e| sum + e);
 
-        let symbolic_shift_part = symbolic_shifts
-            .iter()
-            .zip(self.shift_signature.iter())
-            .fold(
-                Atom::new(),
-                |sum, (shift, sign)| {
-                    if *sign {
-                        sum + shift
-                    } else {
-                        sum - shift
-                    }
-                },
-            );
-
-        symbolic_sum_positive_energies - &symbolic_sum_negative_energies + &symbolic_shift_part
+        symbolic_sum_positive_energies - &symbolic_sum_negative_energies + &symbolic_shift
     }
 
     pub fn to_atom_with_rewrite(&self, esurface: &Esurface) -> Option<Atom> {
@@ -121,57 +110,11 @@ impl Hsurface {
             .sorted()
             .collect_vec();
 
-        // now fix the shift
-
-        // merge shifts and signs
-        let zipped_hsurface_shift = self
-            .shift
-            .iter()
-            .copied()
-            .zip(self.shift_signature.iter().copied())
-            .collect_vec();
-
-        let zipped_esurface_shift = esurface
-            .shift
-            .iter()
-            .copied()
-            .zip(esurface.shift_signature.iter().copied())
-            .collect_vec();
-
-        // find overlap, these parts will cancel
-        let pairs_to_remove = zipped_hsurface_shift
-            .iter()
-            .filter(|shift_component| {
-                let inverted_component = (shift_component.0, !shift_component.1);
-                zipped_esurface_shift.contains(&inverted_component)
-            })
-            .copied()
-            .collect_vec();
-
-        let zipped_hsurface_shift_trimmed = zipped_hsurface_shift
-            .iter()
-            .filter(|element| !pairs_to_remove.contains(element))
-            .copied();
-
-        let zipped_esurface_shift_trimmed = zipped_esurface_shift
-            .iter()
-            .filter(|shift_component| {
-                let inverted_component = (shift_component.0, !shift_component.1);
-                !pairs_to_remove.contains(&inverted_component)
-            })
-            .copied();
-
-        // sort before unzipping as to not fuck up the ordering
-        let zipped_shift = zipped_hsurface_shift_trimmed
-            .chain(zipped_esurface_shift_trimmed)
-            .sorted_by(|a, b| Ord::cmp(&a.0, &b.0));
-
-        let (shift, shift_signature): (Vec<usize>, Vec<bool>) = zipped_shift.unzip();
+        let external_shift = add_external_shifts(&self.external_shift, &esurface.external_shift);
 
         let dummy_esurface = Esurface {
             energies,
-            shift,
-            shift_signature,
+            external_shift,
             sub_orientation: vec![],
             circled_vertices: VertexSet::dummy(),
         };
@@ -201,11 +144,12 @@ mod tests {
 
     #[test]
     fn test_compute_shift_part() {
+        let external_shift = vec![(2, 1), (3, -1)];
+
         let h_surface = Hsurface {
             positive_energies: vec![0],
             negative_energies: vec![1],
-            shift: vec![2, 3],
-            shift_signature: vec![true, false],
+            external_shift,
         };
 
         let energy_cache = [1.0, 2.0, 3.0, 4.0];
@@ -215,11 +159,12 @@ mod tests {
 
     #[test]
     fn test_compute_value() {
+        let external_shift = vec![(4, -1), (5, 1)];
+
         let h_surface = Hsurface {
             positive_energies: vec![0, 1],
             negative_energies: vec![2, 3],
-            shift: vec![4, 5],
-            shift_signature: vec![false, true],
+            external_shift,
         };
 
         let energy_cache = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
@@ -229,11 +174,11 @@ mod tests {
 
     #[test]
     fn test_to_atom() {
+        let external_shift = vec![(4, -1), (5, 1)];
         let h_surface = Hsurface {
             positive_energies: vec![0, 1],
             negative_energies: vec![2, 3],
-            shift: vec![4, 5],
-            shift_signature: vec![false, true],
+            external_shift,
         };
 
         let h_surface_atom = h_surface.to_atom();
@@ -245,17 +190,17 @@ mod tests {
 
     #[test]
     fn test_to_atom_with_rewrite() {
+        let external_shift = vec![(4, -1), (5, 1)];
+
         let h_surface = Hsurface {
             positive_energies: vec![0, 1],
             negative_energies: vec![2, 3],
-            shift: vec![4, 5],
-            shift_signature: vec![false, true],
+            external_shift: external_shift.clone(),
         };
 
         let e_surface = Esurface {
             energies: vec![2, 3, 6],
-            shift: vec![4],
-            shift_signature: vec![true],
+            external_shift: vec![(4, 1)],
             sub_orientation: vec![true, true],
             circled_vertices: VertexSet::dummy(),
         };
@@ -276,8 +221,7 @@ mod tests {
         let h_surface_2 = Hsurface {
             positive_energies: vec![1, 7],
             negative_energies: vec![3, 6],
-            shift: vec![4, 5],
-            shift_signature: vec![false, true],
+            external_shift,
         };
 
         let rewritten = h_surface_2.to_atom_with_rewrite(&e_surface).unwrap();
