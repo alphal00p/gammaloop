@@ -11,7 +11,10 @@ pub struct TermId(usize);
 
 use super::{
     cff_graph::CFFGenerationGraph,
-    esurface::{compute_esurface_cache, Esurface, EsurfaceCache, EsurfaceCollection, EsurfaceID},
+    esurface::{
+        compute_esurface_cache, Esurface, EsurfaceCache, EsurfaceCollection, EsurfaceID,
+        ExternalShift,
+    },
     generation::generate_cff_limit,
     hsurface::{compute_hsurface_cache, HsurfaceCache, HsurfaceCollection},
     surface::HybridSurfaceID,
@@ -348,7 +351,12 @@ impl CFFExpression {
         )
     }
 
-    pub fn limit_for_esurface(&self, esurface_id: EsurfaceID) -> Result<CFFLimit, String> {
+    pub fn limit_for_esurface(
+        &self,
+        esurface_id: EsurfaceID,
+        temp_dep_mom: usize,
+        temp_dep_mom_expr: &ExternalShift,
+    ) -> Result<CFFLimit, String> {
         let circling = self.esurfaces[esurface_id].circled_vertices;
 
         let terms_with_esurface = self
@@ -364,7 +372,16 @@ impl CFFExpression {
 
         let ref_to_esurface = &self.esurfaces[esurface_id];
 
-        generate_cff_limit(dag_left, dag_right, &self.esurfaces, ref_to_esurface)
+        // let (dep_mom, dep_mom_expr) = todo!("construct these objects from somewhere");
+
+        generate_cff_limit(
+            dag_left,
+            dag_right,
+            &self.esurfaces,
+            ref_to_esurface,
+            temp_dep_mom,
+            temp_dep_mom_expr,
+        )
     }
 }
 

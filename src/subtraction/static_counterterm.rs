@@ -85,7 +85,7 @@ impl CounterTerm {
         let terms_in_counterterms = existing_esurfaces
             .iter()
             .map(|existing_esurface| {
-                let limit_result = cff.limit_for_esurface(*existing_esurface);
+                let limit_result = cff.limit_for_esurface(*existing_esurface, todo!(), todo!());
                 match limit_result {
                     Ok(limit) => limit,
                     Err(error_message) => panic!(

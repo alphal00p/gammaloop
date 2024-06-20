@@ -19,7 +19,7 @@ use super::cff_graph::VertexSet;
 use super::surface::{self, Surface};
 
 /// Core esurface struct
-#[derive(Serialize, Deserialize, Debug, Clone, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Esurface {
     pub energies: Vec<usize>,
     pub sub_orientation: Vec<bool>,
@@ -42,6 +42,8 @@ impl PartialEq for Esurface {
         self.energies == other.energies && self.external_shift == other.external_shift
     }
 }
+
+impl Eq for Esurface {}
 
 impl Esurface {
     pub fn to_atom(&self) -> Atom {
@@ -233,11 +235,7 @@ impl Esurface {
         todo!()
     }
 
-    pub fn canonicalize_shift(
-        &mut self,
-        dep_mom: usize,
-        expr_in_terms_of_external_shift: &ExternalShift,
-    ) {
+    pub fn canonicalize_shift(&mut self, dep_mom: usize, dep_mom_expr: &ExternalShift) {
         if let Some(dep_mom_pos) = self
             .external_shift
             .iter()
@@ -245,7 +243,7 @@ impl Esurface {
         {
             let (_, dep_mom_sign) = self.external_shift.remove(dep_mom_pos);
 
-            let external_shift = expr_in_terms_of_external_shift
+            let external_shift = dep_mom_expr
                 .iter()
                 .map(|(index, sign)| (*index, dep_mom_sign * sign))
                 .collect();
@@ -485,7 +483,7 @@ pub fn generate_esurface_data(
 
 pub type ExternalShift = Vec<(usize, i64)>;
 
-/// writes into lhs while emptying rhs
+/// add two external shifts, eliminates zero signs and sorts
 pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> ExternalShift {
     let mut res = lhs.clone();
 
@@ -588,5 +586,24 @@ mod tests {
         let add = add_external_shifts(&shift_3, &shift_4);
 
         assert_eq!(add, vec![(0, 1), (1, 1), (2, 1), (3, 1)]);
+    }
+
+    #[test]
+    fn test_esurface_equality() {
+        let esurface_1 = Esurface {
+            energies: vec![3, 5],
+            sub_orientation: vec![true, false],
+            external_shift: vec![(0, 1), (1, 1)],
+            circled_vertices: VertexSet::dummy(),
+        };
+
+        let esurface_2 = Esurface {
+            energies: vec![3, 5],
+            sub_orientation: vec![true, false],
+            external_shift: vec![(0, 1), (1, 1)],
+            circled_vertices: VertexSet::from_usize(1),
+        };
+
+        assert_eq!(esurface_1, esurface_2);
     }
 }

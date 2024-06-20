@@ -129,7 +129,7 @@ pub struct VertexSet {
 }
 
 impl VertexSet {
-    fn from_usize(id: usize) -> Self {
+    pub fn from_usize(id: usize) -> Self {
         assert!(id < MAX_VERTEX_COUNT, "Vertex ID out of bounds");
 
         VertexSet {
