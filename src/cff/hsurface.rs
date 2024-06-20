@@ -1,11 +1,12 @@
-use crate::cff::surface::Surface;
+use crate::cff::{cff_graph::VertexSet, surface::Surface};
 use crate::utils::FloatLike;
 use derive_more::{From, Into};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use symbolica::representations::Atom;
 use typed_index_collections::TiVec;
 
-use super::surface;
+use super::{esurface::Esurface, surface};
 
 #[derive(From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct HsurfaceID(usize);
@@ -51,6 +52,132 @@ impl Hsurface {
     pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
         surface::compute_shift_part(self, energy_cache)
     }
+
+    pub fn to_atom(&self) -> Atom {
+        let (symbolic_positive_energies, symbolic_negative_energies) =
+            [&self.positive_energies, &self.negative_energies]
+                .iter()
+                .map(|energies| {
+                    energies
+                        .iter()
+                        .map(|i| Atom::parse(&format!("E{}", i)).unwrap())
+                        .collect_vec()
+                })
+                .collect_tuple()
+                .unwrap_or_else(|| unreachable!());
+
+        let symbolic_shifts = self
+            .shift
+            .iter()
+            .map(|i| Atom::parse(&format!("p{}", i)).unwrap())
+            .collect_vec();
+
+        let symbolic_sum_positive_energies = symbolic_positive_energies
+            .iter()
+            .fold(Atom::new(), |sum, e| sum + e);
+
+        let symbolic_sum_negative_energies = symbolic_negative_energies
+            .iter()
+            .fold(Atom::new(), |sum, e| sum + e);
+
+        let symbolic_shift_part = symbolic_shifts
+            .iter()
+            .zip(self.shift_signature.iter())
+            .fold(
+                Atom::new(),
+                |sum, (shift, sign)| {
+                    if *sign {
+                        sum + shift
+                    } else {
+                        sum - shift
+                    }
+                },
+            );
+
+        symbolic_sum_positive_energies - &symbolic_sum_negative_energies + &symbolic_shift_part
+    }
+
+    pub fn to_atom_with_rewrite(&self, esurface: &Esurface) -> Option<Atom> {
+        let possible = self
+            .negative_energies
+            .iter()
+            .all(|energy| esurface.energies.contains(energy));
+
+        if !possible {
+            return None;
+        }
+
+        let additional_positive_energies = esurface
+            .energies
+            .iter()
+            .filter(|energy| !self.negative_energies.contains(energy))
+            .copied();
+
+        let energies = self
+            .positive_energies
+            .iter()
+            .copied()
+            .chain(additional_positive_energies)
+            .sorted()
+            .collect_vec();
+
+        // now fix the shift
+
+        // merge shifts and signs
+        let zipped_hsurface_shift = self
+            .shift
+            .iter()
+            .copied()
+            .zip(self.shift_signature.iter().copied())
+            .collect_vec();
+
+        let zipped_esurface_shift = esurface
+            .shift
+            .iter()
+            .copied()
+            .zip(esurface.shift_signature.iter().copied())
+            .collect_vec();
+
+        // find overlap, these parts will cancel
+        let pairs_to_remove = zipped_hsurface_shift
+            .iter()
+            .filter(|shift_component| {
+                let inverted_component = (shift_component.0, !shift_component.1);
+                zipped_esurface_shift.contains(&inverted_component)
+            })
+            .copied()
+            .collect_vec();
+
+        let zipped_hsurface_shift_trimmed = zipped_hsurface_shift
+            .iter()
+            .filter(|element| !pairs_to_remove.contains(element))
+            .copied();
+
+        let zipped_esurface_shift_trimmed = zipped_esurface_shift
+            .iter()
+            .filter(|shift_component| {
+                let inverted_component = (shift_component.0, !shift_component.1);
+                !pairs_to_remove.contains(&inverted_component)
+            })
+            .copied();
+
+        // sort before unzipping as to not fuck up the ordering
+        let zipped_shift = zipped_hsurface_shift_trimmed
+            .chain(zipped_esurface_shift_trimmed)
+            .sorted_by(|a, b| Ord::cmp(&a.0, &b.0));
+
+        let (shift, shift_signature): (Vec<usize>, Vec<bool>) = zipped_shift.unzip();
+
+        let dummy_esurface = Esurface {
+            energies,
+            shift,
+            shift_signature,
+            sub_orientation: vec![],
+            circled_vertices: VertexSet::dummy(),
+        };
+
+        Some(dummy_esurface.to_atom())
+    }
 }
 
 pub fn compute_hsurface_cache<T: FloatLike>(
@@ -66,6 +193,10 @@ pub fn compute_hsurface_cache<T: FloatLike>(
 
 #[cfg(test)]
 mod tests {
+    use symbolica::representations::Atom;
+
+    use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
+
     use super::Hsurface;
 
     #[test]
@@ -94,5 +225,66 @@ mod tests {
         let energy_cache = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let value = h_surface.compute_value(&energy_cache);
         assert_eq!(value, 1.0 + 2.0 - 3.0 - 4.0 - 5.0 + 6.0);
+    }
+
+    #[test]
+    fn test_to_atom() {
+        let h_surface = Hsurface {
+            positive_energies: vec![0, 1],
+            negative_energies: vec![2, 3],
+            shift: vec![4, 5],
+            shift_signature: vec![false, true],
+        };
+
+        let h_surface_atom = h_surface.to_atom();
+        let expected_atom = Atom::parse("E0 + E1 - E2 - E3 - p4 + p5").unwrap();
+        let diff = h_surface_atom - &expected_atom;
+        let diff = diff.expand();
+        assert_eq!(diff, Atom::new());
+    }
+
+    #[test]
+    fn test_to_atom_with_rewrite() {
+        let h_surface = Hsurface {
+            positive_energies: vec![0, 1],
+            negative_energies: vec![2, 3],
+            shift: vec![4, 5],
+            shift_signature: vec![false, true],
+        };
+
+        let e_surface = Esurface {
+            energies: vec![2, 3, 6],
+            shift: vec![4],
+            shift_signature: vec![true],
+            sub_orientation: vec![true, true],
+            circled_vertices: VertexSet::dummy(),
+        };
+
+        let h_surface_atom = h_surface.to_atom().expand();
+        let e_surface_atom = e_surface.to_atom();
+
+        println!("rewriting {}", h_surface_atom);
+        println!("with {}", e_surface_atom);
+
+        let rewritten = h_surface.to_atom_with_rewrite(&e_surface).unwrap();
+        let target = Atom::parse("E0 + E1 + E6 + p5").unwrap();
+        let diff = rewritten - &target;
+        let diff = diff.expand();
+
+        assert_eq!(diff, Atom::new(), "diff: {}", diff);
+
+        let h_surface_2 = Hsurface {
+            positive_energies: vec![1, 7],
+            negative_energies: vec![3, 6],
+            shift: vec![4, 5],
+            shift_signature: vec![false, true],
+        };
+
+        let rewritten = h_surface_2.to_atom_with_rewrite(&e_surface).unwrap();
+        let target = Atom::parse("E1 + E7 + E2 + p5").unwrap();
+        let diff = rewritten - &target;
+        let diff = diff.expand();
+
+        assert_eq!(diff, Atom::new(), "diff: {}", diff);
     }
 }

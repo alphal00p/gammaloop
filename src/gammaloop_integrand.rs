@@ -1013,7 +1013,7 @@ impl GammaLoopIntegrand {
                     }
 
                     let counter_term =
-                        CounterTerm::construct(maximal_overlap, &existing_esurfaces, cff);
+                        CounterTerm::construct(maximal_overlap, &existing_esurfaces, cff, graph);
 
                     if settings.general.debug > 1 {
                         counter_term.print_debug_data(

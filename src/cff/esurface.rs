@@ -259,7 +259,7 @@ pub fn compute_esurface_cache<T: FloatLike>(
 pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq)]
 pub struct EsurfaceID(usize);
 
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
@@ -473,6 +473,8 @@ pub fn generate_esurface_data(
 
 #[cfg(test)]
 mod tests {
+    use symbolica::representations::Atom;
+
     use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
 
     #[test]
@@ -510,5 +512,23 @@ mod tests {
 
         let res = esurface.compute_value(&energies_cache);
         assert_eq!(res, 2.);
+    }
+
+    #[test]
+    fn test_to_atom() {
+        let esurface = Esurface {
+            sub_orientation: vec![true, true],
+            energies: vec![2, 3],
+            shift: vec![1],
+            shift_signature: vec![false],
+            circled_vertices: VertexSet::dummy(),
+        };
+
+        let esurface_atom = esurface.to_atom();
+        let expected_atom = Atom::parse("E2 + E3 - p1").unwrap();
+
+        let diff = esurface_atom - &expected_atom;
+        let diff = diff.expand();
+        assert_eq!(diff, Atom::new());
     }
 }

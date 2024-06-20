@@ -70,6 +70,7 @@ impl CounterTerm {
         maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)>,
         existing_esurfaces: &ExistingEsurfaces,
         cff: &CFFExpression,
+        temp_graph: &Graph,
     ) -> Self {
         let complements_of_overlap = maximal_overlap
             .iter()
@@ -98,7 +99,22 @@ impl CounterTerm {
                     })
                     .unzip();
 
-                generate_cff_limit(dag_left, dag_right, &cff.esurfaces)
+                let limit_result = generate_cff_limit(dag_left, dag_right, &cff.esurfaces);
+                match limit_result {
+                    Ok(limit) => limit,
+                    Err(error_message) => panic!(
+                        "Could not generate counterterm for esurface: {:?}\n
+                            esurface: {:?}\n
+                            esurface_in_lmb: {}\n
+                            error_message: {},
+                            ",
+                        existing_esurface,
+                        cff.esurfaces[*existing_esurface],
+                        cff.esurfaces[*existing_esurface]
+                            .string_format_in_lmb(&temp_graph.loop_momentum_basis),
+                        error_message
+                    ),
+                }
             })
             .collect_vec();
 

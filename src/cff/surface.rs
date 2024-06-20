@@ -4,7 +4,6 @@ use super::{
 };
 use crate::utils::FloatLike;
 use derive_more::From;
-use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use typed_index_collections::TiVec;
@@ -17,6 +16,18 @@ pub trait Surface {
     }
 
     fn get_external_shift(&self) -> impl Iterator<Item = (&usize, &bool)>;
+}
+
+pub type UnitSurface = ();
+
+impl Surface for UnitSurface {
+    fn get_positive_energies(&self) -> impl Iterator<Item = &usize> {
+        std::iter::empty::<&usize>()
+    }
+
+    fn get_external_shift(&self) -> impl Iterator<Item = (&usize, &bool)> {
+        std::iter::empty::<(&usize, &bool)>()
+    }
 }
 
 #[inline]
@@ -76,16 +87,17 @@ pub fn string_format<S: Surface>(surface: &S) -> String {
     res
 }
 
-#[enum_dispatch]
 pub enum HybridSurface {
     Esurface(Esurface),
     Hsurface(Hsurface),
+    Unit(UnitSurface),
 }
 
-#[derive(From, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(From, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum HybridSurfaceID {
     Esurface(EsurfaceID),
     Hsurface(HsurfaceID),
+    Unit,
 }
 
 pub type HybridSurfaceCollection = TiVec<HybridSurfaceID, HybridSurface>;

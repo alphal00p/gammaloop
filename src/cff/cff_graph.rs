@@ -34,12 +34,12 @@ impl CFFVertex {
         let is_sink = self
             .outgoing_edges
             .iter()
-            .all(|edge| edge.edge_type == CFFEdgeType::External);
+            .all(|edge| edge.edge_type != CFFEdgeType::Virtual);
 
         let is_source = self
             .incoming_edges
             .iter()
-            .all(|edge| edge.edge_type == CFFEdgeType::External);
+            .all(|edge| edge.edge_type != CFFEdgeType::Virtual);
 
         if is_sink {
             VertexType::Sink
@@ -47,6 +47,22 @@ impl CFFVertex {
             VertexType::Source
         } else {
             VertexType::None
+        }
+    }
+
+    fn generates_esurface(&self) -> bool {
+        let vertex_type = self.get_vertex_type();
+
+        match vertex_type {
+            VertexType::None => false,
+            VertexType::Sink => self
+                .outgoing_edges
+                .iter()
+                .all(|edge| edge.edge_type == CFFEdgeType::External),
+            VertexType::Source => self
+                .incoming_edges
+                .iter()
+                .all(|edge| edge.edge_type == CFFEdgeType::External),
         }
     }
 
@@ -136,7 +152,6 @@ impl VertexSet {
             .collect()
     }
 
-    #[cfg(test)]
     pub fn dummy() -> Self {
         VertexSet { vertex_set: 0 }
     }
@@ -149,7 +164,7 @@ struct CFFEdge {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-enum CFFEdgeType {
+pub enum CFFEdgeType {
     External,
     Virtual,
     VirtualExternal,
@@ -211,7 +226,7 @@ impl CFFGenerationGraph {
     #[cfg(test)]
     pub fn from_vec(
         edges: Vec<(usize, usize)>,
-        incoming_vertices: Vec<usize>,
+        incoming_vertices: Vec<(usize, CFFEdgeType)>,
         virtual_orientation: Vec<bool>,
     ) -> Self {
         let edges = edges
@@ -239,12 +254,14 @@ impl CFFGenerationGraph {
             unique_vertices.insert(*vertex, cff_vertex);
         }
 
-        for (edge_id, incoming_vertex) in incoming_vertices.iter().enumerate() {
+        for (edge_id, (incoming_vertex, edge_type)) in incoming_vertices.iter().enumerate() {
+            assert_ne!(*edge_type, CFFEdgeType::Virtual);
+
             let vertex_set = VertexSet::from_usize(*incoming_vertex);
             let cff_vertex = unique_vertices.get_mut(&vertex_set).unwrap();
             let incoming_edge = CFFEdge {
                 edge_id,
-                edge_type: CFFEdgeType::External,
+                edge_type: *edge_type,
             };
             cff_vertex.incoming_edges.push(incoming_edge);
             global_orientation.push(true);
@@ -507,6 +524,10 @@ impl CFFGenerationGraph {
         &self,
         vertices_used: &mut Vec<VertexSet>,
     ) -> (Option<Vec<Self>>, HybridSurface) {
+        if self.vertices.len() < 2 {
+            return (None, HybridSurface::Unit(()));
+        }
+
         let vertex = if let Some(vertex) = self.get_source_sink_greedy() {
             vertex
         } else {
@@ -524,7 +545,7 @@ impl CFFGenerationGraph {
                 let shift_sign = match vertex_type {
                     VertexType::Source => false,
                     VertexType::Sink => true,
-                    VertexType::None => true,
+                    VertexType::None => panic!("vertex is not a source or a sink"),
                 };
                 (edge_id, shift_sign)
             })
@@ -538,7 +559,7 @@ impl CFFGenerationGraph {
                         let shift_sign = match vertex_type {
                             VertexType::Source => true,
                             VertexType::Sink => false,
-                            VertexType::None => false,
+                            VertexType::None => panic!("vertex is not a source or a sink"),
                         };
                         (edge_id, shift_sign)
                     }),
@@ -546,28 +567,33 @@ impl CFFGenerationGraph {
             .sorted_by(|(edge_1, _), (edge_2, _)| edge_1.cmp(edge_2))
             .unzip();
 
-        let surface = if vertex_type != VertexType::None {
-            let energy_sum = vertex
-                .incoming_edges
-                .iter()
-                .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
-                .chain(
-                    vertex
-                        .outgoing_edges
-                        .iter()
-                        .filter(|edge| edge.edge_type == CFFEdgeType::Virtual),
-                )
-                .map(|edge| edge.edge_id)
-                .sorted()
-                .collect_vec();
+        let positive_energies = vertex
+            .incoming_edges
+            .iter()
+            .chain(vertex.outgoing_edges.iter())
+            .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+            .map(|edge| edge.edge_id)
+            .sorted()
+            .collect_vec();
 
-            let sub_orientation = energy_sum
+        let surface = if vertex.generates_esurface() {
+            let mut extra_positive_energies = vertex
+                .iter_all_edges()
+                .filter(|edge| edge.edge_type == CFFEdgeType::VirtualExternal)
+                .map(|edge| edge.edge_id)
+                .collect();
+
+            let mut positive_energies = positive_energies;
+            positive_energies.append(&mut extra_positive_energies);
+            positive_energies.sort();
+
+            let sub_orientation = positive_energies
                 .iter()
                 .map(|id| self.global_orientation[*id])
                 .collect();
 
             let esurface = Esurface {
-                energies: energy_sum,
+                energies: positive_energies,
                 sub_orientation,
                 shift,
                 shift_signature: shift_orientation,
@@ -576,19 +602,45 @@ impl CFFGenerationGraph {
 
             HybridSurface::Esurface(esurface)
         } else {
-            let (positive_energies, negative_energies) =
-                [&vertex.incoming_edges, &vertex.outgoing_edges]
-                    .iter()
-                    .map(|edges| {
-                        edges
-                            .iter()
-                            .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
-                            .map(|edge| edge.edge_id)
-                            .sorted()
-                            .collect_vec()
-                    })
-                    .collect_tuple()
-                    .unwrap_or_else(|| unreachable!());
+            let (mut extra_positive_energies, mut negative_energies) = match vertex_type {
+                VertexType::Sink => (
+                    vertex
+                        .incoming_edges
+                        .iter()
+                        .filter(|edge| edge.edge_type == CFFEdgeType::VirtualExternal)
+                        .map(|edge| edge.edge_id)
+                        .collect(),
+                    vertex
+                        .outgoing_edges
+                        .iter()
+                        .filter(|edge| edge.edge_type == CFFEdgeType::VirtualExternal)
+                        .map(|edge| edge.edge_id)
+                        .collect_vec(),
+                ),
+                VertexType::Source => (
+                    vertex
+                        .outgoing_edges
+                        .iter()
+                        .filter(|edge| edge.edge_type == CFFEdgeType::VirtualExternal)
+                        .map(|edge| edge.edge_id)
+                        .collect(),
+                    vertex
+                        .incoming_edges
+                        .iter()
+                        .filter(|edge| edge.edge_type == CFFEdgeType::VirtualExternal)
+                        .map(|edge| edge.edge_id)
+                        .collect_vec(),
+                ),
+                VertexType::None => {
+                    unreachable!()
+                }
+            };
+
+            let mut positive_energies = positive_energies;
+            positive_energies.append(&mut extra_positive_energies);
+            positive_energies.sort();
+
+            negative_energies.sort();
 
             let hsurface = Hsurface {
                 positive_energies,
@@ -785,6 +837,7 @@ impl CFFGenerationGraph {
     }
 
     #[cfg(test)]
+    /// has duplicates
     fn iter_all_edges(&self) -> impl Iterator<Item = &CFFEdge> {
         self.vertices
             .iter()
@@ -811,7 +864,11 @@ mod test {
     #[test]
     fn test_graph_struct_triangle() {
         let triangle = vec![(0, 1), (1, 2), (2, 0)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = vec![
+            (0, CFFEdgeType::External),
+            (1, CFFEdgeType::External),
+            (2, CFFEdgeType::External),
+        ];
 
         let vertex_sets = [
             VertexSet::from_usize(0),
@@ -848,9 +905,33 @@ mod test {
     }
 
     #[test]
+    fn test_graph_struct_with_virtext() {
+        let line = vec![(0, 1)];
+        let incoming_vertices = vec![
+            (0, CFFEdgeType::VirtualExternal),
+            (0, CFFEdgeType::External),
+            (1, CFFEdgeType::VirtualExternal),
+            (1, CFFEdgeType::External),
+        ];
+
+        let vertex_sets = [VertexSet::from_usize(0), VertexSet::from_usize(1)];
+
+        let dummy_orientation = vec![true; 5];
+
+        let cff_line = CFFGenerationGraph::from_vec(line, incoming_vertices, dummy_orientation);
+        assert_eq!(cff_line.vertices.len(), 2);
+
+        assert!(cff_line.are_adjacent(&vertex_sets[0], &vertex_sets[1]));
+        assert!(cff_line.are_directed_adjacent(&vertex_sets[0], &vertex_sets[1]));
+        assert!(!cff_line.are_directed_adjacent(&vertex_sets[1], &vertex_sets[0]));
+
+        assert_eq!(cff_line.get_edges().len(), 5);
+    }
+
+    #[test]
     fn test_graph_struct_double_box() {
         let double_box = vec![(0, 1), (4, 5), (2, 3), (0, 4), (4, 2), (1, 5), (5, 3)];
-        let incoming_vertices = vec![0, 1, 2, 3];
+        let incoming_vertices = (0..4).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let dummy_orienatation = vec![true; double_box.len() + incoming_vertices.len()];
 
@@ -909,7 +990,7 @@ mod test {
     #[test]
     fn test_vertex_that_is_not_v() {
         let triangle = vec![(0, 1), (1, 2), (2, 0)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let vertex_sets = [
             VertexSet::from_usize(0),
@@ -928,8 +1009,7 @@ mod test {
     #[test]
     fn test_get_directed_neighbours() {
         let triangle = vec![(0, 1), (1, 2), (2, 0)];
-        let incoming_vertices = vec![0, 1, 2];
-
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
         let vertex_sets = [
             VertexSet::from_usize(0),
             VertexSet::from_usize(1),
@@ -950,7 +1030,7 @@ mod test {
 
     fn test_has_directed_cycle() {
         let triangle = vec![(0, 1), (1, 2), (2, 0)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let vertex_sets = [
             VertexSet::from_usize(0),
@@ -965,7 +1045,7 @@ mod test {
         assert!(cff_triangle.has_directed_cycle(&vertex_sets[0]));
 
         let triangle = vec![(0, 1), (1, 2), (0, 2)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let vertex_sets = [
             VertexSet::from_usize(0),
@@ -981,7 +1061,7 @@ mod test {
     #[test]
     fn test_connected_complement() {
         let triangle = vec![(0, 1), (1, 2), (2, 0)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let vertex_sets = [
             VertexSet::from_usize(0),
@@ -1000,7 +1080,10 @@ mod test {
         println!("triangle passed");
 
         let double_bubble = vec![(0, 1), (0, 1), (1, 2), (1, 2)];
-        let incoming_vertices = vec![0, 2];
+        let incoming_vertices = [0, 2]
+            .into_iter()
+            .map(|i| (i, CFFEdgeType::External))
+            .collect_vec();
 
         let vertex_sets = [
             VertexSet::from_usize(0),
@@ -1019,7 +1102,7 @@ mod test {
         println!("double bubble passed");
 
         let single_bubble = vec![(0, 1), (0, 1)];
-        let incoming_vertices = vec![0, 1];
+        let incoming_vertices = (0..2).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let vertex_sets = [VertexSet::from_usize(0), VertexSet::from_usize(1)];
 
@@ -1037,7 +1120,7 @@ mod test {
     #[test]
     fn test_get_vertex_type() {
         let triangle = vec![(0, 1), (2, 1), (0, 2)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
         let vertex_sets = [
             VertexSet::from_usize(0),
             VertexSet::from_usize(1),
@@ -1066,7 +1149,7 @@ mod test {
     #[test]
     fn test_source_sink_candidate_list() {
         let triangle = vec![(0, 1), (2, 1), (0, 2)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
         let vertex_set = [
             VertexSet::from_usize(0),
             VertexSet::from_usize(1),
@@ -1092,7 +1175,7 @@ mod test {
         println!("triangle passed");
 
         let bubble = vec![(0, 1), (0, 1)];
-        let incoming_vertices = vec![0, 1];
+        let incoming_vertices = (0..2).map(|i| (i, CFFEdgeType::External)).collect_vec();
         let vertex_set = [VertexSet::from_usize(0), VertexSet::from_usize(1)];
 
         let dummy_orientation = vec![true; bubble.len() + incoming_vertices.len()];
@@ -1115,7 +1198,7 @@ mod test {
     #[test]
     fn test_contract_from_vertex() {
         let triangle = vec![(0, 1), (2, 1), (0, 2)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let vertex_set = [
             VertexSet::from_usize(0),
@@ -1136,12 +1219,38 @@ mod test {
         let contracted_vertex = contracted_graph.get_vertex(&joined_vertex);
         assert_eq!(contracted_vertex.incoming_edges.len(), 3);
         assert_eq!(contracted_vertex.outgoing_edges.len(), 1);
+
+        let box_like = vec![(1, 0), (3, 0), (1, 2), (2, 3)];
+        let incoming_vertices = vec![
+            (0, CFFEdgeType::VirtualExternal),
+            (1, CFFEdgeType::VirtualExternal),
+            (2, CFFEdgeType::External),
+            (3, CFFEdgeType::External),
+        ];
+
+        let vertex_set = [
+            VertexSet::from_usize(0),
+            VertexSet::from_usize(1),
+            VertexSet::from_usize(2),
+            VertexSet::from_usize(3),
+        ];
+
+        let dummy_orientation = vec![true; box_like.len() + incoming_vertices.len()];
+        let cff_box = CFFGenerationGraph::from_vec(box_like, incoming_vertices, dummy_orientation);
+
+        let joined_vertex = vertex_set[0].join(&vertex_set[1]);
+        let contracted_box = cff_box.contract_vertices(&vertex_set[0], &vertex_set[1]);
+
+        let contracted_vertex = contracted_box.get_vertex(&joined_vertex);
+
+        assert_eq!(contracted_vertex.incoming_edges.len(), 3);
+        assert_eq!(contracted_vertex.outgoing_edges.len(), 1);
     }
 
     #[test]
     fn test_get_edges() {
         let triangle = vec![(0, 1), (2, 1), (0, 2)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let dummy_orientation = vec![true; triangle.len() + incoming_vertices.len()];
 
@@ -1155,7 +1264,7 @@ mod test {
     #[test]
     fn test_has_edge() {
         let triangle = vec![(0, 1), (2, 1), (0, 2)];
-        let incoming_vertices = vec![0, 1, 2];
+        let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
         let dummy_orientation = vec![true; triangle.len() + incoming_vertices.len()];
 
@@ -1174,7 +1283,7 @@ mod test {
     #[test]
     fn test_generate_cut() {
         let box_edges = vec![(0, 1), (1, 2), (2, 3), (3, 0)];
-        let incoming_vertices = vec![0, 1, 2, 3];
+        let incoming_vertices = (0..4).map(|i| (i, CFFEdgeType::External)).collect_vec();
         let incoming_vertices_len = incoming_vertices.len();
 
         let dummy_orientation = vec![true; box_edges.len() + incoming_vertices.len()];
