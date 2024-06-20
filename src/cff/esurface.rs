@@ -232,6 +232,27 @@ impl Esurface {
     pub fn get_point_inside(&self) -> Vec<LorentzVector<f64>> {
         todo!()
     }
+
+    pub fn canonicalize_shift(
+        &mut self,
+        dep_mom: usize,
+        expr_in_terms_of_external_shift: &ExternalShift,
+    ) {
+        if let Some(dep_mom_pos) = self
+            .external_shift
+            .iter()
+            .position(|(index, _)| *index == dep_mom)
+        {
+            let (_, dep_mom_sign) = self.external_shift.remove(dep_mom_pos);
+
+            let external_shift = expr_in_terms_of_external_shift
+                .iter()
+                .map(|(index, sign)| (*index, dep_mom_sign * sign))
+                .collect();
+
+            self.external_shift = add_external_shifts(&self.external_shift, &external_shift);
+        }
+    }
 }
 
 pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
@@ -503,7 +524,7 @@ mod tests {
 
         let dummy_circled_vertices = VertexSet::dummy();
 
-        let esurface = Esurface {
+        let mut esurface = Esurface {
             sub_orientation: sub_orientation.clone(),
             energies,
             external_shift,
@@ -512,6 +533,11 @@ mod tests {
 
         let res = esurface.compute_value(&energies_cache);
         assert_eq!(res, 15.);
+
+        let canon_shift = vec![(1, -1), (2, -1), (3, -1)];
+        esurface.canonicalize_shift(4, &canon_shift);
+
+        assert_eq!(esurface.external_shift, vec![(1, -1), (2, -1)]);
 
         let energies = vec![0, 2];
 
