@@ -1,5 +1,6 @@
 use crate::{
     cff::{
+        esurface::add_external_shifts,
         expression::OrientationExpression,
         hsurface::HsurfaceID,
         surface::{HybridSurface, HybridSurfaceID},
@@ -19,7 +20,7 @@ use log::debug;
 
 use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
-    esurface::{EsurfaceCollection, EsurfaceID},
+    esurface::{Esurface, EsurfaceCollection, EsurfaceID},
     expression::{CFFExpression, CFFExpressionNode, CFFLimit, TermId},
     hsurface::HsurfaceCollection,
     tree::NodeId,
@@ -156,7 +157,7 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
     debug!("generating cff for graph: {}", graph.name);
     debug!("number of orientations: {}", graphs.len());
 
-    let graph_cff = generate_cff_from_orientations(graphs, None, None)?;
+    let graph_cff = generate_cff_from_orientations(graphs, None, None, None)?;
 
     Ok(graph_cff)
 }
@@ -165,6 +166,7 @@ pub fn generate_cff_limit(
     left_dags: Vec<CFFGenerationGraph>,
     right_dags: Vec<CFFGenerationGraph>,
     esurfaces: &EsurfaceCollection,
+    limit_esurface: &Esurface,
 ) -> Result<CFFLimit, String> {
     assert_eq!(
         left_dags.len(),
@@ -172,8 +174,20 @@ pub fn generate_cff_limit(
         "number of left and right dags must match"
     );
 
-    let left = generate_cff_from_orientations(left_dags, Some(esurfaces.clone()), None).unwrap();
-    let right = generate_cff_from_orientations(right_dags, Some(esurfaces.clone()), None).unwrap();
+    let left = generate_cff_from_orientations(
+        left_dags,
+        Some(esurfaces.clone()),
+        None,
+        Some(limit_esurface),
+    )
+    .unwrap();
+    let right = generate_cff_from_orientations(
+        right_dags,
+        Some(esurfaces.clone()),
+        None,
+        Some(limit_esurface),
+    )
+    .unwrap();
 
     Ok(CFFLimit { left, right })
 }
@@ -182,6 +196,7 @@ fn generate_cff_from_orientations(
     orientations_and_graphs: Vec<CFFGenerationGraph>,
     optional_esurface_cache: Option<EsurfaceCollection>,
     optional_hsurface_cache: Option<HsurfaceCollection>,
+    rewrite_at_cache_growth: Option<&Esurface>,
 ) -> Result<CFFExpression, Report> {
     let esurface_cache = if let Some(cache) = optional_esurface_cache {
         cache
@@ -222,7 +237,12 @@ fn generate_cff_from_orientations(
         .enumerate()
         .map(|(term_id, graph)| {
             let global_orientation = graph.global_orientation.clone();
-            let tree = generate_tree_for_orientation(graph.clone(), term_id, &mut generator_cache);
+            let tree = generate_tree_for_orientation(
+                graph.clone(),
+                term_id,
+                &mut generator_cache,
+                rewrite_at_cache_growth,
+            );
             let expression = tree.map(forget_graphs);
 
             OrientationExpression {
@@ -272,13 +292,16 @@ fn generate_tree_for_orientation(
     graph: CFFGenerationGraph,
     term_id: usize,
     generator_cache: &mut GeneratorCache,
+    rewrite_at_cache_growth: Option<&Esurface>,
 ) -> Tree<GenerationData> {
     let mut tree = Tree::from_root(GenerationData::Data {
         graph,
         surface_id: None,
     });
 
-    while let Some(()) = advance_tree(&mut tree, term_id, generator_cache) {}
+    while let Some(()) = advance_tree(&mut tree, term_id, generator_cache, rewrite_at_cache_growth)
+    {
+    }
 
     tree
 }
@@ -287,6 +310,7 @@ fn advance_tree(
     tree: &mut Tree<GenerationData>,
     term_id: usize,
     generator_cache: &mut GeneratorCache,
+    rewrite_at_cache_growth: Option<&Esurface>,
 ) -> Option<()> {
     let bottom_layer = tree
         .get_bottom_layer()
@@ -312,7 +336,7 @@ fn advance_tree(
                 graph.generate_children(&mut generator_cache.vertices_used);
 
             let surface_id = match surface {
-                HybridSurface::Esurface(esurface) => {
+                HybridSurface::Esurface(mut esurface) => {
                     let option_esurface_id = generator_cache
                         .esurface_cache
                         .position(|val| val == &esurface);
@@ -320,8 +344,40 @@ fn advance_tree(
                     let esurface_id = match option_esurface_id {
                         Some(esurface_id) => esurface_id,
                         None => {
-                            generator_cache.esurface_cache.push(esurface);
-                            Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
+                            if let Some(rewrite_esurface) = rewrite_at_cache_growth {
+                                esurface
+                                    .energies
+                                    .retain(|e| !rewrite_esurface.energies.contains(e));
+
+                                let negative_rewriter_esurface_shift = rewrite_esurface
+                                    .external_shift
+                                    .iter()
+                                    .map(|(index, sign)| (*index, -sign))
+                                    .collect_vec();
+
+                                esurface.external_shift = add_external_shifts(
+                                    &esurface.external_shift,
+                                    &negative_rewriter_esurface_shift,
+                                );
+
+                                let new_option_esurface_id = generator_cache
+                                    .esurface_cache
+                                    .position(|val| val == &esurface);
+
+                                match new_option_esurface_id {
+                                    Some(new_esurface_id) => new_esurface_id,
+                                    None => panic!(
+                                        "rewriting the esurface did not yield an existing esurface\n
+                                        rewritten esurface: {:#?} \n
+                                        using {:#?}\n ", esurface, rewrite_esurface,
+                                        
+
+                                    ),
+                                }
+                            } else {
+                                generator_cache.esurface_cache.push(esurface);
+                                Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
+                            }
                         }
                     };
 
@@ -496,7 +552,7 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
         assert_eq!(orientations.len(), 6);
 
-        let cff = generate_cff_from_orientations(orientations, None, None).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None, None, None).unwrap();
         assert_eq!(cff.esurfaces.len(), 6);
 
         let p1 = LorentzVector::from_args(1., 3., 4., 5.);
@@ -578,7 +634,7 @@ mod tests_cff {
         let orientations =
             generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
 
-        let cff = generate_cff_from_orientations(orientations, None, None).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None, None, None).unwrap();
 
         let q = LorentzVector::from_args(1., 2., 3., 4.);
         let zero = LorentzVector::from_args(0., 0., 0., 0.);
@@ -659,7 +715,7 @@ mod tests_cff {
         let incoming_vertices = vec![0, 5];
 
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-        let cff = generate_cff_from_orientations(orientataions, None, None).unwrap();
+        let cff = generate_cff_from_orientations(orientataions, None, None, None).unwrap();
 
         let q = LorentzVector::from_args(1.0, 2.0, 3.0, 4.0);
         let zero_vector = LorentzVector::from_args(0., 0., 0., 0.);
@@ -728,7 +784,7 @@ mod tests_cff {
         // get time before cff generation
         let start = std::time::Instant::now();
 
-        let _cff = generate_cff_from_orientations(orientations, None, None).unwrap();
+        let _cff = generate_cff_from_orientations(orientations, None, None, None).unwrap();
 
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
@@ -769,7 +825,7 @@ mod tests_cff {
         // get time before cff generation
         let _start = std::time::Instant::now();
 
-        let _cff = generate_cff_from_orientations(orientations, None, None).unwrap();
+        let _cff = generate_cff_from_orientations(orientations, None, None, None).unwrap();
 
         let _finish = std::time::Instant::now();
     }
@@ -801,7 +857,7 @@ mod tests_cff {
 
         let start = std::time::Instant::now();
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
-        let cff = generate_cff_from_orientations(orientations, None, None).unwrap();
+        let cff = generate_cff_from_orientations(orientations, None, None, None).unwrap();
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
 

@@ -362,7 +362,9 @@ impl CFFExpression {
             })
             .unzip();
 
-        generate_cff_limit(dag_left, dag_right, &self.esurfaces)
+        let ref_to_esurface = &self.esurfaces[esurface_id];
+
+        generate_cff_limit(dag_left, dag_right, &self.esurfaces, ref_to_esurface)
     }
 }
 

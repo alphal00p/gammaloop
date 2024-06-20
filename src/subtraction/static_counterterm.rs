@@ -13,7 +13,6 @@ use crate::{
             ExistingEsurfaces,
         },
         expression::{CFFExpression, CFFLimit},
-        generation::generate_cff_limit,
     },
     graph::{Graph, LoopMomentumBasis},
     utils::{cast_lorentz_vector, FloatLike},
@@ -86,20 +85,7 @@ impl CounterTerm {
         let terms_in_counterterms = existing_esurfaces
             .iter()
             .map(|existing_esurface| {
-                let circling = cff.esurfaces[*existing_esurface].circled_vertices;
-
-                let terms_with_esurface = cff
-                    .iter_term_ids()
-                    .filter(|&term_id| cff.term_has_esurface(term_id, *existing_esurface));
-
-                let (dag_left, dag_right) = terms_with_esurface
-                    .map(|term_id| {
-                        let term_dag = &cff[term_id].dag;
-                        term_dag.generate_cut(circling)
-                    })
-                    .unzip();
-
-                let limit_result = generate_cff_limit(dag_left, dag_right, &cff.esurfaces);
+                let limit_result = cff.limit_for_esurface(*existing_esurface);
                 match limit_result {
                     Ok(limit) => limit,
                     Err(error_message) => panic!(

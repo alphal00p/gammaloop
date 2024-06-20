@@ -37,10 +37,9 @@ impl Surface for Esurface {
     }
 }
 
-// This equality is naive in the presence of raised propagators
 impl PartialEq for Esurface {
     fn eq(&self, other: &Self) -> bool {
-        self.energies == other.energies && self.sub_orientation == other.sub_orientation
+        self.energies == other.energies && self.external_shift == other.external_shift
     }
 }
 
