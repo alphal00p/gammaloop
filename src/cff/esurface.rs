@@ -456,23 +456,42 @@ pub fn generate_esurface_data(
     let mut orientation_pairs = Vec::with_capacity(esurface_ids.len() / 2);
 
     while let Some(esurface_id) = esurface_ids.pop() {
-        let (posistion, other_esurface_id) = esurface_ids
+        let esurface = &esurfaces[esurface_id];
+
+        if esurface.external_shift.is_empty() {
+            // these do not always have a pair
+            continue;
+        }
+
+        let (position, other_esurface_id) = esurface_ids
             .iter()
             .enumerate()
             .find(|(_pos, other_esurface_id)| {
-                let esurface = &esurfaces[esurface_id];
                 let other_esurface = &esurfaces[**other_esurface_id];
 
                 let energies_match = esurface.energies == other_esurface.energies;
-                let orientation_flipped =
-                    esurface.sub_orientation != other_esurface.sub_orientation;
 
-                energies_match && orientation_flipped
+                let sign_flipped = esurface
+                    .external_shift
+                    .iter()
+                    .zip(other_esurface.external_shift.iter())
+                    .all(|((index, signature), (other_index, other_signature))| {
+                        index == other_index && *signature == -other_signature
+                    })
+                    && esurface.external_shift.len() == other_esurface.external_shift.len();
+
+                energies_match && sign_flipped
             })
-            .ok_or_else(|| eyre!("Could not find mirror esurface"))?;
+            .ok_or_else(|| {
+                eyre!(
+                    "Could not find mirror esurface for esurface: {:?}, list of esurfaces: {:#?}",
+                    esurface_id,
+                    esurfaces
+                )
+            })?;
 
         orientation_pairs.push((esurface_id, *other_esurface_id));
-        esurface_ids.remove(posistion);
+        esurface_ids.remove(position);
     }
 
     Ok(EsurfaceDerivedData {

@@ -982,7 +982,6 @@ impl GammaLoopIntegrand {
 
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 let graph = &mut amplitude_graph.graph;
-                let cff = graph.get_cff();
 
                 let existing_esurfaces = graph.get_existing_esurfaces(
                     &external_moms,
@@ -1013,7 +1012,7 @@ impl GammaLoopIntegrand {
                     }
 
                     let counter_term =
-                        CounterTerm::construct(maximal_overlap, &existing_esurfaces, cff, graph);
+                        CounterTerm::construct(maximal_overlap, &existing_esurfaces, graph);
 
                     if settings.general.debug > 1 {
                         counter_term.print_debug_data(

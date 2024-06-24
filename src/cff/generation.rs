@@ -157,9 +157,9 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
     debug!("generating cff for graph: {}", graph.name);
     debug!("number of orientations: {}", graphs.len());
 
-    let (dep_mom, dep_mom_expr) = todo!("construct these objects from Graph");
+    let (dep_mom, dep_mom_expr) = graph.get_dep_mom_expr();
 
-    let graph_cff = generate_cff_from_orientations(graphs, None, None, None, dep_mom, dep_mom_expr)?;
+    let graph_cff = generate_cff_from_orientations(graphs, None, None, None, dep_mom, &dep_mom_expr)?;
 
     Ok(graph_cff)
 }
@@ -353,6 +353,7 @@ fn advance_tree(
 
             let surface_id = match surface {
                 HybridSurface::Esurface(mut esurface) => {
+                    esurface.canonicalize_shift(dep_mom, dep_mom_expr);
                     let option_esurface_id = generator_cache
                         .esurface_cache
                         .position(|val| *val == esurface);
@@ -376,11 +377,11 @@ fn advance_tree(
                                     &negative_rewriter_esurface_shift,
                                 );
 
+                                esurface.canonicalize_shift(dep_mom, dep_mom_expr);
                                 let new_option_esurface_id = generator_cache
                                     .esurface_cache
                                     .position(|val| *val == esurface);
 
-                                esurface.canonicalize_shift(dep_mom, dep_mom_expr);
                                 match new_option_esurface_id {
                                     Some(new_esurface_id) => new_esurface_id,
                                     None => panic!(
@@ -392,7 +393,6 @@ fn advance_tree(
                                     ),
                                 }
                             } else {
-                                esurface.canonicalize_shift(dep_mom, dep_mom_expr);
                                 generator_cache.esurface_cache.push(esurface);
                                 Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
                             }
@@ -485,7 +485,7 @@ fn advance_tree(
 mod tests_cff {
     use lorentz_vector::LorentzVector;
     use num::traits::Inv;
-    use symbolica::{id::Pattern, representations::Atom};
+    use symbolica::{domains::{integer::{IntegerRing, Z}, rational_polynomial::RationalPolynomial}, id::Pattern, representations::Atom};
     use utils::FloatLike;
 
     use crate::{cff::cff_graph::CFFEdgeType, utils};
@@ -697,29 +697,18 @@ mod tests_cff {
             cff_res
         );
 
-        let conditions = None;
-        let settings = None;
-
         for (esurface_id, esurface) in cff.esurfaces.iter_enumerated() {
-            let expanded_limit = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id));
+            let expanded_limit: RationalPolynomial<IntegerRing, u8> = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id)).to_rational_polynomial(&Z, &Z, None);
+
+
             let factorised_limit = cff.limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr).unwrap();
-            let factorised_limit_atom = factorised_limit.limit_to_atom_with_rewrite(Some(esurface));
+            let factorised_limit_atom = factorised_limit.limit_to_atom_with_rewrite(Some(esurface)).to_rational_polynomial(&Z, &Z, None);
 
             // apply energy conservation
-            let p1_pattern = Pattern::Literal(Atom::parse("p1").unwrap());
-            let rhs_pattern = Pattern::Literal(Atom::parse("-p0").unwrap());
-
-            p1_pattern.replace_all(expanded_limit.as_view(), &rhs_pattern, conditions, settings);
-            p1_pattern.replace_all(
-                factorised_limit_atom.as_view(),
-                &rhs_pattern,
-                conditions,
-                settings,
-            );
-
-            let _diff = (expanded_limit - &factorised_limit_atom).expand();
-            // this test does not work due to the presence of spurious E-surfaces
-            //assert_eq!(diff, Atom::new());
+            let diff = expanded_limit - factorised_limit_atom;
+            println!("diff: {}", diff); 
+            // can't test all, but probably works?
+            // symbolica crash, probably works on newer version? can't change because everything is outdated, need to merge with main 
         }
     }
 

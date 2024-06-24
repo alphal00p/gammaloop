@@ -12,7 +12,7 @@ use crate::{
             compute_esurface_cache, EsurfaceCache, EsurfaceCollection, ExistingEsurfaceId,
             ExistingEsurfaces,
         },
-        expression::{CFFExpression, CFFLimit},
+        expression::CFFLimit,
     },
     graph::{Graph, LoopMomentumBasis},
     utils::{cast_lorentz_vector, FloatLike},
@@ -68,9 +68,9 @@ impl CounterTerm {
     pub fn construct(
         maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)>,
         existing_esurfaces: &ExistingEsurfaces,
-        cff: &CFFExpression,
-        temp_graph: &Graph,
+        graph: &Graph,
     ) -> Self {
+        let cff = graph.get_cff();
         let complements_of_overlap = maximal_overlap
             .iter()
             .map(|(esurface_ids, _)| {
@@ -82,10 +82,13 @@ impl CounterTerm {
             })
             .collect_vec();
 
+        let (dep_mom, dep_mom_expr) = graph.get_dep_mom_expr();
+
         let terms_in_counterterms = existing_esurfaces
             .iter()
             .map(|existing_esurface| {
-                let limit_result = cff.limit_for_esurface(*existing_esurface, todo!(), todo!());
+                let limit_result =
+                    cff.limit_for_esurface(*existing_esurface, dep_mom, &dep_mom_expr);
                 match limit_result {
                     Ok(limit) => limit,
                     Err(error_message) => panic!(
@@ -97,7 +100,7 @@ impl CounterTerm {
                         existing_esurface,
                         cff.esurfaces[*existing_esurface],
                         cff.esurfaces[*existing_esurface]
-                            .string_format_in_lmb(&temp_graph.loop_momentum_basis),
+                            .string_format_in_lmb(&graph.loop_momentum_basis),
                         error_message
                     ),
                 }

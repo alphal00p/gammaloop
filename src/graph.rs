@@ -2,7 +2,7 @@ use crate::{
     cff::{
         esurface::{
             generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData,
-            ExistingEsurfaceId, ExistingEsurfaces,
+            ExistingEsurfaceId, ExistingEsurfaces, ExternalShift,
         },
         expression::CFFExpression,
         generation::generate_cff_expression,
@@ -1412,6 +1412,35 @@ impl Graph {
             &self.get_mass_vector(),
             externals,
         )
+    }
+
+    pub fn get_dep_mom_expr(&self) -> (usize, ExternalShift) {
+        let external_edges = self
+            .edges
+            .iter()
+            .enumerate()
+            .filter(|(_index, edge)| edge.edge_type != EdgeType::Virtual)
+            .collect_vec();
+
+        // find the external leg which does not appear in it's own signature
+        let (_, (dep_mom, _)) = external_edges
+            .iter()
+            .enumerate()
+            .find(|(external_index, (index, _edge))| {
+                self.loop_momentum_basis.edge_signatures[*index].1[*external_index] != 1
+            })
+            .unwrap_or_else(|| panic!("could not determine dependent momenta"));
+
+        let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].1;
+
+        let external_shift = external_edges
+            .iter()
+            .zip(dep_mom_signature.iter())
+            .filter(|(_external_edge, dep_mom_sign)| **dep_mom_sign != 0)
+            .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
+            .collect();
+
+        (*dep_mom, external_shift)
     }
 }
 
