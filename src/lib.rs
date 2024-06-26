@@ -383,4 +383,5 @@ pub enum DiscreteGraphSamplingSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct SubtractionSettings {
     pub sliver_width: f64,
+    pub dampen_integrable_singularity: bool,
 }

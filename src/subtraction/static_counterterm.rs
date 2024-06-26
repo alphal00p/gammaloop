@@ -254,6 +254,7 @@ impl CounterTerm {
                         *existing_esurface_id,
                         e_cm,
                         sliver_width,
+                        settings.subtraction.dampen_integrable_singularity,
                     ),
                     self.radius_star_eval(
                         radius_minus,
@@ -267,6 +268,7 @@ impl CounterTerm {
                         *existing_esurface_id,
                         e_cm,
                         sliver_width,
+                        settings.subtraction.dampen_integrable_singularity,
                     ),
                 );
 
@@ -304,6 +306,7 @@ impl CounterTerm {
         existing_esurface_id: ExistingEsurfaceId,
         e_cm: T,
         sliver_width: T,
+        dampen_integrable_singularity: bool,
     ) -> T {
         if (radius - rstar).abs() > sliver_width * e_cm {
             return T::zero();
@@ -344,9 +347,12 @@ impl CounterTerm {
         let r_minus_rstar = radius - rstar;
         let dampening_factor = (-r_minus_rstar * r_minus_rstar / (e_cm * e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
 
-        let singularity_dampener = (T::one()
-            - rstar.powi(4) / (radius * (Into::<T>::into(2.) * rstar - radius)).powi(2))
-        .exp(); // dampen the integrable singularity at r = 0
+        let singularity_dampener = if dampen_integrable_singularity {
+            (T::one() - rstar.powi(4) / (radius * (Into::<T>::into(2.) * rstar - radius)).powi(2))
+                .exp()
+        } else {
+            T::one()
+        };
 
         jacobian_ratio
             * multichanneling_factor

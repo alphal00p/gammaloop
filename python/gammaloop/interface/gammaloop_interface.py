@@ -143,6 +143,7 @@ class GammaLoopConfiguration(object):
                 },
                 'subtraction': {
                     'sliver_width': 1.0,
+                    'dampen_integrable_singularity': True,
                 }
             }
         }
@@ -504,7 +505,7 @@ class GammaLoop(object):
         if model_restriction not in [None, 'full']:
             if not os.path.isfile(pjoin(model_restriction_dir, f'restrict_{model_restriction}.dat')):
                 raise GammaLoopError(
-                    f"Restriction file 'restrict_{model_restriction}.dat' not found for model '{model_name}' in directory '{pjoin(model_directory,model_name)}'.")
+                    f"Restriction file 'restrict_{model_restriction}.dat' not found for model '{model_name}' in directory '{pjoin(model_directory, model_name)}'.")
             else:
                 param_card = ParamCard(
                     pjoin(model_restriction_dir, f'restrict_{model_restriction}.dat'))
