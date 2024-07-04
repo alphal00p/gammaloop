@@ -219,8 +219,7 @@ build_dependencies () {
 
         else
             echo "Building symbolica ...";
-
-            PYO3_PYTHON=$PYTHON3BIN cargo build --release --features=python_api >> ../dependency_build.log 2>&1
+            PYO3_PYTHON=$PYTHON3BIN cargo rustc --release --features=python_api --crate-type=cdylib >> ../dependency_build.log 2>&1
             RETCODE=$RETCODE+$?
             if [ ! $(($RETCODE)) == 0 ]
             then

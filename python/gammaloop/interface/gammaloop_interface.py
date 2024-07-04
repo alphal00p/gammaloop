@@ -986,7 +986,7 @@ class GammaLoop(object):
 
         self.sync_worker_with_output(args.no_sync)
 
-        res = self.rust_worker.inspect_integrand(
+        res: tuple[float, float] = self.rust_worker.inspect_integrand(
             args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
 
         return complex(res[0], res[1])

@@ -25,15 +25,16 @@ insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 
 
 [dependencies]
-# symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-
+#symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 symbolica = { version = "0.7.0" }
-# spenso = { version = "0.2.0", features = ["shadowing"] }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
+
+#spenso = { version = "0.2.0", features = ["shadowing"] }
+# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
+#     "shadowing",
+# ] }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "729930e", features = [
     "shadowing",
 ] }
-
-# spencer = { path = "../spencer" }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
@@ -128,6 +129,7 @@ similar.opt-level = 3
 [patch.crates-io]
 
 # spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-
 # spenso = { path = "../spenso" }
-symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
+
+symbolica = { git = "https://github.com/benruijl/symbolica", branch = "main" }
+#symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
