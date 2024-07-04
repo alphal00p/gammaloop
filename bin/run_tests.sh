@@ -4,7 +4,7 @@ RETCODE=0;
 
 run_rust_tests() {
     SYMBOLICA_LICENSE="${SYMBOLICA_LICENSE:-GAMMALOOP_USER}";
-    cargo test --release --features=binary --no-default-features -- --test-threads=1 "$@";
+    cargo test --features=binary --release --no-default-features -- --test-threads=1 "$@";
     # Run the tests using specific categories and showing live println()'s
     #cargo test --release --features=binary --no-default-features -- tests_inspect --test-threads=1 --nocapture
     #cargo test --release --features=binary --no-default-features -- tests_integral --test-threads=1 --nocapture

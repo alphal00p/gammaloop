@@ -1,9 +1,9 @@
+use crate::momentum::{FourMomentum, Polarization, Sign, SignOrZero};
 use crate::utils::{self, FloatLike, F};
 
 use ahash::{AHashMap, RandomState};
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
-use serde::de::value;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -14,7 +14,8 @@ use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
 use symbolica::atom::{Atom, AtomView, FunctionBuilder};
 
-use symbolica::domains::float::Complex;
+use spenso::Complex;
+use symbolica::domains::float::NumericalFloatLike;
 
 use symbolica::fun;
 use symbolica::printer::{AtomPrinter, PrintOptions};
@@ -349,6 +350,84 @@ impl Particle {
         }
     }
 
+    pub fn incoming_polarization_match<T: FloatLike>(
+        &self,
+        num: usize,
+        mom: &FourMomentum<F<T>>,
+    ) -> Vec<(Atom, Complex<F<T>>)> {
+        let mut out = vec![];
+
+        match self.spin {
+            2 => {
+                if self.pdg_code > 0 {
+                    let pol = self.incoming_polarization(mom);
+                    let (u1, u2, u3, u4) = (
+                        pol[0].clone(),
+                        pol[1].clone(),
+                        pol[2].clone(),
+                        pol[3].clone(),
+                    );
+                    out.push((Atom::parse(&format!("u{num}(0)")).unwrap(), u1));
+                    out.push((Atom::parse(&format!("u{num}(1)")).unwrap(), u2));
+                    out.push((Atom::parse(&format!("u{num}(2)")).unwrap(), u3));
+                    out.push((Atom::parse(&format!("u{num}(3)")).unwrap(), u4));
+                } else {
+                    let pol = self.incoming_polarization(mom);
+                    let (v1, v2, v3, v4) = (
+                        pol[0].clone(),
+                        pol[1].clone(),
+                        pol[2].clone(),
+                        pol[3].clone(),
+                    );
+                    out.push((Atom::parse(&format!("vbar{num}(0)")).unwrap(), v1));
+                    out.push((Atom::parse(&format!("vbar{num}(1)")).unwrap(), v2));
+                    out.push((Atom::parse(&format!("vbar{num}(2)")).unwrap(), v3));
+                    out.push((Atom::parse(&format!("vbar{num}(3)")).unwrap(), v4));
+                }
+            }
+            3 => {
+                let pol = self.incoming_polarization(mom);
+                let (e1, e2, e3, e4) = (
+                    pol[0].clone(),
+                    pol[1].clone(),
+                    pol[2].clone(),
+                    pol[3].clone(),
+                );
+                out.push((Atom::parse(&format!("ϵ{num}(0)")).unwrap(), e1));
+                out.push((Atom::parse(&format!("ϵ{num}(1)")).unwrap(), e2));
+                out.push((Atom::parse(&format!("ϵ{num}(2)")).unwrap(), e3));
+                out.push((Atom::parse(&format!("ϵ{num}(3)")).unwrap(), e4));
+            }
+            _ => {}
+        }
+        out
+    }
+
+    pub fn incoming_polarization<T: FloatLike>(
+        &self,
+        mom: &FourMomentum<F<T>>,
+    ) -> Polarization<Complex<F<T>>> {
+        let one: Complex<F<T>> = mom.temporal.value.one().into();
+        match self.spin {
+            1 => Polarization::scalar(one),
+            2 => {
+                if self.pdg_code > 0 {
+                    mom.u(Sign::Positive)
+                } else {
+                    mom.v(Sign::Positive).bar()
+                }
+            }
+            3 => {
+                if self.mass.value.is_none() {
+                    mom.pol(SignOrZero::Sign(Sign::Positive))
+                } else {
+                    mom.pol(SignOrZero::Sign(Sign::Negative))
+                }
+            }
+            i => panic!("Spin {}/2 not implemented", i - 1),
+        }
+    }
+
     pub fn outgoing_polarization_atom(&self, num: usize) -> Atom {
         let id = AbstractIndex::try_from(format!("out{}", num)).unwrap().0;
         match self.spin {
@@ -363,6 +442,84 @@ impl Particle {
             3 => Atom::parse(&format!("ϵbar{num}(lor(4,{id}))")).unwrap(),
             _ => Atom::parse("1").unwrap(),
         }
+    }
+
+    pub fn outgoing_polarization<T: FloatLike>(
+        &self,
+        mom: &FourMomentum<F<T>>,
+    ) -> Polarization<Complex<F<T>>> {
+        let one: Complex<F<T>> = mom.temporal.value.one().into();
+        match self.spin {
+            1 => Polarization::scalar(one),
+            2 => {
+                if self.pdg_code > 0 {
+                    mom.u(Sign::Negative).bar()
+                } else {
+                    mom.v(Sign::Negative)
+                }
+            }
+            3 => {
+                if self.mass.value.is_none() {
+                    mom.pol(SignOrZero::Zero)
+                } else {
+                    mom.pol(SignOrZero::Sign(Sign::Positive))
+                }
+            }
+            i => panic!("Spin {}/2 not implemented", i - 1),
+        }
+    }
+
+    pub fn outgoing_polarization_match<T: FloatLike>(
+        &self,
+        num: usize,
+        mom: &FourMomentum<F<T>>,
+    ) -> Vec<(Atom, Complex<F<T>>)> {
+        let mut out = vec![];
+
+        match self.spin {
+            2 => {
+                if self.pdg_code > 0 {
+                    let pol = self.outgoing_polarization(mom);
+                    let (ubar1, ubar2, ubar3, ubar4) = (
+                        pol[0].clone(),
+                        pol[1].clone(),
+                        pol[2].clone(),
+                        pol[3].clone(),
+                    );
+                    out.push((Atom::parse(&format!("ubar{num}(0)")).unwrap(), ubar1));
+                    out.push((Atom::parse(&format!("ubar{num}(1)")).unwrap(), ubar2));
+                    out.push((Atom::parse(&format!("ubar{num}(2)")).unwrap(), ubar3));
+                    out.push((Atom::parse(&format!("ubar{num}(3)")).unwrap(), ubar4));
+                } else {
+                    let pol = self.outgoing_polarization(mom);
+                    let (v1, v2, v3, v4) = (
+                        pol[0].clone(),
+                        pol[1].clone(),
+                        pol[2].clone(),
+                        pol[3].clone(),
+                    );
+                    out.push((Atom::parse(&format!("v{num}(0)")).unwrap(), v1));
+                    out.push((Atom::parse(&format!("v{num}(1)")).unwrap(), v2));
+                    out.push((Atom::parse(&format!("v{num}(2)")).unwrap(), v3));
+                    out.push((Atom::parse(&format!("v{num}(3)")).unwrap(), v4));
+                }
+            }
+            3 => {
+                let pol = self.outgoing_polarization(mom);
+                let (e1, e2, e3, e4) = (
+                    pol[0].clone(),
+                    pol[1].clone(),
+                    pol[2].clone(),
+                    pol[3].clone(),
+                );
+                out.push((Atom::parse(&format!("ϵbar{num}(0)")).unwrap(), e1));
+                out.push((Atom::parse(&format!("ϵbar{num}(1)")).unwrap(), e2));
+                out.push((Atom::parse(&format!("ϵbar{num}(2)")).unwrap(), e3));
+                out.push((Atom::parse(&format!("ϵbar{num}(3)")).unwrap(), e4));
+            }
+            _ => {}
+        }
+        out
     }
 }
 
@@ -602,19 +759,22 @@ impl Default for Model {
     }
 }
 impl Model {
-    pub fn substitute_model_params(&self, mut atom: Atom) -> Atom {
+    pub fn substitute_model_params(&self, atom: &Atom) -> Atom {
+        let mut sub_atom = atom.clone();
         for cpl in self.couplings.iter() {
             let [pattern, rhs] = cpl.rep_rule();
 
-            atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+            sub_atom =
+                sub_atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
         }
 
         for para in self.parameters.iter() {
             if let Some([pattern, rhs]) = para.rep_rule() {
-                atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+                sub_atom =
+                    sub_atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
             }
         }
-        atom
+        sub_atom
     }
 
     pub fn evaluate_couplings(&self, atom: Atom) -> Atom {
@@ -645,13 +805,12 @@ impl Model {
         }
     }
 
-    pub fn append_coupling_map<T: FloatLike>(&self, const_map: &mut AHashMap<Atom, Complex<F<T>>>) {
+    pub fn append_parameter_map(&self, const_map: &mut AHashMap<Atom, Complex<F<f64>>>) {
         // let mut atom = atom;
         for cpl in self.parameters.iter() {
             if let Some(value) = cpl.value {
-                let val = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
                 let key = Atom::parse(&cpl.name).unwrap();
-                const_map.insert(key, val);
+                const_map.insert(key, value);
             }
         }
     }

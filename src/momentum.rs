@@ -1,19 +1,30 @@
 use std::{
     fmt::{Display, LowerExp},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use spenso::{AbstractIndex, DenseTensor, NamedStructure, Representation, VecStructure};
+use log::debug;
+
+use serde::{Deserialize, Serialize};
+use spenso::{
+    arithmetic::ScalarMul, AbstractIndex, DenseTensor, FallibleAdd, FallibleMul, HasTensorData,
+    IndexLess, NamedStructure, RefZero, Representation, VecStructure,
+};
 use symbolica::{
-    atom::Atom,
+    atom::{Atom, Symbol},
     coefficient::Coefficient,
-    domains::{float::Real, rational::RationalField},
+    domains::{
+        float::{NumericalFloatComparison, NumericalFloatLike, Real},
+        rational::RationalField,
+    },
     poly::{polynomial::MultivariatePolynomial, Exponent},
 };
 
+use spenso::Complex;
+
 use crate::utils::{FloatLike, RefDefault, F};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct Energy<T> {
     pub value: T,
 }
@@ -194,6 +205,14 @@ impl<T> Energy<T> {
     // }
 }
 
+impl<T: RefZero> RefZero for Energy<T> {
+    fn ref_zero(&self) -> Self {
+        Energy {
+            value: self.value.ref_zero(),
+        }
+    }
+}
+
 impl Energy<Atom> {
     pub fn new_parametric(id: usize) -> Self {
         let value = Atom::parse(&format!("E_{}", id)).unwrap();
@@ -227,7 +246,7 @@ impl<T> From<T> for Energy<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct ThreeMomentum<T> {
     pub px: T,
     pub py: T,
@@ -300,6 +319,16 @@ impl<T: Real> ThreeMomentum<T> {
     }
 }
 
+impl<T: RefZero> RefZero for ThreeMomentum<T> {
+    fn ref_zero(&self) -> Self {
+        ThreeMomentum {
+            px: self.px.ref_zero(),
+            py: self.py.ref_zero(),
+            pz: self.pz.ref_zero(),
+        }
+    }
+}
+
 impl<T> ThreeMomentum<T> {
     pub fn new(px: T, py: T, pz: T) -> Self {
         ThreeMomentum { px, py, pz }
@@ -324,8 +353,50 @@ impl<T> ThreeMomentum<T> {
     }
 }
 
-impl<T: FloatLike> ThreeMomentum<T> {
-    pub fn rotate_mut(&mut self, alpha: T, beta: T, gamma: T) {
+impl<T: FloatLike> ThreeMomentum<F<T>> {
+    pub fn to_f64(&self) -> ThreeMomentum<F<f64>> {
+        ThreeMomentum {
+            px: F(self.px.to_f64()),
+            py: F(self.py.to_f64()),
+            pz: F(self.pz.to_f64()),
+        }
+    }
+    /// Compute the phi-angle separation with p2.
+    pub fn getdelphi(&self, p2: &ThreeMomentum<F<T>>) -> F<T> {
+        let pt1 = self.pt();
+        let pt2 = p2.pt();
+        if pt1.is_zero() {
+            return pt1.max_value();
+        }
+        if pt2.is_zero() {
+            return pt2.max_value();
+        }
+
+        let mut tmp = self.px.clone() * &p2.px + self.py.clone() * &p2.py;
+
+        tmp /= pt1 * pt2;
+        if tmp.norm() > tmp.one() + tmp.epsilon() {
+            panic!("Cosine larger than 1. in phase-space cuts.")
+        }
+        if tmp.norm() > tmp.one() {
+            (tmp.clone() / tmp.norm()).acos()
+        } else {
+            tmp.acos()
+        }
+    }
+
+    /// Compute the deltaR separation with momentum p2.
+    #[inline]
+    pub fn delta_r(&self, p2: &ThreeMomentum<F<T>>) -> F<T>
+    where
+        T: Real,
+    {
+        let delta_eta = self.pseudo_rap() - p2.pseudo_rap();
+        let delta_phi = self.getdelphi(p2);
+        (delta_eta.square() + delta_phi.square()).sqrt()
+    }
+
+    pub fn rotate_mut(&mut self, alpha: F<T>, beta: F<T>, gamma: F<T>) {
         let sin_alpha = alpha.sin();
         let cos_alpha = alpha.cos();
         let sin_beta = beta.sin();
@@ -350,7 +421,7 @@ impl<T: FloatLike> ThreeMomentum<T> {
             -sin_beta * &px + cos_beta.clone() * &sin_alpha * &py + cos_alpha * &cos_beta * &pz;
     }
 
-    pub fn rotate(&self, alpha: T, beta: T, gamma: T) -> Self {
+    pub fn rotate(&self, alpha: F<T>, beta: F<T>, gamma: F<T>) -> Self {
         let mut result = self.clone();
         result.rotate_mut(alpha, beta, gamma);
         result
@@ -358,13 +429,13 @@ impl<T: FloatLike> ThreeMomentum<T> {
 
     /// Compute transverse momentum.
     #[inline]
-    pub fn pt(&self) -> T {
+    pub fn pt(&self) -> F<T> {
         (self.px.square() + self.py.square()).sqrt()
     }
 
     /// Compute pseudorapidity.
     #[inline]
-    pub fn pseudo_rap(&self) -> T {
+    pub fn pseudo_rap(&self) -> F<T> {
         let pt = self.pt();
         if pt.less_than_epsilon() && self.pz.norm().less_than_epsilon() {
             if self.pz.positive() {
@@ -698,45 +769,7 @@ impl<T> ThreeMomentum<T> {
         }
     }
 
-    /// Compute the phi-angle separation with p2.
-    pub fn getdelphi(&self, p2: &ThreeMomentum<T>) -> T
-    where
-        T: FloatLike,
-    {
-        let pt1 = self.pt();
-        let pt2 = p2.pt();
-        if pt1.is_zero() {
-            return pt1.max_value();
-        }
-        if pt2.is_zero() {
-            return pt2.max_value();
-        }
-
-        let mut tmp = self.px.clone() * &p2.px + self.py.clone() * &p2.py;
-
-        tmp /= pt1 * pt2;
-        if tmp.norm() > tmp.one() + tmp.epsilon() {
-            panic!("Cosine larger than 1. in phase-space cuts.")
-        }
-        if tmp.norm() > tmp.one() {
-            (tmp.clone() / tmp.norm()).acos()
-        } else {
-            tmp.acos()
-        }
-    }
-
-    /// Compute the deltaR separation with momentum p2.
-    #[inline]
-    pub fn delta_r(&self, p2: &ThreeMomentum<T>) -> T
-    where
-        T: FloatLike,
-    {
-        let delta_eta = self.pseudo_rap() - p2.pseudo_rap();
-        let delta_phi = self.getdelphi(p2);
-        (delta_eta.square() + delta_phi.square()).sqrt()
-    }
-
-    pub fn norm(self) -> T
+    pub fn norm(&self) -> T
     where
         T: for<'a> Mul<&'a T, Output = T> + Add<T> + Real,
     {
@@ -807,10 +840,133 @@ impl<T> From<ThreeMomentum<T>> for (T, T, T) {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct FourMomentum<T, U = T> {
     pub temporal: Energy<U>,
     pub spatial: ThreeMomentum<T>,
+}
+
+impl<T: RefZero, U: RefZero> RefZero for FourMomentum<T, U> {
+    fn ref_zero(&self) -> Self {
+        FourMomentum {
+            temporal: self.temporal.ref_zero(),
+            spatial: self.spatial.ref_zero(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Polarization<T> {
+    tensor: DenseTensor<T, IndexLess>,
+}
+
+impl<T: FloatLike> Display for Polarization<F<T>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Pol: {}", self.tensor)
+    }
+}
+
+impl<T: FloatLike> Display for Polarization<Complex<F<T>>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Pol: {}", self.tensor)
+    }
+}
+
+impl<T> Polarization<T> {
+    pub fn scalar(value: T) -> Self {
+        let structure = IndexLess::new(vec![]);
+        Polarization {
+            tensor: DenseTensor {
+                data: vec![value],
+                structure,
+            },
+        }
+    }
+
+    pub fn lorentz(value: [T; 4]) -> Self {
+        let structure = IndexLess::new(vec![Representation::Lorentz(4.into())]);
+        let [v1, v2, v3, v4] = value;
+        Polarization {
+            tensor: DenseTensor {
+                data: vec![v1, v2, v3, v4],
+                structure,
+            },
+        }
+    }
+
+    pub fn bispinor(value: [T; 4]) -> Self {
+        let structure = IndexLess::new(vec![Representation::Bispinor(4.into())]);
+        let [v1, v2, v3, v4] = value;
+        Polarization {
+            tensor: DenseTensor {
+                data: vec![v1, v2, v3, v4],
+                structure,
+            },
+        }
+    }
+}
+
+impl<T> Index<usize> for Polarization<T> {
+    type Output = T;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.tensor[index.into()]
+    }
+}
+
+impl<T> RefZero for Polarization<T>
+where
+    T: RefZero + Clone,
+{
+    fn ref_zero(&self) -> Self {
+        Polarization {
+            tensor: self.tensor.ref_zero(),
+        }
+    }
+}
+
+impl<T, U, Out> Mul<&U> for Polarization<T>
+where
+    T: FallibleMul<U, Output = Out>,
+{
+    type Output = Polarization<Out>;
+    fn mul(self, rhs: &U) -> Self::Output {
+        Polarization {
+            tensor: self.tensor.scalar_mul(rhs).unwrap(),
+        }
+    }
+}
+
+impl<T, U, Out> FallibleAdd<Polarization<U>> for Polarization<T>
+where
+    T: FallibleAdd<U, Output = Out>,
+{
+    type Output = Polarization<Out>;
+    fn add_fallible(&self, rhs: &Polarization<U>) -> Option<Self::Output> {
+        Some(Polarization {
+            tensor: self.tensor.add_fallible(&rhs.tensor)?,
+        })
+    }
+}
+
+impl<T: Neg<Output = T>> Neg for Polarization<T> {
+    type Output = Polarization<T>;
+    fn neg(self) -> Self::Output {
+        Polarization {
+            tensor: -self.tensor,
+        }
+    }
+}
+
+impl<T> Polarization<T> {
+    fn cast<U>(&self) -> Polarization<U>
+    where
+        T: Clone,
+        U: Clone + From<T>,
+    {
+        Polarization {
+            tensor: self.tensor.cast(),
+        }
+    }
 }
 
 impl<T: FloatLike, U: FloatLike> From<FourMomentum<T, U>> for FourMomentum<F<T>, F<U>> {
@@ -877,25 +1033,20 @@ impl<T> FourMomentum<T, T> {
         }
     }
 
-    pub fn to_f64(&self) -> FourMomentum<f64, f64>
-    where
-        T: FloatLike,
-    {
-        FourMomentum {
-            temporal: Energy {
-                value: self.temporal.value.to_f64(),
-            },
-            spatial: self.spatial.into_f64(),
-        }
-    }
-
-    pub fn square(self) -> T
+    pub fn square(&self) -> T
     where
         T: for<'a> Mul<&'a T, Output = T> + Add<T, Output = T> + Clone + Sub<T, Output = T>,
     {
         let temporal = self.temporal.value.clone();
         let spatial = self.spatial.norm_squared();
         temporal * &self.temporal.value - spatial
+    }
+
+    pub fn norm(&self) -> T
+    where
+        T: Real,
+    {
+        self.square().sqrt()
     }
 
     pub fn from_args(energy: T, px: T, py: T, pz: T) -> Self {
@@ -937,13 +1088,14 @@ impl<T> FourMomentum<T, T> {
     pub fn into_dense_named(
         self,
         index: AbstractIndex,
-        name: &str,
-    ) -> DenseTensor<T, NamedStructure>
+        name: Symbol,
+        num: usize,
+    ) -> DenseTensor<T, NamedStructure<Symbol, usize>>
     where
         T: Clone,
     {
         let structure = VecStructure::new(vec![(index, Representation::Lorentz(4.into())).into()])
-            .to_named(name);
+            .to_named(name, Some(num));
         DenseTensor::from_data(
             &[
                 self.temporal.value,
@@ -968,7 +1120,7 @@ impl<T> FourMomentum<T, T> {
 
     pub fn boost(&self, boost_vector: &FourMomentum<T>) -> FourMomentum<T>
     where
-        T: FloatLike,
+        T: Real + NumericalFloatComparison,
     {
         let b2 = boost_vector.spatial.norm_squared();
         let one = b2.one();
@@ -989,29 +1141,236 @@ impl<T> FourMomentum<T, T> {
             boost_vector.spatial.pz.mul_add(&factor, &self.spatial.pz),
         )
     }
+}
 
+impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
     /// Compute the phi-angle separation with p2.
-    pub fn getdelphi(&self, p2: &FourMomentum<T>) -> T
+    pub fn getdelphi(&self, p2: &FourMomentum<F<T>>) -> F<T>
     where
-        T: FloatLike,
+        T: Real,
     {
         self.spatial.getdelphi(&p2.spatial)
     }
 
     /// Compute the deltaR separation with momentum p2.
     #[inline]
-    pub fn delta_r(&self, p2: &FourMomentum<T>) -> T
+    pub fn delta_r(&self, p2: &FourMomentum<F<T>>) -> F<T>
     where
-        T: FloatLike,
+        T: Real,
     {
         self.spatial.delta_r(&p2.spatial)
     }
 
-    pub fn pt(&self) -> T
+    pub fn pt(&self) -> F<T>
+    where
+        T: Real,
+    {
+        self.spatial.pt()
+    }
+
+    pub fn to_f64(&self) -> FourMomentum<F<f64>, F<f64>> {
+        FourMomentum {
+            temporal: Energy {
+                value: F(self.temporal.value.to_f64()),
+            },
+            spatial: self.spatial.to_f64().cast(),
+        }
+    }
+
+    pub fn pol_one(&self) -> Polarization<F<T>>
     where
         T: FloatLike,
     {
-        self.spatial.pt()
+        // definition from helas_ref A.2
+
+        debug!("pol_one in: {}", self);
+        let pt = self.pt();
+        let p = self.spatial.norm();
+
+        let (e1, e2, e3) = if pt.is_zero() {
+            (pt.one(), pt.zero(), pt.zero())
+        } else {
+            (
+                &self.spatial.px * &self.spatial.pz / (&pt * &p),
+                &self.spatial.pz * &self.spatial.pz / (&pt * &p),
+                -(&pt / &p),
+            )
+        };
+
+        debug!(
+            " (pt.zero(), e1, e2, e3) {} {} {} {}",
+            pt.zero(),
+            e1,
+            e2,
+            e3
+        );
+
+        let pol = Polarization::lorentz([pt.zero(), e1, e2, e3]);
+
+        debug!("pol :{pol}");
+        pol
+    }
+
+    pub fn pol_two(&self) -> Polarization<F<T>>
+    where
+        T: FloatLike,
+    {
+        // definition from helas_ref A.2
+        let pt = self.pt();
+        let (e1, e2, e3) = if pt.is_zero() {
+            (pt.zero(), pt.one(), pt.zero())
+        } else {
+            (-(&self.spatial.py / &pt), &self.spatial.px / &pt, pt.zero())
+        };
+        Polarization::lorentz([pt.zero(), e1, e2, e3])
+    }
+
+    pub fn pol_three(&self) -> Polarization<F<T>>
+    where
+        T: FloatLike,
+    {
+        // definition from helas_ref A.2
+        let m = self.norm();
+        let p = self.spatial.norm();
+        let emp = &self.temporal.value / (&m * &p);
+        let e0 = p.square() / &self.temporal.value;
+        let e1 = &self.spatial.px / &emp;
+        let e2 = &self.spatial.py / &emp;
+        let e3 = &self.spatial.pz / &emp;
+
+        Polarization::lorentz([e0, e1, e2, e3])
+    }
+
+    pub fn pol(&self, lambda: SignOrZero) -> Polarization<Complex<F<T>>> {
+        if lambda.is_zero() {
+            self.pol_three().cast()
+        } else {
+            let one = self.temporal.value.one();
+            let sqrt_2_inv: Complex<F<T>> = (&one + &one).sqrt().inv().into();
+            let i = one.i();
+
+            i.add_fallible(&i).unwrap();
+
+            let eone: Polarization<Complex<F<T>>> = lambda * self.pol_one().cast();
+
+            let etwo: Polarization<Complex<F<T>>> = self.pol_two().cast();
+
+            (eone.add_fallible(&(-(etwo * &i)))).unwrap() * &sqrt_2_inv
+        }
+    }
+
+    pub fn omega(&self, lambda: Sign) -> Complex<F<T>> {
+        match lambda {
+            Sign::Positive => (&self.temporal.value + self.spatial.norm()).complex_sqrt(),
+            Sign::Negative => (&self.temporal.value - self.spatial.norm()).complex_sqrt(),
+        }
+    }
+
+    pub fn u(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
+        let zero: Complex<F<T>> = self.temporal.value.zero().into();
+        Polarization::bispinor(match lambda {
+            Sign::Positive => [
+                zero.clone(),
+                self.omega(Sign::Negative),
+                zero.clone(),
+                self.omega(Sign::Positive),
+            ],
+            Sign::Negative => [
+                -self.omega(Sign::Positive),
+                zero.clone(),
+                self.omega(Sign::Negative),
+                zero.clone(),
+            ],
+        })
+    }
+
+    pub fn v(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
+        let zero: Complex<F<T>> = self.temporal.value.zero().into();
+        Polarization::bispinor(match lambda {
+            Sign::Negative => [
+                zero.clone(),
+                self.omega(Sign::Negative),
+                zero.clone(),
+                -self.omega(Sign::Positive),
+            ],
+            Sign::Positive => [
+                self.omega(Sign::Positive),
+                zero.clone(),
+                -self.omega(Sign::Negative),
+                zero.clone(),
+            ],
+        })
+    }
+}
+
+impl<T: FloatLike> Polarization<Complex<F<T>>> {
+    pub fn bar(&self) -> Self {
+        Polarization {
+            tensor: self.tensor.map(Complex::conj),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum Sign {
+    Positive,
+    Negative,
+}
+
+impl<T: Neg<Output = T>> Mul<T> for Sign {
+    type Output = T;
+    fn mul(self, rhs: T) -> Self::Output {
+        match self {
+            Sign::Positive => rhs,
+            Sign::Negative => -rhs,
+        }
+    }
+}
+
+impl Neg for Sign {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        match self {
+            Sign::Positive => Sign::Negative,
+            Sign::Negative => Sign::Positive,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum SignOrZero {
+    Sign(Sign),
+    Zero,
+}
+
+impl SignOrZero {
+    fn is_zero(&self) -> bool {
+        matches!(self, SignOrZero::Zero)
+    }
+
+    #[allow(dead_code)]
+    fn is_sign(&self) -> bool {
+        matches!(self, SignOrZero::Sign(_))
+    }
+}
+
+impl<T: Neg<Output = T> + RefZero> Mul<T> for SignOrZero {
+    type Output = T;
+    fn mul(self, rhs: T) -> Self::Output {
+        match self {
+            SignOrZero::Sign(s) => s * rhs,
+            SignOrZero::Zero => rhs.ref_zero(),
+        }
+    }
+}
+
+impl Neg for SignOrZero {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        match self {
+            SignOrZero::Sign(s) => SignOrZero::Sign(-s),
+            SignOrZero::Zero => SignOrZero::Zero,
+        }
     }
 }
 
@@ -1204,5 +1563,33 @@ impl<T: Display, U: Display> Display for FourMomentum<T, U> {
 impl<T: LowerExp, U: LowerExp> LowerExp for FourMomentum<T, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:e}, {:e}", self.temporal, self.spatial)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use spenso::{FallibleAdd, IteratableTensor, TensorStructure};
+
+    use crate::utils::F;
+
+    use super::FourMomentum;
+
+    #[test]
+    fn polarization() {
+        let mom = FourMomentum::from_args(F(1.), F(1.), F(0.), F(0.));
+
+        let pol = mom.pol_one();
+        let pol2 = pol.clone();
+
+        print!("{}", pol.add_fallible(&pol2).unwrap());
+
+        println!("pol_one: {:?}", pol);
+
+        let structure = pol.tensor.structure.clone();
+
+        println!("{}", structure.flat_index(&[2]).unwrap());
+
+        pol.tensor
+            .iter_flat()
+            .for_each(|(i, d)| println!("{}{}", i, d));
     }
 }

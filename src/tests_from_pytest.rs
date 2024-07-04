@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 use crate::cff::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
+use crate::gammaloop_integrand::DefaultSample;
 use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
 use crate::model::Model;
 use crate::momentum::{FourMomentum, ThreeMomentum};
@@ -13,11 +14,12 @@ use itertools::{FormatWith, Itertools};
 use lorentz_vector::LorentzVector;
 use rayon::prelude::IndexedParallelIterator;
 use serde;
+use spenso::Complex;
 use std::fs::File;
 use std::path::Path;
 use std::{clone, env};
 use symbolica;
-use symbolica::domains::float::Complex;
+use symbolica::domains::float::Complex as SymComplex;
 
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-12);
@@ -58,9 +60,11 @@ mod tests_scalar_massless_triangle {
     use lorentz_vector::LorentzVector;
     use rayon::prelude::IndexedParallelIterator;
     use smartstring::SmartString;
-    use symbolica::domains::float::Complex;
+    use spenso::Complex;
+    use symbolica::domains::float::Complex as SymComplex;
 
     use crate::{
+        gammaloop_integrand::DefaultSample,
         graph::EdgeType,
         momentum::{FourMomentum, ThreeMomentum},
         observables::AFBSettings,
@@ -92,10 +96,10 @@ mod tests_scalar_massless_triangle {
         graph.generate_loop_momentum_bases();
 
         graph.generate_cff();
-        graph.generate_numerator(&model);
+        graph.process_numerator(&model);
         graph.numerator_substitute_model_params(&model);
         // graph.evaluate_model_params(&model);
-        graph.generate_coupling_map(&model);
+        graph.process_numerator(&model);
         assert_eq!(
             graph
                 .derived_data
@@ -124,7 +128,13 @@ mod tests_scalar_massless_triangle {
 
         let energy_product = graph.compute_energy_product(&[k], &[p1, p2]);
 
-        let cff_res = graph.evaluate_cff_expression(&[k], &[p1, p2]) / energy_product;
+        let sample = DefaultSample {
+            loop_moms: vec![k],
+            external_moms: vec![p1, p2],
+            jacobian: F(1.0),
+        };
+
+        let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
 
         // println!("res = {:+e}", res);
 
@@ -203,6 +213,10 @@ fn pytest_scalar_fishnet_2x2() {
     //println!("number of lmbs: {}", n_lmb);
 
     graph.generate_cff();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
     graph.generate_ltd();
 
     for basis in graph
@@ -237,13 +251,19 @@ fn pytest_scalar_fishnet_2x2() {
     let p2_f128: FourMomentum<F<f128>> = p2.cast().higher();
     let p3_f128: FourMomentum<F<f128>> = p3.cast().higher();
 
-    let loop_moms_f128 = [k1_f128, k2_f128, k3_f128, k4_f128];
-    let externals_f128 = [p1_f128, p2_f128, p3_f128];
+    let loop_moms_f128 = vec![k1_f128, k2_f128, k3_f128, k4_f128];
+    let externals_f128 = vec![p1_f128, p2_f128, p3_f128];
 
     let energy_product = graph.compute_energy_product(&loop_moms_f128, &externals_f128);
 
-    let cff_res = graph.evaluate_cff_expression(&loop_moms_f128, &externals_f128) / &energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms_f128, &externals_f128) / &energy_product;
+    let sample = DefaultSample {
+        loop_moms: loop_moms_f128,
+        external_moms: externals_f128,
+        jacobian: F(1.0),
+    };
+
+    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
 
     let absolute_truth: Complex<F<f128>> = Complex::new(
         F::<f128>::from_f64(0.000019991301832169422),
@@ -306,11 +326,21 @@ fn pytest_scalar_sunrise() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
     graph.generate_loop_momentum_bases();
     graph.generate_cff();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
     graph.generate_ltd();
 
     let energy_product = graph.compute_energy_product(&[k1, k2], &[p1]);
 
-    let cff_res = graph.evaluate_cff_expression(&[k1, k2], &[p1]) / energy_product;
+    let sample = DefaultSample {
+        loop_moms: vec![k1, k2],
+        external_moms: vec![p1],
+        jacobian: F(1.0),
+    };
+
+    let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&[k1, k2], &[p1]) / energy_product;
 
     println!("cff_res = {:+e}", cff_res);
@@ -346,6 +376,16 @@ fn pytest_scalar_fishnet_2x3() {
 
     // generate cff
     amplitude.amplitude_graphs[0].graph.generate_cff();
+    amplitude.amplitude_graphs[0]
+        .graph
+        .process_numerator(&model);
+    amplitude.amplitude_graphs[0]
+        .graph
+        .numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    amplitude.amplitude_graphs[0]
+        .graph
+        .process_numerator(&model);
     amplitude.amplitude_graphs[0].graph.generate_ltd();
 
     let externals: Vec<FourMomentum<F<f128>>> = (0..3)
@@ -375,9 +415,15 @@ fn pytest_scalar_fishnet_2x3() {
 
     // let before_cff = std::time::Instant::now();
 
+    let sample = DefaultSample {
+        loop_moms: loop_moms.clone(),
+        external_moms: externals.clone(),
+        jacobian: F(1.0),
+    };
+
     let cff_res = amplitude.amplitude_graphs[0]
         .graph
-        .evaluate_cff_expression(&loop_moms, &externals);
+        .evaluate_cff_expression(&sample);
 
     // let cff_duration = before_cff.elapsed();
     // println!("cff_duration: {}", cff_duration.as_micros());
@@ -422,6 +468,10 @@ fn pytest_scalar_cube() {
     graph.generate_loop_momentum_bases();
     graph.generate_cff();
     graph.generate_ltd();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
 
     let ext = graph
         .edges
@@ -462,8 +512,14 @@ fn pytest_scalar_cube() {
         );
     }
 
+    let sample = DefaultSample {
+        loop_moms: loop_momenta.clone(),
+        external_moms: external_momenta.clone(),
+        jacobian: F(1.0),
+    };
+
     let ltd_res = graph.evaluate_ltd_expression(&loop_momenta, &external_momenta);
-    let cff_res = graph.evaluate_cff_expression(&loop_momenta, &external_momenta);
+    let cff_res = graph.evaluate_cff_expression(&sample);
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(&cff_res.re, &ltd_res.re, &ltd_comparison_tolerance128);
 
@@ -501,11 +557,22 @@ fn pytest_scalar_bubble() {
 
     graph.generate_ltd();
     graph.generate_cff();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
 
     let energy_product = graph.compute_energy_product(&[k], &[p1, p1]);
 
     let ltd_res = graph.evaluate_ltd_expression(&[k], &[p1]) / energy_product;
-    let cff_res = graph.evaluate_cff_expression(&[k], &[p1]) / energy_product;
+
+    let sample = DefaultSample {
+        loop_moms: vec![k],
+        external_moms: vec![p1],
+        jacobian: F(1.0),
+    };
+
+    let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
 
     let absolute_truth = Complex::new(F(0.), -F(0.052955801144924944));
 
@@ -539,6 +606,10 @@ fn pytest_massless_scalar_box() {
 
     graph.generate_ltd();
     graph.generate_cff();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
 
     let p1: FourMomentum<F<f128>> =
         FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.)
@@ -553,7 +624,7 @@ fn pytest_massless_scalar_box() {
             .cast()
             .higher();
 
-    let externals = [p1, p2, p3];
+    let externals = vec![p1, p2, p3];
 
     let absolute_truth = Complex::new(
         F::<f128>::from_f64(0.0),
@@ -567,12 +638,18 @@ fn pytest_massless_scalar_box() {
     )
     .cast();
 
-    let loop_moms = [k];
+    let loop_moms = vec![k];
 
     let energy_product = graph.compute_energy_product(&loop_moms, &externals);
 
-    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+    let sample = DefaultSample {
+        loop_moms,
+        external_moms: externals,
+        jacobian: F(1.0),
+    };
+
+    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -622,6 +699,10 @@ fn pytest_scalar_double_triangle() {
 
     graph.generate_ltd();
     graph.generate_cff();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
 
     let absolute_truth = Complex::new(F(0.00009115369712210525), F(0.)).higher();
 
@@ -636,13 +717,19 @@ fn pytest_scalar_double_triangle() {
         .cast()
         .higher();
 
-    let loop_moms = [k0, k1];
-    let externals = [p1];
+    let loop_moms = vec![k0, k1];
+    let externals = vec![p1];
 
     let energy_product = graph.compute_energy_product(&loop_moms, &externals);
 
-    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+    let sample = DefaultSample {
+        loop_moms,
+        external_moms: externals,
+        jacobian: F(1.0),
+    };
+
+    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -693,6 +780,10 @@ fn pytest_scalar_mercedes() {
 
     graph.generate_ltd();
     graph.generate_cff();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
 
     let absolute_truth = Complex::new(F(0.0), F(2.3081733247975594e-13)).higher();
 
@@ -703,13 +794,18 @@ fn pytest_scalar_mercedes() {
     let p1: FourMomentum<F<f128>> = FourMomentum::from_args(1., 12., 13., 14.).cast().higher();
     let p2: FourMomentum<F<f128>> = FourMomentum::from_args(2., 15., 17., 19.).cast().higher();
 
-    let loop_moms = [k0, k1, k2];
-    let externals = [p1, p2];
+    let loop_moms = vec![k0, k1, k2];
+    let externals = vec![p1, p2];
 
     let energy_product = graph.compute_energy_product(&loop_moms, &externals);
-
-    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+
+    let sample = DefaultSample {
+        loop_moms,
+        external_moms: externals,
+        jacobian: F(1.0),
+    };
+    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -762,6 +858,10 @@ fn pytest_scalar_triangle_box() {
 
     graph.generate_ltd();
     graph.generate_cff();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
 
     let absolute_truth = Complex::new(
         F::<f128>::from_f64(-1.264_354_742_167_213_3e-7),
@@ -782,13 +882,18 @@ fn pytest_scalar_triangle_box() {
         .cast()
         .higher();
 
-    let loop_moms = [k0, k1];
-    let externals = [p1, p2];
+    let loop_moms = vec![k0, k1];
+    let externals = vec![p1, p2];
 
     let energy_product = graph.compute_energy_product(&loop_moms, &externals);
-
-    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+    let sample = DefaultSample {
+        loop_moms,
+        external_moms: externals,
+        jacobian: F(1.0),
+    };
+
+    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -841,6 +946,10 @@ fn pytest_scalar_isopod() {
 
     graph.generate_ltd();
     graph.generate_cff();
+    graph.process_numerator(&model);
+    graph.numerator_substitute_model_params(&model);
+    // graph.evaluate_model_params(&model);
+    graph.process_numerator(&model);
 
     let absolute_truth = Complex::new(F(0.0), F(-2.9299520787585056e-23)).higher();
 
@@ -865,14 +974,21 @@ fn pytest_scalar_isopod() {
 
     let energy_product = graph.compute_energy_product(&loop_moms, &externals);
 
-    let cff_res = graph.evaluate_cff_expression(&loop_moms, &externals) / &energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
+    let sample = DefaultSample {
+        loop_moms: loop_moms.to_vec(),
+        external_moms: externals.to_vec(),
+        jacobian: F(1.0),
+    };
+
+    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
 
     println!("cff_res = {:+e}", cff_res);
     println!("ltd_res = {:+e}", ltd_res);
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
+    println!("cff_res.re = {:+e}", cff_res.re);
     assert_approx_eq(
         &cff_res.re,
         &absolute_truth.re,
@@ -909,7 +1025,7 @@ fn pytest_lbl_box() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_numerator(&model);
+    graph.process_numerator(&model);
     println!();
 
     // for v in graph
@@ -956,5 +1072,5 @@ fn pytest_lbl_box() {
     //     }
     // }
 
-    println!("{}", graph.derived_data.numerator.unwrap());
+    println!("{}", graph.derived_data.numerator.unwrap().expression);
 }
