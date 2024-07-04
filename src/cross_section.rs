@@ -597,6 +597,7 @@ impl Amplitude {
             amplitude_graph.graph.generate_cff();
             amplitude_graph.graph.generate_ltd();
             amplitude_graph.graph.generate_tropical_subgraph_table();
+            amplitude_graph.graph.generate_numerator(model);
         }
 
         // Then dumped the new yaml representation of the amplitude now containing all that additional information

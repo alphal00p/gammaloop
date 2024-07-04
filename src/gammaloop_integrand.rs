@@ -9,18 +9,18 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
+use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::tropical::tropical_parameterization::{self};
 use crate::utils::{
-    cast_complex, cast_lorentz_vector, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
-    global_parameterize, FloatLike,
+    f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
+    PrecisionUpgradable, F,
 };
 use crate::{DiscreteGraphSamplingSettings, IntegratedPhase, SamplingSettings, Settings};
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
-use lorentz_vector::LorentzVector;
-use num::traits::{Inv, Zero};
-use num::Complex;
+use spenso::IsZero;
+use symbolica::domains::float::{Complex, NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 
 /// Trait to capture the common behaviour of amplitudes and cross sections
@@ -33,7 +33,11 @@ trait GraphIntegrand {
     fn get_multi_channeling_channels(&self) -> &[usize];
 
     /// Most basic form of evaluating the 3D representation of the underlying loop integral
-    fn evaluate<T: FloatLike>(&self, sample: &DefaultSample<T>, settings: &Settings) -> Complex<T>;
+    fn evaluate<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+    ) -> Complex<F<T>>;
 
     /// Evaluate in a single LMB-channel
     fn evaluate_channel<T: FloatLike>(
@@ -42,7 +46,7 @@ trait GraphIntegrand {
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
-    ) -> Complex<T>;
+    ) -> Complex<F<T>>;
 
     /// Evaluate a sum over LMB-channels
     fn evaluate_channel_sum<T: FloatLike>(
@@ -50,14 +54,14 @@ trait GraphIntegrand {
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
-    ) -> Complex<T>;
+    ) -> Complex<F<T>>;
 
     /// Evaluate to use when tropical sampling, raises the power of the onshell energies in front of the 3D representation according to the chosen weights.
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
         settings: &Settings,
-    ) -> Complex<T>;
+    ) -> Complex<F<T>>;
 }
 
 impl GraphIntegrand for AmplitudeGraph {
@@ -77,7 +81,9 @@ impl GraphIntegrand for AmplitudeGraph {
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
+        let one = sample.one();
+        let zero = sample.zero();
         // reference to the list of all lmbs
         let lmb_list = self
             .get_graph()
@@ -128,27 +134,28 @@ impl GraphIntegrand for AmplitudeGraph {
             .map(|(i, _)| i);
 
         let energy_product = virtual_energies
-            .map(|i| Into::<T>::into(2.) * onshell_energies[i])
-            .fold(T::one(), |acc, x| acc * x);
+            .map(|i| one.from_i64(2) * &onshell_energies[i])
+            .fold(one.clone(), |acc, x| acc * x);
 
         let lmb_products = channels_lmbs.map(|basis| {
             basis
                 .basis
                 .iter()
-                .fold(T::one(), |acc, i| acc * onshell_energies[*i])
+                .fold(one.clone(), |acc, i| acc * &onshell_energies[*i])
         });
 
         let denominator = lmb_products
-            .map(|x| x.powf(-Into::<T>::into(alpha)) * energy_product)
-            .sum::<T>();
+            .map(|x| x.powf(-F::<T>::from_f64(alpha)) * &energy_product)
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(zero.clone());
 
         let multichanneling_numerator = Complex::new(
             lmb_list[channel]
                 .basis
                 .iter()
-                .fold(T::one(), |acc, i| acc * onshell_energies[*i])
-                .powf(-Into::<T>::into(alpha)),
-            T::zero(),
+                .fold(one.clone(), |acc, i| acc * &onshell_energies[*i])
+                .powf(-F::<T>::from_f64(alpha)),
+            sample.zero(),
         );
 
         multichanneling_numerator * rep3d / denominator
@@ -160,7 +167,9 @@ impl GraphIntegrand for AmplitudeGraph {
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
+        let zero = sample.zero();
+
         // a bit annoying that this is duplicated from evaluate_channel
         let lmb_list = self
             .get_graph()
@@ -178,11 +187,16 @@ impl GraphIntegrand for AmplitudeGraph {
         channels
             .iter()
             .map(|&i| self.evaluate_channel(i, sample, alpha, settings))
-            .sum()
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(zero.clone().into())
     }
 
     #[inline]
-    fn evaluate<T: FloatLike>(&self, sample: &DefaultSample<T>, settings: &Settings) -> Complex<T> {
+    fn evaluate<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
         let rep3d = if settings.general.use_ltd {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
@@ -203,7 +217,8 @@ impl GraphIntegrand for AmplitudeGraph {
         &self,
         sample: &DefaultSample<T>,
         settings: &Settings,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> where {
+        let one = sample.one();
         let rep3d = if settings.general.use_ltd {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
@@ -226,7 +241,7 @@ impl GraphIntegrand for AmplitudeGraph {
         let virtual_loop_energies = self
             .get_graph()
             .get_loop_edges_iterator()
-            .map(|(index, _)| onshell_energies[index]);
+            .map(|(index, _)| onshell_energies[index].clone());
 
         let weight_iterator = tropical_subgraph_table
             .tropical_graph
@@ -236,16 +251,16 @@ impl GraphIntegrand for AmplitudeGraph {
 
         let energy_product = virtual_loop_energies
             .zip(weight_iterator)
-            .map(|(energy, weight)| energy.powf(Into::<T>::into(2. * weight - 1.)))
-            .fold(T::one(), |acc, x| acc * x); // should we put Product and Sum in FloatLike?
+            .map(|(energy, weight)| energy.powf(F::<T>::from_f64(2. * weight - 1.)))
+            .fold(one.clone(), |acc, x| acc * x); // should we put Product and Sum in FloatLike?
 
         let tree_like_energies = self
             .get_graph()
             .get_tree_level_edges_iterator()
-            .map(|(index, _)| onshell_energies[index]);
+            .map(|(index, _)| onshell_energies[index].clone());
 
         let tree_product =
-            tree_like_energies.fold(T::one(), |acc, x| acc * Into::<T>::into(2.) * x);
+            tree_like_energies.fold(one.clone(), |acc, x| acc * F::<T>::from_f64(2.) * x);
 
         rep3d * energy_product / tree_product
     }
@@ -267,7 +282,7 @@ impl GraphIntegrand for SuperGraph {
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
         // sum over cuts
         todo!()
     }
@@ -278,14 +293,18 @@ impl GraphIntegrand for SuperGraph {
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
         // sum over channels
         todo!()
     }
 
     #[allow(unused)]
     #[inline]
-    fn evaluate<T: FloatLike>(&self, sample: &DefaultSample<T>, settings: &Settings) -> Complex<T> {
+    fn evaluate<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
         // sum over channels
         todo!()
     }
@@ -296,7 +315,7 @@ impl GraphIntegrand for SuperGraph {
         &self,
         sample: &DefaultSample<T>,
         settings: &Settings,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
         // sum over channels
         todo!()
     }
@@ -319,20 +338,23 @@ fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
 
 /// Evaluate the sample correctly according to the sample type
 #[inline]
-fn evaluate<T: GraphIntegrand, F: FloatLike>(
-    graph_integrands: &[T],
-    sample: &GammaLoopSample<F>,
+fn evaluate<I: GraphIntegrand, T: FloatLike>(
+    graph_integrands: &[I],
+    sample: &GammaLoopSample<T>,
     settings: &Settings,
-) -> Complex<F> {
+) -> Complex<F<T>> {
+    let zero = sample.zero();
     match sample {
         GammaLoopSample::Default(sample) => graph_integrands
             .iter()
             .map(|g| g.evaluate(sample, settings))
-            .sum::<Complex<F>>(),
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(zero.clone().into()),
         GammaLoopSample::MultiChanneling { alpha, sample } => graph_integrands
             .iter()
             .map(|g| g.evaluate_channel_sum(sample, *alpha, settings))
-            .sum::<Complex<F>>(),
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(zero.clone().into()),
         GammaLoopSample::DiscreteGraph { graph_id, sample } => {
             let graph = &graph_integrands[*graph_id];
             match sample {
@@ -352,7 +374,7 @@ fn evaluate<T: GraphIntegrand, F: FloatLike>(
 }
 
 /// Create a havana grid for a single graph
-fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> Grid<f64> {
+fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> Grid<F<f64>> {
     let num_loops = get_loop_count(graph_integrand);
 
     let n_edges = graph_integrand
@@ -411,7 +433,7 @@ pub struct GammaLoopIntegrand {
 
 impl GraphIntegrands {
     /// Create a havana grid for a list of graphs
-    fn create_grid(&self, settings: &Settings) -> Grid<f64> {
+    fn create_grid(&self, settings: &Settings) -> Grid<F<f64>> {
         match settings.sampling {
             SamplingSettings::DiscreteGraphs(_) => match self {
                 GraphIntegrands::Amplitude(graphs) => {
@@ -448,18 +470,18 @@ impl GraphIntegrands {
 }
 
 impl HasIntegrand for GammaLoopIntegrand {
-    fn create_grid(&self) -> Grid<f64> {
+    fn create_grid(&self) -> Grid<F<f64>> {
         self.graph_integrands.create_grid(&self.settings)
     }
 
     #[allow(unused_variables)]
     fn evaluate_sample(
         &self,
-        sample: &symbolica::numerical_integration::Sample<f64>,
-        wgt: f64,
+        sample: &symbolica::numerical_integration::Sample<F<f64>>,
+        wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: f64,
+        max_eval: F<f64>,
     ) -> EvaluationResult {
         let start_evaluate_sample = Instant::now();
 
@@ -479,7 +501,7 @@ impl HasIntegrand for GammaLoopIntegrand {
         let rotated_sample_point = sample_point.get_rotated_sample(rotation_method);
 
         // 1 / (2 pi )^L
-        let prefactor = self.compute_2pi_factor().inv();
+        let prefactor = F(self.compute_2pi_factor().inv());
 
         // iterate over the stability levels, break if the point is stable
         for stability_level in stability_iterator {
@@ -591,13 +613,13 @@ impl HasIntegrand for GammaLoopIntegrand {
         let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan();
 
         if is_nan {
-            integrand_result = Complex::new(0., 0.);
+            integrand_result = Complex::new_zero();
         }
 
         let evaluation_metadata = EvaluationMetaData {
             rep3d_evaluation_time: *duration,
             parameterization_time,
-            relative_instability_error: Complex::new(0., 0.),
+            relative_instability_error: Complex::new_zero(),
             highest_precision: *precision,
             total_timing: start_evaluate_sample.elapsed(),
             is_nan,
@@ -640,7 +662,7 @@ impl GammaLoopIntegrand {
         sample_point: &GammaLoopSample<f64>,
         rotated_sample_point: &GammaLoopSample<f64>,
         precision: Precision,
-    ) -> (Complex<f64>, Complex<f64>, Duration) {
+    ) -> (Complex<F<f64>>, Complex<F<f64>>, Duration) {
         // measure timing if we are below the max number if we are below the max number
         let start = std::time::Instant::now();
         // cast the momenta to the relevant precision
@@ -665,8 +687,8 @@ impl GammaLoopIntegrand {
                 }
             },
             Precision::Quad => {
-                let sample_point_f128 = sample_point.cast_sample::<f128::f128>();
-                let rotated_sample_point_f128 = rotated_sample_point.cast_sample::<f128::f128>();
+                let sample_point_f128 = sample_point.higher_precision();
+                let rotated_sample_point_f128 = rotated_sample_point.higher_precision();
 
                 match &self.graph_integrands {
                     GraphIntegrands::Amplitude(graph_integrands) => {
@@ -675,7 +697,7 @@ impl GammaLoopIntegrand {
                         let rotated_result =
                             evaluate(graph_integrands, &rotated_sample_point_f128, &self.settings);
 
-                        (cast_complex(result), cast_complex(rotated_result))
+                        (result.lower(), rotated_result.lower())
                     }
                     GraphIntegrands::CrossSection(graph_integrands) => {
                         let result = evaluate(graph_integrands, &sample_point_f128, &self.settings);
@@ -683,7 +705,7 @@ impl GammaLoopIntegrand {
                         let rotated_result =
                             evaluate(graph_integrands, &sample_point_f128, &self.settings);
 
-                        (cast_complex(result), cast_complex(rotated_result))
+                        (result.lower(), rotated_result.lower())
                     }
                 }
             }
@@ -714,9 +736,9 @@ impl GammaLoopIntegrand {
             // overwrite the stability settings if use_f128 is enabled
             [StabilityLevelSetting {
                 precision: Precision::Quad,
-                required_precision_for_re: 1e-5,
-                required_precision_for_im: 1e-5,
-                escalate_for_large_weight_threshold: -1.,
+                required_precision_for_re: F(1e-5),
+                required_precision_for_im: F(1e-5),
+                escalate_for_large_weight_threshold: F(-1.),
             }]
             .iter()
         } else {
@@ -726,7 +748,7 @@ impl GammaLoopIntegrand {
 
     /// Perform map from unit hypercube to 3-momenta
     #[inline]
-    fn parameterize(&self, sample_point: &Sample<f64>) -> GammaLoopSample<f64> {
+    fn parameterize(&self, sample_point: &Sample<F<f64>>) -> GammaLoopSample<f64> {
         match &self.settings.sampling {
             SamplingSettings::Default => {
                 let xs = unwrap_cont_sample(sample_point);
@@ -777,29 +799,30 @@ impl GammaLoopIntegrand {
                             )
                             .unwrap();
 
-                        let (loop_moms, jacobian) =
-                            if loop_moms_f64[0].t.is_nan() || jacobian_f64.is_nan() {
-                                let xs_f128 = xs.iter().map(|x| f128::f128::from(*x)).collect_vec();
-                                let external_moms_f128 =
-                                    external_moms.iter().map(cast_lorentz_vector).collect_vec();
+                        let (loop_moms, jacobian) = if jacobian_f64.is_nan() {
+                            let xs_f128 = xs.iter().map(|x| F::<f128>::from_ff64(*x)).collect_vec();
+                            let external_moms_f128 =
+                                external_moms.iter().map(FourMomentum::higher).collect_vec();
 
-                                let (loop_moms_f128, jacobian_f128) =
-                                    tropical_parameterization::generate_tropical_sample(
-                                        &xs_f128,
-                                        &external_moms_f128,
-                                        graph,
-                                        self.settings.general.debug,
-                                    )
-                                    .unwrap();
+                            let (loop_moms_f128, jacobian_f128) =
+                                tropical_parameterization::generate_tropical_sample(
+                                    &xs_f128,
+                                    &external_moms_f128,
+                                    graph,
+                                    self.settings.general.debug,
+                                )
+                                .unwrap();
 
-                                let loop_moms =
-                                    loop_moms_f128.iter().map(cast_lorentz_vector).collect_vec();
-                                let jacobian = Into::<f64>::into(jacobian_f128);
+                            let loop_moms = loop_moms_f128
+                                .iter()
+                                .map(ThreeMomentum::lower)
+                                .collect_vec();
+                            let jacobian = (jacobian_f128).into_ff64();
 
-                                (loop_moms, jacobian)
-                            } else {
-                                (loop_moms_f64, jacobian_f64)
-                            };
+                            (loop_moms, jacobian)
+                        } else {
+                            (loop_moms_f64, jacobian_f64)
+                        };
 
                         let default_sample = DefaultSample {
                             loop_moms,
@@ -833,7 +856,7 @@ impl GammaLoopIntegrand {
 
     /// Default parametrize is basically everything except tropical sampling.
     #[inline]
-    fn default_parametrize(&self, xs: &[f64]) -> DefaultSample<f64> {
+    fn default_parametrize(&self, xs: &[F<f64>]) -> DefaultSample<f64> {
         let (external_moms, pdf) = self.settings.kinematics.externals.get_externals(xs);
         let (loop_moms_vec, param_jacobian) = global_parameterize(
             xs,
@@ -843,8 +866,8 @@ impl GammaLoopIntegrand {
         );
 
         let loop_moms = loop_moms_vec
-            .iter()
-            .map(|x| LorentzVector::from_args(0., x[0], x[1], x[2]))
+            .into_iter()
+            .map(ThreeMomentum::from)
             .collect_vec();
 
         let jacobian = param_jacobian * pdf;
@@ -860,14 +883,14 @@ impl GammaLoopIntegrand {
     #[inline]
     fn stability_check(
         &self,
-        result: Complex<f64>,
-        rotated_result: Complex<f64>,
+        result: Complex<F<f64>>,
+        rotated_result: Complex<F<f64>>,
         stability_settings: &StabilityLevelSetting,
         integrated_phase: IntegratedPhase,
-        max_eval: f64,
-        wgt: f64,
-    ) -> (Complex<f64>, bool) {
-        let average = (result + rotated_result) / 2.;
+        max_eval: F<f64>,
+        wgt: F<f64>,
+    ) -> (Complex<F<f64>>, bool) {
+        let average = (result + rotated_result) / F(2.);
 
         let (
             result_for_comparison,
@@ -880,8 +903,10 @@ impl GammaLoopIntegrand {
             IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
         };
 
-        let error = if result_for_comparison.is_zero() && rotated_result_for_comparison.is_zero() {
-            0.
+        let error = if IsZero::is_zero(&result_for_comparison)
+            && IsZero::is_zero(&rotated_result_for_comparison)
+        {
+            F(0.)
         } else {
             ((result_for_comparison - rotated_result_for_comparison) / average_for_comparison).abs()
         };
@@ -892,8 +917,8 @@ impl GammaLoopIntegrand {
             IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
         };
 
-        let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
-            && max_wgt_for_comparison != 0.
+        let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > F(0.)
+            && max_wgt_for_comparison.is_non_zero()
         {
             average_for_comparison.abs() * wgt
                 < stability_settings.escalate_for_large_weight_threshold
@@ -947,11 +972,27 @@ enum GammaLoopSample<T: FloatLike> {
 }
 
 impl<T: FloatLike> GammaLoopSample<T> {
+    pub fn zero(&self) -> F<T> {
+        match self {
+            GammaLoopSample::Default(sample) => sample.zero(),
+            GammaLoopSample::MultiChanneling { sample, .. } => sample.zero(),
+            GammaLoopSample::DiscreteGraph { sample, .. } => sample.zero(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn one(&self) -> F<T> {
+        match self {
+            GammaLoopSample::Default(sample) => sample.one(),
+            GammaLoopSample::MultiChanneling { sample, .. } => sample.one(),
+            GammaLoopSample::DiscreteGraph { sample, .. } => sample.one(),
+        }
+    }
     /// Rotation for stability checks
     #[inline]
     fn get_rotated_sample(
         &self,
-        rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
+        rotation_function: impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>>,
     ) -> Self {
         match self {
             GammaLoopSample::Default(sample) => {
@@ -971,8 +1012,12 @@ impl<T: FloatLike> GammaLoopSample<T> {
     }
 
     /// Cast the sample to a different precision
+    #[allow(dead_code)]
     #[inline]
-    fn cast_sample<T2: FloatLike + From<T>>(&self) -> GammaLoopSample<T2> {
+    fn cast_sample<T2: FloatLike>(&self) -> GammaLoopSample<T2>
+    where
+        F<T2>: From<F<T>>,
+    {
         match self {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.cast_sample()),
             GammaLoopSample::MultiChanneling { alpha, sample } => {
@@ -984,6 +1029,45 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
                 graph_id: *graph_id,
                 sample: sample.cast_sample(),
+            },
+        }
+    }
+
+    fn higher_precision(&self) -> GammaLoopSample<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.higher_precision()),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.higher_precision(),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
+                graph_id: *graph_id,
+                sample: sample.higher_precision(),
+            },
+        }
+    }
+
+    #[allow(dead_code)]
+    fn lower_precision(&self) -> GammaLoopSample<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.lower_precision()),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.lower_precision(),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
+                graph_id: *graph_id,
+                sample: sample.lower_precision(),
             },
         }
     }
@@ -1003,24 +1087,36 @@ impl<T: FloatLike> GammaLoopSample<T> {
 /// External momenta are part of the sample in order to facilitate the use of non-constant externals.
 #[derive(Debug, Clone)]
 struct DefaultSample<T: FloatLike> {
-    loop_moms: Vec<LorentzVector<T>>,
-    external_moms: Vec<LorentzVector<T>>,
-    jacobian: f64,
+    loop_moms: Vec<ThreeMomentum<F<T>>>,
+    external_moms: Vec<FourMomentum<F<T>>>,
+    jacobian: F<f64>,
 }
 
 impl<T: FloatLike> DefaultSample<T> {
+    pub fn one(&self) -> F<T> {
+        self.loop_moms[0].px.one()
+    }
+
+    pub fn zero(&self) -> F<T> {
+        self.loop_moms[0].px.zero()
+    }
+
     #[inline]
     /// Rotation for stability checks
     fn get_rotated_sample(
         &self,
-        rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
+        rotation_function: impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>>,
     ) -> Self {
         Self {
             loop_moms: self.loop_moms.iter().map(&rotation_function).collect_vec(),
             external_moms: self
                 .external_moms
                 .iter()
-                .map(&rotation_function)
+                .cloned()
+                .map(|mut p| {
+                    p.spatial = rotation_function(&p.spatial);
+                    p
+                })
                 .collect_vec(),
             jacobian: self.jacobian,
         }
@@ -1028,17 +1124,54 @@ impl<T: FloatLike> DefaultSample<T> {
 
     /// Cast the sample to a different precision
     #[inline]
-    fn cast_sample<T2: FloatLike + From<T>>(&self) -> DefaultSample<T2> {
+    fn cast_sample<T2: FloatLike>(&self) -> DefaultSample<T2>
+    where
+        F<T2>: From<F<T>>,
+    {
+        DefaultSample {
+            loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect_vec(),
+            external_moms: self
+                .external_moms
+                .iter()
+                .map(FourMomentum::cast)
+                .collect_vec(),
+            jacobian: self.jacobian,
+        }
+    }
+
+    fn higher_precision(&self) -> DefaultSample<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
         DefaultSample {
             loop_moms: self
                 .loop_moms
                 .iter()
-                .map(cast_lorentz_vector::<T, T2>)
+                .map(ThreeMomentum::higher)
                 .collect_vec(),
             external_moms: self
                 .external_moms
                 .iter()
-                .map(cast_lorentz_vector::<T, T2>)
+                .map(FourMomentum::higher)
+                .collect_vec(),
+            jacobian: self.jacobian,
+        }
+    }
+
+    fn lower_precision(&self) -> DefaultSample<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
+        DefaultSample {
+            loop_moms: self
+                .loop_moms
+                .iter()
+                .map(ThreeMomentum::lower)
+                .collect_vec(),
+            external_moms: self
+                .external_moms
+                .iter()
+                .map(FourMomentum::lower)
                 .collect_vec(),
             jacobian: self.jacobian,
         }
@@ -1063,11 +1196,28 @@ enum DiscreteGraphSample<T: FloatLike> {
 }
 
 impl<T: FloatLike> DiscreteGraphSample<T> {
+    pub fn zero(&self) -> F<T> {
+        match self {
+            DiscreteGraphSample::Default(sample) => sample.zero(),
+            DiscreteGraphSample::MultiChanneling { sample, .. } => sample.zero(),
+            DiscreteGraphSample::Tropical(sample) => sample.zero(),
+            DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample.zero(),
+        }
+    }
+
+    pub fn one(&self) -> F<T> {
+        match self {
+            DiscreteGraphSample::Default(sample) => sample.one(),
+            DiscreteGraphSample::MultiChanneling { sample, .. } => sample.one(),
+            DiscreteGraphSample::Tropical(sample) => sample.one(),
+            DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample.one(),
+        }
+    }
     /// Rotation for stability checks
     #[inline]
     fn get_rotated_sample(
         &self,
-        rotation_function: impl Fn(&LorentzVector<T>) -> LorentzVector<T>,
+        rotation_function: impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>>,
     ) -> Self {
         match self {
             DiscreteGraphSample::Default(sample) => {
@@ -1096,7 +1246,10 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 
     /// Cast the sample to a different precision
     #[inline]
-    fn cast_sample<T2: FloatLike + From<T>>(&self) -> DiscreteGraphSample<T2> {
+    fn cast_sample<T2: FloatLike>(&self) -> DiscreteGraphSample<T2>
+    where
+        F<T2>: From<F<T>>,
+    {
         match self {
             DiscreteGraphSample::Default(sample) => {
                 DiscreteGraphSample::Default(sample.cast_sample())
@@ -1122,6 +1275,64 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         }
     }
 
+    fn higher_precision(&self) -> DiscreteGraphSample<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
+        match self {
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.higher_precision())
+            }
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.higher_precision(),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.higher_precision())
+            }
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: *alpha,
+                channel_id: *channel_id,
+                sample: sample.higher_precision(),
+            },
+        }
+    }
+
+    fn lower_precision(&self) -> DiscreteGraphSample<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
+        match self {
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.lower_precision())
+            }
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.lower_precision(),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.lower_precision())
+            }
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: *alpha,
+                channel_id: *channel_id,
+                sample: sample.lower_precision(),
+            },
+        }
+    }
+
     /// Retrieve the default sample which is contained in all types
     #[inline]
     fn get_default_sample(&self) -> &DefaultSample<T> {
@@ -1136,7 +1347,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 
 // helper functions can maybe moved to utils
 #[inline]
-fn unwrap_cont_sample(sample: &Sample<f64>) -> &[f64] {
+fn unwrap_cont_sample(sample: &Sample<F<f64>>) -> &[F<f64>] {
     if let Sample::Continuous(_, xs) = sample {
         xs
     } else {
@@ -1145,7 +1356,7 @@ fn unwrap_cont_sample(sample: &Sample<f64>) -> &[f64] {
 }
 
 #[inline]
-fn unwrap_single_discrete_sample(sample: &Sample<f64>) -> (usize, &[f64]) {
+fn unwrap_single_discrete_sample(sample: &Sample<F<f64>>) -> (usize, &[F<f64>]) {
     if let Sample::Discrete(_, index, Some(cont_sample)) = sample {
         (*index, unwrap_cont_sample(cont_sample))
     } else {
@@ -1154,7 +1365,7 @@ fn unwrap_single_discrete_sample(sample: &Sample<f64>) -> (usize, &[f64]) {
 }
 
 #[inline]
-fn unwrap_double_discrete_sample(sample: &Sample<f64>) -> (usize, (usize, &[f64])) {
+fn unwrap_double_discrete_sample(sample: &Sample<F<f64>>) -> (usize, (usize, &[F<f64>])) {
     if let Sample::Discrete(_, index, Some(discrete_sample)) = sample {
         (*index, unwrap_single_discrete_sample(discrete_sample))
     } else {

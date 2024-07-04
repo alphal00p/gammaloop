@@ -2,16 +2,20 @@ use std::time::Duration;
 
 use colored::Colorize;
 use log::info;
-use num::Complex;
 use serde::{Deserialize, Serialize};
+use symbolica::domains::float::{Complex, ConstructibleFloat};
 
-use crate::{observables::Event, utils::format_evaluation_time, Precision};
+use crate::{
+    observables::Event,
+    utils::{format_evaluation_time, F},
+    Precision,
+};
 
 /// The result of an evaluation of the integrand
 #[derive(Clone)]
 pub struct EvaluationResult {
-    pub integrand_result: Complex<f64>,
-    pub integrator_weight: f64,
+    pub integrand_result: Complex<F<f64>>,
+    pub integrator_weight: F<f64>,
     pub event_buffer: Vec<Event>,
     pub evaluation_metadata: EvaluationMetaData,
 }
@@ -19,17 +23,10 @@ pub struct EvaluationResult {
 impl EvaluationResult {
     pub fn zero() -> Self {
         Self {
-            integrand_result: Complex::new(0.0, 0.0),
-            integrator_weight: 0.0,
+            integrand_result: Complex::new_zero(),
+            integrator_weight: F(0.0),
             event_buffer: Vec::new(),
-            evaluation_metadata: EvaluationMetaData {
-                total_timing: Duration::ZERO,
-                rep3d_evaluation_time: Duration::ZERO,
-                parameterization_time: Duration::ZERO,
-                relative_instability_error: Complex::new(0.0, 0.0),
-                highest_precision: Precision::Double,
-                is_nan: false,
-            },
+            evaluation_metadata: EvaluationMetaData::new_empty(),
         }
     }
 }
@@ -40,7 +37,7 @@ pub struct EvaluationMetaData {
     pub total_timing: Duration,
     pub rep3d_evaluation_time: Duration,
     pub parameterization_time: Duration,
-    pub relative_instability_error: Complex<f64>,
+    pub relative_instability_error: Complex<F<f64>>,
     pub highest_precision: Precision,
     pub is_nan: bool,
 }
@@ -51,7 +48,7 @@ impl EvaluationMetaData {
             total_timing: Duration::ZERO,
             rep3d_evaluation_time: Duration::ZERO,
             parameterization_time: Duration::ZERO,
-            relative_instability_error: Complex::new(0.0, 0.0),
+            relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan: false,
         }
@@ -65,7 +62,7 @@ pub struct StatisticsCounter {
     sum_rep3d_evaluation_time: Duration,
     sum_parameterization_time: Duration,
     sum_total_evaluation_time: Duration,
-    sum_relative_instability_error: (f64, f64),
+    sum_relative_instability_error: (F<f64>, F<f64>),
     num_double_precision_evals: usize,
     num_quadruple_precision_evals: usize,
     num_nan_evals: usize,
@@ -128,7 +125,7 @@ impl StatisticsCounter {
         Self {
             sum_rep3d_evaluation_time: Duration::ZERO,
             sum_parameterization_time: Duration::ZERO,
-            sum_relative_instability_error: (0.0, 0.0),
+            sum_relative_instability_error: (F(0.0), F(0.0)),
             sum_total_evaluation_time: Duration::ZERO,
             num_evals: 0,
             num_double_precision_evals: 0,
@@ -167,10 +164,10 @@ impl StatisticsCounter {
     }
 
     /// Get the average relative error computed during instability checks
-    pub fn get_avg_instabillity_error(&self) -> (f64, f64) {
+    pub fn get_avg_instabillity_error(&self) -> (F<f64>, F<f64>) {
         (
-            self.sum_relative_instability_error.0 / self.num_evals as f64,
-            self.sum_relative_instability_error.1 / self.num_evals as f64,
+            self.sum_relative_instability_error.0 / F::<f64>::new_from_usize(self.num_evals),
+            self.sum_relative_instability_error.1 / F::<f64>::new_from_usize(self.num_evals),
         )
     }
 

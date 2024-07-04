@@ -1,8 +1,9 @@
-use crate::utils;
-use ahash::RandomState;
+use crate::utils::{self, FloatLike, F};
+
+use ahash::{AHashMap, RandomState};
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
-use num::Complex;
+use serde::de::value;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -11,7 +12,10 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
-use symbolica::atom::{Atom, FunctionBuilder};
+use symbolica::atom::{Atom, AtomView, FunctionBuilder};
+
+use symbolica::domains::float::Complex;
+
 use symbolica::fun;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::State;
@@ -405,7 +409,7 @@ pub struct SerializableParameter {
     lhacode: Option<Vec<usize>>,
     nature: ParameterNature,
     parameter_type: ParameterType,
-    value: Option<(f64, f64)>,
+    value: Option<(F<f64>, F<f64>)>,
     expression: Option<SmartString<LazyCompact>>,
 }
 
@@ -434,7 +438,7 @@ pub struct Parameter {
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
     pub parameter_type: ParameterType,
-    pub value: Option<Complex<f64>>,
+    pub value: Option<Complex<F<f64>>>,
     pub expression: Option<Atom>,
 }
 
@@ -598,6 +602,59 @@ impl Default for Model {
     }
 }
 impl Model {
+    pub fn substitute_model_params(&self, mut atom: Atom) -> Atom {
+        for cpl in self.couplings.iter() {
+            let [pattern, rhs] = cpl.rep_rule();
+
+            atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+        }
+
+        for para in self.parameters.iter() {
+            if let Some([pattern, rhs]) = para.rep_rule() {
+                atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+            }
+        }
+        atom
+    }
+
+    pub fn evaluate_couplings(&self, atom: Atom) -> Atom {
+        // let mut atom = atom;
+        // for cpl in self.couplings.iter() {
+        //     if let Some(value) = cpl.value {
+        //         let pat = Atom::parse(&cpl.name).unwrap().into_pattern();
+
+        //         let re = Atom::new_num(value);
+        //         atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+        //     }
+        //     let [pattern, rhs] = cpl.rep_rule();
+        //     atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+        // }
+        atom
+    }
+
+    pub fn append_coupling_eval<'a, T: FloatLike>(
+        &'a self,
+        const_map: &mut HashMap<AtomView<'a>, Complex<F<T>>>,
+    ) {
+        // let mut atom = atom;
+        for cpl in self.couplings.iter() {
+            if let Some(value) = cpl.value {
+                let val = Complex::new(F::<T>::from_f64(value.re), F::<T>::from_f64(value.im));
+                const_map.insert(cpl.expression.as_view(), val);
+            }
+        }
+    }
+
+    pub fn append_coupling_map<T: FloatLike>(&self, const_map: &mut AHashMap<Atom, Complex<F<T>>>) {
+        // let mut atom = atom;
+        for cpl in self.parameters.iter() {
+            if let Some(value) = cpl.value {
+                let val = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
+                let key = Atom::parse(&cpl.name).unwrap();
+                const_map.insert(key, val);
+            }
+        }
+    }
     pub fn is_empty(&self) -> bool {
         self.name == "ModelNotLoaded" || self.particles.is_empty()
     }
