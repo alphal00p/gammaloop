@@ -348,8 +348,10 @@ impl CounterTerm {
         let dampening_factor = (-r_minus_rstar * r_minus_rstar / (e_cm * e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
 
         let singularity_dampener = if dampen_integrable_singularity {
-            (T::one() - rstar.powi(4) / (radius * (Into::<T>::into(2.) * rstar - radius)).powi(2))
-                .exp()
+            (T::one()
+                - (rstar * rstar * rstar * rstar
+                    / (rstar * rstar - r_minus_rstar * r_minus_rstar).powi(2)))
+            .exp()
         } else {
             T::one()
         };
