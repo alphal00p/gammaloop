@@ -12,7 +12,7 @@ use color_eyre::Report;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use symbolica::representations::Atom;
+use symbolica::atom::Atom;
 
 use log::debug;
 
@@ -736,7 +736,7 @@ impl CFFIntermediateGraph {
                 }
             }
 
-            current_vertices = vertices_found_in_previous_iteration.clone();
+            current_vertices.clone_from(&vertices_found_in_previous_iteration);
             vertices_found_in_previous_iteration.clear();
         }
 

@@ -26,8 +26,8 @@ insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 
 [dependencies]
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-symbolica = { git = "https://github.com/alphal00p/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso" }
+symbolica = { version = "0.5.0" }
+spenso = { version = "0.1.1", features = ["shadowing"] }
 # spencer = { path = "../spencer" }
 
 serde = { version = "1.0", features = ["derive"] }
@@ -94,7 +94,7 @@ pathfinding = "4.9.1"
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
 optional = true
-version = "0.19"
+version = "0.21"
 
 [build-dependencies]
 pyo3-build-config = "*"
@@ -120,6 +120,5 @@ fail-on-warnings = []
 insta.opt-level = 3
 similar.opt-level = 3
 
-
-[patch."https://github.com/alphal00p/symbolica"]
+[patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
