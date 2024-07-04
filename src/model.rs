@@ -356,7 +356,7 @@ impl Particle {
                     Atom::parse(&format!("v{num}(bis(4,{id}))")).unwrap()
                 }
             }
-            3 => Atom::parse(&format!("ϵbar{num}(lor(4,{id}))")).unwrap(),
+            3 => Atom::parse(&format!("ϵ̅{num}(lor(4,{id}))")).unwrap(),
             _ => Atom::parse("1").unwrap(),
         }
     }

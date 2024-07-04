@@ -1,0 +1,26 @@
+---
+source: src/uv/tests.rs
+expression: inv
+---
+Involution(
+  inv: [
+    (None, Source((Some(()), 1))),
+    (None, Sink(0)),
+    (None, Source((Some(()), 3))),
+    (None, Sink(2)),
+    (None, Source((Some(()), 5))),
+    (None, Sink(4)),
+    (None, Source((Some(()), 7))),
+    (None, Sink(6)),
+    (None, Source((Some(()), 9))),
+    (None, Sink(8)),
+    (None, Identity(Some(()))),
+    (None, Identity(Some(()))),
+    (None, Source((Some(()), 13))),
+    (None, Sink(12)),
+    (None, Source((Some(()), 15))),
+    (None, Sink(14)),
+    (None, Source((Some(()), 17))),
+    (None, Sink(16)),
+  ],
+)

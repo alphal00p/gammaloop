@@ -68,7 +68,7 @@ duplicate = "1.0.0"
 rustc-hash = "1.1.0"
 petgraph = "0.6.4"
 enum-try-as-inner = "0.1.1"
-indexmap = "2.2.2"
+indexmap = { version = "2.2.2", features = ["serde"] }
 nohash-hasher = "0.2.0"
 
 permutation = "0.4.1"
@@ -86,6 +86,10 @@ treena = "0.0.5"
 serde_json = "1.0.115"
 ctrlc = "3.4.4"
 constcat = "0.5.0"
+bitvec = { version = "1.0.1", features = ["serde"] }
+anyhow = { version = "1.0.82", features = ["backtrace"] }
+thiserror = "1.0.58"
+pathfinding = "4.9.1"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -115,7 +119,6 @@ fail-on-warnings = []
 [profile.dev.package]
 insta.opt-level = 3
 similar.opt-level = 3
-
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }

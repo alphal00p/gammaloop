@@ -28,6 +28,8 @@ pub mod tests_from_pytest;
 pub mod tropical;
 pub mod utils;
 
+pub mod uv;
+
 use color_eyre::{Help, Report};
 #[allow(unused)]
 use colored::Colorize;
