@@ -1,7 +1,7 @@
 use colored::Colorize;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use symbolica::domains::float::Complex;
+use spenso::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::Sample;
 

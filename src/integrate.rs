@@ -17,7 +17,6 @@ use crate::evaluation_result::EvaluationResult;
 use crate::evaluation_result::StatisticsCounter;
 use crate::integrands::HasIntegrand;
 use crate::observables::Event;
-use crate::observables::SerializableEvent;
 use crate::utils;
 use crate::utils::format_sample;
 use crate::utils::F;
@@ -32,6 +31,7 @@ use crate::{IntegratedPhase, IntegrationResult};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use rayon::prelude::*;
+use spenso::Complex;
 use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -39,7 +39,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
-use symbolica::domains::float::Complex;
 use tabled::{Style, Table, Tabled};
 
 const N_INTEGRAND_ACCUMULATORS: usize = 2;
@@ -68,6 +67,7 @@ pub struct IntegralResult {
 
 /// struct to keep track of state, used in the havana_integrate function
 /// the idea is to save this to disk after each iteration, so that the integration can be resumed
+
 pub struct IntegrationState {
     pub num_points: usize,
     pub integral: StatisticsAccumulator<F<f64>>,
@@ -665,6 +665,7 @@ pub enum SampleInput {
     },
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum BatchIntegrateOutput {
     Default(Vec<Complex<F<f64>>>, Vec<Sample<F<f64>>>),
     Accumulator(
@@ -673,123 +674,21 @@ pub enum BatchIntegrateOutput {
     ),
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum SerializableBatchIntegrateOutput {
-    Default(Vec<(F<f64>, F<f64>)>, Vec<Sample<F<f64>>>),
-    Accumulator(
-        (StatisticsAccumulator<F<f64>>, StatisticsAccumulator<F<f64>>),
-        Grid<F<f64>>,
-    ),
-}
-
-impl SerializableBatchIntegrateOutput {
-    pub fn from_batch_integrate_output(batch_integrate_output: &BatchIntegrateOutput) -> Self {
-        match batch_integrate_output {
-            BatchIntegrateOutput::Default(integrand_values, samples) => Self::Default(
-                integrand_values.iter().map(|c| (c.re, c.im)).collect(),
-                samples.clone(),
-            ),
-            BatchIntegrateOutput::Accumulator((real_accumulator, imag_accumulator), grid) => {
-                Self::Accumulator(
-                    (real_accumulator.clone(), imag_accumulator.clone()),
-                    grid.clone(),
-                )
-            }
-        }
-    }
-
-    pub fn into_batch_integrate_output(self) -> BatchIntegrateOutput {
-        match self {
-            Self::Default(integrand_values, samples) => BatchIntegrateOutput::Default(
-                integrand_values
-                    .into_iter()
-                    .map(|(re, im)| Complex::new(re, im))
-                    .collect(),
-                samples,
-            ),
-            Self::Accumulator((real_accumulator, imag_accumulator), grid) => {
-                BatchIntegrateOutput::Accumulator((real_accumulator, imag_accumulator), grid)
-            }
-        }
-    }
-}
-
 /// Different ways of processing events, EventList is a list of events, Histogram does accumulation of events on the worker nodes, so the
 /// master node only has to merge the histograms.
+#[derive(Serialize, Deserialize)]
 pub enum EventOutput {
     None,
     EventList { events: Vec<Event> },
     Histogram { histograms: Vec<()> }, // placeholder for the actual histograms
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum SerializableEventOutput {
-    None,
-    EventList { events: Vec<SerializableEvent> },
-    Histogram { histograms: Vec<()> },
-}
-
-impl SerializableEventOutput {
-    pub fn from_event_output(event_output: &EventOutput) -> Self {
-        match event_output {
-            EventOutput::None => Self::None,
-            EventOutput::EventList { events } => Self::EventList {
-                events: events.iter().map(SerializableEvent::from_event).collect(),
-            },
-            EventOutput::Histogram { histograms } => Self::Histogram {
-                histograms: histograms.iter().map(|_| ()).collect(),
-            },
-        }
-    }
-
-    pub fn into_event_output(self) -> EventOutput {
-        match self {
-            Self::None => EventOutput::None,
-            Self::EventList { events } => EventOutput::EventList {
-                events: events
-                    .into_iter()
-                    .map(SerializableEvent::into_event)
-                    .collect(),
-            },
-            Self::Histogram { histograms } => EventOutput::Histogram {
-                histograms: histograms.into_iter().map(|_| ()).collect(),
-            },
-        }
-    }
-}
-
 /// The result of evaluating a batch of points
+#[derive(Serialize, Deserialize)]
 pub struct BatchResult {
     pub statistics: StatisticsCounter,
     pub integrand_data: BatchIntegrateOutput,
     pub event_data: EventOutput,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SerializableBatchResult {
-    pub statistics: StatisticsCounter,
-    pub integrand_data: SerializableBatchIntegrateOutput,
-    pub event_data: SerializableEventOutput,
-}
-
-impl SerializableBatchResult {
-    pub fn from_batch_result(result: BatchResult) -> Self {
-        Self {
-            statistics: result.statistics,
-            integrand_data: SerializableBatchIntegrateOutput::from_batch_integrate_output(
-                &result.integrand_data,
-            ),
-            event_data: SerializableEventOutput::from_event_output(&result.event_data),
-        }
-    }
-
-    pub fn into_batch_result(self) -> BatchResult {
-        BatchResult {
-            statistics: self.statistics,
-            integrand_data: self.integrand_data.into_batch_integrate_output(),
-            event_data: self.event_data.into_event_output(),
-        }
-    }
 }
 
 /// Input for the batch_integrate function, created by the master node

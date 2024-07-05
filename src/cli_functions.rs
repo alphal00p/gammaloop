@@ -1,25 +1,23 @@
+use crate::{
+    cross_section::Amplitude,
+    inspect::inspect,
+    integrands::{integrand_factory, HasIntegrand},
+    integrate::{self, havana_integrate, SerializableBatchIntegrateInput, UserData},
+    model::Model,
+    utils::{print_banner, F, VERSION},
+    Integrand, Settings,
+};
 use clap::{App, Arg, SubCommand};
 use color_eyre::Report;
 use colored::Colorize;
 use eyre::eyre;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
+use spenso::Complex;
 use std::env;
-use symbolica::{domains::float::Complex, numerical_integration::Sample};
-
-use crate::{
-    cross_section::Amplitude,
-    inspect::inspect,
-    integrands::{integrand_factory, HasIntegrand},
-    integrate::{
-        self, havana_integrate, SerializableBatchIntegrateInput, SerializableBatchResult, UserData,
-    },
-    model::Model,
-    utils::{print_banner, F, VERSION},
-    Integrand, Settings,
-};
 use std::{fs, time::Instant};
 use std::{path::PathBuf, str::FromStr};
+use symbolica::numerical_integration::Sample;
 
 pub fn cli(args: &Vec<String>) -> Result<(), Report> {
     let matches = App::new("gammaLoop")
@@ -383,8 +381,8 @@ fn batch_branch(
     let batch_result = integrate::batch_integrate(&integrand, batch_integrate_input);
 
     // save result
-    let serializable_batch_result = SerializableBatchResult::from_batch_result(batch_result);
-    let batch_result_bytes = bincode::serialize(&serializable_batch_result)?;
+
+    let batch_result_bytes = bincode::serialize(&batch_result)?;
     fs::write(output_name, batch_result_bytes)?;
 
     Ok(())

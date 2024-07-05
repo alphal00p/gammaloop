@@ -19,8 +19,9 @@ use crate::{DiscreteGraphSamplingSettings, IntegratedPhase, SamplingSettings, Se
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
+use spenso::Complex;
 use spenso::IsZero;
-use symbolica::domains::float::{Complex, NumericalFloatLike, Real};
+use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 
 /// Trait to capture the common behaviour of amplitudes and cross sections
@@ -112,11 +113,8 @@ impl GraphIntegrand for AmplitudeGraph {
                 &lmb_specification,
             )
         } else {
-            self.get_graph().evaluate_cff_expression_in_lmb(
-                &sample.loop_moms,
-                &sample.external_moms,
-                &lmb_specification,
-            )
+            self.get_graph()
+                .evaluate_cff_expression_in_lmb(sample, &lmb_specification)
         };
 
         let onshell_energies = self.get_graph().compute_onshell_energies_in_lmb(
@@ -145,7 +143,7 @@ impl GraphIntegrand for AmplitudeGraph {
         });
 
         let denominator = lmb_products
-            .map(|x| x.powf(-F::<T>::from_f64(alpha)) * &energy_product)
+            .map(|x| x.powf(&-F::<T>::from_f64(alpha)) * &energy_product)
             .reduce(|acc, e| acc + &e)
             .unwrap_or(zero.clone());
 
@@ -154,7 +152,7 @@ impl GraphIntegrand for AmplitudeGraph {
                 .basis
                 .iter()
                 .fold(one.clone(), |acc, i| acc * &onshell_energies[*i])
-                .powf(-F::<T>::from_f64(alpha)),
+                .powf(&-F::<T>::from_f64(alpha)),
             sample.zero(),
         );
 
@@ -201,8 +199,7 @@ impl GraphIntegrand for AmplitudeGraph {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
-            self.get_graph()
-                .evaluate_cff_expression(&sample.loop_moms, &sample.external_moms)
+            self.get_graph().evaluate_cff_expression(sample)
         };
 
         let energy_product = self
@@ -223,8 +220,7 @@ impl GraphIntegrand for AmplitudeGraph {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
-            self.get_graph()
-                .evaluate_cff_expression(&sample.loop_moms, &sample.external_moms)
+            self.get_graph().evaluate_cff_expression(sample)
         };
 
         let onshell_energies = self
@@ -251,7 +247,7 @@ impl GraphIntegrand for AmplitudeGraph {
 
         let energy_product = virtual_loop_energies
             .zip(weight_iterator)
-            .map(|(energy, weight)| energy.powf(F::<T>::from_f64(2. * weight - 1.)))
+            .map(|(energy, weight)| energy.powf(&F::<T>::from_f64(2. * weight - 1.)))
             .fold(one.clone(), |acc, x| acc * x); // should we put Product and Sum in FloatLike?
 
         let tree_like_energies = self
@@ -1086,10 +1082,10 @@ impl<T: FloatLike> GammaLoopSample<T> {
 /// Sample which contains loop momenta, external momenta and the jacobian of the parameterization.
 /// External momenta are part of the sample in order to facilitate the use of non-constant externals.
 #[derive(Debug, Clone)]
-struct DefaultSample<T: FloatLike> {
-    loop_moms: Vec<ThreeMomentum<F<T>>>,
-    external_moms: Vec<FourMomentum<F<T>>>,
-    jacobian: F<f64>,
+pub struct DefaultSample<T: FloatLike> {
+    pub loop_moms: Vec<ThreeMomentum<F<T>>>,
+    pub external_moms: Vec<FourMomentum<F<T>>>,
+    pub jacobian: F<f64>,
 }
 
 impl<T: FloatLike> DefaultSample<T> {

@@ -11,7 +11,7 @@ use crate::ParameterizationMapping;
 use crate::Precision;
 use crate::Settings;
 use serde::{Deserialize, Serialize};
-use symbolica::domains::float::Complex;
+use spenso::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 

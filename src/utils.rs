@@ -9,18 +9,18 @@ use ref_ops::{
     RefAdd, RefDiv, RefMul, RefNeg, RefSub,
 };
 use rug::float::Constant;
-use rug::ops::CompleteRound;
+use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Serialize};
-use spenso::{RefZero, TrySmallestUpgrade};
+use spenso::{ RefOne, RefZero, TrySmallestUpgrade, R};
 use symbolica::domains::float::{
-    Complex, ConstructibleFloat, NumericalFloatComparison, NumericalFloatLike,
+    ConstructibleFloat, NumericalFloatComparison, NumericalFloatLike,
 };
-// use spenso::Complex;
+use spenso::Complex;
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::time::Duration;
 use symbolica::domains::float::Real;
@@ -81,6 +81,15 @@ pub trait FloatConvertFrom<U> {
 #[derive(Debug, Clone, PartialEq,PartialOrd)]
 pub struct VarFloat<const N: u32> {
     float: rug::Float,
+}
+
+impl<const N: u32> Serialize for VarFloat<N> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.float.to_string().serialize(serializer)
+    }
 }
 
 impl<const N:u32> From<Float> for VarFloat<N> {
@@ -304,7 +313,22 @@ impl<const N: u32> std::fmt::LowerExp for VarFloat<N> {
 }
 
 
+impl<const N:u32> RefZero for VarFloat<N> {
+    fn ref_zero(&self) -> Self {
+        Self::new_zero()
+    }
+    
+}
 
+
+impl<const N:u32> R for VarFloat<N> {}
+
+impl<const N:u32> RefOne for VarFloat<N> {
+    fn ref_one(&self) -> Self {
+        self.one()
+    }
+    
+}
 
 impl<const N:u32> NumericalFloatLike for VarFloat<N>{
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
@@ -312,15 +336,15 @@ impl<const N:u32> NumericalFloatLike for VarFloat<N>{
     }
 
     fn norm(&self) -> Self {
-        self.float.norm().into()
+        self.float.clone().abs().into()
     }
 
     fn from_i64(&self, a: i64) -> Self {
-        self.float.from_i64(a).into()  
+        VarFloat{ float:Float::with_val(N,a )}
     }
 
     fn from_usize(&self, a: usize) -> Self {
-        self.float.from_usize(a).into()  
+        VarFloat{ float:Float::with_val(N,a )}
     }
 
     fn get_precision(&self) -> u32 {
@@ -328,27 +352,40 @@ impl<const N:u32> NumericalFloatLike for VarFloat<N>{
     }
 
     fn zero(&self) -> Self {
-        self.float.zero().into()
+        Self::new_zero()
     }
 
     fn one(&self) -> Self {
-        self.float.one().into()
+        self.from_i64(1)
     }   
 
     fn new_zero() -> Self {
-        Float::new_zero().into()
+        VarFloat{ float:Float::new(N )}
     }
 
     fn inv(&self) -> Self {
-        self.float.inv().into()
+        self.float.clone().recip().into()
     }
 
     fn pow(&self, e: u64) -> Self {
-        self.float.pow(e).into()
+        rug::ops::Pow::pow(&self.float, e).complete(N).into()
     }
 
     fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
-        self.float.sample_unit(rng).into()  
+        let f: f64 = rng.gen();
+        Float::with_val(N, f).into()
+    }
+
+    fn neg(&self) -> Self {
+        (-self.float.clone()).into()
+    }
+
+    fn get_epsilon(&self) -> f64 {
+        2.0f64.powi(-(N as i32))
+    }
+
+    fn fixed_precision(&self) -> bool {
+        true
     }
 
 }
@@ -359,15 +396,19 @@ impl<const N:u32> NumericalFloatComparison for VarFloat<N> {
     }
 
     fn is_one(&self) -> bool {
-        self.float.is_one()
+        self.float == 1.
     }
 
     fn is_zero(&self) -> bool {
-        self.float.is_zero()
+        self.float == 0.
     }
 
     fn max(&self, other: &Self) -> Self {
-        self.float.clone().max(&other.float).into() 
+        if self.float > other.float {
+            self.clone()
+        } else {
+            other.clone()
+        }
     }
 
     fn to_f64(&self) -> f64 {
@@ -375,7 +416,11 @@ impl<const N:u32> NumericalFloatComparison for VarFloat<N> {
     }
 
     fn to_usize_clamped(&self) -> usize {
-        self.float.to_usize_clamped()
+        self.float
+            .to_integer()
+            .unwrap()
+            .to_usize()
+            .unwrap_or(usize::MAX)
     }
     
 }
@@ -387,15 +432,21 @@ impl<const N:u32> Real for VarFloat<N> {
         self.float.clone().atan2(&x.float).into()
     }
 
-    fn powf(&self, e: Self) -> Self {
-        self.float.powf(e.float).into()
+    fn powf(&self, e: &Self) -> Self {
+        self.float.clone().pow(e.float.clone()).into()
+    }
+
+    fn log(&self)->Self{
+        self.float
+                .ln_ref()
+                .complete(N)
+                .into()
     }
 
     delegate! {
         #[into]
         to self.float.clone(){
             fn sqrt(&self) -> Self;
-            fn log(&self) -> Self;
             fn exp(&self) -> Self;
             fn sin(&self) -> Self;
             fn cos(&self) -> Self;
@@ -416,6 +467,8 @@ impl FloatLike for VarFloat<113>{
     fn E(&self) -> Self {
         Self::E()
     }
+
+    
 
     fn FRAC_1_PI(&self) -> Self {
         Self::FRAC_1_PI()
@@ -471,7 +524,9 @@ impl<const N: u32> VarFloat<N> {
 
     #[allow(non_snake_case)]
     fn TAU() -> Self {
-        Self::PI()+Self::PI()
+        let mut tau = Self::PI() + Self::PI();
+        tau.float.set_prec(N);
+        tau
     }
 
     #[allow(non_snake_case)]
@@ -544,6 +599,7 @@ pub trait PrecisionUpgradable {
 
 pub trait FloatLike:
     Real
+    +R
     + NumericalFloatComparison
     + for<'a> RefAdd<&'a Self, Output = Self>
     // + for<'a> RefMutAdd<&'a Self, Output = Self>
@@ -562,8 +618,12 @@ pub trait FloatLike:
     + RefDiv<Self, Output = Self>
     // + RefMutDiv<Self, Output = Self>
     + RefNeg<Output = Self>
+    + RefZero
+    + RefOne
     // + RefMutNeg<Output = Self> f64 doesn't have RefMutNeg
     + PrecisionUpgradable
+    + Serialize
+    + Display
 {
     
 
@@ -632,6 +692,8 @@ pub trait FloatLike:
 #[derive(Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize)]
 pub struct F<T: FloatLike>(pub T);
 
+impl<T:FloatLike> R for F<T> {}
+
 impl<T: FloatLike> PrecisionUpgradable for F<T> where T::Higher: FloatLike, T::Lower: FloatLike{
     type Higher = F<T::Higher>;
     type Lower = F<T::Lower>;
@@ -653,6 +715,12 @@ impl<T:FloatLike> RefZero for F<T> {
          F(self.0.zero())
    }
 }
+
+impl<T:FloatLike> RefOne for F<T> {
+    fn ref_one(&self) -> Self {
+        F(self.0.one())   
+    }
+ }
 
 impl<T:FloatLike> TrySmallestUpgrade<F<T>> for F<T> {
     type LCM = F<T>;
@@ -695,6 +763,9 @@ impl<T: FloatLike> NumericalFloatLike for F<T> {
     fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
         F(self.0.sample_unit(rng))
     }
+    fn neg(&self) -> Self {
+        F(self.0.ref_neg())
+    }
 
     delegate! {
         #[into]
@@ -707,6 +778,8 @@ impl<T: FloatLike> NumericalFloatLike for F<T> {
             fn pow(&self, n: u64) -> Self;
             fn inv(&self) -> Self;
             fn get_precision(&self) -> u32;
+            fn get_epsilon(&self) -> f64;
+            fn fixed_precision(&self) -> bool;
         }
     }
 }
@@ -750,8 +823,8 @@ impl<T: FloatLike> Real for F<T> {
         F(self.0.atan2(&x.0))
     }
 
-    fn powf(&self, e: Self) -> Self {
-        F(self.0.powf(e.0))
+    fn powf(&self, e: &Self) -> Self {
+        F(self.0.powf(&e.0))
     }
     delegate! {
         #[into]
@@ -779,6 +852,11 @@ impl<T: FloatLike> Real for F<T> {
 use delegate::delegate;
 
 impl<T: FloatLike> F<T> {
+
+    pub fn negate(&mut self) {
+        self.0 = -self.0.clone();
+    }
+
     pub fn from_ff64( x: F<f64>) -> Self {
         F(T::from_f64(x.0))
     }
@@ -804,9 +882,23 @@ impl<T: FloatLike> F<T> {
         F(self.0.norm())
     }
 
+    pub fn i(&self)-> Complex<Self>{
+        Complex::new(self.zero(),self.one())
+    }
+
 
     pub fn log10(&self) -> Self {
         self.ln()
+    }
+
+    pub fn complex_sqrt(&self) -> Complex<Self> {
+
+        if self.positive() {
+            Complex::new(self.sqrt(), self.zero())
+        } else {
+            Complex::new(self.zero(), (-self).sqrt())
+        }
+        
     }
     delegate! {
         #[into]
@@ -1244,7 +1336,7 @@ pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
     } else if v.abs() >= F(1e6) || v.abs() < F(1e-5) {
         // exponential notation for large |self.mean|
         let exponent = v.abs().log10().floor();
-        let fac = F(10.0).powf(exponent);
+        let fac = F(10.0).powf(&exponent);
         let mantissa = format_uncertainty(v / fac, dv / fac);
         let e = format!("{:.0e}", fac);
         let mut ee = e.split('e');
@@ -1345,7 +1437,7 @@ impl<T: FloatLike> Signum for Complex<F<T>> {
     fn multiply_sign(&self, sign: i8) -> Complex<F<T>> {
         match sign {
             1 => self.clone(),
-            0 => self.zero(),
+            0 => self.ref_zero(),
             -1 => -self.clone(),
             _ => unreachable!("Sign should be -1,0,1"),
         }
@@ -1357,7 +1449,7 @@ impl<T: FloatLike> Signum for FourMomentum<F<T>> {
     fn multiply_sign(&self, sign: i8) -> FourMomentum<F<T>> {
         match sign {
             1 => self.clone(),
-            0 => self.zero(),
+            0 => self.ref_zero(),
             -1 => -self,
             _ => unreachable!("Sign should be -1,0,1"),
         }

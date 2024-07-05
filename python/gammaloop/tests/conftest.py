@@ -19,6 +19,8 @@ from gammaloop.misc.common import GL_PATH, GammaLoopError, logger
 #    plugin.mypy_argv.extend(  # type: ignore
 #        ['--exclude', "'python/gammaloop/data/models/*'"])
 
+# pytest_plugins = ['pytest_profiling']
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -265,7 +267,7 @@ def scalar_3L_6P_topology_A_export(tmpdir_factory: pytest.TempPathFactory) -> Pa
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','scalar_3L_6P_topology_A.py')} -f qgraph --no_compile
-output {output_path}"""))
+output {output_path} -exp -ef file"""))
     return output_path
 
 
@@ -277,7 +279,7 @@ def physical_3L_6photons_topology_A_export(tmpdir_factory: pytest.TempPathFactor
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(RESOURCES_PATH,'qgraf_outputs','physical_3L_6photons_topology_A.py')} -f qgraph --no_compile
-output {output_path}"""))
+output {output_path} -exp -ef file"""))
     return output_path
 
 

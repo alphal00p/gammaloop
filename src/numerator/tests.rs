@@ -12,17 +12,17 @@ fn lbl() {
         .unwrap();
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_numerator(&model);
+    graph.process_numerator(&model);
 
     let mut numerator = graph.derived_data.numerator.clone().unwrap();
     // println!("{}", numerator);
-    for (lhs, rhs) in graph.generate_lmb_replacement_rules() {
-        numerator =
-            lhs.into_pattern()
-                .replace_all(numerator.as_view(), &rhs.into_pattern(), None, None);
-    }
+    // for (lhs, rhs) in graph.generate_lmb_replacement_rules() {
+    //     numerator =
+    //         lhs.into_pattern()
+    //             .replace_all(numerator.as_view(), &rhs.into_pattern(), None, None);
+    // }
 
-    println!("{}", numerator);
+    println!("{}", numerator.expression);
 
     // if let AtomView::Mul(mul) = numerator.as_view() {
     //     let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();

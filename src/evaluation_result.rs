@@ -3,7 +3,8 @@ use std::time::Duration;
 use colored::Colorize;
 use log::info;
 use serde::{Deserialize, Serialize};
-use symbolica::domains::float::{Complex, ConstructibleFloat};
+use spenso::Complex;
+use symbolica::domains::float::ConstructibleFloat;
 
 use crate::{
     observables::Event,

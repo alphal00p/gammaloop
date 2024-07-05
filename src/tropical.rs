@@ -2,6 +2,7 @@ use ahash::HashSet;
 use color_eyre::Report;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use spenso::IsZero;
 use symbolica::domains::float::NumericalFloatLike;
 
 use crate::{
@@ -643,7 +644,7 @@ pub mod tropical_parameterization {
 
             let xi = rng.get_random_number(Some("sample xi"));
             kappa *= xi.powf(
-                F::<T>::from_f64(tropical_subgraph_table.table[graph.id].generalized_dod).inv(),
+                &F::<T>::from_f64(tropical_subgraph_table.table[graph.id].generalized_dod).inv(),
             );
 
             if debug > 4 {
@@ -659,13 +660,14 @@ pub mod tropical_parameterization {
         let xi_trop = u_trop.clone() * &v_trop;
 
         // perform rescaling for numerical stability
-        let target = u_trop.powf(F::<T>::from_f64(-(DHALF)))
-            * (u_trop.clone() / &xi_trop)
-                .powf(F::<T>::from_f64(tropical_subgraph_table.tropical_graph.dod));
+        let target = u_trop.powf(&F::<T>::from_f64(-(DHALF)))
+            * (u_trop.clone() / &xi_trop).powf(&F::<T>::from_f64(
+                tropical_subgraph_table.tropical_graph.dod,
+            ));
 
         let loop_number = tropical_subgraph_table.table.last().unwrap().loop_number;
         let scaling = target.powf(
-            F::<T>::from_f64(
+            &F::<T>::from_f64(
                 DHALF * loop_number as f64 + tropical_subgraph_table.tropical_graph.dod,
             )
             .inv(),
@@ -751,7 +753,7 @@ pub mod tropical_parameterization {
 
                 let next_edge = graph_ordering[i + 1].1.unwrap();
                 let xi = edge_rng[next_edge].clone();
-                kappa *= xi.powf(F::<T>::from_f64(graph_without_edge_dod).inv());
+                kappa *= xi.powf(&F::<T>::from_f64(graph_without_edge_dod).inv());
             } else {
                 unreachable!()
             }
@@ -760,12 +762,14 @@ pub mod tropical_parameterization {
         let xi_trop = u_trop.clone() * v_trop;
 
         // perform rescaling for numerical stability
-        let target = u_trop.powf(F::<T>::from_f64(-(D as f64 / 2.0)))
-            * (u_trop / xi_trop).powf(F::<T>::from_f64(tropical_subgraph_table.tropical_graph.dod));
+        let target = u_trop.powf(&F::<T>::from_f64(-(D as f64 / 2.0)))
+            * (u_trop / xi_trop).powf(&F::<T>::from_f64(
+                tropical_subgraph_table.tropical_graph.dod,
+            ));
 
         let loop_number = tropical_subgraph_table.table.last().unwrap().loop_number;
         let scaling = target.powf(
-            F::<T>::from_f64(
+            &F::<T>::from_f64(
                 D as f64 / 2.0 * loop_number as f64 + tropical_subgraph_table.tropical_graph.dod,
             )
             .inv(),
@@ -1113,9 +1117,9 @@ pub mod tropical_parameterization {
         debug: usize,
     ) -> F<T> {
         // let zero = v.zero();
-        let polynomial_ratio = (v_trop / v)
-            .powf(F::<T>::from_f64(tropical_subgraph_table.tropical_graph.dod))
-            * (u_trop / u).powf(F::<T>::from_f64(DHALF));
+        let polynomial_ratio = (v_trop / v).powf(&F::<T>::from_f64(
+            tropical_subgraph_table.tropical_graph.dod,
+        )) * (u_trop / u).powf(&F::<T>::from_f64(DHALF));
 
         let i_trop = F::<T>::from_f64(tropical_subgraph_table.table.last().unwrap().j_function);
 

@@ -4,7 +4,7 @@ use crate::{
     inspect,
     integrands::Integrand,
     integrate::{
-        havana_integrate, print_integral_result, MasterNode, SerializableBatchResult,
+        havana_integrate, print_integral_result, BatchResult, MasterNode,
         SerializableIntegrationState,
     },
     model::Model,
@@ -16,12 +16,12 @@ use colored::Colorize;
 use git_version::git_version;
 use itertools::{self, Itertools};
 use log::{info, warn};
+use spenso::Complex;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-use symbolica::{domains::float::Complex, printer::PrintOptions};
-
+use symbolica::printer::PrintOptions;
 const GIT_VERSION: &str = git_version!();
 
 #[allow(unused)]
@@ -541,10 +541,10 @@ impl PythonWorker {
         let job_out_path = Path::new(workspace_path).join(job_out_name);
 
         let output_file = std::fs::read(job_out_path)?;
-        let batch_result: SerializableBatchResult = bincode::deserialize(&output_file).unwrap();
+        let batch_result: BatchResult = bincode::deserialize(&output_file).unwrap();
 
         master_node
-            .process_batch_output(batch_result.into_batch_result())
+            .process_batch_output(batch_result)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         Ok(format!("Processed job {}", job_id))

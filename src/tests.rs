@@ -9,8 +9,9 @@ use crate::{
 
 use colored::Colorize;
 use hyperdual::Zero;
+use spenso::Complex;
 use spenso::IsZero;
-use symbolica::domains::float::Complex;
+use symbolica::domains::float::Complex as SymComplex;
 
 use crate::inspect::inspect;
 use crate::integrate::{havana_integrate, UserData};
@@ -201,6 +202,8 @@ fn get_unit_volume_integrand() -> UnitVolumeSettings {
 
 #[cfg(test)]
 mod tests_integral {
+    use symbolica::domains::float::ConstructibleFloat;
+
     use crate::{HFunction, HFunctionSettings, ParameterizationMode};
 
     use super::*;
@@ -221,7 +224,7 @@ mod tests_integral {
         assert!(compare_integration(
             &mut settings,
             IntegratedPhase::Real,
-            Complex::new_one(),
+            SymComplex::new_one().into(),
             None
         ));
     }
@@ -242,7 +245,7 @@ mod tests_integral {
         assert!(compare_integration(
             &mut settings,
             IntegratedPhase::Real,
-            Complex::new_one(),
+            SymComplex::new_one().into(),
             None
         ));
     }
@@ -263,7 +266,7 @@ mod tests_integral {
         assert!(compare_integration(
             &mut settings,
             IntegratedPhase::Real,
-            Complex::new_one(),
+            SymComplex::new_one().into(),
             None
         ));
     }
@@ -288,7 +291,7 @@ mod tests_integral {
         assert!(compare_integration(
             &mut settings,
             IntegratedPhase::Real,
-            Complex::new_one(),
+            SymComplex::new_one().into(),
             None
         ));
     }
