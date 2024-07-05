@@ -30,19 +30,13 @@ insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 
 [dependencies]
 #symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
+#symbolica = { git = "https://github.com/benruijl/symbolica", branch = "nested_evaluate" }
 symbolica = { version = "0.7.0" }
 
 #spenso = { version = "0.2.0", features = ["shadowing"] }
-# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
-#     "shadowing",
-# ] }
-#spenso = { git = "https://github.com/alphal00p/spenso", rev = "729930e", features = [
-#    "shadowing",
-#] }
 spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
     "shadowing",
 ] }
-
 
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
@@ -134,9 +128,7 @@ insta.opt-level = 3
 similar.opt-level = 3
 
 [patch."https://github.com/alphal00p/spenso"]
-
-# spenso = { path = "../spenso" }
 [patch.crates-io]
+# spenso = { path = "../spenso" }
 # spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-
 symbolica = { git = "https://github.com/benruijl/symbolica", branch = "nested_evaluate" }
