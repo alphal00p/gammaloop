@@ -452,41 +452,44 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
 
 impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
     pub fn perform_pi2_rotation_x_mut(&mut self) {
+        todo!("fix this version");
         let px = self.px.clone();
         self.px = -px;
     }
 
     pub fn perform_pi2_rotation_x(&self) -> Self {
         Self {
-            px: -self.px.clone(),
-            py: self.py.clone(),
-            pz: self.pz.clone(),
+            px: self.px.clone(),
+            py: -self.pz.clone(),
+            pz: self.py.clone(),
         }
     }
 
     pub fn perform_pi2_rotation_y_mut(&mut self) {
+        todo!("fix this version");
         let py = self.py.clone();
         self.py = -py;
     }
 
     pub fn perform_pi2_rotation_y(&self) -> Self {
         Self {
-            px: self.px.clone(),
-            py: -self.py.clone(),
-            pz: self.pz.clone(),
+            px: self.pz.clone(),
+            py: self.py.clone(),
+            pz: -self.px.clone(),
         }
     }
 
     pub fn perform_pi2_rotation_z_mut(&mut self) {
+        todo!("fix this version");
         let pz = self.pz.clone();
         self.pz = -pz;
     }
 
     pub fn perform_pi2_rotation_z(&self) -> Self {
         Self {
-            px: self.px.clone(),
-            py: self.py.clone(),
-            pz: -self.pz.clone(),
+            px: -self.py.clone(),
+            py: self.px.clone(),
+            pz: self.pz.clone(),
         }
     }
 }
