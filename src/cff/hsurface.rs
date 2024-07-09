@@ -1,11 +1,11 @@
 use crate::cff::cff_graph::VertexSet;
 use crate::cff::esurface::add_external_shifts;
 use crate::cff::surface::Surface;
-use crate::utils::FloatLike;
+use crate::utils::{FloatLike, F};
 use derive_more::{From, Into};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use symbolica::representations::Atom;
+use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
 use super::esurface::ExternalShift;
@@ -46,12 +46,12 @@ impl PartialEq for Hsurface {
 
 impl Hsurface {
     #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
         surface::compute_value(self, energy_cache)
     }
 
     #[inline]
-    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
         surface::compute_shift_part(self, energy_cache)
     }
 
@@ -125,8 +125,8 @@ impl Hsurface {
 
 pub fn compute_hsurface_cache<T: FloatLike>(
     hsurfaces: &HsurfaceCollection,
-    energy_cache: &[T],
-) -> HsurfaceCache<T> {
+    energy_cache: &[F<T>],
+) -> HsurfaceCache<F<T>> {
     hsurfaces
         .iter()
         .map(|hsurface| hsurface.compute_value(energy_cache))
@@ -136,9 +136,12 @@ pub fn compute_hsurface_cache<T: FloatLike>(
 
 #[cfg(test)]
 mod tests {
-    use symbolica::representations::Atom;
+    use symbolica::atom::Atom;
 
-    use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
+    use crate::{
+        cff::{cff_graph::VertexSet, esurface::Esurface},
+        utils::F,
+    };
 
     use super::Hsurface;
 
@@ -152,9 +155,9 @@ mod tests {
             external_shift,
         };
 
-        let energy_cache = [1.0, 2.0, 3.0, 4.0];
+        let energy_cache = [F(1.0), F(2.0), F(3.0), F(4.0)];
         let shift_part = h_surface.compute_shift_part(&energy_cache);
-        assert_eq!(shift_part, -1.0);
+        assert_eq!(shift_part.0, -1.0);
     }
 
     #[test]
@@ -167,9 +170,9 @@ mod tests {
             external_shift,
         };
 
-        let energy_cache = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let energy_cache = [F(1.0), F(2.0), F(3.0), F(4.0), F(5.0), F(6.0)];
         let value = h_surface.compute_value(&energy_cache);
-        assert_eq!(value, 1.0 + 2.0 - 3.0 - 4.0 - 5.0 + 6.0);
+        assert_eq!(value.0, 1.0 + 2.0 - 3.0 - 4.0 - 5.0 + 6.0);
     }
 
     #[test]

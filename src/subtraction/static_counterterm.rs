@@ -1,7 +1,7 @@
 /// Counterterm for amplitudes with constant externals.
 use itertools::Itertools;
-use lorentz_vector::LorentzVector;
-use num::Complex;
+use spenso::Complex;
+use symbolica::domains::float::{NumericalFloatLike, Real};
 
 const MAX_ITERATIONS: usize = 20;
 const TOLERANCE: f64 = 10.0;
@@ -9,20 +9,21 @@ const TOLERANCE: f64 = 10.0;
 use crate::{
     cff::{
         esurface::{
-            compute_esurface_cache, EsurfaceCache, EsurfaceCollection, ExistingEsurfaceId,
-            ExistingEsurfaces,
+            compute_esurface_cache, EsurfaceCache, EsurfaceCollection, EsurfaceID,
+            ExistingEsurfaceId, ExistingEsurfaces,
         },
         expression::CFFLimit,
     },
     graph::{Graph, LoopMomentumBasis},
-    utils::{cast_lorentz_vector, FloatLike},
+    momentum::{FourMomentum, ThreeMomentum},
+    utils::{FloatLike, F},
     Settings,
 };
 
 #[derive(Debug, Clone)]
 pub struct CounterTerm {
     existing_esurfaces: ExistingEsurfaces,
-    maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)>,
+    maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)>,
     complements_of_overlap: Vec<Vec<ExistingEsurfaceId>>,
     terms_in_counterterms: Vec<CFFLimit>,
 }
@@ -31,9 +32,9 @@ impl CounterTerm {
     pub fn print_debug_data(
         &self,
         esurfaces: &EsurfaceCollection,
-        external_momenta: &[LorentzVector<f64>],
+        external_momenta: &[FourMomentum<F<f64>>],
         lmb: &LoopMomentumBasis,
-        real_mass_vector: &[f64],
+        real_mass_vector: &[F<f64>],
     ) {
         let number_of_existing_esurfaces = self.existing_esurfaces.len();
         let simplified_maximal_overlap_structure = self
@@ -66,7 +67,7 @@ impl CounterTerm {
     }
 
     pub fn construct(
-        maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)>,
+        maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)>,
         existing_esurfaces: &ExistingEsurfaces,
         graph: &Graph,
     ) -> Self {
@@ -118,41 +119,44 @@ impl CounterTerm {
     // the multichanneling denominator will be evaluated at r*, so we can not use the cache.
     fn evaluate_multichanneling_denominator<T: FloatLike>(
         &self,
-        esurface_cache: &EsurfaceCache<T>,
-    ) -> T {
+        esurface_cache: &EsurfaceCache<F<T>>,
+    ) -> F<T> {
+        let const_builder = &esurface_cache[EsurfaceID::from(0usize)];
+
         self.complements_of_overlap
             .iter()
             .map(|esurface_id_group| {
-                let group = esurface_id_group
+                let group = &esurface_id_group
                     .iter()
-                    .map(|esurface_id| esurface_cache[self.existing_esurfaces[*esurface_id]])
-                    .fold(T::one(), |acc, e| acc * e); // Dreams of product::<T>...
+                    .map(|esurface_id| &esurface_cache[self.existing_esurfaces[*esurface_id]])
+                    .fold(const_builder.one(), |acc, e| acc * e); // Dreams of product::<T>...
 
                 group * group
             })
-            .sum::<T>()
+            .reduce(|acc, x| &acc + &x)
+            .unwrap_or_else(|| const_builder.zero())
     }
 
     pub fn evaluate<T: FloatLike>(
         &self,
-        loop_momenta: &[LorentzVector<T>],
-        external_momenta: &[LorentzVector<T>],
+        loop_momenta: &[ThreeMomentum<F<T>>],
+        external_momenta: &[FourMomentum<F<T>>],
         graph: &Graph,
         rotate_overlap_centers: bool,
         settings: &Settings,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
         let real_mass_vector = graph
             .get_real_mass_vector()
             .into_iter()
-            .map(Into::<T>::into)
+            .map(F::from_ff64)
             .collect_vec();
 
-        let e_cm = Into::<T>::into(settings.kinematics.e_cm);
-        let sliver_width = Into::<T>::into(settings.subtraction.sliver_width);
+        let e_cm = F::from_ff64(settings.kinematics.e_cm);
+        let sliver_width = F::from_f64(settings.subtraction.sliver_width);
         let esurfaces = &graph.get_cff().esurfaces;
         let lmb = &graph.loop_momentum_basis;
 
-        let mut res = T::zero();
+        let mut res = loop_momenta[0].px.zero();
 
         for ((overlap, center), overlap_complement) in self
             .maximal_overlap
@@ -168,16 +172,32 @@ impl CounterTerm {
                 let rotation_function = settings.stability.rotation_axis.rotation_function();
                 center
                     .iter()
-                    .map(|c| cast_lorentz_vector(&rotation_function(c)))
+                    .map(rotation_function)
+                    .map(|c_vec| {
+                        ThreeMomentum::new(
+                            F::from_ff64(c_vec.px),
+                            F::from_ff64(c_vec.py),
+                            F::from_ff64(c_vec.px),
+                        )
+                    })
                     .collect_vec()
             } else {
-                center.iter().map(cast_lorentz_vector).collect_vec()
+                center
+                    .iter()
+                    .map(|c_vec| {
+                        ThreeMomentum::new(
+                            F::from_ff64(c_vec.px),
+                            F::from_ff64(c_vec.py),
+                            F::from_ff64(c_vec.px),
+                        )
+                    })
+                    .collect_vec()
             };
 
             let shifted_momenta = loop_momenta
                 .iter()
                 .zip(center_t.iter())
-                .map(|(momentum, center)| momentum - center)
+                .map(|(momentum, center)| momentum.clone() - center.clone())
                 .collect_vec();
 
             let (hemispherical_unit_shifted_momenta, hemispherical_radius) =
@@ -207,7 +227,7 @@ impl CounterTerm {
                     println!("radius_guess: {}", radius_guess)
                 }
 
-                let function = |r| {
+                let function = |r: &_| {
                     esurface.compute_self_and_r_derivative(
                         r,
                         &hemispherical_unit_shifted_momenta,
@@ -219,19 +239,19 @@ impl CounterTerm {
                 };
 
                 let (radius_plus, derivative_at_r_plus) = newton_iteration_and_derivative(
-                    radius_guess,
+                    &radius_guess,
                     function,
-                    Into::<T>::into(TOLERANCE),
+                    &F::from_f64(TOLERANCE),
                     MAX_ITERATIONS,
-                    e_cm,
+                    &e_cm,
                 );
 
                 let (radius_minus, derivative_at_r_minus) = newton_iteration_and_derivative(
-                    -radius_guess,
+                    &(-radius_guess),
                     function,
-                    Into::<T>::into(TOLERANCE),
+                    &F::from_f64(TOLERANCE),
                     MAX_ITERATIONS,
-                    e_cm,
+                    &e_cm,
                 );
 
                 if settings.general.debug > 1 {
@@ -243,8 +263,8 @@ impl CounterTerm {
 
                 let (r_plus_eval, r_minus_eval) = (
                     self.radius_star_eval(
-                        radius_plus,
-                        hemispherical_radius,
+                        &radius_plus,
+                        &hemispherical_radius,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
@@ -252,13 +272,13 @@ impl CounterTerm {
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
-                        e_cm,
-                        sliver_width,
+                        &e_cm,
+                        &sliver_width,
                         settings.subtraction.dampen_integrable_singularity,
                     ),
                     self.radius_star_eval(
-                        radius_minus,
-                        hemispherical_radius,
+                        &radius_minus,
+                        &hemispherical_radius,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
@@ -266,17 +286,17 @@ impl CounterTerm {
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
-                        e_cm,
-                        sliver_width,
+                        &e_cm,
+                        &sliver_width,
                         settings.subtraction.dampen_integrable_singularity,
                     ),
                 );
 
                 let ct_plus = r_plus_eval
-                    * ((hemispherical_radius - radius_plus) * derivative_at_r_plus).inv();
+                    * ((&hemispherical_radius - &radius_plus) * derivative_at_r_plus).inv();
 
                 let ct_minus = r_minus_eval
-                    * ((hemispherical_radius - radius_minus) * derivative_at_r_minus).inv();
+                    * ((&hemispherical_radius - &radius_minus) * derivative_at_r_minus).inv();
 
                 res += ct_plus + ct_minus;
             }
@@ -285,31 +305,32 @@ impl CounterTerm {
         // match the complex prefactor off cff
         let loop_number = graph.loop_momentum_basis.basis.len();
         let internal_vertex_number = graph.vertices.len() - graph.external_connections.len();
+        let zero = res.zero();
 
-        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32)
-            * Complex::new(-T::one(), T::zero()).powi(internal_vertex_number as i32 - 1);
+        let prefactor = Complex::new(zero, res.one()).pow(loop_number as u64)
+            * Complex::new(-res.one(), res.zero()).pow(internal_vertex_number as u64 - 1);
 
-        Complex::new(res, T::zero()) * prefactor
+        Complex::new(res.clone(), res.zero()) * prefactor
     }
 
     #[allow(clippy::too_many_arguments)]
     fn radius_star_eval<T: FloatLike>(
         &self,
-        rstar: T,
-        radius: T,
-        unit_loop_momenta: &[LorentzVector<T>],
-        center: &[LorentzVector<T>],
+        rstar: &F<T>,
+        radius: &F<T>,
+        unit_loop_momenta: &[ThreeMomentum<F<T>>],
+        center: &[ThreeMomentum<F<T>>],
         graph: &Graph,
-        external_momenta: &[LorentzVector<T>],
+        external_momenta: &[FourMomentum<F<T>>],
         esurfaces: &EsurfaceCollection,
         overlap_complement: &[ExistingEsurfaceId],
         existing_esurface_id: ExistingEsurfaceId,
-        e_cm: T,
-        sliver_width: T,
+        e_cm: &F<T>,
+        sliver_width: &F<T>,
         dampen_integrable_singularity: bool,
-    ) -> T {
+    ) -> F<T> {
         if (radius - rstar).abs() > sliver_width * e_cm {
-            return T::zero();
+            return radius.zero();
         }
 
         let loop_number = unit_loop_momenta.len();
@@ -326,18 +347,19 @@ impl CounterTerm {
         let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
         let rstar_energy_product = graph
             .get_virtual_edges_iterator()
-            .map(|(edge_id, _)| Into::<T>::into(2.0) * energy_cache[edge_id])
-            .fold(T::one(), |acc, e| acc * e);
+            .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
+            .fold(radius.one(), |acc, e| acc * e);
 
         let multichanneling_denominator =
             self.evaluate_multichanneling_denominator(&esurface_cache);
 
-        let multichanneling_numerator_root = overlap_complement.iter().fold(T::one(), |acc, id| {
-            acc * esurface_cache[self.existing_esurfaces[*id]]
-        });
+        let multichanneling_numerator_root =
+            overlap_complement.iter().fold(radius.one(), |acc, id| {
+                acc * &esurface_cache[self.existing_esurfaces[*id]]
+            });
 
-        let multichanneling_factor = multichanneling_numerator_root
-            * multichanneling_numerator_root
+        let multichanneling_factor = &multichanneling_numerator_root
+            * &multichanneling_numerator_root
             / multichanneling_denominator;
 
         let terms = &self.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
@@ -345,15 +367,15 @@ impl CounterTerm {
         let eval_terms = terms.evaluate_from_esurface_cache(&esurface_cache, &energy_cache);
 
         let r_minus_rstar = radius - rstar;
-        let dampening_factor = (-r_minus_rstar * r_minus_rstar / (e_cm * e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
+        let dampening_factor = (-&r_minus_rstar * &r_minus_rstar / (e_cm * e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
 
         let singularity_dampener = if dampen_integrable_singularity {
-            (T::one()
+            (radius.one()
                 - (rstar * rstar * rstar * rstar
-                    / (rstar * rstar - r_minus_rstar * r_minus_rstar).powi(2)))
+                    / (rstar * rstar - &r_minus_rstar * &r_minus_rstar).powi(2)))
             .exp()
         } else {
-            T::one()
+            radius.one()
         };
 
         jacobian_ratio
@@ -365,38 +387,49 @@ impl CounterTerm {
     }
 }
 
-fn normalize_momenta<T: FloatLike>(momenta: &[LorentzVector<T>]) -> (Vec<LorentzVector<T>>, T) {
+fn normalize_momenta<T: FloatLike>(
+    momenta: &[ThreeMomentum<F<T>>],
+) -> (Vec<ThreeMomentum<F<T>>>, F<T>) {
     // let the x plane of the first momenta carry all the sine functions in the definition of spherical coordinates
-    let sign_radius = momenta[0].x.signum();
+    // let sign_radius = momenta[0].px.signum();
+
+    let first_momentum_x_component = &momenta[0].px;
+
+    let sign_radius = if momenta[0].px.positive() {
+        first_momentum_x_component.one()
+    } else {
+        first_momentum_x_component.one().neg()
+    };
 
     let radius = sign_radius
         * momenta
             .iter()
-            .map(|k| k.spatial_squared())
-            .sum::<T>()
+            .map(|k| k.norm_squared())
+            .reduce(|acc, x| &acc + &x)
+            .unwrap()
             .sqrt();
 
-    let normalized_momentum = momenta.iter().map(|k| k / radius).collect_vec();
+    let normalized_momentum = momenta.iter().map(|k| k * radius.inv()).collect_vec();
 
     (normalized_momentum, radius)
 }
 
 /// root finding, also returns the derivative at the root, so that we don't have to recompute it
 fn newton_iteration_and_derivative<T: FloatLike>(
-    guess: T,
-    f_x_and_df_x: impl Fn(T) -> (T, T),
-    tolerance: T,
+    guess: &F<T>,
+    f_x_and_df_x: impl Fn(&F<T>) -> (F<T>, F<T>),
+    tolerance: &F<T>,
     max_iterations: usize,
-    e_cm: T,
-) -> (T, T) {
-    let mut x = guess;
-    let (mut val_f_x, mut val_df_x) = f_x_and_df_x(x);
+    e_cm: &F<T>,
+) -> (F<T>, F<T>) {
+    let mut x = guess.clone();
+    let (mut val_f_x, mut val_df_x) = f_x_and_df_x(&x);
 
     let mut iteration = 0;
 
-    while iteration < max_iterations && val_f_x.abs() > T::epsilon() * tolerance * e_cm {
+    while iteration < max_iterations && val_f_x.abs() > guess.epsilon() * tolerance * e_cm {
         x -= val_f_x / val_df_x;
-        (val_f_x, val_df_x) = f_x_and_df_x(x);
+        (val_f_x, val_df_x) = f_x_and_df_x(&x);
         // println!("x: {}, val_f_x: {}, val_df_x: {}", x, val_f_x, val_df_x);
 
         iteration += 1;

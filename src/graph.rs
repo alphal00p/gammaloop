@@ -7,6 +7,7 @@ use crate::{
         expression::CFFExpression,
         generation::generate_cff_expression,
     },
+    gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
     momentum::{Energy, FourMomentum, ThreeMomentum},
@@ -784,17 +785,17 @@ impl Graph {
     }
 
     #[inline]
-    pub fn get_mass_vector(&self) -> Vec<Option<Complex<f64>>> {
+    pub fn get_mass_vector(&self) -> Vec<Option<Complex<F<f64>>>> {
         self.edges.iter().map(|e| e.particle.mass.value).collect()
     }
 
     #[inline]
-    pub fn get_real_mass_vector(&self) -> Vec<f64> {
+    pub fn get_real_mass_vector(&self) -> Vec<F<f64>> {
         self.edges
             .iter()
             .map(|e| match e.particle.mass.value {
                 Some(mass) => mass.re,
-                None => 0.0,
+                None => F::from_f64(0.0),
             })
             .collect()
     }
@@ -1143,10 +1144,10 @@ impl Graph {
         &self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<T> {
+    ) -> Vec<F<T>> {
         let energy_cache = self.compute_onshell_energies_in_lmb(
-            loop_moms,
-            independent_external_momenta,
+            &sample.loop_moms,
+            &sample.external_moms,
             lmb_specification,
         );
 
@@ -1216,9 +1217,9 @@ impl Graph {
             .cff_expression
             .as_ref()
             .unwrap()
-            .terms
+            .orientations
             .iter()
-            .map(|e| e.orientation)
+            .map(|e| e.orientation.clone())
         {
             let mut emr = emr.clone();
             for ((i, _), sign) in self.get_virtual_edges_iterator().zip(orient.into_iter()) {
@@ -1413,8 +1414,8 @@ impl Graph {
     #[inline]
     pub fn get_existing_esurfaces<T: FloatLike>(
         &self,
-        externals: &[LorentzVector<T>],
-        e_cm: f64,
+        externals: &[FourMomentum<F<T>>],
+        e_cm: F<f64>,
         debug: usize,
     ) -> ExistingEsurfaces {
         get_existing_esurfaces(
@@ -1430,10 +1431,10 @@ impl Graph {
     #[inline]
     pub fn get_maximal_overlap(
         &self,
-        externals: &[LorentzVector<f64>],
-        e_cm: f64,
+        externals: &[FourMomentum<F<f64>>],
+        e_cm: F<f64>,
         debug: usize,
-    ) -> Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)> {
+    ) -> Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)> {
         let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, debug);
         find_maximal_overlap(
             &self.loop_momentum_basis,

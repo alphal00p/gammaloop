@@ -5,15 +5,16 @@ use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
 use itertools::Itertools;
-use lorentz_vector::LorentzVector;
-use num::Complex;
+use spenso::Complex;
 
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
 use crate::graph::LoopMomentumBasis;
+use crate::momentum::FourMomentum;
+use crate::momentum::ThreeMomentum;
 use crate::utils::compute_shift_part;
-use crate::utils::FloatLike;
+use crate::utils::F;
 
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {
@@ -31,13 +32,19 @@ impl<'a> PropagatorConstraint<'a> {
     }
 }
 
-fn extract_center<T: FloatLike>(num_loops: usize, solution: &[T]) -> Vec<LorentzVector<T>> {
+fn extract_center(num_loops: usize, solution: &[f64]) -> Vec<ThreeMomentum<F<f64>>> {
     let len = solution.len();
     let num_loop_vars = 3 * num_loops;
 
     solution[len - num_loop_vars..]
         .chunks(3)
-        .map(|window| LorentzVector::from_args(T::zero(), window[0], window[1], window[2]))
+        .map(|window| {
+            ThreeMomentum::new(
+                F::from_f64(window[0]),
+                F::from_f64(window[1]),
+                F::from_f64(window[2]),
+            )
+        })
         .collect()
 }
 
@@ -46,8 +53,8 @@ fn construct_solver(
     esurfaces_to_consider: &[ExistingEsurfaceId],
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &[Option<Complex<f64>>],
-    external_momenta: &[LorentzVector<f64>],
+    edge_masses: &[Option<Complex<F<f64>>>],
+    external_momenta: &[FourMomentum<F<f64>>],
     verbose: bool,
 ) -> DefaultSolver {
     let num_loops = lmb.basis.len();
@@ -57,7 +64,7 @@ fn construct_solver(
     // first we study the structure of the problem
     let mut propagator_constraints: Vec<PropagatorConstraint> = Vec::with_capacity(num_edges);
 
-    let mut inequivalent_masses: Vec<Complex<f64>> = vec![];
+    let mut inequivalent_masses: Vec<Complex<F<f64>>> = vec![];
 
     let mut esurface_constraints: Vec<Vec<usize>> = Vec::with_capacity(esurfaces_to_consider.len());
 
@@ -149,7 +156,7 @@ fn construct_solver(
 
         let shift_part = esurfaces[existing_esurfaces[*esurface_id]]
             .compute_shift_part_from_momenta(lmb, external_momenta);
-        b_vector[constraint_index + 1] = -shift_part;
+        b_vector[constraint_index + 1] = -shift_part.0;
         a_matrix[constraint_index + 1][0] = -1.0;
     }
 
@@ -162,9 +169,9 @@ fn construct_solver(
         let spatial_shift =
             compute_shift_part(propagator_constraint.external_signature, external_momenta);
 
-        b_vector[vertical_offset] = spatial_shift.x;
-        b_vector[vertical_offset + 1] = spatial_shift.y;
-        b_vector[vertical_offset + 2] = spatial_shift.z;
+        b_vector[vertical_offset] = spatial_shift.spatial.px.0;
+        b_vector[vertical_offset + 1] = spatial_shift.spatial.py.0;
+        b_vector[vertical_offset + 2] = spatial_shift.spatial.pz.0;
 
         for (loop_index, individual_loop_signature) in
             propagator_constraint.loop_signature.iter().enumerate()
@@ -182,7 +189,7 @@ fn construct_solver(
         vertical_offset += 3;
 
         if let Some(mass_index) = propagator_constraint.mass_pointer {
-            b_vector[vertical_offset] = inequivalent_masses[mass_index].re;
+            b_vector[vertical_offset] = inequivalent_masses[mass_index].re.0;
             vertical_offset += 1;
         }
     }
@@ -216,10 +223,10 @@ pub fn find_center(
     esurfaces_to_consider: &[ExistingEsurfaceId],
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &[Option<Complex<f64>>],
-    external_momenta: &[LorentzVector<f64>],
+    edge_masses: &[Option<Complex<F<f64>>>],
+    external_momenta: &[FourMomentum<F<f64>>],
     verbose: bool,
-) -> Option<Vec<LorentzVector<f64>>> {
+) -> Option<Vec<ThreeMomentum<F<f64>>>> {
     let mut solver = construct_solver(
         lmb,
         esurfaces_to_consider,
@@ -250,7 +257,7 @@ pub fn find_center(
                 &to_real_mass_vector(edge_masses),
                 &center,
                 external_momenta,
-            ) < 0.0
+            ) < F::from_f64(0.0)
         });
 
         if is_valid {
@@ -271,9 +278,9 @@ pub fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &[Option<Complex<f64>>],
-    external_momenta: &[LorentzVector<f64>],
-) -> Vec<(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)> {
+    edge_masses: &[Option<Complex<F<f64>>>],
+    external_momenta: &[FourMomentum<F<f64>>],
+) -> Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)> {
     let mut res = vec![];
 
     let all_existing_esurfaces = existing_esurfaces
@@ -371,7 +378,7 @@ pub fn find_maximal_overlap(
 
 fn is_subset_of_result(
     subset: &[ExistingEsurfaceId],
-    result: &[(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)],
+    result: &[(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)],
 ) -> bool {
     result
         .iter()
@@ -380,7 +387,7 @@ fn is_subset_of_result(
 
 #[derive(Debug)]
 struct EsurfacePairs {
-    data: HashMap<(ExistingEsurfaceId, ExistingEsurfaceId), Vec<LorentzVector<f64>>>,
+    data: HashMap<(ExistingEsurfaceId, ExistingEsurfaceId), Vec<ThreeMomentum<F<f64>>>>,
     has_pair_with: Vec<Vec<ExistingEsurfaceId>>,
 }
 
@@ -388,7 +395,7 @@ impl EsurfacePairs {
     fn insert(
         &mut self,
         pair: (ExistingEsurfaceId, ExistingEsurfaceId),
-        center: Vec<LorentzVector<f64>>,
+        center: Vec<ThreeMomentum<F<f64>>>,
     ) {
         if pair.0 > pair.1 {
             self.data.insert((pair.1, pair.0), center);
@@ -416,8 +423,8 @@ impl EsurfacePairs {
         lmb: &LoopMomentumBasis,
         existing_esurfaces: &ExistingEsurfaces,
         esurfaces: &EsurfaceCollection,
-        edge_masses: &[Option<Complex<f64>>],
-        external_momenta: &[LorentzVector<f64>],
+        edge_masses: &[Option<Complex<F<f64>>>],
+        external_momenta: &[FourMomentum<F<f64>>],
     ) -> Self {
         let mut res = Self::new_empty(existing_esurfaces.len());
 
@@ -457,7 +464,7 @@ impl EsurfacePairs {
         &self,
         existing_esurfaces: &ExistingEsurfaces,
         subset_len: usize,
-        result: &[(Vec<ExistingEsurfaceId>, Vec<LorentzVector<f64>>)],
+        result: &[(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)],
     ) -> HashSet<Vec<ExistingEsurfaceId>> {
         let mut res = HashSet::default();
         let existing_esurfaces_not_in_overlap = existing_esurfaces
@@ -540,12 +547,12 @@ impl EsurfacePairs {
     }
 }
 
-fn to_real_mass_vector(edge_masses: &[Option<Complex<f64>>]) -> Vec<f64> {
+fn to_real_mass_vector(edge_masses: &[Option<Complex<F<f64>>>]) -> Vec<F<f64>> {
     edge_masses
         .iter()
         .map(|mass| match mass {
             Some(m) => m.re,
-            None => 0.0,
+            None => F::from_f64(0.0),
         })
         .collect_vec()
 }
@@ -555,8 +562,7 @@ fn to_real_mass_vector(edge_masses: &[Option<Complex<f64>>]) -> Vec<f64> {
 mod tests {
     use super::*;
     use itertools::Itertools;
-    use lorentz_vector::LorentzVector;
-    use num::Complex;
+    use spenso::Complex;
 
     use crate::{
         cff::{
@@ -567,27 +573,27 @@ mod tests {
     };
 
     struct HelperBoxStructure {
-        external_momenta: [LorentzVector<f64>; 3],
+        external_momenta: [FourMomentum<F<f64>>; 3],
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
         existing_esurfaces: ExistingEsurfaces,
-        edge_masses: Vec<Option<Complex<f64>>>,
+        edge_masses: Vec<Option<Complex<F<f64>>>>,
     }
 
     struct HelperBananaStructure {
-        external_momenta: [LorentzVector<f64>; 1],
+        external_momenta: [FourMomentum<F<f64>>; 1],
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
         existing_esurfaces: ExistingEsurfaces,
-        edge_masses: Vec<Option<Complex<f64>>>,
+        edge_masses: Vec<Option<Complex<F<f64>>>>,
     }
 
     impl HelperBoxStructure {
-        fn new(masses: Option<[f64; 4]>) -> Self {
+        fn new(masses: Option<[F<f64>; 4]>) -> Self {
             let external_momenta = [
-                LorentzVector::from_args(14.0, -6.6, -40.0, 0.0),
-                LorentzVector::from_args(-43.0, 15.2, 33.0, 0.0),
-                LorentzVector::from_args(-17.9, -50.0, 11.8, 0.0),
+                FourMomentum::from_args(F(14.0), F(-6.6), F(-40.0), F(0.0)),
+                FourMomentum::from_args(F(-43.0), F(15.2), F(33.0), F(0.0)),
+                FourMomentum::from_args(F(-17.9), F(-50.0), F(11.8), F(0.0)),
             ];
 
             let box_basis = vec![4];
@@ -643,7 +649,7 @@ mod tests {
                     let mut edge_masses = vec![None; 4];
                     let mut real_masses = masses
                         .iter()
-                        .map(|&x| Some(Complex::new(x, 0.0)))
+                        .map(|&x| Some(Complex::new(x, F(0.0))))
                         .collect_vec();
 
                     edge_masses.append(&mut real_masses);
@@ -666,7 +672,12 @@ mod tests {
 
     impl HelperBananaStructure {
         fn new() -> Self {
-            let external_momenta = [LorentzVector::from_args(10.0, -10.00000000, 0.0, 0.0)];
+            let external_momenta = [FourMomentum::from_args(
+                F(10.0),
+                F(-10.00000000),
+                F(0.0),
+                F(0.0),
+            )];
             let banana_basis = vec![2, 3];
             let banana_edge_sigs = vec![
                 (vec![0, 0], vec![1]),
@@ -761,7 +772,7 @@ mod tests {
 
         assert_eq!(esurface_pairs.data.len(), 4);
 
-        let box4e_massive = HelperBoxStructure::new(Some([10.5; 4]));
+        let box4e_massive = HelperBoxStructure::new(Some([F(10.5); 4]));
         let esurface_pairs_massive = EsurfacePairs::new(
             &box4e_massive.lmb,
             &box4e_massive.existing_esurfaces,
@@ -823,7 +834,7 @@ mod tests {
                         &box4e.external_momenta,
                     );
 
-                assert!(esurfaec_val < 0.0);
+                assert!(esurfaec_val.0 < 0.0);
             }
         }
     }
@@ -831,7 +842,7 @@ mod tests {
     /// This test deforms the threshold structure into 4 pieces with no overlap
     #[test]
     fn test_disconnected_box_4e() {
-        let box4e = HelperBoxStructure::new(Some([10.5; 4]));
+        let box4e = HelperBoxStructure::new(Some([F(10.5); 4]));
 
         let maximal_overlap = find_maximal_overlap(
             &box4e.lmb,
@@ -855,7 +866,7 @@ mod tests {
                         &box4e.external_momenta,
                     );
 
-                assert!(esurfaec_val < 0.0);
+                assert!(esurfaec_val < F(0.0));
             }
         }
     }

@@ -309,6 +309,7 @@ impl RotationMethod {
             RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x,
             RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y,
             RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z,
+            RotationMethod::None => |vector: &ThreeMomentum<F<T>>| vector.clone(),
         }
     }
 }

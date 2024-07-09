@@ -540,7 +540,7 @@ pub mod tropical_parameterization {
     use symbolica::domains::float::{NumericalFloatLike, Real};
 
     use crate::{
-        graph::LoopMomentumBasis,
+        graph::{Graph, LoopMomentumBasis},
         linalg::SquareMatrix,
         momentum::{FourMomentum, ThreeMomentum},
         utils::{box_muller, compute_shift_part, inverse_gamma_lr, FloatLike, F},
@@ -814,7 +814,7 @@ pub mod tropical_parameterization {
                 .enumerate()
                 .map(|(index, _edge)| {
                     let edge_mass = F::<T>::from_ff64(
-                        match graph.edges[tropical_subgraph_table.tropical_graph._edge_map[index]]
+                        match graph.edges[tropical_subgraph_table.tropical_graph.edge_map[index]]
                             .particle
                             .mass
                             .value
@@ -825,7 +825,7 @@ pub mod tropical_parameterization {
                     );
 
                     let external_signature = &graph.loop_momentum_basis.edge_signatures
-                        [tropical_subgraph_table.tropical_graph._edge_map[index]]
+                        [tropical_subgraph_table.tropical_graph.edge_map[index]]
                         .1;
                     let accumulator = external_momenta[0].spatial.zero();
                     let edge_shift = external_momenta.iter().enumerate().fold(

@@ -9,8 +9,8 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
-use crate::subtraction::static_counterterm::CounterTerm;
 use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::subtraction::static_counterterm::CounterTerm;
 use crate::tropical::tropical_parameterization::{self};
 use crate::utils::{
     f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
@@ -38,14 +38,10 @@ trait GraphIntegrand {
 
     /// Most basic form of evaluating the 3D representation of the underlying loop integral
     fn evaluate<T: FloatLike>(
-        
         &self,
-       
         sample: &DefaultSample<T>,
-       
         rotate_overlap_centers: bool,
         settings: &Settings,
-    ,
     ) -> Complex<F<T>>;
 
     /// Evaluate in a single LMB-channel
@@ -200,15 +196,13 @@ impl GraphIntegrand for AmplitudeGraph {
 
     #[inline]
     fn evaluate<T: FloatLike>(
-        
         &self,
-       
         sample: &DefaultSample<T>,
-       
         rotate_overlap_centers: bool,
         settings: &Settings,
-    ,
     ) -> Complex<F<T>> {
+        let zero_builder = &sample.loop_moms[0].px;
+
         let rep3d = if settings.general.use_ltd {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
@@ -223,7 +217,7 @@ impl GraphIntegrand for AmplitudeGraph {
         let counter_terms = self.get_graph().derived_data.static_counterterm.as_ref();
 
         let counter_term_eval = match counter_terms {
-            None => Complex::new(T::zero(), T::zero()),
+            None => Complex::new(zero_builder.zero(), zero_builder.zero()),
             Some(counter_term) => counter_term.evaluate(
                 &sample.loop_moms,
                 &sample.external_moms,
@@ -244,6 +238,7 @@ impl GraphIntegrand for AmplitudeGraph {
         settings: &Settings,
     ) -> Complex<F<T>> where {
         let one = sample.one();
+
         let rep3d = if settings.general.use_ltd {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
@@ -293,7 +288,7 @@ impl GraphIntegrand for AmplitudeGraph {
                     .graph
                     .compute_energy_product(&sample.loop_moms, &sample.external_moms)
             }
-            None => Complex::new(T::zero(), T::zero()),
+            None => Complex::new(one.zero(), one.zero()),
         };
 
         (rep3d - counterterm) * energy_product / tree_product
@@ -335,14 +330,10 @@ impl GraphIntegrand for SuperGraph {
     #[allow(unused)]
     #[inline]
     fn evaluate<T: FloatLike>(
-        
         &self,
-       
         sample: &DefaultSample<T>,
-       
         rotate_overlap_centers: bool,
         settings: &Settings,
-    ,
     ) -> Complex<F<T>> {
         // sum over channels
         todo!()
@@ -845,9 +836,7 @@ impl GammaLoopIntegrand {
                             tropical_parameterization::generate_tropical_sample(
                                 xs,
                                 &external_moms,
-                                graph.get_tropical_subgraph_table(),
-                                &graph.loop_momentum_basis,
-                                &graph.get_real_mass_vector(),
+                                &graph,
                                 self.settings.general.debug,
                             )
                             .unwrap();

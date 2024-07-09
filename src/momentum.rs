@@ -1021,6 +1021,36 @@ impl<T: Real> RefDefault for FourMomentum<T, T> {
     }
 }
 
+impl<'a, T> Mul<T> for &'a FourMomentum<T, T>
+where
+    T: Mul<T, Output = T> + Clone,
+{
+    type Output = FourMomentum<T, T>;
+    fn mul(self, rhs: T) -> Self::Output {
+        FourMomentum {
+            temporal: Energy {
+                value: self.temporal.value.clone() * rhs.clone(),
+            },
+            spatial: self.spatial.clone() * rhs,
+        }
+    }
+}
+
+impl<'a, T> Mul<&T> for &'a FourMomentum<T, T>
+where
+    T: for<'b> Mul<&'b T, Output = T> + Clone,
+{
+    type Output = FourMomentum<T, T>;
+    fn mul(self, rhs: &T) -> Self::Output {
+        FourMomentum {
+            temporal: Energy {
+                value: self.temporal.value.clone() * rhs,
+            },
+            spatial: self.spatial.clone() * rhs,
+        }
+    }
+}
+
 impl<T> FourMomentum<T, T> {
     pub fn zero(&self) -> Self
     where

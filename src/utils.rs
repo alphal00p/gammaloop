@@ -1735,17 +1735,17 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
 
 pub fn compute_loop_part<T: FloatLike>(
     loop_signature: &[isize],
-    loop_moms: &[LorentzVector<T>],
-) -> LorentzVector<T> {
-    let mut res = LorentzVector::default();
+    loop_moms: &[ThreeMomentum<F<T>>],
+) -> ThreeMomentum<F<T>> {
+    let mut res = loop_moms[0].default();
 
     for i_l in loop_signature.iter().enumerate() {
         match i_l.1 {
             1 => {
-                res += loop_moms[i_l.0];
+                res += &loop_moms[i_l.0];
             }
             -1 => {
-                res -= loop_moms[i_l.0];
+                res -= &loop_moms[i_l.0];
             }
             0 => {}
             _ => unreachable!("Sign should be -1,0,1"),
@@ -1757,17 +1757,17 @@ pub fn compute_loop_part<T: FloatLike>(
 
 pub fn compute_shift_part<T: FloatLike>(
     external_signature: &[isize],
-    external_moms: &[LorentzVector<T>],
-) -> LorentzVector<T> {
-    let mut res = LorentzVector::default();
+    external_moms: &[FourMomentum<F<T>>],
+) -> FourMomentum<F<T>> {
+    let mut res = external_moms[0].default();
 
     for i_l in external_signature.iter().enumerate() {
         match i_l.1 {
             1 => {
-                res += external_moms[i_l.0];
+                res += &external_moms[i_l.0];
             }
             -1 => {
-                res -= external_moms[i_l.0];
+                res -= &external_moms[i_l.0];
             }
             0 => {}
             _ => unreachable!("Sign should be -1,0,1"),
@@ -1779,17 +1779,17 @@ pub fn compute_shift_part<T: FloatLike>(
 
 pub fn compute_t_part_of_shift_part<T: FloatLike>(
     external_signature: &[isize],
-    external_moms: &[LorentzVector<T>],
-) -> T {
-    let mut res = T::zero();
+    external_moms: &[FourMomentum<F<T>>],
+) -> F<T> {
+    let mut res = external_moms[0].temporal.value.zero();
 
     for i_l in external_signature.iter().enumerate() {
         match i_l.1 {
             1 => {
-                res += external_moms[i_l.0].t;
+                res += &external_moms[i_l.0].temporal.value;
             }
             -1 => {
-                res -= external_moms[i_l.0].t;
+                res -= &external_moms[i_l.0].temporal.value;
             }
             0 => {}
             _ => unreachable!("Sign should be -1,0,1"),
@@ -1799,71 +1799,6 @@ pub fn compute_t_part_of_shift_part<T: FloatLike>(
     res
 }
 
-pub fn compute_loop_part<T: FloatLike>(
-    loop_signature: &[isize],
-    loop_moms: &[LorentzVector<T>],
-) -> LorentzVector<T> {
-    let mut res = LorentzVector::default();
-
-    for i_l in loop_signature.iter().enumerate() {
-        match i_l.1 {
-            1 => {
-                res += loop_moms[i_l.0];
-            }
-            -1 => {
-                res -= loop_moms[i_l.0];
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-
-    res
-}
-
-pub fn compute_shift_part<T: FloatLike>(
-    external_signature: &[isize],
-    external_moms: &[LorentzVector<T>],
-) -> LorentzVector<T> {
-    let mut res = LorentzVector::default();
-
-    for i_l in external_signature.iter().enumerate() {
-        match i_l.1 {
-            1 => {
-                res += external_moms[i_l.0];
-            }
-            -1 => {
-                res -= external_moms[i_l.0];
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-
-    res
-}
-
-pub fn compute_t_part_of_shift_part<T: FloatLike>(
-    external_signature: &[isize],
-    external_moms: &[LorentzVector<T>],
-) -> T {
-    let mut res = T::zero();
-
-    for i_l in external_signature.iter().enumerate() {
-        match i_l.1 {
-            1 => {
-                res += external_moms[i_l.0].t;
-            }
-            -1 => {
-                res -= external_moms[i_l.0].t;
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-
-    res
-}
 
 pub fn compute_momentum<'a, 'b: 'a, T>(
     signature: &(Vec<isize>, Vec<isize>),

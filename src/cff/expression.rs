@@ -1,9 +1,9 @@
-use crate::utils::FloatLike;
+use crate::utils::{FloatLike, F};
 use derive_more::{From, Into};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::ops::Index;
-use symbolica::representations::Atom;
+use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
 use typed_index_collections::TiVec;
 
 #[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize)]
@@ -43,7 +43,7 @@ pub enum CFFExpressionNode {
 
 impl CFFExpression {
     #[inline]
-    pub fn evaluate_orientations<T: FloatLike>(&self, energy_cache: &[T]) -> Vec<T> {
+    pub fn evaluate_orientations<T: FloatLike>(&self, energy_cache: &[F<T>]) -> Vec<F<T>> {
         let esurface_cache = self.compute_esurface_cache(energy_cache);
         let hsurface_cache = self.compute_hsurface_cache(energy_cache);
 
@@ -63,18 +63,19 @@ impl CFFExpression {
     }
 
     #[inline]
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
         self.evaluate_orientations(energy_cache)
             .into_iter()
-            .sum::<T>()
+            .reduce(|acc, x| &acc + &x)
+            .unwrap_or_else(|| energy_cache[0].zero())
     }
 
     #[inline]
     pub fn evaluate_orientations_from_caches<T: FloatLike>(
         &self,
-        esurface_cache: &EsurfaceCache<T>,
-        hsurface_cache: &HsurfaceCache<T>,
-    ) -> Vec<T> {
+        esurface_cache: &EsurfaceCache<F<T>>,
+        hsurface_cache: &HsurfaceCache<F<T>>,
+    ) -> Vec<F<T>> {
         let mut term_cache = self.build_term_cache();
 
         self.iter_term_ids()
@@ -93,9 +94,9 @@ impl CFFExpression {
     #[inline]
     pub fn evaluate_orientations_from_esurface_cache<T: FloatLike>(
         &self,
-        esurface_cache: &EsurfaceCache<T>,
-        energy_cache: &[T],
-    ) -> Vec<T> {
+        esurface_cache: &EsurfaceCache<F<T>>,
+        energy_cache: &[F<T>],
+    ) -> Vec<F<T>> {
         let hsurface_cache = compute_hsurface_cache(&self.hsurfaces, energy_cache);
         self.evaluate_orientations_from_caches(esurface_cache, &hsurface_cache)
     }
@@ -103,32 +104,40 @@ impl CFFExpression {
     #[inline]
     pub fn evaluate_from_caches<T: FloatLike>(
         &self,
-        esurface_cache: &EsurfaceCache<T>,
-        hsurface_cache: &HsurfaceCache<T>,
-    ) -> T {
+        esurface_cache: &EsurfaceCache<F<T>>,
+        hsurface_cache: &HsurfaceCache<F<T>>,
+    ) -> F<T> {
         self.evaluate_orientations_from_caches(esurface_cache, hsurface_cache)
             .into_iter()
-            .sum::<T>()
+            .reduce(|acc, x| &acc + &x)
+            .unwrap_or_else(|| esurface_cache[EsurfaceID::from(0usize)].zero())
     }
 
     #[inline]
     pub fn evalauate_from_esurface_cache<T: FloatLike>(
         &self,
-        esurface_cache: &EsurfaceCache<T>,
-        energy_cache: &[T],
-    ) -> T {
+        esurface_cache: &EsurfaceCache<F<T>>,
+        energy_cache: &[F<T>],
+    ) -> F<T> {
         self.evaluate_orientations_from_esurface_cache(esurface_cache, energy_cache)
             .into_iter()
-            .sum::<T>()
+            .reduce(|acc, x| &acc + &x)
+            .unwrap_or_else(|| energy_cache[0].zero())
     }
 
     #[inline]
-    pub fn compute_esurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> EsurfaceCache<T> {
+    pub fn compute_esurface_cache<T: FloatLike>(
+        &self,
+        energy_cache: &[F<T>],
+    ) -> EsurfaceCache<F<T>> {
         compute_esurface_cache(&self.esurfaces, energy_cache)
     }
 
     #[inline]
-    pub fn compute_hsurface_cache<T: FloatLike>(&self, energy_cache: &[T]) -> HsurfaceCache<T> {
+    pub fn compute_hsurface_cache<T: FloatLike>(
+        &self,
+        energy_cache: &[F<T>],
+    ) -> HsurfaceCache<F<T>> {
         compute_hsurface_cache(&self.hsurfaces, energy_cache)
     }
 
@@ -223,7 +232,7 @@ impl CFFExpression {
     }
 
     #[inline]
-    fn build_term_cache<T: FloatLike>(&self) -> TermCache<Option<T>> {
+    fn build_term_cache<T: FloatLike>(&self) -> TermCache<Option<F<T>>> {
         self.orientations
             .iter()
             .map(|orientation| vec![None; orientation.expression.get_num_nodes()].into())
@@ -389,18 +398,20 @@ fn recursive_eval_from_node<T: FloatLike>(
     tree: &Tree<CFFExpressionNode>,
     node_id: NodeId,
     term_id: TermId,
-    esurface_cache: &EsurfaceCache<T>,
-    hsurface_cache: &HsurfaceCache<T>,
-    term_cache: &mut TermCache<Option<T>>,
-) -> T {
+    esurface_cache: &EsurfaceCache<F<T>>,
+    hsurface_cache: &HsurfaceCache<F<T>>,
+    term_cache: &mut TermCache<Option<F<T>>>,
+) -> F<T> {
     let node = tree.get_node(node_id);
     match node.data {
-        CFFExpressionNode::Pointer { term_id, node_id } => term_cache[term_id][node_id].unwrap(),
+        CFFExpressionNode::Pointer { term_id, node_id } => {
+            term_cache[term_id][node_id].clone().unwrap()
+        }
         CFFExpressionNode::Data(surface_id) => {
             let surface_val = match surface_id {
                 HybridSurfaceID::Esurface(esurface_id) => esurface_cache[esurface_id].inv(),
                 HybridSurfaceID::Hsurface(hsurface_id) => hsurface_cache[hsurface_id].inv(),
-                HybridSurfaceID::Unit => T::one(),
+                HybridSurfaceID::Unit => esurface_cache[EsurfaceID::from(0usize)].one(),
             };
 
             let res = if !node.children.is_empty() {
@@ -418,11 +429,12 @@ fn recursive_eval_from_node<T: FloatLike>(
                                 term_cache,
                             )
                         })
-                        .sum::<T>()
+                        .reduce(|acc, x| acc + x)
+                        .unwrap_or_else(|| unreachable!())
             } else {
                 surface_val
             };
-            term_cache[term_id][node_id] = Some(res);
+            term_cache[term_id][node_id] = Some(res.clone());
             res
         }
     }
@@ -431,10 +443,10 @@ fn recursive_eval_from_node<T: FloatLike>(
 fn evaluate_tree<T: FloatLike>(
     tree: &Tree<CFFExpressionNode>,
     term_id: TermId,
-    esurface_cache: &EsurfaceCache<T>,
-    hsurface_cache: &HsurfaceCache<T>,
-    term_cache: &mut TermCache<Option<T>>,
-) -> T {
+    esurface_cache: &EsurfaceCache<F<T>>,
+    hsurface_cache: &HsurfaceCache<F<T>>,
+    term_cache: &mut TermCache<Option<F<T>>>,
+) -> F<T> {
     recursive_eval_from_node(
         tree,
         NodeId::root(),
@@ -464,9 +476,9 @@ pub struct CFFLimit {
 impl CFFLimit {
     pub fn evaluate_from_esurface_cache<T: FloatLike>(
         &self,
-        esurface_cache: &EsurfaceCache<T>,
-        energy_cache: &[T],
-    ) -> T {
+        esurface_cache: &EsurfaceCache<F<T>>,
+        energy_cache: &[F<T>],
+    ) -> F<T> {
         let left_orientations = self
             .left
             .evaluate_orientations_from_esurface_cache(esurface_cache, energy_cache);
@@ -478,7 +490,8 @@ impl CFFLimit {
             .into_iter()
             .zip(right_orientations)
             .map(|(l, r)| l * r)
-            .sum()
+            .reduce(|acc, x| &acc + &x)
+            .unwrap_or_else(|| esurface_cache[EsurfaceID::from(0usize)].zero())
     }
 
     pub fn limit_to_atom_with_rewrite(&self, rewriter_esurface: Option<&Esurface>) -> Atom {

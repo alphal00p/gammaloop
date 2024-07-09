@@ -6,13 +6,15 @@ use eyre::eyre;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
-use symbolica::representations::Atom;
+use symbolica::atom::Atom;
+use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
 
 use crate::graph::{Graph, LoopMomentumBasis};
+use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::utils::{
     compute_loop_part, compute_momentum, compute_shift_part, compute_t_part_of_shift_part,
-    format_momentum, FloatLike,
+    format_momentum, FloatLike, RefDefault, F,
 };
 
 use super::cff_graph::VertexSet;
@@ -71,13 +73,13 @@ impl Esurface {
     /// Compute the value of the esurface from an energy cache that can be computed from the underlying graph
     /// This is the fastest way to compute the value of all esurfaces in a full evaluation
     #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
         surface::compute_value(self, energy_cache)
     }
 
     /// Only compute the shift part, useful for existence checks
     #[inline]
-    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[T]) -> T {
+    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
         surface::compute_shift_part(self, energy_cache)
     }
 
@@ -87,21 +89,27 @@ impl Esurface {
     pub fn compute_from_momenta<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
-        real_mass_vector: &[T],
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-    ) -> T {
+        real_mass_vector: &[F<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> F<T> {
+        let spatial_part_of_externals = external_moms
+            .iter()
+            .map(|mom| mom.spatial.clone())
+            .collect_vec();
+
         let energy_sum = self
             .energies
             .iter()
             .map(|index| {
                 let signature = &lmb.edge_signatures[*index];
-                let momentum = compute_momentum(signature, loop_moms, external_moms);
-                let mass = real_mass_vector[*index];
+                let momentum = compute_momentum(signature, loop_moms, &spatial_part_of_externals);
+                let mass = &real_mass_vector[*index];
 
-                (momentum.spatial_squared() + mass * mass).sqrt()
+                (momentum.norm_squared() + mass * mass).sqrt()
             })
-            .sum::<T>();
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| loop_moms[0].px.zero());
 
         energy_sum + self.compute_shift_part_from_momenta(lmb, external_moms)
     }
@@ -111,28 +119,34 @@ impl Esurface {
     pub fn compute_shift_part_from_momenta<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
-        external_moms: &[LorentzVector<T>],
-    ) -> T {
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> F<T> {
         self.external_shift
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].1;
-                Into::<T>::into(*sign as f64)
+                F::from_f64(*sign as f64)
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
-            .sum::<T>()
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| external_moms[0].temporal.value.zero())
     }
 
     #[inline]
     pub fn compute_self_and_r_derivative<T: FloatLike>(
         &self,
-        radius: T,
-        shifted_unit_loops: &[LorentzVector<T>],
-        center: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        radius: &F<T>,
+        shifted_unit_loops: &[ThreeMomentum<F<T>>],
+        center: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb: &LoopMomentumBasis,
-        real_mass_vector: &[T],
-    ) -> (T, T) {
+        real_mass_vector: &[F<T>],
+    ) -> (F<T>, F<T>) {
+        let spatial_part_of_externals = external_moms
+            .iter()
+            .map(|mom| mom.spatial.clone())
+            .collect_vec();
+
         let loops = shifted_unit_loops
             .iter()
             .zip(center)
@@ -147,20 +161,21 @@ impl Esurface {
             .map(|&index| {
                 let signature = &lmb.edge_signatures[index];
 
-                let momentum = compute_momentum(signature, &loops, external_moms);
+                let momentum = compute_momentum(signature, &loops, &spatial_part_of_externals);
                 let unit_loop_part = compute_loop_part(&signature.0, shifted_unit_loops);
 
-                let energy = (momentum.spatial_squared()
-                    + real_mass_vector[index] * real_mass_vector[index])
+                let energy = (momentum.norm_squared()
+                    + &real_mass_vector[index] * &real_mass_vector[index])
                     .sqrt();
 
-                let numerator = momentum.spatial_dot(&unit_loop_part);
+                let numerator = momentum * &unit_loop_part;
 
-                (numerator / energy, energy)
+                (numerator / &energy, energy)
             })
-            .fold((T::zero(), T::zero()), |(der_sum, en_sum), (der, en)| {
-                (der_sum + der, en_sum + en)
-            });
+            .fold(
+                (radius.zero(), radius.zero()),
+                |(der_sum, en_sum), (der, en)| (der_sum + der, en_sum + en),
+            );
 
         (energy_sum + shift, derivative)
     }
@@ -168,15 +183,15 @@ impl Esurface {
     #[inline]
     pub fn get_radius_guess<T: FloatLike>(
         &self,
-        _unit_loops: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        _unit_loops: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb: &LoopMomentumBasis,
-    ) -> T {
+    ) -> F<T> {
         //let mut radius_guess = T::zero();
         //let mut denominator = T::zero();
 
         let esurface_shift = self.compute_shift_part_from_momenta(lmb, external_moms);
-        Into::<T>::into(2.0) * esurface_shift.abs()
+        F::from_f64(2.0) * esurface_shift.abs()
 
         //for energy in self.energies.iter() {
         //    let signature = &lmb.edge_signatures[*energy];
@@ -257,12 +272,12 @@ pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
 pub fn compute_esurface_cache<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
-    energy_cache: &[T],
-) -> EsurfaceCache<T> {
+    energy_cache: &[F<T>],
+) -> EsurfaceCache<F<T>> {
     esurfaces
         .iter()
         .map(|esurface| esurface.compute_value(energy_cache))
-        .collect::<Vec<T>>()
+        .collect::<Vec<F<T>>>()
         .into()
 }
 
@@ -283,18 +298,18 @@ pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
 pub struct ExistingEsurfaceId(usize);
 
 const MAX_EXPECTED_CAPACITY: usize = 32; // Used to prevent reallocations during existence check
-const SHIFT_THRESHOLD: f64 = 1.0e-13;
-const EXISTENCE_THRESHOLD: f64 = 1.0e-7;
+const SHIFT_THRESHOLD: F<f64> = F(1.0e-13);
+const EXISTENCE_THRESHOLD: F<f64> = F(1.0e-7);
 
 /// Returns the list of esurfaces which may exist, must be called each time at evaluation if externals are not fixed.
 #[inline]
 pub fn get_existing_esurfaces<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
     esurface_derived_data: &EsurfaceDerivedData,
-    externals: &[LorentzVector<T>],
+    externals: &[FourMomentum<F<T>>],
     lmb: &LoopMomentumBasis,
     debug: usize,
-    e_cm: f64,
+    e_cm: F<f64>,
 ) -> ExistingEsurfaces {
     let mut existing_esurfaces = ExistingEsurfaces::with_capacity(MAX_EXPECTED_CAPACITY);
 
@@ -305,11 +320,11 @@ pub fn get_existing_esurfaces<T: FloatLike>(
             let esurface = &esurfaces[*esurface_id];
 
             let shift_part = esurface.compute_shift_part_from_momenta(lmb, externals);
-            let shift_zero_sq = shift_part * shift_part;
+            let shift_zero_sq = &shift_part * &shift_part;
 
-            if shift_part < -Into::<T>::into(SHIFT_THRESHOLD * e_cm) {
+            if shift_part < -F::from_ff64(SHIFT_THRESHOLD * e_cm) {
                 Some((*esurface_id, shift_zero_sq))
-            } else if shift_part > Into::<T>::into(SHIFT_THRESHOLD * e_cm) {
+            } else if shift_part > F::from_ff64(SHIFT_THRESHOLD * e_cm) {
                 Some((*other_esurface_id, shift_zero_sq))
             } else {
                 None
@@ -319,14 +334,14 @@ pub fn get_existing_esurfaces<T: FloatLike>(
 
             let esurface_shift = compute_shift_part(shift_signature, externals);
 
-            let shift_spatial_sq = esurface_shift.spatial_squared();
+            let shift_spatial_sq = esurface_shift.spatial.norm_squared();
             let mass_sum_squared = esurface_derived_data[esurface_to_check_id].mass_sum_squared;
 
             let existence_condition =
-                shift_zero_sq - shift_spatial_sq - Into::<T>::into(mass_sum_squared);
+                &shift_zero_sq - shift_spatial_sq - F::from_ff64(mass_sum_squared);
 
             if existence_condition
-                > Into::<T>::into(EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm)
+                > F::from_ff64(EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm)
             {
                 if debug > 1 {
                     println!(
@@ -358,14 +373,14 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct EsurfaceData {
     cut_momentum_basis: usize,
-    mass_sum_squared: f64,
+    mass_sum_squared: F<f64>,
     shift_signature: Vec<isize>,
 }
 
 impl EsurfaceData {
     #[allow(dead_code)]
-    fn existence_condition<T: FloatLike>(&self, externals: &[LorentzVector<T>]) -> (T, T) {
-        let mut shift = LorentzVector::new();
+    fn existence_condition<T: FloatLike>(&self, externals: &[FourMomentum<F<T>>]) -> (F<T>, F<T>) {
+        let mut shift = externals[0].default();
 
         for (i, external) in externals.iter().enumerate() {
             match self.shift_signature[i] {
@@ -375,23 +390,24 @@ impl EsurfaceData {
                 _ => unreachable!("Shift signature must be -1, 0 or 1"),
             }
         }
+        let shift_squared = shift.square();
 
         (
-            shift.t,
-            shift.square() - Into::<T>::into(self.mass_sum_squared),
+            shift.temporal.value,
+            shift_squared - F::from_ff64(self.mass_sum_squared),
         )
     }
 
     pub fn compute_shift_part_from_externals<T: FloatLike>(
         &self,
-        externals: &[LorentzVector<T>],
-    ) -> T {
-        let mut shift = T::zero();
+        externals: &[FourMomentum<F<T>>],
+    ) -> F<T> {
+        let mut shift = externals[0].temporal.value.zero();
 
         for (i, external) in externals.iter().enumerate() {
             match self.shift_signature[i] {
-                1 => shift += external.t,
-                -1 => shift -= external.t,
+                1 => shift += &external.temporal.value,
+                -1 => shift -= &external.temporal.value,
                 0 => {}
                 _ => unreachable!("Shift signature must be -1, 0 or 1"),
             }
@@ -434,13 +450,14 @@ pub fn generate_esurface_data(
 
             let shift_signature = lmb.edge_signatures[energy_not_in_cmb].1.clone();
 
-            let mass_sum: f64 = esurface
+            let mass_sum: F<f64> = esurface
                 .energies
                 .iter()
                 .map(|&i| graph.edges[i].particle.mass.value)
                 .filter(|mass| mass.is_some())
                 .map(|mass| mass.unwrap_or_else(|| unreachable!()).re)
-                .sum();
+                .reduce(|acc, x| acc + x)
+                .unwrap_or_else(|| F::from_f64(0.0));
 
             Ok(EsurfaceData {
                 cut_momentum_basis: lmb_index,
@@ -524,15 +541,18 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
 
 #[cfg(test)]
 mod tests {
-    use symbolica::representations::Atom;
+    use symbolica::atom::Atom;
 
-    use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
+    use crate::{
+        cff::{cff_graph::VertexSet, esurface::Esurface},
+        utils::F,
+    };
 
     use super::add_external_shifts;
 
     #[test]
     fn test_esurface() {
-        let energies_cache = [1., 2., 3., 4., 5.];
+        let energies_cache = [F(1.), F(2.), F(3.), F(4.), F(5.)];
         let energies = vec![0, 1, 2];
 
         let external_shift = vec![(3, 1), (4, 1)];
@@ -549,7 +569,7 @@ mod tests {
         };
 
         let res = esurface.compute_value(&energies_cache);
-        assert_eq!(res, 15.);
+        assert_eq!(res.0, 15.);
 
         let canon_shift = vec![(1, -1), (2, -1), (3, -1)];
         esurface.canonicalize_shift(4, &canon_shift);
@@ -568,7 +588,7 @@ mod tests {
         };
 
         let res = esurface.compute_value(&energies_cache);
-        assert_eq!(res, 2.);
+        assert_eq!(res.0, 2.);
     }
 
     #[test]

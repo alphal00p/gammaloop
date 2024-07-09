@@ -192,7 +192,7 @@ mod tests_scalar_massless_triangle {
             &[p1, p2],
             &graph.loop_momentum_basis,
             0,
-            2.0,
+            F(2.0),
         );
 
         assert_eq!(existing.len(), 0);
@@ -737,9 +737,9 @@ fn pytest_massless_scalar_box() {
     graph.generate_esurface_data().unwrap();
 
     let box4_e = [
-        LorentzVector::from_args(14.0, -6.6, -40.0, 0.0),
-        LorentzVector::from_args(43.0, -15.2, -33.0, 0.0),
-        LorentzVector::from_args(17.9, 50.0, -11.8, 0.0),
+        FourMomentum::from_args(F(14.0), F(-6.6), F(-40.0), F(0.0)),
+        FourMomentum::from_args(F(43.0), F(-15.2), F(-33.0), F(0.0)),
+        FourMomentum::from_args(F(17.9), F(50.0), F(-11.8), F(0.0)),
     ];
 
     let esurfaces = &graph
@@ -755,7 +755,7 @@ fn pytest_massless_scalar_box() {
         &box4_e,
         &graph.loop_momentum_basis,
         0,
-        57.0,
+        F(57.0),
     );
 
     let edge_masses = graph
@@ -1181,11 +1181,11 @@ fn pytest_hexagon() {
         .esurfaces;
 
     let kinematics = [
-        LorentzVector::from_args(24., -21.2, 71., 0.),
-        LorentzVector::from_args(50.4, 15.8, -18.8, 0.),
-        LorentzVector::from_args(-0.2, 46.2, 8.6, 0.),
-        -LorentzVector::from_args(-33.2, 2.6, -70.8, 0.),
-        -LorentzVector::from_args(-80., -5.6, -40.0, 0.0),
+        FourMomentum::from_args(F(24.), F(-21.2), F(71.), F(0.)),
+        FourMomentum::from_args(F(50.4), F(15.8), F(-18.8), F(0.)),
+        FourMomentum::from_args(F(-0.2), F(46.2), F(8.6), F(0.)),
+        -FourMomentum::from_args(F(-33.2), F(2.6), F(-70.8), F(0.)),
+        -FourMomentum::from_args(F(-80.), F(-5.6), F(-40.0), F(0.0)),
     ];
 
     let existing_esurface = get_existing_esurfaces(
@@ -1194,7 +1194,7 @@ fn pytest_hexagon() {
         &kinematics,
         &graph.loop_momentum_basis,
         0,
-        75.,
+        F(75.),
     );
 
     assert_eq!(existing_esurface.len(), 6);
@@ -1223,11 +1223,11 @@ fn pytest_hexagon() {
     assert_eq!(maximal_overlap[3].0.len(), 2);
 
     let hexagon_10_e = [
-        LorentzVector::from_args(-80., 29., -70., 0.),
-        LorentzVector::from_args(83.5, 14.0, 70.0, 0.0),
-        LorentzVector::from_args(88.5, 6.5, -6., 0.),
-        -LorentzVector::from_args(36.5, -71., 97.5, 0.),
-        -LorentzVector::from_args(12.5, -83.5, -57.5, 0.),
+        FourMomentum::from_args(F(-80.), F(29.), F(-70.), F(0.)),
+        FourMomentum::from_args(F(83.5), F(14.0), F(70.0), F(0.0)),
+        FourMomentum::from_args(F(88.5), F(6.5), F(-6.), F(0.)),
+        -FourMomentum::from_args(F(36.5), F(-71.), F(97.5), F(0.)),
+        -FourMomentum::from_args(F(12.5), F(-83.5), F(-57.5), F(0.)),
     ];
 
     let existing_esurfaces = get_existing_esurfaces(
@@ -1236,7 +1236,7 @@ fn pytest_hexagon() {
         &hexagon_10_e,
         &graph.loop_momentum_basis,
         0,
-        88.,
+        F(88.),
     );
 
     assert_eq!(existing_esurfaces.len(), 10);
@@ -1284,21 +1284,21 @@ fn pytest_topology_c() {
         .esurfaces;
 
     let kinematics = [
-        LorentzVector::from_args(9.0, 0.0, 0.0, 8.94427190999916),
-        LorentzVector::from_args(9.0, 0.0, 0.0, -8.94427190999916),
-        -LorentzVector::from_args(
-            1.83442509122858,
-            -0.383828222192743,
-            0.69085529916260,
-            -1.31653190094982,
+        FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(8.94427190999916)),
+        FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(-8.94427190999916)),
+        -FourMomentum::from_args(
+            F(1.83442509122858),
+            F(-0.383828222192743),
+            F(0.69085529916260),
+            F(-1.31653190094982),
         ),
-        -LorentzVector::from_args(
-            5.78920098524940,
-            -1.80358221330469,
-            -5.24375913342836,
-            1.328506453,
+        -FourMomentum::from_args(
+            F(5.78920098524940),
+            F(-1.80358221330469),
+            F(-5.24375913342836),
+            F(1.328506453),
         ),
-        -LorentzVector::from_args(2.82869, -1.83886, -1.6969477, 0.8605192),
+        -FourMomentum::from_args(F(2.82869), F(-1.83886), F(-1.6969477), F(0.8605192)),
     ];
 
     let _edge_masses = graph
@@ -1307,7 +1307,7 @@ fn pytest_topology_c() {
         .map(|edge| edge.particle.mass.value)
         .map(|mass| {
             if let Some(value) = mass {
-                if value.re == 0.0 {
+                if value.re.0 == 0.0 {
                     None
                 } else {
                     Some(value)
@@ -1324,7 +1324,7 @@ fn pytest_topology_c() {
         &kinematics,
         &graph.loop_momentum_basis,
         2,
-        18.,
+        F(18.),
     );
 
     let overlap = find_maximal_overlap(
@@ -1361,24 +1361,32 @@ fn pytest_massless_pentabox() {
     graph.generate_loop_momentum_bases();
     graph.generate_esurface_data().unwrap();
 
-    let rescaling = 1.0e-3;
+    let rescaling = F(1.0e-3);
     let kinematics = [
-        LorentzVector::from_args(5.980_260_048_915_123e2, 0.0, 0.0, 5.724_562_014_045_295e2)
-            * rescaling,
-        LorentzVector::from_args(5.980_260_048_915_123e2, 0.0, 0.0, -5.724_562_014_045_295e2)
-            * rescaling,
-        LorentzVector::from_args(
-            -5.394_473_213_122_507e2,
-            -1.971_081_698_462_961e2,
-            -4.416_135_519_343_869e2,
-            2.250_822_886_064_787e2,
-        ) * rescaling,
-        LorentzVector::from_args(
-            -2.255_538_754_188_549e2,
-            1.757_868_459_829_899e2,
-            3.716_353_112_335_996e1,
-            -1.013_763_093_935_658e2,
-        ) * rescaling,
+        &FourMomentum::from_args(
+            F(5.980_260_048_915_123e2),
+            F(0.0),
+            F(0.0),
+            F(5.724_562_014_045_295e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(5.980_260_048_915_123e2),
+            F(0.0),
+            F(0.0),
+            F(-5.724_562_014_045_295e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-5.394_473_213_122_507e2),
+            F(-1.971_081_698_462_961e2),
+            F(-4.416_135_519_343_869e2),
+            F(2.250_822_886_064_787e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-2.255_538_754_188_549e2),
+            F(1.757_868_459_829_899e2),
+            F(3.716_353_112_335_996e1),
+            F(-1.013_763_093_935_658e2),
+        ) * &rescaling,
     ];
 
     let edge_masses = graph
@@ -1387,7 +1395,7 @@ fn pytest_massless_pentabox() {
         .map(|edge| edge.particle.mass.value)
         .map(|mass| {
             if let Some(value) = mass {
-                if value.re == 0.0 {
+                if value.re.0 == 0.0 {
                     None
                 } else {
                     Some(value)
@@ -1409,7 +1417,7 @@ fn pytest_massless_pentabox() {
         &kinematics,
         &graph.loop_momentum_basis,
         0,
-        1.0,
+        F(1.0),
     );
 
     assert_eq!(existing_esurfaces.len(), 17);
@@ -1448,32 +1456,32 @@ fn pytest_massless_3l_pentabox() {
     graph.generate_loop_momentum_bases();
     graph.generate_esurface_data().unwrap();
 
-    let rescaling = 1.0e0;
+    let rescaling = F(1.0e0);
     let kinematics = [
-        LorentzVector::from_args(
-            0.149500000000000E+01,
-            0.000000000000000E+00,
-            0.000000000000000E+00,
-            0.149165176901313E+01,
-        ) * rescaling,
-        LorentzVector::from_args(
-            0.150500000000000E+01,
-            0.000000000000000E+00,
-            0.000000000000000E+00,
-            -0.149165176901313E+01,
-        ) * rescaling,
-        LorentzVector::from_args(
-            -0.126041949101381e+01,
-            -0.452362952912639e+00,
-            -0.101350243653045e+01,
-            0.516563513332600e+00,
-        ) * rescaling,
-        LorentzVector::from_args(
-            -0.105098730574850e+01,
-            0.489324061520790e-01,
-            0.928212188578101e+00,
-            -0.283905035967510e+00,
-        ) * rescaling,
+        &FourMomentum::from_args(
+            F(0.149500000000000E+01),
+            F(0.000000000000000E+00),
+            F(0.000000000000000E+00),
+            F(0.149165176901313E+01),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(0.150500000000000E+01),
+            F(0.000000000000000E+00),
+            F(0.000000000000000E+00),
+            F(-0.149165176901313E+01),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-0.126041949101381e+01),
+            F(-0.452362952912639e+00),
+            F(-0.101350243653045e+01),
+            F(0.516563513332600e+00),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-0.105098730574850e+01),
+            F(0.489324061520790e-01),
+            F(0.928212188578101e+00),
+            F(-0.283905035967510e+00),
+        ) * &rescaling,
     ];
 
     let edge_masses = graph
@@ -1482,7 +1490,7 @@ fn pytest_massless_3l_pentabox() {
         .map(|edge| edge.particle.mass.value)
         .map(|mass| {
             if let Some(value) = mass {
-                if value.re == 0.0 {
+                if value.re.0 == 0.0 {
                     None
                 } else {
                     Some(value)
@@ -1504,7 +1512,7 @@ fn pytest_massless_3l_pentabox() {
         &kinematics,
         &graph.loop_momentum_basis,
         0,
-        1.0,
+        F(1.0),
     );
 
     assert_eq!(graph.loop_momentum_basis.basis.len(), 3);
