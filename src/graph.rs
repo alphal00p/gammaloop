@@ -9,33 +9,40 @@ use crate::{
     },
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
-    numerator::generate_numerator,
+    momentum::{Energy, FourMomentum, ThreeMomentum},
+    numerator::Numerator,
     subtraction::{overlap::find_maximal_overlap, static_counterterm},
-    tensor::{
-        AbstractIndex, Contract, DataTensor, DenseTensor, GetTensorData, Representation,
-        SetTensorData, Slot, SparseTensor, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT,
-        COLORFUND, COLORSEXT, EUCLIDEAN,
-    },
     tropical::{self, TropicalSubgraphTable},
-    utils::{compute_momentum, FloatLike},
+    utils::{compute_four_momentum_from_three, compute_three_momentum_from_four, FloatLike, F},
 };
+
 use ahash::RandomState;
+
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use itertools::Itertools;
-use log::warn;
-use lorentz_vector::LorentzVector;
+use log::{debug, warn};
 use nalgebra::DMatrix;
 #[allow(unused_imports)]
-use num::traits::Float;
-use num::Complex;
+use spenso::Contract;
+use spenso::{
+    ufo::{batch_replace, preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
+    Complex, *,
+};
 
+use core::panic;
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
-use symbolica::{id::Pattern, representations::Atom};
+
+use symbolica::{
+    atom::{Atom, Symbol},
+    domains::float::NumericalFloatLike,
+    id::Pattern,
+    state::State,
+};
 
 use constcat::concat;
 
@@ -121,7 +128,7 @@ impl InteractionVertexInfo {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern =
-                        Pattern::parse(&format!("Q{}(lor(4,x_))", e)).unwrap();
+                        Pattern::parse(&format!("Q{}(lor(4,indexid(x_)))", e)).unwrap();
 
                     atom = momentum_in_pattern.replace_all(
                         atom.as_view(),
@@ -131,8 +138,12 @@ impl InteractionVertexInfo {
                     );
                 }
 
+                atom = preprocess_ufo_spin_wrapped(atom);
+
                 for (i, e) in edges.iter().enumerate() {
-                    let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
+                    let pat: Pattern = Atom::parse(&format!("indexid({})", i + 1))
+                        .unwrap()
+                        .into_pattern();
 
                     let dir = if graph.is_edge_incoming(*e, vertex_pos) {
                         "in"
@@ -162,55 +173,7 @@ impl InteractionVertexInfo {
 
                 //a is adjoint index, i is fundamental index, ia is antifundamental index, s is sextet ,sa is antisextet
 
-                let t_pat = Pattern::parse("T(a_,i_,ia_)").unwrap();
-
-                let t_rep = Pattern::parse("T(coad(a_),cof(i_),coaf(ia_))").unwrap();
-
-                atom = t_pat.replace_all(atom.as_view(), &t_rep, None, None);
-
-                let f_pat = Pattern::parse("f(a1_,a2_,a3_)").unwrap();
-
-                let f_rep = Pattern::parse("f(coad(a1_),coad(a2_),coad(a3_))").unwrap();
-
-                atom = f_pat.replace_all(atom.as_view(), &f_rep, None, None);
-
-                let d_pat = Pattern::parse("d(a1_,a2_,a3_)").unwrap();
-
-                let d_rep = Pattern::parse("d(coad(a1_),coad(a2_),coad(a3_))").unwrap();
-
-                atom = d_pat.replace_all(atom.as_view(), &d_rep, None, None);
-
-                let eps_pat = Pattern::parse("Epsilon(i1_,i2_,i3_)").unwrap();
-
-                let eps_rep = Pattern::parse("EpsilonBar(cof(i1_),cof(i2_),cof(i3_))").unwrap();
-
-                atom = eps_pat.replace_all(atom.as_view(), &eps_rep, None, None);
-
-                let eps_bar_pat = Pattern::parse("EpsilonBar(ia_1,ia_2,ia_3)").unwrap();
-
-                let eps_bar_rep =
-                    Pattern::parse("Epsilon(coaf(ia_1),coaf(ia_2),coaf(ia_3))").unwrap();
-
-                atom = eps_bar_pat.replace_all(atom.as_view(), &eps_bar_rep, None, None);
-
-                let t6_pat = Pattern::parse("T6(a_,s_,as_)").unwrap();
-
-                let t6_rep = Pattern::parse("T6(coad(a_),cos(s_),coas(as_))").unwrap();
-
-                atom = t6_pat.replace_all(atom.as_view(), &t6_rep, None, None);
-
-                let k6_pat = Pattern::parse("K6(ia1_,ia2_,s_)").unwrap();
-
-                let k6_rep = Pattern::parse("K6(coaf(ia1_),coaf(ia2_),cos(s_))").unwrap();
-
-                atom = k6_pat.replace_all(atom.as_view(), &k6_rep, None, None);
-
-                let k6_bar_pat = Pattern::parse("K6Bar(as_,i1_,i2_)").unwrap();
-
-                let k6_bar_rep = Pattern::parse("K6Bar(coas(as_),cof(i1_),cof(i2_))").unwrap();
-
-                atom = k6_bar_pat.replace_all(atom.as_view(), &k6_bar_rep, None, None);
-
+                atom = preprocess_ufo_color_wrapped(atom);
                 //T(1,2,3) Fundamental representation matrix (T a1 )ı  ̄3 i2
                 // f(1,2,3) Antisymmetric structure constant f a1a2a3
                 // d(1,2,3) Symmetric structure constant da1 a2 a3
@@ -226,44 +189,37 @@ impl InteractionVertexInfo {
                 for (i, s) in spins.iter().enumerate() {
                     let id1 = Pattern::parse(&format!("Identity({},x_)", i + 1)).unwrap();
 
-                    let id2 = Pattern::parse(&format!("Identity(x_,{})", i + 1)).unwrap();
+                    let id2 = Pattern::parse(&format!("id(x_,{})", i + 1)).unwrap();
 
                     let ind = match s {
-                        1 => concat!(EUCLIDEAN, "("),
-                        3 => concat!(COLORFUND, "("),
-                        -3 => concat!(COLORANTIFUND, "("),
-                        6 => concat!(COLORSEXT, "("),
-                        -6 => concat!(COLORANTISEXT, "("),
-                        8 => concat!(COLORADJ, "("),
+                        1 => concat!(EUCLIDEAN, "(1,"),
+                        3 => concat!(COLORFUND, "(3,"),
+                        -3 => concat!(COLORANTIFUND, "(3,"),
+                        6 => concat!(COLORSEXT, "(6,"),
+                        -6 => concat!(COLORANTISEXT, "(6,"),
+                        8 => concat!(COLORADJ, "(8,"),
                         i => panic!("Color {i}not supported "),
                     };
 
                     atom = id1.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("Identity({}{}),x_)", ind, i + 1)).unwrap(),
+                        &Pattern::parse(&format!("id({}indexid({})),x_)", ind, i + 1)).unwrap(),
                         None,
                         None,
                     );
 
                     atom = id2.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("Identity(x_,{}{}))", ind, i + 1)).unwrap(),
+                        &Pattern::parse(&format!("id(x_,{}indexid({})))", ind, i + 1)).unwrap(),
                         None,
                         None,
                     );
                 }
 
-                let id3 = Pattern::parse("Identity(x__)").unwrap();
-
-                atom = id3.replace_all(
-                    atom.as_view(),
-                    &Pattern::parse("id(x__)").unwrap(),
-                    None,
-                    None,
-                );
-
                 for (i, e) in edges.iter().enumerate() {
-                    let pat: Pattern = Atom::new_num((i + 1) as i64).into_pattern();
+                    let pat: Pattern = Atom::parse(&format!("indexid({})", i + 1))
+                        .unwrap()
+                        .into_pattern();
 
                     let dir = if graph.is_edge_incoming(*e, vertex_pos) {
                         "in"
@@ -282,7 +238,9 @@ impl InteractionVertexInfo {
                 }
 
                 for i in 0..MAX_COLOR_INNER_CONTRACTIONS {
-                    let pat: Pattern = Atom::new_num(-1 - i as i64).into_pattern();
+                    let pat: Pattern = Atom::parse(&format!("indexid({})", -1 - i as i64))
+                        .unwrap()
+                        .into_pattern();
 
                     let index_num = AbstractIndex::try_from(format!("inner{}", i)).unwrap().0;
                     atom = pat.replace_all(
@@ -292,36 +250,6 @@ impl InteractionVertexInfo {
                         None,
                     );
                 }
-
-                let euc = Pattern::parse(concat!(EUCLIDEAN, "(x_)")).unwrap();
-                let euc_rep = Pattern::parse(concat!(EUCLIDEAN, "(1,x_)")).unwrap();
-
-                atom = euc.replace_all(atom.as_view(), &euc_rep, None, None);
-
-                let cof = Pattern::parse(concat!(COLORFUND, "(x_)")).unwrap();
-                let cof_rep = Pattern::parse(concat!(COLORFUND, "(3,x_)")).unwrap();
-
-                atom = cof.replace_all(atom.as_view(), &cof_rep, None, None);
-
-                let coaf = Pattern::parse(concat!(COLORANTIFUND, "(x_)")).unwrap();
-                let coaf_rep = Pattern::parse(concat!(COLORANTIFUND, "(3,x_)")).unwrap();
-
-                atom = coaf.replace_all(atom.as_view(), &coaf_rep, None, None);
-
-                let cos = Pattern::parse(concat!(COLORSEXT, "(x_)")).unwrap();
-                let cos_rep = Pattern::parse(concat!(COLORSEXT, "(6,x_)")).unwrap();
-
-                atom = cos.replace_all(atom.as_view(), &cos_rep, None, None);
-
-                let coas = Pattern::parse(concat!(COLORANTISEXT, "(x_)")).unwrap();
-                let coas_rep = Pattern::parse(concat!(COLORANTISEXT, "(6,x_)")).unwrap();
-
-                atom = coas.replace_all(atom.as_view(), &coas_rep, None, None);
-
-                let coa = Pattern::parse(concat!(COLORADJ, "(x_)")).unwrap();
-                let coa_rep = Pattern::parse(concat!(COLORADJ, "(8,x_)")).unwrap();
-
-                atom = coa.replace_all(atom.as_view(), &coa_rep, None, None);
 
                 atom
             })
@@ -477,6 +405,18 @@ impl Edge {
         (mom, mass)
     }
 
+    pub fn substitute_lmb(&self, atom: Atom, graph: &Graph, lmb: &LoopMomentumBasis) -> Atom {
+        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+        let mom = Pattern::parse(&format!("Q{num}(x_)")).unwrap();
+        let mom_rep = lmb.pattern(num);
+        atom.replace_all(&mom, &mom_rep, None, None)
+    }
+
+    pub fn edge_momentum_symbol(&self, graph: &Graph) -> Symbol {
+        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+        State::get_symbol(format!("Q{num}"))
+    }
+
     pub fn numerator(&self, graph: &Graph) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         match self.edge_type {
@@ -494,11 +434,11 @@ impl Edge {
                     None,
                 );
 
-                let pslashfun = Pattern::parse("PSlash(x__)").unwrap();
+                let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
                 atom = pslashfun.replace_all(
                     atom.as_view(),
                     &Pattern::parse(&format!(
-                        "Q{}(lor(4,{}))Gamma({},x__)",
+                        "Q{}(lor(4,{}))Gamma({},i_,j_)",
                         num, pindex_num, pindex_num
                     ))
                     .unwrap(),
@@ -506,28 +446,18 @@ impl Edge {
                     None,
                 );
 
-                let pat: Pattern = Atom::new_num(1).into_pattern();
+                atom = preprocess_ufo_spin_wrapped(atom);
 
                 let in_index_num = AbstractIndex::try_from(format!("in{}", num)).unwrap().0;
-
-                atom = pat.replace_all(
-                    atom.as_view(),
-                    &Pattern::parse(&format!("{in_index_num}")).unwrap(),
-                    None,
-                    None,
-                );
-
-                let pat: Pattern = Atom::new_num(2).into_pattern();
-
                 let out_index_num = AbstractIndex::try_from(format!("out{}", num)).unwrap().0;
-                atom = pat.replace_all(
-                    atom.as_view(),
-                    &Pattern::parse(&format!("{out_index_num}")).unwrap(),
-                    None,
-                    None,
-                );
 
-                atom
+                let replacements = [
+                    ("indexid(1)", &format!("{in_index_num}")[..]),
+                    ("indexid(2)", &format!("{out_index_num}")[..]),
+                    ("indexid(i_)", "i_"),
+                ];
+
+                batch_replace(&replacements, atom)
             }
         }
     }
@@ -589,7 +519,6 @@ impl Vertex {
 
     pub fn contracted_vertex_rule(&self, graph: &Graph) -> Option<Atom> {
         let all = self.apply_vertex_rule(graph)?;
-
         let scalar = all
             .into_iter()
             .reduce(|acc, tensor| acc.contract(&tensor).unwrap())
@@ -681,6 +610,20 @@ pub struct Graph {
 }
 
 impl Graph {
+    pub fn dot(&self) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph G {\n");
+        for edge in &self.edges {
+            let from = self.vertices[edge.vertices[0]].name.clone();
+            let to = self.vertices[edge.vertices[1]].name.clone();
+            dot.push_str(&format!(
+                "\"{}\" -> \"{}\" [label=\"{}\"];\n",
+                from, to, edge.name
+            ));
+        }
+        dot.push_str("}\n");
+        dot
+    }
     pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> Graph {
         // First build vertices
         let mut vertices: Vec<Vertex> = vec![];
@@ -717,6 +660,8 @@ impl Graph {
             .map(|e| Edge::from_serializable_edge(model, &g, e))
             .collect();
 
+        debug!("Loaded {} edges", g.edges.len());
+        debug!("Loaded graph: {}", g.dot());
         g.external_edges = g
             .edges
             .iter()
@@ -805,9 +750,9 @@ impl Graph {
     #[inline]
     pub fn compute_emr<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-    ) -> Vec<LorentzVector<T>> {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> Vec<ThreeMomentum<F<T>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
         self.compute_emr_in_lmb(loop_moms, external_moms, &lmb_specification)
     }
@@ -815,31 +760,25 @@ impl Graph {
     #[inline]
     pub fn compute_emr_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<LorentzVector<T>> {
-        let lmb = match lmb_specification {
-            LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
-                .derived_data
-                .loop_momentum_bases
-                .as_ref()
-                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*lmb_idx],
-            LoopMomentumBasisSpecification::Literal(basis) => basis,
-        };
+    ) -> Vec<ThreeMomentum<F<T>>> {
+        //do we really want 4-momenta here? -lucien
+        let lmb = lmb_specification.basis(self);
 
         lmb.edge_signatures
             .iter()
-            .map(|sig| compute_momentum(sig, loop_moms, external_moms))
+            .map(|sig| compute_three_momentum_from_four(sig, loop_moms, external_moms))
             .collect()
     }
 
     #[inline]
     pub fn compute_onshell_energies<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-    ) -> Vec<T> {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> Vec<F<T>> {
         let lmb_sepcification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
         self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &lmb_sepcification)
     }
@@ -863,37 +802,29 @@ impl Graph {
     #[inline]
     pub fn compute_onshell_energies_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<T> {
-        let lmb = match lmb_specification {
-            LoopMomentumBasisSpecification::FromList(lmb_idx) => &self
-                .derived_data
-                .loop_momentum_bases
-                .as_ref()
-                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*lmb_idx],
-            LoopMomentumBasisSpecification::Literal(basis) => basis,
-        };
+    ) -> Vec<F<T>> {
+        let lmb = lmb_specification.basis(self);
 
         lmb.edge_signatures
             .iter()
-            .map(|sig| compute_momentum(sig, loop_moms, external_moms))
+            .map(|sig| compute_four_momentum_from_three(sig, loop_moms, external_moms))
             .zip(self.edges.iter())
             .map(|(emr_mom, edge)| match edge.edge_type {
                 EdgeType::Virtual => {
-                    if let Some(mass_value) = edge.particle.mass.value {
-                        if mass_value.im != 0. {
-                            panic!("Complex masses not yet supported in gammaLoop")
-                        }
-                        let energy_squared = emr_mom.spatial_squared()
-                            + Into::<T>::into(mass_value.re * mass_value.re);
-                        energy_squared.sqrt()
-                    } else {
-                        emr_mom.spatial_distance()
-                    }
+                    emr_mom
+                        .spatial
+                        .on_shell_energy(edge.particle.mass.value.map(|m| {
+                            if m.im.is_non_zero() {
+                                panic!("Complex masses not yet supported in gammaLoop")
+                            }
+                            F::<T>::from_ff64(m.re)
+                        }))
+                        .value
                 }
-                _ => emr_mom.t,
+                _ => emr_mom.temporal.value, // a wierd way of just obtaining the energy of the external particles
             })
             .collect()
     }
@@ -901,9 +832,9 @@ impl Graph {
     #[inline]
     pub fn compute_energy_product<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-    ) -> T {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> F<T> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
         self.compute_energy_product_in_lmb(loop_moms, external_moms, &lmb_specification)
     }
@@ -911,10 +842,10 @@ impl Graph {
     #[inline]
     pub fn compute_energy_product_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> T {
+    ) -> F<T> {
         let all_energies =
             self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_specification);
 
@@ -922,8 +853,8 @@ impl Graph {
             .iter()
             .zip(all_energies.iter())
             .filter(|(e, _)| e.edge_type == EdgeType::Virtual)
-            .map(|(_, val)| Into::<T>::into(2.) * val)
-            .fold(Into::<T>::into(1.), |acc, x| acc * x)
+            .map(|(_, val)| F::<T>::from_f64(2.) * val) // why times 2? -lucien
+            .fold(F::<T>::from_f64(1.), |acc, x| acc * x)
     }
 
     #[inline]
@@ -1154,24 +1085,27 @@ impl Graph {
         }
     }
 
-    pub fn generate_numerator(&mut self, model: &Model) {
-        self.derived_data.numerator = Some(generate_numerator(self, model));
+    pub fn generate_numerator(&mut self) {
+        self.derived_data.numerator = Some(Numerator::generate(self));
     }
 
-    pub fn smart_generate_numerator(&mut self, model: &Model) {
+    pub fn smart_generate_numerator(&mut self) {
         if self.derived_data.numerator.is_none() {
-            self.derived_data.numerator = Some(generate_numerator(self, model));
+            self.generate_numerator();
         }
     }
 
     #[inline]
     pub fn evaluate_ltd_expression<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-    ) -> Complex<T> {
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> Complex<F<T>> {
+        let one = loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero, one);
         let loop_number = self.loop_momentum_basis.basis.len();
-        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32);
+        let prefactor = i.pow(loop_number as u64);
 
         prefactor
             * self.derived_data.ltd_expression.as_ref().unwrap().evaluate(
@@ -1184,12 +1118,15 @@ impl Graph {
     #[inline]
     pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
+        let one = loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero, one);
         let loop_number = self.loop_momentum_basis.basis.len();
-        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32);
+        let prefactor = i.pow(loop_number as u64);
 
         prefactor
             * self
@@ -1201,10 +1138,10 @@ impl Graph {
     }
 
     #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_orientations<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        independent_external_momenta: &[LorentzVector<T>],
+        sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
     ) -> Vec<T> {
         let energy_cache = self.compute_onshell_energies_in_lmb(
@@ -1220,35 +1157,128 @@ impl Graph {
             .evaluate_orientations(&energy_cache)
     }
 
+    pub fn numerator_substitute_model_params(&mut self, model: &Model) {
+        if let Some(numerator) = self.derived_data.numerator.as_mut() {
+            numerator.substitute_model_params(model);
+        }
+    }
+
+    fn emr_from_lmb<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<FourMomentum<F<T>>> {
+        let massless = lmb.to_massless_emr(sample);
+        self.edges
+            .iter()
+            .zip(massless)
+            .map(|(edge, emr)| match edge.edge_type {
+                EdgeType::Virtual => {
+                    emr.spatial
+                        .into_on_shell_four_momentum(edge.particle.mass.value.map(|m| {
+                            if m.im.is_non_zero() {
+                                panic!("Complex masses not yet supported in gammaLoop")
+                            }
+                            F::<T>::from_ff64(m.re)
+                        }))
+                }
+                _ => emr,
+            })
+            .collect()
+    }
+
+    pub fn evaluate_model_params(&mut self, _model: &Model) {}
+
+    pub fn evaluate_numerator<T: FloatLike>(&self, emr: Vec<FourMomentum<F<T>>>) -> Complex<F<T>> {
+        self.derived_data
+            .numerator
+            .as_ref()
+            .unwrap()
+            .evaluate(&emr, self)
+    }
+
     #[inline]
+    /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_numerator_orientations<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+    ) -> Vec<Complex<F<T>>> {
+        let mut out = vec![];
+        let lmb = lmb_specification.basis(self);
+
+        let emr = self.emr_from_lmb(sample, lmb);
+
+        // debug!("Numerator: {}", numerator);
+
+        for orient in self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .terms
+            .iter()
+            .map(|e| e.orientation)
+        {
+            let mut emr = emr.clone();
+            for ((i, _), sign) in self.get_virtual_edges_iterator().zip(orient.into_iter()) {
+                if !sign {
+                    emr[i].temporal.value.negate()
+                }
+            }
+
+            out.push(self.evaluate_numerator(emr));
+        }
+
+        out
+    }
+
+    #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
+        sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
+        let one = sample.one();
+        let zero = one.zero();
+        let i = Complex::new(zero.clone(), one.clone());
+
         let loop_number = self.loop_momentum_basis.basis.len();
         let internal_vertex_number = self.vertices.len() - self.external_connections.len();
 
-        let prefactor = Complex::new(T::zero(), T::one()).powi(loop_number as i32)
-            * Complex::new(-T::one(), T::zero()).powi(internal_vertex_number as i32 - 1);
+        let prefactor =
+            i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
 
         // here numerator evaluation can be weaved into the summation
         prefactor
             * self
-                .evaluate_cff_orientations(loop_moms, external_moms, lmb_specification)
+                .evaluate_cff_orientations(sample, lmb_specification)
                 .into_iter()
-                .sum::<T>()
+                .zip(self.evaluate_numerator_orientations(sample, lmb_specification))
+                .map(|(cff, _num)| {
+                    let zero = cff.zero();
+                    Complex::new(cff, zero)
+                })
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or(Complex::new(one.clone(), one.clone()))
     }
 
     #[inline]
     pub fn evaluate_cff_expression<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-    ) -> Complex<T> {
+        sample: &DefaultSample<T>,
+    ) -> Complex<F<T>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.evaluate_cff_expression_in_lmb(loop_moms, external_moms, &lmb_specification)
+        self.evaluate_cff_expression_in_lmb(sample, &lmb_specification)
+    }
+
+    pub fn process_numerator(&mut self, model: &Model) {
+        self.smart_generate_numerator();
+        let mut numerator = self.derived_data.numerator.clone().unwrap();
+
+        numerator.process(self, model);
+        self.derived_data.numerator = Some(numerator);
     }
 
     pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
@@ -1454,7 +1484,7 @@ pub struct DerivedGraphData {
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub static_counterterm: Option<static_counterterm::CounterTerm>,
-    pub numerator: Option<Atom>,
+    pub numerator: Option<Numerator>,
 }
 
 impl DerivedGraphData {
@@ -1487,6 +1517,7 @@ impl DerivedGraphData {
                     .collect()
             }),
             esurface_derived_data: self.esurface_derived_data.clone(),
+            numerator: self.numerator.clone(),
         }
     }
 
@@ -1506,7 +1537,7 @@ impl DerivedGraphData {
                 .edge_groups
                 .map(|groups| groups.into_iter().map(|group| group.into()).collect()),
             esurface_derived_data: serializable.esurface_derived_data,
-            numerator: None,
+            numerator: serializable.numerator,
             static_counterterm: None,
         }
     }
@@ -1553,6 +1584,7 @@ pub struct SerializableDerivedGraphData {
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
     pub edge_groups: Option<Vec<Vec<usize>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
+    pub numerator: Option<Numerator>,
 }
 
 #[derive(Debug, Clone)]
@@ -1575,6 +1607,50 @@ impl LoopMomentumBasis {
             edge_signatures: serializable.edge_signatures.clone(),
         }
     }
+
+    pub fn to_massless_emr<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+    ) -> Vec<FourMomentum<F<T>>> {
+        self.edge_signatures
+            .iter()
+            .map(|sig| {
+                compute_four_momentum_from_three(sig, &sample.loop_moms, &sample.external_moms)
+            })
+            .collect()
+    }
+
+    pub fn pattern(&self, edge_id: usize) -> Pattern {
+        let (loop_signature, external_signature) = self.edge_signatures[edge_id].clone();
+
+        let mut atom = Atom::new_num(0);
+
+        for (i, sign) in loop_signature.iter().enumerate() {
+            match sign {
+                1 => {
+                    atom = &atom + &Atom::parse(&format!("K{}(x{}__)", i, edge_id)).unwrap();
+                }
+                -1 => {
+                    atom = &atom - &Atom::parse(&format!("K{}(x{}__)", i, edge_id)).unwrap();
+                }
+                _ => {}
+            }
+        }
+
+        for (i, sign) in external_signature.iter().enumerate() {
+            match sign {
+                1 => {
+                    atom = &atom + &Atom::parse(&format!("P{}(x{}__)", i, edge_id)).unwrap();
+                }
+                -1 => {
+                    atom = &atom - &Atom::parse(&format!("P{}(x{}__)", i, edge_id)).unwrap();
+                }
+                _ => {}
+            }
+        }
+
+        atom.into_pattern()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1587,6 +1663,19 @@ pub struct SerializableLoopMomentumBasis {
 pub enum LoopMomentumBasisSpecification<'a> {
     Literal(&'a LoopMomentumBasis),
     FromList(usize),
+}
+
+impl<'a> LoopMomentumBasisSpecification<'a> {
+    pub fn basis(&self, graph: &'a Graph) -> &'a LoopMomentumBasis {
+        match self {
+            LoopMomentumBasisSpecification::Literal(basis) => basis,
+            LoopMomentumBasisSpecification::FromList(idx) => &graph
+                .derived_data
+                .loop_momentum_bases
+                .as_ref()
+                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*idx],
+        }
+    }
 }
 
 #[cfg(test)]

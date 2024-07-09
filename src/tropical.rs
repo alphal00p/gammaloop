@@ -1,17 +1,19 @@
 use ahash::HashSet;
 use color_eyre::Report;
 use log::debug;
-use num::traits::Zero;
 use serde::{Deserialize, Serialize};
+use spenso::IsZero;
+use symbolica::domains::float::NumericalFloatLike;
 
 use crate::{
     graph::{EdgeType, Graph},
-    utils::FloatLike,
+    utils::{FloatLike, F},
 };
 
 /// Dimensionality of space
-pub const D: usize = 3; // we are always going to do 3-d representations, so I hardcode this.
+pub const D: usize = 3; // we are always going to do 3-d representations, so  hardcode this.
 
+pub const DHALF: f64 = 1.5;
 /// Simplified version of the Graph struct, used to generate the tropical subgraph table
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TropicalGraph {
@@ -30,7 +32,7 @@ impl TropicalGraph {
     /// Create the simplfied graph from the full Graph struct
     pub fn from_graph(graph: &Graph, tropical_edge_weights: &[f64]) -> Self {
         let dod = tropical_edge_weights.iter().sum::<f64>()
-            - D as f64 / 2.0 * graph.loop_momentum_basis.basis.len() as f64;
+            - DHALF * graph.loop_momentum_basis.basis.len() as f64;
 
         let mut topology = Vec::with_capacity(graph.edges.len());
         let mut is_edge_massive = Vec::with_capacity(graph.edges.len());
@@ -506,18 +508,20 @@ impl TropicalSubgraphTable {
     /// Panics if the uniform random number is greater than one or the probability distribution is incorrectly normalized.
     fn sample_edge<T: FloatLike>(
         &self,
-        uniform: T,
+        uniform: F<T>,
         subgraph: &TropicalSubGraphId,
     ) -> (usize, TropicalSubGraphId) {
-        let edges_in_subgraph = subgraph.contains_edges();
-        let j = Into::<T>::into(self.table[subgraph.id].j_function);
+        let zero = uniform.zero();
 
-        let mut cum_sum = T::zero();
+        let edges_in_subgraph = subgraph.contains_edges();
+        let j = F::<T>::from_f64(self.table[subgraph.id].j_function);
+
+        let mut cum_sum = zero.clone();
         for &edge in &edges_in_subgraph {
             let graph_without_edge = subgraph.pop_edge(edge);
-            let p_e = Into::<T>::into(self.table[graph_without_edge.id].j_function)
-                / Into::<T>::into(j)
-                / Into::<T>::into(self.table[graph_without_edge.id].generalized_dod);
+            let p_e = F::<T>::from_f64(self.table[graph_without_edge.id].j_function)
+                / &j
+                / F::<T>::from_f64(self.table[graph_without_edge.id].generalized_dod);
             cum_sum += p_e;
             if cum_sum >= uniform {
                 return (edge, graph_without_edge);
@@ -532,16 +536,17 @@ pub mod tropical_parameterization {
     use color_eyre::Report;
 
     use itertools::{izip, Itertools};
-    use lorentz_vector::LorentzVector;
     use statrs::function::gamma::gamma;
+    use symbolica::domains::float::{NumericalFloatLike, Real};
 
     use crate::{
         graph::LoopMomentumBasis,
         linalg::SquareMatrix,
-        utils::{box_muller, compute_shift_part, inverse_gamma_lr, FloatLike},
+        momentum::{FourMomentum, ThreeMomentum},
+        utils::{box_muller, compute_shift_part, inverse_gamma_lr, FloatLike, F},
     };
 
-    use super::{TropicalSubgraphTable, D};
+    use super::{TropicalSubgraphTable, D, DHALF};
 
     /// Fake random number generator, perhaps it is more readable to get rid of this.
     struct MimicRng<'a, T> {
@@ -550,14 +555,29 @@ pub mod tropical_parameterization {
         tokens: Vec<&'a str>,
     }
 
-    impl<'a, T: Copy> MimicRng<'a, T> {
+    impl<'a, T: Clone> MimicRng<'a, T> {
         fn get_random_number(&mut self, token: Option<&'a str>) -> T {
-            let random_number = self.cache[self.counter];
+            let random_number = self.cache[self.counter].clone();
             self.counter += 1;
             if let Some(token) = token {
                 self.tokens.push(token);
             }
             random_number
+        }
+
+        #[allow(dead_code)]
+        fn one(&self) -> T
+        where
+            T: Real,
+        {
+            self.cache[0].one()
+        }
+
+        fn zero(&self) -> T
+        where
+            T: Real,
+        {
+            self.cache[0].zero()
         }
 
         fn new(cache: &'a [T]) -> Self {
@@ -579,13 +599,15 @@ pub mod tropical_parameterization {
     /// A rescaling is performed for numerical stability, with this rescaling u_trop and v_trop always evaluate to 1.
     fn permatuhedral_sampling<T: FloatLike>(
         tropical_subgraph_table: &TropicalSubgraphTable,
-        rng: &mut MimicRng<T>,
+        rng: &mut MimicRng<F<T>>,
         debug: usize,
-    ) -> PermatuhedralSamplingResult<T> {
-        let mut kappa = T::one();
-        let mut x_vec = vec![T::zero(); tropical_subgraph_table.tropical_graph.topology.len()];
-        let mut u_trop = T::one();
-        let mut v_trop = T::one();
+    ) -> PermatuhedralSamplingResult<F<T>> {
+        let zero = rng.zero();
+        let one = zero.one();
+        let mut kappa = one.clone();
+        let mut x_vec = vec![zero.clone(); tropical_subgraph_table.tropical_graph.topology.len()];
+        let mut u_trop = one.clone();
+        let mut v_trop = one.clone();
 
         let mut graph = tropical_subgraph_table
             .tropical_graph
@@ -602,18 +624,18 @@ pub mod tropical_parameterization {
                     .sample_edge(rng.get_random_number(Some("sample_edge")), &graph)
             };
 
-            x_vec[edge] = kappa;
+            x_vec[edge] = kappa.clone();
 
             if tropical_subgraph_table.table[graph.id].mass_momentum_spanning
                 && !tropical_subgraph_table.table[graph_without_edge.id].mass_momentum_spanning
             {
-                v_trop = x_vec[edge];
+                v_trop = x_vec[edge].clone();
             }
 
             if tropical_subgraph_table.table[graph_without_edge.id].loop_number
                 < tropical_subgraph_table.table[graph.id].loop_number
             {
-                u_trop *= x_vec[edge];
+                u_trop *= &x_vec[edge];
             }
 
             // Terminate early, so we do not waste a random variable in the final step
@@ -624,7 +646,7 @@ pub mod tropical_parameterization {
 
             let xi = rng.get_random_number(Some("sample xi"));
             kappa *= xi.powf(
-                Into::<T>::into(tropical_subgraph_table.table[graph.id].generalized_dod).inv(),
+                &F::<T>::from_f64(tropical_subgraph_table.table[graph.id].generalized_dod).inv(),
             );
 
             if debug > 4 {
@@ -637,16 +659,18 @@ pub mod tropical_parameterization {
             }
         }
 
-        let xi_trop = u_trop * v_trop;
+        let xi_trop = u_trop.clone() * &v_trop;
 
         // perform rescaling for numerical stability
-        let target = u_trop.powf(Into::<T>::into(-(D as f64 / 2.0)))
-            * (u_trop / xi_trop).powf(Into::<T>::into(tropical_subgraph_table.tropical_graph.dod));
+        let target = u_trop.powf(&F::<T>::from_f64(-(DHALF)))
+            * (u_trop.clone() / &xi_trop).powf(&F::<T>::from_f64(
+                tropical_subgraph_table.tropical_graph.dod,
+            ));
 
         let loop_number = tropical_subgraph_table.table.last().unwrap().loop_number;
         let scaling = target.powf(
-            Into::<T>::into(
-                D as f64 / 2.0 * loop_number as f64 + tropical_subgraph_table.tropical_graph.dod,
+            &F::<T>::from_f64(
+                DHALF * loop_number as f64 + tropical_subgraph_table.tropical_graph.dod,
             )
             .inv(),
         );
@@ -658,9 +682,9 @@ pub mod tropical_parameterization {
             println!("v_trop before scaling: {v_trop}");
         }
 
-        x_vec.iter_mut().for_each(|x| *x *= scaling);
-        u_trop = T::one();
-        v_trop = T::one();
+        x_vec.iter_mut().for_each(|x| *x *= &scaling);
+        u_trop = one.clone();
+        v_trop = one.clone();
 
         PermatuhedralSamplingResult {
             x: x_vec,
@@ -673,10 +697,12 @@ pub mod tropical_parameterization {
     /// It has been checked that it produces the same result as the normal version.
     fn _adapted_permatuhedral_sampling<T: FloatLike>(
         tropical_subgraph_table: &TropicalSubgraphTable,
-        rng: &mut MimicRng<T>,
-        edge_rng: &[T],
+        rng: &mut MimicRng<F<T>>,
+        edge_rng: &[F<T>],
         _debug: usize,
-    ) -> PermatuhedralSamplingResult<T> {
+    ) -> PermatuhedralSamplingResult<F<T>> {
+        let one = rng.one();
+        let zero = one.zero();
         let mut graph = tropical_subgraph_table
             .tropical_graph
             .get_full_subgraph_id();
@@ -698,26 +724,26 @@ pub mod tropical_parameterization {
             graph = graph_without_edge;
         }
 
-        let mut kappa = T::one();
-        let mut x_vec = vec![T::zero(); tropical_subgraph_table.tropical_graph.topology.len()];
-        let mut u_trop = T::one();
-        let mut v_trop = T::one();
+        let mut kappa = one.clone();
+        let mut x_vec = vec![zero.clone(); tropical_subgraph_table.tropical_graph.topology.len()];
+        let mut u_trop = one.clone();
+        let mut v_trop = one.clone();
 
         for i in 1..=graph.num_edges {
             let (graph, _) = graph_ordering[i - 1];
             if let (graph_without_edge, Some(edge)) = graph_ordering[i] {
-                x_vec[edge] = kappa;
+                x_vec[edge] = kappa.clone();
 
                 if tropical_subgraph_table.table[graph.id].mass_momentum_spanning
                     && !tropical_subgraph_table.table[graph_without_edge.id].mass_momentum_spanning
                 {
-                    v_trop = x_vec[edge];
+                    v_trop = x_vec[edge].clone();
                 }
 
                 if tropical_subgraph_table.table[graph_without_edge.id].loop_number
                     < tropical_subgraph_table.table[graph.id].loop_number
                 {
-                    u_trop *= x_vec[edge];
+                    u_trop *= &x_vec[edge];
                 }
 
                 if graph_without_edge.is_empty() {
@@ -728,30 +754,32 @@ pub mod tropical_parameterization {
                     tropical_subgraph_table.table[graph_without_edge.id].generalized_dod;
 
                 let next_edge = graph_ordering[i + 1].1.unwrap();
-                let xi = edge_rng[next_edge];
-                kappa *= xi.powf(Into::<T>::into(graph_without_edge_dod).inv());
+                let xi = edge_rng[next_edge].clone();
+                kappa *= xi.powf(&F::<T>::from_f64(graph_without_edge_dod).inv());
             } else {
                 unreachable!()
             }
         }
 
-        let xi_trop = u_trop * v_trop;
+        let xi_trop = u_trop.clone() * v_trop;
 
         // perform rescaling for numerical stability
-        let target = u_trop.powf(Into::<T>::into(-(D as f64 / 2.0)))
-            * (u_trop / xi_trop).powf(Into::<T>::into(tropical_subgraph_table.tropical_graph.dod));
+        let target = u_trop.powf(&F::<T>::from_f64(-(D as f64 / 2.0)))
+            * (u_trop / xi_trop).powf(&F::<T>::from_f64(
+                tropical_subgraph_table.tropical_graph.dod,
+            ));
 
         let loop_number = tropical_subgraph_table.table.last().unwrap().loop_number;
         let scaling = target.powf(
-            Into::<T>::into(
+            &F::<T>::from_f64(
                 D as f64 / 2.0 * loop_number as f64 + tropical_subgraph_table.tropical_graph.dod,
             )
             .inv(),
         );
 
-        x_vec.iter_mut().for_each(|x| *x *= scaling);
-        u_trop = T::one();
-        v_trop = T::one();
+        x_vec.iter_mut().for_each(|x| *x *= &scaling);
+        u_trop = one.clone();
+        v_trop = one.clone();
 
         PermatuhedralSamplingResult {
             x: x_vec,
@@ -761,14 +789,16 @@ pub mod tropical_parameterization {
     }
 
     /// This function is called from the paramatrization stage of evaluate_sample
-    pub fn generate_tropical_sample<T: FloatLike + Into<f64>>(
-        x_space_point: &[T],
-        external_momenta: &[LorentzVector<T>],
-        tropical_subgraph_table: &TropicalSubgraphTable,
-        lmb: &LoopMomentumBasis,
-        real_mass_vector: &[f64],
+    #[allow(clippy::type_complexity)]
+
+    pub fn generate_tropical_sample<T: FloatLike>(
+        x_space_point: &[F<T>],
+        external_momenta: &[FourMomentum<F<T>>],
+        graph: &Graph,
         debug: usize,
-    ) -> Result<(Vec<LorentzVector<T>>, T), Report> {
+    ) -> Result<(Vec<ThreeMomentum<F<T>>>, F<T>), Report> {
+        // let zero = x_space_point[0].zero();
+        let tropical_subgraph_table = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
         let signature_matrix = &tropical_subgraph_table.tropical_graph.signature_matrix;
         let _num_edges = signature_matrix.len();
         let num_loops = signature_matrix[0].len();
@@ -776,24 +806,39 @@ pub mod tropical_parameterization {
         let mut rng = MimicRng::new(x_space_point);
 
         // perhaps this data should be stored in some cache in the integrand.
-        let (edge_masses, edge_shifts): (Vec<T>, Vec<LorentzVector<T>>) = tropical_subgraph_table
-            .tropical_graph
-            .topology
-            .iter()
-            .enumerate()
-            .map(|(index, _edge)| {
-                let edge_mass = Into::<T>::into(
-                    real_mass_vector[tropical_subgraph_table.tropical_graph.edge_map[index]],
-                );
+        let (edge_masses, edge_shifts): (Vec<F<T>>, Vec<ThreeMomentum<F<T>>>) =
+            tropical_subgraph_table
+                .tropical_graph
+                .topology
+                .iter()
+                .enumerate()
+                .map(|(index, _edge)| {
+                    let edge_mass = F::<T>::from_ff64(
+                        match graph.edges[tropical_subgraph_table.tropical_graph._edge_map[index]]
+                            .particle
+                            .mass
+                            .value
+                        {
+                            Some(mass) => mass.re,
+                            None => F(0.0),
+                        },
+                    );
 
-                let external_signature =
-                    &lmb.edge_signatures[tropical_subgraph_table.tropical_graph.edge_map[index]].1;
+                    let external_signature = &graph.loop_momentum_basis.edge_signatures
+                        [tropical_subgraph_table.tropical_graph._edge_map[index]]
+                        .1;
+                    let accumulator = external_momenta[0].spatial.zero();
+                    let edge_shift = external_momenta.iter().enumerate().fold(
+                        accumulator,
+                        |acc, (i, external_momentum)| {
+                            let external_spatial = external_momentum.spatial.clone();
+                            acc + external_spatial * F::<T>::from_f64(external_signature[i] as f64)
+                        },
+                    );
 
-                let edge_shift = compute_shift_part(external_signature, external_momenta);
-
-                (edge_mass, edge_shift)
-            })
-            .unzip();
+                    (edge_mass, edge_shift)
+                })
+                .unzip();
 
         if debug > 1 {
             println!("edge shifts: {:?}", edge_shifts);
@@ -816,9 +861,9 @@ pub mod tropical_parameterization {
             println!("L matrix: {:?}", l_matrix);
         }
 
-        let lambda = Into::<T>::into(inverse_gamma_lr(
+        let lambda = F::<T>::from_f64(inverse_gamma_lr(
             tropical_subgraph_table.tropical_graph.dod,
-            Into::<f64>::into(rng.get_random_number(Some("sample lambda"))),
+            F::<T>::into_f64(&rng.get_random_number(Some("sample lambda"))),
             50,
         ));
 
@@ -852,7 +897,7 @@ pub mod tropical_parameterization {
         }
 
         let loop_momenta = compute_loop_momenta(
-            v_polynomial,
+            v_polynomial.clone(),
             lambda,
             &decomposed_l_matrix.q_transposed_inverse,
             &q_vectors,
@@ -886,19 +931,22 @@ pub mod tropical_parameterization {
     /// Compute the L x L matrix from the feynman parameters and the signature matrix
     #[inline]
     fn compute_l_matrix<T: FloatLike>(
-        x_vec: &[T],
+        x_vec: &[F<T>],
         signature_matrix: &[Vec<isize>],
-    ) -> SquareMatrix<T> {
+    ) -> SquareMatrix<F<T>> {
+        let zero = x_vec[0].zero();
         let num_edges = signature_matrix.len();
         let num_loops = signature_matrix[0].len();
 
-        let mut temp_l_matrix = SquareMatrix::new_zeros(num_loops);
+        let mut temp_l_matrix = SquareMatrix::fill(zero.clone(), num_loops);
 
         for i in 0..num_loops {
             for j in 0..num_loops {
                 for e in 0..num_edges {
-                    temp_l_matrix[(i, j)] += x_vec[e]
-                        * Into::<T>::into((signature_matrix[e][i] * signature_matrix[e][j]) as f64);
+                    temp_l_matrix[(i, j)] += x_vec[e].clone()
+                        * F::<T>::from_f64(
+                            (signature_matrix[e][i] * signature_matrix[e][j]) as f64,
+                        );
                 }
             }
         }
@@ -909,9 +957,9 @@ pub mod tropical_parameterization {
     /// Sample Gaussian distributed vectors, using the Box-Muller transform
     #[inline]
     fn sample_q_vectors<T: FloatLike>(
-        rng: &mut MimicRng<T>,
+        rng: &mut MimicRng<F<T>>,
         num_loops: usize,
-    ) -> Vec<LorentzVector<T>> {
+    ) -> Vec<ThreeMomentum<F<T>>> {
         let token = Some("box muller");
         let num_variables = D * num_loops;
 
@@ -927,8 +975,7 @@ pub mod tropical_parameterization {
         (0..num_loops)
             .zip(gaussians.chunks(3).into_iter())
             .map(|(_, mut chunk)| {
-                LorentzVector::from_args(
-                    T::zero(),
+                ThreeMomentum::new(
                     chunk.next().unwrap(),
                     chunk.next().unwrap(),
                     chunk.next().unwrap(),
@@ -940,17 +987,21 @@ pub mod tropical_parameterization {
     /// Compute the vectors u, according to the formula in the notes
     #[inline]
     fn compute_u_vectors<T: FloatLike>(
-        x_vec: &[T],
+        x_vec: &[F<T>],
         signature_marix: &[Vec<isize>],
-        edge_shifts: &[LorentzVector<T>],
-    ) -> Vec<LorentzVector<T>> {
+        edge_shifts: &[ThreeMomentum<F<T>>],
+    ) -> Vec<ThreeMomentum<F<T>>> {
         let num_loops = signature_marix[0].len();
         let num_edges = signature_marix.len();
 
+        let accumulator = edge_shifts[0].zero();
+
         (0..num_loops)
             .map(|l| {
-                (0..num_edges).fold(LorentzVector::new(), |acc: LorentzVector<T>, e| {
-                    acc + edge_shifts[e] * x_vec[e] * Into::<T>::into(signature_marix[e][l] as f64)
+                (0..num_edges).fold(accumulator.clone(), |acc: ThreeMomentum<F<T>>, e| {
+                    acc + &edge_shifts[e]
+                        * &x_vec[e]
+                        * F::<T>::from_f64(signature_marix[e][l] as f64)
                 })
             })
             .collect_vec()
@@ -959,20 +1010,22 @@ pub mod tropical_parameterization {
     /// Compute the polynomial v, according to the formula in the notes
     #[inline]
     fn compute_v_polynomial<T: FloatLike>(
-        x_vec: &[T],
-        u_vectors: &[LorentzVector<T>],
-        inverse_l: &SquareMatrix<T>,
-        edge_shifts: &[LorentzVector<T>],
-        edge_masses: &[T],
+        x_vec: &[F<T>],
+        u_vectors: &[ThreeMomentum<F<T>>],
+        inverse_l: &SquareMatrix<F<T>>,
+        edge_shifts: &[ThreeMomentum<F<T>>],
+        edge_masses: &[F<T>],
         debug: usize,
-    ) -> T {
+    ) -> F<T> {
         let num_loops = inverse_l.get_dim();
+        let zero = x_vec[0].zero();
+        // let one = zero.one();
 
         if debug > 6 {
             println!("analyzing computation_of_polynomial");
-            let mut term_1 = T::zero();
-            for (&x_e, &mass, &shift) in izip!(x_vec, edge_masses, edge_shifts) {
-                let quant = x_e * (mass * mass + shift.spatial_squared());
+            let mut term_1 = zero.clone();
+            for (x_e, mass, shift) in izip!(x_vec, edge_masses, edge_shifts) {
+                let quant = x_e.clone() * (mass.square() + shift.norm_squared());
                 println!("x_e: {x_e}, mass: {mass}, shift: {shift}");
                 println!("quant: {quant}");
                 term_1 += quant;
@@ -980,9 +1033,9 @@ pub mod tropical_parameterization {
 
             println!("term_1: {term_1}");
 
-            let mut term_2 = T::zero();
+            let mut term_2 = zero.clone();
             for (i, j) in (0..num_loops).cartesian_product(0..num_loops) {
-                let quant = u_vectors[i].spatial_dot(&u_vectors[j]) * inverse_l[(i, j)];
+                let quant = u_vectors[i].clone() * &u_vectors[j] * &inverse_l[(i, j)];
                 println!(
                     "u_i: {}, u_j: {}, inverse_l: {}",
                     u_vectors[i],
@@ -998,14 +1051,16 @@ pub mod tropical_parameterization {
             println!("res: {res}");
             res
         } else {
-            let term_1 = izip!(x_vec, edge_masses, edge_shifts)
-                .map(|(&x_e, &mass, &shift)| x_e * (mass * mass + shift.spatial_squared()))
-                .sum::<T>();
+            let term_1: F<T> = izip!(x_vec, edge_masses, edge_shifts)
+                .map(|(x_e, mass, shift)| (mass.square() + shift.norm_squared()) * x_e)
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or(zero.clone());
 
             let term_2 = (0..num_loops)
                 .cartesian_product(0..num_loops)
-                .map(|(i, j)| u_vectors[i].spatial_dot(&u_vectors[j]) * inverse_l[(i, j)])
-                .sum::<T>();
+                .map(|(i, j)| u_vectors[i].clone() * &u_vectors[j] * &inverse_l[(i, j)])
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or(zero.clone());
 
             term_1 - term_2
         }
@@ -1014,24 +1069,26 @@ pub mod tropical_parameterization {
     /// Compute the loop momenta, according to the formula in the notes
     #[inline]
     fn compute_loop_momenta<T: FloatLike>(
-        v: T,
-        lambda: T,
-        q_t_inverse: &SquareMatrix<T>,
-        q_vectors: &[LorentzVector<T>],
-        l_inverse: &SquareMatrix<T>,
-        u_vectors: &[LorentzVector<T>],
+        v: F<T>,
+        lambda: F<T>,
+        q_t_inverse: &SquareMatrix<F<T>>,
+        q_vectors: &[ThreeMomentum<F<T>>],
+        l_inverse: &SquareMatrix<F<T>>,
+        u_vectors: &[ThreeMomentum<F<T>>],
         debug: usize,
-    ) -> Vec<LorentzVector<T>> {
+    ) -> Vec<ThreeMomentum<F<T>>> {
+        // let zero = v.zero();
+        let zero_mom = q_vectors[0].zero();
         let num_loops = q_t_inverse.get_dim();
-        let prefactor = (v / lambda * Into::<T>::into(0.5)).sqrt();
+        let prefactor = (v / lambda * F::<T>::from_f64(0.5)).sqrt();
 
         if debug > 6 {
             for l in 0..num_loops {
-                let mut weird_shift: LorentzVector<T> = LorentzVector::new();
+                let mut weird_shift = zero_mom.clone();
                 for j in 0..num_loops {
-                    let term_in_weird_shift = u_vectors[j] * l_inverse[(l, j)];
+                    let term_in_weird_shift = u_vectors[j].clone() * &l_inverse[(l, j)];
                     println!("term in weird shift: {term_in_weird_shift}");
-                    weird_shift += u_vectors[j] * l_inverse[(l, j)];
+                    weird_shift += u_vectors[j].clone() * &l_inverse[(l, j)];
                 }
                 println!("weird shift: {weird_shift}");
             }
@@ -1039,10 +1096,10 @@ pub mod tropical_parameterization {
         (0..num_loops)
             .map(|l| {
                 q_vectors.iter().zip(u_vectors.iter()).enumerate().fold(
-                    LorentzVector::new(),
+                    zero_mom.clone(),
                     |acc, (l_prime, (q, u))| {
-                        acc + q * prefactor * q_t_inverse[(l, l_prime)]
-                            - u * l_inverse[(l, l_prime)]
+                        acc + q * &prefactor * &q_t_inverse[(l, l_prime)]
+                            - u * &l_inverse[(l, l_prime)]
                     },
                 )
             })
@@ -1054,25 +1111,26 @@ pub mod tropical_parameterization {
     #[inline]
     fn compute_jacobian<T: FloatLike>(
         tropical_subgraph_table: &TropicalSubgraphTable,
-        u_trop: T,
-        v_trop: T,
-        v: T,
-        u: T,
+        u_trop: F<T>,
+        v_trop: F<T>,
+        v: F<T>,
+        u: F<T>,
         num_loops: usize,
         debug: usize,
-    ) -> T {
-        let polynomial_ratio = (v_trop / v)
-            .powf(Into::<T>::into(tropical_subgraph_table.tropical_graph.dod))
-            * (u_trop / u).powf(Into::<T>::into(D as f64 / 2.0));
+    ) -> F<T> {
+        // let zero = v.zero();
+        let polynomial_ratio = (v_trop / v).powf(&F::<T>::from_f64(
+            tropical_subgraph_table.tropical_graph.dod,
+        )) * (u_trop / u).powf(&F::<T>::from_f64(DHALF));
 
-        let i_trop = Into::<T>::into(tropical_subgraph_table.table.last().unwrap().j_function);
+        let i_trop = F::<T>::from_f64(tropical_subgraph_table.table.last().unwrap().j_function);
 
         if debug > 1 {
             println!("i_trop: {i_trop}");
         }
 
-        let gamma_omega = Into::<T>::into(gamma(tropical_subgraph_table.tropical_graph.dod));
-        let denom = Into::<T>::into(
+        let gamma_omega = F::<T>::from_f64(gamma(tropical_subgraph_table.tropical_graph.dod));
+        let denom = F::<T>::from_f64(
             tropical_subgraph_table
                 .tropical_graph
                 .topology
@@ -1087,14 +1145,14 @@ pub mod tropical_parameterization {
         }
 
         // we divide by (2pi)^L later, tropcial sampling already contains a part of this, so we undo that here.
-        let pi_power = Into::<T>::into(std::f64::consts::PI.powf((D * num_loops) as f64 / 2.0));
+        let pi_power = F::<T>::from_f64(std::f64::consts::PI.powf((D * num_loops) as f64 / 2.0));
 
         // we include the factor of 2^E here, so we don't need to include it in the evaluate function, we still need to add it for the tree-like edges
         let num_edges = tropical_subgraph_table.tropical_graph.topology.len();
         let two_to_the_e: usize = 1 << num_edges;
 
         i_trop * gamma_omega / denom * polynomial_ratio * pi_power
-            / Into::<T>::into(two_to_the_e as f64)
+            / F::<T>::from_f64(two_to_the_e as f64)
     }
 }
 
@@ -1103,7 +1161,7 @@ pub mod tropical_parameterization {
 mod tests {
     use crate::utils::assert_approx_eq;
 
-    const TOLERANCE: f64 = 1e-14;
+    const TOLERANCE: F<f64> = F(1e-14);
 
     use super::*;
 
@@ -1277,15 +1335,23 @@ mod tests {
             let table = subgraph_table.table[i];
             assert!(table.mass_momentum_spanning);
             assert_eq!(table.loop_number, 0);
-            assert_approx_eq(table.generalized_dod, 0.84, TOLERANCE);
-            assert_approx_eq(table.j_function, 3.030_303_030_303_03, TOLERANCE);
+            assert_approx_eq(&table.generalized_dod.into(), &0.84.into(), &TOLERANCE);
+            assert_approx_eq(
+                &table.j_function.into(),
+                &3.030_303_030_303_03.into(),
+                &TOLERANCE,
+            );
         }
 
         let final_table = subgraph_table.table[7];
         assert!(final_table.mass_momentum_spanning);
         assert_eq!(final_table.loop_number, 1);
-        assert_approx_eq(final_table.generalized_dod, 0.0, TOLERANCE);
-        assert_approx_eq(final_table.j_function, 10.822_510_822_510_82, TOLERANCE);
+        assert_approx_eq(&final_table.generalized_dod.into(), &0.0.into(), &TOLERANCE);
+        assert_approx_eq(
+            &final_table.j_function.into(),
+            &10.822_510_822_510_82.into(),
+            &TOLERANCE,
+        );
     }
 
     #[test]
@@ -1342,23 +1408,31 @@ mod tests {
             let table = subgraph_table.table[i];
             assert!(table.mass_momentum_spanning);
             assert_eq!(table.loop_number, 0);
-            assert_approx_eq(table.generalized_dod, 1.68, TOLERANCE);
-            assert_approx_eq(table.j_function, 1.0, TOLERANCE);
+            assert_approx_eq(&table.generalized_dod.into(), &1.68.into(), &TOLERANCE);
+            assert_approx_eq(&table.j_function.into(), &1.0.into(), &TOLERANCE);
         }
 
         for i in [3, 5, 6] {
             let table = subgraph_table.table[i];
             assert!(table.mass_momentum_spanning);
             assert_eq!(table.loop_number, 1);
-            assert_approx_eq(table.generalized_dod, 0.84, TOLERANCE);
-            assert_approx_eq(table.j_function, 1.190_476_190_476_19, TOLERANCE);
+            assert_approx_eq(&table.generalized_dod.into(), &0.84.into(), &TOLERANCE);
+            assert_approx_eq(
+                &table.j_function.into(),
+                &1.190_476_190_476_19.into(),
+                &TOLERANCE,
+            );
         }
 
         let final_table = subgraph_table.table[7];
         assert!(final_table.mass_momentum_spanning);
         assert_eq!(final_table.loop_number, 2);
-        assert_approx_eq(final_table.generalized_dod, 0.0, TOLERANCE);
-        assert_approx_eq(final_table.j_function, 4.251_700_680_272_108, TOLERANCE);
+        assert_approx_eq(&final_table.generalized_dod.into(), &0.0.into(), &TOLERANCE);
+        assert_approx_eq(
+            &final_table.j_function.into(),
+            &4.251_700_680_272_108.into(),
+            &TOLERANCE,
+        );
     }
 
     #[test]
@@ -1428,6 +1502,6 @@ mod tests {
 
         let i_tr = subgraph_table.table.last().unwrap().j_function;
 
-        assert_approx_eq(i_tr, 1_818.303_855_640_347_1, TOLERANCE);
+        assert_approx_eq(&i_tr.into(), &1_818.303_855_640_347_1.into(), &TOLERANCE);
     }
 }

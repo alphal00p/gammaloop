@@ -48,7 +48,7 @@ try:
     import symbolica  # pylint: disable=import-error # type: ignore
     # pylint: disable=unused-import
     from symbolica import Expression, Transformer, set_license_key  # type: ignore
-    if not str(os.path.abspath(symbolica.__file__)).startswith(str(os.path.join(GL_PATH, 'dependencies', 'venv'))):
+    if not str(os.path.abspath(symbolica.__file__)).startswith(str(os.path.join(GL_PATH, 'dependencies'))):
         logger.warning(
             """\n\n/*
 |
@@ -56,7 +56,7 @@ try:
 | Instead it was loaded from %s%s%s.
 | This may lead to unexpected behaviour. You can avoid this by running the following command:
 |
-| %sgammaloop --build_dependencies && source %s%s
+| %sgammaloop --build_dependencies with_venv && source %s%s
 |
 \\*
 """,
@@ -64,7 +64,7 @@ try:
             Colour.GREEN, os.path.abspath(os.path.join(GL_PATH, 'dependencies', 'venv', 'bin', 'activate')), Colour.END)
 except ImportError:
     logger.critical(
-        "Could not import Symbolica, please run\n\n%sgammaloop --build_dependencies && source %s%s\n", Colour.GREEN,
+        "Could not import Symbolica, please run\n\n%sgammaloop --build_dependencies with_venv && source %s%s\n", Colour.GREEN,
         os.path.abspath(os.path.join(
             GL_PATH, 'dependencies', 'venv', 'bin', 'activate')),
         Colour.END)
@@ -90,7 +90,7 @@ def register_symbolica() -> bool:
     global gl_is_symbolica_registered
 
     # Check if is_licensed exist for backward compatibility. Later on, it can be removed.
-    if gl_is_symbolica_registered is not None or (hasattr(symbolica, 'is_licensed') and symbolica.is_licensed()):
+    if gl_is_symbolica_registered is not None or (hasattr(symbolica, 'is_licensed') and symbolica.is_licensed()):  # type: ignore # nopep8
         gl_is_symbolica_registered = True
         return True
 

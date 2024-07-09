@@ -26,7 +26,7 @@ def run_rust_test(rust_tests_binary: Path, output_path: Path, test_name: str) ->
     new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = str(output_path)
     if 'SYMBOLICA_LICENSE' not in new_env:
         new_env['SYMBOLICA_LICENSE'] = 'GAMMALOOP_USER'
-    process = Popen(['cargo', 'test', f'pytest_{test_name}', '--release', '--target-dir', os.path.join(GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries'), '--', '--test-threads=1', '--ignored',
+    process = Popen(['cargo', 'test', f'pytest_{test_name}', '--features=binary,fail-on-warnings', '--no-default-features', '--release', '--target-dir', os.path.join(GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries'), '--', '--test-threads=1', '--ignored',
                     '--nocapture'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE, env=new_env)
     output, error = process.communicate()
     if process.returncode != 0:
@@ -58,28 +58,30 @@ def run_drawing(drawing_path: str) -> bool:
     return True
 
 
-def check_integration_result(imag_phase: bool, target: float, process_path: Path):
-    max_mc_error_dif = 5.0
-    max_rel_error_dif = 0.01
-    max_percent_error = 0.01
+def check_integration_result(target: float, process_path: Path, max_mc_error_diff=5.0, max_rel_error_diff=0.01, max_percent_error=0.01, imag_phase=False):
 
-    # copy settings
-    f = open(os.path.join(process_path, 'runs', 'run.yaml'), "r").read()
-    run_yaml = yaml.safe_load(f)
+    with open(os.path.join(process_path, 'runs', 'run.yaml'), "r") as f:
+        run_yaml = yaml.safe_load(f.read())
 
-    res_for_check = run_yaml["result"][0]
-    error_for_check = run_yaml["error"][0]
-    zero_res = run_yaml["result"][1]
-    if imag_phase:
-        res_for_check = run_yaml["result"][1]
-        error_for_check = run_yaml["error"][1]
-        zero_res = run_yaml["result"][0]
-
-    assert zero_res == 0.0
+    index_for_check = 1 if imag_phase else 0
+    res_for_check = run_yaml["result"][index_for_check]
+    error_for_check = run_yaml["error"][index_for_check]
 
     absolute_difference = abs(res_for_check - target)
-    relative_difference = absolute_difference / abs(target)
+    assert absolute_difference < max_mc_error_diff * error_for_check
 
-    assert absolute_difference < max_mc_error_dif * error_for_check
-    assert relative_difference < max_rel_error_dif
-    assert error_for_check < max_percent_error * abs(target)
+    if abs(target) > 0.:
+        relative_difference = absolute_difference / abs(target)
+        assert relative_difference < max_rel_error_diff
+        assert error_for_check < max_percent_error * abs(target)
+
+
+def check_inspect_result(inspect_result: complex, target: complex, max_relative_diff=1.0e-12):
+    for target, diff in [
+        (abs(target.real), abs(inspect_result.real - target.real)),
+        (abs(target.imag), abs(inspect_result.imag - target.imag))
+    ]:
+        if abs(target) > 0.:
+            assert diff < max_relative_diff * target
+        else:
+            assert diff < max_relative_diff

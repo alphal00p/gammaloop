@@ -1,6 +1,4 @@
-CXX=g++
-
-CXXFLAGS=-O2 -fPIC
+CXX ?= g++
 
 all: libfjcore
 
@@ -14,5 +12,5 @@ distclean: clean
 	rm -f fjcore.o wrapper.o libfjcore.a
 
 .cc.o:         $<
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -O2 -fPIC -c $< -o $@
 

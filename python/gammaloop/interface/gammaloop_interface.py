@@ -38,6 +38,7 @@ AVAILABLE_COMMANDS = [
     'test_ir_limits',
     'test_uv_limits',
     'set',
+    'set_model_param',
     'reset',
     'generate_graph'
 ]
@@ -414,6 +415,9 @@ class GammaLoop(object):
                             help='Setting path to set value to')
     set_parser.add_argument(
         'value', metavar='value', type=str, help='value to set as valid python syntax')
+    set_parser.add_argument(
+        '--no_update_run_card', '-n', default=False, action='store_true',
+        help='Do not update the run card of the current launched output. This is useful for batching changes.')
 
     def do_set(self, str_args: str) -> None:
         if str_args == 'help':
@@ -431,6 +435,62 @@ class GammaLoop(object):
         str_setting = pformat(config_value)
         logger.info("Setting '%s%s%s' to:%s%s%s%s", Colour.GREEN,
                     full_path, Colour.END, Colour.BLUE, '\n' if len(str_setting) > 80 else ' ', str_setting, Colour.END)
+
+        if not args.no_update_run_card and self.launched_output is not None:
+            # Update the run card in the output with the current configuration
+            update_run_card_in_output(self.launched_output, self.config)
+
+    # show_settings command
+    set_model_param_settings = ArgumentParser(prog='set_model_param')
+    set_model_param_settings.add_argument('param', metavar='param', type=str,
+                                          help='Model external parameter name to modify')
+    set_model_param_settings.add_argument('value', metavar='value', type=float,
+                                          help='Value to assign to that model parameter')
+    set_model_param_settings.add_argument('--no_overwrite', '-n',
+                                          default=False, action='store_true', help='Do not overwrite the param card and YAML model on disk with the new value')
+
+    def do_set_model_param(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.set_model_param_settings.print_help()
+            return
+        args = self.set_model_param_settings.parse_args(
+            split_str_args(str_args))
+
+        if self.launched_output is None:
+            raise GammaLoopError(
+                "No output launched. Please launch an output first with 'launch' command.")
+
+        if self.model.is_empty():
+            raise GammaLoopError(
+                "Command set_model_param can only be called once a model has been loaded.")
+
+        input_card = InputParamCard.from_model(self.model)
+
+        if args.param not in input_card:
+            raise GammaLoopError(
+                f"Model parameter '{args.param}' not found in model '{self.model.get_full_name()}'. Available external parameters are:\n\
+                    {', '.join(p for p in input_card.keys())}")
+
+        input_card[args.param] = complex(args.value)
+        self.model.apply_input_param_card(input_card, simplify=False)
+        processed_yaml_model = self.model.to_yaml()
+        self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+
+        logger.info("Setting model parameter '%s%s%s' to %s%s%s", Colour.GREEN,
+                    args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+
+        if not args.no_overwrite:
+            ParamCardWriter.write(
+                self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
+            logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
+                         self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+            with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
+                output_metadata = OutputMetaData.from_yaml_str(file.read())
+            self.launched_output.joinpath('cards', 'param_card.dat')
+            with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
+                file.write(processed_yaml_model)
+            logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
+                'sources', 'model', f"{output_metadata['model_name']}.yaml"))
 
     # show_settings command
     show_settings = ArgumentParser(prog='show_settings')
@@ -513,7 +573,7 @@ class GammaLoop(object):
             model_restriction = 'full'
             if not os.path.isfile(pjoin(model_restriction_dir, 'restrict_full.dat')):
                 self.model.apply_input_param_card(
-                    InputParamCard.default_from_model(self.model), simplify=False)
+                    InputParamCard.from_model(self.model), simplify=False)
                 ParamCardWriter.write(
                     Path(pjoin(model_restriction_dir, 'restrict_full.dat')), self.model, generic=True)
             param_card = ParamCard(
@@ -811,8 +871,8 @@ class GammaLoop(object):
                                help='Generate expression associated to the graph and output it to a text file')
     output_parser.add_argument('-mr', '--model_replacements', default=False, action='store_true',
                                help='Generate coupling replacements and output it to a text file')
-    output_parser.add_argument('-ef', '--expression_format', type=str, default='default',
-                               choices=['default', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
+    output_parser.add_argument('-ef', '--expression_format', type=str, default='file',
+                               choices=['file', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
 
     def do_output(self, str_args: str) -> None:
         if str_args == 'help':
@@ -861,8 +921,8 @@ class GammaLoop(object):
         'path_to_launch', type=str, help='Path to launch a given run command to')
     launch_parser.add_argument('--no_overwrite_model', '-nom', action='store_true', default=False,
                                help='Do not overwrite model with the new parameter and coupling values derived from the param card.')
-    launch_parser.add_argument('--no_overwrite_run_settings', '-nors', action='store_true', default=False,
-                               help='Do not overwrite the run settings with the new settings derived from the run card.')
+    launch_parser.add_argument('--load_run_settings', '-lrs', action='store_true', default=False,
+                               help='Load the run settings from the run_card.yaml in the process output.')
 
     def do_launch(self, str_args: str) -> None:
         if str_args == 'help':
@@ -889,13 +949,15 @@ class GammaLoop(object):
         self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
 
         # Sync the run_settings from the interface to the output or vice-versa
-        if not args.no_overwrite_run_settings:
+        if args.load_run_settings:
             run_settings = load_configuration(
                 pjoin(args.path_to_launch, 'cards', 'run_card.yaml'), True)
             # Do not overwrite the external momenta setting in gammaLoop if they are set constant in the process dir
             if run_settings['Kinematics']['externals']['type'] == 'constant':
                 del run_settings['Kinematics']
             self.config.update({'run_settings': run_settings})
+        else:
+            update_run_card_in_output(args.path_to_launch, self.config)
 
         # Depending on the type of output, sync cross-section or amplitude
         if output_metadata['output_type'] == 'amplitudes':
@@ -962,6 +1024,57 @@ class GammaLoop(object):
                 logger.info("Cross-sections:\n%s",
                             pformat(self.cross_sections.to_serializable()))
 
+    def sync_worker_with_output(self, no_sync=False) -> None:
+        if no_sync or self.launched_output is None:
+            return
+
+        # Read metadata
+        with open(pjoin(self.launched_output, 'output_metadata.yaml'), 'r', encoding='utf-8') as file:
+            output_metadata = OutputMetaData.from_yaml_str(file.read())
+
+        # Sync the model with the one used in the output
+        with open(pjoin(self.launched_output, 'sources', 'model', f"{output_metadata['model_name']}.yaml"), 'r', encoding='utf-8') as file:
+            self.model = Model.from_yaml(file.read())
+        self.model.apply_input_param_card(InputParamCard.from_param_card(
+            ParamCard(pjoin(self.launched_output, 'cards', 'param_card.dat')), self.model), simplify=False)
+        processed_yaml_model = self.model.to_yaml()
+        self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+
+        run_settings = load_configuration(
+            pjoin(self.launched_output, 'cards', 'run_card.yaml'), True)
+        # Do not overwrite the external momenta setting in gammaLoop if they are set constant in the process dir
+        if run_settings['Kinematics']['externals']['type'] == 'constant':
+            del run_settings['Kinematics']
+        self.config.update({'run_settings': run_settings})
+
+        # Depending on the type of output, sync cross-section or amplitude
+        if output_metadata['output_type'] == 'amplitudes':
+            self.amplitudes = cross_section.AmplitudeList()
+            self.rust_worker.reset_amplitudes()
+            for amplitude_name in output_metadata['contents']:
+                with open(pjoin(self.launched_output, 'sources', 'amplitudes', f'{amplitude_name}', 'amplitude.yaml'), 'r', encoding='utf-8') as file:
+                    amplitude_yaml = file.read()
+                    self.amplitudes.add_amplitude(
+                        cross_section.Amplitude.from_yaml_str(self.model, amplitude_yaml))
+                    self.rust_worker.add_amplitude_from_yaml_str(
+                        amplitude_yaml)
+            self.rust_worker.load_amplitudes_derived_data(
+                pjoin(self.launched_output, 'sources', 'amplitudes'))
+
+            self.rust_worker.load_amplitude_integrands(
+                pjoin(self.launched_output, 'cards', 'run_card.yaml'))
+
+        elif output_metadata['output_type'] == 'cross_sections':
+            self.cross_sections = cross_section.CrossSectionList()
+            self.rust_worker.reset_cross_sections()
+            for cross_section_name in output_metadata['contents']:
+                with open(pjoin(self.launched_output, 'sources', 'cross_sections', f'{cross_section_name}', 'cross_section.yaml'), 'r', encoding='utf-8') as file:
+                    cross_section_yaml = file.read()
+                    self.cross_sections.add_cross_section(
+                        cross_section.CrossSection.from_yaml_str(self.model, cross_section_yaml))
+                    self.rust_worker.add_cross_section_from_yaml_str(
+                        cross_section_yaml)
+
     # inspect command
     inspect_parser = ArgumentParser(prog='inspect')
     inspect_parser.add_argument(
@@ -971,24 +1084,35 @@ class GammaLoop(object):
     inspect_parser.add_argument('--point', '-p', nargs="+", type=float,
                                 default=None, help='Point to inspect.')
     inspect_parser.add_argument(
-        '--term', '-t', nargs="+", type=int, default=None, help="term to inspect.")
+        '--term', '-t', nargs="+", type=int, default=tuple([0,]), help="term to inspect.")
     inspect_parser.add_argument('--is-momentum-space', '-ms', action='store_true',
                                 default=False, help='Inspect in momentum space.')
     inspect_parser.add_argument(
         '--force-radius', '-fr', action='store_true', default=False, help='Force radius to be used.')
+    inspect_parser.add_argument(
+        '--no_sync', '-ns', action='store_true', default=False,
+        help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
 
-    def do_inspect(self, str_args: str) -> None:
+    def do_inspect(self, str_args: str) -> complex:
         if str_args == 'help':
             self.inspect_parser.print_help()
-            return
+            return 0
         args = self.inspect_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        self.rust_worker.inspect_integrand(
+        if self.launched_output is None:
+            raise GammaLoopError(
+                "No output launched. Please launch an output first with 'launch' command.")
+
+        self.sync_worker_with_output(args.no_sync)
+
+        res: tuple[float, float] = self.rust_worker.inspect_integrand(
             args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
+
+        return complex(res[0], res[1])
 
         # raise GammaLoopError("Command not implemented yet")
 
@@ -1001,21 +1125,21 @@ class GammaLoop(object):
         '--target', '-t', type=str, default=None)
     integrate_parser.add_argument(
         '--restart', '-r', action='store_true',)
+    integrate_parser.add_argument(
+        '--no_sync', '-ns', action='store_true', default=False,
+        help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
 
-    def do_integrate(self, str_args: str) -> None:
+    def do_integrate(self, str_args: str) -> list[complex]:
         if str_args == 'help':
             self.integrate_parser.print_help()
-            return
+            return []
         args = self.integrate_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        # Update the run card in the output with the current configuration
-        update_run_card_in_output(self.launched_output, self.config)
-        self.rust_worker.load_amplitude_integrands(
-            pjoin(self.launched_output, 'cards', 'run_card.yaml'))
+        self.sync_worker_with_output(args.no_sync)
 
         target: tuple[float, float] | None = None
         if args.target is not None:
@@ -1036,8 +1160,10 @@ class GammaLoop(object):
         if not os.path.exists(workspace_path):
             os.mkdir(workspace_path)
 
-        self.rust_worker.integrate_integrand(
+        res = self.rust_worker.integrate_integrand(
             args.integrand, args.cores, str(result_output_path), str(workspace_path), target)
+
+        return [complex(r[0], r[1]) for r in res]
 
         # nuke the workspace if integration finishes
         # For now leave the possibility of restarting where integration left off.
@@ -1047,41 +1173,41 @@ class GammaLoop(object):
 
     # test_ir_limits
     test_ir_limits_parser = ArgumentParser(prog='test_ir_limits')
+    test_ir_limits_parser.add_argument(
+        '--no_sync', '-ns', action='store_true', default=False,
+        help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
 
     def do_test_ir_limits(self, str_args: str) -> None:
         if str_args == 'help':
             self.test_ir_limits_parser.print_help()
             return
-        _args = self.test_ir_limits_parser.parse_args(split_str_args(str_args))
+        args = self.test_ir_limits_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        # Update the run card in the output with the current configuration
-        update_run_card_in_output(self.launched_output, self.config)
-        self.rust_worker.load_amplitude_integrands(
-            pjoin(self.launched_output, 'cards', 'run_card.yaml'))
+        self.sync_worker_with_output(args.no_sync)
 
         raise GammaLoopError("Command not implemented yet")
 
     # test_uv_limits
     test_uv_limits_parser = ArgumentParser(prog='test_ir_limits')
+    test_uv_limits_parser.add_argument(
+        '--no_sync', '-ns', action='store_true', default=False,
+        help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
 
     def do_test_uv_limits(self, str_args: str) -> None:
         if str_args == 'help':
             self.test_uv_limits_parser.print_help()
             return
-        _args = self.test_uv_limits_parser.parse_args(split_str_args(str_args))
+        args = self.test_uv_limits_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        # Update the run card in the output with the current configuration
-        update_run_card_in_output(self.launched_output, self.config)
-        self.rust_worker.load_amplitude_integrands(
-            pjoin(self.launched_output, 'cards', 'run_card.yaml'))
+        self.sync_worker_with_output(args.no_sync)
 
         raise GammaLoopError("Command not implemented yet")
 
@@ -1106,6 +1232,9 @@ class GammaLoop(object):
     hpc_parser = ArgumentParser(prog='hpc_run')
     hpc_parser.add_argument('integrand', type=str,
                             help="Integrand to integrate", default=None)
+    hpc_parser.add_argument(
+        '--no_sync', '-ns', action='store_true', default=False,
+        help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
 
     def do_hpc_run(self, str_args: str) -> None:
         args = self.hpc_parser.parse_args(split_str_args(str_args))
@@ -1113,10 +1242,7 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        # Update the run card in the output with the current configuration
-        update_run_card_in_output(self.launched_output, self.config)
-        self.rust_worker.load_amplitude_integrands(
-            pjoin(self.launched_output, 'cards', 'run_card.yaml'))
+        self.sync_worker_with_output(args.no_sync)
 
         # create a workspace for batch input/output files
         workspace_path = self.launched_output.joinpath("workspace")

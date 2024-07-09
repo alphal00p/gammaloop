@@ -4,22 +4,24 @@ use crate::{
     inspect,
     integrands::Integrand,
     integrate::{
-        havana_integrate, print_integral_result, MasterNode, SerializableBatchResult,
+        havana_integrate, print_integral_result, BatchResult, MasterNode,
         SerializableIntegrationState,
     },
     model::Model,
+    utils::F,
     HasIntegrand, Settings,
 };
 use ahash::HashMap;
 use colored::Colorize;
 use git_version::git_version;
+use itertools::{self, Itertools};
 use log::{info, warn};
+use spenso::Complex;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 use symbolica::printer::PrintOptions;
-
 const GIT_VERSION: &str = git_version!();
 
 #[allow(unused)]
@@ -29,7 +31,7 @@ use pyo3::{
     pyclass,
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
-    types::{PyModule, PyTuple, PyType},
+    types::{PyComplex, PyModule, PyTuple, PyType},
     wrap_pyfunction, FromPyObject, IntoPy, PyObject, PyRef, PyResult, Python,
 };
 
@@ -52,7 +54,7 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
     */
     crate::set_interrupt_handler();
     cli(&py
-        .import("sys")?
+        .import_bound("sys")?
         .getattr("argv")?
         .extract::<Vec<String>>()?)
     .map_err(|e| exceptions::PyException::new_err(e.to_string()))
@@ -60,7 +62,7 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
 
 #[pymodule]
 #[pyo3(name = "_gammaloop")]
-fn gammalooprs(_py: Python, m: &PyModule) -> PyResult<()> {
+fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     // TODO: Verify that indeed Python logger level is used in that case.
     pyo3_log::init();
     crate::set_interrupt_handler();
@@ -97,7 +99,7 @@ impl Clone for PythonWorker {
 #[pymethods]
 impl PythonWorker {
     #[classmethod]
-    pub fn new(_cls: &PyType) -> PyResult<PythonWorker> {
+    pub fn new(_cls: &Bound<PyType>) -> PyResult<PythonWorker> {
         crate::set_interrupt_handler();
         Ok(PythonWorker {
             model: Model::default(),
@@ -244,11 +246,11 @@ impl PythonWorker {
     pub fn export_cross_sections(
         &mut self,
         export_root: &str,
-        cross_section_names: Vec<&str>,
+        cross_section_names: Vec<String>,
     ) -> PyResult<String> {
         let mut n_exported: usize = 0;
         for cross_section in &self.cross_sections.container {
-            if cross_section_names.contains(&cross_section.name.as_str()) {
+            if cross_section_names.contains(&cross_section.name.to_string()) {
                 n_exported += 1;
                 let res = cross_section.export(export_root, &self.model);
                 if let Err(err) = res {
@@ -268,11 +270,11 @@ impl PythonWorker {
     pub fn export_amplitudes(
         &mut self,
         export_root: &str,
-        amplitude_names: Vec<&str>,
+        amplitude_names: Vec<String>,
     ) -> PyResult<String> {
         let mut n_exported: usize = 0;
         for amplitude in self.amplitudes.container.iter_mut() {
-            if amplitude_names.contains(&amplitude.name.as_str()) {
+            if amplitude_names.contains(&amplitude.name.to_string()) {
                 n_exported += 1;
                 let res = amplitude.export(export_root, &self.model);
                 if let Err(err) = res {
@@ -344,7 +346,8 @@ impl PythonWorker {
         force_radius: bool,
         is_momentum_space: bool,
         use_f128: bool,
-    ) -> PyResult<String> {
+    ) -> PyResult<(f64, f64)> {
+        let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
         match self.integrands.get_mut(integrand) {
             Some(integrand) => {
                 let settings = match integrand {
@@ -352,7 +355,7 @@ impl PythonWorker {
                     _ => todo!(),
                 };
 
-                inspect::inspect(
+                let res = inspect::inspect(
                     &settings,
                     integrand,
                     pt,
@@ -361,16 +364,14 @@ impl PythonWorker {
                     is_momentum_space,
                     use_f128,
                 );
-            }
-            None => {
-                return Err(exceptions::PyException::new_err(format!(
-                    "Could not find integrand {}",
-                    integrand
-                )))
-            }
-        };
 
-        Ok(format!("Inspected integrand: {:?}", integrand))
+                Ok((res.re.0, res.im.0))
+            }
+            None => Err(exceptions::PyException::new_err(format!(
+                "Could not find integrand {}",
+                integrand
+            ))),
+        }
     }
 
     pub fn integrate_integrand(
@@ -380,12 +381,13 @@ impl PythonWorker {
         result_path: &str,
         workspace_path: &str,
         target: Option<(f64, f64)>,
-    ) -> PyResult<String> {
+    ) -> PyResult<Vec<(f64, f64)>> {
+        let target = target.map(|(re, im)| (F(re), F(im)));
         match self.integrands.get_mut(integrand) {
             Some(integrand_enum) => match integrand_enum {
                 Integrand::GammaLoopIntegrand(gloop_integrand) => {
                     let target = match target {
-                        Some((re, im)) => Some(num::Complex::new(re, im)),
+                        Some((re, im)) => Some(Complex::new(re, im)),
                         _ => None,
                     };
 
@@ -465,7 +467,12 @@ impl PythonWorker {
                             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
                     )?;
 
-                    Ok(format!("Integrated integrand {}", integrand))
+                    Ok(result
+                        .result
+                        .iter()
+                        .tuple_windows()
+                        .map(|(re, im)| (re.0, im.0))
+                        .collect())
                 }
                 _ => unimplemented!("unsupported integrand type"),
             },
@@ -534,10 +541,10 @@ impl PythonWorker {
         let job_out_path = Path::new(workspace_path).join(job_out_name);
 
         let output_file = std::fs::read(job_out_path)?;
-        let batch_result: SerializableBatchResult = bincode::deserialize(&output_file).unwrap();
+        let batch_result: BatchResult = bincode::deserialize(&output_file).unwrap();
 
         master_node
-            .process_batch_output(batch_result.into_batch_result())
+            .process_batch_output(batch_result)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         Ok(format!("Processed job {}", job_id))
@@ -572,11 +579,11 @@ impl PythonWorker {
 impl PythonWorker {
     fn printer_options(format: &str) -> PrintOptions {
         match format {
+            "file" => PrintOptions::file(),
             "mathematica" => PrintOptions {
                 terms_on_new_line: false,
                 color_top_level_sum: false,
-                color: false,
-                color_builtin_functions: false,
+                color_builtin_symbols: false,
                 print_finite_field: true,
                 symmetric_representation_for_finite_field: false,
                 explicit_rational_polynomial: false,
@@ -588,9 +595,8 @@ impl PythonWorker {
             },
             "latex" => PrintOptions {
                 terms_on_new_line: false,
-                color: false,
                 color_top_level_sum: false,
-                color_builtin_functions: false,
+                color_builtin_symbols: false,
                 print_finite_field: true,
                 symmetric_representation_for_finite_field: false,
                 explicit_rational_polynomial: false,
@@ -603,8 +609,7 @@ impl PythonWorker {
             _ => PrintOptions {
                 terms_on_new_line: false,
                 color_top_level_sum: true,
-                color: false,
-                color_builtin_functions: true,
+                color_builtin_symbols: true,
                 print_finite_field: true,
                 symmetric_representation_for_finite_field: false,
                 explicit_rational_polynomial: false,

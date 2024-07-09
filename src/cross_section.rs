@@ -572,7 +572,7 @@ impl Amplitude {
                 let out = (
                     format!(
                         "{}",
-                        AtomPrinter::new_with_options(num.as_view(), printer_ops)
+                        AtomPrinter::new_with_options(num.expression.as_view(), printer_ops)
                     ),
                     rep_rules,
                     dens,
@@ -598,6 +598,12 @@ impl Amplitude {
             amplitude_graph.graph.generate_ltd();
             amplitude_graph.graph.generate_tropical_subgraph_table();
             amplitude_graph.graph.generate_esurface_data()?;
+            amplitude_graph.graph.process_numerator(model);
+            amplitude_graph
+                .graph
+                .numerator_substitute_model_params(model);
+            // graph.evaluate_model_params(&model);
+            amplitude_graph.graph.process_numerator(model);
         }
 
         // Then dumped the new yaml representation of the amplitude now containing all that additional information
@@ -790,7 +796,7 @@ impl AmplitudeList {
     pub fn generate_numerator(&mut self, model: &Model) {
         for amplitude in self.container.iter_mut() {
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
-                amplitude_graph.graph.generate_numerator(model);
+                amplitude_graph.graph.process_numerator(model);
             }
         }
     }

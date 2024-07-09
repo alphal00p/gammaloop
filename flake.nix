@@ -37,7 +37,9 @@
 
       inherit (pkgs) lib;
 
-      craneLib = crane.lib.${system};
+      craneLib =
+        crane.lib.${system}.overrideToolchain
+        fenix.packages.${system}.stable.toolchain;
       src = craneLib.cleanCargoSource (craneLib.path ./.);
 
       # Common arguments can be set here to avoid repeating them later
@@ -60,7 +62,7 @@
 
       craneLibLLvmTools =
         craneLib.overrideToolchain
-        (fenix.packages.${system}.complete.withComponents [
+        (fenix.packages.${system}.stable.withComponents [
           "cargo"
           "llvm-tools"
           "rustc"
@@ -146,6 +148,8 @@
         # Additional dev-shell environment variables can be set directly
         # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+
+        LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
