@@ -1147,6 +1147,7 @@ impl Graph {
         &self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
+        debug: usize,
     ) -> Vec<F<T>> {
         let energy_cache = self.compute_onshell_energies_in_lmb(
             &sample.loop_moms,
@@ -1158,7 +1159,7 @@ impl Graph {
             .cff_expression
             .as_ref()
             .unwrap()
-            .evaluate_orientations(&energy_cache)
+            .evaluate_orientations(&energy_cache, debug)
     }
 
     pub fn numerator_substitute_model_params(&mut self, model: &Model) {
@@ -1243,6 +1244,7 @@ impl Graph {
         &self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
+        debug: usize,
     ) -> Complex<F<T>> {
         let one = sample.one();
         let zero = one.zero();
@@ -1257,7 +1259,7 @@ impl Graph {
         // here numerator evaluation can be weaved into the summation
         prefactor
             * self
-                .evaluate_cff_orientations(sample, lmb_specification)
+                .evaluate_cff_orientations(sample, lmb_specification, debug)
                 .into_iter()
                 .zip(self.evaluate_numerator_orientations(sample, lmb_specification))
                 .map(|(cff, _num)| {
@@ -1272,9 +1274,10 @@ impl Graph {
     pub fn evaluate_cff_expression<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        debug: usize,
     ) -> Complex<F<T>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.evaluate_cff_expression_in_lmb(sample, &lmb_specification)
+        self.evaluate_cff_expression_in_lmb(sample, &lmb_specification, debug)
     }
 
     pub fn process_numerator(&mut self, model: &Model) {

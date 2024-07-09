@@ -142,7 +142,7 @@ mod tests_scalar_massless_triangle {
             jacobian: F(1.0),
         };
 
-        let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
+        let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
 
         // println!("res = {:+e}", res);
 
@@ -304,7 +304,7 @@ fn pytest_scalar_fishnet_2x2() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let absolute_truth: Complex<F<f128>> = Complex::new(
         F::<f128>::from_f64(0.000019991301832169422),
@@ -384,7 +384,7 @@ fn pytest_scalar_sunrise() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&[k1, k2], &[p1]) / energy_product;
 
     println!("cff_res = {:+e}", cff_res);
@@ -470,7 +470,7 @@ fn pytest_scalar_fishnet_2x3() {
 
     let cff_res = amplitude.amplitude_graphs[0]
         .graph
-        .evaluate_cff_expression(&sample);
+        .evaluate_cff_expression(&sample, 0);
 
     // let cff_duration = before_cff.elapsed();
     // println!("cff_duration: {}", cff_duration.as_micros());
@@ -571,7 +571,7 @@ fn pytest_scalar_cube() {
     };
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_momenta, &external_momenta);
-    let cff_res = graph.evaluate_cff_expression(&sample);
+    let cff_res = graph.evaluate_cff_expression(&sample, 0);
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(&cff_res.re, &ltd_res.re, &ltd_comparison_tolerance128);
 
@@ -627,7 +627,7 @@ fn pytest_scalar_bubble() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
 
     let absolute_truth = Complex::new(F(0.), -F(0.052955801144924944));
 
@@ -707,7 +707,7 @@ fn pytest_massless_scalar_box() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -842,7 +842,7 @@ fn pytest_scalar_double_triangle() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -921,7 +921,7 @@ fn pytest_scalar_mercedes() {
         external_moms: externals,
         jacobian: F(1.0),
     };
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -1012,7 +1012,7 @@ fn pytest_scalar_triangle_box() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -1103,7 +1103,7 @@ fn pytest_scalar_isopod() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     println!("cff_res = {:+e}", cff_res);
     println!("ltd_res = {:+e}", ltd_res);

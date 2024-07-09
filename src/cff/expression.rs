@@ -43,7 +43,15 @@ pub enum CFFExpressionNode {
 
 impl CFFExpression {
     #[inline]
-    pub fn evaluate_orientations<T: FloatLike>(&self, energy_cache: &[F<T>]) -> Vec<F<T>> {
+    pub fn evaluate_orientations<T: FloatLike>(
+        &self,
+        energy_cache: &[F<T>],
+        debug: usize,
+    ) -> Vec<F<T>> {
+        if debug > 3 {
+            println!("evaluating cff orientations in eager mode");
+        }
+
         let esurface_cache = self.compute_esurface_cache(energy_cache);
         let hsurface_cache = self.compute_hsurface_cache(energy_cache);
 
@@ -51,20 +59,29 @@ impl CFFExpression {
 
         self.iter_term_ids()
             .map(|t| {
-                evaluate_tree(
+                let orientation_result = evaluate_tree(
                     &self.orientations[t].expression,
                     t,
                     &esurface_cache,
                     &hsurface_cache,
                     &mut term_cache,
-                )
+                );
+
+                if debug > 3 {
+                    println!(
+                        "result of orientation {:?}, {}",
+                        self.orientations[t].orientation, orientation_result,
+                    )
+                }
+
+                orientation_result
             })
             .collect()
     }
 
     #[inline]
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
-        self.evaluate_orientations(energy_cache)
+    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
+        self.evaluate_orientations(energy_cache, debug)
             .into_iter()
             .reduce(|acc, x| &acc + &x)
             .unwrap_or_else(|| energy_cache[0].zero())

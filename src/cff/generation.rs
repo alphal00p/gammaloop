@@ -600,7 +600,7 @@ mod tests_cff {
             .reduce(|acc, x| acc * x).unwrap();
 
         let cff_res: F<f64> =
-            energy_prefactor * cff.evaluate(&energy_cache) * F((2. * std::f64::consts::PI).powi(-3));
+            energy_prefactor * cff.evaluate(&energy_cache, 0) * F((2. * std::f64::consts::PI).powi(-3));
 
         let target_res = F(6.333_549_225_536_17e-9_f64);
         let absolute_error = cff_res - target_res;
@@ -684,7 +684,7 @@ mod tests_cff {
             .map(|e| (F(2.) * e).inv())
             .reduce(|acc, x| acc * x).unwrap();
 
-        let cff_res = energy_prefactor * cff.evaluate(&energy_cache);
+        let cff_res = energy_prefactor * cff.evaluate(&energy_cache, 0);
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
@@ -769,7 +769,7 @@ mod tests_cff {
             .map(|e| (F(2.) * e).inv())
             .reduce(|acc, x| acc * x).unwrap();
 
-        let res = cff.evaluate(&energies_cache) * energy_prefactor;
+        let res = cff.evaluate(&energies_cache, 0) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
@@ -894,7 +894,7 @@ mod tests_cff {
         let energy_cache = [F(3.0); 17];
         let start = std::time::Instant::now();
         for _ in 0..100 {
-            let _res = cff.evaluate(&energy_cache);
+            let _res = cff.evaluate(&energy_cache, 0);
         }
         let finish = std::time::Instant::now();
         println!("time to evaluate cff: {:?}", (finish - start) / 100);
