@@ -1,8 +1,8 @@
 use crate::{
     cff::{
         esurface::{
-            generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData,
-            ExistingEsurfaceId, ExistingEsurfaces, ExternalShift,
+            generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData, ExistingEsurfaces,
+            ExternalShift,
         },
         expression::CFFExpression,
         generation::generate_cff_expression,
@@ -12,7 +12,10 @@ use crate::{
     model::{self, Model},
     momentum::{FourMomentum, ThreeMomentum},
     numerator::Numerator,
-    subtraction::{overlap::find_maximal_overlap, static_counterterm},
+    subtraction::{
+        overlap::{find_maximal_overlap, OverlapStructure},
+        static_counterterm,
+    },
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_four_momentum_from_three, compute_three_momentum_from_four, FloatLike, F},
 };
@@ -1429,13 +1432,12 @@ impl Graph {
     }
 
     #[inline]
-    #[allow(clippy::type_complexity)]
     pub fn get_maximal_overlap(
         &self,
         externals: &[FourMomentum<F<f64>>],
         e_cm: F<f64>,
         debug: usize,
-    ) -> Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)> {
+    ) -> OverlapStructure {
         let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, debug);
         find_maximal_overlap(
             &self.loop_momentum_basis,

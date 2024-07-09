@@ -16,6 +16,17 @@ use crate::momentum::ThreeMomentum;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
 
+#[derive(Debug, Clone)]
+pub struct OverlapGroup {
+    pub existing_esurfaces: Vec<ExistingEsurfaceId>,
+    pub center: Vec<ThreeMomentum<F<f64>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OverlapStructure {
+    pub overlap_groups: Vec<OverlapGroup>,
+}
+
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {
     propagator_id: usize,            // index into the graph's edges
@@ -274,15 +285,16 @@ pub fn find_center(
     }
 }
 
-#[allow(clippy::type_complexity)]
 pub fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<F<f64>>>],
     external_momenta: &[FourMomentum<F<f64>>],
-) -> Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)> {
-    let mut res = vec![];
+) -> OverlapStructure {
+    let mut res = OverlapStructure {
+        overlap_groups: vec![],
+    };
 
     let all_existing_esurfaces = existing_esurfaces
         .iter_enumerated()
@@ -302,7 +314,11 @@ pub fn find_maximal_overlap(
     );
 
     if let Some(center) = option_center {
-        res.push((all_existing_esurfaces, center));
+        let single_group = OverlapGroup {
+            existing_esurfaces: all_existing_esurfaces,
+            center,
+        };
+        res.overlap_groups.push(single_group);
         return res;
     }
 
@@ -330,12 +346,12 @@ pub fn find_maximal_overlap(
                 false,
             );
 
-            res.push((
-                vec![existing_esurface_id],
-                center.unwrap_or_else(|| {
+            res.overlap_groups.push(OverlapGroup {
+                existing_esurfaces: vec![existing_esurface_id],
+                center: center.unwrap_or_else(|| {
                     panic!("Could not find center of esurface {:?}", esurface_id)
                 }),
-            ));
+            });
             num_disconnected_surfaces += 1;
         }
     }
@@ -367,7 +383,10 @@ pub fn find_maximal_overlap(
             );
 
             if let Some(center) = option_center {
-                res.push((subset.clone(), center));
+                res.overlap_groups.push(OverlapGroup {
+                    existing_esurfaces: subset.clone(),
+                    center,
+                });
             }
         }
 
@@ -377,14 +396,12 @@ pub fn find_maximal_overlap(
     res
 }
 
-#[allow(clippy::type_complexity)]
-fn is_subset_of_result(
-    subset: &[ExistingEsurfaceId],
-    result: &[(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)],
-) -> bool {
-    result
-        .iter()
-        .any(|(result_subset, _)| subset.iter().all(|&x| result_subset.contains(&x)))
+fn is_subset_of_result(subset: &[ExistingEsurfaceId], result: &OverlapStructure) -> bool {
+    result.overlap_groups.iter().any(|group| {
+        subset
+            .iter()
+            .all(|&x| group.existing_esurfaces.contains(&x))
+    })
 }
 
 #[derive(Debug)]
@@ -462,12 +479,11 @@ impl EsurfacePairs {
         self.has_pair_with[Into::<usize>::into(esurface_id)].is_empty()
     }
 
-    #[allow(clippy::type_complexity)]
     fn construct_possible_subsets_of_len(
         &self,
         existing_esurfaces: &ExistingEsurfaces,
         subset_len: usize,
-        result: &[(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)],
+        result: &OverlapStructure,
     ) -> HashSet<Vec<ExistingEsurfaceId>> {
         let mut res = HashSet::default();
         let existing_esurfaces_not_in_overlap = existing_esurfaces
@@ -475,8 +491,9 @@ impl EsurfacePairs {
             .map(|a| a.0)
             .filter(|&existing_esurface_id| {
                 !result
+                    .overlap_groups
                     .iter()
-                    .any(|(overlap, _)| overlap.contains(&existing_esurface_id))
+                    .any(|group| group.existing_esurfaces.contains(&existing_esurface_id))
             });
 
         let mut possible_options_from_esurfaces_not_in_overlap = HashSet::default();
@@ -746,6 +763,16 @@ mod tests {
             ),
         ];
 
+        let fake_res = OverlapStructure {
+            overlap_groups: fake_res
+                .into_iter()
+                .map(|(group, center)| OverlapGroup {
+                    existing_esurfaces: group,
+                    center,
+                })
+                .collect_vec(),
+        };
+
         let fake_subset = vec![
             Into::<ExistingEsurfaceId>::into(1),
             Into::<ExistingEsurfaceId>::into(2),
@@ -799,7 +826,9 @@ mod tests {
             &box4e.external_momenta,
         );
 
-        let res = vec![];
+        let res = OverlapStructure {
+            overlap_groups: vec![],
+        };
         let subsets_3 =
             esurface_pairs.construct_possible_subsets_of_len(&box4e.existing_esurfaces, 3, &res);
 
@@ -823,9 +852,12 @@ mod tests {
             &box4e.external_momenta,
         );
 
-        assert_eq!(maximal_overlap.len(), 4);
+        assert_eq!(maximal_overlap.overlap_groups.len(), 4);
 
-        for (esurfaces, center) in maximal_overlap.iter() {
+        for overlap_group in maximal_overlap.overlap_groups.iter() {
+            let esurfaces = &overlap_group.existing_esurfaces;
+            let center = &overlap_group.center;
+
             assert_eq!(esurfaces.len(), 2);
 
             for esurface in esurfaces.iter() {
@@ -855,9 +887,12 @@ mod tests {
             &box4e.external_momenta,
         );
 
-        assert_eq!(maximal_overlap.len(), 4);
+        assert_eq!(maximal_overlap.overlap_groups.len(), 4);
 
-        for (esurfaces, center) in maximal_overlap.iter() {
+        for overlap_group in maximal_overlap.overlap_groups.iter() {
+            let esurfaces = &overlap_group.existing_esurfaces;
+            let center = &overlap_group.center;
+
             assert_eq!(esurfaces.len(), 1);
 
             for esurface in esurfaces.iter() {
@@ -893,6 +928,6 @@ mod tests {
 
         println!("center: {:#?}", maximal_overlap);
 
-        assert_eq!(maximal_overlap.len(), 1);
+        assert_eq!(maximal_overlap.overlap_groups.len(), 1);
     }
 }

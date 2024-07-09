@@ -782,9 +782,9 @@ fn pytest_massless_scalar_box() {
         &box4_e,
     );
 
-    assert_eq!(maximal_overlap.len(), 4);
-    for overlap in maximal_overlap.iter() {
-        assert_eq!(overlap.0.len(), 2);
+    assert_eq!(maximal_overlap.overlap_groups.len(), 4);
+    for overlap in maximal_overlap.overlap_groups.iter() {
+        assert_eq!(overlap.existing_esurfaces.len(), 2);
     }
 }
 
@@ -1216,11 +1216,23 @@ fn pytest_hexagon() {
     let duration = now.elapsed();
     println!("duration: {}", duration.as_micros());
 
-    assert_eq!(maximal_overlap.len(), 4);
-    assert_eq!(maximal_overlap[0].0.len(), 3);
-    assert_eq!(maximal_overlap[1].0.len(), 3);
-    assert_eq!(maximal_overlap[2].0.len(), 3);
-    assert_eq!(maximal_overlap[3].0.len(), 2);
+    assert_eq!(maximal_overlap.overlap_groups.len(), 4);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[3].existing_esurfaces.len(),
+        2
+    );
 
     let hexagon_10_e = [
         FourMomentum::from_args(F(-80.), F(29.), F(-70.), F(0.)),
@@ -1252,11 +1264,23 @@ fn pytest_hexagon() {
     let duration = now.elapsed();
     println!("duration: {}", duration.as_micros());
 
-    assert_eq!(maximal_overlap.len(), 4);
-    assert_eq!(maximal_overlap[0].0.len(), 8);
-    assert_eq!(maximal_overlap[1].0.len(), 8);
-    assert_eq!(maximal_overlap[2].0.len(), 7);
-    assert_eq!(maximal_overlap[3].0.len(), 7);
+    assert_eq!(maximal_overlap.overlap_groups.len(), 4);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        8
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        8
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        7
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[3].existing_esurfaces.len(),
+        7
+    );
 }
 
 #[test]
@@ -1335,16 +1359,16 @@ fn pytest_topology_c() {
         &kinematics,
     );
 
-    assert_eq!(overlap.len(), 9);
-    assert_eq!(overlap[0].0.len(), 22);
-    assert_eq!(overlap[1].0.len(), 21);
-    assert_eq!(overlap[2].0.len(), 21);
-    assert_eq!(overlap[3].0.len(), 21);
-    assert_eq!(overlap[4].0.len(), 21);
-    assert_eq!(overlap[5].0.len(), 21);
-    assert_eq!(overlap[6].0.len(), 20);
-    assert_eq!(overlap[7].0.len(), 17);
-    assert_eq!(overlap[8].0.len(), 17);
+    assert_eq!(overlap.overlap_groups.len(), 9);
+    assert_eq!(overlap.overlap_groups[0].existing_esurfaces.len(), 22);
+    assert_eq!(overlap.overlap_groups[1].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[2].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[3].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[4].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[5].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[6].existing_esurfaces.len(), 20);
+    assert_eq!(overlap.overlap_groups[7].existing_esurfaces.len(), 17);
+    assert_eq!(overlap.overlap_groups[8].existing_esurfaces.len(), 17);
 }
 
 #[test]
@@ -1435,11 +1459,20 @@ fn pytest_massless_pentabox() {
         &kinematics,
     );
 
-    assert_eq!(maximal_overlap.len(), 3);
+    assert_eq!(maximal_overlap.overlap_groups.len(), 3);
 
-    assert_eq!(maximal_overlap[0].0.len(), 16);
-    assert_eq!(maximal_overlap[1].0.len(), 13);
-    assert_eq!(maximal_overlap[2].0.len(), 13);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        16
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        13
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        13
+    );
 }
 
 #[test]
@@ -1533,9 +1566,15 @@ fn pytest_massless_3l_pentabox() {
     );
     let _elapsed = now.elapsed();
 
-    assert_eq!(maximal_overlap.len(), 2);
-    assert_eq!(maximal_overlap[0].0.len(), 27);
-    assert_eq!(maximal_overlap[1].0.len(), 26);
+    assert_eq!(maximal_overlap.overlap_groups.len(), 2);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        27
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        26
+    );
 }
 
 #[test]

@@ -20,11 +20,13 @@ use crate::{
     Settings,
 };
 
+use super::overlap::OverlapStructure;
+
 #[allow(clippy::type_complexity)]
 #[derive(Debug, Clone)]
 pub struct CounterTerm {
     existing_esurfaces: ExistingEsurfaces,
-    maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)>,
+    maximal_overlap: OverlapStructure,
     complements_of_overlap: Vec<Vec<ExistingEsurfaceId>>,
     terms_in_counterterms: Vec<CFFLimit>,
 }
@@ -40,8 +42,9 @@ impl CounterTerm {
         let number_of_existing_esurfaces = self.existing_esurfaces.len();
         let simplified_maximal_overlap_structure = self
             .maximal_overlap
+            .overlap_groups
             .iter()
-            .map(|(ids, _)| ids.len())
+            .map(|groups| groups.existing_esurfaces.len())
             .collect_vec();
 
         println!("number of thresholds: {}", number_of_existing_esurfaces);
@@ -50,7 +53,10 @@ impl CounterTerm {
             simplified_maximal_overlap_structure
         );
 
-        for (overlap, center) in self.maximal_overlap.iter() {
+        for overlap_group in self.maximal_overlap.overlap_groups.iter() {
+            let overlap = &overlap_group.existing_esurfaces;
+            let center = &overlap_group.center;
+
             println!("overlap size: {}", overlap.len());
             println!("center: {:#?}", center);
 
@@ -67,16 +73,17 @@ impl CounterTerm {
         }
     }
 
-    #[allow(clippy::type_complexity)]
     pub fn construct(
-        maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)>,
+        maximal_overlap: OverlapStructure,
         existing_esurfaces: &ExistingEsurfaces,
         graph: &Graph,
     ) -> Self {
         let cff = graph.get_cff();
         let complements_of_overlap = maximal_overlap
+            .overlap_groups
             .iter()
-            .map(|(esurface_ids, _)| {
+            .map(|overlap_group| {
+                let esurface_ids = &overlap_group.existing_esurfaces;
                 existing_esurfaces
                     .iter_enumerated()
                     .map(|a| a.0)
@@ -160,11 +167,15 @@ impl CounterTerm {
 
         let mut res = loop_momenta[0].px.zero();
 
-        for ((overlap, center), overlap_complement) in self
+        for (overlap_group, overlap_complement) in self
             .maximal_overlap
+            .overlap_groups
             .iter()
             .zip(self.complements_of_overlap.iter())
         {
+            let overlap = &overlap_group.existing_esurfaces;
+            let center = &overlap_group.center;
+
             if settings.general.debug > 1 {
                 println!("evaluating overlap structure: {:?}", overlap);
                 println!("with center: {:?}", center);

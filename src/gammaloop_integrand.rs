@@ -1013,8 +1013,11 @@ impl GammaLoopIntegrand {
                     );
 
                     if settings.general.debug > 0 {
-                        let maximal_overlap_structure =
-                            maximal_overlap.iter().map(|(x, _)| x.len()).collect_vec();
+                        let maximal_overlap_structure = maximal_overlap
+                            .overlap_groups
+                            .iter()
+                            .map(|overlap_group| overlap_group.existing_esurfaces.len())
+                            .collect_vec();
 
                         println!("maximal overlap structure: {:?}", maximal_overlap_structure)
                     }
