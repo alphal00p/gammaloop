@@ -17,6 +17,7 @@ use symbolica::{atom::AtomView, domains::float::Complex as SymComplex};
 use symbolica::{
     atom::{Atom, FunctionBuilder, Symbol},
     state::State,
+    printer::{AtomPrinter, PrintOptions}
 };
 
 pub fn apply_replacements(
@@ -46,11 +47,19 @@ impl Serialize for Numerator {
     where
         S: serde::Serializer,
     {
-        let expression = self.expression.to_string();
+        let expression =
+            AtomPrinter::new_with_options(self.expression.as_view(), PrintOptions::file())
+                .to_string();
+
         let const_map: AHashMap<String, Complex<F<f64>>> = self
             .const_map
             .iter()
-            .map(|(k, &v)| (k.to_string(), v))
+            .map(|(k, &v)| {
+                (
+                    AtomPrinter::new_with_options(k.as_view(), PrintOptions::file()).to_string(),
+                    v,
+                )
+            })
             .collect();
 
         let mut state = serializer.serialize_struct("Numerator", 3)?;
