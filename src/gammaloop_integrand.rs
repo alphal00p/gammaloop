@@ -836,7 +836,7 @@ impl GammaLoopIntegrand {
                             tropical_parameterization::generate_tropical_sample(
                                 xs,
                                 &external_moms,
-                                &graph,
+                                graph,
                                 self.settings.general.debug,
                             )
                             .unwrap();

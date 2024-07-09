@@ -597,7 +597,7 @@ mod tests_cff {
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| &acc * &x).unwrap();
+            .reduce(|acc, x| acc * x).unwrap();
 
         let cff_res: F<f64> =
             energy_prefactor * cff.evaluate(&energy_cache) * F((2. * std::f64::consts::PI).powi(-3));
@@ -682,7 +682,7 @@ mod tests_cff {
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| &acc * &x).unwrap();
+            .reduce(|acc, x| acc * x).unwrap();
 
         let cff_res = energy_prefactor * cff.evaluate(&energy_cache);
 
@@ -764,7 +764,7 @@ mod tests_cff {
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| &acc * &x).unwrap();
+            .reduce(|acc, x| acc * x).unwrap();
 
         let res = cff.evaluate(&energies_cache) * energy_prefactor;
 

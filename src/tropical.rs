@@ -540,10 +540,10 @@ pub mod tropical_parameterization {
     use symbolica::domains::float::{NumericalFloatLike, Real};
 
     use crate::{
-        graph::{Graph, LoopMomentumBasis},
+        graph::Graph,
         linalg::SquareMatrix,
         momentum::{FourMomentum, ThreeMomentum},
-        utils::{box_muller, compute_shift_part, inverse_gamma_lr, FloatLike, F},
+        utils::{box_muller, inverse_gamma_lr, FloatLike, F},
     };
 
     use super::{TropicalSubgraphTable, D, DHALF};

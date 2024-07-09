@@ -274,6 +274,7 @@ pub fn find_center(
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
     existing_esurfaces: &ExistingEsurfaces,
@@ -376,6 +377,7 @@ pub fn find_maximal_overlap(
     res
 }
 
+#[allow(clippy::type_complexity)]
 fn is_subset_of_result(
     subset: &[ExistingEsurfaceId],
     result: &[(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)],
@@ -460,6 +462,7 @@ impl EsurfacePairs {
         self.has_pair_with[Into::<usize>::into(esurface_id)].is_empty()
     }
 
+    #[allow(clippy::type_complexity)]
     fn construct_possible_subsets_of_len(
         &self,
         existing_esurfaces: &ExistingEsurfaces,

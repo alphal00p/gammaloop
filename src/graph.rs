@@ -10,7 +10,7 @@ use crate::{
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
-    momentum::{Energy, FourMomentum, ThreeMomentum},
+    momentum::{FourMomentum, ThreeMomentum},
     numerator::Numerator,
     subtraction::{overlap::find_maximal_overlap, static_counterterm},
     tropical::{self, TropicalSubgraphTable},
@@ -1429,6 +1429,7 @@ impl Graph {
     }
 
     #[inline]
+    #[allow(clippy::type_complexity)]
     pub fn get_maximal_overlap(
         &self,
         externals: &[FourMomentum<F<f64>>],

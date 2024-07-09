@@ -20,6 +20,7 @@ use crate::{
     Settings,
 };
 
+#[allow(clippy::type_complexity)]
 #[derive(Debug, Clone)]
 pub struct CounterTerm {
     existing_esurfaces: ExistingEsurfaces,
@@ -66,6 +67,7 @@ impl CounterTerm {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn construct(
         maximal_overlap: Vec<(Vec<ExistingEsurfaceId>, Vec<ThreeMomentum<F<f64>>>)>,
         existing_esurfaces: &ExistingEsurfaces,
