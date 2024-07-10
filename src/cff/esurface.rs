@@ -352,7 +352,8 @@ pub fn get_existing_esurfaces<T: FloatLike>(
                         "{}",
                         format!(
                             "esurface {} has negative_shift, shift: {}",
-                            esurface_id.0, shift_part
+                            esurface_id.0,
+                            -shift_part.abs()
                         )
                         .yellow()
                     );
@@ -365,7 +366,8 @@ pub fn get_existing_esurfaces<T: FloatLike>(
                         "{}",
                         format!(
                             "esurface {} has negative shift, shift: {}",
-                            other_esurface_id.0, shift_part
+                            other_esurface_id.0,
+                            -shift_part.abs()
                         )
                         .yellow()
                     );
