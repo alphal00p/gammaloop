@@ -1095,32 +1095,24 @@ pub fn print_integral_result(
             .blue()
             .bold(),
         if !itg.avg.is_zero() {
-            if (itg.err / itg.avg).abs() > F(0.01) {
+            if (itg.err / itg.avg).abs().0 > 0.01 {
                 format!(
                     "{:-8}",
-                    format!("{:.3}%", (itg.err / itg.avg).abs() * F(100.)).red()
+                    format!("{:.3}%", (itg.err / itg.avg).abs().0 * 100.).red()
                 )
             } else {
                 format!(
                     "{:-8}",
-                    format!("{:.3}%", (itg.err / itg.avg).abs() * F(100.)).green()
+                    format!("{:.3}%", (itg.err / itg.avg).abs().0 * 100.).green()
                 )
             }
         } else {
             format!("{:-8}", "")
         },
         if itg.chi_sq / (F::<f64>::new_from_usize(i_iter)) > F(5.) {
-            format!(
-                "{:-6.3} χ²/dof",
-                itg.chi_sq / (F::<f64>::new_from_usize(i_iter))
-            )
-            .red()
+            format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).red()
         } else {
-            format!(
-                "{:-6.3} χ²/dof",
-                itg.chi_sq / (F::<f64>::new_from_usize(i_iter))
-            )
-            .normal()
+            format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).normal()
         },
         if i_itg == 1 {
             if let Some(t) = trgt {
@@ -1131,20 +1123,20 @@ pub fn print_integral_result(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
                         (t - itg.avg).abs() / itg.err,
                         if t.abs() > F(0.) {
-                            (t - itg.avg).abs() / t.abs() * F(100.)
+                            (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {
-                            F(0.)
+                            0.
                         }
                     )
                     .red()
                 } else {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        (t - itg.avg).abs() / itg.err,
+                        (t - itg.avg).abs().0 / itg.err.0,
                         if t.abs() > F(0.) {
-                            (t - itg.avg).abs() / t.abs() * F(100.)
+                            (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {
-                            F(0.)
+                            0.
                         }
                     )
                     .green()
@@ -1162,9 +1154,9 @@ pub fn print_integral_result(
                 .max(&itg.max_eval_positive.abs())
                 / (itg.avg.abs() * (F::<f64>::new_from_usize(itg.processed_samples)));
             if mwi > F(1.) {
-                format!("  mwi: {:<10.4e}", mwi).red()
+                format!("  mwi: {:<10.4e}", mwi.0).red()
             } else {
-                format!("  mwi: {:<10.4e}", mwi).normal()
+                format!("  mwi: {:<10.4e}", mwi.0).normal()
             }
         } else {
             format!("  mwi: {:<10.4e}", 0.).normal()
