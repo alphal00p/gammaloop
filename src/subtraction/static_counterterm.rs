@@ -367,9 +367,9 @@ impl CounterTerm {
         let sliver_width = F::from_f64(settings.subtraction.sliver_width);
         let e_cm = F::from_ff64(settings.kinematics.e_cm);
 
-        if settings.subtraction.dynamic_sliver && (radius - rstar).abs() > &sliver_width * rstar {
-            return radius.zero();
-        } else if (radius - rstar).abs() > sliver_width * &e_cm {
+        if (settings.subtraction.dynamic_sliver && (radius - rstar).abs() > &sliver_width * rstar)
+            || ((radius - rstar).abs() > &sliver_width * &e_cm)
+        {
             return radius.zero();
         }
 
