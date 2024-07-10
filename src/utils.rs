@@ -1279,9 +1279,12 @@ pub fn to_str_expression(expression: &Atom) -> String {
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
 /// Based on the Python package gvar.
 pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
-    fn ndec(x: F<f64>, offset: usize) -> i32 {
-        let mut ans = (offset as f64 - x.0.log10()) as i32;
-        if ans > 0 && x.0 * 10.0.powi(ans) >= [0.5, 9.5, 99.5][offset] {
+    let mean = mean.0;
+    let sdev = sdev.0;
+
+    fn ndec(x: f64, offset: usize) -> i32 {
+        let mut ans = (offset as f64 - x.log10()) as i32;
+        if ans > 0 && x * 10.0.powi(ans) >= [0.5, 9.5, 99.5][offset] {
             ans -= 1;
         }
         if ans < 0 {
@@ -1298,7 +1301,7 @@ pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
         format!("{:e} ± {:e}", v, dv)
     } else if dv.is_infinite() {
         format!("{:e} ± inf", v)
-    } else if v.is_zero() && !(F(1e-4)..F(1e5)).contains(&dv) {
+    } else if v.is_zero() && !(1e-4..1e5).contains(&dv) {
         if dv.is_zero() {
             "0(0)".to_owned()
         } else {
@@ -1309,9 +1312,9 @@ pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
             "0.0(".to_owned() + e1 + ")e" + e2
         }
     } else if v.is_zero() {
-        if dv >= F(9.95) {
+        if dv >= 9.95 {
             format!("0({:.0})", dv)
-        } else if dv >= F(0.995) {
+        } else if dv >= 0.995 {
             format!("0.0({:.1})", dv)
         } else {
             let ndecimal = ndec(dv, 2);
@@ -1319,7 +1322,7 @@ pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
                 "{:.*}({:.0})",
                 ndecimal as usize,
                 v,
-                dv * F(10.).powi(ndecimal)
+                dv * (10.).powi(ndecimal)
             )
         }
     } else if dv.is_zero() {
@@ -1332,27 +1335,27 @@ pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
         } else {
             e1.to_owned() + "(0)"
         }
-    } else if dv > F(1e4) * v.abs() {
+    } else if dv > 1e4 * v.abs() {
         format!("{:.1e} ± {:.2e}", v, dv)
-    } else if v.abs() >= F(1e6) || v.abs() < F(1e-5) {
+    } else if v.abs() >= 1e6 || v.abs() < 1e-5 {
         // exponential notation for large |self.mean|
         let exponent = v.abs().log10().floor();
-        let fac = F(10.0).powf(&exponent);
-        let mantissa = format_uncertainty(v / fac, dv / fac);
+        let fac = 10.0.powf(&exponent);
+        let mantissa = format_uncertainty(F(v / fac), F(dv / fac));
         let e = format!("{:.0e}", fac);
         let mut ee = e.split('e');
         mantissa + "e" + ee.nth(1).unwrap()
     }
     // normal cases
-    else if dv >= F(9.95) {
-        if v.abs() >= F(9.5) {
+    else if dv >= 9.95 {
+        if v.abs() >= 9.5 {
             format!("{:.0}({:.0})", v, dv)
         } else {
             let ndecimal = ndec(v.abs(), 1);
             format!("{:.*}({:.*})", ndecimal as usize, v, ndecimal as usize, dv)
         }
-    } else if dv >= F(0.995) {
-        if v.abs() >= F(0.95) {
+    } else if dv >= 0.995 {
+        if v.abs() >= 0.95 {
             format!("{:.1}({:.1})", v, dv)
         } else {
             let ndecimal = ndec(v.abs(), 1);
@@ -1364,7 +1367,7 @@ pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
             "{:.*}({:.0})",
             ndecimal as usize,
             v,
-            dv * F(10.).powi(ndecimal)
+            dv * (10.).powi(ndecimal)
         )
     }
 }
