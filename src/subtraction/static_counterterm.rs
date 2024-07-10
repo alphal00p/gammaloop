@@ -166,7 +166,6 @@ impl CounterTerm {
             .collect_vec();
 
         let e_cm = F::from_ff64(settings.kinematics.e_cm);
-        let sliver_width = F::from_f64(settings.subtraction.sliver_width);
         let esurfaces = &graph.get_cff().esurfaces;
         let lmb = &graph.loop_momentum_basis;
 
@@ -310,9 +309,7 @@ impl CounterTerm {
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
-                        &e_cm,
-                        &sliver_width,
-                        settings.subtraction.dampen_integrable_singularity,
+                        settings,
                     ),
                     self.radius_star_eval(
                         &negative_result.solution,
@@ -324,9 +321,7 @@ impl CounterTerm {
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
-                        &e_cm,
-                        &sliver_width,
-                        settings.subtraction.dampen_integrable_singularity,
+                        settings,
                     ),
                 );
 
@@ -367,11 +362,14 @@ impl CounterTerm {
         esurfaces: &EsurfaceCollection,
         overlap_complement: &[ExistingEsurfaceId],
         existing_esurface_id: ExistingEsurfaceId,
-        e_cm: &F<T>,
-        sliver_width: &F<T>,
-        dampen_integrable_singularity: bool,
+        settings: &Settings,
     ) -> F<T> {
-        if (radius - rstar).abs() > sliver_width * e_cm {
+        let sliver_width = F::from_f64(settings.subtraction.sliver_width);
+        let e_cm = F::from_ff64(settings.kinematics.e_cm);
+
+        if settings.subtraction.dynamic_sliver && (radius - rstar).abs() > &sliver_width * rstar {
+            return radius.zero();
+        } else if (radius - rstar).abs() > sliver_width * &e_cm {
             return radius.zero();
         }
 
@@ -409,9 +407,9 @@ impl CounterTerm {
         let eval_terms = terms.evaluate_from_esurface_cache(&esurface_cache, &energy_cache);
 
         let r_minus_rstar = radius - rstar;
-        let dampening_factor = (-&r_minus_rstar * &r_minus_rstar / (e_cm * e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
+        let dampening_factor = (-&r_minus_rstar * &r_minus_rstar / (&e_cm * &e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
 
-        let singularity_dampener = if dampen_integrable_singularity {
+        let singularity_dampener = if settings.subtraction.dampen_integrable_singularity {
             (radius.one()
                 - (rstar * rstar * rstar * rstar
                     / (rstar * rstar - &r_minus_rstar * &r_minus_rstar).powi(2)))

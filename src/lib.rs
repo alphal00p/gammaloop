@@ -388,4 +388,5 @@ pub enum DiscreteGraphSamplingSettings {
 pub struct SubtractionSettings {
     pub sliver_width: f64,
     pub dampen_integrable_singularity: bool,
+    pub dynamic_sliver: bool,
 }

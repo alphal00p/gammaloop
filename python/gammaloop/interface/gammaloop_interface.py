@@ -145,6 +145,7 @@ class GammaLoopConfiguration(object):
                 'subtraction': {
                     'sliver_width': 1.0,
                     'dampen_integrable_singularity': True,
+                    'dynamic_sliver': False,
                 }
             }
         }
