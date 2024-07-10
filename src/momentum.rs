@@ -452,9 +452,8 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
 
 impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
     pub fn perform_pi2_rotation_x_mut(&mut self) {
-        todo!("fix this version");
-        let px = self.px.clone();
-        self.px = -px;
+        self.pz = -self.pz.clone();
+        std::mem::swap(&mut self.pz, &mut self.py);
     }
 
     pub fn perform_pi2_rotation_x(&self) -> Self {
@@ -466,9 +465,8 @@ impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
     }
 
     pub fn perform_pi2_rotation_y_mut(&mut self) {
-        todo!("fix this version");
-        let py = self.py.clone();
-        self.py = -py;
+        self.px = -self.px.clone();
+        std::mem::swap(&mut self.px, &mut self.pz);
     }
 
     pub fn perform_pi2_rotation_y(&self) -> Self {
@@ -480,9 +478,8 @@ impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
     }
 
     pub fn perform_pi2_rotation_z_mut(&mut self) {
-        todo!("fix this version");
-        let pz = self.pz.clone();
-        self.pz = -pz;
+        self.py = -self.py.clone();
+        std::mem::swap(&mut self.px, &mut self.py);
     }
 
     pub fn perform_pi2_rotation_z(&self) -> Self {
