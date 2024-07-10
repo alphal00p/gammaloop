@@ -601,13 +601,13 @@ impl HasIntegrand for GammaLoopIntegrand {
             || panic!("No evaluation was done, perhaps the final stability level has a non-negative escalation threshold?")
         );
 
-        if self.settings.general.debug > 1 {
+        if self.settings.general.debug > 0 {
             println!("{}", "
             |  DEBUG -------------------------------------------------------------------------------------  |".green());
             println!();
 
-            println!("{}", "sample form havana: ".blue());
-            println!("\tsampled x: {:?}", sample_point);
+            println!("{}", "sample from havana: ".blue());
+            println!("\tsampled x: {:?}", sample);
             println!();
 
             println!("{}", "parametrisation result".blue());
