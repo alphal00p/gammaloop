@@ -1,4 +1,5 @@
 /// Counterterm for amplitudes with constant externals.
+use colored::Colorize;
 use itertools::Itertools;
 use spenso::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -154,6 +155,10 @@ impl CounterTerm {
         rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<F<T>> {
+        if settings.general.debug > 1 {
+            println!("{}", "Start evaluation of threshold counterterms".green());
+        }
+
         let real_mass_vector = graph
             .get_real_mass_vector()
             .into_iter()
@@ -178,22 +183,39 @@ impl CounterTerm {
 
             if settings.general.debug > 1 {
                 println!("evaluating overlap structure: {:?}", overlap);
+                println!(
+                    "contains esurfaces: {:?}",
+                    overlap
+                        .iter()
+                        .map(|id| self.existing_esurfaces[*id])
+                        .collect_vec()
+                );
                 println!("with center: {:?}", center);
             }
 
             let center_t = if rotate_overlap_centers {
+                if settings.general.debug > 1 {
+                    println!("{}", "Rotating centers for stability check".yellow());
+                }
+
                 let rotation_function = settings.stability.rotation_axis.rotation_function();
-                center
+                let rotated_center = center
                     .iter()
                     .map(rotation_function)
                     .map(|c_vec| {
                         ThreeMomentum::new(
                             F::from_ff64(c_vec.px),
                             F::from_ff64(c_vec.py),
-                            F::from_ff64(c_vec.px),
+                            F::from_ff64(c_vec.pz), // manual cast is needed for some reason?
                         )
                     })
-                    .collect_vec()
+                    .collect_vec();
+
+                if settings.general.debug > 1 {
+                    println!("Rotated centers: {:?}", rotated_center);
+                }
+
+                rotated_center
             } else {
                 center
                     .iter()
@@ -201,7 +223,7 @@ impl CounterTerm {
                         ThreeMomentum::new(
                             F::from_ff64(c_vec.px),
                             F::from_ff64(c_vec.py),
-                            F::from_ff64(c_vec.px),
+                            F::from_ff64(c_vec.pz),
                         )
                     })
                     .collect_vec()
@@ -217,18 +239,20 @@ impl CounterTerm {
                 normalize_momenta(&shifted_momenta);
 
             if settings.general.debug > 1 {
-                println!("shifted_momenta: {:?}", shifted_momenta);
-                println!("hemihyperradius: {:?}", hemispherical_radius);
+                println!("Momenta shifted by center: {:?}", shifted_momenta);
+                println!("Hemispherical radius: {:?}", hemispherical_radius);
             }
 
-            //println!("hemispherical_radius: {}", hemispherical_radius);
-
             for existing_esurface_id in overlap.iter() {
+                let esurface_id = &self.existing_esurfaces[*existing_esurface_id];
+                let esurface = &esurfaces[*esurface_id];
+
                 if settings.general.debug > 1 {
-                    println!("subtracting esurface: {:?}", existing_esurface_id);
+                    println!("subtracting esurface: {:?}", esurface_id);
+                    println!("energies: {:?}", &esurface.energies);
+                    println!("external shift: {:?}", &esurface.external_shift);
                 }
 
-                let esurface = &esurfaces[self.existing_esurfaces[*existing_esurface_id]];
                 // solve the radius
                 let radius_guess = esurface.get_radius_guess(
                     &hemispherical_unit_shifted_momenta,
@@ -237,7 +261,7 @@ impl CounterTerm {
                 );
 
                 if settings.general.debug > 1 {
-                    println!("radius_guess: {}", radius_guess)
+                    println!("Initial condition for newton iterations: ±{}", radius_guess);
                 }
 
                 let function = |r: &_| {
@@ -251,7 +275,7 @@ impl CounterTerm {
                     )
                 };
 
-                let (radius_plus, derivative_at_r_plus) = newton_iteration_and_derivative(
+                let positive_result = newton_iteration_and_derivative(
                     &radius_guess,
                     function,
                     &F::from_f64(TOLERANCE),
@@ -259,7 +283,7 @@ impl CounterTerm {
                     &e_cm,
                 );
 
-                let (radius_minus, derivative_at_r_minus) = newton_iteration_and_derivative(
+                let negative_result = newton_iteration_and_derivative(
                     &(-radius_guess),
                     function,
                     &F::from_f64(TOLERANCE),
@@ -268,15 +292,16 @@ impl CounterTerm {
                 );
 
                 if settings.general.debug > 1 {
-                    println!(
-                        "radius_plus: {}, radius_minus: {}",
-                        radius_plus, radius_minus
-                    );
+                    println!("Positive solution: ");
+                    positive_result.debug_print(&e_cm);
+
+                    println!("Negative solution: ");
+                    negative_result.debug_print(&e_cm);
                 }
 
                 let (r_plus_eval, r_minus_eval) = (
                     self.radius_star_eval(
-                        &radius_plus,
+                        &positive_result.solution,
                         &hemispherical_radius,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
@@ -290,7 +315,7 @@ impl CounterTerm {
                         settings.subtraction.dampen_integrable_singularity,
                     ),
                     self.radius_star_eval(
-                        &radius_minus,
+                        &negative_result.solution,
                         &hemispherical_radius,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
@@ -306,10 +331,14 @@ impl CounterTerm {
                 );
 
                 let ct_plus = r_plus_eval
-                    * ((&hemispherical_radius - &radius_plus) * derivative_at_r_plus).inv();
+                    * ((&hemispherical_radius - &positive_result.solution)
+                        * positive_result.derivative_at_solution)
+                        .inv();
 
                 let ct_minus = r_minus_eval
-                    * ((&hemispherical_radius - &radius_minus) * derivative_at_r_minus).inv();
+                    * ((&hemispherical_radius - &negative_result.solution)
+                        * negative_result.derivative_at_solution)
+                        .inv();
 
                 res += ct_plus + ct_minus;
             }
@@ -427,14 +456,15 @@ fn normalize_momenta<T: FloatLike>(
     (normalized_momentum, radius)
 }
 
-/// root finding, also returns the derivative at the root, so that we don't have to recompute it
+/// root finding, returns the derivative at the root, so that we don't have to recompute it.
+/// Also returns the value of the function whose root is being found and the number of iterations used for debug information
 fn newton_iteration_and_derivative<T: FloatLike>(
     guess: &F<T>,
     f_x_and_df_x: impl Fn(&F<T>) -> (F<T>, F<T>),
     tolerance: &F<T>,
     max_iterations: usize,
     e_cm: &F<T>,
-) -> (F<T>, F<T>) {
+) -> NewtonIterationResult<T> {
     let mut x = guess.clone();
     let (mut val_f_x, mut val_df_x) = f_x_and_df_x(&x);
 
@@ -448,5 +478,42 @@ fn newton_iteration_and_derivative<T: FloatLike>(
         iteration += 1;
     }
 
-    (x, val_df_x)
+    NewtonIterationResult {
+        solution: x,
+        derivative_at_solution: val_df_x,
+        error_of_function: val_f_x,
+        num_iterations_used: iteration,
+    }
+}
+
+struct NewtonIterationResult<T: FloatLike> {
+    solution: F<T>,
+    derivative_at_solution: F<T>,
+    error_of_function: F<T>,
+    num_iterations_used: usize,
+}
+
+impl<T: FloatLike> NewtonIterationResult<T> {
+    fn debug_print(&self, e_cm: &F<T>) {
+        println!("r*: {}", &self.solution);
+        println!("Derivative at r* {}", &self.derivative_at_solution);
+        println!(
+            "Value of esurface: {}",
+            if self.error_of_function.abs()
+                < self.solution.epsilon() * &F::from_f64(TOLERANCE) * e_cm
+            {
+                format!("{}", &self.error_of_function).green()
+            } else {
+                format!("{}", &self.error_of_function).red()
+            }
+        );
+        println!(
+            "Number of iterations used: {}",
+            if self.num_iterations_used == MAX_ITERATIONS {
+                format!("{}", &self.num_iterations_used).red()
+            } else {
+                format!("{}", self.num_iterations_used).green()
+            }
+        )
+    }
 }
