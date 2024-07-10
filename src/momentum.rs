@@ -452,41 +452,41 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
 
 impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
     pub fn perform_pi2_rotation_x_mut(&mut self) {
-        let px = self.px.clone();
-        self.px = -px;
+        self.pz = -self.pz.clone();
+        std::mem::swap(&mut self.pz, &mut self.py);
     }
 
     pub fn perform_pi2_rotation_x(&self) -> Self {
         Self {
-            px: -self.px.clone(),
-            py: self.py.clone(),
-            pz: self.pz.clone(),
+            px: self.px.clone(),
+            py: -self.pz.clone(),
+            pz: self.py.clone(),
         }
     }
 
     pub fn perform_pi2_rotation_y_mut(&mut self) {
-        let py = self.py.clone();
-        self.py = -py;
+        self.px = -self.px.clone();
+        std::mem::swap(&mut self.px, &mut self.pz);
     }
 
     pub fn perform_pi2_rotation_y(&self) -> Self {
         Self {
-            px: self.px.clone(),
-            py: -self.py.clone(),
-            pz: self.pz.clone(),
+            px: self.pz.clone(),
+            py: self.py.clone(),
+            pz: -self.px.clone(),
         }
     }
 
     pub fn perform_pi2_rotation_z_mut(&mut self) {
-        let pz = self.pz.clone();
-        self.pz = -pz;
+        self.py = -self.py.clone();
+        std::mem::swap(&mut self.px, &mut self.py);
     }
 
     pub fn perform_pi2_rotation_z(&self) -> Self {
         Self {
-            px: self.px.clone(),
-            py: self.py.clone(),
-            pz: -self.pz.clone(),
+            px: -self.py.clone(),
+            py: self.px.clone(),
+            pz: self.pz.clone(),
         }
     }
 }
