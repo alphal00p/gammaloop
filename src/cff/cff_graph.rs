@@ -391,7 +391,12 @@ impl CFFGenerationGraph {
                 }
             }
 
-            current_vertices = vertices_found_in_previous_iteration.clone();
+            // current_vertices = vertices_found_in_previous_iteration.clone();
+            // vertices_found_in_previous_iteration.clear();
+            std::mem::swap(
+                &mut current_vertices,
+                &mut vertices_found_in_previous_iteration,
+            );
             vertices_found_in_previous_iteration.clear();
         }
 
