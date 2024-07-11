@@ -437,16 +437,6 @@ impl CounterTerm {
         overlap_complement: &[ExistingEsurfaceId],
         existing_esurface_id: ExistingEsurfaceId,
     ) -> F<T> {
-        //if (settings.subtraction.dynamic_sliver && (radius - rstar).abs() > &sliver_width * rstar)
-        //    || ((radius - rstar).abs() > &sliver_width * &e_cm)
-        //{
-        //    return radius.zero();
-        //}
-
-        //        let loop_number = unit_loop_momenta.len();
-
-        // let jacobian_ratio = (rstar / radius).abs().powi(3 * loop_number as i32 - 1);
-
         let loop_momenta_at_star = unit_loop_momenta
             .iter()
             .zip(center.iter())
@@ -475,18 +465,6 @@ impl CounterTerm {
         let terms = &self.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
 
         let eval_terms = terms.evaluate_from_esurface_cache(&esurface_cache, &energy_cache);
-
-        // let r_minus_rstar = radius - rstar;
-        // let dampening_factor = (-&r_minus_rstar * &r_minus_rstar / (&e_cm * &e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
-
-        //let singularity_dampener = if settings.subtraction.dampen_integrable_singularity {
-        //    (radius.one()
-        //        - (rstar * rstar * rstar * rstar
-        //            / (rstar * rstar - &r_minus_rstar * &r_minus_rstar).powi(2)))
-        //    .exp()
-        //} else {
-        //    radius.one()
-        //};
 
         multichanneling_factor * eval_terms / rstar_energy_product
     }
@@ -536,7 +514,6 @@ fn newton_iteration_and_derivative<T: FloatLike>(
     while iteration < max_iterations && val_f_x.abs() > guess.epsilon() * tolerance * e_cm {
         x -= val_f_x / val_df_x;
         (val_f_x, val_df_x) = f_x_and_df_x(&x);
-        // println!("x: {}, val_f_x: {}, val_df_x: {}", x, val_f_x, val_df_x);
 
         iteration += 1;
     }
