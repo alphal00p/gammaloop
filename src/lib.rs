@@ -102,7 +102,7 @@ fn _default_shifts() -> Vec<(f64, f64, f64, f64)> {
     vec![(1.0, 0.0, 0.0, 0.0); 15]
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct HFunctionSettings {
     pub function: HFunction,
     pub sigma: f64,
@@ -389,4 +389,5 @@ pub struct SubtractionSettings {
     pub sliver_width: f64,
     pub dampen_integrable_singularity: bool,
     pub dynamic_sliver: bool,
+    pub integrated_ct_hfunction: HFunctionSettings,
 }

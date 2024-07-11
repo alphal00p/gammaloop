@@ -146,6 +146,12 @@ class GammaLoopConfiguration(object):
                     'sliver_width': 1.0,
                     'dampen_integrable_singularity': True,
                     'dynamic_sliver': False,
+                    'integrated_ct_hfunction': {
+                        'function': 'poly_exponential',
+                        'sigma': 1.0,
+                        'enabled_dampening': True,
+                        'power': None,
+                    },
                 }
             }
         }
