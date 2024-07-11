@@ -35,7 +35,7 @@ symbolica = { version = "0.7.0" }
 
 #spenso = { version = "0.2.0", features = ["shadowing"] }
 spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
-    "shadowing",
+   "shadowing",
 ] }
 
 serde = { version = "1.0", features = ["derive"] }
