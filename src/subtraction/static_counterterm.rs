@@ -1,6 +1,7 @@
 /// Counterterm for amplitudes with constant externals.
 use colored::Colorize;
 use itertools::Itertools;
+use ref_ops::RefNeg;
 use spenso::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 
@@ -17,7 +18,7 @@ use crate::{
     },
     graph::{Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
-    utils::{FloatLike, F},
+    utils::{self, FloatLike, F},
     Settings,
 };
 
@@ -169,7 +170,9 @@ impl CounterTerm {
         let esurfaces = &graph.get_cff().esurfaces;
         let lmb = &graph.loop_momentum_basis;
 
-        let mut res = loop_momenta[0].px.zero();
+        let const_builder = &loop_momenta[0].px.zero();
+
+        let mut res = Complex::new(const_builder.zero(), const_builder.zero());
 
         for (overlap_group, overlap_complement) in self
             .maximal_overlap
@@ -283,7 +286,7 @@ impl CounterTerm {
                 );
 
                 let negative_result = newton_iteration_and_derivative(
-                    &(-radius_guess),
+                    &radius_guess.ref_neg(),
                     function,
                     &F::from_f64(TOLERANCE),
                     MAX_ITERATIONS,
@@ -301,7 +304,6 @@ impl CounterTerm {
                 let (r_plus_eval, r_minus_eval) = (
                     self.radius_star_eval(
                         &positive_result.solution,
-                        &hemispherical_radius,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
@@ -309,11 +311,9 @@ impl CounterTerm {
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
-                        settings,
                     ),
                     self.radius_star_eval(
                         &negative_result.solution,
-                        &hemispherical_radius,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
@@ -321,40 +321,114 @@ impl CounterTerm {
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
-                        settings,
                     ),
                 );
+                let loop_number = loop_momenta.len();
+                let (jacobian_ratio_plus, jacobian_ratio_minus) = (
+                    (&positive_result.solution / &hemispherical_radius)
+                        .pow(3 * loop_number as u64 - 1),
+                    (&negative_result.solution / &hemispherical_radius)
+                        .pow(3 * loop_number as u64 - 1),
+                );
 
-                let ct_plus = r_plus_eval
-                    * ((&hemispherical_radius - &positive_result.solution)
-                        * positive_result.derivative_at_solution)
-                        .inv();
+                let (uv_damper_plus, uv_damper_minus) = (
+                    unnormalized_gaussian(&hemispherical_radius, &positive_result.solution, &e_cm),
+                    unnormalized_gaussian(&hemispherical_radius, &negative_result.solution, &e_cm),
+                );
 
-                let ct_minus = r_minus_eval
-                    * ((&hemispherical_radius - &negative_result.solution)
-                        * negative_result.derivative_at_solution)
-                        .inv();
+                let (singularity_dampener_plus, singularity_damper_minus) =
+                    if settings.subtraction.dampen_integrable_singularity {
+                        (
+                            singularity_dampener(&hemispherical_radius, &positive_result.solution),
+                            singularity_dampener(&hemispherical_radius, &negative_result.solution),
+                        )
+                    } else {
+                        (hemispherical_radius.one(), hemispherical_radius.one())
+                    };
 
-                res += ct_plus + ct_minus;
+                let i = Complex::new(radius_guess.zero(), radius_guess.one());
+
+                let radius_sign_plus = if positive_result.solution > hemispherical_radius.zero() {
+                    const_builder.one()
+                } else {
+                    -const_builder.one()
+                };
+
+                let radius_sign_minus = if positive_result.solution > hemispherical_radius.zero() {
+                    const_builder.one()
+                } else {
+                    -const_builder.one()
+                };
+
+                let ct_plus = Complex::new(
+                    &r_plus_eval
+                        * ((&hemispherical_radius - &positive_result.solution)
+                            * &positive_result.derivative_at_solution)
+                            .inv()
+                        * &uv_damper_plus
+                        * &singularity_dampener_plus
+                        * &jacobian_ratio_plus,
+                    radius_guess.zero(),
+                );
+
+                let minus_half = -const_builder.one() / (const_builder.one() + const_builder.one());
+
+                let integrated_ct_plus = &i * radius_guess.PI() * &minus_half * r_plus_eval
+                    / &positive_result.derivative_at_solution
+                    / &positive_result.solution
+                    * utils::h(
+                        &positive_result.solution / &hemispherical_radius,
+                        None,
+                        None,
+                        &settings.subtraction.integrated_ct_hfunction,
+                    )
+                    * &jacobian_ratio_plus
+                    * &radius_sign_plus;
+
+                let ct_minus = Complex::new(
+                    &r_minus_eval
+                        * ((&hemispherical_radius - &negative_result.solution)
+                            * &negative_result.derivative_at_solution)
+                            .inv()
+                        * &uv_damper_minus
+                        * &singularity_damper_minus
+                        * &jacobian_ratio_minus,
+                    radius_guess.zero(),
+                );
+
+                let integrated_ct_minus = &i * radius_guess.PI() * r_minus_eval * &minus_half
+                    / &negative_result.derivative_at_solution
+                    / &negative_result.solution
+                    * utils::h(
+                        &negative_result.solution / &hemispherical_radius,
+                        None,
+                        None,
+                        &settings.subtraction.integrated_ct_hfunction,
+                    )
+                    * &jacobian_ratio_minus
+                    * &radius_sign_minus;
+
+                res += ct_plus + integrated_ct_plus + ct_minus + integrated_ct_minus;
             }
         }
 
         // match the complex prefactor off cff
         let loop_number = graph.loop_momentum_basis.basis.len();
         let internal_vertex_number = graph.vertices.len() - graph.external_connections.len();
-        let zero = res.zero();
 
-        let prefactor = Complex::new(zero, res.one()).pow(loop_number as u64)
-            * Complex::new(-res.one(), res.zero()).pow(internal_vertex_number as u64 - 1);
+        let prefactor = Complex::new(const_builder.zero(), const_builder.one())
+            .pow(loop_number as u64)
+            * Complex::new(-const_builder.one(), const_builder.zero())
+                .pow(internal_vertex_number as u64 - 1);
 
-        Complex::new(res.clone(), res.zero()) * prefactor
+        res * prefactor
     }
 
+    // evaluate radius independent part
     #[allow(clippy::too_many_arguments)]
     fn radius_star_eval<T: FloatLike>(
         &self,
         rstar: &F<T>,
-        radius: &F<T>,
         unit_loop_momenta: &[ThreeMomentum<F<T>>],
         center: &[ThreeMomentum<F<T>>],
         graph: &Graph,
@@ -362,20 +436,16 @@ impl CounterTerm {
         esurfaces: &EsurfaceCollection,
         overlap_complement: &[ExistingEsurfaceId],
         existing_esurface_id: ExistingEsurfaceId,
-        settings: &Settings,
     ) -> F<T> {
-        let sliver_width = F::from_f64(settings.subtraction.sliver_width);
-        let e_cm = F::from_ff64(settings.kinematics.e_cm);
+        //if (settings.subtraction.dynamic_sliver && (radius - rstar).abs() > &sliver_width * rstar)
+        //    || ((radius - rstar).abs() > &sliver_width * &e_cm)
+        //{
+        //    return radius.zero();
+        //}
 
-        if (settings.subtraction.dynamic_sliver && (radius - rstar).abs() > &sliver_width * rstar)
-            || ((radius - rstar).abs() > &sliver_width * &e_cm)
-        {
-            return radius.zero();
-        }
+        //        let loop_number = unit_loop_momenta.len();
 
-        let loop_number = unit_loop_momenta.len();
-
-        let jacobian_ratio = (rstar / radius).abs().powi(3 * loop_number as i32 - 1);
+        // let jacobian_ratio = (rstar / radius).abs().powi(3 * loop_number as i32 - 1);
 
         let loop_momenta_at_star = unit_loop_momenta
             .iter()
@@ -388,13 +458,13 @@ impl CounterTerm {
         let rstar_energy_product = graph
             .get_virtual_edges_iterator()
             .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
-            .fold(radius.one(), |acc, e| acc * e);
+            .fold(rstar.one(), |acc, e| acc * e);
 
         let multichanneling_denominator =
             self.evaluate_multichanneling_denominator(&esurface_cache);
 
         let multichanneling_numerator_root =
-            overlap_complement.iter().fold(radius.one(), |acc, id| {
+            overlap_complement.iter().fold(rstar.one(), |acc, id| {
                 acc * &esurface_cache[self.existing_esurfaces[*id]]
             });
 
@@ -406,24 +476,19 @@ impl CounterTerm {
 
         let eval_terms = terms.evaluate_from_esurface_cache(&esurface_cache, &energy_cache);
 
-        let r_minus_rstar = radius - rstar;
-        let dampening_factor = (-&r_minus_rstar * &r_minus_rstar / (&e_cm * &e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
+        // let r_minus_rstar = radius - rstar;
+        // let dampening_factor = (-&r_minus_rstar * &r_minus_rstar / (&e_cm * &e_cm)).exp(); // unnormalized such that the exponential is 1 at r = r*
 
-        let singularity_dampener = if settings.subtraction.dampen_integrable_singularity {
-            (radius.one()
-                - (rstar * rstar * rstar * rstar
-                    / (rstar * rstar - &r_minus_rstar * &r_minus_rstar).powi(2)))
-            .exp()
-        } else {
-            radius.one()
-        };
+        //let singularity_dampener = if settings.subtraction.dampen_integrable_singularity {
+        //    (radius.one()
+        //        - (rstar * rstar * rstar * rstar
+        //            / (rstar * rstar - &r_minus_rstar * &r_minus_rstar).powi(2)))
+        //    .exp()
+        //} else {
+        //    radius.one()
+        //};
 
-        jacobian_ratio
-            * multichanneling_factor
-            * eval_terms
-            * dampening_factor
-            * singularity_dampener
-            / rstar_energy_product
+        multichanneling_factor * eval_terms / rstar_energy_product
     }
 }
 
@@ -514,4 +579,18 @@ impl<T: FloatLike> NewtonIterationResult<T> {
             }
         )
     }
+}
+
+fn unnormalized_gaussian<T: FloatLike>(radius: &F<T>, radius_star: &F<T>, e_cm: &F<T>) -> F<T> {
+    let delta_r = radius - radius_star;
+    (-&delta_r * &delta_r / (e_cm * e_cm)).exp()
+}
+
+fn singularity_dampener<T: FloatLike>(radius: &F<T>, radius_star: &F<T>) -> F<T> {
+    let delta_r = radius - radius_star;
+    let radius_star_sq = radius_star * radius_star;
+    let radius_star_4 = &radius_star_sq * &radius_star_sq;
+    let delta_r_sq = &delta_r * &delta_r;
+
+    (radius.one() - radius_star_4 / (radius_star_sq - delta_r_sq).pow(2)).exp()
 }
