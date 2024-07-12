@@ -291,6 +291,7 @@ pub fn find_maximal_overlap(
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<F<f64>>>],
     external_momenta: &[FourMomentum<F<f64>>],
+    debug: usize,
 ) -> OverlapStructure {
     let mut res = OverlapStructure {
         overlap_groups: vec![],
@@ -323,6 +324,7 @@ pub fn find_maximal_overlap(
     }
 
     // if the center is not valid, create a table of all pairs
+    let pair_benchmark_start = std::time::Instant::now();
     let esurface_pairs = EsurfacePairs::new(
         lmb,
         existing_esurfaces,
@@ -330,6 +332,15 @@ pub fn find_maximal_overlap(
         edge_masses,
         external_momenta,
     );
+    let pair_benchmark = pair_benchmark_start.elapsed();
+
+    if debug > 3 {
+        println!(
+            "Time to generate {} pairs: {}",
+            esurface_pairs.data.len(),
+            pair_benchmark.as_millis(),
+        );
+    }
 
     let mut num_disconnected_surfaces = 0;
 
@@ -376,6 +387,10 @@ pub fn find_maximal_overlap(
         }
     }
 
+    if debug > 3 {
+        println!("num disconnected surfaces: {}", num_disconnected_surfaces);
+    }
+
     if num_disconnected_surfaces == existing_esurfaces.len() {
         return res;
     }
@@ -388,8 +403,16 @@ pub fn find_maximal_overlap(
         };
 
     while subset_size > 1 {
+        if debug > 3 {
+            println!("current subset_size: {}", subset_size);
+        }
+
         let possible_subsets =
             esurface_pairs.construct_possible_subsets_of_len(existing_esurfaces, subset_size, &res);
+
+        if debug > 3 {
+            println!("possible subsets at this size: {}", possible_subsets.len());
+        }
 
         for subset in possible_subsets.iter() {
             let option_center = find_center(
@@ -411,6 +434,10 @@ pub fn find_maximal_overlap(
         }
 
         subset_size -= 1;
+
+        if debug > 3 {
+            println!("current result: {:?}", res);
+        }
     }
 
     res
@@ -870,6 +897,7 @@ mod tests {
             &box4e.esurfaces,
             &box4e.edge_masses,
             &box4e.external_momenta,
+            0,
         );
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 4);
@@ -905,6 +933,7 @@ mod tests {
             &box4e.esurfaces,
             &box4e.edge_masses,
             &box4e.external_momenta,
+            0,
         );
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 4);
@@ -944,6 +973,7 @@ mod tests {
             &banana.esurfaces,
             &banana.edge_masses,
             &banana.external_momenta,
+            0,
         );
 
         println!("center: {:#?}", maximal_overlap);

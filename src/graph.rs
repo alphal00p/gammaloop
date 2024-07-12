@@ -1262,7 +1262,8 @@ impl Graph {
                 .evaluate_cff_orientations(sample, lmb_specification, debug)
                 .into_iter()
                 .zip(
-                    self.evaluate_numerator_orientations(sample, lmb_specification), // 0.., // dummy values for performance test
+                    // self.evaluate_numerator_orientations(sample, lmb_specification),
+                    0.., // dummy values for performance test
                 )
                 .map(|(cff, _num)| {
                     let zero = cff.zero();
@@ -1456,6 +1457,7 @@ impl Graph {
             &self.get_cff().esurfaces,
             &self.get_mass_vector(),
             externals,
+            debug,
         )
     }
 

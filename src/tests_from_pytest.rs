@@ -770,6 +770,7 @@ fn pytest_massless_scalar_box() {
         esurfaces,
         &edge_masses,
         &box4_e,
+        0,
     );
 
     assert_eq!(existing.len(), 4);
@@ -780,6 +781,7 @@ fn pytest_massless_scalar_box() {
         esurfaces,
         &edge_masses,
         &box4_e,
+        0,
     );
 
     assert_eq!(maximal_overlap.overlap_groups.len(), 4);
@@ -1212,6 +1214,7 @@ fn pytest_hexagon() {
         esurfaces,
         &edge_masses,
         &kinematics,
+        0,
     );
     let duration = now.elapsed();
     println!("duration: {}", duration.as_micros());
@@ -1260,6 +1263,7 @@ fn pytest_hexagon() {
         esurfaces,
         &edge_masses,
         &hexagon_10_e,
+        0,
     );
     let duration = now.elapsed();
     println!("duration: {}", duration.as_micros());
@@ -1357,6 +1361,7 @@ fn pytest_topology_c() {
         esurfaces,
         &_edge_masses,
         &kinematics,
+        0,
     );
 
     assert_eq!(overlap.overlap_groups.len(), 9);
@@ -1457,6 +1462,7 @@ fn pytest_massless_pentabox() {
             .esurfaces,
         &edge_masses,
         &kinematics,
+        0,
     );
 
     assert_eq!(maximal_overlap.overlap_groups.len(), 3);
@@ -1563,6 +1569,7 @@ fn pytest_massless_3l_pentabox() {
             .esurfaces,
         &edge_masses,
         &kinematics,
+        0,
     );
     let _elapsed = now.elapsed();
 

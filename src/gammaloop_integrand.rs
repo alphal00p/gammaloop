@@ -996,6 +996,11 @@ impl GammaLoopIntegrand {
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 let graph = &mut amplitude_graph.graph;
 
+                // temporary fix, rederive esurface data
+                graph
+                    .generate_esurface_data()
+                    .unwrap_or_else(|_| panic!("failed to generate esurface derived data"));
+
                 let existing_esurfaces = graph.get_existing_esurfaces(
                     &external_moms,
                     settings.kinematics.e_cm,
@@ -1007,7 +1012,7 @@ impl GammaLoopIntegrand {
                         "#{} existing esurfaces for graph {}",
                         existing_esurfaces.len(),
                         graph.name
-                    )
+                    );
                 }
 
                 if !existing_esurfaces.is_empty() {
@@ -1017,14 +1022,14 @@ impl GammaLoopIntegrand {
                         settings.general.debug,
                     );
 
-                    if settings.general.debug > 0 {
-                        let maximal_overlap_structure = maximal_overlap
-                            .overlap_groups
-                            .iter()
-                            .map(|overlap_group| overlap_group.existing_esurfaces.len())
-                            .collect_vec();
+                    let maximal_overlap_structure = maximal_overlap
+                        .overlap_groups
+                        .iter()
+                        .map(|overlap_group| overlap_group.existing_esurfaces.len())
+                        .collect_vec();
 
-                        println!("maximal overlap structure: {:?}", maximal_overlap_structure)
+                    if settings.general.debug > 0 {
+                        println!("maximal overlap structure: {:?}", maximal_overlap_structure);
                     }
 
                     let counter_term =
