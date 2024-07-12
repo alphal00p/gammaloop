@@ -1340,7 +1340,7 @@ pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
     } else if v.abs() >= 1e6 || v.abs() < 1e-5 {
         // exponential notation for large |self.mean|
         let exponent = v.abs().log10().floor();
-        let fac = 10.0.powf(&exponent);
+        let fac = (10.0).powf(&exponent);
         let mantissa = format_uncertainty(F(v / fac), F(dv / fac));
         let e = format!("{:.0e}", fac);
         let mut ee = e.split('e');

@@ -1109,7 +1109,7 @@ pub fn print_integral_result(
         } else {
             format!("{:-8}", "")
         },
-        if itg.chi_sq.0 / (i_iter as f64) > 5. {
+        if itg.chi_sq / (F::<f64>::new_from_usize(i_iter)) > F(5.) {
             format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).red()
         } else {
             format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).normal()
@@ -1121,8 +1121,8 @@ pub fn print_integral_result(
                 {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        (t - itg.avg).abs().0 / itg.err.0,
-                        if t.abs().0 > 0. {
+                        (t - itg.avg).abs() / itg.err,
+                        if t.abs() > F(0.) {
                             (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {
                             0.
@@ -1133,7 +1133,7 @@ pub fn print_integral_result(
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
                         (t - itg.avg).abs().0 / itg.err.0,
-                        if t.abs().0 > 0. {
+                        if t.abs() > F(0.) {
                             (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {
                             0.
@@ -1152,12 +1152,11 @@ pub fn print_integral_result(
                 .max_eval_negative
                 .abs()
                 .max(&itg.max_eval_positive.abs())
-                .0
-                / (itg.avg.abs().0 * (itg.processed_samples as f64));
-            if mwi > 1. {
-                format!("  mwi: {:<10.4e}", mwi).red()
+                / (itg.avg.abs() * (F::<f64>::new_from_usize(itg.processed_samples)));
+            if mwi > F(1.) {
+                format!("  mwi: {:<10.4e}", mwi.0).red()
             } else {
-                format!("  mwi: {:<10.4e}", mwi).normal()
+                format!("  mwi: {:<10.4e}", mwi.0).normal()
             }
         } else {
             format!("  mwi: {:<10.4e}", 0.).normal()
