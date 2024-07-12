@@ -1085,7 +1085,7 @@ fn pytest_scalar_isopod() {
     let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.))
         .cast()
         .higher();
-    let k1: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 11.), F(11. / 13.), F(13. / 17.))
+    let k1: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.))
         .cast()
         .higher();
 
