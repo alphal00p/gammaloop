@@ -1257,17 +1257,25 @@ impl Graph {
             i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
 
         // here numerator evaluation can be weaved into the summation
-        prefactor
+        let res = prefactor
             * self
                 .evaluate_cff_orientations(sample, lmb_specification, debug)
                 .into_iter()
-                .zip(self.evaluate_numerator_orientations(sample, lmb_specification))
+                .zip(
+                    self.evaluate_numerator_orientations(sample, lmb_specification), // 0.., // dummy values for performance test
+                )
                 .map(|(cff, _num)| {
                     let zero = cff.zero();
                     Complex::new(cff, zero)
                 })
                 .reduce(|acc, e| acc + &e)
-                .unwrap_or(Complex::new(one.clone(), one.clone()))
+                .unwrap_or_else(|| panic!("no orientations to evaluate"));
+
+        if debug > 1 {
+            println!("sum over all orientations including numerator: {}", &res)
+        }
+
+        res
     }
 
     #[inline]
