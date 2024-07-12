@@ -95,9 +95,12 @@ class TestScalarTopologies:
 
         gl = get_gamma_loop_interpreter()
 
-        command_list = gl_interface.CommandList.from_string(
+        command_list = gl_interface.CommandList()
+
+        command_list.add_command(
             "launch {}".format(scalar_3L_6P_topology_A_export))
 
+        command_list.add_command("set_model_param mass_scalar_1 172.0")
         command_list.add_command(
             "set externals.momenta [\
 [5.,0.,0.,5.],\
@@ -107,7 +110,6 @@ class TestScalarTopologies:
 [1.523581094674306e0,-1.058809596665922e0,-9.770963832697570e-1,4.954838522679282e-1],\
 [4.307611382509676e0,2.318312618377385e0,3.595630405248305e0,-5.023787565702210e-1],\
 ]")
-        command_list.add_command("set_model_param mass_scalar_1 172.0")
 
         command_list.add_command("set integrated_phase 'imag'")
         command_list.add_command("set e_cm 1.")
