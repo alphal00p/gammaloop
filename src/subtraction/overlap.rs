@@ -349,7 +349,27 @@ pub fn find_maximal_overlap(
             res.overlap_groups.push(OverlapGroup {
                 existing_esurfaces: vec![existing_esurface_id],
                 center: center.unwrap_or_else(|| {
-                    panic!("Could not find center of esurface {:?}", esurface_id)
+                    let esurface = &esurfaces[esurface_id];
+
+                    let mut error_message = String::new();
+
+                    error_message.push_str(&format!(
+                        "Could not find center of esuface {:?}\n",
+                        esurface_id
+                    ));
+                    error_message.push_str(&format!("edges: {:?}\n", esurface.energies));
+
+                    error_message
+                        .push_str(&format!("external shift: {:?}\n", esurface.external_shift));
+
+                    error_message.push_str(&format!(
+                        "Equation in LMB: {}\n",
+                        esurface.string_format_in_lmb(lmb)
+                    ));
+
+                    error_message.push_str(&format!("External momenta: {:#?}\n", external_momenta));
+
+                    panic!("{}", error_message)
                 }),
             });
             num_disconnected_surfaces += 1;
