@@ -663,7 +663,7 @@ pub trait FloatLike:
     }
 
     fn epsilon(&self) -> Self {
-        Self::from_f64(std::f64::EPSILON)
+        Self::from_f64(f64::EPSILON)
     }
 
     fn less_than_epsilon(&self) -> bool {
@@ -675,11 +675,11 @@ pub trait FloatLike:
     }
 
     fn max_value(&self) -> Self {
-        Self::from_f64(std::f64::MAX)
+        Self::from_f64(f64::MAX)
     }
 
     fn min_value(&self) -> Self {
-        Self::from_f64(std::f64::MIN)
+        Self::from_f64(f64::MIN)
     }
 
     fn ln(&self) -> Self {

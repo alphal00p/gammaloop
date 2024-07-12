@@ -211,7 +211,7 @@ impl AverageAndErrorAccumulator {
 
         w = ((w + self.sum) * (w - self.sum)) / (n - 1.);
         if w == 0. {
-            w = std::f64::EPSILON;
+            w = f64::EPSILON;
         }
         w = 1. / w;
 
