@@ -16,8 +16,8 @@ use spenso::{Complex, ParamTensor};
 use symbolica::{atom::AtomView, domains::float::Complex as SymComplex};
 use symbolica::{
     atom::{Atom, FunctionBuilder, Symbol},
+    printer::{AtomPrinter, PrintOptions},
     state::State,
-    printer::{AtomPrinter, PrintOptions}
 };
 
 pub fn apply_replacements(
