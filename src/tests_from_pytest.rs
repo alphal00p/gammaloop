@@ -40,19 +40,28 @@ pub fn load_amplitude_output(output_path: &str, load_generic_model: bool) -> (Mo
         String::from("./src/test_resources")
     };
     let path = Path::new(&output_dir).join(output_path);
-    let output_meta_data: OutputMetaData =
-        serde_yaml::from_reader(File::open(path.join("output_metadata.yaml")).unwrap()).unwrap();
+    let output_meta_data: OutputMetaData = serde_yaml::from_reader(
+        File::open(path.join("output_metadata.yaml")).unwrap_or_else(|e| {
+            panic!(
+                "Could not open file '{:?}'. Error: {:?}",
+                path.join("output_metadata.yaml"),
+                e
+            )
+        }),
+    )
+    .unwrap();
     assert_eq!(output_meta_data.output_type, OutputType::Amplitudes);
     assert_eq!(output_meta_data.contents.len(), 1);
 
     let model = if load_generic_model {
         Model::from_file(String::from(
-            path.join(format!(
-                "gammaloop_models/{}.yaml",
-                output_meta_data.model_name.as_str()
-            ))
-            .to_str()
-            .unwrap(),
+            Path::new(&output_dir)
+                .join(format!(
+                    "gammaloop_models/{}.yaml",
+                    output_meta_data.model_name.as_str()
+                ))
+                .to_str()
+                .unwrap(),
         ))
         .unwrap()
     } else {
@@ -104,7 +113,7 @@ mod tests_scalar_massless_triangle {
     #[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
     fn pytest_massless_scalar_triangle() {
         let (model, amplitude) =
-            load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle", true);
+            load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", true);
 
         assert_eq!(model.name, "scalars");
         assert!(amplitude.amplitude_graphs.len() == 1);

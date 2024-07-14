@@ -379,8 +379,15 @@ output {output_path} -exp -ef file"""))
 
 @pytest.fixture(scope="session")
 def compile_rust_tests() -> Path | None:
-    process = Popen(['cargo', 'build', '--release', '--features=binary,fail-on-warnings', '--no-default-features',
-                    '--tests', '--message-format=json'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
+
+    # If you want to bypass the "manual" compilation of the rust tests, then uncomment the line below
+    # return None
+
+    cmd_list = ['cargo', 'build', '--release', '--target-dir', os.path.normpath(os.path.join(
+        GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries')), '--features=binary,fail-on-warnings', '--no-default-features',
+        '--tests', '--message-format=json']
+    logger.debug("Compiling rust tests with command: %s", " ".join(cmd_list))
+    process = Popen(cmd_list, cwd=GL_PATH, stdout=PIPE, stderr=PIPE)
     logger.critical("Compiling rust tests...")
     output, err = process.communicate()
     if process.returncode != 0:
