@@ -125,13 +125,13 @@ impl Numerator {
             .iter()
             .enumerate()
             .map(|(i, _)| {
-                let named_structur: NamedStructure<&str> = NamedStructure::from_iter(
+                let named_structure: NamedStructure<&str> = NamedStructure::from_iter(
                     [(AbstractIndex(i), Representation::Lorentz(4.into()))],
                     "Q",
                     Some(i),
                 );
                 debug!("Q{}", i);
-                named_structur.to_shell().expanded_shadow().unwrap()
+                named_structure.to_shell().expanded_shadow().unwrap()
             })
             .collect_vec();
 

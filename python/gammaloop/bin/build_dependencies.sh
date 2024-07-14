@@ -183,11 +183,11 @@ build_dependencies () {
     fi
 
     if ! test -d symbolica; then
-        echo "Cloning symbolica ...";
         CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}"
+        echo "Cloning symbolica with '"$CMD_TO_ACCESS_SYMBOLICA"' ...";
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
-        cd symbolica && git reset --hard 82d19d3 >> ../dependency_build.log 2>&1
-
+        echo "Patching symbolica ...";
+        cd symbolica && ln -s ../../bin/patch_symbolica.py . && ./patch_symbolica.py >> ../dependency_build.log 2>&1
         cd ..
     fi
 

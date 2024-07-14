@@ -336,9 +336,9 @@ impl<const N:u32> NumericalFloatLike for VarFloat<N>{
         (&self.float*&a.float+&b.float).complete(N).into()  
     }
 
-    fn norm(&self) -> Self {
-        self.float.clone().abs().into()
-    }
+    // fn norm(&self) -> Self {
+    //     self.float.clone().abs().into()
+    // }
 
     fn from_i64(&self, a: i64) -> Self {
         VarFloat{ float:Float::with_val(N,a )}
@@ -443,6 +443,9 @@ impl<const N:u32> Real for VarFloat<N> {
                 .complete(N)
                 .into()
     }
+    fn norm(&self) -> Self{
+        self.float.clone().abs().into()
+    }
 
     delegate! {
         #[into]
@@ -459,7 +462,7 @@ impl<const N:u32> Real for VarFloat<N> {
             fn tanh(&self) -> Self;
             fn asinh(&self) -> Self;
             fn acosh(&self) -> Self;
-            fn atanh(&self) -> Self;    
+            fn atanh(&self) -> Self; 
         }
     }
 }
@@ -773,7 +776,7 @@ impl<T: FloatLike> NumericalFloatLike for F<T> {
         to self.0{
             fn zero(&self) -> Self;
             fn one(&self) -> Self;
-            fn norm(&self) -> Self;
+            // fn norm(&self) -> Self;
             fn from_usize(&self, x: usize) -> Self;
             fn from_i64(&self, x: i64) -> Self;
             fn pow(&self, n: u64) -> Self;
@@ -827,6 +830,11 @@ impl<T: FloatLike> Real for F<T> {
     fn powf(&self, e: &Self) -> Self {
         F(self.0.powf(&e.0))
     }
+
+    fn norm(&self) -> Self {
+        F(self.0.norm())
+    }
+    
     delegate! {
         #[into]
         to self.0{

@@ -6,8 +6,8 @@ from gammaloop.tests.common import run_rust_test
 @pytest.mark.rust
 class TestRust:
 
-    def test_rust_massless_scalar_triangle(self, compile_rust_tests: Path, scalar_massless_triangle_export: Path):
-        assert run_rust_test(compile_rust_tests, scalar_massless_triangle_export,
+    def test_rust_massless_scalar_triangle(self, scalars_model_yaml_file: Path, massless_scalar_triangle_export: Path):
+        assert run_rust_test(None, massless_scalar_triangle_export,
                              'massless_scalar_triangle')
 
     def test_rust_scalar_fishnet_2x2(self, compile_rust_tests: Path, scalar_fishnet_2x2_export: Path):

@@ -41,12 +41,8 @@ use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
 
-use symbolica::{
-    atom::{Atom, Symbol},
-    domains::float::NumericalFloatLike,
-    id::Pattern,
-    state::State,
-};
+use symbolica::{atom::Atom, domains::float::NumericalFloatLike, id::Pattern};
+//use symbolica::{atom::Symbol,state::State};
 
 use constcat::concat;
 

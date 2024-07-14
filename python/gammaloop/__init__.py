@@ -23,7 +23,7 @@ class CLIColour(StrEnum):
     END = '\033[0m'
 
 
-def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=False, no_gammaloop_python_venv=False, install_dependencies_with_venv=False):
+def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=False, no_gammaloop_python_venv=False, install_dependencies_with_venv=False, external_symbolica=False):
 
     global DEPENDENCIES_CHECKED
     if DEPENDENCIES_CHECKED and all(opt is False for opt in [clean_dependencies, build_dependencies, no_gammaloop_python_venv]):
@@ -90,18 +90,21 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
                 additional_python_paths.extend([sp for sp in site_paths if sp.startswith(
                     venv_path) and (len(sys.path) == 0 or sp != sys.path[0])])
 
-    if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt')):
-        print("\nSymbolica dependency appears to be incorrectly %sinstalled%s. Run '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies. Exiting.\n" % (
-            CLIColour.RED, CLIColour.END, CLIColour.GREEN, CLIColour.END))
-        sys.exit(1)
+    if external_symbolica or os.environ.get('GL_EXTERNAL_SYMBOLICA', None) is not None:
+        additional_python_paths = []
     else:
-        with open(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt'), 'r') as f:
-            symbolica_path = f.read().strip()
-        if symbolica_path == '.':
-            symbolica_path = os.path.join(
-                gammaloop_root_path, 'dependencies', 'symbolica')
-        if symbolica_path not in sys.path:
-            additional_python_paths.append(symbolica_path)
+        if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt')):
+            print("\nSymbolica dependency appears to be incorrectly %sinstalled%s. Run '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies. Exiting.\n" % (
+                CLIColour.RED, CLIColour.END, CLIColour.GREEN, CLIColour.END))
+            sys.exit(1)
+        else:
+            with open(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt'), 'r') as f:
+                symbolica_path = f.read().strip()
+            if symbolica_path == '.':
+                symbolica_path = os.path.join(
+                    gammaloop_root_path, 'dependencies', 'symbolica')
+            if symbolica_path not in sys.path:
+                additional_python_paths.append(symbolica_path)
 
     if len(additional_python_paths) > 0:
         print("%sINFO:%s The following paths have been automatically and temporarily added by gammaloop to your PYTHONPATH:\n%s" % (
@@ -141,6 +144,8 @@ def cli():
                            default=False, help='Directly run command specified')
     argparser.add_argument('--logging_format', '-lf', dest='logging_format', default='long',
                            choices=['long', 'short', 'min', 'none'], help='Type of prefix for the logging format')
+    argparser.add_argument('--external_symbolica', '-extsymb', action='store_true',
+                           default=False, help='Do not adjust paths so as to use the Symbolica library installed in the gammaloop dependencies')
     args = argparser.parse_args()
 
     from . import misc
@@ -161,7 +166,7 @@ def cli():
 
     # Before importing anything of gammaloop, check the dependencies with proper arguments
     check_gammaloop_dependencies(args.clean_dependencies, args.build_dependencies,
-                                 args.no_gammaloop_python_venv, args.install_dependencies_with_venv)
+                                 args.no_gammaloop_python_venv, args.install_dependencies_with_venv, args.external_symbolica)
 
     from .interface.gammaloop_interface import CommandList
     from .interface.gammaloop_interface import GammaLoop

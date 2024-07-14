@@ -10,7 +10,8 @@ from pprint import pformat
 import yaml
 import shutil
 import copy
-from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GammaLoopWarning
+from gammaloop import __version__
+from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GIT_REVISION, GammaLoopWarning
 from gammaloop.misc.utils import Colour, verbose_yaml_dump
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
@@ -338,6 +339,9 @@ class GammaLoop(object):
 
         # Initialize a gammaloop rust engine worker which will be used throughout the session
         self.rust_worker: gl_rust.Worker = gl_rust.Worker.new()
+        logger.debug('Starting interface of GammaLoop v%s%s',
+                     __version__,
+                     (f' (git rev.: {GIT_REVISION})' if GIT_REVISION is not None else ''))
         logger.debug(
             "Successfully initialized GammaLoop rust worker from library %s.", gl_rust.__file__)  # type: ignore
 
@@ -880,6 +884,8 @@ class GammaLoop(object):
                                help='Generate coupling replacements and output it to a text file')
     output_parser.add_argument('-ef', '--expression_format', type=str, default='file',
                                choices=['file', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
+    output_parser.add_argument('-ow', '--overwrite_output', default=False, action='store_true',
+                               help='Overwrite output if already existing.')
 
     def do_output(self, str_args: str) -> None:
         if str_args == 'help':
@@ -888,8 +894,11 @@ class GammaLoop(object):
         args = self.output_parser.parse_args(split_str_args(str_args))
 
         if Path(args.output_path).exists():
-            raise GammaLoopError(
-                f"Output path '{args.output_path}' already exists, clean it up first.")
+            if args.overwrite_output:
+                shutil.rmtree(args.output_path)
+            else:
+                raise GammaLoopError(
+                    f"Output path '{args.output_path}' already exists, clean it up first.")
 
         if self.model.is_empty():
             raise GammaLoopError(

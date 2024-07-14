@@ -7,8 +7,8 @@ use log::debug;
 
 use serde::{Deserialize, Serialize};
 use spenso::{
-    arithmetic::ScalarMul, AbstractIndex, DenseTensor, FallibleAdd, FallibleMul, HasTensorData,
-    IndexLess, NamedStructure, RefZero, Representation, VecStructure,
+    arithmetic::ScalarMul, AbstractIndex, DenseTensor, FallibleAdd, FallibleMul, IndexLess,
+    NamedStructure, RefZero, Representation, VecStructure,
 };
 use symbolica::{
     atom::{Atom, Symbol},
