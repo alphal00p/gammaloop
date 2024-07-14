@@ -132,7 +132,7 @@ impl InteractionVertexInfo {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern =
-                        Pattern::parse(&format!("Q{}(lor(4,indexid(x_)))", e)).unwrap();
+                        Pattern::parse(&format!("Q({},aind(lor(4,indexid(x_))))", e)).unwrap();
 
                     atom = momentum_in_pattern.replace_all(
                         atom.as_view(),
@@ -193,7 +193,7 @@ impl InteractionVertexInfo {
                 for (i, s) in spins.iter().enumerate() {
                     let id1 = Pattern::parse(&format!("Identity({},x_)", i + 1)).unwrap();
 
-                    let id2 = Pattern::parse(&format!("id(x_,{})", i + 1)).unwrap();
+                    let id2 = Pattern::parse(&format!("id(aind(x_,{}))", i + 1)).unwrap();
 
                     let ind = match s {
                         1 => concat!(EUCLIDEAN, "(1,"),
@@ -207,14 +207,16 @@ impl InteractionVertexInfo {
 
                     atom = id1.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("id({}indexid({})),x_)", ind, i + 1)).unwrap(),
+                        &Pattern::parse(&format!("id(aind({}indexid({})),x_))", ind, i + 1))
+                            .unwrap(),
                         None,
                         None,
                     );
 
                     atom = id2.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("id(x_,{}indexid({})))", ind, i + 1)).unwrap(),
+                        &Pattern::parse(&format!("id(aind(x_,{}indexid({}))))", ind, i + 1))
+                            .unwrap(),
                         None,
                         None,
                     );
@@ -411,15 +413,15 @@ impl Edge {
 
     pub fn substitute_lmb(&self, atom: Atom, graph: &Graph, lmb: &LoopMomentumBasis) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-        let mom = Pattern::parse(&format!("Q{num}(x_)")).unwrap();
+        let mom = Pattern::parse(&format!("Q({num},x_)")).unwrap();
         let mom_rep = lmb.pattern(num);
         atom.replace_all(&mom, &mom_rep, None, None)
     }
 
-    pub fn edge_momentum_symbol(&self, graph: &Graph) -> Symbol {
-        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-        State::get_symbol(format!("Q{num}"))
-    }
+    // pub fn edge_momentum_symbol(&self, graph: &Graph) -> Symbol {
+    //     let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+    //     State::get_symbol(format!("Q{num}"))
+    // }
 
     pub fn numerator(&self, graph: &Graph) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
@@ -433,7 +435,7 @@ impl Edge {
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 atom = pfun.replace_all(
                     atom.as_view(),
-                    &Pattern::parse(&format!("Q{}(lor(4,x_))", num)).unwrap(),
+                    &Pattern::parse(&format!("Q({},aind(lor(4,x_)))", num)).unwrap(),
                     None,
                     None,
                 );
@@ -442,7 +444,7 @@ impl Edge {
                 atom = pslashfun.replace_all(
                     atom.as_view(),
                     &Pattern::parse(&format!(
-                        "Q{}(lor(4,{}))Gamma({},i_,j_)",
+                        "Q({},aind(lor(4,{})))Gamma({},i_,j_)",
                         num, pindex_num, pindex_num
                     ))
                     .unwrap(),
@@ -1645,10 +1647,10 @@ impl LoopMomentumBasis {
         for (i, sign) in loop_signature.iter().enumerate() {
             match sign {
                 1 => {
-                    atom = &atom + &Atom::parse(&format!("K{}(x{}__)", i, edge_id)).unwrap();
+                    atom = &atom + &Atom::parse(&format!("K({},x_))", i)).unwrap();
                 }
                 -1 => {
-                    atom = &atom - &Atom::parse(&format!("K{}(x{}__)", i, edge_id)).unwrap();
+                    atom = &atom - &Atom::parse(&format!("K({},x_)", i)).unwrap();
                 }
                 _ => {}
             }
@@ -1657,10 +1659,10 @@ impl LoopMomentumBasis {
         for (i, sign) in external_signature.iter().enumerate() {
             match sign {
                 1 => {
-                    atom = &atom + &Atom::parse(&format!("P{}(x{}__)", i, edge_id)).unwrap();
+                    atom = &atom + &Atom::parse(&format!("P({},x_)", i)).unwrap();
                 }
                 -1 => {
-                    atom = &atom - &Atom::parse(&format!("P{}(x{}__)", i, edge_id)).unwrap();
+                    atom = &atom - &Atom::parse(&format!("P({},x_)", i)).unwrap();
                 }
                 _ => {}
             }

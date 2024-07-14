@@ -131,7 +131,7 @@ impl Numerator {
                     Some(i),
                 );
                 debug!("Q{}", i);
-                named_structur.to_shell().shadow().unwrap()
+                named_structur.to_shell().expanded_shadow().unwrap()
             })
             .collect_vec();
 

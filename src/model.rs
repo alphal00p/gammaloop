@@ -340,12 +340,12 @@ impl Particle {
             1 => Atom::parse("1").unwrap(),
             2 => {
                 if self.pdg_code > 0 {
-                    Atom::parse(&format!("u{num}(bis(4,{id}))")).unwrap()
+                    Atom::parse(&format!("u({num},aind(bis(4,{id})))")).unwrap()
                 } else {
-                    Atom::parse(&format!("vbar{num}(bis(4,{id}))")).unwrap()
+                    Atom::parse(&format!("vbar({num},aind(bis(4,{id})))")).unwrap()
                 }
             }
-            3 => Atom::parse(&format!("ϵ{num}(lor(4,{id}))")).unwrap(),
+            3 => Atom::parse(&format!("ϵ({num},aind(lor(4,{id})))")).unwrap(),
             _ => Atom::parse("1").unwrap(),
         }
     }
@@ -367,10 +367,10 @@ impl Particle {
                         pol[2].clone(),
                         pol[3].clone(),
                     );
-                    out.push((Atom::parse(&format!("u{num}(0)")).unwrap(), u1));
-                    out.push((Atom::parse(&format!("u{num}(1)")).unwrap(), u2));
-                    out.push((Atom::parse(&format!("u{num}(2)")).unwrap(), u3));
-                    out.push((Atom::parse(&format!("u{num}(3)")).unwrap(), u4));
+                    out.push((Atom::parse(&format!("u({num},cind(0))")).unwrap(), u1));
+                    out.push((Atom::parse(&format!("u({num},cind(1))")).unwrap(), u2));
+                    out.push((Atom::parse(&format!("u({num},cind(2))")).unwrap(), u3));
+                    out.push((Atom::parse(&format!("u({num},cind(3))")).unwrap(), u4));
                 } else {
                     let pol = self.incoming_polarization(mom);
                     let (v1, v2, v3, v4) = (
@@ -379,10 +379,10 @@ impl Particle {
                         pol[2].clone(),
                         pol[3].clone(),
                     );
-                    out.push((Atom::parse(&format!("vbar{num}(0)")).unwrap(), v1));
-                    out.push((Atom::parse(&format!("vbar{num}(1)")).unwrap(), v2));
-                    out.push((Atom::parse(&format!("vbar{num}(2)")).unwrap(), v3));
-                    out.push((Atom::parse(&format!("vbar{num}(3)")).unwrap(), v4));
+                    out.push((Atom::parse(&format!("vbar({num},cind(0))")).unwrap(), v1));
+                    out.push((Atom::parse(&format!("vbar({num},cind(1))")).unwrap(), v2));
+                    out.push((Atom::parse(&format!("vbar({num},cind(2))")).unwrap(), v3));
+                    out.push((Atom::parse(&format!("vbar({num},cind(3))")).unwrap(), v4));
                 }
             }
             3 => {
@@ -393,10 +393,10 @@ impl Particle {
                     pol[2].clone(),
                     pol[3].clone(),
                 );
-                out.push((Atom::parse(&format!("ϵ{num}(0)")).unwrap(), e1));
-                out.push((Atom::parse(&format!("ϵ{num}(1)")).unwrap(), e2));
-                out.push((Atom::parse(&format!("ϵ{num}(2)")).unwrap(), e3));
-                out.push((Atom::parse(&format!("ϵ{num}(3)")).unwrap(), e4));
+                out.push((Atom::parse(&format!("ϵ({num},cind(0))")).unwrap(), e1));
+                out.push((Atom::parse(&format!("ϵ({num},cind(1))")).unwrap(), e2));
+                out.push((Atom::parse(&format!("ϵ({num},cind(2))")).unwrap(), e3));
+                out.push((Atom::parse(&format!("ϵ({num},cind(3))")).unwrap(), e4));
             }
             _ => {}
         }
@@ -434,12 +434,12 @@ impl Particle {
             1 => Atom::parse("1").unwrap(),
             2 => {
                 if self.pdg_code > 0 {
-                    Atom::parse(&format!("ubar{num}(bis(4,{id}))")).unwrap()
+                    Atom::parse(&format!("ubar({num},aind(bis(4,{id})))")).unwrap()
                 } else {
-                    Atom::parse(&format!("v{num}(bis(4,{id}))")).unwrap()
+                    Atom::parse(&format!("v({num},aind(bis(4,{id})))")).unwrap()
                 }
             }
-            3 => Atom::parse(&format!("ϵbar{num}(lor(4,{id}))")).unwrap(),
+            3 => Atom::parse(&format!("ϵbar({num},aind(lor(4,{id})))")).unwrap(),
             _ => Atom::parse("1").unwrap(),
         }
     }
@@ -486,10 +486,10 @@ impl Particle {
                         pol[2].clone(),
                         pol[3].clone(),
                     );
-                    out.push((Atom::parse(&format!("ubar{num}(0)")).unwrap(), ubar1));
-                    out.push((Atom::parse(&format!("ubar{num}(1)")).unwrap(), ubar2));
-                    out.push((Atom::parse(&format!("ubar{num}(2)")).unwrap(), ubar3));
-                    out.push((Atom::parse(&format!("ubar{num}(3)")).unwrap(), ubar4));
+                    out.push((Atom::parse(&format!("ubar({num},cind(0))")).unwrap(), ubar1));
+                    out.push((Atom::parse(&format!("ubar({num},cind(1))")).unwrap(), ubar2));
+                    out.push((Atom::parse(&format!("ubar({num},cind(2))")).unwrap(), ubar3));
+                    out.push((Atom::parse(&format!("ubar({num},cind(3))")).unwrap(), ubar4));
                 } else {
                     let pol = self.outgoing_polarization(mom);
                     let (v1, v2, v3, v4) = (
@@ -498,10 +498,10 @@ impl Particle {
                         pol[2].clone(),
                         pol[3].clone(),
                     );
-                    out.push((Atom::parse(&format!("v{num}(0)")).unwrap(), v1));
-                    out.push((Atom::parse(&format!("v{num}(1)")).unwrap(), v2));
-                    out.push((Atom::parse(&format!("v{num}(2)")).unwrap(), v3));
-                    out.push((Atom::parse(&format!("v{num}(3)")).unwrap(), v4));
+                    out.push((Atom::parse(&format!("v({num},cind(0))")).unwrap(), v1));
+                    out.push((Atom::parse(&format!("v({num},cind(1))")).unwrap(), v2));
+                    out.push((Atom::parse(&format!("v({num},cind(2))")).unwrap(), v3));
+                    out.push((Atom::parse(&format!("v({num},cind(3))")).unwrap(), v4));
                 }
             }
             3 => {
@@ -512,10 +512,10 @@ impl Particle {
                     pol[2].clone(),
                     pol[3].clone(),
                 );
-                out.push((Atom::parse(&format!("ϵbar{num}(0)")).unwrap(), e1));
-                out.push((Atom::parse(&format!("ϵbar{num}(1)")).unwrap(), e2));
-                out.push((Atom::parse(&format!("ϵbar{num}(2)")).unwrap(), e3));
-                out.push((Atom::parse(&format!("ϵbar{num}(3)")).unwrap(), e4));
+                out.push((Atom::parse(&format!("ϵbar({num},cind(0))")).unwrap(), e1));
+                out.push((Atom::parse(&format!("ϵbar({num},cind(1))")).unwrap(), e2));
+                out.push((Atom::parse(&format!("ϵbar({num},cind(2))")).unwrap(), e3));
+                out.push((Atom::parse(&format!("ϵbar({num},cind(3))")).unwrap(), e4));
             }
             _ => {}
         }

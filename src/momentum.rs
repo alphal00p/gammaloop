@@ -1336,7 +1336,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
 impl<T: FloatLike> Polarization<Complex<F<T>>> {
     pub fn bar(&self) -> Self {
         Polarization {
-            tensor: self.tensor.map(Complex::conj),
+            tensor: self.tensor.map_data_ref(Complex::conj),
         }
     }
 }
