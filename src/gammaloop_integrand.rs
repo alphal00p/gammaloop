@@ -10,12 +10,15 @@ use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::subtraction::static_counterterm::CounterTerm;
 use crate::tropical::tropical_parameterization::{self};
 use crate::utils::{
     f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
     PrecisionUpgradable, F,
 };
-use crate::{DiscreteGraphSamplingSettings, IntegratedPhase, SamplingSettings, Settings};
+use crate::{
+    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, SamplingSettings, Settings,
+};
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
@@ -37,6 +40,7 @@ trait GraphIntegrand {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<F<T>>;
 
@@ -61,6 +65,7 @@ trait GraphIntegrand {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<F<T>>;
 }
@@ -113,8 +118,11 @@ impl GraphIntegrand for AmplitudeGraph {
                 &lmb_specification,
             )
         } else {
-            self.get_graph()
-                .evaluate_cff_expression_in_lmb(sample, &lmb_specification)
+            self.get_graph().evaluate_cff_expression_in_lmb(
+                sample,
+                &lmb_specification,
+                settings.general.debug,
+            )
         };
 
         let onshell_energies = self.get_graph().compute_onshell_energies_in_lmb(
@@ -193,46 +201,61 @@ impl GraphIntegrand for AmplitudeGraph {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<F<T>> {
+        let zero_builder = &sample.loop_moms[0].px;
+
         let rep3d = if settings.general.use_ltd {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
-            self.get_graph().evaluate_cff_expression(sample)
+            self.get_graph()
+                .evaluate_cff_expression(sample, settings.general.debug)
         };
 
         let energy_product = self
             .get_graph()
             .compute_energy_product(&sample.loop_moms, &sample.external_moms);
 
-        rep3d / energy_product
+        let counter_terms = self.get_graph().derived_data.static_counterterm.as_ref();
+
+        let counter_term_eval = match counter_terms {
+            None => Complex::new(zero_builder.zero(), zero_builder.zero()),
+            Some(counter_term) => counter_term.evaluate(
+                &sample.loop_moms,
+                &sample.external_moms,
+                self.get_graph(),
+                rotate_overlap_centers,
+                settings,
+            ),
+        };
+
+        rep3d / energy_product - counter_term_eval
     }
 
     #[inline]
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<F<T>> where {
         let one = sample.one();
+
         let rep3d = if settings.general.use_ltd {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
-            self.get_graph().evaluate_cff_expression(sample)
+            self.get_graph()
+                .evaluate_cff_expression(sample, settings.general.debug)
         };
 
         let onshell_energies = self
             .get_graph()
             .compute_onshell_energies(&sample.loop_moms, &sample.external_moms);
 
-        let tropical_subgraph_table = self
-            .get_graph()
-            .derived_data
-            .tropical_subgraph_table
-            .as_ref()
-            .unwrap();
+        let tropical_subgraph_table = self.get_graph().get_tropical_subgraph_table();
 
         let virtual_loop_energies = self
             .get_graph()
@@ -258,7 +281,22 @@ impl GraphIntegrand for AmplitudeGraph {
         let tree_product =
             tree_like_energies.fold(one.clone(), |acc, x| acc * F::<T>::from_f64(2.) * x);
 
-        rep3d * energy_product / tree_product
+        let counterterm = match &self.get_graph().derived_data.static_counterterm {
+            Some(counterterm) => {
+                counterterm.evaluate(
+                    &sample.loop_moms,
+                    &sample.external_moms,
+                    self.get_graph(),
+                    rotate_overlap_centers,
+                    settings,
+                ) * self
+                    .graph
+                    .compute_energy_product(&sample.loop_moms, &sample.external_moms)
+            }
+            None => Complex::new(one.zero(), one.zero()),
+        };
+
+        (rep3d - counterterm) * energy_product / tree_product
     }
 }
 
@@ -299,6 +337,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<F<T>> {
         // sum over channels
@@ -310,6 +349,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        rotate_overlap_centers: bool,
         settings: &Settings,
     ) -> Complex<F<T>> {
         // sum over channels
@@ -337,13 +377,14 @@ fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
 fn evaluate<I: GraphIntegrand, T: FloatLike>(
     graph_integrands: &[I],
     sample: &GammaLoopSample<T>,
+    rotate_overlap_centers: bool,
     settings: &Settings,
 ) -> Complex<F<T>> {
     let zero = sample.zero();
     match sample {
         GammaLoopSample::Default(sample) => graph_integrands
             .iter()
-            .map(|g| g.evaluate(sample, settings))
+            .map(|g| g.evaluate(sample, rotate_overlap_centers, settings))
             .reduce(|acc, e| acc + &e)
             .unwrap_or(zero.clone().into()),
         GammaLoopSample::MultiChanneling { alpha, sample } => graph_integrands
@@ -354,11 +395,15 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
         GammaLoopSample::DiscreteGraph { graph_id, sample } => {
             let graph = &graph_integrands[*graph_id];
             match sample {
-                DiscreteGraphSample::Default(sample) => graph.evaluate(sample, settings),
+                DiscreteGraphSample::Default(sample) => {
+                    graph.evaluate(sample, rotate_overlap_centers, settings)
+                }
                 DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                     graph.evaluate_channel_sum(sample, *alpha, settings)
                 }
-                DiscreteGraphSample::Tropical(sample) => graph.evaluate_tropical(sample, settings),
+                DiscreteGraphSample::Tropical(sample) => {
+                    graph.evaluate_tropical(sample, rotate_overlap_centers, settings)
+                }
                 DiscreteGraphSample::DiscreteMultiChanneling {
                     alpha,
                     channel_id,
@@ -556,13 +601,13 @@ impl HasIntegrand for GammaLoopIntegrand {
             || panic!("No evaluation was done, perhaps the final stability level has a non-negative escalation threshold?")
         );
 
-        if self.settings.general.debug > 1 {
+        if self.settings.general.debug > 0 {
             println!("{}", "
             |  DEBUG -------------------------------------------------------------------------------------  |".green());
             println!();
 
-            println!("{}", "sample form havana: ".blue());
-            println!("\tsampled x: {:?}", sample_point);
+            println!("{}", "sample from havana: ".blue());
+            println!("\tsampled x: {:?}", sample);
             println!();
 
             println!("{}", "parametrisation result".blue());
@@ -668,16 +713,16 @@ impl GammaLoopIntegrand {
             }
             Precision::Double => match &self.graph_integrands {
                 GraphIntegrands::Amplitude(graph_integrands) => {
-                    let result = evaluate(graph_integrands, sample_point, &self.settings);
+                    let result = evaluate(graph_integrands, sample_point, false, &self.settings);
                     let rotated_result =
-                        evaluate(graph_integrands, rotated_sample_point, &self.settings);
+                        evaluate(graph_integrands, rotated_sample_point, true, &self.settings);
 
                     (result, rotated_result)
                 }
                 GraphIntegrands::CrossSection(graph_integrands) => {
-                    let result = evaluate(graph_integrands, sample_point, &self.settings);
+                    let result = evaluate(graph_integrands, sample_point, false, &self.settings);
                     let rotated_result =
-                        evaluate(graph_integrands, rotated_sample_point, &self.settings);
+                        evaluate(graph_integrands, rotated_sample_point, true, &self.settings);
 
                     (result, rotated_result)
                 }
@@ -688,18 +733,24 @@ impl GammaLoopIntegrand {
 
                 match &self.graph_integrands {
                     GraphIntegrands::Amplitude(graph_integrands) => {
-                        let result = evaluate(graph_integrands, &sample_point_f128, &self.settings);
+                        let result =
+                            evaluate(graph_integrands, &sample_point_f128, false, &self.settings);
 
-                        let rotated_result =
-                            evaluate(graph_integrands, &rotated_sample_point_f128, &self.settings);
+                        let rotated_result = evaluate(
+                            graph_integrands,
+                            &rotated_sample_point_f128,
+                            true,
+                            &self.settings,
+                        );
 
                         (result.lower(), rotated_result.lower())
                     }
                     GraphIntegrands::CrossSection(graph_integrands) => {
-                        let result = evaluate(graph_integrands, &sample_point_f128, &self.settings);
+                        let result =
+                            evaluate(graph_integrands, &sample_point_f128, false, &self.settings);
 
                         let rotated_result =
-                            evaluate(graph_integrands, &sample_point_f128, &self.settings);
+                            evaluate(graph_integrands, &sample_point_f128, true, &self.settings);
 
                         (result.lower(), rotated_result.lower())
                     }
@@ -935,7 +986,71 @@ impl GammaLoopIntegrand {
         (2. * std::f64::consts::PI).powi(loop_number as i32 * 3)
     }
 
-    pub fn amplitude_integrand_constructor(amplitude: Amplitude, settings: Settings) -> Self {
+    pub fn amplitude_integrand_constructor(mut amplitude: Amplitude, settings: Settings) -> Self {
+        #[allow(irrefutable_let_patterns)]
+        // for amplitudes we can construct counterterms beforehand if external momenta are constant
+        if let Externals::Constant(_) = settings.kinematics.externals {
+            let dummy = [];
+            let (external_moms, _) = settings.kinematics.externals.get_externals(&dummy);
+
+            for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
+                let graph = &mut amplitude_graph.graph;
+
+                // temporary fix, rederive esurface data
+                graph
+                    .generate_esurface_data()
+                    .unwrap_or_else(|_| panic!("failed to generate esurface derived data"));
+
+                let existing_esurfaces = graph.get_existing_esurfaces(
+                    &external_moms,
+                    settings.kinematics.e_cm,
+                    settings.general.debug,
+                );
+
+                if settings.general.debug > 0 {
+                    println!(
+                        "#{} existing esurfaces for graph {}",
+                        existing_esurfaces.len(),
+                        graph.name
+                    );
+                }
+
+                if !existing_esurfaces.is_empty() {
+                    let maximal_overlap = graph.get_maximal_overlap(
+                        &external_moms,
+                        settings.kinematics.e_cm,
+                        settings.general.debug,
+                    );
+
+                    let maximal_overlap_structure = maximal_overlap
+                        .overlap_groups
+                        .iter()
+                        .map(|overlap_group| overlap_group.existing_esurfaces.len())
+                        .collect_vec();
+
+                    if settings.general.debug > 0 {
+                        println!("maximal overlap structure: {:?}", maximal_overlap_structure);
+                    }
+
+                    let counter_term =
+                        CounterTerm::construct(maximal_overlap, &existing_esurfaces, graph);
+
+                    if settings.general.debug > 1 {
+                        counter_term.print_debug_data(
+                            &graph.get_cff().esurfaces,
+                            &external_moms,
+                            &graph.loop_momentum_basis,
+                            &graph.get_real_mass_vector(),
+                        );
+                    }
+
+                    graph.derived_data.static_counterterm = Some(counter_term);
+                }
+            }
+        } else {
+            panic!("Only constant external momenta are supported at the moment.")
+        }
+
         Self {
             settings,
             graph_integrands: GraphIntegrands::Amplitude(amplitude.amplitude_graphs),

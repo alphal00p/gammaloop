@@ -178,3 +178,6 @@ default.nix
 
 # Ignore the local test resources
 src/test_resources/qqddg/
+
+# My own process outputs
+process_outputs

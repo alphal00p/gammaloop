@@ -1,10 +1,21 @@
 use crate::{
-    cff::{generate_cff_expression, CFFExpression, SerializableCFFExpression},
+    cff::{
+        esurface::{
+            generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData, ExistingEsurfaces,
+            ExternalShift,
+        },
+        expression::CFFExpression,
+        generation::generate_cff_expression,
+    },
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, Model},
-    momentum::{Energy, FourMomentum, ThreeMomentum},
+    momentum::{FourMomentum, ThreeMomentum},
     numerator::Numerator,
+    subtraction::{
+        overlap::{find_maximal_overlap, OverlapStructure},
+        static_counterterm,
+    },
     tropical::{self, TropicalSubgraphTable},
     utils::{compute_four_momentum_from_three, compute_three_momentum_from_four, FloatLike, F},
 };
@@ -26,6 +37,7 @@ use spenso::{
 
 use core::panic;
 use serde::{Deserialize, Serialize};
+use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
 
@@ -778,6 +790,22 @@ impl Graph {
     }
 
     #[inline]
+    pub fn get_mass_vector(&self) -> Vec<Option<Complex<F<f64>>>> {
+        self.edges.iter().map(|e| e.particle.mass.value).collect()
+    }
+
+    #[inline]
+    pub fn get_real_mass_vector(&self) -> Vec<F<f64>> {
+        self.edges
+            .iter()
+            .map(|e| match e.particle.mass.value {
+                Some(mass) => mass.re,
+                None => F::from_f64(0.0),
+            })
+            .collect()
+    }
+
+    #[inline]
     pub fn compute_onshell_energies_in_lmb<T: FloatLike>(
         &self,
         loop_moms: &[ThreeMomentum<F<T>>],
@@ -1121,65 +1149,19 @@ impl Graph {
         &self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
+        debug: usize,
     ) -> Vec<F<T>> {
-        let independent_external_momenta = &sample.external_moms;
-        let one = sample.one();
-        let zero = one.zero();
-        let lmb = lmb_specification.basis(self);
-
-        let mut energy_cache = vec![zero.clone(); self.edges.len()];
-        // some gymnastics to account for the sign of outgoing momenta
-
-        let mut flipped_externals = Vec::with_capacity(independent_external_momenta.len() + 1); // there is one more external energy that depends on the others
-
-        for (index, edge) in self
-            .edges
-            .iter()
-            .filter(|edge| edge.edge_type != EdgeType::Virtual)
-            .enumerate()
-        {
-            if index < independent_external_momenta.len() {
-                match edge.edge_type {
-                    EdgeType::Incoming => {
-                        flipped_externals
-                            .push(independent_external_momenta[index].temporal.clone());
-                    }
-                    EdgeType::Outgoing => {
-                        flipped_externals
-                            .push(-independent_external_momenta[index].temporal.clone());
-                    }
-                    _ => unreachable!(),
-                }
-            } else {
-                flipped_externals.push(
-                    -flipped_externals
-                        .iter()
-                        .fold(Energy::new(zero.clone()), |acc, x| acc + x), // energy conservation
-                );
-            }
-        }
-
-        // here we still use the non_flipped_externals for the virtual edges, since otherwise we would have to change the signature matrix as well.
-        for (index, edge) in self.edges.iter().enumerate() {
-            energy_cache[index] = match edge.edge_type {
-                EdgeType::Virtual => {
-                    compute_three_momentum_from_four(
-                        &lmb.edge_signatures[index],
-                        &sample.loop_moms,
-                        independent_external_momenta,
-                    )
-                    .on_shell_energy(edge.particle.mass.value.map(|m| F::<T>::from_ff64(m.re)))
-                    .value
-                }
-                _ => flipped_externals[index].value.clone(),
-            };
-        }
+        let energy_cache = self.compute_onshell_energies_in_lmb(
+            &sample.loop_moms,
+            &sample.external_moms,
+            lmb_specification,
+        );
 
         self.derived_data
             .cff_expression
             .as_ref()
             .unwrap()
-            .evaluate_orientations(&energy_cache)
+            .evaluate_orientations(&energy_cache, debug)
     }
 
     pub fn numerator_substitute_model_params(&mut self, model: &Model) {
@@ -1241,9 +1223,9 @@ impl Graph {
             .cff_expression
             .as_ref()
             .unwrap()
-            .terms
+            .orientations
             .iter()
-            .map(|e| e.orientation)
+            .map(|e| e.orientation.clone())
         {
             let mut emr = emr.clone();
             for ((i, _), sign) in self.get_virtual_edges_iterator().zip(orient.into_iter()) {
@@ -1264,6 +1246,7 @@ impl Graph {
         &self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
+        debug: usize,
     ) -> Complex<F<T>> {
         let one = sample.one();
         let zero = one.zero();
@@ -1276,26 +1259,36 @@ impl Graph {
             i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
 
         // here numerator evaluation can be weaved into the summation
-        prefactor
+        let res = prefactor
             * self
-                .evaluate_cff_orientations(sample, lmb_specification)
+                .evaluate_cff_orientations(sample, lmb_specification, debug)
                 .into_iter()
-                .zip(self.evaluate_numerator_orientations(sample, lmb_specification))
+                .zip(
+                    // self.evaluate_numerator_orientations(sample, lmb_specification),
+                    0.., // dummy values for performance test
+                )
                 .map(|(cff, _num)| {
                     let zero = cff.zero();
                     Complex::new(cff, zero)
                 })
                 .reduce(|acc, e| acc + &e)
-                .unwrap_or(Complex::new(one.clone(), one.clone()))
+                .unwrap_or_else(|| panic!("no orientations to evaluate"));
+
+        if debug > 1 {
+            println!("sum over all orientations including numerator: {}", &res)
+        }
+
+        res
     }
 
     #[inline]
     pub fn evaluate_cff_expression<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
+        debug: usize,
     ) -> Complex<F<T>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.evaluate_cff_expression_in_lmb(sample, &lmb_specification)
+        self.evaluate_cff_expression_in_lmb(sample, &lmb_specification, debug)
     }
 
     pub fn process_numerator(&mut self, model: &Model) {
@@ -1358,8 +1351,145 @@ impl Graph {
         })
     }
 
+    /// For a given edge, return the indices of the edges which have the same signature
+    #[inline]
+    pub fn is_edge_raised(&self, edge_index: usize) -> SmallVec<[usize; 2]> {
+        let edge_signature = &self.loop_momentum_basis.edge_signatures[edge_index];
+        let virtual_edges = self.get_virtual_edges_iterator();
+
+        virtual_edges
+            .filter(|(index, _)| {
+                self.loop_momentum_basis.edge_signatures[*index] == *edge_signature
+                    && *index != edge_index
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// Returns groups of edges which all have the same signature
+    pub fn group_edges_by_signature(&self) -> Vec<SmallVec<[usize; 3]>> {
+        let mut edges: Vec<usize> = self
+            .get_virtual_edges_iterator()
+            .map(|(index, _)| index)
+            .collect();
+
+        let mut grouped_edges = Vec::with_capacity(edges.len());
+
+        while !edges.is_empty() {
+            let current_edge = edges.remove(0);
+
+            let mut group = smallvec![current_edge];
+            let mut index = 0;
+
+            while index < edges.len() {
+                if self.loop_momentum_basis.edge_signatures[current_edge]
+                    == self.loop_momentum_basis.edge_signatures[edges[index]]
+                {
+                    group.push(edges.remove(index));
+                } else {
+                    index += 1;
+                }
+            }
+
+            grouped_edges.push(group);
+        }
+
+        grouped_edges
+    }
+
+    pub fn generate_edge_groups(&mut self) {
+        self.derived_data.edge_groups = Some(self.group_edges_by_signature());
+    }
+
+    pub fn generate_esurface_data(&mut self) -> Result<(), Report> {
+        let data = generate_esurface_data(self, &self.get_cff().esurfaces)?;
+        self.derived_data.esurface_derived_data = Some(data);
+
+        Ok(())
+    }
+
     pub fn is_edge_incoming(&self, edge: usize, vertex: usize) -> bool {
         self.edges[edge].is_incoming_to(vertex)
+    }
+
+    // helper function
+    #[inline]
+    pub fn get_cff(&self) -> &CFFExpression {
+        self.derived_data.cff_expression.as_ref().unwrap()
+    }
+
+    #[inline]
+    pub fn get_tropical_subgraph_table(&self) -> &TropicalSubgraphTable {
+        self.derived_data.tropical_subgraph_table.as_ref().unwrap()
+    }
+
+    #[inline]
+    pub fn get_esurface_derived_data(&self) -> &EsurfaceDerivedData {
+        self.derived_data.esurface_derived_data.as_ref().unwrap()
+    }
+
+    #[inline]
+    pub fn get_existing_esurfaces<T: FloatLike>(
+        &self,
+        externals: &[FourMomentum<F<T>>],
+        e_cm: F<f64>,
+        debug: usize,
+    ) -> ExistingEsurfaces {
+        get_existing_esurfaces(
+            &self.get_cff().esurfaces,
+            self.get_esurface_derived_data(),
+            externals,
+            &self.loop_momentum_basis,
+            debug,
+            e_cm,
+        )
+    }
+
+    #[inline]
+    pub fn get_maximal_overlap(
+        &self,
+        externals: &[FourMomentum<F<f64>>],
+        e_cm: F<f64>,
+        debug: usize,
+    ) -> OverlapStructure {
+        let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, debug);
+        find_maximal_overlap(
+            &self.loop_momentum_basis,
+            &existing_esurfaces,
+            &self.get_cff().esurfaces,
+            &self.get_mass_vector(),
+            externals,
+            debug,
+        )
+    }
+
+    pub fn get_dep_mom_expr(&self) -> (usize, ExternalShift) {
+        let external_edges = self
+            .edges
+            .iter()
+            .enumerate()
+            .filter(|(_index, edge)| edge.edge_type != EdgeType::Virtual)
+            .collect_vec();
+
+        // find the external leg which does not appear in it's own signature
+        let (_, (dep_mom, _)) = external_edges
+            .iter()
+            .enumerate()
+            .find(|(external_index, (index, _edge))| {
+                self.loop_momentum_basis.edge_signatures[*index].1[*external_index] != 1
+            })
+            .unwrap_or_else(|| panic!("could not determine dependent momenta"));
+
+        let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].1;
+
+        let external_shift = external_edges
+            .iter()
+            .zip(dep_mom_signature.iter())
+            .filter(|(_external_edge, dep_mom_sign)| **dep_mom_sign != 0)
+            .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
+            .collect();
+
+        (*dep_mom, external_shift)
     }
 }
 
@@ -1370,6 +1500,9 @@ pub struct DerivedGraphData {
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
+    pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
+    pub esurface_derived_data: Option<EsurfaceDerivedData>,
+    pub static_counterterm: Option<static_counterterm::CounterTerm>,
     pub numerator: Option<Numerator>,
 }
 
@@ -1380,7 +1513,10 @@ impl DerivedGraphData {
             cff_expression: None,
             ltd_expression: None,
             tropical_subgraph_table: None,
+            edge_groups: None,
+            esurface_derived_data: None,
             numerator: None,
+            static_counterterm: None,
         }
     }
 
@@ -1390,9 +1526,16 @@ impl DerivedGraphData {
                 .loop_momentum_bases
                 .clone()
                 .map(|lmbs| lmbs.iter().map(|lmb| lmb.to_serializable()).collect_vec()),
-            cff_expression: self.cff_expression.clone().map(|cff| cff.to_serializable()),
+            cff_expression: self.cff_expression.clone(),
             ltd_expression: self.ltd_expression.clone().map(|ltd| ltd.to_serializable()),
             tropical_subgraph_table: self.tropical_subgraph_table.clone(),
+            edge_groups: self.edge_groups.clone().map(|groups| {
+                groups
+                    .iter()
+                    .map(|group| group.clone().into_iter().collect())
+                    .collect()
+            }),
+            esurface_derived_data: self.esurface_derived_data.clone(),
             numerator: self.numerator.clone(),
         }
     }
@@ -1404,14 +1547,17 @@ impl DerivedGraphData {
                     .map(LoopMomentumBasis::from_serializable)
                     .collect_vec()
             }),
-            cff_expression: serializable
-                .cff_expression
-                .map(CFFExpression::from_serializable),
+            cff_expression: serializable.cff_expression,
             ltd_expression: serializable
                 .ltd_expression
                 .map(LTDExpression::from_serializable),
             tropical_subgraph_table: serializable.tropical_subgraph_table,
+            edge_groups: serializable
+                .edge_groups
+                .map(|groups| groups.into_iter().map(|group| group.into()).collect()),
+            esurface_derived_data: serializable.esurface_derived_data,
             numerator: serializable.numerator,
+            static_counterterm: None,
         }
     }
 
@@ -1452,9 +1598,11 @@ impl DerivedGraphData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableDerivedGraphData {
     pub loop_momentum_bases: Option<Vec<SerializableLoopMomentumBasis>>,
-    pub cff_expression: Option<SerializableCFFExpression>,
+    pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<SerializableLTDExpression>,
     pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
+    pub edge_groups: Option<Vec<Vec<usize>>>,
+    pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub numerator: Option<Numerator>,
 }
 

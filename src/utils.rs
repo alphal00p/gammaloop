@@ -27,6 +27,7 @@ use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
 // use symbolica::domains::Field;
 use symbolica::numerical_integration::Sample;
+use typed_index_collections::TiSlice;
 
 #[allow(unused_imports)]
 use log::{debug, info};
@@ -662,7 +663,7 @@ pub trait FloatLike:
     }
 
     fn epsilon(&self) -> Self {
-        Self::from_f64(std::f64::EPSILON)
+        Self::from_f64(f64::EPSILON)
     }
 
     fn less_than_epsilon(&self) -> bool {
@@ -674,11 +675,11 @@ pub trait FloatLike:
     }
 
     fn max_value(&self) -> Self {
-        Self::from_f64(std::f64::MAX)
+        Self::from_f64(f64::MAX)
     }
 
     fn min_value(&self) -> Self {
-        Self::from_f64(std::f64::MIN)
+        Self::from_f64(f64::MIN)
     }
 
     fn ln(&self) -> Self {
@@ -1269,7 +1270,7 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 multiplication_operator: '*',
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
-                latex: false
+                latex: false,
             },
         )
     )
@@ -1735,6 +1736,73 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
     false
 }
 
+pub fn compute_loop_part<T: FloatLike>(
+    loop_signature: &[isize],
+    loop_moms: &[ThreeMomentum<F<T>>],
+) -> ThreeMomentum<F<T>> {
+    let mut res = loop_moms[0].default();
+
+    for i_l in loop_signature.iter().enumerate() {
+        match i_l.1 {
+            1 => {
+                res += &loop_moms[i_l.0];
+            }
+            -1 => {
+                res -= &loop_moms[i_l.0];
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
+    res
+}
+
+pub fn compute_shift_part<T: FloatLike>(
+    external_signature: &[isize],
+    external_moms: &[FourMomentum<F<T>>],
+) -> FourMomentum<F<T>> {
+    let mut res = external_moms[0].default();
+
+    for i_l in external_signature.iter().enumerate() {
+        match i_l.1 {
+            1 => {
+                res += &external_moms[i_l.0];
+            }
+            -1 => {
+                res -= &external_moms[i_l.0];
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
+    res
+}
+
+pub fn compute_t_part_of_shift_part<T: FloatLike>(
+    external_signature: &[isize],
+    external_moms: &[FourMomentum<F<T>>],
+) -> F<T> {
+    let mut res = external_moms[0].temporal.value.zero();
+
+    for i_l in external_signature.iter().enumerate() {
+        match i_l.1 {
+            1 => {
+                res += &external_moms[i_l.0].temporal.value;
+            }
+            -1 => {
+                res -= &external_moms[i_l.0].temporal.value;
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
+    res
+}
+
+
 pub fn compute_momentum<'a, 'b: 'a, T>(
     signature: &(Vec<isize>, Vec<isize>),
     loop_moms: &'a [T],
@@ -1769,6 +1837,60 @@ where
             _ => unreachable!("Sign should be, -1,0,1"),
         }
     }
+    res
+}
+
+/// Usefull for debugging
+pub fn format_momentum(signature: &(Vec<isize>, Vec<isize>)) -> String {
+    let mut res = String::new();
+    let mut first = true;
+
+    for (i_l, sign) in signature.0.iter().enumerate() {
+        match sign {
+            1 => {
+                if first {
+                    res.push_str(&format!("k_{}", i_l));
+                    first = false;
+                } else {
+                    res.push_str(&format!(" + k_{}", i_l));
+                }
+            }
+            -1 => {
+                if first {
+                    res.push_str(&format!("-k_{}", i_l));
+                    first = false;
+                } else {
+                    res.push_str(&format!(" - k_{}", i_l));
+                }
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
+    for (i_l, sign) in signature.1.iter().enumerate() {
+        match sign {
+            1 => {
+                if first {
+                    res.push_str(&format!("p_{}", i_l));
+                    first = false;
+                } else {
+                    res.push_str(&format!(" + p_{}", i_l));
+                }
+            }
+            -1 => {
+                if first {
+                    res.push_str(&format!("-p_{}", i_l));
+                    first = false;
+                } else {
+                    res.push_str(&format!(" - p_{}", i_l));
+                }
+            }
+            0 => {}
+            _ => unreachable!("Sign should be -1,0,1"),
+        }
+    }
+
     res
 }
 
@@ -2772,4 +2894,25 @@ pub fn format_sample(sample: &Sample<F<f64>>) -> String {
         },
         _ => String::from("N/A"),
     }
+}
+
+pub fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
+    vec1: &TiSlice<K, T>,
+    vec2: &TiSlice<K, T>,
+) -> String {
+    let mut result = String::new();
+
+    result.push_str("elements of vec1 that are not in vec2:\n");
+
+    vec1.iter()
+        .filter(|vec1_element| !vec2.contains(vec1_element))
+        .for_each(|vec1_element| result.push_str(&format!("{:#?}\n", vec1_element)));
+
+    result.push_str("elements of vec2 that are not in vec1:\n");
+
+    vec2.iter()
+        .filter(|vec2_element| !vec1.contains(vec2_element))
+        .for_each(|vec2_element| result.push_str(&format!("{:#?}", vec2_element)));
+
+    result
 }

@@ -39,7 +39,8 @@ AVAILABLE_COMMANDS = [
     'test_uv_limits',
     'set',
     'set_model_param',
-    'reset'
+    'reset',
+    'generate_graph'
 ]
 
 
@@ -140,6 +141,17 @@ class GammaLoopConfiguration(object):
                 },
                 'sampling': {
                     'type': 'default'
+                },
+                'subtraction': {
+                    'sliver_width': 1.0,
+                    'dampen_integrable_singularity': True,
+                    'dynamic_sliver': False,
+                    'integrated_ct_hfunction': {
+                        'function': 'poly_exponential',
+                        'sigma': 1.0,
+                        'enabled_dampening': True,
+                        'power': None,
+                    },
                 }
             }
         }
@@ -560,7 +572,7 @@ class GammaLoop(object):
         if model_restriction not in [None, 'full']:
             if not os.path.isfile(pjoin(model_restriction_dir, f'restrict_{model_restriction}.dat')):
                 raise GammaLoopError(
-                    f"Restriction file 'restrict_{model_restriction}.dat' not found for model '{model_name}' in directory '{pjoin(model_directory,model_name)}'.")
+                    f"Restriction file 'restrict_{model_restriction}.dat' not found for model '{model_name}' in directory '{pjoin(model_directory, model_name)}'.")
             else:
                 param_card = ParamCard(
                     pjoin(model_restriction_dir, f'restrict_{model_restriction}.dat'))
@@ -739,6 +751,124 @@ class GammaLoop(object):
                     )
                     for i, g in enumerate(graphs)]
             )])
+
+    generate_graph_parser = ArgumentParser(prog='generate_graph')
+    generate_graph_parser.add_argument(
+        '--name', '-n', type=str, default='graph',)
+    generate_graph_parser.add_argument(
+        '--virtual-edges', '-ve', type=str)
+    generate_graph_parser.add_argument(
+        '--external-edges', '-ee', type=str)
+
+    def do_generate_graph(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.generate_graph_parser.print_help()
+            return
+
+        args = self.generate_graph_parser.parse_args(split_str_args(str_args))
+
+        try:
+            virtual_edges = eval(args.virtual_edges)
+        except Exception as exc:
+            raise GammaLoopError(
+                f"Invalid value '{args.virtual_edges}' for virtual edges. Error:\n{exc}") from exc
+
+        try:
+            external_edges = eval(args.external_edges)
+        except Exception as exc:
+            raise GammaLoopError(
+                f"Invalid value '{args.external_edges}' for external edges. Error:\n{exc}") from exc
+
+        graph: dict[str, Any] = {
+        }
+
+        graph["edges"] = {}
+        graph["nodes"] = {}
+        graph["overall_factor"] = str("1")
+
+        for external_edge in external_edges:
+            type = external_edge[0]
+            internal_node = external_edge[1]
+
+            external_node = int("10" + str(internal_node))
+            momentum_name = "p" + str(internal_node)
+
+            graph["nodes"][external_node] = {
+                "PDGs": (1000,),
+                "momenta": (momentum_name,),
+                "indices": (),
+                "vertex_id": -1,
+                "edge_ids": (external_node,)
+            }
+
+            graph["edges"][external_node] = {}
+            if type == "in":
+                graph["edges"][external_node]["type"] = "in"
+                graph["edges"][external_node]["vertices"] = (
+                    external_node, internal_node)
+            elif type == "out":
+                graph["edges"][external_node]["type"] = "out"
+                graph["edges"][external_node]["vertices"] = (
+                    internal_node, external_node)
+            else:
+                raise ValueError("Unknown external edge type")
+
+            graph["edges"][external_node]["name"] = momentum_name
+            graph["edges"][external_node]["PDG"] = 1000
+            graph["edges"][external_node]["momentum"] = ""
+            graph["edges"][external_node]["indices"] = ()
+
+            if internal_node not in graph["nodes"]:
+                graph["nodes"][internal_node] = {
+                    "PDGs": (1000,),
+                    "momenta": (),
+                    "indices": (),
+                    "vertex_id": 0,
+                    "edge_ids": (external_node,)
+                }
+            else:
+                graph["nodes"][internal_node]["edge_ids"] += (
+                    int(1000),)
+                graph["nodes"][internal_node]["PDGs"] += (1000,)
+
+        for virtual_edge_id, virtual_edge in enumerate(virtual_edges):
+            pdg = virtual_edge[0]
+            internal_node1 = virtual_edge[1]
+            internal_node2 = virtual_edge[2]
+
+            edge_id = virtual_edge_id + 1
+            graph["edges"][edge_id] = {
+                "name": "q" + str(edge_id),
+                "PDG": pdg,
+                "type": "virtual",
+                "momentum": "",
+                "indices": (),
+                "vertices": (internal_node1, internal_node2)
+            }
+
+            for node in [internal_node1, internal_node2]:
+                if node not in graph["nodes"]:
+                    graph["nodes"][node] = {
+                        "PDGs": (pdg,),
+                        "momenta": (),
+                        "indices": (),
+                        "vertex_id": 0,
+                        "edge_ids": (edge_id,)
+                    }
+                else:
+                    graph["nodes"][node]["edge_ids"] += (edge_id,)
+                    graph["nodes"][node]["PDGs"] += (pdg,)
+
+        gammaloop_graph = Graph.from_qgraph(self.model, graph, args.name)
+        self.amplitudes = cross_section.AmplitudeList([cross_section.Amplitude(
+            args.name,
+            [
+                supergraph.AmplitudeGraph(
+                    sg_id=0, sg_cut_id=0, fs_cut_id=0, amplitude_side=Side.LEFT,
+                    graph=gammaloop_graph
+                )
+            ]
+        )])
 
     # output command
     output_parser = ArgumentParser(prog='output')

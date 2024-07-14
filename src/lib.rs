@@ -23,6 +23,7 @@ pub mod model;
 pub mod momentum;
 pub mod numerator;
 pub mod observables;
+pub mod subtraction;
 
 pub mod tests;
 pub mod tests_from_pytest;
@@ -101,7 +102,7 @@ fn _default_shifts() -> Vec<(f64, f64, f64, f64)> {
     vec![(1.0, 0.0, 0.0, 0.0); 15]
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct HFunctionSettings {
     pub function: HFunction,
     pub sigma: f64,
@@ -217,6 +218,8 @@ pub struct Settings {
     pub stability: StabilitySettings,
     #[serde(rename = "sampling")]
     pub sampling: SamplingSettings,
+    #[serde(rename = "subtraction")]
+    pub subtraction: SubtractionSettings,
 }
 
 impl Settings {
@@ -294,6 +297,8 @@ pub enum RotationMethod {
     Pi2Y,
     #[serde(rename = "z")]
     Pi2Z,
+    #[serde(rename = "none")]
+    None,
 }
 
 impl RotationMethod {
@@ -304,6 +309,7 @@ impl RotationMethod {
             RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x,
             RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y,
             RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z,
+            RotationMethod::None => |vector: &ThreeMomentum<F<T>>| vector.clone(),
         }
     }
 }
@@ -376,4 +382,12 @@ pub enum DiscreteGraphSamplingSettings {
     DiscreteMultiChanneling(MultiChannelingSettings),
     #[serde(rename = "tropical")]
     TropicalSampling,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct SubtractionSettings {
+    pub sliver_width: f64,
+    pub dampen_integrable_singularity: bool,
+    pub dynamic_sliver: bool,
+    pub integrated_ct_hfunction: HFunctionSettings,
 }

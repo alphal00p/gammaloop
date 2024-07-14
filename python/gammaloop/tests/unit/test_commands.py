@@ -254,8 +254,12 @@ class TestScalarCube:
 
     def test_info(self, scalar_cube_export: Path):
         gloop = get_gamma_loop_interpreter()
-        gloop.run(CommandList.from_string(
-            f"launch {scalar_cube_export}"))
+
+        command_list = CommandList.from_string(
+            "set externals.momenta [[1.,3.,4.,5.],[1.,6.,7.,8.],[1.,9.,10.,11.],[1.,12.,13.,14.],[1.,15.,16.,17.],[1.,18.,19.,20.],[1.,21.,22.,23.]]")
+        command_list.add_command(f"launch {scalar_cube_export}")
+
+        gloop.run(command_list)
         assert gloop.model.name == 'scalars'
         assert gloop.get_model_from_rust_worker().name == 'scalars'
         for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:

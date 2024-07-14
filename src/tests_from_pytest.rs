@@ -1,20 +1,29 @@
 #![allow(unused_imports)]
-use crate::cff::generate_cff_expression;
+use crate::cff::esurface::{
+    get_existing_esurfaces, Esurface, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
+};
+use crate::cff::generation::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::gammaloop_integrand::DefaultSample;
 use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
 use crate::model::Model;
 use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
+use crate::subtraction::static_counterterm;
 use crate::utils::{
     assert_approx_eq, compute_momentum, compute_three_momentum_from_four, PrecisionUpgradable,
 };
 use crate::utils::{f128, F};
 use colored::Colorize;
 use itertools::{FormatWith, Itertools};
+use libc::__c_anonymous_ptrace_syscall_info_exit;
 use lorentz_vector::LorentzVector;
+use petgraph::algo::greedy_matching;
+use petgraph::graph;
 use rayon::prelude::IndexedParallelIterator;
 use serde;
 use spenso::Complex;
+use statrs::function::evaluate;
 use std::fs::File;
 use std::path::Path;
 use std::{clone, env};
@@ -106,8 +115,7 @@ mod tests_scalar_massless_triangle {
                 .cff_expression
                 .as_ref()
                 .unwrap()
-                .terms
-                .len(),
+                .get_num_trees(),
             6
         );
         assert_eq!(
@@ -134,7 +142,7 @@ mod tests_scalar_massless_triangle {
             jacobian: F(1.0),
         };
 
-        let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
+        let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
 
         // println!("res = {:+e}", res);
 
@@ -163,7 +171,40 @@ mod tests_scalar_massless_triangle {
         assert_approx_eq(&cff_res.im, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
         assert_approx_eq(&ltd_res.re, &absolute_truth.re, &LTD_COMPARISON_TOLERANCE);
         assert_approx_eq(&ltd_res.im, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
-        // TODO: @Mathijs, you can put your own checks there
+
+        let propagator_groups = graph.group_edges_by_signature();
+        assert_eq!(propagator_groups.len(), 3);
+
+        let generate_data = graph.generate_esurface_data();
+
+        if let Err(e) = generate_data {
+            panic!("Error: {}", e);
+        }
+
+        let existing = get_existing_esurfaces(
+            &graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .esurfaces,
+            graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+            &[p1, p2],
+            &graph.loop_momentum_basis,
+            0,
+            F(2.0),
+        );
+
+        assert_eq!(existing.len(), 0);
+
+        let cff = graph.get_cff();
+        let unfolded = cff.expand_terms();
+
+        assert_eq!(unfolded.len(), 6);
+
+        for term in unfolded.iter() {
+            assert_eq!(term.len(), 2);
+        }
     }
 }
 
@@ -189,7 +230,7 @@ fn pytest_scalar_fishnet_2x2() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
     let cff = generate_cff_expression(&graph).unwrap();
-    assert!(!cff.terms.is_empty());
+    assert!(!cff.esurfaces.is_empty());
 
     // println!("basis size: {:?}", graph.loop_momentum_basis.basis);
     graph.generate_loop_momentum_bases();
@@ -263,7 +304,7 @@ fn pytest_scalar_fishnet_2x2() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let absolute_truth: Complex<F<f128>> = Complex::new(
         F::<f128>::from_f64(0.000019991301832169422),
@@ -293,6 +334,9 @@ fn pytest_scalar_fishnet_2x2() {
         &absolute_truth.im,
         &ltd_comparison_tolerance128,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 12);
     // TODO: @Mathijs, you can put your own checks there
 }
 
@@ -340,7 +384,7 @@ fn pytest_scalar_sunrise() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&[k1, k2], &[p1]) / energy_product;
 
     println!("cff_res = {:+e}", cff_res);
@@ -352,6 +396,9 @@ fn pytest_scalar_sunrise() {
     assert_approx_eq(&ltd_res.re, &absolute_truth.re, &LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(&ltd_res.im, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
     println!("ltd correct");
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 3);
 }
 
 #[test]
@@ -423,7 +470,7 @@ fn pytest_scalar_fishnet_2x3() {
 
     let cff_res = amplitude.amplitude_graphs[0]
         .graph
-        .evaluate_cff_expression(&sample);
+        .evaluate_cff_expression(&sample, 0);
 
     // let cff_duration = before_cff.elapsed();
     // println!("cff_duration: {}", cff_duration.as_micros());
@@ -441,6 +488,11 @@ fn pytest_scalar_fishnet_2x3() {
     assert_approx_eq(&cff_res.re, &ltd_res.re, &ltd_comparison_tolerance128);
 
     assert_approx_eq(&cff_res.im, &ltd_res.im, &ltd_comparison_tolerance128);
+
+    let propagator_groups = amplitude.amplitude_graphs[0]
+        .graph
+        .group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 17);
     // TODO: @Mathijs, you can put your own checks there
 }
 
@@ -519,11 +571,14 @@ fn pytest_scalar_cube() {
     };
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_momenta, &external_momenta);
-    let cff_res = graph.evaluate_cff_expression(&sample);
+    let cff_res = graph.evaluate_cff_expression(&sample, 0);
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(&cff_res.re, &ltd_res.re, &ltd_comparison_tolerance128);
 
     assert_approx_eq(&cff_res.im, &ltd_res.im, &ltd_comparison_tolerance128);
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 12);
 }
 
 #[test]
@@ -572,7 +627,7 @@ fn pytest_scalar_bubble() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
 
     let absolute_truth = Complex::new(F(0.), -F(0.052955801144924944));
 
@@ -580,6 +635,9 @@ fn pytest_scalar_bubble() {
     assert_approx_eq(&cff_res.im, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(&ltd_res.re, &absolute_truth.re, &LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(&ltd_res.im, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 2);
 }
 
 #[test]
@@ -649,7 +707,7 @@ fn pytest_massless_scalar_box() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -673,6 +731,63 @@ fn pytest_massless_scalar_box() {
         &absolute_truth.im,
         &ltd_comparison_tolerance128,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 4);
+    graph.generate_esurface_data().unwrap();
+
+    let box4_e = [
+        FourMomentum::from_args(F(14.0), F(-6.6), F(-40.0), F(0.0)),
+        FourMomentum::from_args(F(43.0), F(-15.2), F(-33.0), F(0.0)),
+        FourMomentum::from_args(F(17.9), F(50.0), F(-11.8), F(0.0)),
+    ];
+
+    let esurfaces = &graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
+
+    let existing = get_existing_esurfaces(
+        esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &box4_e,
+        &graph.loop_momentum_basis,
+        0,
+        F(57.0),
+    );
+
+    let edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .collect_vec();
+
+    find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing,
+        esurfaces,
+        &edge_masses,
+        &box4_e,
+        0,
+    );
+
+    assert_eq!(existing.len(), 4);
+
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing,
+        esurfaces,
+        &edge_masses,
+        &box4_e,
+        0,
+    );
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 4);
+    for overlap in maximal_overlap.overlap_groups.iter() {
+        assert_eq!(overlap.existing_esurfaces.len(), 2);
+    }
 }
 
 #[test]
@@ -729,7 +844,7 @@ fn pytest_scalar_double_triangle() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -754,6 +869,9 @@ fn pytest_scalar_double_triangle() {
         &absolute_truth.im,
         &ltd_comparison_tolerance128,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 5);
 }
 
 #[test]
@@ -805,7 +923,7 @@ fn pytest_scalar_mercedes() {
         external_moms: externals,
         jacobian: F(1.0),
     };
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -832,6 +950,9 @@ fn pytest_scalar_mercedes() {
         &absolute_truth.im,
         &ltd_comparison_tolerance128,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 6);
 }
 
 #[test]
@@ -893,7 +1014,7 @@ fn pytest_scalar_triangle_box() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -920,6 +1041,9 @@ fn pytest_scalar_triangle_box() {
         &absolute_truth.im,
         &ltd_comparison_tolerance128,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 6);
 }
 
 #[test]
@@ -963,7 +1087,7 @@ fn pytest_scalar_isopod() {
     let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.))
         .cast()
         .higher();
-    let k1: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(2. / 11.), F(11. / 13.), F(13. / 17.))
+    let k1: ThreeMomentum<F<f128>> = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.))
         .cast()
         .higher();
 
@@ -981,7 +1105,7 @@ fn pytest_scalar_isopod() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
 
     println!("cff_res = {:+e}", cff_res);
     println!("ltd_res = {:+e}", ltd_res);
@@ -1012,11 +1136,456 @@ fn pytest_scalar_isopod() {
         &absolute_truth.im,
         &ltd_comparison_tolerance128,
     );
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 9);
 }
 
 #[test]
 #[ignore]
+fn pytest_raised_triangle() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 
+    let (model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    assert_eq!(model.name, "scalars");
+    assert!(amplitude.amplitude_graphs.len() == 1);
+
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 5);
+}
+
+#[test]
+#[ignore]
+fn pytest_hexagon() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let (model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    assert_eq!(model.name, "scalars");
+    assert!(amplitude.amplitude_graphs.len() == 1);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let esurfaces = &graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
+
+    let kinematics = [
+        FourMomentum::from_args(F(24.), F(-21.2), F(71.), F(0.)),
+        FourMomentum::from_args(F(50.4), F(15.8), F(-18.8), F(0.)),
+        FourMomentum::from_args(F(-0.2), F(46.2), F(8.6), F(0.)),
+        -FourMomentum::from_args(F(-33.2), F(2.6), F(-70.8), F(0.)),
+        -FourMomentum::from_args(F(-80.), F(-5.6), F(-40.0), F(0.0)),
+    ];
+
+    let existing_esurface = get_existing_esurfaces(
+        esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &kinematics,
+        &graph.loop_momentum_basis,
+        0,
+        F(75.),
+    );
+
+    assert_eq!(existing_esurface.len(), 6);
+
+    let edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .collect_vec();
+
+    let now = std::time::Instant::now();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurface,
+        esurfaces,
+        &edge_masses,
+        &kinematics,
+        0,
+    );
+    let duration = now.elapsed();
+    println!("duration: {}", duration.as_micros());
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 4);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[3].existing_esurfaces.len(),
+        2
+    );
+
+    let hexagon_10_e = [
+        FourMomentum::from_args(F(-80.), F(29.), F(-70.), F(0.)),
+        FourMomentum::from_args(F(83.5), F(14.0), F(70.0), F(0.0)),
+        FourMomentum::from_args(F(88.5), F(6.5), F(-6.), F(0.)),
+        -FourMomentum::from_args(F(36.5), F(-71.), F(97.5), F(0.)),
+        -FourMomentum::from_args(F(12.5), F(-83.5), F(-57.5), F(0.)),
+    ];
+
+    let existing_esurfaces = get_existing_esurfaces(
+        esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &hexagon_10_e,
+        &graph.loop_momentum_basis,
+        0,
+        F(88.),
+    );
+
+    assert_eq!(existing_esurfaces.len(), 10);
+
+    let now = std::time::Instant::now();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurfaces,
+        esurfaces,
+        &edge_masses,
+        &hexagon_10_e,
+        0,
+    );
+    let duration = now.elapsed();
+    println!("duration: {}", duration.as_micros());
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 4);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        8
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        8
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        7
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[3].existing_esurfaces.len(),
+        7
+    );
+}
+
+#[test]
+#[ignore]
+fn pytest_topology_c() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let (model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    assert_eq!(model.name, "scalars");
+    assert!(amplitude.amplitude_graphs.len() == 1);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let esurfaces = &graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
+
+    let kinematics = [
+        FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(8.94427190999916)),
+        FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(-8.94427190999916)),
+        -FourMomentum::from_args(
+            F(1.83442509122858),
+            F(-0.383828222192743),
+            F(0.69085529916260),
+            F(-1.31653190094982),
+        ),
+        -FourMomentum::from_args(
+            F(5.78920098524940),
+            F(-1.80358221330469),
+            F(-5.24375913342836),
+            F(1.328506453),
+        ),
+        -FourMomentum::from_args(F(2.82869), F(-1.83886), F(-1.6969477), F(0.8605192)),
+    ];
+
+    let _edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re.0 == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &kinematics,
+        &graph.loop_momentum_basis,
+        2,
+        F(18.),
+    );
+
+    let overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurfaces,
+        esurfaces,
+        &_edge_masses,
+        &kinematics,
+        0,
+    );
+
+    assert_eq!(overlap.overlap_groups.len(), 9);
+    assert_eq!(overlap.overlap_groups[0].existing_esurfaces.len(), 22);
+    assert_eq!(overlap.overlap_groups[1].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[2].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[3].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[4].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[5].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[6].existing_esurfaces.len(), 20);
+    assert_eq!(overlap.overlap_groups[7].existing_esurfaces.len(), 17);
+    assert_eq!(overlap.overlap_groups[8].existing_esurfaces.len(), 17);
+}
+
+#[test]
+#[ignore]
+fn pytest_massless_pentabox() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let (_model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let rescaling = F(1.0e-3);
+    let kinematics = [
+        &FourMomentum::from_args(
+            F(5.980_260_048_915_123e2),
+            F(0.0),
+            F(0.0),
+            F(5.724_562_014_045_295e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(5.980_260_048_915_123e2),
+            F(0.0),
+            F(0.0),
+            F(-5.724_562_014_045_295e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-5.394_473_213_122_507e2),
+            F(-1.971_081_698_462_961e2),
+            F(-4.416_135_519_343_869e2),
+            F(2.250_822_886_064_787e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-2.255_538_754_188_549e2),
+            F(1.757_868_459_829_899e2),
+            F(3.716_353_112_335_996e1),
+            F(-1.013_763_093_935_658e2),
+        ) * &rescaling,
+    ];
+
+    let edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re.0 == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &kinematics,
+        &graph.loop_momentum_basis,
+        0,
+        F(1.0),
+    );
+
+    assert_eq!(existing_esurfaces.len(), 17);
+
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurfaces,
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        &edge_masses,
+        &kinematics,
+        0,
+    );
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 3);
+
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        16
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        13
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        13
+    );
+}
+
+#[test]
+#[ignore]
+fn pytest_massless_3l_pentabox() {
+    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+
+    let (_model, amplitude) =
+        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let rescaling = F(1.0e0);
+    let kinematics = [
+        &FourMomentum::from_args(
+            F(0.149500000000000E+01),
+            F(0.000000000000000E+00),
+            F(0.000000000000000E+00),
+            F(0.149165176901313E+01),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(0.150500000000000E+01),
+            F(0.000000000000000E+00),
+            F(0.000000000000000E+00),
+            F(-0.149165176901313E+01),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-0.126041949101381e+01),
+            F(-0.452362952912639e+00),
+            F(-0.101350243653045e+01),
+            F(0.516563513332600e+00),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-0.105098730574850e+01),
+            F(0.489324061520790e-01),
+            F(0.928212188578101e+00),
+            F(-0.283905035967510e+00),
+        ) * &rescaling,
+    ];
+
+    let edge_masses = graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re.0 == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        &kinematics,
+        &graph.loop_momentum_basis,
+        0,
+        F(1.0),
+    );
+
+    assert_eq!(graph.loop_momentum_basis.basis.len(), 3);
+    assert_eq!(existing_esurfaces.len(), 28);
+
+    let now = std::time::Instant::now();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.loop_momentum_basis,
+        &existing_esurfaces,
+        &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        &edge_masses,
+        &kinematics,
+        0,
+    );
+    let _elapsed = now.elapsed();
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 2);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        27
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        26
+    );
+}
+
+#[test]
+#[ignore]
 fn pytest_lbl_box() {
     assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
 

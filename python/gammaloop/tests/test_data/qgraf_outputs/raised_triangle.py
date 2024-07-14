@@ -1,7 +1,5 @@
 graphs = []
-# To be imported after having the gammaloop UFO model named "scalars"
 
-# Triangle massless
 graphs.append(  # type: ignore
     {
         "edges": {
@@ -33,27 +31,44 @@ graphs.append(  # type: ignore
                 "name": "q1",
                 "PDG": 1000,
                 "type": "virtual",
-                "momentum": "k1",
                 "indices": (),
-                "vertices": (1, 2)
+                "vertices": (1, 4)
             },
             2: {
                 "name": "q2",
                 "PDG": 1000,
                 "type": "virtual",
-                "momentum": "k1-p2",
                 "indices": (),
-                "vertices": (2, 3)
+                "vertices": (4, 5),
             },
             3: {
                 "name": "q3",
                 "PDG": 1000,
                 "type": "virtual",
-                "momentum": "k1-p1",
+                "indices": (),
+                "vertices": (4, 5)
+            },
+            4: {
+                "name": "q4",
+                "PDG": 1000,
+                "type": "virtual",
+                "indices": (),
+                "vertices": (5, 2)
+            },
+            5: {
+                "name": "q5",
+                "PDG": 1000,
+                "type": "virtual",
+                "indices": (),
+                "vertices": (2, 3)
+            },
+            6: {
+                "name": "q6",
+                "PDG": 1000,
+                "type": "virtual",
                 "indices": (),
                 "vertices": (3, 1)
-            },
-
+            }
         },
         "nodes": {
             101: {
@@ -61,42 +76,56 @@ graphs.append(  # type: ignore
                 "momenta": ("p1",),
                 "indices": (),
                 "vertex_id": -1,
-                "edge_ids": (101,)
+                "edge_ids": (101,),
             },
             102: {
                 "PDGs": (1000,),
                 "momenta": ("p2",),
                 "indices": (),
                 "vertex_id": -1,
-                "edge_ids": (102,)
+                "edge_ids": (102,),
             },
             103: {
                 "PDGs": (1000,),
                 "momenta": ("p3",),
                 "indices": (),
                 "vertex_id": -1,
-                "edge_ids": (103,)
+                "edge_ids": (103,),
             },
             1: {
                 "PDGs": (1000, 1000, 1000),
-                "momenta": ("-k1", "p1", "k1-p1"),
+                "momenta": (),
                 "indices": (),
                 "vertex_id": 0,
-                "edge_ids": (1, 101, 3)
+                "edge_ids": (1, 6, 101),
             },
             2: {
                 "PDGs": (1000, 1000, 1000),
-                "momenta": ("-k1+p2", "-p2", "k1"),
+                "momenta": (),
                 "indices": (),
                 "vertex_id": 0,
-                "edge_ids": (2, 102, 1)
+                "edge_ids": (4, 5, 102),
             },
             3: {
                 "PDGs": (1000, 1000, 1000),
-                "momenta": ("-k1+p1", "-p1+p2", "k1-p2"),
+                "momenta": (),
                 "indices": (),
                 "vertex_id": 0,
-                "edge_ids": (3, 103, 2)
+                "edge_ids": (5, 6, 103),
+            },
+            4: {
+                "PDGs": (1000, 1000, 1000),
+                "momenta": (),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (1, 2, 3),
+            },
+            5: {
+                "PDGs": (1000, 1000, 1000),
+                "momenta": (),
+                "indices": (),
+                "vertex_id": 0,
+                "edge_ids": (2, 3, 4),
             },
         },
         "overall_factor": "1"

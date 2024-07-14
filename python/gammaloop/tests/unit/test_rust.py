@@ -51,6 +51,26 @@ class TestRust:
         assert run_rust_test(compile_rust_tests, scalar_isopod_export,
                              'scalar_isopod')
 
+    def test_rust_raised_triangle(self, compile_rust_tests: Path, scalar_raised_triangle_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_raised_triangle_export,
+                             'raised_triangle')
+
+    def test_rust_hexagon(self, compile_rust_tests: Path, scalar_hexagon_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_hexagon_export,
+                             'hexagon')
+
     def test_rust_lbl_box(self, compile_rust_tests: Path, lbl_box_export: Path):
         assert run_rust_test(compile_rust_tests, lbl_box_export,
                              'lbl_box')
+
+    def test_rust_topology_c(self, compile_rust_tests: Path, scalar_ltd_topology_c_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_ltd_topology_c_export,
+                             'topology_c')
+
+    def test_rust_massless_pentabox(self, compile_rust_tests: Path, scalar_massless_pentabox_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_massless_pentabox_export,
+                             'massless_pentabox')
+
+    def test_rust_massless_3l_pentabox(self, compile_rust_tests: Path, scalar_massless_3l_pentabox_export: Path):
+        assert run_rust_test(compile_rust_tests, scalar_massless_3l_pentabox_export,
+                             'massless_3l_pentabox')

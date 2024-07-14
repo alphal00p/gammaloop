@@ -49,3 +49,12 @@ Stability:
     escalate_for_large_weight_threshold: -1.0
 sampling: 
   type: default
+subtraction:
+  sliver_width: 10.0
+  dampen_integrable_singularity: false
+  dynamic_sliver: false
+  integrated_ct_hfunction: 
+    function: poly_exponential
+    sigma: 1.0
+    enabled_dampening: true
+    power: null

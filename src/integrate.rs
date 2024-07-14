@@ -1116,8 +1116,8 @@ pub fn print_integral_result(
         },
         if i_itg == 1 {
             if let Some(t) = trgt {
-                if (t - itg.avg).abs() / itg.err > F(5.)
-                    || (!t.abs().is_zero() && (t - itg.avg).abs() / t.abs() > F(0.01))
+                if (t - itg.avg).abs().0 / itg.err.0 > 5.
+                    || (!t.abs().is_zero() && ((t - itg.avg).abs() / t.abs()).0 > 0.01)
                 {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
@@ -1147,7 +1147,7 @@ pub fn print_integral_result(
         } else {
             "".to_string().normal()
         },
-        if itg.avg.abs() != F(0.) {
+        if itg.avg.abs().0 != 0. {
             let mwi = itg
                 .max_eval_negative
                 .abs()

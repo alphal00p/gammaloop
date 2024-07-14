@@ -597,6 +597,7 @@ impl Amplitude {
             amplitude_graph.graph.generate_cff();
             amplitude_graph.graph.generate_ltd();
             amplitude_graph.graph.generate_tropical_subgraph_table();
+            amplitude_graph.graph.generate_esurface_data()?;
             amplitude_graph.graph.process_numerator(model);
             amplitude_graph
                 .graph
@@ -788,6 +789,9 @@ impl AmplitudeList {
         for amplitude in self.container.iter_mut() {
             let ampltitude_path = path.join(amplitude.name.as_str());
             amplitude.load_derived_data(&ampltitude_path)?;
+            for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
+                amplitude_graph.graph.generate_esurface_data()?;
+            }
         }
         Ok(())
     }
