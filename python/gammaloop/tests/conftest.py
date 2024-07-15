@@ -261,7 +261,7 @@ output {output_path}"""))
 def scalar_raised_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     output_path = get_test_directory(tmpdir_factory,
-                                     "TEST_AMPLITUDE_raised_triangle", True).joinpath("GL_OUTPUT")
+                                     "TEST_AMPLITUDE_scalar_raised_triangle", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'raised_triangle.py')} -f qgraph --no_compile
