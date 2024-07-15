@@ -97,7 +97,13 @@ def check_integration_result(target: float, process_path: Path, max_mc_error_dif
 
     if abs(target) > 0.:
         relative_difference = absolute_difference / abs(target)
+        if relative_difference >= max_rel_error_diff:
+            logger.debug("Failing test: relative_difference = %.16e (>= max_rel_error_diff = %.16e)",
+                         relative_difference, max_rel_error_diff)
         assert relative_difference < max_rel_error_diff
+        if error_for_check >= max_percent_error * abs(target):
+            logger.debug("Failing test: error_for_check = %.16e (>= max_percent_error * abs(target) = %.16e)",
+                         error_for_check, max_percent_error * abs(target))
         assert error_for_check < max_percent_error * abs(target)
 
 
@@ -107,6 +113,12 @@ def check_inspect_result(inspect_result: complex, target: complex, max_relative_
         (abs(target.imag), abs(inspect_result.imag - target.imag))
     ]:
         if abs(target) > 0.:
+            if diff >= max_relative_diff * target:
+                logger.debug("Failing test: diff = %.16e (>= max_relative_diff * target = %.16e)",
+                             diff, max_relative_diff * target)
             assert diff < max_relative_diff * target
         else:
+            if diff >= max_relative_diff:
+                logger.debug("Failing test: diff = %.16e (>= max_relative_diff = %.16e)",
+                             diff, max_relative_diff)
             assert diff < max_relative_diff

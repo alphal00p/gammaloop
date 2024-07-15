@@ -94,7 +94,7 @@ def replace_pseudo_floats(expression: str) -> str:
 
     def rationalize_float(fl: re.Match[str]) -> sb.Expression:
         fl_eval: float = eval(fl.group())
-        rationalized_fl = SBE.num(fl_eval, 10000)  # type: ignore
+        rationalized_fl = SBE.num(fl_eval, 1e-10)  # type: ignore
         rationalized_fl_eval: float = eval(str(rationalized_fl)+'.')
         if common.GammaLoopWarning.FloatInExpression not in common.GL_WARNINGS_ISSUED:
             common.GL_WARNINGS_ISSUED.add(

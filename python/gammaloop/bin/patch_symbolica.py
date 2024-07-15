@@ -3,9 +3,10 @@ import subprocess
 
 
 def revert_revision():
-    pass
-    # print(subprocess.check_output(
-    #    ['git', 'reset', '--hard', '82d19d3']).decode('ascii').strip())
+    # pass
+    # Pin the revision of the branch currently working for gammaLoop
+    print(subprocess.check_output(
+        ['git', 'reset', '--hard', '41c0a3a8d876a8c67fc8b530f49c8b11e977fcc0']).decode('ascii').strip())
 
 
 def patch_lib_rs():

@@ -92,6 +92,8 @@ coverage.xml
 .pytest_cache/
 cover/
 
+*.pkl
+
 # dependencies
 python/gammaloop/dependencies/LOCK
 python/gammaloop/dependencies/INSTALLED
