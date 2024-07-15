@@ -186,8 +186,24 @@ build_dependencies () {
         CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}"
         echo "Cloning symbolica with '"$CMD_TO_ACCESS_SYMBOLICA"' ...";
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
+        RETCODE=$RETCODE+$?
+        if [ ! $(($RETCODE)) == 0 ]
+        then
+            cat ../dependency_build.log;
+            echo -e "\033[91mERROR: failed to clone symbolica iwth command '"$CMD_TO_ACCESS_SYMBOLICA"'. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
+            rm -f LOCK
+            exit $(($RETCODE))
+        fi
         echo "Patching symbolica ...";
         cd symbolica && ln -s ../../bin/patch_symbolica.py . && ./patch_symbolica.py >> ../dependency_build.log 2>&1
+        RETCODE=$RETCODE+$?
+        if [ ! $(($RETCODE)) == 0 ]
+        then
+            cat ../dependency_build.log;
+            echo -e "\033[91mERROR: failed to patch symbolica. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
+            rm -f LOCK
+            exit $(($RETCODE))
+        fi
         cd ..
     fi
 
