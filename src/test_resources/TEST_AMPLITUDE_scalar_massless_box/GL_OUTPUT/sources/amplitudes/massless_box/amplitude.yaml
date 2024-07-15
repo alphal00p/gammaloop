@@ -1,0 +1,188 @@
+name: massless_box
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: massless_box_0
+    vertices:
+    - name: v1
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p1
+    - name: v2
+      vertex_info:
+        type: external_vertex_info
+        direction: out
+        particle: scalar_0
+      edges:
+      - p2
+    - name: v3
+      vertex_info:
+        type: external_vertex_info
+        direction: out
+        particle: scalar_0
+      edges:
+      - p3
+    - name: v4
+      vertex_info:
+        type: external_vertex_info
+        direction: out
+        particle: scalar_0
+      edges:
+      - p4
+    - name: v5
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q1
+      - p1
+      - q4
+    - name: v6
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q2
+      - p2
+      - q1
+    - name: v7
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q3
+      - p3
+      - q2
+    - name: v8
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q4
+      - p4
+      - q3
+    edges:
+    - name: p1
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v1
+      - v5
+    - name: p2
+      edge_type: out
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v6
+      - v2
+    - name: p3
+      edge_type: out
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v7
+      - v3
+    - name: p4
+      edge_type: out
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v8
+      - v4
+    - name: q1
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v5
+      - v6
+    - name: q2
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v6
+      - v7
+    - name: q3
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v7
+      - v8
+    - name: q4
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v8
+      - v5
+    overall_factor: 1.0
+    external_connections:
+    - - v1
+      - null
+    - - null
+      - v2
+    - - null
+      - v3
+    - - null
+      - v4
+    loop_momentum_basis:
+    - q3
+    edge_signatures:
+    - - p1
+      - - - 0
+        - - 1
+          - 0
+          - 0
+          - 0
+    - - p2
+      - - - 0
+        - - 0
+          - 1
+          - 0
+          - 0
+    - - p3
+      - - - 0
+        - - 0
+          - 0
+          - 1
+          - 0
+    - - p4
+      - - - 0
+        - - 1
+          - -1
+          - -1
+          - 0
+    - - q1
+      - - - 1
+        - - 0
+          - 1
+          - 1
+          - 0
+    - - q2
+      - - - 1
+        - - 0
+          - 0
+          - 1
+          - 0
+    - - q3
+      - - - 1
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q4
+      - - - 1
+        - - -1
+          - 1
+          - 1
+          - 0
+  multi_channeling_channels: []

@@ -456,8 +456,8 @@ class Edge(object):
 
 class Graph(object):
     def __init__(self, name: str, vertices: list[Vertex], edges: list[Edge], external_connections: list[tuple[Vertex | None, Vertex | None]],
-                 loop_momentum_basis: list[Edge] | None = None, overall_factor: float = 1.0, edge_signatures: dict[str,
-                                                                                                                   tuple[list[int], list[int]]] | None = None):
+                 loop_momentum_basis: list[Edge] | None = None, overall_factor: float = 1.0,
+                 edge_signatures: dict[str, tuple[list[int], list[int]]] | None = None):
         self.name: str = name
         self.vertices: list[Vertex] = vertices
         self.edges: list[Edge] = edges
@@ -550,7 +550,7 @@ class Graph(object):
                                       e[1].name if e[1] is not None else None] for e in self.external_connections],
             'overall_factor': self.overall_factor,
             'loop_momentum_basis': [e.name for e in self.loop_momentum_basis] if self.loop_momentum_basis is not None else None,
-            'edge_signatures': self.edge_signatures
+            'edge_signatures': sorted([(k, v) for k, v in self.edge_signatures.items()], key=lambda x: x[0])
         }
 
     @ staticmethod
@@ -592,7 +592,8 @@ class Graph(object):
         loop_momentum_basis: list[Edge] = [edge_name_to_edge_map[e_name]
                                            for e_name in serializable_dict['loop_momentum_basis']]
         graph = Graph(serializable_dict['name'], graph_vertices, graph_edges,
-                      external_connections, loop_momentum_basis, serializable_dict['overall_factor'], serializable_dict['edge_signatures'])
+                      external_connections, loop_momentum_basis, serializable_dict['overall_factor'],
+                      dict(serializable_dict['edge_signatures']))
         graph.synchronize_name_map()
 
         return graph

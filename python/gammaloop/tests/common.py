@@ -22,16 +22,23 @@ def get_gamma_loop_interpreter() -> gl_interface.GammaLoop:
 
 def run_rust_test(rust_tests_binary: Path | None, output_path: Path, test_name: str) -> bool:
     new_env: dict[str, str] = os.environ.copy()
-    if new_env.get('PYTEST_OUTPUT_PATH_FOR_RUST', None) == "TMP":
-        if os.path.isfile(output_path):
-            new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = os.path.normpath(
-                os.path.join(os.path.dirname(output_path), os.path.pardir))
-        elif os.path.isdir(output_path):
-            new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = os.path.normpath(
-                os.path.join(output_path, os.path.pardir, os.path.pardir))
-        else:
-            raise gammaloop.misc.common.GammaLoopError(
-                f"Could not find specified output path '{output_path}' to run the rust test on.")
+    match new_env.get('PYTEST_OUTPUT_PATH_FOR_RUST', None):
+        case "TMP":
+            if os.path.isfile(output_path):
+                new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = os.path.normpath(
+                    os.path.join(os.path.dirname(output_path), os.path.pardir))
+            elif os.path.isdir(output_path):
+                new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = os.path.normpath(
+                    os.path.join(output_path, os.path.pardir, os.path.pardir))
+            else:
+                raise gammaloop.misc.common.GammaLoopError(
+                    f"Could not find specified output path '{output_path}' to run the rust test on.")
+        case None:
+            new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = os.path.normpath(os.path.join(
+                GL_PATH, os.path.pardir, os.path.pardir, 'src', 'test_resources'))
+        case _:
+            pass
+
     if 'SYMBOLICA_LICENSE' not in new_env:
         new_env['SYMBOLICA_LICENSE'] = 'GAMMALOOP_USER'
 

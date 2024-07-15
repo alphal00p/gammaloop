@@ -1,0 +1,533 @@
+name: fishnet_2x3
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: fishnet_2x3_0
+    vertices:
+    - name: v1
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p1
+    - name: v2
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p2
+    - name: v3
+      vertex_info:
+        type: external_vertex_info
+        direction: out
+        particle: scalar_0
+      edges:
+      - p3
+    - name: v4
+      vertex_info:
+        type: external_vertex_info
+        direction: out
+        particle: scalar_0
+      edges:
+      - p4
+    - name: v5
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - p1
+      - q211
+      - q111
+    - name: v6
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q111
+      - q212
+      - q112
+    - name: v7
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q112
+      - q213
+      - q113
+    - name: v8
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q113
+      - q214
+      - p3
+    - name: v9
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q211
+      - q121
+      - q221
+    - name: v10
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q121
+      - q212
+      - q122
+      - q222
+    - name: v11
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q213
+      - q122
+      - q223
+      - q123
+    - name: v12
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q214
+      - q123
+      - q224
+    - name: v13
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q221
+      - p2
+      - q131
+    - name: v14
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q131
+      - q222
+      - q132
+    - name: v15
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q132
+      - q223
+      - q133
+    - name: v16
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q133
+      - p4
+      - q224
+    edges:
+    - name: p1
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v1
+      - v5
+    - name: p2
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v2
+      - v13
+    - name: p3
+      edge_type: out
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v8
+      - v3
+    - name: p4
+      edge_type: out
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v16
+      - v4
+    - name: q111
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v5
+      - v6
+    - name: q112
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v6
+      - v7
+    - name: q113
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v7
+      - v8
+    - name: q121
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v9
+      - v10
+    - name: q122
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v10
+      - v11
+    - name: q123
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v11
+      - v12
+    - name: q131
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v13
+      - v14
+    - name: q132
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v14
+      - v15
+    - name: q133
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v15
+      - v16
+    - name: q211
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v5
+      - v9
+    - name: q212
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v6
+      - v10
+    - name: q213
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v7
+      - v11
+    - name: q214
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v8
+      - v12
+    - name: q221
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v9
+      - v13
+    - name: q222
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v10
+      - v14
+    - name: q223
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v11
+      - v15
+    - name: q224
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v12
+      - v16
+    overall_factor: 1.0
+    external_connections:
+    - - v1
+      - null
+    - - v2
+      - null
+    - - null
+      - v3
+    - - null
+      - v4
+    loop_momentum_basis:
+    - q122
+    - q123
+    - q212
+    - q222
+    - q223
+    - q224
+    edge_signatures:
+    - - p1
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 1
+          - 0
+          - 0
+          - 0
+    - - p2
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 1
+          - 0
+          - 0
+    - - p3
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 1
+          - 0
+    - - p4
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 1
+          - 1
+          - -1
+          - 0
+    - - q111
+      - - - -1
+          - 0
+          - 1
+          - 0
+          - 1
+          - 1
+        - - 0
+          - 0
+          - 1
+          - 0
+    - - q112
+      - - - -1
+          - 0
+          - 0
+          - 0
+          - 1
+          - 1
+        - - 0
+          - 0
+          - 1
+          - 0
+    - - q113
+      - - - 0
+          - -1
+          - 0
+          - 0
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 1
+          - 0
+    - - q121
+      - - - 1
+          - 0
+          - -1
+          - 1
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q122
+      - - - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q123
+      - - - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q131
+      - - - 0
+          - 0
+          - 0
+          - -1
+          - -1
+          - -1
+        - - 1
+          - 1
+          - -1
+          - 0
+    - - q132
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - -1
+          - -1
+        - - 1
+          - 1
+          - -1
+          - 0
+    - - q133
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - -1
+        - - 1
+          - 1
+          - -1
+          - 0
+    - - q211
+      - - - 1
+          - 0
+          - -1
+          - 0
+          - -1
+          - -1
+        - - 1
+          - 0
+          - -1
+          - 0
+    - - q212
+      - - - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q213
+      - - - -1
+          - 1
+          - 0
+          - 0
+          - 1
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q214
+      - - - 0
+          - -1
+          - 0
+          - 0
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q221
+      - - - 0
+          - 0
+          - 0
+          - -1
+          - -1
+          - -1
+        - - 1
+          - 0
+          - -1
+          - 0
+    - - q222
+      - - - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q223
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+    - - q224
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 0
+          - 0
+  multi_channeling_channels: []

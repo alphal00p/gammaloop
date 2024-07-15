@@ -17,7 +17,10 @@ use crate::{
         static_counterterm,
     },
     tropical::{self, TropicalSubgraphTable},
-    utils::{compute_four_momentum_from_three, compute_three_momentum_from_four, FloatLike, F},
+    utils::{
+        compute_four_momentum_from_three, compute_three_momentum_from_four, sorted_vectorize,
+        FloatLike, F,
+    },
 };
 
 use ahash::RandomState;
@@ -545,6 +548,7 @@ pub struct SerializableGraph {
         Option<SmartString<LazyCompact>>,
     )>,
     loop_momentum_basis: Vec<SmartString<LazyCompact>>,
+    #[serde(with = "sorted_vectorize")]
     edge_signatures: HashMap<SmartString<LazyCompact>, (Vec<isize>, Vec<isize>)>,
 }
 

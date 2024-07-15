@@ -1,0 +1,584 @@
+name: cube
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: cube_0
+    vertices:
+    - name: v1
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p1
+    - name: v2
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p2
+    - name: v3
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p3
+    - name: v4
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p4
+    - name: v5
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p5
+    - name: v6
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p6
+    - name: v7
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p7
+    - name: v8
+      vertex_info:
+        type: external_vertex_info
+        direction: in
+        particle: scalar_0
+      edges:
+      - p8
+    - name: v9
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - p1
+      - q12
+      - q15
+      - q31
+    - name: v10
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q12
+      - p2
+      - q24
+      - q26
+    - name: v11
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q31
+      - q21
+      - p3
+      - q37
+    - name: v12
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q24
+      - p4
+      - q48
+      - q21
+    - name: v13
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q15
+      - q75
+      - p5
+      - q56
+    - name: v14
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q26
+      - q56
+      - p6
+      - q68
+    - name: v15
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q37
+      - q75
+      - p7
+      - q78
+    - name: v16
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - q48
+      - q68
+      - q78
+      - p8
+    edges:
+    - name: p1
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v1
+      - v9
+    - name: p2
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v2
+      - v10
+    - name: p3
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v3
+      - v11
+    - name: p4
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v4
+      - v12
+    - name: p5
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v5
+      - v13
+    - name: p6
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v6
+      - v14
+    - name: p7
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v7
+      - v15
+    - name: p8
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v8
+      - v16
+    - name: q12
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v9
+      - v10
+    - name: q24
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v10
+      - v12
+    - name: q21
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v10
+      - v9
+    - name: q31
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v11
+      - v9
+    - name: q56
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v13
+      - v14
+    - name: q68
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v14
+      - v16
+    - name: q78
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v15
+      - v16
+    - name: q75
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v15
+      - v13
+    - name: q15
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v9
+      - v13
+    - name: q26
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v10
+      - v14
+    - name: q37
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v11
+      - v15
+    - name: q48
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v12
+      - v16
+    overall_factor: 1.0
+    external_connections:
+    - - v1
+      - null
+    - - v2
+      - null
+    - - v3
+      - null
+    - - v4
+      - null
+    - - v5
+      - null
+    - - v6
+      - null
+    - - v7
+      - null
+    - - v8
+      - null
+    loop_momentum_basis:
+    - q21
+    - q56
+    - q78
+    - q75
+    - q48
+    edge_signatures:
+    - - p1
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p2
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p3
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p4
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p5
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+    - - p6
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+    - - p7
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+    - - p8
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+        - - -1
+          - -1
+          - -1
+          - -1
+          - -1
+          - -1
+          - -1
+          - 0
+    - - q12
+      - - - 1
+          - -1
+          - -1
+          - 0
+          - 0
+        - - 1
+          - 0
+          - 1
+          - 0
+          - 1
+          - 0
+          - 1
+          - 0
+    - - q15
+      - - - 0
+          - 1
+          - 0
+          - -1
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - -1
+          - 0
+          - 0
+          - 0
+    - - q21
+      - - - 1
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q24
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 0
+          - -1
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q26
+      - - - 0
+          - -1
+          - -1
+          - 0
+          - -1
+        - - 1
+          - 1
+          - 1
+          - 1
+          - 1
+          - 0
+          - 1
+          - 0
+    - - q31
+      - - - 0
+          - 0
+          - -1
+          - -1
+          - 0
+        - - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+    - - q37
+      - - - 0
+          - 0
+          - 1
+          - 1
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - -1
+          - 0
+    - - q48
+      - - - 0
+          - 0
+          - 0
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q56
+      - - - 0
+          - 1
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q68
+      - - - 0
+          - 0
+          - -1
+          - 0
+          - -1
+        - - 1
+          - 1
+          - 1
+          - 1
+          - 1
+          - 1
+          - 1
+          - 0
+    - - q75
+      - - - 0
+          - 0
+          - 0
+          - 1
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q78
+      - - - 0
+          - 0
+          - 1
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+  multi_channeling_channels: []
