@@ -9,7 +9,7 @@ from typing import Any, Callable
 from enum import StrEnum
 import yaml
 import cmath
-from symbolica import Expression as SBE, AtomType  # pylint: disable=import-error
+from symbolica import Expression as SBE, AtomType  # pylint: disable=import-error # type: ignore
 from gammaloop.misc.common import pjoin, DATA_PATH, GammaLoopError, logger, GL_WARNINGS_ISSUED, GammaLoopWarning
 import gammaloop.misc.utils as utils
 from gammaloop.base_objects.param_card import ParamCard

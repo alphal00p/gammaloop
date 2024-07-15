@@ -13,7 +13,7 @@ from pprint import pformat
 import gammaloop.misc.common as common
 from gammaloop.misc import LOGGING_PREFIX_FORMAT
 
-from symbolica import Expression as SBE  # pylint: disable=import-error # nopep8
+from symbolica import Expression as SBE  # pylint: disable=import-error # nopep8 # type: ignore
 import symbolica as sb  # pylint: disable=import-error # type: ignore # nopep8
 
 
