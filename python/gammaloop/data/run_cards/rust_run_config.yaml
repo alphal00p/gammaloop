@@ -42,3 +42,11 @@ sampling:
   type: default
 subtraction:
   sliver_width: 1.0
+  dampen_integrable_singularity: true
+  dynamic_sliver: false
+  integrated_ct_hfunction: 
+    enabled_dampening: true
+    function: poly_exponential
+    power: null
+    sigma: 1.0
+
