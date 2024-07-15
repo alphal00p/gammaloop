@@ -162,10 +162,10 @@ class TestLoadQGraph:
 class TestMasslessScalarTriangleAmplitude:
 
     # This test uses a session-wide fixture defined in conftest.py
-    def test_info(self, scalar_massless_triangle_export: Path):
+    def test_info(self, massless_scalar_triangle_export: Path):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
-            f"launch {scalar_massless_triangle_export}"))
+            f"launch {massless_scalar_triangle_export}"))
         assert gloop.model.name == 'scalars'
         assert gloop.get_model_from_rust_worker().name == 'scalars'
         for cross_sections in [gloop.cross_sections, gloop.get_cross_sections_from_rust_worker()]:
@@ -177,8 +177,8 @@ class TestMasslessScalarTriangleAmplitude:
         gloop.run(CommandList.from_string("info"))
 
     @pytest.mark.drawing
-    def test_drawing(self, scalar_massless_triangle_export: str):
-        assert run_drawing(pjoin(scalar_massless_triangle_export, 'sources',
+    def test_drawing(self, massless_scalar_triangle_export: str):
+        assert run_drawing(pjoin(massless_scalar_triangle_export, 'sources',
                            'amplitudes', 'massless_triangle', 'drawings'))
 
 
