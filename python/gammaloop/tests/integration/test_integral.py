@@ -13,12 +13,12 @@ class TestScalarTopologies:
         # gl = get_gamma_loop_interpreter()
         # gl.run(CommandList.from_string("import_model sm"))
 
-    def test_scalar_triangle(self, scalar_massless_triangle_export: Path):
+    def test_scalar_triangle(self, massless_scalar_triangle_export: Path):
         target = 0.00009765455799148221
         gl = get_gamma_loop_interpreter()
 
         command_list = gl_interface.CommandList.from_string(
-            "launch {}".format(scalar_massless_triangle_export))
+            "launch {}".format(massless_scalar_triangle_export))
         command_list.add_command(
             "set externals.momenta [[1,3,4,5],[-1,-6,-7,-8],]")
         command_list.add_command(
@@ -30,7 +30,7 @@ class TestScalarTopologies:
 
         gl.run(command_list)
         check_integration_result(
-            target, scalar_massless_triangle_export, imag_phase=True)
+            target, massless_scalar_triangle_export, imag_phase=True)
 
     def test_tree_triangle(self, scalar_tree_triangle_export: Path):
         target = 0.00009765455799148221 / -49
