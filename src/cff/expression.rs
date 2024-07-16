@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::ops::Index;
 use symbolica::{
     atom::{Atom, AtomView},
-    domains::float::NumericalFloatLike,
-    evaluate::{EvalTree, FunctionMap},
+    domains::{float::NumericalFloatLike, rational::Rational},
+    evaluate::{EvalTree, ExpressionEvaluator, FunctionMap},
 };
 use typed_index_collections::TiVec;
 
@@ -418,10 +418,10 @@ impl CFFExpression {
     }
 
     /// graph currently needed to determine which edges are external
-    pub fn build_symbolica_evaluator(
+    pub fn build_symbolica_evaluator<T: FloatLike + Default>(
         &self,
         graph: &Graph,
-    ) -> EvalTree<symbolica::domains::rational::Rational> {
+    ) -> ExpressionEvaluator<F<T>> {
         let orientation_atoms = self
             .orientations
             .iter_enumerated()
@@ -441,20 +441,20 @@ impl CFFExpression {
             })
             .collect_vec();
 
-        let mut tree: EvalTree<symbolica::domains::rational::Rational> =
-            AtomView::to_eval_tree_multiple(
-                &orientation_atom_views,
-                |r| r.clone(),
-                &function_map,
-                &params,
-            );
+        let mut tree: EvalTree<Rational> = AtomView::to_eval_tree_multiple(
+            &orientation_atom_views,
+            |r| r.clone(),
+            &function_map,
+            &params,
+        );
 
-        println!("original cff ops: {:?}", tree.count_operations());
         tree.horner_scheme();
         tree.common_subexpression_elimination();
         tree.common_pair_elimination();
 
-        tree
+        let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
+
+        tree_ft.linearize(graph.edges.len())
     }
 }
 

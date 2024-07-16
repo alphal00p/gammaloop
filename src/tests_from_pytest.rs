@@ -94,6 +94,7 @@ pub fn load_amplitude_output(output_path: &str, load_generic_model: bool) -> (Mo
 #[cfg(test)]
 mod tests_scalar_massless_triangle {
     use lorentz_vector::LorentzVector;
+    use nalgebra::coordinates::X;
     use rayon::prelude::IndexedParallelIterator;
     use smartstring::SmartString;
     use spenso::Complex;
@@ -232,22 +233,15 @@ mod tests_scalar_massless_triangle {
         }
 
         let graph_cff = graph.get_cff();
-        let evaluator = graph_cff.build_symbolica_evaluator(&graph);
+        let mut evaluator = graph_cff.build_symbolica_evaluator(&graph);
 
-        let evaluator_f64 = evaluator.map_coeff::<f64, _>(&|r| r.into());
-        let mut evaluator_f64 = evaluator_f64.linearize(6);
+        let energy_cache = graph.compute_onshell_energies(&[k], &[p1, p2]);
 
-        let energy_cache = graph
-            .compute_onshell_energies(&[k], &[p1, p2])
-            .iter()
-            .map(|f| f.0)
-            .collect_vec();
+        let mut out = vec![F(0.0); 6];
 
-        let mut out = vec![0.0; 6];
-
-        evaluator_f64.evaluate_multiple(&energy_cache, &mut out);
-        let sum = out.iter().sum::<f64>() / energy_product.0;
-        assert_approx_eq(&F(sum), &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
+        evaluator.evaluate_multiple(&energy_cache, &mut out);
+        let sum = out.into_iter().reduce(|acc, x| acc + x).unwrap() / energy_product;
+        assert_approx_eq(&sum, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
     }
 }
 
