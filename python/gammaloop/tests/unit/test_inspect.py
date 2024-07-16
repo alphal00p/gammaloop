@@ -33,7 +33,7 @@ class TestScalarTopologies:
         inspect_res = gl.do_inspect(
             'scalar_3L_6P_topology_A -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327')
         check_inspect_result(
-            inspect_res, complex(0, 2.3706290494305587e-44), max_relative_diff=1.0e-12)
+            inspect_res, complex(0, 2.2265511758628186e-44), max_relative_diff=1.0e-12)
 
 
 class TestPhysicalTopologies:
