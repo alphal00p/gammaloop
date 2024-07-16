@@ -7,9 +7,12 @@ use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
-use spenso::AbstractIndex;
+use spenso::{Representation, Slot, ABSTRACTIND};
 use std::fs;
+use std::ops::Index;
 use std::path::Path;
+use symbolica::id::Pattern;
+// use std::str::pattern::Pattern;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
 use symbolica::atom::{Atom, AtomView, FunctionBuilder};
@@ -128,8 +131,39 @@ pub struct VertexRule {
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Vec<Option<Arc<Coupling>>>>,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VertexSlots {
+    edge_slots: Vec<EdgeSlots>,
+}
+
+impl Index<usize> for VertexSlots {
+    type Output = EdgeSlots;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.edge_slots[index]
+    }
+}
+
+impl From<EdgeSlots> for VertexSlots {
+    fn from(value: EdgeSlots) -> Self {
+        VertexSlots {
+            edge_slots: vec![value],
+        }
+    }
+}
 
 impl VertexRule {
+    pub fn generate_vertex_slots(
+        &self,
+        mut shifts: (usize, usize, usize),
+    ) -> (VertexSlots, (usize, usize, usize)) {
+        let mut edge_slots = vec![];
+        for p in &self.particles {
+            let (e, s) = p.slots(shifts);
+            edge_slots.push(e);
+            shifts = s;
+        }
+        (VertexSlots { edge_slots }, shifts)
+    }
     pub fn from_serializable_vertex_rule(
         model: &Model,
         vertex_rule: &SerializableVertexRule,
@@ -315,7 +349,114 @@ pub struct Particle {
     pub y_charge: isize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InOutIndex {
+    incoming: Slot,
+    outgoing: Slot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EdgeSlots {
+    lorentz: Vec<Slot>,
+    spin: Vec<Slot>,
+    pub color: Vec<Slot>,
+}
+
+impl EdgeSlots {
+    pub fn replacements(&self, id: usize) -> Vec<(Pattern, Pattern)> {
+        let rhs_lor = Slot::from((id.into(), Representation::Lorentz(4.into())))
+            .to_symbolic_wrapped()
+            .into_pattern();
+
+        let rhs_spin = Slot::from((id.into(), Representation::Bispinor(4.into())))
+            .to_symbolic_wrapped()
+            .into_pattern();
+
+        let mut reps = vec![];
+        for l in &self.lorentz {
+            reps.push((rhs_lor.clone(), l.to_symbolic().into_pattern()));
+        }
+
+        for s in &self.spin {
+            reps.push((rhs_spin.clone(), s.to_symbolic().into_pattern()));
+        }
+
+        for c in &self.color {
+            let rhs_color = Slot::from((id.into(), c.representation))
+                .to_symbolic_wrapped()
+                .into_pattern();
+
+            reps.push((rhs_color.clone(), c.to_symbolic().into_pattern()));
+        }
+
+        reps
+    }
+    pub fn to_aind_atom(&self) -> Atom {
+        let mut builder = FunctionBuilder::new(State::get_symbol(ABSTRACTIND));
+
+        for l in &self.lorentz {
+            builder = builder.add_arg(l.to_symbolic().as_view());
+        }
+
+        for s in &self.spin {
+            builder = builder.add_arg(s.to_symbolic().as_view());
+        }
+
+        for c in &self.color {
+            builder = builder.add_arg(c.to_symbolic().as_view());
+        }
+
+        builder.finish()
+    }
+}
+
 impl Particle {
+    fn lorentz_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
+        let fourd_lor = Representation::Lorentz(4.into());
+
+        match self.spin {
+            3 => (vec![Slot::from((shift.into(), fourd_lor))], shift + 1),
+            _ => (vec![], shift),
+        }
+    }
+
+    fn spin_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
+        let fourd_bis = Representation::Bispinor(4.into());
+
+        match self.spin {
+            2 => (vec![Slot::from((shift.into(), fourd_bis))], shift + 1),
+            _ => (vec![], shift),
+        }
+    }
+
+    fn color_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
+        let rep = match self.color {
+            3 => Representation::ColorFundamental(3.into()),
+            -3 => Representation::ColorAntiFundamental(3.into()),
+            6 => Representation::ColorSextet(6.into()),
+            -6 => Representation::ColorAntiSextet(6.into()),
+            8 => Representation::ColorAdjoint(8.into()),
+            _ => return (vec![], shift),
+        };
+
+        (vec![Slot::from((shift.into(), rep))], shift + 1)
+    }
+
+    pub fn slots(&self, shifts: (usize, usize, usize)) -> (EdgeSlots, (usize, usize, usize)) {
+        let (lorentz, shift_lor) = self.lorentz_slots(shifts.0);
+        let (spin, shift_spin) = self.spin_slots(shifts.1);
+        let (color, shift_color) = self.color_slots(shifts.2);
+
+        (
+            EdgeSlots {
+                lorentz,
+                spin,
+                color,
+            },
+            (shift_lor, shift_spin, shift_color),
+        )
+    }
+
     pub fn from_serializable_particle(model: &Model, particle: &SerializableParticle) -> Particle {
         Particle {
             pdg_code: particle.pdg_code,
@@ -334,18 +475,28 @@ impl Particle {
         }
     }
 
-    pub fn incoming_polarization_atom(&self, num: usize) -> Atom {
-        let id = AbstractIndex::try_from(format!("in{}", num)).unwrap().0;
+    pub fn incoming_polarization_atom(&self, edge_slots: &EdgeSlots, num: usize) -> Atom {
         match self.spin {
             1 => Atom::parse("1").unwrap(),
             2 => {
                 if self.pdg_code > 0 {
-                    Atom::parse(&format!("u({num},aind(bis(4,{id})))")).unwrap()
+                    let mut u = FunctionBuilder::new(State::get_symbol("u"));
+                    u = u.add_arg(&Atom::new_num(num as i64));
+                    u = u.add_arg(&edge_slots.to_aind_atom());
+                    u.finish()
                 } else {
-                    Atom::parse(&format!("vbar({num},aind(bis(4,{id})))")).unwrap()
+                    let mut vbar = FunctionBuilder::new(State::get_symbol("vbar"));
+                    vbar = vbar.add_arg(&Atom::new_num(num as i64));
+                    vbar = vbar.add_arg(&edge_slots.to_aind_atom());
+                    vbar.finish()
                 }
             }
-            3 => Atom::parse(&format!("ϵ({num},aind(lor(4,{id})))")).unwrap(),
+            3 => {
+                let mut e = FunctionBuilder::new(State::get_symbol("ϵ"));
+                e = e.add_arg(&Atom::new_num(num as i64));
+                e = e.add_arg(&edge_slots.to_aind_atom());
+                e.finish()
+            }
             _ => Atom::parse("1").unwrap(),
         }
     }
@@ -428,18 +579,28 @@ impl Particle {
         }
     }
 
-    pub fn outgoing_polarization_atom(&self, num: usize) -> Atom {
-        let id = AbstractIndex::try_from(format!("out{}", num)).unwrap().0;
+    pub fn outgoing_polarization_atom(&self, edge_slots: &EdgeSlots, num: usize) -> Atom {
         match self.spin {
             1 => Atom::parse("1").unwrap(),
             2 => {
                 if self.pdg_code > 0 {
-                    Atom::parse(&format!("ubar({num},aind(bis(4,{id})))")).unwrap()
+                    let mut ubar = FunctionBuilder::new(State::get_symbol("ubar"));
+                    ubar = ubar.add_arg(&Atom::new_num(num as i64));
+                    ubar = ubar.add_arg(&edge_slots.to_aind_atom());
+                    ubar.finish()
                 } else {
-                    Atom::parse(&format!("v({num},aind(bis(4,{id})))")).unwrap()
+                    let mut v = FunctionBuilder::new(State::get_symbol("v"));
+                    v = v.add_arg(&Atom::new_num(num as i64));
+                    v = v.add_arg(&edge_slots.to_aind_atom());
+                    v.finish()
                 }
             }
-            3 => Atom::parse(&format!("ϵbar({num},aind(lor(4,{id})))")).unwrap(),
+            3 => {
+                let mut ebar = FunctionBuilder::new(State::get_symbol("ϵbar"));
+                ebar = ebar.add_arg(&Atom::new_num(num as i64));
+                ebar = ebar.add_arg(&edge_slots.to_aind_atom());
+                ebar.finish()
+            }
             _ => Atom::parse("1").unwrap(),
         }
     }

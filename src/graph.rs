@@ -9,7 +9,7 @@ use crate::{
     },
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
-    model::{self, Model},
+    model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, ThreeMomentum},
     numerator::Numerator,
     subtraction::{
@@ -34,7 +34,7 @@ use nalgebra::DMatrix;
 #[allow(unused_imports)]
 use spenso::Contract;
 use spenso::{
-    ufo::{batch_replace, preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
+    ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
     Complex, *,
 };
 
@@ -44,7 +44,11 @@ use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{collections::HashMap, path::Path, sync::Arc};
 
-use symbolica::{atom::Atom, domains::float::NumericalFloatLike, id::Pattern};
+use symbolica::{
+    atom::Atom,
+    domains::float::NumericalFloatLike,
+    id::{Pattern, Replacement},
+};
 //use symbolica::{atom::Symbol,state::State};
 
 use constcat::concat;
@@ -84,6 +88,21 @@ pub enum VertexInfo {
     InteractonVertexInfo(InteractionVertexInfo),
 }
 
+impl VertexInfo {
+    pub fn generate_vertex_slots(
+        &self,
+        shifts: (usize, usize, usize),
+    ) -> (VertexSlots, (usize, usize, usize)) {
+        match self {
+            VertexInfo::ExternalVertexInfo(e) => {
+                let (e, shifts) = e.particle.slots(shifts);
+                (e.into(), shifts)
+            }
+            VertexInfo::InteractonVertexInfo(i) => i.vertex_rule.generate_vertex_slots(shifts),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct SerializableInteractionVertexInfo {
     vertex_rule: SmartString<LazyCompact>,
@@ -120,6 +139,8 @@ impl InteractionVertexInfo {
         vertex_pos: usize,
         graph: &Graph,
     ) -> Option<[DataTensor<Atom>; 3]> {
+        let vertex_slots = &graph.derived_data.vertex_slots.as_ref().unwrap()[vertex_pos];
+
         let spin_structure = self
             .vertex_rule
             .lorentz_structures
@@ -143,26 +164,17 @@ impl InteractionVertexInfo {
 
                 atom = preprocess_ufo_spin_wrapped(atom);
 
-                for (i, e) in edges.iter().enumerate() {
-                    let pat: Pattern = Atom::parse(&format!("indexid({})", i + 1))
-                        .unwrap()
-                        .into_pattern();
+                for (i, _) in edges.iter().enumerate() {
+                    let replacements = vertex_slots[i].replacements(i + 1);
 
-                    let dir = if graph.is_edge_incoming(*e, vertex_pos) {
-                        "in"
-                    } else {
-                        "out"
-                    };
+                    let reps: Vec<Replacement> = replacements
+                        .iter()
+                        .map(|(pat, rhs)| Replacement::new(pat, rhs))
+                        .collect();
 
-                    let index_num = AbstractIndex::try_from(format!("{}{}", dir, e)).unwrap().0;
-
-                    atom = pat.replace_all(
-                        atom.as_view(),
-                        &Atom::new_num(index_num as i64).into_pattern(),
-                        None,
-                        None,
-                    );
+                    atom = atom.replace_all_multiple(&reps);
                 }
+
                 atom
             })
             .collect_vec();
@@ -173,7 +185,6 @@ impl InteractionVertexInfo {
             .iter()
             .map(|cs| {
                 let mut atom = cs.clone();
-
                 //a is adjoint index, i is fundamental index, ia is antifundamental index, s is sextet ,sa is antisextet
 
                 atom = preprocess_ufo_color_wrapped(atom);
@@ -221,25 +232,15 @@ impl InteractionVertexInfo {
                     );
                 }
 
-                for (i, e) in edges.iter().enumerate() {
-                    let pat: Pattern = Atom::parse(&format!("indexid({})", i + 1))
-                        .unwrap()
-                        .into_pattern();
+                for (i, _) in edges.iter().enumerate() {
+                    let replacements = vertex_slots[i].replacements(i + 1);
 
-                    let dir = if graph.is_edge_incoming(*e, vertex_pos) {
-                        "in"
-                    } else {
-                        "out"
-                    };
+                    let reps: Vec<Replacement> = replacements
+                        .iter()
+                        .map(|(pat, rhs)| Replacement::new(pat, rhs))
+                        .collect();
 
-                    let index_num = AbstractIndex::try_from(format!("{}{}", dir, e)).unwrap().0;
-
-                    atom = pat.replace_all(
-                        atom.as_view(),
-                        &Atom::new_num(index_num as i64).into_pattern(),
-                        None,
-                        None,
-                    );
+                    atom = atom.replace_all_multiple(&reps);
                 }
 
                 for i in 0..MAX_COLOR_INNER_CONTRACTIONS {
@@ -247,10 +248,9 @@ impl InteractionVertexInfo {
                         .unwrap()
                         .into_pattern();
 
-                    let index_num = AbstractIndex::try_from(format!("inner{}", i)).unwrap().0;
                     atom = pat.replace_all(
                         atom.as_view(),
-                        &Atom::new_num(index_num as i64).into_pattern(),
+                        &Atom::new_num(i as i64).into_pattern(),
                         None,
                         None,
                     );
@@ -422,15 +422,33 @@ impl Edge {
     //     State::get_symbol(format!("Q{num}"))
     // }
 
-    pub fn numerator(&self, graph: &Graph) -> Atom {
+    pub fn in_slot<'a>(&self, graph: &'a Graph) -> &'a EdgeSlots {
+        let local_pos_in_sink_vertex =
+            graph.vertices[self.vertices[1]].get_local_edge_position(self, graph);
+
+        &graph.derived_data.vertex_slots.as_ref().unwrap()[self.vertices[1]]
+            [local_pos_in_sink_vertex]
+    }
+
+    pub fn out_slot<'a>(&self, graph: &'a Graph) -> &'a EdgeSlots {
+        let local_pos_in_sink_vertex =
+            graph.vertices[self.vertices[0]].get_local_edge_position(self, graph);
+
+        &graph.derived_data.vertex_slots.as_ref().unwrap()[self.vertices[0]]
+            [local_pos_in_sink_vertex]
+    }
+
+    pub fn numerator(&self, graph: &Graph) -> (Atom, usize) {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+        let in_slots = self.in_slot(graph);
+        let out_slots = self.out_slot(graph);
+
         match self.edge_type {
-            EdgeType::Incoming => self.particle.incoming_polarization_atom(num),
-            EdgeType::Outgoing => self.particle.outgoing_polarization_atom(num),
+            EdgeType::Incoming => (self.particle.incoming_polarization_atom(in_slots, num), 0),
+            EdgeType::Outgoing => (self.particle.outgoing_polarization_atom(out_slots, num), 0),
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
-                let pindex_num = AbstractIndex::try_from(format!("p{}", num)).unwrap().0;
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 atom = pfun.replace_all(
                     atom.as_view(),
@@ -440,10 +458,11 @@ impl Edge {
                 );
 
                 let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
+                let pindex_num = graph.shifts.0 + 1;
                 atom = pslashfun.replace_all(
                     atom.as_view(),
                     &Pattern::parse(&format!(
-                        "Q({},aind(lor(4,{})))Gamma({},i_,j_)",
+                        "Q({},aind(lor(4,{})))*Gamma({},i_,j_)",
                         num, pindex_num, pindex_num
                     ))
                     .unwrap(),
@@ -453,16 +472,28 @@ impl Edge {
 
                 atom = preprocess_ufo_spin_wrapped(atom);
 
-                let in_index_num = AbstractIndex::try_from(format!("in{}", num)).unwrap().0;
-                let out_index_num = AbstractIndex::try_from(format!("out{}", num)).unwrap().0;
+                let replacements_in = in_slots.replacements(1);
 
-                let replacements = [
-                    ("indexid(1)", &format!("{in_index_num}")[..]),
-                    ("indexid(2)", &format!("{out_index_num}")[..]),
-                    ("indexid(i_)", "i_"),
-                ];
+                let mut replacements_out = out_slots.replacements(2);
 
-                batch_replace(&replacements, atom)
+                replacements_out.push((
+                    Atom::parse("indexid(x_)").unwrap().into_pattern(),
+                    Atom::parse("x_").unwrap().into_pattern(),
+                ));
+
+                for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
+                    let id: NamedStructure<&str, ()> =
+                        NamedStructure::from_iter([cin, cout], "id", None);
+                    atom = atom * &id.to_symbolic().unwrap();
+                }
+
+                let reps: Vec<Replacement> = replacements_in
+                    .iter()
+                    .chain(replacements_out.iter())
+                    .map(|(pat, rhs)| Replacement::new(pat, rhs))
+                    .collect();
+
+                (atom.replace_all_multiple(&reps), pindex_num + 1)
             }
         }
     }
@@ -497,6 +528,23 @@ pub struct Vertex {
 }
 
 impl Vertex {
+    pub fn get_local_edge_position(&self, edge: &Edge, graph: &Graph) -> usize {
+        let global_id: usize = graph.edge_name_to_position[&edge.name];
+        self.edges
+            .iter()
+            .enumerate()
+            .find(|(_, &e)| e == global_id)
+            .unwrap()
+            .0
+    }
+
+    pub fn generate_vertex_slots(
+        &self,
+        shifts: (usize, usize, usize),
+    ) -> (VertexSlots, (usize, usize, usize)) {
+        self.vertex_info.generate_vertex_slots(shifts)
+    }
+
     pub fn from_serializable_vertex(model: &model::Model, vertex: &SerializableVertex) -> Vertex {
         Vertex {
             name: vertex.name.clone(),
@@ -613,9 +661,23 @@ pub struct Graph {
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub derived_data: DerivedGraphData,
+    pub shifts: (usize, usize, usize),
 }
 
 impl Graph {
+    fn generate_vertex_slots(&mut self) {
+        let (v, s) = self
+            .vertices
+            .iter()
+            .fold((vec![], self.shifts), |(mut acc, shifts), v| {
+                let (e, new_shifts) = v.generate_vertex_slots(shifts);
+                acc.push(e);
+                (acc, new_shifts)
+            });
+        self.shifts = s;
+        self.derived_data.vertex_slots = Some(v);
+    }
+
     pub fn dot(&self) -> String {
         let mut dot = String::new();
         dot.push_str("digraph G {\n");
@@ -626,6 +688,40 @@ impl Graph {
                 "\"{}\" -> \"{}\" [label=\"{}\"];\n",
                 from, to, edge.name
             ));
+        }
+        dot.push_str("}\n");
+        dot
+    }
+
+    pub fn dot_internal(&self) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph G {\n");
+        for edge in &self.edges {
+            let from = self.vertices[edge.vertices[0]].name.clone();
+            let to = self.vertices[edge.vertices[1]].name.clone();
+            dot.push_str(&format!(
+                "\"{}\" -> \"{}\" [label=\"{}\"];\n",
+                self.vertex_name_to_position[&from],
+                self.vertex_name_to_position[&to],
+                self.edge_name_to_position[&edge.name]
+            ));
+        }
+        dot.push_str("}\n");
+        dot
+    }
+
+    pub fn dot_internal_vertices(&self) -> String {
+        let mut dot = String::new();
+        // let mut seen_edges = HashSet::new();
+        dot.push_str("digraph G {\n");
+        for (vi, v) in self.vertices.iter().enumerate() {
+            dot.push_str(&format!("\"{}\" [label=\"{}: {:?}\"] \n", vi, vi, v.edges));
+            for e in &v.edges {
+                let [from, to] = self.edges[*e].vertices;
+                // if seen_edges.insert(e) {
+                dot.push_str(&format!("\"{}\" -> \"{}\" [label=\"{}\"];\n", from, to, e));
+                // }
+            }
         }
         dot.push_str("}\n");
         dot
@@ -655,16 +751,17 @@ impl Graph {
             vertex_name_to_position,
             edge_name_to_position: HashMap::default(),
             derived_data: DerivedGraphData::new_empty(),
+            shifts: (0, 0, MAX_COLOR_INNER_CONTRACTIONS),
         };
 
+        // let mut edges: Vec<Edge> = vec![];
         let mut edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
             HashMap::default();
-        // Then build edges
-        g.edges = graph
-            .edges
-            .iter()
-            .map(|e| Edge::from_serializable_edge(model, &g, e))
-            .collect();
+        for edge in &graph.edges {
+            let edge = Edge::from_serializable_edge(model, &g, edge);
+            edge_name_to_position.insert(edge.name.clone(), g.edges.len());
+            g.edges.push(edge);
+        }
 
         debug!("Loaded {} edges", g.edges.len());
         debug!("Loaded graph: {}", g.dot());
@@ -689,6 +786,9 @@ impl Graph {
                 .iter()
                 .map(|e| *edge_name_to_position.get(e).unwrap())
                 .collect();
+            // if vertex.edges == vec![14, 13, 5] {
+            //     panic!("ser vertex list {:#?}", serializable_vertex.edges)
+            // }
         }
         g.edge_name_to_position = edge_name_to_position;
 
@@ -723,6 +823,10 @@ impl Graph {
             .iter()
             .map(|e| g.get_edge_position(e).unwrap())
             .collect();
+
+        g.generate_vertex_slots();
+
+        // panic!("{:?}", g.edge_name_to_position);
 
         g
     }
@@ -1503,6 +1607,7 @@ pub struct DerivedGraphData {
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub static_counterterm: Option<static_counterterm::CounterTerm>,
+    pub vertex_slots: Option<Vec<VertexSlots>>,
     pub numerator: Option<Numerator>,
 }
 
@@ -1517,6 +1622,7 @@ impl DerivedGraphData {
             esurface_derived_data: None,
             numerator: None,
             static_counterterm: None,
+            vertex_slots: None,
         }
     }
 
@@ -1537,6 +1643,7 @@ impl DerivedGraphData {
             }),
             esurface_derived_data: self.esurface_derived_data.clone(),
             numerator: self.numerator.clone(),
+            vertex_slots: self.vertex_slots.clone(),
         }
     }
 
@@ -1558,6 +1665,7 @@ impl DerivedGraphData {
             esurface_derived_data: serializable.esurface_derived_data,
             numerator: serializable.numerator,
             static_counterterm: None,
+            vertex_slots: serializable.vertex_slots,
         }
     }
 
@@ -1604,6 +1712,7 @@ pub struct SerializableDerivedGraphData {
     pub edge_groups: Option<Vec<Vec<usize>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub numerator: Option<Numerator>,
+    pub vertex_slots: Option<Vec<VertexSlots>>,
 }
 
 #[derive(Debug, Clone)]

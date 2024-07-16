@@ -5,7 +5,9 @@ use crate::cff::esurface::{
 use crate::cff::generation::generate_cff_expression;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::gammaloop_integrand::DefaultSample;
-use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
+use crate::graph::{
+    Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, SerializableGraph, VertexInfo,
+};
 use crate::model::Model;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
@@ -1612,4 +1614,28 @@ fn pytest_lbl_box() {
     // }
 
     println!("{}", graph.derived_data.numerator.unwrap().expression);
+}
+
+#[test]
+fn pytest_physical_3L_6photons_topology_A_inspect() {
+    let (model, amplitude) = load_amplitude_output(
+        "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
+        true,
+    );
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.process_numerator(&model);
+
+    let a = graph
+        .derived_data
+        .numerator
+        .as_ref()
+        .unwrap()
+        .network
+        .as_ref()
+        .unwrap();
+
+    println!("{}", a.dot());
+    println!("{}", graph.derived_data.numerator.unwrap().expression)
 }
