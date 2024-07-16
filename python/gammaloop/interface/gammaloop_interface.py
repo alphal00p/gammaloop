@@ -691,8 +691,9 @@ class GammaLoop(object):
 
         graphs: list[Graph] = []
         for i_qg, qgraph_object in enumerate(all_raw_graphs):
-            graphs.append(Graph.from_qgraph(
-                self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}"))
+            new_graph = Graph.from_qgraph(
+                self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
+            graphs.append(new_graph)
         logger.info("Successfully loaded %s graphs.",
                     len(all_raw_graphs))
 

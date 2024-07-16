@@ -786,9 +786,6 @@ impl Graph {
                 .iter()
                 .map(|e| *edge_name_to_position.get(e).unwrap())
                 .collect();
-            // if vertex.edges == vec![14, 13, 5] {
-            //     panic!("ser vertex list {:#?}", serializable_vertex.edges)
-            // }
         }
         g.edge_name_to_position = edge_name_to_position;
 
