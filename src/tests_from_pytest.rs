@@ -1567,7 +1567,7 @@ fn pytest_lbl_box() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     graph.process_numerator(&model);
-    println!();
+    // println!();
 
     // for v in graph
     //     .vertices
@@ -1613,10 +1613,11 @@ fn pytest_lbl_box() {
     //     }
     // }
 
-    println!("{}", graph.derived_data.numerator.unwrap().expression);
+    // println!("{}", graph.derived_data.numerator.unwrap().expression);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn pytest_physical_3L_6photons_topology_A_inspect() {
     let (model, amplitude) = load_amplitude_output(
         "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
