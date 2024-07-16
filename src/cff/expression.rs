@@ -1,9 +1,16 @@
-use crate::utils::{FloatLike, F};
+use crate::{
+    graph::{EdgeType, Graph},
+    utils::{FloatLike, F},
+};
 use derive_more::{From, Into};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::ops::Index;
-use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
+use symbolica::{
+    atom::{Atom, AtomView},
+    domains::float::NumericalFloatLike,
+    evaluate::{EvalTree, FunctionMap},
+};
 use typed_index_collections::TiVec;
 
 #[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize)]
@@ -408,6 +415,46 @@ impl CFFExpression {
             temp_dep_mom,
             temp_dep_mom_expr,
         )
+    }
+
+    /// graph currently needed to determine which edges are external
+    pub fn build_symbolica_evaluator(
+        &self,
+        graph: &Graph,
+    ) -> EvalTree<symbolica::domains::rational::Rational> {
+        let orientation_atoms = self
+            .orientations
+            .iter_enumerated()
+            .map(|(term_id, _)| self.construct_atom_for_term(term_id, None))
+            .collect_vec();
+
+        let orientation_atom_views = orientation_atoms.iter().map(Atom::as_view).collect_vec();
+        let function_map = FunctionMap::new();
+
+        let params = graph
+            .edges
+            .iter()
+            .enumerate()
+            .map(|(id, edge)| match edge.edge_type {
+                EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
+                _ => Atom::parse(&format!("p{}", id)).unwrap(),
+            })
+            .collect_vec();
+
+        let mut tree: EvalTree<symbolica::domains::rational::Rational> =
+            AtomView::to_eval_tree_multiple(
+                &orientation_atom_views,
+                |r| r.clone(),
+                &function_map,
+                &params,
+            );
+
+        println!("original cff ops: {:?}", tree.count_operations());
+        tree.horner_scheme();
+        tree.common_subexpression_elimination();
+        tree.common_pair_elimination();
+
+        tree
     }
 }
 

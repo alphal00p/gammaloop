@@ -230,6 +230,24 @@ mod tests_scalar_massless_triangle {
         for term in unfolded.iter() {
             assert_eq!(term.len(), 2);
         }
+
+        let graph_cff = graph.get_cff();
+        let evaluator = graph_cff.build_symbolica_evaluator(&graph);
+
+        let evaluator_f64 = evaluator.map_coeff::<f64, _>(&|r| r.into());
+        let mut evaluator_f64 = evaluator_f64.linearize(6);
+
+        let energy_cache = graph
+            .compute_onshell_energies(&[k], &[p1, p2])
+            .iter()
+            .map(|f| f.0)
+            .collect_vec();
+
+        let mut out = vec![0.0; 6];
+
+        evaluator_f64.evaluate_multiple(&energy_cache, &mut out);
+        let sum = out.iter().sum::<f64>() / energy_product.0;
+        assert_approx_eq(&F(sum), &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
     }
 }
 
