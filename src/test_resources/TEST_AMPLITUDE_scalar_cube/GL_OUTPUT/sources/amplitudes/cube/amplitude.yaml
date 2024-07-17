@@ -87,7 +87,7 @@ amplitude_graphs:
         vertex_rule: V_4_SCALAR_0000
       edges:
       - q31
-      - q21
+      - q43
       - p3
       - q37
     - name: v12
@@ -98,7 +98,7 @@ amplitude_graphs:
       - q24
       - p4
       - q48
-      - q21
+      - q43
     - name: v13
       vertex_info:
         type: interacton_vertex_info
@@ -206,13 +206,13 @@ amplitude_graphs:
       vertices:
       - v10
       - v12
-    - name: q21
+    - name: q43
       edge_type: virtual
       particle: scalar_0
       propagator: scalar_0_propFeynman
       vertices:
-      - v10
-      - v9
+      - v12
+      - v11
     - name: q31
       edge_type: virtual
       particle: scalar_0
@@ -295,7 +295,7 @@ amplitude_graphs:
     - - v8
       - null
     loop_momentum_basis:
-    - q21
+    - q43
     - q56
     - q78
     - q75
@@ -441,22 +441,8 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - q21
-      - - - 1
-          - 0
-          - 0
-          - 0
-          - 0
-        - - 0
-          - 0
-          - 0
-          - 0
-          - 0
-          - 0
-          - 0
-          - 0
     - - q24
-      - - - 0
+      - - - 1
           - 0
           - 0
           - 0
@@ -484,7 +470,7 @@ amplitude_graphs:
           - 1
           - 0
     - - q31
-      - - - 0
+      - - - 1
           - 0
           - -1
           - -1
@@ -510,6 +496,20 @@ amplitude_graphs:
           - 0
           - 0
           - -1
+          - 0
+    - - q43
+      - - - 1
+          - 0
+          - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
           - 0
     - - q48
       - - - 0

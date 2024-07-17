@@ -369,11 +369,11 @@ output {output_path} -exp -ef file"""))
 def physical_3L_6photons_topology_A_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     output_path = get_test_directory(tmpdir_factory,
-                                     "TEST_AMPLITUDE_physical_3L_6photons_topology_A", False).joinpath("GL_OUTPUT")
+                                     "TEST_AMPLITUDE_physical_3L_6photons_topology_A", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'physical_3L_6photons_topology_A.py')} -f qgraph --no_compile
-output {output_path} -exp -ef file"""))
+output {output_path} --overwrite_output -exp -ef file"""))
     return output_path
 
 

@@ -477,6 +477,17 @@ class Graph(object):
         self.loop_momentum_basis: list[Edge] | None = loop_momentum_basis
         self.name_to_position: dict[str, dict[str, int]] = {}
 
+    def are_edges_and_vertices_list_consistent(self):
+        """ Tests that the list of edges assigned to each vertex is consistent with the list of vertices assigned to each edge."""
+        edge_ids_per_vertex_id = {v.name: set() for v in self.vertices}
+        for edge in self.edges:
+            for vertex in edge.vertices:
+                edge_ids_per_vertex_id[vertex.name].add(edge.name)
+        for vertex in self.vertices:
+            if set(e.name for e in vertex.edges) != edge_ids_per_vertex_id[vertex.name]:
+                raise GammaLoopError(
+                    f"Graph '{self.name}' has inconsistent list of edges and vertices. Vertex '{vertex.name}' is defined with edges {set(e.name for e in vertex.edges)} but has the following edges pointing to it {edge_ids_per_vertex_id[vertex.name]}.")
+
     def get_sorted_incoming_edges(self) -> list[Edge]:
         sorted_incoming_edges: list[Edge] = []
         for (u, _v) in self.external_connections:  # pylint: disable=invalid-name
@@ -685,6 +696,9 @@ class Graph(object):
 
         graph.edge_signatures = {graph.edges[i].name: sig for i, sig in enumerate(
             graph.generate_momentum_flow())}
+
+        # Make sure vertices are defined with a consistent set of edge names
+        graph.are_edges_and_vertices_list_consistent()
 
         return graph
 

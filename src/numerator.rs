@@ -247,7 +247,7 @@ impl Numerator {
         self.network = Some(network);
     }
 
-    pub fn generate(graph: &Graph) -> Self {
+    pub fn generate(graph: &mut Graph) -> Self {
         debug!("generating numerator for graph: {}", graph.name);
 
         let vatoms: Vec<Atom> = graph
@@ -260,7 +260,14 @@ impl Numerator {
         //     .iter()
         //     .filter(|e| e.edge_type == EdgeType::Virtual)
         //     .map(|e| e.particle);
-        let eatoms: Vec<Atom> = graph.edges.iter().map(|e| e.numerator(graph)).collect();
+        let mut eatoms: Vec<Atom> = vec![];
+        let mut shift = 0;
+        for e in &graph.edges {
+            let (n, i) = e.numerator(graph);
+            eatoms.push(n);
+            shift += i;
+            graph.shifts.0 += shift;
+        }
         let mut builder = Atom::new_num(1);
 
         for v in &vatoms {

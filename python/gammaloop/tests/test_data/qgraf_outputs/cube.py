@@ -87,12 +87,12 @@ graphs.append(
                 "vertices": (2, 4)
             },
             43: {
-                "name": "q21",
+                "name": "q43",
                 "PDG": 1000,
                 "type": "virtual",
                 "momentum": "N/A",
                 "indices": (),
-                "vertices": (2, 1)
+                "vertices": (4, 3)
             },
             31: {
                 "name": "q31",
