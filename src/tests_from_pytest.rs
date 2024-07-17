@@ -234,7 +234,6 @@ mod tests_scalar_massless_triangle {
 
         let graph_cff = graph.get_cff();
         let mut evaluator = graph_cff.build_symbolica_evaluator(&graph);
-
         let energy_cache = graph.compute_onshell_energies(&[k], &[p1, p2]);
 
         let mut out = vec![F(0.0); 6];
@@ -523,6 +522,24 @@ fn pytest_scalar_fishnet_2x3() {
         .graph
         .group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 17);
+
+    let cff = amplitude.amplitude_graphs[0].graph.get_cff();
+    let ose = amplitude.amplitude_graphs[0]
+        .graph
+        .compute_onshell_energies(&loop_moms, &externals)
+        .iter()
+        .map(|x| x.lower())
+        .collect_vec();
+
+    let mut evaluator = cff.build_symbolica_evaluator::<f64>(&amplitude.amplitude_graphs[0].graph);
+    let mut out = vec![F(0.0); cff.get_num_trees()];
+
+    let now = std::time::Instant::now();
+    evaluator.evaluate_multiple(&ose, &mut out);
+    let after = now.elapsed();
+    println!("fishnet timing: {} ms", after.as_millis());
+    panic!()
+
     // TODO: @Mathijs, you can put your own checks there
 }
 
