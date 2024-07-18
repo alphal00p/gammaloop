@@ -4,6 +4,7 @@ use crate::{
 };
 use derive_more::{From, Into};
 use itertools::Itertools;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::ops::Index;
 use symbolica::{
@@ -417,8 +418,44 @@ impl CFFExpression {
         )
     }
 
+    pub fn build_symbolica_evaluators<T: FloatLike + Default>(
+        &self,
+        graph: &Graph,
+    ) -> Vec<ExpressionEvaluator<F<T>>> {
+        let function_map = FunctionMap::new();
+
+        let params = graph
+            .edges
+            .iter()
+            .enumerate()
+            .map(|(id, edge)| match edge.edge_type {
+                EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
+                _ => Atom::parse(&format!("p{}", id)).unwrap(),
+            })
+            .collect_vec();
+
+        self.orientations
+            .iter_enumerated()
+            .map(|(term_id, _)| {
+                let atom = self.construct_atom_for_term(term_id, None);
+                let atom_view = atom.as_view();
+
+                let mut tree = atom_view
+                    .to_eval_tree(|r| r.clone(), &function_map, &params)
+                    .unwrap();
+
+                tree.horner_scheme();
+                tree.common_subexpression_elimination();
+                tree.common_pair_elimination();
+
+                let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
+                tree_ft.linearize(params.len())
+            })
+            .collect()
+    }
+
     /// graph currently needed to determine which edges are external
-    pub fn build_symbolica_evaluator<T: FloatLike + Default>(
+    pub fn build_joint_symbolica_evaluator<T: FloatLike + Default>(
         &self,
         graph: &Graph,
     ) -> ExpressionEvaluator<F<T>> {
@@ -446,14 +483,18 @@ impl CFFExpression {
             |r| r.clone(),
             &function_map,
             &params,
-        );
+        )
+        .unwrap();
 
+        debug!("optimizing cff");
         tree.horner_scheme();
+        debug!("horner scheme completed");
         tree.common_subexpression_elimination();
+        debug!("common subexpression elimination completed");
         tree.common_pair_elimination();
+        debug!("common pair elimination completed");
 
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
-
         tree_ft.linearize(graph.edges.len())
     }
 }
