@@ -2,17 +2,17 @@ use crate::{
     graph::{EdgeType, Graph},
     utils::{FloatLike, F},
 };
+use color_eyre::Report;
 use derive_more::{From, Into};
+use eyre::eyre;
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, ops::Index};
+use std::{fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
     domains::{float::NumericalFloatLike, rational::Rational},
-    evaluate::{
-        CompileOptions, CompiledCode, CompiledEvaluator, EvalTree, ExpressionEvaluator, FunctionMap,
-    },
+    evaluate::{CompileOptions, CompiledEvaluator, EvalTree, ExpressionEvaluator, FunctionMap},
 };
 use typed_index_collections::TiVec;
 
@@ -501,10 +501,56 @@ impl CFFExpression {
         tree_ft.linearize(graph.edges.len())
     }
 
-    pub fn build_compiled_experssion(&self, graph: &Graph) -> CompiledCFFExpression {
-        //let joint = self.build_joint_symbolica_evaluator(graph);
-        //let orientations = self.build_symbolica_evaluators(graph);
-        todo!();
+    pub fn build_compiled_experssion<T: FloatLike + Default>(
+        &mut self,
+        graph: &Graph,
+        export_path: PathBuf,
+    ) -> Result<(), Report> {
+        let path_to_compiled = export_path.join("compiled").join(graph.name.to_string());
+
+        let joint = self.build_joint_symbolica_evaluator::<T>(graph);
+        let orientations = self.build_symbolica_evaluators::<T>(graph);
+
+        let path_to_joint = path_to_compiled.join("joint");
+        let joint_cpp = joint.export_cpp(&format!("{}.cpp", path_to_joint.to_str().unwrap()))?;
+        let joint_compiled = joint_cpp.compile(
+            &format!("{}.so", path_to_joint.to_str().unwrap()),
+            CompileOptions::default(),
+        )?;
+
+        let joint_evaluator = joint_compiled.load().map_err(|e| eyre!("{}", e))?;
+
+        let orientation_evaluators = orientations
+            .into_iter()
+            .enumerate()
+            .map(|(term_id, evaluator)| {
+                let path_to_orientation = path_to_compiled.join(format!("orientation_{}", term_id));
+
+                let orientation_cpp = evaluator
+                    .export_cpp(&format!("{}.cpp", path_to_orientation.to_str().unwrap()))
+                    .unwrap();
+
+                let orientation_compiled = orientation_cpp
+                    .compile(
+                        &format!("{}.so", path_to_compiled.to_str().unwrap()),
+                        CompileOptions::default(),
+                    )
+                    .unwrap();
+
+                orientation_compiled.load().unwrap()
+            })
+            .collect_vec();
+
+        self.compiled = Some(CompiledCFFExpression {
+            metadata: CompiledCFFExpressionMetaData {
+                name: path_to_compiled,
+                num_orientations: orientation_evaluators.len(),
+            },
+            joint: joint_evaluator,
+            orientations: orientation_evaluators.into(),
+        });
+
+        Ok(())
     }
 }
 
@@ -646,7 +692,7 @@ pub struct CompiledCFFExpression {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct CompiledCFFExpressionMetaData {
-    name: String,
+    name: PathBuf,
     num_orientations: usize,
 }
 
@@ -664,11 +710,15 @@ impl CompiledCFFExpression {
     }
 
     fn from_metedata(metadata: CompiledCFFExpressionMetaData) -> Self {
-        let joint = CompiledEvaluator::load(&format!("{}_joint", metadata.name)).unwrap();
+        let path_to_joint = metadata.name.join("joint.so");
+        let joint = CompiledEvaluator::load(path_to_joint.to_str().unwrap()).unwrap();
         let orientations = (0..metadata.num_orientations)
             .map(|orientation| {
-                CompiledEvaluator::load(&format!("{}_orientation_{}", metadata.name, orientation))
-                    .unwrap()
+                let path_to_orientation = metadata
+                    .name
+                    .join(format!("orientation_{}.so", orientation));
+
+                CompiledEvaluator::load(path_to_orientation.to_str().unwrap()).unwrap()
             })
             .collect();
 
