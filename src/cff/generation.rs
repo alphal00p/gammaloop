@@ -288,6 +288,7 @@ fn generate_cff_from_orientations(
         orientations: terms.into(),
         esurfaces: generator_cache.esurface_cache,
         hsurfaces: generator_cache.hsurface_cache,
+        compiled: None,
     })
 }
 

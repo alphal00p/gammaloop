@@ -6,7 +6,7 @@ use derive_more::{From, Into};
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::ops::Index;
+use std::{fmt::Debug, ops::Index};
 use symbolica::{
     atom::{Atom, AtomView},
     domains::{float::NumericalFloatLike, rational::Rational},
@@ -43,6 +43,7 @@ pub struct CFFExpression {
     pub orientations: TiVec<TermId, OrientationExpression>,
     pub esurfaces: EsurfaceCollection,
     pub hsurfaces: HsurfaceCollection,
+    pub compiled: Option<CompiledCFFExpression>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -638,8 +639,15 @@ pub enum HybridNode {
 }
 
 pub struct CompiledCFFExpression {
+    metadata: CompiledCFFExpressionMetaData,
     joint: CompiledEvaluator,
     orientations: TiVec<TermId, CompiledEvaluator>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CompiledCFFExpressionMetaData {
+    name: String,
+    num_orientations: usize,
 }
 
 impl CompiledCFFExpression {
@@ -653,5 +661,52 @@ impl CompiledCFFExpression {
         let mut out = [F(0.0)];
         self.orientations[orientation].evaluate(energy_cache, &mut out);
         out[0]
+    }
+
+    fn from_metedata(metadata: CompiledCFFExpressionMetaData) -> Self {
+        let joint = CompiledEvaluator::load(&format!("{}_joint", metadata.name)).unwrap();
+        let orientations = (0..metadata.num_orientations)
+            .map(|orientation| {
+                CompiledEvaluator::load(&format!("{}_orientation_{}", metadata.name, orientation))
+                    .unwrap()
+            })
+            .collect();
+
+        Self {
+            metadata,
+            joint,
+            orientations,
+        }
+    }
+}
+
+impl Clone for CompiledCFFExpression {
+    fn clone(&self) -> Self {
+        Self::from_metedata(self.metadata.clone())
+    }
+}
+
+impl Serialize for CompiledCFFExpression {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        CompiledCFFExpressionMetaData::serialize(&self.metadata, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CompiledCFFExpression {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let metadata = CompiledCFFExpressionMetaData::deserialize(deserializer)?;
+        Ok(Self::from_metedata(metadata))
+    }
+}
+
+impl Debug for CompiledCFFExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        CompiledCFFExpressionMetaData::fmt(&self.metadata, f)
     }
 }
