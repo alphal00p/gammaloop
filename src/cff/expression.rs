@@ -6,11 +6,14 @@ use derive_more::{From, Into};
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use statrs::function::evaluate;
 use std::ops::Index;
 use symbolica::{
     atom::{Atom, AtomView},
     domains::{float::NumericalFloatLike, rational::Rational},
-    evaluate::{EvalTree, ExpressionEvaluator, FunctionMap},
+    evaluate::{
+        CompileOptions, CompiledCode, CompiledEvaluator, EvalTree, ExpressionEvaluator, FunctionMap,
+    },
 };
 use typed_index_collections::TiVec;
 
@@ -497,6 +500,12 @@ impl CFFExpression {
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
         tree_ft.linearize(graph.edges.len())
     }
+
+    pub fn build_compiled_experssion(&self, graph: &Graph) -> CompiledCFFExpression {
+        //let joint = self.build_joint_symbolica_evaluator(graph);
+        //let orientations = self.build_symbolica_evaluators(graph);
+        todo!();
+    }
 }
 
 fn recursive_eval_from_node<T: FloatLike>(
@@ -627,4 +636,25 @@ impl CFFLimit {
 pub enum HybridNode {
     Data(HybridSurfaceID),
     Pointer { term_id: TermId, node_id: NodeId },
+}
+
+pub struct CompiledCFFExpression {
+    joint: CompiledEvaluator,
+    orientations: TiVec<TermId, CompiledEvaluator>,
+}
+
+impl CompiledCFFExpression {
+    pub fn evaluate_orientations(&self, energy_cache: &[F<f64>]) -> Vec<F<f64>> {
+        let mut out = vec![0.0; self.orientations.len()];
+        let unwrap_energies = energy_cache.iter().map(|e| e.0).collect_vec();
+        self.joint.evaluate(&unwrap_energies, &mut out);
+        out.into_iter().map(F::from_f64).collect_vec()
+    }
+
+    pub fn evaluate_one_orientation(&self, orientation: TermId, energy_cache: &[F<f64>]) -> F<f64> {
+        let mut out = [0.0];
+        let unwrap_energies = energy_cache.iter().map(|e| e.0).collect_vec();
+        self.orientations[orientation].evaluate(&unwrap_energies, &mut out);
+        F(out[0])
+    }
 }
