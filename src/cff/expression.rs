@@ -6,7 +6,6 @@ use derive_more::{From, Into};
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use statrs::function::evaluate;
 use std::ops::Index;
 use symbolica::{
     atom::{Atom, AtomView},
@@ -645,16 +644,14 @@ pub struct CompiledCFFExpression {
 
 impl CompiledCFFExpression {
     pub fn evaluate_orientations(&self, energy_cache: &[F<f64>]) -> Vec<F<f64>> {
-        let mut out = vec![0.0; self.orientations.len()];
-        let unwrap_energies = energy_cache.iter().map(|e| e.0).collect_vec();
-        self.joint.evaluate(&unwrap_energies, &mut out);
-        out.into_iter().map(F::from_f64).collect_vec()
+        let mut out = vec![F(0.0); self.orientations.len()];
+        self.joint.evaluate(energy_cache, &mut out);
+        out
     }
 
     pub fn evaluate_one_orientation(&self, orientation: TermId, energy_cache: &[F<f64>]) -> F<f64> {
-        let mut out = [0.0];
-        let unwrap_energies = energy_cache.iter().map(|e| e.0).collect_vec();
-        self.orientations[orientation].evaluate(&unwrap_energies, &mut out);
-        F(out[0])
+        let mut out = [F(0.0)];
+        self.orientations[orientation].evaluate(energy_cache, &mut out);
+        out[0]
     }
 }
