@@ -6,7 +6,7 @@ def revert_revision():
     # pass
     # Pin the revision of the branch currently working for gammaLoop
     print(subprocess.check_output(
-        ['git', 'reset', '--hard', '13d6bfffd5c6b40064739bdf4bdcfc96beb4f324']).decode('ascii').strip())
+        ['git', 'reset', '--hard', '797db1082a97e3a1c12d9b011709ce41e91838d8']).decode('ascii').strip())
 
 
 def patch_lib_rs():

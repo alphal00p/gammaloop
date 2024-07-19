@@ -16,6 +16,7 @@ use spenso::{ RefOne, RefZero, TrySmallestUpgrade, R};
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatComparison, NumericalFloatLike,
 };
+use symbolica::evaluate::CompiledEvaluatorFloat;
 use spenso::Complex;
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -961,6 +962,21 @@ impl<T: FloatLike> F<T> {
             pub fn is_infinite(&self) -> bool;
             pub fn floor(&self) -> Self;
         }
+    }
+}
+
+impl CompiledEvaluatorFloat for F<f64> {
+    fn evaluate(eval: &symbolica::evaluate::CompiledEvaluator, args: &[Self], out: &mut [Self]) {
+        // cast to f64
+        let args_f64: Vec<f64> = args.iter().map(|x| x.0).collect_vec(); 
+        let mut out_f64 = out.iter().map(|x| x.0).collect_vec();
+        
+        eval.evaluate_double(&args_f64, &mut out_f64);
+
+        // write the result to out
+        out.iter_mut().zip(out_f64).for_each(|(out_ff64, out_f64)| {
+            *out_ff64 = F(out_f64)
+        });
     }
 }
 
