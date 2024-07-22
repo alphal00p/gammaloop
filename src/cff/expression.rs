@@ -506,13 +506,9 @@ impl CFFExpression {
         )
         .unwrap();
 
-        debug!("optimizing cff");
         tree.horner_scheme();
-        debug!("horner scheme completed");
         tree.common_subexpression_elimination();
-        debug!("common subexpression elimination completed");
         tree.common_pair_elimination();
-        debug!("common pair elimination completed");
 
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
         tree_ft.linearize(params.len())
