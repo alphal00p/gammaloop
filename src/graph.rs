@@ -1599,14 +1599,27 @@ impl Graph {
 
     pub fn build_compiled_expression(&mut self, export_path: PathBuf) -> Result<(), Report> {
         // this is stupid, need to restructure
-        let cloned_graph = self.clone();
+        let params = self.build_params_for_cff();
         match self.derived_data.cff_expression.as_mut() {
-            Some(cff) => cff.build_compiled_experssion::<f64>(&cloned_graph, export_path),
+            Some(cff) => {
+                cff.build_compiled_experssion::<f64>(&params, self.name.as_ref(), export_path)
+            }
             None => {
                 self.generate_cff();
                 self.build_compiled_expression(export_path)
             }
         }
+    }
+
+    pub fn build_params_for_cff(&self) -> Vec<Atom> {
+        self.edges
+            .iter()
+            .enumerate()
+            .map(|(id, edge)| match edge.edge_type {
+                EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
+                _ => Atom::parse(&format!("p{}", id)).unwrap(),
+            })
+            .collect()
     }
 }
 

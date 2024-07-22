@@ -1,7 +1,4 @@
-use crate::{
-    graph::{EdgeType, Graph},
-    utils::{FloatLike, F},
-};
+use crate::utils::{FloatLike, F};
 use color_eyre::Report;
 use derive_more::{From, Into};
 use eyre::eyre;
@@ -423,19 +420,9 @@ impl CFFExpression {
 
     pub fn build_symbolica_evaluators<T: FloatLike + Default>(
         &self,
-        graph: &Graph,
+        params: &[Atom],
     ) -> Vec<ExpressionEvaluator<F<T>>> {
         let function_map = FunctionMap::new();
-
-        let params = graph
-            .edges
-            .iter()
-            .enumerate()
-            .map(|(id, edge)| match edge.edge_type {
-                EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
-                _ => Atom::parse(&format!("p{}", id)).unwrap(),
-            })
-            .collect_vec();
 
         self.orientations
             .iter_enumerated()
@@ -444,7 +431,7 @@ impl CFFExpression {
                 let atom_view = atom.as_view();
 
                 let mut tree = atom_view
-                    .to_eval_tree(|r| r.clone(), &function_map, &params)
+                    .to_eval_tree(|r| r.clone(), &function_map, params)
                     .unwrap();
 
                 tree.horner_scheme();
@@ -460,7 +447,7 @@ impl CFFExpression {
     /// graph currently needed to determine which edges are external
     pub fn build_joint_symbolica_evaluator<T: FloatLike + Default>(
         &self,
-        graph: &Graph,
+        params: &[Atom],
     ) -> ExpressionEvaluator<F<T>> {
         let orientation_atoms = self
             .orientations
@@ -471,21 +458,21 @@ impl CFFExpression {
         let orientation_atom_views = orientation_atoms.iter().map(Atom::as_view).collect_vec();
         let function_map = FunctionMap::new();
 
-        let params = graph
-            .edges
-            .iter()
-            .enumerate()
-            .map(|(id, edge)| match edge.edge_type {
-                EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
-                _ => Atom::parse(&format!("p{}", id)).unwrap(),
-            })
-            .collect_vec();
+        //let params = graph
+        //    .edges
+        //    .iter()
+        //    .enumerate()
+        //    .map(|(id, edge)| match edge.edge_type {
+        //        EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
+        //        _ => Atom::parse(&format!("p{}", id)).unwrap(),
+        //    })
+        //    .collect_vec();
 
         let mut tree: EvalTree<Rational> = AtomView::to_eval_tree_multiple(
             &orientation_atom_views,
             |r| r.clone(),
             &function_map,
-            &params,
+            params,
         )
         .unwrap();
 
@@ -498,18 +485,19 @@ impl CFFExpression {
         debug!("common pair elimination completed");
 
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
-        tree_ft.linearize(graph.edges.len())
+        tree_ft.linearize(params.len())
     }
 
     pub fn build_compiled_experssion<T: FloatLike + Default>(
         &mut self,
-        graph: &Graph,
+        params: &[Atom],
+        name: &str,
         export_path: PathBuf,
     ) -> Result<(), Report> {
-        let path_to_compiled = export_path.join("compiled").join(graph.name.to_string());
+        let path_to_compiled = export_path.join("compiled").join(name);
 
-        let joint = self.build_joint_symbolica_evaluator::<T>(graph);
-        let orientations = self.build_symbolica_evaluators::<T>(graph);
+        let joint = self.build_joint_symbolica_evaluator::<T>(params);
+        let orientations = self.build_symbolica_evaluators::<T>(params);
 
         let path_to_joint = path_to_compiled.join("joint");
         let joint_cpp = joint.export_cpp(&format!("{}.cpp", path_to_joint.to_str().unwrap()))?;

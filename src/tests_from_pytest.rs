@@ -30,7 +30,8 @@ use std::fs::File;
 use std::path::Path;
 use std::{clone, env};
 use symbolica;
-use symbolica::domains::float::Complex as SymComplex;
+use symbolica::domains::float::{Complex as SymComplex, NumericalFloatLike};
+use symbolica::evaluate::CompileOptions;
 
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-12);
@@ -95,12 +96,17 @@ pub fn load_amplitude_output(output_path: &str, load_generic_model: bool) -> (Mo
 
 #[cfg(test)]
 mod tests_scalar_massless_triangle {
+    use core::panic;
+
     use lorentz_vector::LorentzVector;
     use nalgebra::coordinates::X;
     use rayon::prelude::IndexedParallelIterator;
     use smartstring::SmartString;
     use spenso::Complex;
-    use symbolica::domains::float::Complex as SymComplex;
+    use symbolica::{
+        domains::float::{Complex as SymComplex, NumericalFloatLike},
+        evaluate::{CompileOptions, ExportedCode},
+    };
 
     use crate::{
         gammaloop_integrand::DefaultSample,
@@ -114,6 +120,8 @@ mod tests_scalar_massless_triangle {
 
     #[test]
     fn pytest_massless_scalar_triangle() {
+        let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
+
         let (model, amplitude) =
             load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", true);
 
@@ -170,6 +178,13 @@ mod tests_scalar_massless_triangle {
         };
 
         let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
+
+        let before_in_house = std::time::Instant::now();
+        for _ in 0..1000 {
+            graph.evaluate_cff_expression(&sample, 0);
+        }
+        let in_house_elapsed = before_in_house.elapsed();
+        println!("in house eval: {} ns", in_house_elapsed.as_nanos() / 1000);
 
         // println!("res = {:+e}", res);
 
@@ -234,12 +249,32 @@ mod tests_scalar_massless_triangle {
         }
 
         let graph_cff = graph.get_cff();
-        let mut evaluator = graph_cff.build_symbolica_evaluator(&graph);
+        let time_before_evaluator = std::time::Instant::now();
+        let mut evaluator =
+            graph_cff.build_joint_symbolica_evaluator(&graph.build_params_for_cff());
+        let time_after_evaluator = time_before_evaluator.elapsed();
+
+        println!(
+            "time to build triangle evaluator: {} mus",
+            time_after_evaluator.as_micros()
+        );
+
         let energy_cache = graph.compute_onshell_energies(&[k], &[p1, p2]);
 
         let mut out = vec![F(0.0); 6];
 
-        evaluator.evaluate_multiple(&energy_cache, &mut out);
+        let before_evaluate = std::time::Instant::now();
+        for _ in 0..1000 {
+            evaluator.evaluate_multiple(&energy_cache, &mut out);
+            let _sum = out.iter().fold(out[0].zero(), |acc, x| acc + x);
+        }
+        let non_compiled_evaluation_time = before_evaluate.elapsed();
+
+        println!(
+            "symbolica evaluation time: {} ns",
+            non_compiled_evaluation_time.as_nanos() / 1000
+        );
+
         let sum = out.into_iter().reduce(|acc, x| acc + x).unwrap() / energy_product;
         assert_approx_eq(&sum, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
     }
@@ -529,7 +564,9 @@ fn pytest_scalar_fishnet_2x3() {
         .map(|x| x.lower())
         .collect_vec();
 
-    let mut evaluator = cff.build_symbolica_evaluator::<f64>(&amplitude.amplitude_graphs[0].graph);
+    let mut evaluator = cff.build_joint_symbolica_evaluator::<f64>(
+        &amplitude.amplitude_graphs[0].graph.build_params_for_cff(),
+    );
     let mut out = vec![F(0.0); cff.get_num_trees()];
 
     let now = std::time::Instant::now();
@@ -826,6 +863,8 @@ fn pytest_scalar_massless_box() {
 
 #[test]
 fn pytest_scalar_double_triangle() {
+    let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
+
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_double_triangle/GL_OUTPUT", true);
 
@@ -903,6 +942,78 @@ fn pytest_scalar_double_triangle() {
 
     let propagator_groups = graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 5);
+
+    let loop_moms_f64 = sample
+        .loop_moms
+        .iter()
+        .map(ThreeMomentum::lower)
+        .collect_vec();
+
+    let externals_f64 = sample
+        .external_moms
+        .iter()
+        .map(FourMomentum::lower)
+        .collect_vec();
+
+    let before = std::time::Instant::now();
+    let mut evaluator = graph
+        .get_cff()
+        .build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff());
+
+    let compiled = evaluator
+        .export_cpp("double_triangle.cpp")
+        .unwrap()
+        .compile("lib_double_triangle.so", CompileOptions::default())
+        .unwrap();
+
+    let compiled_evaluator = compiled.load().unwrap();
+
+    let after = before.elapsed();
+
+    let mut out = vec![0.0; graph.get_cff().get_num_trees()];
+
+    println!("time to create evaluator: {} mus", after.as_micros());
+
+    let before = std::time::Instant::now();
+    for _ in 0..1000 {
+        let ose = graph
+            .compute_onshell_energies(&loop_moms_f64, &externals_f64)
+            .iter()
+            .map(|e| e.0)
+            .collect_vec();
+        //evaluator.evaluate_multiple(&ose, &mut out);
+
+        compiled_evaluator.evaluate(&ose, &mut out);
+        let _symbolica_sum = out.iter().fold(out[0].zero(), |acc, x| acc + x);
+    }
+    let after = before.elapsed();
+
+    println!("symbolica eval time: {} ns", after.as_nanos() / 1000);
+
+    let sample_f64 = DefaultSample {
+        loop_moms: loop_moms_f64.clone(),
+        external_moms: externals_f64.clone(),
+        jacobian: sample.jacobian,
+    };
+
+    let before = std::time::Instant::now();
+    for _ in 0..1000 {
+        let _house_cff = graph.evaluate_cff_expression(&sample_f64, 0);
+    }
+    let after = before.elapsed();
+    println!("in house eval time: {} ns", after.as_nanos() / 1000);
+
+    let mut out_f = vec![F(0.0); graph.get_cff().get_num_trees()];
+    let ose = graph.compute_onshell_energies(&loop_moms_f64, &externals_f64);
+    evaluator.evaluate_multiple(&ose, &mut out_f);
+    let symbolica_sum =
+        out_f.iter().fold(out_f[0].zero(), |acc, x| acc + x) / energy_product.lower();
+
+    assert_approx_eq(
+        &symbolica_sum,
+        &absolute_truth.re.lower(),
+        &LTD_COMPARISON_TOLERANCE,
+    );
 }
 
 #[test]
