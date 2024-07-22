@@ -42,7 +42,11 @@ use core::panic;
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use symbolica::{
     atom::Atom,
@@ -1591,6 +1595,18 @@ impl Graph {
             .collect();
 
         (*dep_mom, external_shift)
+    }
+
+    pub fn build_compiled_expression(&mut self, export_path: PathBuf) -> Result<(), Report> {
+        // this is stupid, need to restructure
+        let cloned_graph = self.clone();
+        match self.derived_data.cff_expression.as_mut() {
+            Some(cff) => cff.build_compiled_experssion::<f64>(&cloned_graph, export_path),
+            None => {
+                self.generate_cff();
+                self.build_compiled_expression(export_path)
+            }
+        }
     }
 }
 
