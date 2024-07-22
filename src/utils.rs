@@ -1,3 +1,4 @@
+use crate::cff::expression::CFFFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
@@ -657,6 +658,7 @@ pub trait FloatLike:
     + PrecisionUpgradable
     + Serialize
     + Display
+    + CFFFloat<Self>
 {
     
 

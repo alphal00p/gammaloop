@@ -1,4 +1,4 @@
-use crate::utils::{FloatLike, F};
+use crate::utils::{FloatLike, VarFloat, F};
 use color_eyre::Report;
 use derive_more::{From, Into};
 use eyre::eyre;
@@ -28,6 +28,24 @@ use super::{
     tree::{NodeCache, NodeId, Tree},
 };
 
+pub trait CFFFloat<T: FloatLike> {
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<T>], usize) -> Vec<F<T>>;
+}
+
+impl CFFFloat<f64> for f64 {
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<f64>], usize) -> Vec<F<f64>> {
+        |energy_cache, debug| cff.compiled_evaluate_orientations(energy_cache, debug)
+    }
+}
+
+impl CFFFloat<VarFloat<113>> for VarFloat<113> {
+    fn get_evaluator(
+        cff: &CFFExpression,
+    ) -> impl Fn(&[F<VarFloat<113>>], usize) -> Vec<F<VarFloat<113>>> {
+        |energy_cache, debug| cff.eager_evaluate_orientations(energy_cache, debug)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrientationExpression {
     pub orientation: Vec<bool>,
@@ -51,7 +69,17 @@ pub enum CFFExpressionNode {
 
 impl CFFExpression {
     #[inline]
-    pub fn evaluate_orientations<T: FloatLike>(
+    pub fn evaluate_orientations<T: FloatLike + CFFFloat<T>>(
+        &self,
+        energy_cache: &[F<T>],
+        debug: usize,
+    ) -> Vec<F<T>> {
+        let evaluator = T::get_evaluator(self);
+        evaluator(energy_cache, debug)
+    }
+
+    #[inline]
+    fn eager_evaluate_orientations<T: FloatLike>(
         &self,
         energy_cache: &[F<T>],
         debug: usize,
@@ -88,6 +116,18 @@ impl CFFExpression {
     }
 
     #[inline]
+    fn compiled_evaluate_orientations(&self, energy_cache: &[F<f64>], debug: usize) -> Vec<F<f64>> {
+        if debug > 3 {
+            println!("evaluating cff orientations in eager mode");
+        }
+
+        self.compiled
+            .as_ref()
+            .unwrap()
+            .evaluate_orientations(energy_cache)
+    }
+
+    #[inline]
     pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
         self.evaluate_orientations(energy_cache, debug)
             .into_iter()
@@ -96,7 +136,7 @@ impl CFFExpression {
     }
 
     #[inline]
-    pub fn evaluate_orientations_from_caches<T: FloatLike>(
+    fn evaluate_orientations_from_caches<T: FloatLike>(
         &self,
         esurface_cache: &EsurfaceCache<F<T>>,
         hsurface_cache: &HsurfaceCache<F<T>>,
