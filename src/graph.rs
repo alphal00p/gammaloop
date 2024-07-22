@@ -1598,12 +1598,9 @@ impl Graph {
     }
 
     pub fn build_compiled_expression(&mut self, export_path: PathBuf) -> Result<(), Report> {
-        // this is stupid, need to restructure
         let params = self.build_params_for_cff();
         match self.derived_data.cff_expression.as_mut() {
-            Some(cff) => {
-                cff.build_compiled_experssion::<f64>(&params, self.name.as_ref(), export_path)
-            }
+            Some(cff) => cff.build_compiled_experssion::<f64>(&params, export_path),
             None => {
                 self.generate_cff();
                 self.build_compiled_expression(export_path)

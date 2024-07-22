@@ -458,16 +458,6 @@ impl CFFExpression {
         let orientation_atom_views = orientation_atoms.iter().map(Atom::as_view).collect_vec();
         let function_map = FunctionMap::new();
 
-        //let params = graph
-        //    .edges
-        //    .iter()
-        //    .enumerate()
-        //    .map(|(id, edge)| match edge.edge_type {
-        //        EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
-        //        _ => Atom::parse(&format!("p{}", id)).unwrap(),
-        //    })
-        //    .collect_vec();
-
         let mut tree: EvalTree<Rational> = AtomView::to_eval_tree_multiple(
             &orientation_atom_views,
             |r| r.clone(),
@@ -491,10 +481,12 @@ impl CFFExpression {
     pub fn build_compiled_experssion<T: FloatLike + Default>(
         &mut self,
         params: &[Atom],
-        name: &str,
-        export_path: PathBuf,
+        path: PathBuf,
     ) -> Result<(), Report> {
-        let path_to_compiled = export_path.join("compiled").join(name);
+        let path_to_compiled = path.join("compiled");
+        std::fs::create_dir_all(&path_to_compiled)?;
+
+        debug!("compiling cff in {}", path_to_compiled.to_str().unwrap());
 
         let joint = self.build_joint_symbolica_evaluator::<T>(params);
         let orientations = self.build_symbolica_evaluators::<T>(params);
@@ -520,7 +512,7 @@ impl CFFExpression {
 
                 let orientation_compiled = orientation_cpp
                     .compile(
-                        &format!("{}.so", path_to_compiled.to_str().unwrap()),
+                        &format!("{}.so", path_to_orientation.to_str().unwrap()),
                         CompileOptions::default(),
                     )
                     .unwrap();

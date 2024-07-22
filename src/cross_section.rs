@@ -6,6 +6,7 @@ use bincode;
 use color_eyre::{Help, Report};
 #[allow(unused_imports)]
 use eyre::{eyre, Context};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -592,6 +593,12 @@ impl Amplitude {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
 
+        // Then dumped the new yaml representation of the amplitude now containing all that additional information
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str());
+
         // generate cff and ltd for each graph in the ampltiudes, ltd also generates lmbs
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
             amplitude_graph.graph.generate_cff();
@@ -606,21 +613,22 @@ impl Amplitude {
             amplitude_graph.graph.process_numerator(model);
         }
 
-        // Then dumped the new yaml representation of the amplitude now containing all that additional information
-        let path = Path::new(export_root)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str());
-
         fs::write(
-            path.join("amplitude.yaml"),
+            path.clone().join("amplitude.yaml"),
             serde_yaml::to_string(&self.to_serializable())?,
         )?;
 
         // dump the derived data in a binary file
-        for amplitude_graph in self.amplitude_graphs.iter() {
+        for amplitude_graph in self.amplitude_graphs.iter_mut() {
+            debug!("compiling cff");
+            amplitude_graph
+                .graph
+                .build_compiled_expression(path.clone())?;
+
+            debug!("dumping derived data");
             fs::write(
-                path.join(format!("derived_data_{}.bin", amplitude_graph.graph.name)),
+                path.clone()
+                    .join(format!("derived_data_{}.bin", amplitude_graph.graph.name)),
                 bincode::serialize(&amplitude_graph.graph.derived_data.to_serializable())?,
             );
         }
