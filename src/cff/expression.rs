@@ -776,7 +776,7 @@ struct CompiledCFFExpressionMetaData {
 impl CompiledCFFExpression {
     pub fn evaluate_orientations(&self, energy_cache: &[F<f64>]) -> Vec<F<f64>> {
         let expr = self.unwrap();
-        let mut out = vec![F(0.0); expr.orientations.len()];
+        let mut out = vec![F(0.0); expr.metadata.num_orientations];
         expr.joint.evaluate(energy_cache, &mut out);
         out
     }
@@ -795,7 +795,7 @@ impl CompiledCFFExpression {
 
         let joint = CompiledEvaluator::load(path_to_joint_str).map_err(|e| eyre!(e))?;
 
-        let orientations = (0..metadata.num_orientations)
+        let orientations_result = (0..metadata.num_orientations)
             .map(|orientation| {
                 let path_to_orientation = metadata
                     .name
@@ -807,7 +807,12 @@ impl CompiledCFFExpression {
 
                 CompiledEvaluator::load(path_to_orientation_str).map_err(|e| eyre!(e))
             })
-            .collect::<Result<_, Report>>()?;
+            .collect::<Result<_, Report>>();
+
+        let orientations = match orientations_result {
+            Ok(orientations) => orientations,
+            Err(_e) => vec![].into(),
+        };
 
         let inner = InnerCompiledCFF {
             metadata,
