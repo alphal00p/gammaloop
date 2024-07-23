@@ -134,6 +134,14 @@ impl CFFExpression {
     }
 
     #[inline]
+    pub fn eager_evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
+        self.eager_evaluate_orientations(energy_cache, debug)
+            .into_iter()
+            .reduce(|acc, x| &acc + &x)
+            .unwrap_or_else(|| energy_cache[0].zero())
+    }
+
+    #[inline]
     fn evaluate_orientations_from_caches<T: FloatLike>(
         &self,
         esurface_cache: &EsurfaceCache<F<T>>,
