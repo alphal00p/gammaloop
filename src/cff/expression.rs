@@ -34,7 +34,13 @@ pub trait CFFFloat<T: FloatLike> {
 
 impl CFFFloat<f64> for f64 {
     fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<f64>], usize) -> Vec<F<f64>> {
-        |energy_cache, debug| cff.compiled_evaluate_orientations(energy_cache, debug)
+        |energy_cache, debug| {
+            if cff.compiled.is_some() {
+                cff.compiled_evaluate_orientations(energy_cache, debug)
+            } else {
+                cff.eager_evaluate_orientations(energy_cache, debug)
+            }
+        }
     }
 }
 
@@ -783,6 +789,13 @@ impl CompiledCFFExpression {
         match self {
             CompiledCFFExpression::Some(inner) => inner,
             CompiledCFFExpression::None => panic!("compiled cff not present"),
+        }
+    }
+
+    fn is_some(&self) -> bool {
+        match self {
+            CompiledCFFExpression::Some(_) => true,
+            CompiledCFFExpression::None => false,
         }
     }
 }
