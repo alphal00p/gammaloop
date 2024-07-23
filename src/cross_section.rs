@@ -588,7 +588,13 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn export(&mut self, export_root: &str, model: &Model) -> Result<(), Report> {
+    pub fn export(
+        &mut self,
+        export_root: &str,
+        model: &Model,
+        compile_cff: bool,
+        compile_seperate_orientations: bool,
+    ) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
 
@@ -619,10 +625,12 @@ impl Amplitude {
 
         // dump the derived data in a binary file
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
-            debug!("compiling cff");
-            amplitude_graph
-                .graph
-                .build_compiled_expression(path.clone())?;
+            if compile_cff {
+                debug!("compiling cff");
+                amplitude_graph
+                    .graph
+                    .build_compiled_expression(path.clone(), compile_seperate_orientations)?;
+            }
 
             debug!("dumping derived data");
             fs::write(

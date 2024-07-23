@@ -1609,13 +1609,21 @@ impl Graph {
         (*dep_mom, external_shift)
     }
 
-    pub fn build_compiled_expression(&mut self, export_path: PathBuf) -> Result<(), Report> {
+    pub fn build_compiled_expression(
+        &mut self,
+        export_path: PathBuf,
+        compile_seperate_orientations: bool,
+    ) -> Result<(), Report> {
         let params = self.build_params_for_cff();
         match self.derived_data.cff_expression.as_mut() {
-            Some(cff) => cff.build_compiled_experssion::<f64>(&params, export_path),
+            Some(cff) => cff.build_compiled_experssion::<f64>(
+                &params,
+                export_path,
+                compile_seperate_orientations,
+            ),
             None => {
                 self.generate_cff();
-                self.build_compiled_expression(export_path)
+                self.build_compiled_expression(export_path, compile_seperate_orientations)
             }
         }
     }

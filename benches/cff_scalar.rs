@@ -48,7 +48,7 @@ fn load_helper(path: &str) -> Graph {
     let true_path = PathBuf::from(COMPILED_DUMP).join(path);
     amplitude.amplitude_graphs[0]
         .graph
-        .build_compiled_expression(true_path)
+        .build_compiled_expression(true_path, false)
         .unwrap();
 
     amplitude.amplitude_graphs.remove(0).graph
