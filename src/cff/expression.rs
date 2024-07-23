@@ -784,7 +784,7 @@ impl CompiledCFFExpression {
     pub fn evaluate_one_orientation(&self, orientation: TermId, energy_cache: &[F<f64>]) -> F<f64> {
         let expr = self.unwrap();
         if expr.orientations.is_empty() {
-            panic!("no orientations to evaluate, most likely they are not generated, use output -cso to generate them")
+            panic!("no orientations to evaluate, most likely they are not generated, set compile_seperate_orientations in config to generate them")
         }
 
         let mut out = [F(0.0)];
