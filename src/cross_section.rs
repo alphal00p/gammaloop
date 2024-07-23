@@ -588,7 +588,6 @@ impl Amplitude {
         Ok(())
     }
 
-    #[allow(unused)]
     pub fn export(&mut self, export_root: &str, model: &Model) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
@@ -630,7 +629,7 @@ impl Amplitude {
                 path.clone()
                     .join(format!("derived_data_{}.bin", amplitude_graph.graph.name)),
                 bincode::serialize(&amplitude_graph.graph.derived_data.to_serializable())?,
-            );
+            )?;
         }
 
         // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
