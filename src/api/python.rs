@@ -271,12 +271,19 @@ impl PythonWorker {
         &mut self,
         export_root: &str,
         amplitude_names: Vec<String>,
+        compile_cff: bool,
+        compile_seperate_orientations: bool,
     ) -> PyResult<String> {
         let mut n_exported: usize = 0;
         for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.to_string()) {
                 n_exported += 1;
-                let res = amplitude.export(export_root, &self.model);
+                let res = amplitude.export(
+                    export_root,
+                    &self.model,
+                    compile_cff,
+                    compile_seperate_orientations,
+                );
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));
                 }
