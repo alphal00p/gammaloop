@@ -575,13 +575,14 @@ impl CFFExpression {
         Ok(())
     }
 
-    pub fn load_compiled(&mut self, path: PathBuf) {
+    pub fn load_compiled(&mut self, path: PathBuf) -> Result<(), Report> {
         let metadata = CompiledCFFExpressionMetaData {
             name: path.join("compiled"),
             num_orientations: self.get_num_trees(),
         };
 
-        self.compiled = CompiledCFFExpression::from_metedata(metadata);
+        self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
+        Ok(())
     }
 }
 
@@ -747,18 +748,27 @@ impl CompiledCFFExpression {
         out[0]
     }
 
-    fn from_metedata(metadata: CompiledCFFExpressionMetaData) -> Self {
+    fn from_metedata(metadata: CompiledCFFExpressionMetaData) -> Result<Self, Report> {
         let path_to_joint = metadata.name.join("joint.so");
-        let joint = CompiledEvaluator::load(path_to_joint.to_str().unwrap()).unwrap();
+        let path_to_joint_str = path_to_joint
+            .to_str()
+            .ok_or(eyre!("could not convert path to string"))?;
+
+        let joint = CompiledEvaluator::load(path_to_joint_str).map_err(|e| eyre!(e))?;
+
         let orientations = (0..metadata.num_orientations)
             .map(|orientation| {
                 let path_to_orientation = metadata
                     .name
                     .join(format!("orientation_{}.so", orientation));
 
-                CompiledEvaluator::load(path_to_orientation.to_str().unwrap()).unwrap()
+                let path_to_orientation_str = path_to_orientation
+                    .to_str()
+                    .ok_or(eyre!("could not_convert path to_string"))?;
+
+                CompiledEvaluator::load(path_to_orientation_str).map_err(|e| eyre!(e))
             })
-            .collect();
+            .collect::<Result<_, Report>>()?;
 
         let inner = InnerCompiledCFF {
             metadata,
@@ -766,7 +776,7 @@ impl CompiledCFFExpression {
             orientations,
         };
 
-        Self::Some(inner)
+        Ok(Self::Some(inner))
     }
 
     fn unwrap(&self) -> &InnerCompiledCFF {
@@ -780,7 +790,7 @@ impl CompiledCFFExpression {
 impl Clone for CompiledCFFExpression {
     fn clone(&self) -> Self {
         match self {
-            Self::Some(inner) => Self::from_metedata(inner.metadata.clone()),
+            Self::Some(inner) => Self::from_metedata(inner.metadata.clone()).unwrap(),
             Self::None => Self::None,
         }
     }
