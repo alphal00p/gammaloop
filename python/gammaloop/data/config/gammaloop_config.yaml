@@ -31,3 +31,5 @@ drawing:
     caption_size: "40pt"
 export_settings:
   write_default_settings: false
+  compile_cff: true
+  compile_seperate_orientations: false

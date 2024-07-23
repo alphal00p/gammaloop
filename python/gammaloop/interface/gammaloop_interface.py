@@ -86,6 +86,8 @@ class GammaLoopConfiguration(object):
             },
             'export_settings': {
                 'write_default_settings': False,
+                'compile_cff': True,
+                'compile_seperate_orientations': False,
             },
             'run_settings': {
                 'General': {
@@ -887,10 +889,6 @@ class GammaLoop(object):
                                choices=['file', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
     output_parser.add_argument('-ow', '--overwrite_output', default=False, action='store_true',
                                help='Overwrite output if already existing.')
-    output_parser.add_argument('-ccff', '--compiled_cff', default=False,
-                               action='store_true', help='Compile the CFF expression to C++')
-    output_parser.add_argument('-cso', '--compile_seperate_orientations', default=False,
-                               action='store_true', help='Compile each orientation to C++ independently')
 
     def do_output(self, str_args: str) -> None:
         if str_args == 'help':
@@ -927,7 +925,7 @@ class GammaLoop(object):
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
             amplitude_exporter.export(
-                args.output_path, self.amplitudes, args.compiled_cff, args.compile_seperate_orientations)
+                args.output_path, self.amplitudes)
             if args.expression:
                 amplitude_exporter.export_expression(
                     args.output_path, self.amplitudes, args.expression_format)

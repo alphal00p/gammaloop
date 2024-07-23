@@ -251,7 +251,7 @@ class AmplitudesExporter(GammaLoopExporter):
 
         self.gammaloop.rust_worker.export_expressions(str(export_root), format)
 
-    def export(self, export_root: Path, amplitudes: AmplitudeList, compiled_cff: bool, compile_seperate_orientations: bool):
+    def export(self, export_root: Path, amplitudes: AmplitudeList):
 
         # Tweak the run configuration for the particular process exported before attending to the generic export
         self.adjust_run_settings(amplitudes)
@@ -285,7 +285,7 @@ class AmplitudesExporter(GammaLoopExporter):
 
         # Now address the rust export aspect
         self.gammaloop.rust_worker.export_amplitudes(
-            str(export_root), [amp.name for amp in amplitudes], compiled_cff, compile_seperate_orientations)
+            str(export_root), [amp.name for amp in amplitudes], self.gammaloop.config['export_settings']['compile_cff'], self.gammaloop.config['export_settings']['compile_seperate_orientations'])
 
         if self.gammaloop.config['export_settings']['write_default_settings']:
             self.gammaloop.rust_worker.write_default_settings(str(export_root))
