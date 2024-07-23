@@ -58,7 +58,8 @@ pub struct CFFExpression {
     pub orientations: TiVec<TermId, OrientationExpression>,
     pub esurfaces: EsurfaceCollection,
     pub hsurfaces: HsurfaceCollection,
-    pub compiled: Option<CompiledCFFExpression>,
+    #[serde(skip_serializing)]
+    pub compiled: CompiledCFFExpression,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,10 +122,7 @@ impl CFFExpression {
             println!("evaluating cff orientations in eager mode");
         }
 
-        self.compiled
-            .as_ref()
-            .unwrap()
-            .evaluate_orientations(energy_cache)
+        self.compiled.evaluate_orientations(energy_cache)
     }
 
     #[inline]
@@ -557,7 +555,7 @@ impl CFFExpression {
             })
             .collect_vec();
 
-        self.compiled = Some(CompiledCFFExpression {
+        self.compiled = CompiledCFFExpression::Some(InnerCompiledCFF {
             metadata: CompiledCFFExpressionMetaData {
                 name: path_to_compiled,
                 num_orientations: orientation_evaluators.len(),
@@ -567,6 +565,15 @@ impl CFFExpression {
         });
 
         Ok(())
+    }
+
+    pub fn load_compiled(&mut self, path: PathBuf) {
+        let metadata = CompiledCFFExpressionMetaData {
+            name: path.join("compiled"),
+            num_orientations: self.get_num_trees(),
+        };
+
+        self.compiled = CompiledCFFExpression::from_metedata(metadata);
     }
 }
 
@@ -700,7 +707,13 @@ pub enum HybridNode {
     Pointer { term_id: TermId, node_id: NodeId },
 }
 
-pub struct CompiledCFFExpression {
+// custom option so we have control over serialize/deserialize
+pub enum CompiledCFFExpression {
+    Some(InnerCompiledCFF),
+    None,
+}
+
+pub struct InnerCompiledCFF {
     metadata: CompiledCFFExpressionMetaData,
     joint: CompiledEvaluator,
     orientations: TiVec<TermId, CompiledEvaluator>,
@@ -714,14 +727,15 @@ struct CompiledCFFExpressionMetaData {
 
 impl CompiledCFFExpression {
     pub fn evaluate_orientations(&self, energy_cache: &[F<f64>]) -> Vec<F<f64>> {
-        let mut out = vec![F(0.0); self.orientations.len()];
-        self.joint.evaluate(energy_cache, &mut out);
+        let expr = self.unwrap();
+        let mut out = vec![F(0.0); expr.orientations.len()];
+        expr.joint.evaluate(energy_cache, &mut out);
         out
     }
 
     pub fn evaluate_one_orientation(&self, orientation: TermId, energy_cache: &[F<f64>]) -> F<f64> {
         let mut out = [F(0.0)];
-        self.orientations[orientation].evaluate(energy_cache, &mut out);
+        self.unwrap().orientations[orientation].evaluate(energy_cache, &mut out);
         out[0]
     }
 
@@ -738,41 +752,46 @@ impl CompiledCFFExpression {
             })
             .collect();
 
-        Self {
+        let inner = InnerCompiledCFF {
             metadata,
             joint,
             orientations,
+        };
+
+        Self::Some(inner)
+    }
+
+    fn unwrap(&self) -> &InnerCompiledCFF {
+        match self {
+            CompiledCFFExpression::Some(inner) => inner,
+            CompiledCFFExpression::None => panic!("compiled cff not present"),
         }
     }
 }
 
 impl Clone for CompiledCFFExpression {
     fn clone(&self) -> Self {
-        Self::from_metedata(self.metadata.clone())
-    }
-}
-
-impl Serialize for CompiledCFFExpression {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        CompiledCFFExpressionMetaData::serialize(&self.metadata, serializer)
+        match self {
+            Self::Some(inner) => Self::from_metedata(inner.metadata.clone()),
+            Self::None => Self::None,
+        }
     }
 }
 
 impl<'de> Deserialize<'de> for CompiledCFFExpression {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let metadata = CompiledCFFExpressionMetaData::deserialize(deserializer)?;
-        Ok(Self::from_metedata(metadata))
+        Ok(Self::None)
     }
 }
 
 impl Debug for CompiledCFFExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        CompiledCFFExpressionMetaData::fmt(&self.metadata, f)
+        match self {
+            Self::Some(inner) => CompiledCFFExpressionMetaData::fmt(&inner.metadata, f),
+            Self::None => str::fmt("None", f),
+        }
     }
 }

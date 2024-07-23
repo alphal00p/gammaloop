@@ -640,11 +640,7 @@ impl Amplitude {
 
     pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
         for ampltitude_graph in self.amplitude_graphs.iter_mut() {
-            let graph_path = path.join(format!(
-                "derived_data_{}.bin",
-                ampltitude_graph.graph.name.as_str()
-            ));
-            ampltitude_graph.graph.load_derived_data(&graph_path)?;
+            ampltitude_graph.graph.load_derived_data(path)?;
         }
         Ok(())
     }

@@ -1405,8 +1405,14 @@ impl Graph {
     }
 
     pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
-        let derived_data = DerivedGraphData::load_from_path(path)?;
+        let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
+        let derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
         self.derived_data = derived_data;
+        self.derived_data
+            .cff_expression
+            .as_mut()
+            .unwrap()
+            .load_compiled(path.into());
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
         let lmb_indices = self.loop_momentum_basis.basis.clone();
