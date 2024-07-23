@@ -19,6 +19,9 @@ opt-level = 2
 [profile.bench]
 lto = "fat"
 
+[[bench]]
+name = "cff_scalar"
+harness = false
 
 [profile.release]
 lto = "fat"
