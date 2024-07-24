@@ -944,7 +944,7 @@ dependencies = [
  "smartstring",
  "spenso",
  "statrs",
- "symbolica 0.8.0",
+ "symbolica",
  "tabled",
  "treena",
  "typed-index-collections",
@@ -2196,7 +2196,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=master#095809aa5e6395f758f67d35b55659d02c533f3c"
+source = "git+https://github.com/alphal00p/spenso?branch=update_to_symb_08#d46f7c7f7ca4c5b62534a75e514f6991b32c0c64"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2221,7 +2221,7 @@ dependencies = [
  "serde_toml",
  "slotmap",
  "smartstring",
- "symbolica 0.7.0",
+ "symbolica",
  "thiserror",
 ]
 
@@ -2289,32 +2289,6 @@ dependencies = [
  "cpp_demangle",
  "rustc-demangle",
  "symbolic-common",
-]
-
-[[package]]
-name = "symbolica"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d68130aa3250a37289a125685427115c84da7a1f0385c8c95c2a9e1451159d27"
-dependencies = [
- "ahash",
- "append-only-vec",
- "brotli",
- "byteorder",
- "bytes",
- "colored",
- "dyn-clone",
- "once_cell",
- "rand",
- "rand_xoshiro",
- "rayon",
- "rug",
- "serde",
- "smallvec",
- "smartstring",
- "tinyjson",
- "tracing",
- "wide",
 ]
 
 [[package]]

@@ -215,7 +215,7 @@ build_dependencies () {
         then
 
             echo "Building symbolica with maturin within a venv ...";
-            maturin develop $SYMBOLICA_BUILD_FLAGS >> ../dependency_build.log 2>&1
+            maturin develop >> ../dependency_build.log 2>&1
             RETCODE=$RETCODE+$?
             if [ ! $(($RETCODE)) == 0 ]
             then

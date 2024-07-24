@@ -32,7 +32,7 @@ insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 # These will be patched
 symbolica = { version = "0.8.0" }
 #spenso = { version = "0.2.0", features = ["shadowing"] }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
+spenso = { git = "https://github.com/alphal00p/spenso", branch = "update_to_symb_08", features = [
     "shadowing",
 ] }
 
