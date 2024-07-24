@@ -7,7 +7,7 @@ import subprocess
 import os
 from typing import Any
 from pprint import pformat
-import yaml
+import yaml  # type: ignore
 import shutil
 import copy
 from gammaloop import __version__
