@@ -1636,10 +1636,10 @@ pub fn h<T: FloatLike>(
                 ),
             };
 
-            println!("normalisation: {}", normalisation);
-            println!("t: {}", t);
-            println!("sig: {}", sig);
-            println!("power: {:?}", power);
+            // println!("normalisation: {}", normalisation);
+            // println!("t: {}", t);
+            // println!("sig: {}", sig);
+            // println!("power: {:?}", power);
 
 
             let prefactor = match power {
@@ -1647,7 +1647,7 @@ pub fn h<T: FloatLike>(
                 Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
             };
 
-            println!("prefactor: {}", prefactor);
+            // println!("prefactor: {}", prefactor);
             prefactor
                 * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig)).exp()
         }
