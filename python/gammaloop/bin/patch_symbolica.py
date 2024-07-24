@@ -121,8 +121,7 @@ def patch_cargo_toml():
         raise BaseException(
             "Could not find version field in symbolica's Cargo.toml")
     elif symbolica_version_modified:
-        print(f"Patched symbolica's Cargo.toml to specify version {
-              requested_symbolica_version} requested by gammaLoop (it was {current_version_number})")
+        print(f"Patched symbolica's Cargo.toml to specify version {requested_symbolica_version} requested by gammaLoop (it was {current_version_number})")  # nopep8
         cargo_toml = '\n'.join(modified_cargo_toml)
         with open('./Cargo.toml', 'w', encoding='utf8') as f_out:
             f_out.write(cargo_toml)
