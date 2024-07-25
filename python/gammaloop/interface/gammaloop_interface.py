@@ -7,7 +7,7 @@ import subprocess
 import os
 from typing import Any
 from pprint import pformat
-import yaml
+import yaml  # type: ignore
 import shutil
 import copy
 from gammaloop import __version__
@@ -117,7 +117,8 @@ class GammaLoopConfiguration(object):
                     'n_increase': 0,
                     'n_max': 1000000000,
                     'integrated_phase': 'real',
-                    'learning_rate': 1.5,
+                    'discrete_dim_learning_rate': 1.5,
+                    'continuous_dim_learning_rate': 1.5,
                     'train_on_avg': False,
                     'show_max_wgt_info': False,
                     'max_prob_ratio': 0.01,

@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 import subprocess
+import os
+import re
+
+GL_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), os.path.pardir, os.path.pardir, os.path.pardir))
 
 
 def revert_revision():
-    # pass
     # Pin the revision of the branch currently working for gammaLoop
-    print(subprocess.check_output(
-        ['git', 'reset', '--hard', '797db1082a97e3a1c12d9b011709ce41e91838d8']).decode('ascii').strip())
+    if os.environ.get('SYMBOLICA_REVISION_HASH', 'latest') != 'latest':
+        print(subprocess.check_output(
+            ['git', 'reset', '--hard', os.environ['SYMBOLICA_REVISION_HASH']]).decode('ascii').strip())
 
 
 def patch_lib_rs():
@@ -43,12 +48,84 @@ def patch_build_rs():
             f_out.write(symbolica_build_rs.replace(
                 'fn main() {',
                 """fn main() {
-    pyo3_build_config::add_extension_module_link_args();"""))
+    if cfg!(target_os = "macos") {
+        pyo3_build_config::add_extension_module_link_args();
+    }"""))
+
+
+# Something like this can be useful on some user's systems with this
+# error when loading the pyo3 symbolica library
+#   Symbol not found: ___emutls_get_address
+# This will however not be called by default
+def patch_build_linking():
+    with open('./build.rs', 'r', encoding='utf8') as f_in:
+        symbolica_build_rs = f_in.read()
+    if 'gcc_s' not in symbolica_build_rs:
+        with open('./build.rs', 'w', encoding='utf8') as f_out:
+            f_out.write(symbolica_build_rs.replace(
+                'fn main() {',
+                """fn main() {
+    println!("cargo:rustc-link-lib=gcc_s");
+    println!("cargo:rustc-link-search=/opt/local/lib/libgcc");"""))
+
+
+def get_symbolica_version_in_gammaloop_cargo_toml():
+    try:
+        with open(os.path.join(GL_PATH, 'Cargo.toml'), 'r') as f_in:
+            symbolica_version = re.findall(
+                r'symbolica\s*=\s*\{\s*version\s*=\s*\"(?P<version>.*)\"\s*\}', f_in.read())[0]
+        if symbolica_version == '*':
+            raise BaseException(
+                "Symbolica version is specified in Cargo.toml must be pinned to a specific version")
+        return symbolica_version
+    except Exception as e:
+        raise BaseException(
+            "Could not identify symbolica version specified in Cargo.toml") from e
 
 
 def patch_cargo_toml():
     with open('./Cargo.toml', 'r', encoding='utf8') as f_in:
         cargo_toml = f_in.read()
+
+    requested_symbolica_version = get_symbolica_version_in_gammaloop_cargo_toml()
+    current_version_number = None
+    modified_cargo_toml = []
+    in_package_group = False
+    symbolica_version_modified = None
+    for line in cargo_toml.split('\n'):
+        if not in_package_group:
+            if '[package]' in line:
+                in_package_group = True
+            modified_cargo_toml.append(line)
+        else:
+            if line.strip().startswith('version'):
+                try:
+                    current_version_number = re.findall(
+                        r'version\s*=\s*\"(?P<version>.*)\"', line)[0]
+                    if current_version_number != requested_symbolica_version:
+                        symbolica_version_modified = True
+                        modified_cargo_toml.append(
+                            f'version = "{requested_symbolica_version}"')
+                    else:
+                        symbolica_version_modified = False
+                        modified_cargo_toml.append(line)
+                except Exception as e:
+                    raise BaseException(
+                        "Could not identify symbolica version specified in symbolica's Cargo.toml") from e
+            else:
+                if line.strip().startswith('['):
+                    in_package_group = False
+                modified_cargo_toml.append(line)
+
+    if current_version_number is None:
+        raise BaseException(
+            "Could not find version field in symbolica's Cargo.toml")
+    elif symbolica_version_modified:
+        print(f"Patched symbolica's Cargo.toml to specify version {requested_symbolica_version} requested by gammaLoop (it was {current_version_number})")  # nopep8
+        cargo_toml = '\n'.join(modified_cargo_toml)
+        with open('./Cargo.toml', 'w', encoding='utf8') as f_out:
+            f_out.write(cargo_toml)
+
     if 'pyo3-build-config = "*"' not in cargo_toml:
         with open('./Cargo.toml', 'w', encoding='utf8') as f_out:
             f_out.write('\n'.join([
@@ -64,5 +141,6 @@ if __name__ == '__main__':
     revert_revision()
     patch_lib_rs()
     patch_build_rs()
+    # patch_build_linking()
     patch_cargo_toml()
     print("Symbolica successfully patched for use in GammaLoop")

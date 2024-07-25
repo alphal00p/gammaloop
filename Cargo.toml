@@ -32,14 +32,12 @@ insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 
 
 [dependencies]
-# symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-#symbolica = { git = "https://github.com/benruijl/symbolica", branch = "nested_evaluate" }
-symbolica = { version = "0.7.0" }
-
-spenso = { version = "0.2.0", features = ["shadowing"] }
-# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
-#     "shadowing",
-# ] }
+# These will be patched
+symbolica = { version = "0.8.0" }
+#spenso = { version = "0.2.0", features = ["shadowing"] }
+spenso = { git = "https://github.com/alphal00p/spenso", branch = "update_to_symb_08", features = [
+    "shadowing",
+] }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
@@ -135,10 +133,7 @@ fail-on-warnings = []
 insta.opt-level = 3
 similar.opt-level = 3
 
-# [patch."https://github.com/alphal00p/spenso"]
-# symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 [patch.crates-io]
-# spenso = { path = "../spenso" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "nested_evaluate" }
+symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
+[patch."https://github.com/alphal00p/spenso"]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }

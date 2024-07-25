@@ -37,10 +37,10 @@ jobs:
         ./bin/build_dependencies.sh    
     - name: Compile binary
       run: |
-        ./bin/compile_bin.sh
+        ./bin/compile_bin.sh --release
     - name: Compile library
       run: |
-        ./bin/compile_lib.sh
+        ./bin/compile_lib.sh --release
     - name: Run code checks
       run: |
         ./bin/run_tests.sh python -m "codecheck"

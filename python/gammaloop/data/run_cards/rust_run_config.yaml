@@ -20,7 +20,8 @@ Integrator:
   n_increase: 0
   n_max: 1000000000
   integrated_phase: real
-  learning_rate: 1.5
+  discrete_dim_learning_rate: 1.5
+  continuous_dim_learning_rate: 1.5
   train_on_avg: false
   show_max_wgt_info: false
   max_prob_ratio: 0.01

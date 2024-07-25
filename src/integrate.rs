@@ -302,9 +302,10 @@ where
         let new_meta_data = StatisticsCounter::from_evaluation_results(&evaluation_results);
         integration_state.stats = integration_state.stats.merged(&new_meta_data);
 
-        integration_state
-            .grid
-            .update(settings.integrator.learning_rate);
+        integration_state.grid.update(
+            settings.integrator.discrete_dim_learning_rate,
+            settings.integrator.continuous_dim_learning_rate,
+        );
         integration_state.integral.update_iter();
 
         for i_integrand in 0..N_INTEGRAND_ACCUMULATORS {
@@ -827,7 +828,10 @@ impl MasterNode {
 
     /// Finish the current iteration. This should be called after all jobs have been processed.
     pub fn update_iter(&mut self) {
-        self.grid.update(self.integrator_settings.learning_rate);
+        self.grid.update(
+            self.integrator_settings.discrete_dim_learning_rate,
+            self.integrator_settings.continuous_dim_learning_rate,
+        );
         self.master_accumulator_re.update_iter();
         self.master_accumulator_im.update_iter();
 

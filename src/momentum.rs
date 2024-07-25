@@ -15,6 +15,7 @@ use symbolica::{
     coefficient::Coefficient,
     domains::{
         float::{NumericalFloatComparison, NumericalFloatLike, Real},
+        integer::IntegerRing,
         rational::RationalField,
     },
     poly::{polynomial::MultivariatePolynomial, Exponent},
@@ -1473,12 +1474,14 @@ impl<T> FourMomentum<T, Atom> {
         let energy = self
             .temporal
             .value
-            .to_polynomial(&RationalField::new(), None);
+            .to_polynomial(&RationalField::new(IntegerRing), None);
 
         let px: MultivariatePolynomial<RationalField, _> =
-            Atom::new_num(self.spatial.px).to_polynomial(&RationalField::new(), None);
-        let py = Atom::new_num(self.spatial.py).to_polynomial(&RationalField::new(), None);
-        let pz = Atom::new_num(self.spatial.pz).to_polynomial(&RationalField::new(), None);
+            Atom::new_num(self.spatial.px).to_polynomial(&RationalField::new(IntegerRing), None);
+        let py =
+            Atom::new_num(self.spatial.py).to_polynomial(&RationalField::new(IntegerRing), None);
+        let pz =
+            Atom::new_num(self.spatial.pz).to_polynomial(&RationalField::new(IntegerRing), None);
 
         DenseTensor::from_data(&[energy, px, py, pz], structure).unwrap()
     }

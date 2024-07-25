@@ -151,7 +151,7 @@ impl<'a,const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float*&rhs.float).complete(N).into()
+        (&self.float*&rhs.float).complete(N as i64).into()
     }
 }
 
@@ -159,7 +159,7 @@ impl<'a,const N: u32> std::ops::Mul<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float*&rhs.float).complete(N).into()
+        (&self.float*&rhs.float).complete(N as i64).into()
     }
 }
 
@@ -197,7 +197,7 @@ impl<'a,const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float+&rhs.float).complete(N).into()
+        (&self.float+&rhs.float).complete(N as i64).into()
     }
 }
 
@@ -205,7 +205,7 @@ impl<'a,const N: u32> std::ops::Add<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float+&rhs.float).complete(N).into()
+        (&self.float+&rhs.float).complete(N as i64).into()
     }
 }
 
@@ -243,7 +243,7 @@ impl<'a,const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float-&rhs.float).complete(N).into()
+        (&self.float-&rhs.float).complete(N as i64).into()
     }
 }
 
@@ -251,7 +251,7 @@ impl<'a,const N: u32> std::ops::Sub<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float-&rhs.float).complete(N).into()
+        (&self.float-&rhs.float).complete(N as i64).into()
     }
 }
 
@@ -289,7 +289,7 @@ impl<'a,const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float/&rhs.float).complete(N).into()
+        (&self.float/&rhs.float).complete(N as i64).into()
     }
 }
 
@@ -297,7 +297,7 @@ impl<'a,const N: u32> Div<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float/&rhs.float).complete(N).into()
+        (&self.float/&rhs.float).complete(N as i64).into()
     }
 }
 
@@ -327,7 +327,7 @@ impl<'a,const N: u32> std::ops::Neg for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn neg(self) -> Self::Output {
-        (-&self.float).complete(N).into()
+        (-&self.float).complete(N as i64).into()
     }
 }
 
@@ -363,7 +363,7 @@ impl<const N:u32> RefOne for VarFloat<N> {
 
 impl<const N:u32> NumericalFloatLike for VarFloat<N>{
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
-        (&self.float*&a.float+&b.float).complete(N).into()  
+        (&self.float*&a.float+&b.float).complete(N as i64).into()  
     }
 
     // fn norm(&self) -> Self {
@@ -399,7 +399,7 @@ impl<const N:u32> NumericalFloatLike for VarFloat<N>{
     }
 
     fn pow(&self, e: u64) -> Self {
-        rug::ops::Pow::pow(&self.float, e).complete(N).into()
+        rug::ops::Pow::pow(&self.float, e).complete(N as i64).into()
     }
 
     fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
@@ -470,7 +470,7 @@ impl<const N:u32> Real for VarFloat<N> {
     fn log(&self)->Self{
         self.float
                 .ln_ref()
-                .complete(N)
+                .complete(N as i64)
                 .into()
     }
     fn norm(&self) -> Self{
@@ -1325,6 +1325,7 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
                 latex: false,
+                double_star_for_exponentiation: false
             },
         )
     )
@@ -1637,10 +1638,10 @@ pub fn h<T: FloatLike>(
                 ),
             };
 
-            println!("normalisation: {}", normalisation);
-            println!("t: {}", t);
-            println!("sig: {}", sig);
-            println!("power: {:?}", power);
+            // println!("normalisation: {}", normalisation);
+            // println!("t: {}", t);
+            // println!("sig: {}", sig);
+            // println!("power: {:?}", power);
 
 
             let prefactor = match power {
@@ -1648,7 +1649,7 @@ pub fn h<T: FloatLike>(
                 Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
             };
 
-            println!("prefactor: {}", prefactor);
+            // println!("prefactor: {}", prefactor);
             prefactor
                 * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig)).exp()
         }
