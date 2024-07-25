@@ -3,7 +3,7 @@ use color_eyre::Report;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
-use log::debug;
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
@@ -537,16 +537,17 @@ impl CFFExpression {
         let path_to_compiled = path.join("compiled");
         std::fs::create_dir_all(&path_to_compiled)?;
 
-        debug!(
-            "compiling cff in {}",
-            path_to_compiled
+        let joint = self.build_joint_symbolica_evaluator::<T>(params);
+
+        let path_to_code = path_to_compiled.join("expression.cpp");
+
+        info!(
+            "Compiling cff soutce_code {}",
+            path_to_code
                 .to_str()
                 .ok_or(eyre!("could not convert path to string"))?
         );
 
-        let joint = self.build_joint_symbolica_evaluator::<T>(params);
-
-        let path_to_code = path_to_compiled.join("expression.cpp");
         let path_to_so = path_to_compiled.join("expression.so");
         let path_to_so_str = path_to_so
             .to_str()
@@ -579,6 +580,8 @@ impl CFFExpression {
         };
 
         self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
+
+        info!("Compilation succesful");
 
         Ok(())
     }
