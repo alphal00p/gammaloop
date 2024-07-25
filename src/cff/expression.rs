@@ -547,7 +547,13 @@ impl CFFExpression {
         let joint = self.build_joint_symbolica_evaluator::<T>(params);
 
         let path_to_code = path_to_compiled.join("expression.cpp");
-        let path_to_code_str = path_to_compiled
+        let path_to_so = path_to_compiled.join("expression.so");
+        let path_to_so_str = path_to_so
+            .to_str()
+            .ok_or(eyre!("could not convert path to string"))?;
+
+        let path_to_code_clone = path_to_code.clone();
+        let path_to_code_str = path_to_code_clone
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;
 
@@ -565,7 +571,7 @@ impl CFFExpression {
 
         std::fs::write(path_to_code, cpp_str)?;
         let exported_code = ExportedCode::new(path_to_code_str.to_string(), "joint".to_string());
-        exported_code.compile("expression.so", CompileOptions::default())?;
+        exported_code.compile(path_to_so_str, CompileOptions::default())?;
 
         let metadata = CompiledCFFExpressionMetaData {
             name: path_to_compiled,
