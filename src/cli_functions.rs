@@ -363,7 +363,8 @@ fn batch_branch(
             .join("amplitudes")
             .join(amplitude_name);
 
-        amp.load_derived_data(&derived_data_path)?;
+        // to lazy to pass load_compiled correctly at this point
+        amp.load_derived_data(&derived_data_path, true)?;
         amp
     };
 

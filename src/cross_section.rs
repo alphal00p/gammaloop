@@ -645,9 +645,11 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
+    pub fn load_derived_data(&mut self, path: &Path, load_compiled: bool) -> Result<(), Report> {
         for ampltitude_graph in self.amplitude_graphs.iter_mut() {
-            ampltitude_graph.graph.load_derived_data(path)?;
+            ampltitude_graph
+                .graph
+                .load_derived_data(path, load_compiled)?;
         }
         Ok(())
     }
@@ -795,11 +797,11 @@ impl AmplitudeList {
         self.container.push(amplitude);
     }
 
-    pub fn load_derived_data(&mut self, path: &str) -> Result<(), Report> {
+    pub fn load_derived_data(&mut self, path: &str, load_compiled: bool) -> Result<(), Report> {
         let path = Path::new(path);
         for amplitude in self.container.iter_mut() {
             let ampltitude_path = path.join(amplitude.name.as_str());
-            amplitude.load_derived_data(&ampltitude_path)?;
+            amplitude.load_derived_data(&ampltitude_path, load_compiled)?;
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 amplitude_graph.graph.generate_esurface_data()?;
             }

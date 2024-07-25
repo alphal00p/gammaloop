@@ -1404,20 +1404,22 @@ impl Graph {
         self.derived_data.numerator = Some(numerator);
     }
 
-    pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
+    pub fn load_derived_data(&mut self, path: &Path, load_compiled: bool) -> Result<(), Report> {
         let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
         let derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
         self.derived_data = derived_data;
 
-        let loaded_compiled = self
-            .derived_data
-            .cff_expression
-            .as_mut()
-            .unwrap()
-            .load_compiled(path.into());
+        if load_compiled {
+            let loaded_compiled = self
+                .derived_data
+                .cff_expression
+                .as_mut()
+                .unwrap()
+                .load_compiled(path.into());
 
-        if let Err(e) = loaded_compiled {
-            warn!("could not load compiled cff: {}", e)
+            if let Err(e) = loaded_compiled {
+                warn!("could not load compiled cff: {}", e)
+            }
         }
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.

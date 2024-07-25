@@ -992,7 +992,7 @@ class GammaLoop(object):
                     self.rust_worker.add_amplitude_from_yaml_str(
                         amplitude_yaml)
             self.rust_worker.load_amplitudes_derived_data(
-                pjoin(args.path_to_launch, 'sources', 'amplitudes'))
+                pjoin(args.path_to_launch, 'sources', 'amplitudes'), self.config["export_settings"]["compile_cff"])
 
             self.rust_worker.load_amplitude_integrands(
                 pjoin(args.path_to_launch, 'cards', 'run_card.yaml'))
@@ -1080,7 +1080,7 @@ class GammaLoop(object):
                     self.rust_worker.add_amplitude_from_yaml_str(
                         amplitude_yaml)
             self.rust_worker.load_amplitudes_derived_data(
-                pjoin(self.launched_output, 'sources', 'amplitudes'))
+                pjoin(self.launched_output, 'sources', 'amplitudes'), self.config["export_settings"]["compile_cff"])
 
             self.rust_worker.load_amplitude_integrands(
                 pjoin(self.launched_output, 'cards', 'run_card.yaml'))

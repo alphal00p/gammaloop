@@ -219,9 +219,13 @@ impl PythonWorker {
             .map(|a| self.amplitudes = a)
     }
 
-    pub fn load_amplitudes_derived_data(&mut self, path: &str) -> PyResult<()> {
+    pub fn load_amplitudes_derived_data(
+        &mut self,
+        path: &str,
+        load_compiled: bool,
+    ) -> PyResult<()> {
         self.amplitudes
-            .load_derived_data(path)
+            .load_derived_data(path, load_compiled)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
