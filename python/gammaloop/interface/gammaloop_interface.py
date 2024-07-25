@@ -127,7 +127,7 @@ class GammaLoopConfiguration(object):
                 'Observables': [],
                 'Selectors': [],
                 'Stability': {
-                    'rotation_axis': 'x',
+                    'rotation_axis': ['x'],
                     'levels': [
                         {
                             'precision': 'Double',
