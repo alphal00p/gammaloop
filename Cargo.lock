@@ -928,7 +928,7 @@ dependencies = [
  "portrait",
  "pprof",
  "pyo3",
- "pyo3-build-config 0.22.2",
+ "pyo3-build-config",
  "pyo3-log",
  "rand",
  "rand_xoshiro",
@@ -1196,16 +1196,6 @@ name = "libc"
 version = "0.2.155"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
-
-[[package]]
-name = "libloading"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
-dependencies = [
- "cfg-if",
- "windows-targets 0.52.6",
-]
 
 [[package]]
 name = "libm"
@@ -1748,7 +1738,7 @@ dependencies = [
  "memoffset",
  "parking_lot",
  "portable-atomic",
- "pyo3-build-config 0.21.2",
+ "pyo3-build-config",
  "pyo3-ffi",
  "pyo3-macros",
  "unindent",
@@ -1765,23 +1755,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyo3-build-config"
-version = "0.22.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e8730e591b14492a8945cdff32f089250b05f5accecf74aeddf9e8272ce1fa8"
-dependencies = [
- "once_cell",
- "target-lexicon",
-]
-
-[[package]]
 name = "pyo3-ffi"
 version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01be5843dc60b916ab4dad1dca6d20b9b4e6ddc8e15f50c47fe6d85f1fb97403"
 dependencies = [
  "libc",
- "pyo3-build-config 0.21.2",
+ "pyo3-build-config",
 ]
 
 [[package]]
@@ -1815,7 +1795,7 @@ checksum = "08260721f32db5e1a5beae69a55553f56b99bd0e1c3e6e0a5e8851a9d0f5a85c"
 dependencies = [
  "heck",
  "proc-macro2",
- "pyo3-build-config 0.21.2",
+ "pyo3-build-config",
  "quote",
  "syn 2.0.71",
 ]
@@ -2068,12 +2048,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
-name = "self_cell"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
-
-[[package]]
 name = "semver"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2293,6 +2267,8 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68130aa3250a37289a125685427115c84da7a1f0385c8c95c2a9e1451159d27"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -2301,14 +2277,11 @@ dependencies = [
  "bytes",
  "colored",
  "dyn-clone",
- "libloading",
  "once_cell",
- "pyo3-build-config 0.22.2",
  "rand",
  "rand_xoshiro",
  "rayon",
  "rug",
- "self_cell",
  "serde",
  "smallvec",
  "smartstring",
@@ -2885,3 +2858,7 @@ dependencies = [
  "quote",
  "syn 2.0.71",
 ]
+
+[[patch.unused]]
+name = "symbolica"
+version = "0.8.0"
