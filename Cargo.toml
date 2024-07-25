@@ -10,7 +10,6 @@ license-file = "LICENSE.md"
 readme = "README.md"
 repository = "https://github.com/alphal00p/gammaloop"
 
-
 [profile.dev-optim]
 inherits = "dev"
 opt-level = 2
@@ -124,6 +123,7 @@ bench = false
 [features]
 extension-module = ["pyo3/extension-module"]
 default = ["python_api"]
+higher_loops = []
 
 python_api = ["pyo3", "extension-module"]
 binary = []
