@@ -9,7 +9,9 @@ use std::{fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
     domains::{float::NumericalFloatLike, rational::Rational},
-    evaluate::{CompileOptions, CompiledEvaluator, EvalTree, ExpressionEvaluator, FunctionMap},
+    evaluate::{
+        CompileOptions, CompiledEvaluator, EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap,
+    },
 };
 use typed_index_collections::TiVec;
 
@@ -543,73 +545,34 @@ impl CFFExpression {
         );
 
         let joint = self.build_joint_symbolica_evaluator::<T>(params);
-        let orientations = self.build_symbolica_evaluators::<T>(params);
 
-        let path_to_joint = path_to_compiled.join("joint");
-        let joint_cpp = joint.export_cpp(&format!(
-            "{}.cpp",
-            path_to_joint
-                .to_str()
-                .ok_or(eyre!("could not convert path to string"))?
-        ))?;
+        let path_to_code = path_to_compiled.join("expression.cpp");
+        let path_to_code_str = path_to_compiled
+            .to_str()
+            .ok_or(eyre!("could not convert path to string"))?;
 
-        let joint_compiled = joint_cpp.compile(
-            &format!(
-                "{}.so",
-                path_to_joint
-                    .to_str()
-                    .ok_or(eyre!("could not convert path to string"))?
-            ),
-            CompileOptions::default(),
-        )?;
+        let mut cpp_str = joint.export_cpp_str("joint", true);
 
-        let joint_evaluator = joint_compiled.load().map_err(|e| eyre!("{}", e))?;
+        if compile_seperate_orientations {
+            let orientations = self.build_symbolica_evaluators::<T>(params);
+            for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
+                let orientation_cpp_str = orientation_evaluator
+                    .export_cpp_str(&format!("orientation_{}", orientation_id), false);
 
-        let orientation_evaluators = if compile_seperate_orientations {
-            orientations
-                .into_iter()
-                .enumerate()
-                .map(|(term_id, evaluator)| {
-                    let path_to_orientation =
-                        path_to_compiled.join(format!("orientation_{}", term_id));
-
-                    let orientation_cpp = evaluator
-                        .export_cpp(&format!(
-                            "{}.cpp",
-                            path_to_orientation
-                                .to_str()
-                                .ok_or("could not convert path to string".to_string())?
-                        ))
-                        .map_err(|e| format!("{e}"))?;
-
-                    let orientation_compiled = orientation_cpp
-                        .compile(
-                            &format!(
-                                "{}.so",
-                                path_to_orientation
-                                    .to_str()
-                                    .ok_or("could not convert path to string".to_string())?
-                            ),
-                            CompileOptions::default(),
-                        )
-                        .map_err(|e| format!("{e}"))?;
-
-                    orientation_compiled.load()
-                })
-                .collect::<Result<Vec<CompiledEvaluator>, String>>()
-        } else {
-            Ok(vec![])
+                cpp_str.push_str(&orientation_cpp_str);
+            }
         }
-        .map_err(|e| eyre!(e))?;
 
-        self.compiled = CompiledCFFExpression::Some(InnerCompiledCFF {
-            metadata: CompiledCFFExpressionMetaData {
-                name: path_to_compiled,
-                num_orientations: orientation_evaluators.len(),
-            },
-            joint: joint_evaluator,
-            orientations: orientation_evaluators.into(),
-        });
+        std::fs::write(path_to_code, cpp_str)?;
+        let exported_code = ExportedCode::new(path_to_code_str.to_string(), "joint".to_string());
+        exported_code.compile("expression.so", CompileOptions::default())?;
+
+        let metadata = CompiledCFFExpressionMetaData {
+            name: path_to_compiled,
+            num_orientations: self.get_num_trees(),
+        };
+
+        self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
 
         Ok(())
     }
@@ -793,24 +756,18 @@ impl CompiledCFFExpression {
     }
 
     fn from_metedata(metadata: CompiledCFFExpressionMetaData) -> Result<Self, Report> {
-        let path_to_joint = metadata.name.join("joint.so");
+        let path_to_joint = metadata.name.join("expression.so");
         let path_to_joint_str = path_to_joint
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;
 
-        let joint = CompiledEvaluator::load(path_to_joint_str).map_err(|e| eyre!(e))?;
+        let joint = CompiledEvaluator::load(path_to_joint_str, "joint").map_err(|e| eyre!(e))?;
 
         let orientations_result = (0..metadata.num_orientations)
             .map(|orientation| {
-                let path_to_orientation = metadata
-                    .name
-                    .join(format!("orientation_{}.so", orientation));
-
-                let path_to_orientation_str = path_to_orientation
-                    .to_str()
-                    .ok_or(eyre!("could not_convert path to_string"))?;
-
-                CompiledEvaluator::load(path_to_orientation_str).map_err(|e| eyre!(e))
+                joint
+                    .load_new_function(&format!("orientation_{}", orientation))
+                    .map_err(|e| eyre!(e))
             })
             .collect::<Result<_, Report>>();
 
