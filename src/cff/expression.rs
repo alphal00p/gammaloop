@@ -490,7 +490,7 @@ impl CFFExpression {
 
                 tree.horner_scheme();
                 tree.common_subexpression_elimination();
-                tree.common_pair_elimination();
+                //  ree.common_pair_elimination();
 
                 let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
                 tree_ft.linearize(params.len())
@@ -522,7 +522,7 @@ impl CFFExpression {
 
         tree.horner_scheme();
         tree.common_subexpression_elimination();
-        tree.common_pair_elimination();
+        // tree.common_pair_elimination();
 
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
         tree_ft.linearize(params.len())
