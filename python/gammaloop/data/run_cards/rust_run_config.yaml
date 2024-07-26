@@ -1,10 +1,10 @@
 General:
   debug: 0
   use_ltd: false
-Integrand:
-  type: gamma_loop
   load_compiled_cff: True
   load_compiled_seperate_orientations: False
+Integrand:
+  type: gamma_loop
 Kinematics:
   e_cm: 3.0
   externals:
