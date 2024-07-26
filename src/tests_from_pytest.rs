@@ -1626,17 +1626,21 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.process_numerator(&model);
+    graph.generate_numerator();
 
-    let a = graph
-        .derived_data
-        .numerator
-        .as_ref()
-        .unwrap()
-        .network
-        .as_ref()
-        .unwrap();
+    println!("{}", graph.derived_data.numerator.unwrap().expression);
 
-    println!("{}", a.dot());
-    println!("{}", graph.derived_data.numerator.unwrap().expression)
+    // graph.process_numerator(&model);
+
+    // let a = graph
+    //     .derived_data
+    //     .numerator
+    //     .as_ref()
+    //     .unwrap()
+    //     .network
+    //     .as_ref()
+    //     .unwrap();
+
+    // println!("{}", a.dot());
+    // println!("{}", graph.derived_data.numerator.unwrap().expression)
 }

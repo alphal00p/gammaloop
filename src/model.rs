@@ -7,7 +7,10 @@ use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
-use spenso::{Representation, Slot, ABSTRACTIND};
+use spenso::{
+    BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Dual, IsAbstractSlot,
+    Lorentz, PhysReps, Representation, Slot, ABSTRACTIND,
+};
 use std::fs;
 use std::ops::Index;
 use std::path::Path;
@@ -351,26 +354,26 @@ pub struct Particle {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InOutIndex {
-    incoming: Slot,
-    outgoing: Slot,
+    incoming: Slot<PhysReps>,
+    outgoing: Slot<PhysReps>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EdgeSlots {
-    lorentz: Vec<Slot>,
-    spin: Vec<Slot>,
-    pub color: Vec<Slot>,
+    lorentz: Vec<Slot<PhysReps>>,
+    spin: Vec<Slot<PhysReps>>,
+    pub color: Vec<Slot<PhysReps>>,
 }
 
 impl EdgeSlots {
     pub fn replacements(&self, id: usize) -> Vec<(Pattern, Pattern)> {
-        let rhs_lor = Slot::from((id.into(), Representation::Lorentz(4.into())))
-            .to_symbolic_wrapped()
-            .into_pattern();
+        let rhs_lor: Slot<PhysReps> = Lorentz::new_slot_selfless(4, id).into();
 
-        let rhs_spin = Slot::from((id.into(), Representation::Bispinor(4.into())))
-            .to_symbolic_wrapped()
-            .into_pattern();
+        let rhs_lor = rhs_lor.to_symbolic_wrapped().into_pattern();
+
+        let rhs_spin: Slot<PhysReps> = Bispinor::new_slot_selfless(4, id).into();
+
+        let rhs_spin = rhs_spin.to_symbolic_wrapped().into_pattern();
 
         let mut reps = vec![];
         for l in &self.lorentz {
@@ -382,9 +385,9 @@ impl EdgeSlots {
         }
 
         for c in &self.color {
-            let rhs_color = Slot::from((id.into(), c.representation))
-                .to_symbolic_wrapped()
-                .into_pattern();
+            let mut rhs_color = *c;
+            rhs_color.aind = id.into();
+            let rhs_color = rhs_color.to_symbolic_wrapped().into_pattern();
 
             reps.push((rhs_color.clone(), c.to_symbolic().into_pattern()));
         }
@@ -411,35 +414,35 @@ impl EdgeSlots {
 }
 
 impl Particle {
-    fn lorentz_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
-        let fourd_lor = Representation::Lorentz(4.into());
+    fn lorentz_slots(&self, shift: usize) -> (Vec<Slot<PhysReps>>, usize) {
+        let fourd_lor: Representation<PhysReps> = Lorentz::new_dimed_rep_selfless(4).cast();
 
         match self.spin {
-            3 => (vec![Slot::from((shift.into(), fourd_lor))], shift + 1),
+            3 => (vec![fourd_lor.new_slot(shift)], shift + 1),
             _ => (vec![], shift),
         }
     }
 
-    fn spin_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
-        let fourd_bis = Representation::Bispinor(4.into());
+    fn spin_slots(&self, shift: usize) -> (Vec<Slot<PhysReps>>, usize) {
+        let fourd_bis: Representation<PhysReps> = Bispinor::new_dimed_rep_selfless(4).cast();
 
         match self.spin {
-            2 => (vec![Slot::from((shift.into(), fourd_bis))], shift + 1),
+            2 => (vec![fourd_bis.new_slot(shift)], shift + 1),
             _ => (vec![], shift),
         }
     }
 
-    fn color_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
-        let rep = match self.color {
-            3 => Representation::ColorFundamental(3.into()),
-            -3 => Representation::ColorAntiFundamental(3.into()),
-            6 => Representation::ColorSextet(6.into()),
-            -6 => Representation::ColorAntiSextet(6.into()),
-            8 => Representation::ColorAdjoint(8.into()),
+    fn color_slots(&self, shift: usize) -> (Vec<Slot<PhysReps>>, usize) {
+        let rep: Representation<PhysReps> = match self.color {
+            3 => ColorFundamental::new_dimed_rep_selfless(3).cast(),
+            -3 => Dual::<ColorFundamental>::new_dimed_rep_selfless(3).cast(),
+            6 => ColorSextet::new_dimed_rep_selfless(6).cast(),
+            -6 => Dual::<ColorSextet>::new_dimed_rep_selfless(6).cast(),
+            8 => ColorAdjoint::new_dimed_rep_selfless(8).cast(),
             _ => return (vec![], shift),
         };
 
-        (vec![Slot::from((shift.into(), rep))], shift + 1)
+        (vec![rep.new_slot(shift)], shift + 1)
     }
 
     pub fn slots(&self, shifts: (usize, usize, usize)) -> (EdgeSlots, (usize, usize, usize)) {

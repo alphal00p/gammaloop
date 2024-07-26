@@ -9,8 +9,8 @@ use itertools::Itertools;
 use log::debug;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::{
-    AbstractIndex, NamedStructure, Representation, Shadowable, SymbolicTensor, TensorNetwork,
-    TensorStructure,
+    AbstractIndex, Lorentz, NamedStructure, PhysReps, RepName, Representation, Shadowable,
+    SymbolicTensor, TensorNetwork, TensorStructure,
 };
 use spenso::{Complex, ParamTensor};
 use symbolica::{atom::AtomView, domains::float::Complex as SymComplex};
@@ -126,7 +126,7 @@ impl Numerator {
             .enumerate()
             .map(|(i, _)| {
                 let named_structure: NamedStructure<&str> = NamedStructure::from_iter(
-                    [(AbstractIndex(i), Representation::Lorentz(4.into()))],
+                    [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
                     "Q",
                     Some(i),
                 );

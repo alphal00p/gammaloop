@@ -152,7 +152,7 @@ impl InteractionVertexInfo {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern =
-                        Pattern::parse(&format!("Q({},aind(lor(4,indexid(x_))))", e)).unwrap();
+                        Pattern::parse(&format!("Q({},aind(lord(4,indexid(x_))))", e)).unwrap();
 
                     atom = momentum_in_pattern.replace_all(
                         atom.as_view(),
@@ -162,7 +162,7 @@ impl InteractionVertexInfo {
                     );
                 }
 
-                atom = preprocess_ufo_spin_wrapped(atom);
+                atom = preprocess_ufo_spin_wrapped(atom, true);
 
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
@@ -260,19 +260,19 @@ impl InteractionVertexInfo {
             })
             .collect();
 
-        let i = Slot {
-            index: AbstractIndex::try_from(format!("i{}", vertex_pos)).unwrap(),
-            representation: Representation::Euclidean(color_structure.len().into()),
-        };
+        let irep: Representation<PhysReps> =
+            Euclidean::new_dimed_rep_selfless(color_structure.len()).cast();
+        let i = irep.new_slot(AbstractIndex::try_from(format!("i{}", vertex_pos)).unwrap());
 
         let color_structure = DataTensor::Dense(
             DenseTensor::from_data(&color_structure, VecStructure::from(vec![i])).unwrap(),
         );
 
-        let j = Slot {
-            index: AbstractIndex::try_from(format!("j{}", vertex_pos)).unwrap(),
-            representation: Representation::Euclidean(spin_structure.len().into()),
-        };
+        let jrep: Representation<PhysReps> =
+            Euclidean::new_dimed_rep_selfless(spin_structure.len()).cast();
+
+        let j = jrep.new_slot(AbstractIndex::try_from(format!("j{}", vertex_pos)).unwrap());
+
         let spin_structure = DataTensor::Dense(
             DenseTensor::from_data(&spin_structure, VecStructure::from(vec![j])).unwrap(),
         );
@@ -452,7 +452,7 @@ impl Edge {
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 atom = pfun.replace_all(
                     atom.as_view(),
-                    &Pattern::parse(&format!("Q({},aind(lor(4,x_)))", num)).unwrap(),
+                    &Pattern::parse(&format!("Q({},aind(loru(4,x_)))", num)).unwrap(),
                     None,
                     None,
                 );
@@ -470,7 +470,7 @@ impl Edge {
                     None,
                 );
 
-                atom = preprocess_ufo_spin_wrapped(atom);
+                atom = preprocess_ufo_spin_wrapped(atom, true);
 
                 let replacements_in = in_slots.replacements(1);
 
