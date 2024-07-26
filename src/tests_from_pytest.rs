@@ -1628,19 +1628,21 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     graph.generate_numerator();
 
-    println!("{}", graph.derived_data.numerator.unwrap().expression);
+    println!(
+        "{}",
+        graph.derived_data.numerator.as_ref().unwrap().expression
+    );
+    graph.process_numerator(&model);
 
-    // graph.process_numerator(&model);
+    let a = graph
+        .derived_data
+        .numerator
+        .as_ref()
+        .unwrap()
+        .network
+        .as_ref()
+        .unwrap();
 
-    // let a = graph
-    //     .derived_data
-    //     .numerator
-    //     .as_ref()
-    //     .unwrap()
-    //     .network
-    //     .as_ref()
-    //     .unwrap();
-
-    // println!("{}", a.dot());
+    println!("{}", a.dot());
     // println!("{}", graph.derived_data.numerator.unwrap().expression)
 }

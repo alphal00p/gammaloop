@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use spenso::{
     arithmetic::ScalarMul, AbstractIndex, BaseRepName, Bispinor, DenseTensor, Euclidean,
     FallibleAdd, FallibleMul, IndexLess, Lorentz, NamedStructure, PhysReps, RefZero, RepName,
-    Representation, VecStructure,
+    VecStructure,
 };
 use symbolica::{
     atom::{Atom, Symbol},

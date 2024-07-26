@@ -422,20 +422,22 @@ impl Edge {
     //     State::get_symbol(format!("Q{num}"))
     // }
 
-    pub fn in_slot<'a>(&self, graph: &'a Graph) -> &'a EdgeSlots {
+    pub fn in_slot(&self, graph: &Graph) -> EdgeSlots<Lorentz> {
         let local_pos_in_sink_vertex =
             graph.vertices[self.vertices[1]].get_local_edge_position(self, graph);
 
-        &graph.derived_data.vertex_slots.as_ref().unwrap()[self.vertices[1]]
+        graph.derived_data.vertex_slots.as_ref().unwrap()[self.vertices[1]]
             [local_pos_in_sink_vertex]
+            .dual()
     }
 
-    pub fn out_slot<'a>(&self, graph: &'a Graph) -> &'a EdgeSlots {
+    pub fn out_slot(&self, graph: &Graph) -> EdgeSlots<Lorentz> {
         let local_pos_in_sink_vertex =
             graph.vertices[self.vertices[0]].get_local_edge_position(self, graph);
 
-        &graph.derived_data.vertex_slots.as_ref().unwrap()[self.vertices[0]]
+        graph.derived_data.vertex_slots.as_ref().unwrap()[self.vertices[0]]
             [local_pos_in_sink_vertex]
+            .dual()
     }
 
     pub fn numerator(&self, graph: &Graph) -> (Atom, usize) {
@@ -444,8 +446,8 @@ impl Edge {
         let out_slots = self.out_slot(graph);
 
         match self.edge_type {
-            EdgeType::Incoming => (self.particle.incoming_polarization_atom(in_slots, num), 0),
-            EdgeType::Outgoing => (self.particle.outgoing_polarization_atom(out_slots, num), 0),
+            EdgeType::Incoming => (self.particle.incoming_polarization_atom(&in_slots, num), 0),
+            EdgeType::Outgoing => (self.particle.outgoing_polarization_atom(&out_slots, num), 0),
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
@@ -462,7 +464,7 @@ impl Edge {
                 atom = pslashfun.replace_all(
                     atom.as_view(),
                     &Pattern::parse(&format!(
-                        "Q({},aind(lor(4,{})))*Gamma({},i_,j_)",
+                        "Q({},aind(lord(4,{})))*Gamma({},i_,j_)",
                         num, pindex_num, pindex_num
                     ))
                     .unwrap(),
@@ -470,7 +472,7 @@ impl Edge {
                     None,
                 );
 
-                atom = preprocess_ufo_spin_wrapped(atom, true);
+                atom = preprocess_ufo_spin_wrapped(atom, false);
 
                 let replacements_in = in_slots.replacements(1);
 

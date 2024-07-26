@@ -8,11 +8,11 @@ use ahash::AHashMap;
 use itertools::Itertools;
 use log::debug;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
-use spenso::{
-    AbstractIndex, Lorentz, NamedStructure, PhysReps, RepName, Representation, Shadowable,
-    SymbolicTensor, TensorNetwork, TensorStructure,
-};
 use spenso::{Complex, ParamTensor};
+use spenso::{
+    Lorentz, NamedStructure, PhysReps, RepName, Shadowable, SymbolicTensor, TensorNetwork,
+    TensorStructure,
+};
 use symbolica::{atom::AtomView, domains::float::Complex as SymComplex};
 use symbolica::{
     atom::{Atom, FunctionBuilder, Symbol},
