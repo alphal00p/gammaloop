@@ -585,25 +585,7 @@ impl HasIntegrand for GammaLoopIntegrand {
                 duration,
             ));
 
-            if !stable {
-                if self.settings.general.debug > 0 {
-                    println!("TODO: fix this printout");
-                    //   let (
-                    //       (real_formatted, rotated_real_formatted),
-                    //       (imag_formatted, rotated_imag_formatted),
-                    //   ) = (
-                    //       format_for_compare_digits(result.re, rotated_result.re),
-                    //       format_for_compare_digits(result.im, rotated_result.im),
-                    //   );
-
-                    //   println!("{}", "\nEscalating to next stability level:".red());
-                    //   println!("\tresult:         {} + {}i", real_formatted, imag_formatted,);
-                    //   println!(
-                    //       "\trotated result: {} + {}i",
-                    //       rotated_real_formatted, rotated_imag_formatted,
-                    //   );
-                }
-            } else {
+            if stable {
                 break;
             }
         }
@@ -622,36 +604,31 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!();
 
             println!("{}", "parametrisation result".blue());
-            println!("{}", "\tloop momenta: ".yellow());
 
-            //            let loop_moms = &sample_point.get_default_sample().loop_moms;
-            //            for (index, loop_mom) in loop_moms.iter().enumerate() {
-            //                println!("\t\tloop momentum {}: {:?}", index, loop_mom);
-            //            }
-            //
-            println!("{}", "\trotated loop momenta: ".yellow());
+            for (sample, rotation) in samples.iter() {
+                let rotation_string = match rotation {
+                    None => String::from("None"),
+                    Some(index) => format!("{:?}", self.settings.stability.rotation_axis[*index]),
+                };
 
-            // let rotated_loop_moms = &rotated_sample_point.get_default_sample().loop_moms;
-            //  for (index, loop_mom) in rotated_loop_moms.iter().enumerate() {
-            //      println!("\t\tloop momentum {}: {:?}", index, loop_mom);
-            //  }
+                println!("\trotation: {}", rotation_string);
+                println!("{}", "\tloop momenta: ".yellow());
 
-            println!("{}", "\texternal momenta: ".yellow());
+                let loop_moms = &sample.get_default_sample().loop_moms;
+                for (index, loop_mom) in loop_moms.iter().enumerate() {
+                    println!("\t\tloop momentum {}: {:?}", index, loop_mom);
+                }
 
-            //let external_moms = &sample_point.get_default_sample().external_moms;
-            //for (index, external_mom) in external_moms.iter().enumerate() {
-            //    println!("\t\texternal momentum {}: {:?}", index, external_mom);
-            //}
+                println!("{}", "\texternal momenta: ".yellow());
 
-            println!("{}", "\trotated external momenta: ".yellow());
+                let external_moms = &sample.get_default_sample().external_moms;
+                for (index, external_mom) in external_moms.iter().enumerate() {
+                    println!("\t\texternal momentum {}: {:?}", index, external_mom);
+                }
+            }
 
-            //   let rotated_external_moms = &rotated_sample_point.get_default_sample().external_moms;
-            //   for (index, external_mom) in rotated_external_moms.iter().enumerate() {
-            //       println!("\t\texternal momentum {}: {:?}", index, external_mom);
-            //   }
-
-            //  let jacobian = sample_point.get_default_sample().jacobian;
-            // println!("\t{}: {:+e}", "jacobian".yellow(), jacobian);
+            let jacobian = sample_point.get_default_sample().jacobian;
+            println!("\t{}: {:+e}", "jacobian".yellow(), jacobian);
             println!();
 
             println!("{}", "evaluation result: ".blue());
@@ -983,15 +960,43 @@ impl GammaLoopIntegrand {
             }
         });
 
-        let stable = match integrated_phase {
+        let unstable_sample = match integrated_phase {
             IntegratedPhase::Real => {
-                errors.all(|error| error < stability_settings.required_precision_for_re)
+                errors.position(|error| error > stability_settings.required_precision_for_re)
             }
             IntegratedPhase::Imag => {
-                errors.all(|error| error < stability_settings.required_precision_for_im)
+                errors.position(|error| error > stability_settings.required_precision_for_im)
             }
             IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
         };
+
+        if self.settings.general.debug > 0 {
+            if let Some(unstable_index) = unstable_sample {
+                let unstable_point = results[unstable_index];
+                let rotation_axis = format!(
+                    "{:?}",
+                    self.settings.stability.rotation_axis[unstable_index]
+                );
+
+                let (
+                    (real_formatted, rotated_real_formatted),
+                    (imag_formatted, rotated_imag_formatted),
+                ) = (
+                    format_for_compare_digits(average.re, unstable_point.re),
+                    format_for_compare_digits(average.im, unstable_point.im),
+                );
+
+                println!("{}", "\nUnstable point detected:".red());
+                println!("Rotation axis: {}", rotation_axis);
+                println!("\taverage result: {} + {}i", real_formatted, imag_formatted,);
+                println!(
+                    "\trotated result: {} + {}i",
+                    rotated_real_formatted, rotated_imag_formatted,
+                );
+            }
+        }
+
+        let stable = unstable_sample.is_none();
 
         let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > F(0.)
             && max_wgt_for_comparison.is_non_zero()
