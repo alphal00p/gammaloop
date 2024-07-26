@@ -93,7 +93,7 @@ class GammaLoopConfiguration(object):
                 'General': {
                     'debug': 0,
                     'use_ltd': False,
-                    'load_compiled_cff': True,
+                    'load_compiled_cff': False,
                     'load_compiled_seperate_orientations': False
                 },
                 'Integrand': {

@@ -3,7 +3,7 @@ General:
   use_ltd: false
 Integrand:
   type: gamma_loop
-  load_compiled_cff: True 
+  load_compiled_cff: False
   load_compiled_seperate_orientations: False
 Kinematics:
   e_cm: 3.0
