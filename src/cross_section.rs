@@ -625,12 +625,11 @@ impl Amplitude {
 
         // dump the derived data in a binary file
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
-            if compile_cff {
-                debug!("compiling cff");
-                amplitude_graph
-                    .graph
-                    .build_compiled_expression(path.clone(), compile_seperate_orientations)?;
-            }
+            amplitude_graph.graph.build_compiled_expression(
+                path.clone(),
+                compile_cff,
+                compile_seperate_orientations,
+            )?;
 
             debug!("dumping derived data");
             fs::write(
@@ -645,11 +644,18 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn load_derived_data(&mut self, path: &Path, load_compiled: bool) -> Result<(), Report> {
+    pub fn load_derived_data(
+        &mut self,
+        path: &Path,
+        load_compiled_cff: bool,
+        load_compiled_seperate_orientations: bool,
+    ) -> Result<(), Report> {
         for ampltitude_graph in self.amplitude_graphs.iter_mut() {
-            ampltitude_graph
-                .graph
-                .load_derived_data(path, load_compiled)?;
+            ampltitude_graph.graph.load_derived_data(
+                path,
+                load_compiled_cff,
+                load_compiled_seperate_orientations,
+            )?;
         }
         Ok(())
     }
@@ -797,11 +803,19 @@ impl AmplitudeList {
         self.container.push(amplitude);
     }
 
-    pub fn load_derived_data(&mut self, path: &str, load_compiled: bool) -> Result<(), Report> {
-        let path = Path::new(path);
+    pub fn load_derived_data(
+        &mut self,
+        path: &Path,
+        load_compiled_cff: bool,
+        load_compiled_seperate_orientations: bool,
+    ) -> Result<(), Report> {
         for amplitude in self.container.iter_mut() {
             let ampltitude_path = path.join(amplitude.name.as_str());
-            amplitude.load_derived_data(&ampltitude_path, load_compiled)?;
+            amplitude.load_derived_data(
+                &ampltitude_path,
+                load_compiled_cff,
+                load_compiled_seperate_orientations,
+            )?;
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 amplitude_graph.graph.generate_esurface_data()?;
             }

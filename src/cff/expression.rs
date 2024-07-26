@@ -528,21 +528,27 @@ impl CFFExpression {
         tree_ft.linearize(params.len())
     }
 
+    /// does nothing if compile_cff and compile_seperate_orientations are both set to false
     pub fn build_compiled_experssion<T: FloatLike + Default>(
         &mut self,
         params: &[Atom],
         path: PathBuf,
+        compile_cff: bool,
         compile_seperate_orientations: bool,
     ) -> Result<(), Report> {
+        if !compile_cff && !compile_seperate_orientations {
+            return Ok(());
+        }
+
+        let mut cpp_str = String::new();
+
         let path_to_compiled = path.join("compiled");
         std::fs::create_dir_all(&path_to_compiled)?;
-
-        let joint = self.build_joint_symbolica_evaluator::<T>(params);
 
         let path_to_code = path_to_compiled.join("expression.cpp");
 
         info!(
-            "Compiling cff soutce_code {}",
+            "Compiling cff source_code {}",
             path_to_code
                 .to_str()
                 .ok_or(eyre!("could not convert path to string"))?
@@ -558,13 +564,16 @@ impl CFFExpression {
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;
 
-        let mut cpp_str = joint.export_cpp_str("joint", true);
+        if compile_cff {
+            let joint = self.build_joint_symbolica_evaluator::<T>(params);
+            cpp_str.push_str(&joint.export_cpp_str("joint", true));
+        }
 
         if compile_seperate_orientations {
             let orientations = self.build_symbolica_evaluators::<T>(params);
             for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
                 let orientation_cpp_str = orientation_evaluator
-                    .export_cpp_str(&format!("orientation_{}", orientation_id), false);
+                    .export_cpp_str(&format!("orientation_{}", orientation_id), !compile_cff);
 
                 cpp_str.push_str(&orientation_cpp_str);
             }
@@ -577,6 +586,8 @@ impl CFFExpression {
         let metadata = CompiledCFFExpressionMetaData {
             name: path_to_compiled,
             num_orientations: self.get_num_trees(),
+            compile_cff_present: compile_cff,
+            compile_seperate_orientations_present: compile_seperate_orientations,
         };
 
         self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
@@ -586,11 +597,23 @@ impl CFFExpression {
         Ok(())
     }
 
-    pub fn load_compiled(&mut self, path: PathBuf) -> Result<(), Report> {
+    pub fn load_compiled(
+        &mut self,
+        path: PathBuf,
+        use_compiled_cff: bool,
+        use_compiled_seperate_orientations: bool,
+    ) -> Result<(), Report> {
         let metadata = CompiledCFFExpressionMetaData {
             name: path.join("compiled"),
             num_orientations: self.get_num_trees(),
+            compile_cff_present: use_compiled_cff,
+            compile_seperate_orientations_present: use_compiled_seperate_orientations,
         };
+
+        if !use_compiled_cff && !use_compiled_seperate_orientations {
+            self.compiled = CompiledCFFExpression::None;
+            return Ok(());
+        }
 
         self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
         Ok(())
@@ -735,7 +758,7 @@ pub enum CompiledCFFExpression {
 
 pub struct InnerCompiledCFF {
     metadata: CompiledCFFExpressionMetaData,
-    joint: CompiledEvaluator,
+    joint: Option<CompiledEvaluator>,
     orientations: TiVec<TermId, CompiledEvaluator>,
 }
 
@@ -743,13 +766,23 @@ pub struct InnerCompiledCFF {
 struct CompiledCFFExpressionMetaData {
     name: PathBuf,
     num_orientations: usize,
+    compile_cff_present: bool,
+    compile_seperate_orientations_present: bool,
 }
 
 impl CompiledCFFExpression {
     pub fn evaluate_orientations(&self, energy_cache: &[F<f64>]) -> Vec<F<f64>> {
         let expr = self.unwrap();
         let mut out = vec![F(0.0); expr.metadata.num_orientations];
-        expr.joint.evaluate(energy_cache, &mut out);
+        match &expr.joint {
+            Some(evaluator) => evaluator.evaluate(energy_cache, &mut out),
+            None => {
+                for (id, out_elem) in out.iter_mut().enumerate() {
+                    *out_elem = self.evaluate_one_orientation(id.into(), energy_cache);
+                }
+            }
+        }
+
         out
     }
 
@@ -770,28 +803,52 @@ impl CompiledCFFExpression {
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;
 
-        let joint = CompiledEvaluator::load(path_to_joint_str, "joint").map_err(|e| eyre!(e))?;
+        if metadata.compile_cff_present {
+            let joint =
+                CompiledEvaluator::load(path_to_joint_str, "joint").map_err(|e| eyre!(e))?;
 
-        let orientations_result = (0..metadata.num_orientations)
-            .map(|orientation| {
-                joint
-                    .load_new_function(&format!("orientation_{}", orientation))
-                    .map_err(|e| eyre!(e))
-            })
-            .collect::<Result<_, Report>>();
+            let orientations = if metadata.compile_seperate_orientations_present {
+                (0..metadata.num_orientations)
+                    .map(|orientation| {
+                        joint
+                            .load_new_function(&format!("orientation_{}", orientation))
+                            .map_err(|e| eyre!(e))
+                    })
+                    .collect::<Result<_, Report>>()?
+            } else {
+                vec![].into()
+            };
 
-        let orientations = match orientations_result {
-            Ok(orientations) => orientations,
-            Err(_e) => vec![].into(),
-        };
+            let inner = InnerCompiledCFF {
+                metadata,
+                joint: Some(joint),
+                orientations,
+            };
 
-        let inner = InnerCompiledCFF {
-            metadata,
-            joint,
-            orientations,
-        };
+            Ok(Self::Some(inner))
+        } else if metadata.compile_seperate_orientations_present {
+            let orientation_zero = CompiledEvaluator::load(path_to_joint_str, "orientation_0")
+                .map_err(|e| eyre!(e))?;
 
-        Ok(Self::Some(inner))
+            let mut orientations = vec![orientation_zero];
+
+            for orienatation_id in 1..metadata.num_orientations {
+                let orientation_evaluator = orientations[0]
+                    .load_new_function(&format!("orientation_{}", orienatation_id))
+                    .map_err(|e| eyre!(e))?;
+
+                orientations.push(orientation_evaluator);
+            }
+            let inner = InnerCompiledCFF {
+                metadata,
+                joint: None,
+                orientations: orientations.into(),
+            };
+
+            return Ok(Self::Some(inner));
+        } else {
+            return Ok(Self::None);
+        }
     }
 
     fn unwrap(&self) -> &InnerCompiledCFF {

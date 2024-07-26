@@ -219,13 +219,22 @@ impl PythonWorker {
             .map(|a| self.amplitudes = a)
     }
 
-    pub fn load_amplitudes_derived_data(
-        &mut self,
-        path: &str,
-        load_compiled: bool,
-    ) -> PyResult<()> {
+    pub fn load_amplitudes_derived_data(&mut self, path: &str) -> PyResult<()> {
+        let path = PathBuf::from(path);
+
+        let path_to_amplitudes = path.join("sources").join("amplitudes");
+        let path_to_settings = path.join("cards").join("run_card.yaml");
+        let settings_str = std::fs::read_to_string(path_to_settings)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        let settings: Settings = serde_yaml::from_str(&settings_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
         self.amplitudes
-            .load_derived_data(path, load_compiled)
+            .load_derived_data(
+                &path_to_amplitudes,
+                settings.general.load_compiled_cff,
+                settings.general.load_compiled_seperate_orientations,
+            )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 

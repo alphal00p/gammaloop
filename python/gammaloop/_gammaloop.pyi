@@ -45,7 +45,7 @@ class Worker:
     def load_amplitudes_from_yaml_str(self, yaml_str: str) -> None:
         """ Loads a list of amplitudes from a yaml string representation of that list. """
 
-    def load_amplitudes_derived_data(self, file_path: str, load_compiled: bool) -> None:
+    def load_amplitudes_derived_data(self, file_path: str) -> None:
         """ Loads the derived data associated to the amplitudes. """
 
     def get_amplitudes(self) -> str:
