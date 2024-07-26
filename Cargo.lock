@@ -2059,6 +2059,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "self_cell"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
+
+[[package]]
 name = "semver"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2286,11 +2292,14 @@ dependencies = [
  "bytes",
  "colored",
  "dyn-clone",
+ "libloading",
  "once_cell",
+ "pyo3-build-config",
  "rand",
  "rand_xoshiro",
  "rayon",
  "rug",
+ "self_cell",
  "serde",
  "smallvec",
  "smartstring",
@@ -2867,7 +2876,3 @@ dependencies = [
  "quote",
  "syn 2.0.72",
 ]
-
-[[patch.unused]]
-name = "symbolica"
-version = "0.8.0"
