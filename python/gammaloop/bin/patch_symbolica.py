@@ -18,6 +18,8 @@ def patch_lib_rs():
     with open('./src/lib.rs', 'r', encoding='utf8') as f_in:
         symbolica_lib_rs = f_in.read()
     if 'GAMMALOOP_USER' not in symbolica_lib_rs:
+        symbolica_lib_rs = "#![allow(warnings)]\n" + symbolica_lib_rs
+
         with open('./src/lib.rs', 'w', encoding='utf8') as f_out:
             f_out.write(symbolica_lib_rs.replace(
                 '.or(env::var("SYMBOLICA_LICENSE").ok());',
