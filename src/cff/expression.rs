@@ -572,8 +572,10 @@ impl CFFExpression {
         if compile_seperate_orientations {
             let orientations = self.build_symbolica_evaluators::<T>(params);
             for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
-                let orientation_cpp_str = orientation_evaluator
-                    .export_cpp_str(&format!("orientation_{}", orientation_id), !compile_cff);
+                let orientation_cpp_str = orientation_evaluator.export_cpp_str(
+                    &format!("orientation_{}", orientation_id),
+                    !compile_cff && orientation_id == 0,
+                );
 
                 cpp_str.push_str(&orientation_cpp_str);
             }
