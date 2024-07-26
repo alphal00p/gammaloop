@@ -7,7 +7,10 @@ use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
-use spenso::{Representation, Slot, ABSTRACTIND};
+use spenso::{
+    BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Dual, DualSlotTo,
+    IsAbstractSlot, Lorentz, PhysReps, RepName, Representation, Slot, ABSTRACTIND,
+};
 use std::fs;
 use std::ops::Index;
 use std::path::Path;
@@ -133,18 +136,18 @@ pub struct VertexRule {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VertexSlots {
-    edge_slots: Vec<EdgeSlots>,
+    edge_slots: Vec<EdgeSlots<Dual<Lorentz>>>,
 }
 
 impl Index<usize> for VertexSlots {
-    type Output = EdgeSlots;
+    type Output = EdgeSlots<Dual<Lorentz>>;
     fn index(&self, index: usize) -> &Self::Output {
         &self.edge_slots[index]
     }
 }
 
-impl From<EdgeSlots> for VertexSlots {
-    fn from(value: EdgeSlots) -> Self {
+impl From<EdgeSlots<Dual<Lorentz>>> for VertexSlots {
+    fn from(value: EdgeSlots<Dual<Lorentz>>) -> Self {
         VertexSlots {
             edge_slots: vec![value],
         }
@@ -351,26 +354,36 @@ pub struct Particle {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InOutIndex {
-    incoming: Slot,
-    outgoing: Slot,
+    incoming: Slot<PhysReps>,
+    outgoing: Slot<PhysReps>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EdgeSlots {
-    lorentz: Vec<Slot>,
-    spin: Vec<Slot>,
-    pub color: Vec<Slot>,
+pub struct EdgeSlots<LorRep: RepName> {
+    lorentz: Vec<Slot<LorRep>>,
+    spin: Vec<Slot<Bispinor>>,
+    pub color: Vec<Slot<PhysReps>>,
 }
 
-impl EdgeSlots {
+impl<LorRep: BaseRepName> EdgeSlots<LorRep>
+where
+    PhysReps: From<LorRep>,
+{
+    pub fn dual(&self) -> EdgeSlots<LorRep::Dual> {
+        EdgeSlots {
+            lorentz: self.lorentz.iter().map(|l| l.dual()).collect(),
+            spin: self.spin.iter().map(|s| s.dual()).collect(),
+            color: self.color.iter().map(|c| c.dual()).collect(),
+        }
+    }
     pub fn replacements(&self, id: usize) -> Vec<(Pattern, Pattern)> {
-        let rhs_lor = Slot::from((id.into(), Representation::Lorentz(4.into())))
+        let rhs_lor = LorRep::new_slot_selfless(4, id)
             .to_symbolic_wrapped()
             .into_pattern();
 
-        let rhs_spin = Slot::from((id.into(), Representation::Bispinor(4.into())))
-            .to_symbolic_wrapped()
-            .into_pattern();
+        let rhs_spin = Bispinor::new_slot_selfless(4, id);
+
+        let rhs_spin = rhs_spin.to_symbolic_wrapped().into_pattern();
 
         let mut reps = vec![];
         for l in &self.lorentz {
@@ -382,9 +395,9 @@ impl EdgeSlots {
         }
 
         for c in &self.color {
-            let rhs_color = Slot::from((id.into(), c.representation))
-                .to_symbolic_wrapped()
-                .into_pattern();
+            let mut rhs_color = *c;
+            rhs_color.aind = id.into();
+            let rhs_color = rhs_color.to_symbolic_wrapped().into_pattern();
 
             reps.push((rhs_color.clone(), c.to_symbolic().into_pattern()));
         }
@@ -411,38 +424,41 @@ impl EdgeSlots {
 }
 
 impl Particle {
-    fn lorentz_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
-        let fourd_lor = Representation::Lorentz(4.into());
+    fn lorentz_slots<LR: BaseRepName>(&self, shift: usize) -> (Vec<Slot<LR>>, usize) {
+        let fourd_lor = LR::new_dimed_rep_selfless(4);
 
         match self.spin {
-            3 => (vec![Slot::from((shift.into(), fourd_lor))], shift + 1),
+            3 => (vec![Representation::new_slot(&fourd_lor, shift)], shift + 1),
             _ => (vec![], shift),
         }
     }
 
-    fn spin_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
-        let fourd_bis = Representation::Bispinor(4.into());
+    fn spin_slots(&self, shift: usize) -> (Vec<Slot<Bispinor>>, usize) {
+        let fourd_bis: Representation<_> = Bispinor::new_dimed_rep_selfless(4);
 
         match self.spin {
-            2 => (vec![Slot::from((shift.into(), fourd_bis))], shift + 1),
+            2 => (vec![fourd_bis.new_slot(shift)], shift + 1),
             _ => (vec![], shift),
         }
     }
 
-    fn color_slots(&self, shift: usize) -> (Vec<Slot>, usize) {
-        let rep = match self.color {
-            3 => Representation::ColorFundamental(3.into()),
-            -3 => Representation::ColorAntiFundamental(3.into()),
-            6 => Representation::ColorSextet(6.into()),
-            -6 => Representation::ColorAntiSextet(6.into()),
-            8 => Representation::ColorAdjoint(8.into()),
+    fn color_slots(&self, shift: usize) -> (Vec<Slot<PhysReps>>, usize) {
+        let rep: Representation<PhysReps> = match self.color {
+            3 => ColorFundamental::new_dimed_rep_selfless(3).cast(),
+            -3 => Dual::<ColorFundamental>::new_dimed_rep_selfless(3).cast(),
+            6 => ColorSextet::new_dimed_rep_selfless(6).cast(),
+            -6 => Dual::<ColorSextet>::new_dimed_rep_selfless(6).cast(),
+            8 => ColorAdjoint::new_dimed_rep_selfless(8).cast(),
             _ => return (vec![], shift),
         };
 
-        (vec![Slot::from((shift.into(), rep))], shift + 1)
+        (vec![rep.new_slot(shift)], shift + 1)
     }
 
-    pub fn slots(&self, shifts: (usize, usize, usize)) -> (EdgeSlots, (usize, usize, usize)) {
+    pub fn slots<LR: BaseRepName>(
+        &self,
+        shifts: (usize, usize, usize),
+    ) -> (EdgeSlots<LR>, (usize, usize, usize)) {
         let (lorentz, shift_lor) = self.lorentz_slots(shifts.0);
         let (spin, shift_spin) = self.spin_slots(shifts.1);
         let (color, shift_color) = self.color_slots(shifts.2);
@@ -475,7 +491,7 @@ impl Particle {
         }
     }
 
-    pub fn incoming_polarization_atom(&self, edge_slots: &EdgeSlots, num: usize) -> Atom {
+    pub fn incoming_polarization_atom(&self, edge_slots: &EdgeSlots<Lorentz>, num: usize) -> Atom {
         match self.spin {
             1 => Atom::parse("1").unwrap(),
             2 => {
@@ -579,7 +595,7 @@ impl Particle {
         }
     }
 
-    pub fn outgoing_polarization_atom(&self, edge_slots: &EdgeSlots, num: usize) -> Atom {
+    pub fn outgoing_polarization_atom(&self, edge_slots: &EdgeSlots<Lorentz>, num: usize) -> Atom {
         match self.spin {
             1 => Atom::parse("1").unwrap(),
             2 => {

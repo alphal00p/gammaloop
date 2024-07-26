@@ -7,8 +7,9 @@ use log::debug;
 
 use serde::{Deserialize, Serialize};
 use spenso::{
-    arithmetic::ScalarMul, AbstractIndex, DenseTensor, FallibleAdd, FallibleMul, IndexLess,
-    NamedStructure, RefZero, Representation, VecStructure,
+    arithmetic::ScalarMul, AbstractIndex, BaseRepName, Bispinor, DenseTensor, Euclidean,
+    FallibleAdd, FallibleMul, IndexLess, Lorentz, NamedStructure, PhysReps, RefZero, RepName,
+    VecStructure,
 };
 use symbolica::{
     atom::{Atom, Symbol},
@@ -340,7 +341,7 @@ impl<T> ThreeMomentum<T> {
         T: Clone,
     {
         let structure =
-            VecStructure::new(vec![(index, Representation::Euclidean(3.into())).into()]);
+            VecStructure::from_iter(vec![PhysReps::new_slot(Euclidean {}.into(), 3, index)]);
         DenseTensor::from_data(&[self.px, self.py, self.pz], structure).unwrap()
     }
 
@@ -349,7 +350,7 @@ impl<T> ThreeMomentum<T> {
         T: Clone,
     {
         let structure =
-            VecStructure::new(vec![(index, Representation::Euclidean(3.into())).into()]);
+            VecStructure::from_iter(vec![PhysReps::new_slot(Euclidean {}.into(), 3, index)]);
         DenseTensor::from_data(&[self.px, self.py, self.pz], structure).unwrap()
     }
 }
@@ -858,7 +859,7 @@ impl<T: RefZero, U: RefZero> RefZero for FourMomentum<T, U> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Polarization<T> {
-    tensor: DenseTensor<T, IndexLess>,
+    tensor: DenseTensor<T, IndexLess<PhysReps>>,
 }
 
 impl<T: FloatLike> Display for Polarization<F<T>> {
@@ -885,7 +886,7 @@ impl<T> Polarization<T> {
     }
 
     pub fn lorentz(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Representation::Lorentz(4.into())]);
+        let structure = IndexLess::new(vec![Lorentz::new_dimed_rep_selfless(4).cast()]);
         let [v1, v2, v3, v4] = value;
         Polarization {
             tensor: DenseTensor {
@@ -896,7 +897,7 @@ impl<T> Polarization<T> {
     }
 
     pub fn bispinor(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Representation::Bispinor(4.into())]);
+        let structure = IndexLess::new(vec![Bispinor::new_dimed_rep_selfless(4).cast()]);
         let [v1, v2, v3, v4] = value;
         Polarization {
             tensor: DenseTensor {
@@ -1103,7 +1104,7 @@ impl<T> FourMomentum<T, T> {
     where
         T: Clone,
     {
-        let structure = VecStructure::new(vec![(index, Representation::Lorentz(4.into())).into()]);
+        let structure = VecStructure::from_iter([PhysReps::new_slot(Lorentz {}.into(), 4, index)]);
         DenseTensor::from_data(
             &[
                 self.temporal.value,
@@ -1125,7 +1126,7 @@ impl<T> FourMomentum<T, T> {
     where
         T: Clone,
     {
-        let structure = VecStructure::new(vec![(index, Representation::Lorentz(4.into())).into()])
+        let structure = VecStructure::from_iter([PhysReps::new_slot(Lorentz {}.into(), 4, index)])
             .to_named(name, Some(num));
         DenseTensor::from_data(
             &[
@@ -1470,18 +1471,18 @@ impl<T> FourMomentum<T, Atom> {
     where
         T: Clone + Into<Coefficient> + Exponent,
     {
-        let structure = VecStructure::new(vec![(index, Representation::Lorentz(4.into())).into()]);
+        let structure = VecStructure::from_iter([PhysReps::new_slot(Lorentz {}.into(), 4, index)]);
         let energy = self
             .temporal
             .value
-            .to_polynomial(&RationalField::new(IntegerRing), None);
+            .to_polynomial(&RationalField::new(IntegerRing {}), None);
 
         let px: MultivariatePolynomial<RationalField, _> =
-            Atom::new_num(self.spatial.px).to_polynomial(&RationalField::new(IntegerRing), None);
+            Atom::new_num(self.spatial.px).to_polynomial(&RationalField::new(IntegerRing {}), None);
         let py =
-            Atom::new_num(self.spatial.py).to_polynomial(&RationalField::new(IntegerRing), None);
+            Atom::new_num(self.spatial.py).to_polynomial(&RationalField::new(IntegerRing {}), None);
         let pz =
-            Atom::new_num(self.spatial.pz).to_polynomial(&RationalField::new(IntegerRing), None);
+            Atom::new_num(self.spatial.pz).to_polynomial(&RationalField::new(IntegerRing {}), None);
 
         DenseTensor::from_data(&[energy, px, py, pz], structure).unwrap()
     }
