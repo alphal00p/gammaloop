@@ -16,6 +16,7 @@ use spenso::{
 use symbolica::{
     atom::AtomView,
     domains::float::Complex as SymComplex,
+    evaluate::FunctionMap,
     id::{MatchSettings, Pattern, Replacement},
 };
 use symbolica::{
@@ -119,7 +120,18 @@ impl Numerator {
         self.expression = model.substitute_model_params(&self.expression);
     }
 
-    pub fn compile(&self, graph: &Graph) {
+    pub fn build_const_fn_map_and_split(&mut self, fn_map: &mut FunctionMap, model: &Model) {
+        let mut replacements = vec![];
+        replacements.extend(model.dependent_coupling_replacements());
+        replacements.extend(model.internal_parameter_replacements());
+
+        let mut split_reps = vec![];
+        split_reps.extend(model.valued_coupling_re_im_split(fn_map));
+        split_reps.extend(model.external_parameter_re_im_split(fn_map));
+    }
+
+    pub fn compile(&mut self, graph: &Graph) {
+
         // if let Some(net) = self.network {
         //     net.eval_tree(|a| a.clone(), &fn_map, &params).compile();
         // }
