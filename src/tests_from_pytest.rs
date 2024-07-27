@@ -10,12 +10,14 @@ use crate::graph::{
 };
 use crate::model::Model;
 use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::numerator::Numerator;
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
 use crate::utils::{
     assert_approx_eq, compute_momentum, compute_three_momentum_from_four, PrecisionUpgradable,
 };
 use crate::utils::{f128, F};
+use ahash::AHashMap;
 use colored::Colorize;
 use itertools::{FormatWith, Itertools};
 //use libc::__c_anonymous_ptrace_syscall_info_exit;
@@ -30,6 +32,7 @@ use std::fs::File;
 use std::path::Path;
 use std::{clone, env};
 use symbolica;
+use symbolica::atom::Atom;
 use symbolica::domains::float::Complex as SymComplex;
 
 #[allow(unused)]
@@ -1619,6 +1622,7 @@ fn pytest_lbl_box() {
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_3L_6photons_topology_A_inspect() {
+    env_logger::init();
     let (model, amplitude) = load_amplitude_output(
         "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
         true,
@@ -1628,21 +1632,36 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     graph.generate_numerator();
 
+    graph.process_numerator(&model);
+
     println!(
         "{}",
         graph.derived_data.numerator.as_ref().unwrap().expression
     );
-    graph.process_numerator(&model);
 
-    let a = graph
-        .derived_data
-        .numerator
-        .as_ref()
-        .unwrap()
-        .network
-        .as_ref()
-        .unwrap();
+    println!(
+        "{}",
+        graph.derived_data.numerator.unwrap().network.unwrap().dot()
+    );
+    // let mut onlycolor = Numerator {
+    //     expression: Atom::parse("T(aind(coad(8,9),cof(3,8),coaf(3,7)))*T(aind(coad(8,14),cof(3,13),coaf(3,12)))*T(aind(coad(8,21),cof(3,20),coaf(3,19)))*T(aind(coad(8,26),cof(3,25),coaf(3,24)))*id(aind(coaf(3,3),cof(3,4)))*id(aind(coaf(3,4),cof(3,24)))*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,6),cof(3,3)))*id(aind(coaf(3,8),cof(3,5)))*id(aind(coaf(3,10),cof(3,11)))*id(aind(coaf(3,11),cof(3,7)))*id(aind(coaf(3,13),cof(3,10)))*id(aind(coaf(3,15),cof(3,16)))*id(aind(coaf(3,16),cof(3,12)))*id(aind(coaf(3,17),cof(3,18)))*id(aind(coaf(3,18),cof(3,15)))*id(aind(coaf(3,20),cof(3,17)))*id(aind(coaf(3,22),cof(3,23)))*id(aind(coaf(3,23),cof(3,19)))*id(aind(coaf(3,25),cof(3,22)))*id(aind(coad(8,21),coad(8,9)))*id(aind(coad(8,26),coad(8,14)))").unwrap(),
+    //     network: None,
+    //     const_map: AHashMap::new(),
+    // };
 
-    println!("{}", a.dot());
-    // println!("{}", graph.derived_data.numerator.unwrap().expression)
+    // onlycolor.fill_network();
+    // println!("{}", onlycolor.network.as_ref().unwrap().dot());
+
+    // onlycolor.process_color_simple();
+    // println!("{}", onlycolor.expression);
+    // let a = graph
+    //     .derived_data
+    //     .numerator
+    //     .as_ref()
+    //     .unwrap()
+    //     .network
+    //     .as_ref()
+    //     .unwrap();
+
+    // println!("{}", a.dot_nodes());
 }

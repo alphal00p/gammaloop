@@ -954,6 +954,10 @@ impl Model {
         sub_atom
     }
 
+    pub fn substitute_split_model_params(&self, atom: &Atom) -> Atom {
+        atom.clone()
+    }
+
     pub fn evaluate_couplings(&self, atom: Atom) -> Atom {
         // let mut atom = atom;
         // for cpl in self.couplings.iter() {

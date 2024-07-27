@@ -6,14 +6,18 @@ use crate::{
 };
 use ahash::AHashMap;
 use itertools::Itertools;
-use log::debug;
+use log::{debug, info};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::{Complex, ParamTensor};
 use spenso::{
     Lorentz, NamedStructure, PhysReps, RepName, Shadowable, SymbolicTensor, TensorNetwork,
     TensorStructure,
 };
-use symbolica::{atom::AtomView, domains::float::Complex as SymComplex};
+use symbolica::{
+    atom::AtomView,
+    domains::float::Complex as SymComplex,
+    id::{MatchSettings, Pattern, Replacement},
+};
 use symbolica::{
     atom::{Atom, FunctionBuilder, Symbol},
     printer::{AtomPrinter, PrintOptions},
@@ -113,6 +117,12 @@ impl<'de> Deserialize<'de> for Numerator {
 impl Numerator {
     pub fn substitute_model_params(&mut self, model: &Model) {
         self.expression = model.substitute_model_params(&self.expression);
+    }
+
+    pub fn compile(&self, graph: &Graph) {
+        // if let Some(net) = self.network {
+        //     net.eval_tree(|a| a.clone(), &fn_map, &params).compile();
+        // }
     }
 
     pub fn evaluate<T: FloatLike>(
@@ -240,11 +250,191 @@ impl Numerator {
         self.const_map.extend(const_map);
 
         self.substitute_model_params(model);
+        self.process_color_simple();
+        self.fill_network();
+    }
 
+    // pub fn generate_fn_map(&self mut){
+    //     let mut replacements = vec![];
+    //     let mut fn_map: FunctionMap<Rational> = FunctionMap::new();
+
+    //     for (k, v) in const_atom_map.iter() {
+    //     let name_re = Atom::new_var(State::get_symbol(k.to_string() + "_re"));
+    //     let name_im = Atom::new_var(State::get_symbol(k.to_string() + "_im"));
+    //     let i = Atom::new_var(State::I);
+    //     let pat = &name_re + i * &name_im;
+    //     replacements.push((Atom::new_var(*k).into_pattern(), pat.into_pattern()));
+
+    //     fn_map.add_constant(name_re.into(), Rational::from(v.re));
+    //     fn_map.add_constant(name_im.into(), Rational::from(v.im));
+    // }
+    // }
+
+    pub fn fill_network(&mut self) {
         let sym_tensor: SymbolicTensor = self.expression.clone().try_into().unwrap();
 
         let network = sym_tensor.to_network().unwrap().to_fully_parametric();
         self.network = Some(network);
+    }
+
+    fn replace_repeat(&mut self, lhs: Pattern, rhs: Pattern) {
+        let atom = self.expression.replace_all(&lhs, &rhs, None, None);
+        if atom != self.expression {
+            self.expression = atom;
+            self.replace_repeat(lhs, rhs);
+        }
+    }
+
+    fn replace_repeat_multiple(&mut self, reps: &[Replacement<'_>]) {
+        let atom = self.expression.replace_all_multiple(reps);
+        info!("expanded rep");
+        if atom != self.expression {
+            info!("applied replacement");
+            self.expression = atom;
+            self.replace_repeat_multiple(reps);
+        }
+    }
+
+    fn replace_repeat_multiple_atom(expr: &mut Atom, reps: &[Replacement<'_>]) {
+        let atom = expr.replace_all_multiple(reps);
+        if atom != *expr {
+            *expr = atom;
+            Self::replace_repeat_multiple_atom(expr, reps)
+        }
+    }
+
+    fn replace_repeat_multiple_atom_expand(expr: &mut Atom, reps: &[Replacement<'_>]) {
+        let a = expr.expand();
+        let atom = a.replace_all_multiple(reps);
+        if atom != *expr {
+            *expr = atom;
+            Self::replace_repeat_multiple_atom_expand(expr, reps)
+        }
+    }
+
+    pub fn isolate_color(&mut self) {
+        let color_fn = FunctionBuilder::new(State::get_symbol("color"))
+            .add_arg(&Atom::new_num(1))
+            .finish();
+        self.expression = &self.expression * color_fn;
+        let replacements = vec![
+            (
+                Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,aind(y___,cof(i__),z___)))").unwrap(),
+            ),
+            (
+                Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,aind(y___,coaf(i__),z___)))").unwrap(),
+            ),
+            (
+                Pattern::parse("f_(x___,aind(y___,coad(i__),z___))*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,aind(y___,coad(i__),z___)))").unwrap(),
+            ),
+        ];
+        let reps: Vec<Replacement> = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect();
+
+        self.replace_repeat_multiple(&reps)
+    }
+
+    pub fn process_color_simple(&mut self) {
+        self.isolate_color();
+        let (mut coefs, rem) = self.expression.coefficient_list(State::get_symbol("color"));
+
+        let replacements = vec![
+            (Pattern::parse("color(a___)").unwrap(),Pattern::parse("a___").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*id(aind(coaf(i__),cof(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(j__),z___))").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,cof(j__),z___))*id(aind(cof(i__),coaf(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(i__),z___))").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*id(aind(cof(j__),coaf(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coaf(j__),z___))").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*id(aind(coaf(j__),cof(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coaf(j__),z___))").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,coad(i__),z___))*id(aind(coad(j__),coad(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coad(j__),z___))").unwrap()),
+            (
+                Pattern::parse("id(aind(coaf(3,a_),cof(3,a_)))").unwrap(),
+                Pattern::parse("Nc").unwrap(),
+            ),
+            (
+                Pattern::parse("id(aind(cof(3,a_),coaf(3,a_)))").unwrap(),
+                Pattern::parse("Nc").unwrap(),
+            ),
+            (
+                Pattern::parse("id(aind(coad(8,a_),coad(8,a_)))").unwrap(),
+                Pattern::parse("Nc*Nc -1").unwrap(),
+            ),
+            (
+                Pattern::parse("T(aind(coad(8,b_),cof(3,a_),coaf(3,a_)))").unwrap(),
+                Pattern::parse("0").unwrap(),
+            ),
+            (
+                Pattern::parse("T(aind(coad(8,c_),cof(3,a_),coaf(3,b_)))T(aind(coad(8,d_),cof(3,b_),coaf(3,a_)))").unwrap(),
+                Pattern::parse("TR* id(aind(coad(8,c_),coad(8,d_)))").unwrap(),
+            ),
+            (
+                Pattern::parse("T(aind(coad(8,g_),cof(3,a_),coaf(3,b_)))*T(aind(coad(8,g_),cof(3,c_),coaf(3,d_)))").unwrap(),
+                Pattern::parse("TR* (id(aind(cof(3,a_),coaf(3,d_)))* id(aind(cof(3,c_),coaf(3,b_)))-1/Nc id(aind(cof(3,a_),coaf(3,b_)))* id(aind(cof(3,c_),coaf(3,d_))))").unwrap(),
+            )
+        ];
+
+        let reps: Vec<Replacement> = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect();
+
+        let mut atom = Atom::new_num(0);
+        for (key, coef) in coefs.iter_mut() {
+            Self::replace_repeat_multiple_atom_expand(key, &reps);
+
+            atom = atom + coef.factor() * key.factor();
+            // println!("coef {i}:{}\n", coef.factor());
+        }
+        atom = atom + rem;
+        self.expression = atom;
+
+        // println!("rem:{}", rem);
+
+        // self.replace_repeat_multiple(&reps);
+    }
+
+    fn process_color(&mut self) {
+        let idlhs = Pattern::parse("T(aind(y___,a_,z___))*id(aind(a_,b_))").unwrap();
+
+        let idrhs = Pattern::parse("T(aind(y___,b_,z___))").unwrap();
+
+        self.replace_repeat(idlhs, idrhs);
+
+        // // T(a,...,i,j)T(b,...,j,k) = T(a,...,b,...,i,k)
+        // let contractfundlhs = Pattern::parse("T(aind(y___,i_,j_))*T(aind(z___,j_,k_))").unwrap();
+
+        // let contractfundrhs = Pattern::parse("T(aind(y___,z___,i_,k_))").unwrap();
+
+        // self.replace_repeat(contractfundlhs, contractfundrhs);
+
+        // //T(a,x,b,i,j)T(c,x,d,k,l) = 1/2(T(a,d,i,l)T(c,b,k,j)
+        // //-1/Nc T(a,b,i,j)T(c,d,k,l))
+        // let contractadjlhs =
+        //     Pattern::parse("T(aind(a___,x__,b___,i_,j_))T(aind(c___,x__,d___,k_,l_))").unwrap();
+
+        // let contractadjrhs =
+        //     Pattern::parse("1/2(T(aind(a___,d___,i_,l_))T(aind(c___,b___,k_,j_))-1/Nc T(aind(a___,b___,i_,j_))T(aind(c___,d___,k_,l_)))").unwrap();
+
+        // self.replace_repeat(contractadjlhs, contractadjrhs);
+
+        // //T(a,b,c,...,i,i) = Tr(a,b,c,...)
+        // let tracefundlhs = Pattern::parse("T(aind(a___,i_,i_)").unwrap();
+
+        // let tracefundrhs = Pattern::parse("Tr(a___)").unwrap();
+
+        // self.replace_repeat(tracefundlhs, tracefundrhs);
+
+        // //T(a,x,b,x,c,i,j) = 1/2(T(a,c,i,j)Tr(b)-1/Nc T(a,b,c,i,j))
+
+        // let traceadjlhs = Pattern::parse("T(a_,x_,b_,x_,c_,i_,j_)").unwrap();
+
+        // let traceadjrhs =
+        //     Pattern::parse("1/2(T(a_,c_,i_,j_)Tr(b_)-1/Nc T(aind(a_,b_,c_,i_,j_)))").unwrap();
+
+        // self.replace_repeat(traceadjlhs, traceadjrhs);
     }
 
     pub fn generate(graph: &mut Graph) -> Self {
