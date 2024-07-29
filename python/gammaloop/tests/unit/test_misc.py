@@ -59,7 +59,8 @@ class TestCode:
                 json_msg = json_obj['message']
                 if "level" in json_msg and json_msg["level"] in ["warning", "error"]:
                     if warning_msg is None:
-                        found_warning = f"Clippy issued at least one warning : {'Unknown' if 'message' not in json_msg else json_msg['message']}"
+                        found_warning = f"Clippy issued at least one warning : {
+                            'Unknown' if 'message' not in json_msg else json_msg['message']}"
                         warning_msg = found_warning
                         warning_msg += "\nAll clippy warnings and errors:"
                     else:
@@ -67,7 +68,8 @@ class TestCode:
                         for category in ['spans', 'children']:
                             if category in json_msg:
                                 del json_msg[category]
-                        warning_msg += f"\n\n>>> #{i_msg}:\n\n{pformat(json_msg)}"
+                        warning_msg += f"\n\n>>> #{
+                            i_msg}:\n\n{pformat(json_msg)}"
         if warning_msg is not None:
             logger.critical(warning_msg)
 

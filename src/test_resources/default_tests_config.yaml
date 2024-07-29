@@ -2,7 +2,7 @@ General:
   debug: 0
   use_ltd: false
   load_compiled_cff: false
-  load_compiled_seperate_orientations: false
+  load_compiled_separate_orientations: false
 Integrand:
   type: unit_volume
   n_3d_momenta: 11

@@ -1417,7 +1417,7 @@ impl Graph {
         &mut self,
         path: &Path,
         load_compiled_cff: bool,
-        load_compiled_seperate_orientations: bool,
+        load_compiled_separate_orientations: bool,
     ) -> Result<(), Report> {
         let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
         let derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
@@ -1430,7 +1430,7 @@ impl Graph {
             .load_compiled(
                 path.into(),
                 load_compiled_cff,
-                load_compiled_seperate_orientations,
+                load_compiled_separate_orientations,
             )?;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
@@ -1626,7 +1626,7 @@ impl Graph {
         &mut self,
         export_path: PathBuf,
         compile_cff: bool,
-        compile_seperate_orientations: bool,
+        compile_separate_orientations: bool,
     ) -> Result<(), Report> {
         let params = self.build_params_for_cff();
         match self.derived_data.cff_expression.as_mut() {
@@ -1634,14 +1634,14 @@ impl Graph {
                 &params,
                 export_path,
                 compile_cff,
-                compile_seperate_orientations,
+                compile_separate_orientations,
             ),
             None => {
                 self.generate_cff();
                 self.build_compiled_expression(
                     export_path,
                     compile_cff,
-                    compile_seperate_orientations,
+                    compile_separate_orientations,
                 )
             }
         }

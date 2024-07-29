@@ -525,15 +525,15 @@ impl CFFExpression {
         tree_ft.linearize()
     }
 
-    /// does nothing if compile_cff and compile_seperate_orientations are both set to false
+    /// does nothing if compile_cff and compile_separate_orientations are both set to false
     pub fn build_compiled_experssion<T: FloatLike + Default>(
         &mut self,
         params: &[Atom],
         path: PathBuf,
         compile_cff: bool,
-        compile_seperate_orientations: bool,
+        compile_separate_orientations: bool,
     ) -> Result<(), Report> {
-        if !compile_cff && !compile_seperate_orientations {
+        if !compile_cff && !compile_separate_orientations {
             return Ok(());
         }
 
@@ -566,7 +566,7 @@ impl CFFExpression {
             cpp_str.push_str(&joint.export_cpp_str("joint", true));
         }
 
-        if compile_seperate_orientations {
+        if compile_separate_orientations {
             let orientations = self.build_symbolica_evaluators::<T>(params);
             for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
                 let orientation_cpp_str = orientation_evaluator.export_cpp_str(
@@ -586,7 +586,7 @@ impl CFFExpression {
             name: path_to_compiled,
             num_orientations: self.get_num_trees(),
             compile_cff_present: compile_cff,
-            compile_seperate_orientations_present: compile_seperate_orientations,
+            compile_separate_orientations_present: compile_separate_orientations,
         };
 
         self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
@@ -600,16 +600,16 @@ impl CFFExpression {
         &mut self,
         path: PathBuf,
         use_compiled_cff: bool,
-        use_compiled_seperate_orientations: bool,
+        use_compiled_separate_orientations: bool,
     ) -> Result<(), Report> {
         let metadata = CompiledCFFExpressionMetaData {
             name: path.join("compiled"),
             num_orientations: self.get_num_trees(),
             compile_cff_present: use_compiled_cff,
-            compile_seperate_orientations_present: use_compiled_seperate_orientations,
+            compile_separate_orientations_present: use_compiled_separate_orientations,
         };
 
-        if !use_compiled_cff && !use_compiled_seperate_orientations {
+        if !use_compiled_cff && !use_compiled_separate_orientations {
             self.compiled = CompiledCFFExpression::None;
             return Ok(());
         }
@@ -766,7 +766,7 @@ struct CompiledCFFExpressionMetaData {
     name: PathBuf,
     num_orientations: usize,
     compile_cff_present: bool,
-    compile_seperate_orientations_present: bool,
+    compile_separate_orientations_present: bool,
 }
 
 impl CompiledCFFExpression {
@@ -788,7 +788,7 @@ impl CompiledCFFExpression {
     pub fn evaluate_one_orientation(&self, orientation: TermId, energy_cache: &[F<f64>]) -> F<f64> {
         let expr = self.unwrap();
         if expr.orientations.is_empty() {
-            panic!("no orientations to evaluate, most likely they are not generated, set compile_seperate_orientations in config to generate them")
+            panic!("no orientations to evaluate, most likely they are not generated, set compile_separate_orientations in config to generate them")
         }
 
         let mut out = [F(0.0)];
@@ -806,7 +806,7 @@ impl CompiledCFFExpression {
             let joint =
                 CompiledEvaluator::load(path_to_joint_str, "joint").map_err(|e| eyre!(e))?;
 
-            let orientations = if metadata.compile_seperate_orientations_present {
+            let orientations = if metadata.compile_separate_orientations_present {
                 (0..metadata.num_orientations)
                     .map(|orientation| {
                         joint
@@ -825,7 +825,7 @@ impl CompiledCFFExpression {
             };
 
             Ok(Self::Some(inner))
-        } else if metadata.compile_seperate_orientations_present {
+        } else if metadata.compile_separate_orientations_present {
             let orientation_zero = CompiledEvaluator::load(path_to_joint_str, "orientation_0")
                 .map_err(|e| eyre!(e))?;
 

@@ -593,7 +593,7 @@ impl Amplitude {
         export_root: &str,
         model: &Model,
         compile_cff: bool,
-        compile_seperate_orientations: bool,
+        compile_separate_orientations: bool,
     ) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
@@ -628,7 +628,7 @@ impl Amplitude {
             amplitude_graph.graph.build_compiled_expression(
                 path.clone(),
                 compile_cff,
-                compile_seperate_orientations,
+                compile_separate_orientations,
             )?;
 
             debug!("dumping derived data");
@@ -648,13 +648,13 @@ impl Amplitude {
         &mut self,
         path: &Path,
         load_compiled_cff: bool,
-        load_compiled_seperate_orientations: bool,
+        load_compiled_separate_orientations: bool,
     ) -> Result<(), Report> {
         for ampltitude_graph in self.amplitude_graphs.iter_mut() {
             ampltitude_graph.graph.load_derived_data(
                 path,
                 load_compiled_cff,
-                load_compiled_seperate_orientations,
+                load_compiled_separate_orientations,
             )?;
         }
         Ok(())
@@ -807,14 +807,14 @@ impl AmplitudeList {
         &mut self,
         path: &Path,
         load_compiled_cff: bool,
-        load_compiled_seperate_orientations: bool,
+        load_compiled_separate_orientations: bool,
     ) -> Result<(), Report> {
         for amplitude in self.container.iter_mut() {
             let ampltitude_path = path.join(amplitude.name.as_str());
             amplitude.load_derived_data(
                 &ampltitude_path,
                 load_compiled_cff,
-                load_compiled_seperate_orientations,
+                load_compiled_separate_orientations,
             )?;
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 amplitude_graph.graph.generate_esurface_data()?;

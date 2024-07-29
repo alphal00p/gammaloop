@@ -139,7 +139,7 @@ pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
     pub load_compiled_cff: bool,
-    pub load_compiled_seperate_orientations: bool,
+    pub load_compiled_separate_orientations: bool,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize)]

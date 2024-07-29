@@ -233,7 +233,7 @@ impl PythonWorker {
             .load_derived_data(
                 &path_to_amplitudes,
                 settings.general.load_compiled_cff,
-                settings.general.load_compiled_seperate_orientations,
+                settings.general.load_compiled_separate_orientations,
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
@@ -285,7 +285,7 @@ impl PythonWorker {
         export_root: &str,
         amplitude_names: Vec<String>,
         compile_cff: bool,
-        compile_seperate_orientations: bool,
+        compile_separate_orientations: bool,
     ) -> PyResult<String> {
         let mut n_exported: usize = 0;
         for amplitude in self.amplitudes.container.iter_mut() {
@@ -295,7 +295,7 @@ impl PythonWorker {
                     export_root,
                     &self.model,
                     compile_cff,
-                    compile_seperate_orientations,
+                    compile_separate_orientations,
                 );
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));

@@ -87,14 +87,14 @@ class GammaLoopConfiguration(object):
             'export_settings': {
                 'write_default_settings': False,
                 'compile_cff': True,
-                'compile_seperate_orientations': False,
+                'compile_separate_orientations': False,
             },
             'run_settings': {
                 'General': {
                     'debug': 0,
                     'use_ltd': False,
                     'load_compiled_cff': True,
-                    'load_compiled_seperate_orientations': False
+                    'load_compiled_separate_orientations': False
                 },
                 'Integrand': {
                     'type': 'gamma_loop'
