@@ -1,4 +1,7 @@
-use crate::utils::{FloatLike, VarFloat, F};
+use crate::{
+    utils::{FloatLike, VarFloat, F},
+    Settings,
+};
 use color_eyre::Report;
 use derive_more::{From, Into};
 use eyre::eyre;
@@ -596,20 +599,19 @@ impl CFFExpression {
         Ok(())
     }
 
-    pub fn load_compiled(
-        &mut self,
-        path: PathBuf,
-        use_compiled_cff: bool,
-        use_compiled_separate_orientations: bool,
-    ) -> Result<(), Report> {
+    pub fn load_compiled(&mut self, path: PathBuf, settings: &Settings) -> Result<(), Report> {
         let metadata = CompiledCFFExpressionMetaData {
             name: path.join("compiled"),
             num_orientations: self.get_num_trees(),
-            compile_cff_present: use_compiled_cff,
-            compile_separate_orientations_present: use_compiled_separate_orientations,
+            compile_cff_present: settings.general.load_compiled_cff,
+            compile_separate_orientations_present: settings
+                .general
+                .load_compiled_separate_orientations,
         };
 
-        if !use_compiled_cff && !use_compiled_separate_orientations {
+        if !settings.general.load_compiled_cff
+            && !settings.general.load_compiled_separate_orientations
+        {
             self.compiled = CompiledCFFExpression::None;
             return Ok(());
         }

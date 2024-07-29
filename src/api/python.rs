@@ -230,11 +230,7 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         self.amplitudes
-            .load_derived_data(
-                &path_to_amplitudes,
-                settings.general.load_compiled_cff,
-                settings.general.load_compiled_separate_orientations,
-            )
+            .load_derived_data(&path_to_amplitudes, &settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 

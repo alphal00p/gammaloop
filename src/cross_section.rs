@@ -644,18 +644,9 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn load_derived_data(
-        &mut self,
-        path: &Path,
-        load_compiled_cff: bool,
-        load_compiled_separate_orientations: bool,
-    ) -> Result<(), Report> {
+    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
         for ampltitude_graph in self.amplitude_graphs.iter_mut() {
-            ampltitude_graph.graph.load_derived_data(
-                path,
-                load_compiled_cff,
-                load_compiled_separate_orientations,
-            )?;
+            ampltitude_graph.graph.load_derived_data(path, settings)?;
         }
         Ok(())
     }
@@ -803,19 +794,10 @@ impl AmplitudeList {
         self.container.push(amplitude);
     }
 
-    pub fn load_derived_data(
-        &mut self,
-        path: &Path,
-        load_compiled_cff: bool,
-        load_compiled_separate_orientations: bool,
-    ) -> Result<(), Report> {
+    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
         for amplitude in self.container.iter_mut() {
             let ampltitude_path = path.join(amplitude.name.as_str());
-            amplitude.load_derived_data(
-                &ampltitude_path,
-                load_compiled_cff,
-                load_compiled_separate_orientations,
-            )?;
+            amplitude.load_derived_data(&ampltitude_path, settings)?;
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 amplitude_graph.graph.generate_esurface_data()?;
             }

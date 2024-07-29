@@ -21,6 +21,7 @@ use crate::{
         compute_four_momentum_from_three, compute_three_momentum_from_four, sorted_vectorize,
         FloatLike, F,
     },
+    Settings,
 };
 
 use ahash::RandomState;
@@ -1413,12 +1414,7 @@ impl Graph {
         self.derived_data.numerator = Some(numerator);
     }
 
-    pub fn load_derived_data(
-        &mut self,
-        path: &Path,
-        load_compiled_cff: bool,
-        load_compiled_separate_orientations: bool,
-    ) -> Result<(), Report> {
+    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
         let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
         let derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
         self.derived_data = derived_data;
@@ -1427,11 +1423,7 @@ impl Graph {
             .cff_expression
             .as_mut()
             .unwrap()
-            .load_compiled(
-                path.into(),
-                load_compiled_cff,
-                load_compiled_separate_orientations,
-            )?;
+            .load_compiled(path.into(), settings)?;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
         let lmb_indices = self.loop_momentum_basis.basis.clone();
