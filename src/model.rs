@@ -9,11 +9,13 @@ use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
 use spenso::{
     BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Dual, DualSlotTo,
-    IsAbstractSlot, Lorentz, PhysReps, RepName, Representation, Slot, ABSTRACTIND,
+    IsAbstractSlot, IsZero, Lorentz, PhysReps, RepName, Representation, Slot, ABSTRACTIND,
 };
 use std::fs;
 use std::ops::Index;
 use std::path::Path;
+use symbolica::domains::rational::Rational;
+use symbolica::evaluate::FunctionMap;
 use symbolica::id::Pattern;
 // use std::str::pattern::Pattern;
 use std::sync::Arc;
@@ -952,6 +954,105 @@ impl Model {
             }
         }
         sub_atom
+    }
+
+    pub fn dependent_coupling_replacements(&self) -> Vec<(Pattern, Pattern)> {
+        let mut reps = vec![];
+        for cpl in self.couplings.iter().filter(|c| c.value.is_none()) {
+            let [pattern, rhs] = cpl.rep_rule();
+            reps.push((pattern.into_pattern(), rhs.into_pattern()));
+        }
+        reps
+    }
+
+    pub fn internal_parameter_replacements(&self) -> Vec<(Pattern, Pattern)> {
+        let mut reps = vec![];
+        for para in self
+            .parameters
+            .iter()
+            .filter(|p| matches!(p.nature, ParameterNature::Internal))
+        {
+            if let Some([pattern, rhs]) = para.rep_rule() {
+                reps.push((pattern.into_pattern(), rhs.into_pattern()));
+            }
+        }
+        reps
+    }
+
+    pub fn valued_coupling_re_im_split(
+        &self,
+        fn_map: &mut FunctionMap<Rational>,
+    ) -> Vec<(Pattern, Pattern)> {
+        let mut reps = vec![];
+        for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
+            let lhs = Atom::parse(&cpl.name).unwrap().into_pattern();
+            if let Some(value) = cpl.value {
+                let rhs = if value.im == 0.0 {
+                    let name = Atom::new_var(State::get_symbol(format!("{}_re", cpl.name)));
+                    fn_map.add_constant(name.clone().into(), Rational::from(value.re));
+                    name.into_pattern()
+                } else if value.re == 0.0 {
+                    let name = Atom::new_var(State::get_symbol(format!("{}_im", cpl.name)));
+                    fn_map.add_constant(name.clone().into(), Rational::from(value.im));
+                    name.into_pattern()
+                } else {
+                    let name_re = Atom::new_var(State::get_symbol(cpl.name.clone() + "_re"));
+                    fn_map.add_constant(name_re.clone().into(), Rational::from(value.re));
+                    let name_im = Atom::new_var(State::get_symbol(cpl.name.clone() + "_im"));
+                    fn_map.add_constant(name_im.clone().into(), Rational::from(value.im));
+                    let i = Atom::new_var(State::I);
+                    (&name_re + i * &name_im).into_pattern()
+                };
+                reps.push((lhs, rhs));
+            }
+        }
+        reps
+    }
+
+    pub fn substitute_split_model_params(&self, atom: &Atom) -> Atom {
+        atom.clone()
+    }
+
+    pub fn external_parameter_re_im_split(
+        &self,
+        fn_map: &mut FunctionMap<Rational>,
+    ) -> Vec<(Pattern, Pattern)> {
+        let mut reps = vec![];
+        for param in self
+            .parameters
+            .iter()
+            .filter(|p| matches!(p.nature, ParameterNature::External))
+        {
+            let lhs = Atom::parse(&param.name).unwrap().into_pattern();
+            if let Some(value) = param.value {
+                let rhs = match param.parameter_type {
+                    ParameterType::Imaginary => {
+                        if value.re.is_zero() {
+                            let name =
+                                Atom::new_var(State::get_symbol(format!("{}_im", param.name)));
+                            fn_map.add_constant(name.clone().into(), Rational::from(value.im.0));
+                            name.into_pattern()
+                        } else {
+                            let name_re =
+                                Atom::new_var(State::get_symbol(param.name.clone() + "_re"));
+                            fn_map.add_constant(name_re.clone().into(), Rational::from(value.re.0));
+                            let name_im =
+                                Atom::new_var(State::get_symbol(param.name.clone() + "_im"));
+                            fn_map.add_constant(name_im.clone().into(), Rational::from(value.im.0));
+                            let i = Atom::new_var(State::I);
+                            (&name_re + i * &name_im).into_pattern()
+                        }
+                    }
+                    ParameterType::Real => {
+                        let name = Atom::new_var(State::get_symbol(format!("{}_re", param.name)));
+                        fn_map.add_constant(name.clone().into(), Rational::from(value.re.0));
+                        name.into_pattern()
+                    }
+                };
+                reps.push((lhs, rhs));
+            }
+        }
+        reps
     }
 
     pub fn evaluate_couplings(&self, atom: Atom) -> Atom {
