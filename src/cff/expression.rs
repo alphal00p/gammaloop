@@ -489,11 +489,10 @@ impl CFFExpression {
                     .unwrap();
 
                 tree.horner_scheme();
-                tree.common_subexpression_elimination();
-                //  ree.common_pair_elimination();
+                tree.common_subexpression_elimination(1);
 
                 let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
-                tree_ft.linearize(params.len())
+                tree_ft.linearize()
             })
             .collect()
     }
@@ -521,11 +520,10 @@ impl CFFExpression {
         .unwrap();
 
         tree.horner_scheme();
-        tree.common_subexpression_elimination();
-        // tree.common_pair_elimination();
+        tree.common_subexpression_elimination(1);
 
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
-        tree_ft.linearize(params.len())
+        tree_ft.linearize()
     }
 
     /// does nothing if compile_cff and compile_seperate_orientations are both set to false
