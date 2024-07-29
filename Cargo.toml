@@ -118,6 +118,7 @@ bench = false
 [features]
 extension-module = ["pyo3/extension-module"]
 default = ["python_api"]
+higher_loops = []
 
 python_api = ["pyo3", "extension-module"]
 binary = []

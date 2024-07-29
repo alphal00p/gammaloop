@@ -11,7 +11,7 @@ use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
-    parametric::ParamTensor,
+    parametric::{ParamTensor, PatternReplacement},
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
     symbolic::SymbolicTensor,
 };
@@ -127,9 +127,27 @@ impl Numerator {
         replacements.extend(model.dependent_coupling_replacements());
         replacements.extend(model.internal_parameter_replacements());
 
+        let reps = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect_vec();
+
+        if let Some(net) = &mut self.network {
+            net.replace_all_multiple_repeat_mut(&reps);
+        }
+
         let mut split_reps = vec![];
         split_reps.extend(model.valued_coupling_re_im_split(fn_map));
         split_reps.extend(model.external_parameter_re_im_split(fn_map));
+
+        let reps = split_reps
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect_vec();
+
+        if let Some(net) = &mut self.network {
+            net.replace_all_multiple_repeat_mut(&reps);
+        }
     }
 
     pub fn compile(&mut self, _graph: &Graph) {
