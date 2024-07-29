@@ -2,7 +2,7 @@
 use colored::Colorize;
 use itertools::Itertools;
 use ref_ops::RefNeg;
-use spenso::Complex;
+use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 
 const MAX_ITERATIONS: usize = 20;

@@ -8,8 +8,11 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
 use spenso::{
-    BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Dual, DualSlotTo,
-    IsAbstractSlot, IsZero, Lorentz, PhysReps, RepName, Representation, Slot, ABSTRACTIND,
+    contraction::IsZero,
+    structure::{
+        BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Dual, DualSlotTo,
+        IsAbstractSlot, Lorentz, PhysReps, RepName, Representation, Slot, ABSTRACTIND,
+    },
 };
 use std::fs;
 use std::ops::Index;
@@ -22,7 +25,7 @@ use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
 use symbolica::atom::{Atom, AtomView, FunctionBuilder};
 
-use spenso::Complex;
+use spenso::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 
 use symbolica::fun;

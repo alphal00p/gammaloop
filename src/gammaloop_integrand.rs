@@ -22,8 +22,8 @@ use crate::{
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
-use spenso::Complex;
-use spenso::IsZero;
+use spenso::complex::Complex;
+use spenso::contraction::IsZero;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 

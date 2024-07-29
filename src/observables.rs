@@ -8,7 +8,7 @@ use log::{debug, error, info, trace, warn};
 use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use spenso::Complex;
+use spenso::complex::Complex;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufWriter, Write};

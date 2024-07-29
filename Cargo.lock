@@ -2271,7 +2271,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=update_to_symb_08#592f62fb950509b00bcbf542d564546bc19083cf"
+source = "git+https://github.com/alphal00p/spenso?branch=master#d90acef80d4e3c62e62248b63ebb98debe553e91"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2381,7 +2381,6 @@ dependencies = [
  "dyn-clone",
  "libloading",
  "once_cell",
- "pyo3-build-config",
  "rand",
  "rand_xoshiro",
  "rayon",

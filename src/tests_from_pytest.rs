@@ -26,7 +26,7 @@ use petgraph::algo::greedy_matching;
 use petgraph::graph;
 use rayon::prelude::IndexedParallelIterator;
 use serde;
-use spenso::Complex;
+use spenso::complex::Complex;
 use statrs::function::evaluate;
 use std::fs::File;
 use std::path::Path;
@@ -105,7 +105,7 @@ mod tests_scalar_massless_triangle {
     use nalgebra::coordinates::X;
     use rayon::prelude::IndexedParallelIterator;
     use smartstring::SmartString;
-    use spenso::Complex;
+    use spenso::complex::Complex;
     use symbolica::{
         domains::float::{Complex as SymComplex, NumericalFloatLike},
         evaluate::{CompileOptions, ExportedCode},

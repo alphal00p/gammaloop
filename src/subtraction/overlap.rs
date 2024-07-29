@@ -5,7 +5,7 @@ use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
 use itertools::Itertools;
-use spenso::Complex;
+use spenso::complex::Complex;
 
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
@@ -629,7 +629,7 @@ fn to_real_mass_vector(edge_masses: &[Option<Complex<F<f64>>>]) -> Vec<F<f64>> {
 mod tests {
     use super::*;
     use itertools::Itertools;
-    use spenso::Complex;
+    use spenso::complex::Complex;
 
     use crate::{
         cff::{
