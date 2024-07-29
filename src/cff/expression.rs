@@ -497,7 +497,6 @@ impl CFFExpression {
             .collect()
     }
 
-    /// graph currently needed to determine which edges are external
     pub fn build_joint_symbolica_evaluator<T: FloatLike + Default>(
         &self,
         params: &[Atom],
