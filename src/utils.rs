@@ -1,3 +1,4 @@
+use crate::cff::expression::CFFFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
@@ -657,6 +658,7 @@ pub trait FloatLike:
     + PrecisionUpgradable
     + Serialize
     + Display
+    + CFFFloat<Self>
 {
     
 
@@ -2881,8 +2883,19 @@ pub fn print_banner() {
 
 #[allow(unused)]
 pub fn format_for_compare_digits(x: F<f64>, y: F<f64>) -> (String, String) {
-    let string_x = format!("{:.16e}", x);
-    let string_y = format!("{:.16e}", y);
+    let mut string_x = format!("{:.16e}", x);
+    let mut string_y = format!("{:.16e}", y);
+
+    #[allow(clippy::comparison_chain)]
+    if string_x.len() > string_y.len() {
+        for _ in 0..(string_x.len() - string_y.len()) {
+            string_y.push(' ');
+        }
+    } else if string_y.len() > string_x.len() {
+        for _ in 0..(string_y.len() - string_x.len()) {
+            string_x.push(' ');
+        }
+    }
 
     let string_vec = string_x
         .chars()

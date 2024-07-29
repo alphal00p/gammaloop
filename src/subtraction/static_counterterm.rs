@@ -153,7 +153,7 @@ impl CounterTerm {
         loop_momenta: &[ThreeMomentum<F<T>>],
         external_momenta: &[FourMomentum<F<T>>],
         graph: &Graph,
-        rotate_overlap_centers: bool,
+        rotate_overlap_centers: Option<usize>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         if settings.general.debug > 1 {
@@ -195,12 +195,13 @@ impl CounterTerm {
                 println!("with center: {:?}", center);
             }
 
-            let center_t = if rotate_overlap_centers {
+            let center_t = if let Some(func_index) = rotate_overlap_centers {
                 if settings.general.debug > 1 {
                     println!("{}", "Rotating centers for stability check".yellow());
                 }
 
-                let rotation_function = settings.stability.rotation_axis.rotation_function();
+                let rotation_function =
+                    settings.stability.rotation_axis[func_index].rotation_function();
                 let rotated_center = center
                     .iter()
                     .map(rotation_function)

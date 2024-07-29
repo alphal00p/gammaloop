@@ -138,6 +138,8 @@ pub enum ParameterizationMapping {
 pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
+    pub load_compiled_cff: bool,
+    pub load_compiled_separate_orientations: bool,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize)]
@@ -245,14 +247,14 @@ pub struct IntegrationResult {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StabilitySettings {
-    rotation_axis: RotationMethod,
+    rotation_axis: Vec<RotationMethod>,
     levels: Vec<StabilityLevelSetting>,
 }
 
 impl Default for StabilitySettings {
     fn default() -> Self {
         Self {
-            rotation_axis: RotationMethod::default(),
+            rotation_axis: vec![RotationMethod::default()],
             levels: vec![
                 StabilityLevelSetting::default_double(),
                 StabilityLevelSetting::default_quad(),

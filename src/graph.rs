@@ -21,6 +21,7 @@ use crate::{
         compute_four_momentum_from_three, compute_three_momentum_from_four, sorted_vectorize,
         FloatLike, F,
     },
+    Settings,
 };
 
 use ahash::RandomState;
@@ -49,7 +50,11 @@ use core::panic;
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use symbolica::{
     atom::Atom,
@@ -1409,9 +1414,16 @@ impl Graph {
         self.derived_data.numerator = Some(numerator);
     }
 
-    pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
-        let derived_data = DerivedGraphData::load_from_path(path)?;
+    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
+        let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
+        let derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
         self.derived_data = derived_data;
+
+        self.derived_data
+            .cff_expression
+            .as_mut()
+            .unwrap()
+            .load_compiled(path.into(), settings)?;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
         let lmb_indices = self.loop_momentum_basis.basis.clone();
@@ -1600,6 +1612,42 @@ impl Graph {
             .collect();
 
         (*dep_mom, external_shift)
+    }
+
+    pub fn build_compiled_expression(
+        &mut self,
+        export_path: PathBuf,
+        compile_cff: bool,
+        compile_separate_orientations: bool,
+    ) -> Result<(), Report> {
+        let params = self.build_params_for_cff();
+        match self.derived_data.cff_expression.as_mut() {
+            Some(cff) => cff.build_compiled_experssion::<f64>(
+                &params,
+                export_path,
+                compile_cff,
+                compile_separate_orientations,
+            ),
+            None => {
+                self.generate_cff();
+                self.build_compiled_expression(
+                    export_path,
+                    compile_cff,
+                    compile_separate_orientations,
+                )
+            }
+        }
+    }
+
+    pub fn build_params_for_cff(&self) -> Vec<Atom> {
+        self.edges
+            .iter()
+            .enumerate()
+            .map(|(id, edge)| match edge.edge_type {
+                EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
+                _ => Atom::parse(&format!("p{}", id)).unwrap(),
+            })
+            .collect()
     }
 }
 

@@ -15,6 +15,9 @@ RESOURCES_PATH = os.path.join(os.path.dirname(
 
 def get_gamma_loop_interpreter() -> gl_interface.GammaLoop:
     gloop = gl_interface.GammaLoop()
+    gloop.run(gl_interface.CommandList.from_string("set compile_cff False"))
+    gloop.run(gl_interface.CommandList.from_string(
+        "set load_compiled_cff False"))
     gammaloop.misc.common.GL_DEBUG = True
     gammaloop.misc.common.GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
     return gloop

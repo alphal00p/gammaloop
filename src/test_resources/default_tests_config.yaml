@@ -1,6 +1,8 @@
 General:
   debug: 0
   use_ltd: false
+  load_compiled_cff: false
+  load_compiled_separate_orientations: false
 Integrand:
   type: unit_volume
   n_3d_momenta: 11
@@ -38,7 +40,7 @@ Integrator:
 Observables: []
 Selectors: []
 Stability:
-  rotation_axis: x
+  rotation_axis: []
   levels:
   - precision: Double
     required_precision_for_re: 1e-5

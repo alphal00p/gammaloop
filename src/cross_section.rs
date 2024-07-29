@@ -6,6 +6,7 @@ use bincode;
 use color_eyre::{Help, Report};
 #[allow(unused_imports)]
 use eyre::{eyre, Context};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -587,10 +588,21 @@ impl Amplitude {
         Ok(())
     }
 
-    #[allow(unused)]
-    pub fn export(&mut self, export_root: &str, model: &Model) -> Result<(), Report> {
+    pub fn export(
+        &mut self,
+        export_root: &str,
+        model: &Model,
+        compile_cff: bool,
+        compile_separate_orientations: bool,
+    ) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
+
+        // Then dumped the new yaml representation of the amplitude now containing all that additional information
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str());
 
         // generate cff and ltd for each graph in the ampltiudes, ltd also generates lmbs
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
@@ -606,23 +618,25 @@ impl Amplitude {
             amplitude_graph.graph.process_numerator(model);
         }
 
-        // Then dumped the new yaml representation of the amplitude now containing all that additional information
-        let path = Path::new(export_root)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str());
-
         fs::write(
-            path.join("amplitude.yaml"),
+            path.clone().join("amplitude.yaml"),
             serde_yaml::to_string(&self.to_serializable())?,
         )?;
 
         // dump the derived data in a binary file
-        for amplitude_graph in self.amplitude_graphs.iter() {
+        for amplitude_graph in self.amplitude_graphs.iter_mut() {
+            amplitude_graph.graph.build_compiled_expression(
+                path.clone(),
+                compile_cff,
+                compile_separate_orientations,
+            )?;
+
+            debug!("dumping derived data");
             fs::write(
-                path.join(format!("derived_data_{}.bin", amplitude_graph.graph.name)),
+                path.clone()
+                    .join(format!("derived_data_{}.bin", amplitude_graph.graph.name)),
                 bincode::serialize(&amplitude_graph.graph.derived_data.to_serializable())?,
-            );
+            )?;
         }
 
         // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
@@ -630,13 +644,9 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn load_derived_data(&mut self, path: &Path) -> Result<(), Report> {
+    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
         for ampltitude_graph in self.amplitude_graphs.iter_mut() {
-            let graph_path = path.join(format!(
-                "derived_data_{}.bin",
-                ampltitude_graph.graph.name.as_str()
-            ));
-            ampltitude_graph.graph.load_derived_data(&graph_path)?;
+            ampltitude_graph.graph.load_derived_data(path, settings)?;
         }
         Ok(())
     }
@@ -784,11 +794,10 @@ impl AmplitudeList {
         self.container.push(amplitude);
     }
 
-    pub fn load_derived_data(&mut self, path: &str) -> Result<(), Report> {
-        let path = Path::new(path);
+    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
         for amplitude in self.container.iter_mut() {
             let ampltitude_path = path.join(amplitude.name.as_str());
-            amplitude.load_derived_data(&ampltitude_path)?;
+            amplitude.load_derived_data(&ampltitude_path, settings)?;
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 amplitude_graph.graph.generate_esurface_data()?;
             }

@@ -220,8 +220,17 @@ impl PythonWorker {
     }
 
     pub fn load_amplitudes_derived_data(&mut self, path: &str) -> PyResult<()> {
+        let path = PathBuf::from(path);
+
+        let path_to_amplitudes = path.join("sources").join("amplitudes");
+        let path_to_settings = path.join("cards").join("run_card.yaml");
+        let settings_str = std::fs::read_to_string(path_to_settings)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        let settings: Settings = serde_yaml::from_str(&settings_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
         self.amplitudes
-            .load_derived_data(path)
+            .load_derived_data(&path_to_amplitudes, &settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
@@ -271,12 +280,19 @@ impl PythonWorker {
         &mut self,
         export_root: &str,
         amplitude_names: Vec<String>,
+        compile_cff: bool,
+        compile_separate_orientations: bool,
     ) -> PyResult<String> {
         let mut n_exported: usize = 0;
         for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.to_string()) {
                 n_exported += 1;
-                let res = amplitude.export(export_root, &self.model);
+                let res = amplitude.export(
+                    export_root,
+                    &self.model,
+                    compile_cff,
+                    compile_separate_orientations,
+                );
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));
                 }

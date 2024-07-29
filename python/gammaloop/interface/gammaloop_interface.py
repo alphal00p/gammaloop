@@ -86,11 +86,15 @@ class GammaLoopConfiguration(object):
             },
             'export_settings': {
                 'write_default_settings': False,
+                'compile_cff': True,
+                'compile_separate_orientations': False,
             },
             'run_settings': {
                 'General': {
                     'debug': 0,
-                    'use_ltd': False
+                    'use_ltd': False,
+                    'load_compiled_cff': True,
+                    'load_compiled_separate_orientations': False
                 },
                 'Integrand': {
                     'type': 'gamma_loop'
@@ -125,7 +129,7 @@ class GammaLoopConfiguration(object):
                 'Observables': [],
                 'Selectors': [],
                 'Stability': {
-                    'rotation_axis': 'x',
+                    'rotation_axis': ['x'],
                     'levels': [
                         {
                             'precision': 'Double',
@@ -923,7 +927,8 @@ class GammaLoop(object):
 
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
-            amplitude_exporter.export(args.output_path, self.amplitudes)
+            amplitude_exporter.export(
+                args.output_path, self.amplitudes)
             if args.expression:
                 amplitude_exporter.export_expression(
                     args.output_path, self.amplitudes, args.expression_format)
@@ -989,7 +994,7 @@ class GammaLoop(object):
                     self.rust_worker.add_amplitude_from_yaml_str(
                         amplitude_yaml)
             self.rust_worker.load_amplitudes_derived_data(
-                pjoin(args.path_to_launch, 'sources', 'amplitudes'))
+                args.path_to_launch)
 
             self.rust_worker.load_amplitude_integrands(
                 pjoin(args.path_to_launch, 'cards', 'run_card.yaml'))
@@ -1077,7 +1082,7 @@ class GammaLoop(object):
                     self.rust_worker.add_amplitude_from_yaml_str(
                         amplitude_yaml)
             self.rust_worker.load_amplitudes_derived_data(
-                pjoin(self.launched_output, 'sources', 'amplitudes'))
+                pjoin(self.launched_output))
 
             self.rust_worker.load_amplitude_integrands(
                 pjoin(self.launched_output, 'cards', 'run_card.yaml'))

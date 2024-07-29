@@ -40,7 +40,7 @@ trait GraphIntegrand {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: bool,
+        rotate_overlap_centers: Option<usize>,
         settings: &Settings,
     ) -> Complex<F<T>>;
 
@@ -65,7 +65,7 @@ trait GraphIntegrand {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: bool,
+        rotate_overlap_centers: Option<usize>,
         settings: &Settings,
     ) -> Complex<F<T>>;
 }
@@ -201,7 +201,7 @@ impl GraphIntegrand for AmplitudeGraph {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: bool,
+        rotate_overlap_centers: Option<usize>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         let zero_builder = &sample.loop_moms[0].px;
@@ -238,7 +238,7 @@ impl GraphIntegrand for AmplitudeGraph {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: bool,
+        rotate_overlap_centers: Option<usize>,
         settings: &Settings,
     ) -> Complex<F<T>> where {
         let one = sample.one();
@@ -337,7 +337,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: bool,
+        rotate_overlap_centers: Option<usize>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         // sum over channels
@@ -349,7 +349,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: bool,
+        rotate_overlap_centers: Option<usize>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         // sum over channels
@@ -377,7 +377,7 @@ fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
 fn evaluate<I: GraphIntegrand, T: FloatLike>(
     graph_integrands: &[I],
     sample: &GammaLoopSample<T>,
-    rotate_overlap_centers: bool,
+    rotate_overlap_centers: Option<usize>,
     settings: &Settings,
 ) -> Complex<F<T>> {
     let zero = sample.zero();
@@ -538,8 +538,23 @@ impl HasIntegrand for GammaLoopIntegrand {
         let parameterization_time = before_parameterization.elapsed();
 
         // rotate the momenta for the stability tests.
-        let rotation_method = self.settings.stability.rotation_axis.rotation_function();
-        let rotated_sample_point = sample_point.get_rotated_sample(rotation_method);
+        let rotated_sample_points = self
+            .settings
+            .stability
+            .rotation_axis
+            .iter()
+            .enumerate()
+            .map(|(func_index, f)| {
+                (
+                    sample_point.get_rotated_sample(f.rotation_function()),
+                    Some(func_index),
+                )
+            });
+
+        let samples = [(sample_point.clone(), None)]
+            .into_iter()
+            .chain(rotated_sample_points)
+            .collect_vec();
 
         // 1 / (2 pi )^L
         let prefactor = F(self.compute_2pi_factor().inv());
@@ -547,21 +562,16 @@ impl HasIntegrand for GammaLoopIntegrand {
         // iterate over the stability levels, break if the point is stable
         for stability_level in stability_iterator {
             // evaluate the integrand at the current stability level
-            let (result, rotated_result, duration) = self.evaluate_at_prec(
-                &sample_point,
-                &rotated_sample_point,
-                stability_level.precision,
-            );
-
-            let (result_scaled, rotated_result_scaled) = (
-                result * sample_point.get_default_sample().jacobian * prefactor,
-                rotated_result * rotated_sample_point.get_default_sample().jacobian * prefactor,
-            );
+            let (results, duration) = self.evaluate_at_prec(&samples, stability_level.precision);
+            let results_scaled = results
+                .iter()
+                .zip(samples.iter())
+                .map(|(result, sample)| result * sample.0.get_default_sample().jacobian * prefactor)
+                .collect_vec();
 
             // check for the stability
             let (avg_result, stable) = self.stability_check(
-                result_scaled,
-                rotated_result_scaled,
+                &results_scaled,
                 stability_level,
                 self.settings.integrator.integrated_phase,
                 max_eval,
@@ -575,24 +585,7 @@ impl HasIntegrand for GammaLoopIntegrand {
                 duration,
             ));
 
-            if !stable {
-                if self.settings.general.debug > 0 {
-                    let (
-                        (real_formatted, rotated_real_formatted),
-                        (imag_formatted, rotated_imag_formatted),
-                    ) = (
-                        format_for_compare_digits(result.re, rotated_result.re),
-                        format_for_compare_digits(result.im, rotated_result.im),
-                    );
-
-                    println!("{}", "\nEscalating to next stability level:".red());
-                    println!("\tresult:         {} + {}i", real_formatted, imag_formatted,);
-                    println!(
-                        "\trotated result: {} + {}i",
-                        rotated_real_formatted, rotated_imag_formatted,
-                    );
-                }
-            } else {
+            if stable {
                 break;
             }
         }
@@ -611,32 +604,27 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!();
 
             println!("{}", "parametrisation result".blue());
-            println!("{}", "\tloop momenta: ".yellow());
 
-            let loop_moms = &sample_point.get_default_sample().loop_moms;
-            for (index, loop_mom) in loop_moms.iter().enumerate() {
-                println!("\t\tloop momentum {}: {:?}", index, loop_mom);
-            }
+            for (sample, rotation) in samples.iter() {
+                let rotation_string = match rotation {
+                    None => String::from("None"),
+                    Some(index) => format!("{:?}", self.settings.stability.rotation_axis[*index]),
+                };
 
-            println!("{}", "\trotated loop momenta: ".yellow());
+                println!("\trotation: {}", rotation_string);
+                println!("{}", "\tloop momenta: ".yellow());
 
-            let rotated_loop_moms = &rotated_sample_point.get_default_sample().loop_moms;
-            for (index, loop_mom) in rotated_loop_moms.iter().enumerate() {
-                println!("\t\tloop momentum {}: {:?}", index, loop_mom);
-            }
+                let loop_moms = &sample.get_default_sample().loop_moms;
+                for (index, loop_mom) in loop_moms.iter().enumerate() {
+                    println!("\t\tloop momentum {}: {:?}", index, loop_mom);
+                }
 
-            println!("{}", "\texternal momenta: ".yellow());
+                println!("{}", "\texternal momenta: ".yellow());
 
-            let external_moms = &sample_point.get_default_sample().external_moms;
-            for (index, external_mom) in external_moms.iter().enumerate() {
-                println!("\t\texternal momentum {}: {:?}", index, external_mom);
-            }
-
-            println!("{}", "\trotated external momenta: ".yellow());
-
-            let rotated_external_moms = &rotated_sample_point.get_default_sample().external_moms;
-            for (index, external_mom) in rotated_external_moms.iter().enumerate() {
-                println!("\t\texternal momentum {}: {:?}", index, external_mom);
+                let external_moms = &sample.get_default_sample().external_moms;
+                for (index, external_mom) in external_moms.iter().enumerate() {
+                    println!("\t\texternal momentum {}: {:?}", index, external_mom);
+                }
             }
 
             let jacobian = sample_point.get_default_sample().jacobian;
@@ -700,70 +688,74 @@ impl GammaLoopIntegrand {
     /// This function performs the evaluation twice, once for the original sample and once for the rotated sample.
     fn evaluate_at_prec(
         &self,
-        sample_point: &GammaLoopSample<f64>,
-        rotated_sample_point: &GammaLoopSample<f64>,
+        samples: &[(GammaLoopSample<f64>, Option<usize>)],
         precision: Precision,
-    ) -> (Complex<F<f64>>, Complex<F<f64>>, Duration) {
+    ) -> (Vec<Complex<F<f64>>>, Duration) {
         // measure timing if we are below the max number if we are below the max number
         let start = std::time::Instant::now();
         // cast the momenta to the relevant precision
-        let (result, rotated_result) = match precision {
+        let results: Vec<_> = match precision {
             Precision::Single => {
                 unimplemented!("From<f64> for f32 can't be implemented")
             }
             Precision::Double => match &self.graph_integrands {
-                GraphIntegrands::Amplitude(graph_integrands) => {
-                    let result = evaluate(graph_integrands, sample_point, false, &self.settings);
-                    let rotated_result =
-                        evaluate(graph_integrands, rotated_sample_point, true, &self.settings);
-
-                    (result, rotated_result)
-                }
-                GraphIntegrands::CrossSection(graph_integrands) => {
-                    let result = evaluate(graph_integrands, sample_point, false, &self.settings);
-                    let rotated_result =
-                        evaluate(graph_integrands, rotated_sample_point, true, &self.settings);
-
-                    (result, rotated_result)
-                }
-            },
-            Precision::Quad => {
-                let sample_point_f128 = sample_point.higher_precision();
-                let rotated_sample_point_f128 = rotated_sample_point.higher_precision();
-
-                match &self.graph_integrands {
-                    GraphIntegrands::Amplitude(graph_integrands) => {
-                        let result =
-                            evaluate(graph_integrands, &sample_point_f128, false, &self.settings);
-
-                        let rotated_result = evaluate(
+                GraphIntegrands::Amplitude(graph_integrands) => samples
+                    .iter()
+                    .map(|(sample, rotate_overlap_centers)| {
+                        evaluate(
                             graph_integrands,
-                            &rotated_sample_point_f128,
-                            true,
+                            sample,
+                            *rotate_overlap_centers,
                             &self.settings,
-                        );
-
-                        (result.lower(), rotated_result.lower())
-                    }
-                    GraphIntegrands::CrossSection(graph_integrands) => {
-                        let result =
-                            evaluate(graph_integrands, &sample_point_f128, false, &self.settings);
-
-                        let rotated_result =
-                            evaluate(graph_integrands, &sample_point_f128, true, &self.settings);
-
-                        (result.lower(), rotated_result.lower())
-                    }
-                }
-            }
+                        )
+                    })
+                    .collect(),
+                GraphIntegrands::CrossSection(graph_integrands) => samples
+                    .iter()
+                    .map(|(sample, rotate_overlap_centers)| {
+                        evaluate(
+                            graph_integrands,
+                            sample,
+                            *rotate_overlap_centers,
+                            &self.settings,
+                        )
+                    })
+                    .collect(),
+            },
+            Precision::Quad => match &self.graph_integrands {
+                GraphIntegrands::Amplitude(graph_integrands) => samples
+                    .iter()
+                    .map(|(sample, rotate_overlap_centers)| {
+                        evaluate(
+                            graph_integrands,
+                            &sample.higher_precision(),
+                            *rotate_overlap_centers,
+                            &self.settings,
+                        )
+                        .lower()
+                    })
+                    .collect(),
+                GraphIntegrands::CrossSection(graph_integrands) => samples
+                    .iter()
+                    .map(|(sample, rotate_overlap_centers)| {
+                        evaluate(
+                            graph_integrands,
+                            &sample.higher_precision(),
+                            *rotate_overlap_centers,
+                            &self.settings,
+                        )
+                        .lower()
+                    })
+                    .collect(),
+            },
             Precision::Arb(_prec) => {
                 unimplemented!("need better traits to use arb prec")
             }
         };
 
-        let duration = start.elapsed() / 2;
+        let duration = start.elapsed() / (samples.len() as u32);
 
-        (result, rotated_result, duration)
+        (results, duration)
     }
 
     /// Used to create the use_data_generator closure for havana_integrate
@@ -930,39 +922,81 @@ impl GammaLoopIntegrand {
     #[inline]
     fn stability_check(
         &self,
-        result: Complex<F<f64>>,
-        rotated_result: Complex<F<f64>>,
+        results: &[Complex<F<f64>>],
         stability_settings: &StabilityLevelSetting,
         integrated_phase: IntegratedPhase,
         max_eval: F<f64>,
         wgt: F<f64>,
     ) -> (Complex<F<f64>>, bool) {
-        let average = (result + rotated_result) / F(2.);
+        if results.len() == 1 {
+            return (results[0], true);
+        }
 
-        let (
-            result_for_comparison,
-            rotated_result_for_comparison,
-            average_for_comparison,
-            max_wgt_for_comparison,
-        ) = match integrated_phase {
-            IntegratedPhase::Real => (result.re, rotated_result.re, average.re, max_eval),
-            IntegratedPhase::Imag => (result.im, rotated_result.im, average.im, max_eval),
+        let average = results
+            .iter()
+            .fold(Complex::<F<f64>>::new_zero(), |acc, x| acc + x)
+            / F(results.len() as f64);
+
+        let (results_for_comparison, average_for_comparison, max_wgt_for_comparison) =
+            match integrated_phase {
+                IntegratedPhase::Real => (
+                    results.iter().map(|r| r.re).collect_vec(),
+                    average.re,
+                    max_eval,
+                ),
+                IntegratedPhase::Imag => (
+                    results.iter().map(|r| r.im).collect_vec(),
+                    average.im,
+                    max_eval,
+                ),
+                IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
+            };
+
+        let mut errors = results_for_comparison.iter().map(|res| {
+            if IsZero::is_zero(res) && IsZero::is_zero(&average_for_comparison) {
+                F(0.)
+            } else {
+                ((res - average_for_comparison) / average_for_comparison).abs()
+            }
+        });
+
+        let unstable_sample = match integrated_phase {
+            IntegratedPhase::Real => {
+                errors.position(|error| error > stability_settings.required_precision_for_re)
+            }
+            IntegratedPhase::Imag => {
+                errors.position(|error| error > stability_settings.required_precision_for_im)
+            }
             IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
         };
 
-        let error = if IsZero::is_zero(&result_for_comparison)
-            && IsZero::is_zero(&rotated_result_for_comparison)
-        {
-            F(0.)
-        } else {
-            ((result_for_comparison - rotated_result_for_comparison) / average_for_comparison).abs()
-        };
+        if self.settings.general.debug > 0 {
+            if let Some(unstable_index) = unstable_sample {
+                let unstable_point = results[unstable_index];
+                let rotation_axis = format!(
+                    "{:?}",
+                    self.settings.stability.rotation_axis[unstable_index]
+                );
 
-        let stable = match integrated_phase {
-            IntegratedPhase::Real => error < stability_settings.required_precision_for_re,
-            IntegratedPhase::Imag => error < stability_settings.required_precision_for_im,
-            IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
-        };
+                let (
+                    (real_formatted, rotated_real_formatted),
+                    (imag_formatted, rotated_imag_formatted),
+                ) = (
+                    format_for_compare_digits(average.re, unstable_point.re),
+                    format_for_compare_digits(average.im, unstable_point.im),
+                );
+
+                println!("{}", "\nUnstable point detected:".red());
+                println!("Rotation axis: {}", rotation_axis);
+                println!("\taverage result: {} + {}i", real_formatted, imag_formatted,);
+                println!(
+                    "\trotated result: {} + {}i",
+                    rotated_real_formatted, rotated_imag_formatted,
+                );
+            }
+        }
+
+        let stable = unstable_sample.is_none();
 
         let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > F(0.)
             && max_wgt_for_comparison.is_non_zero()

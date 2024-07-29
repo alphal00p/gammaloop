@@ -1,9 +1,21 @@
-use crate::utils::{FloatLike, F};
+use crate::{
+    utils::{FloatLike, VarFloat, F},
+    Settings,
+};
+use color_eyre::Report;
 use derive_more::{From, Into};
+use eyre::eyre;
 use itertools::Itertools;
+use log::info;
 use serde::{Deserialize, Serialize};
-use std::ops::Index;
-use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
+use std::{fmt::Debug, ops::Index, path::PathBuf};
+use symbolica::{
+    atom::{Atom, AtomView},
+    domains::{float::NumericalFloatLike, rational::Rational},
+    evaluate::{
+        CompileOptions, CompiledEvaluator, EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap,
+    },
+};
 use typed_index_collections::TiVec;
 
 #[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize)]
@@ -21,6 +33,30 @@ use super::{
     tree::{NodeCache, NodeId, Tree},
 };
 
+pub trait CFFFloat<T: FloatLike> {
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<T>], usize) -> Vec<F<T>>;
+}
+
+impl CFFFloat<f64> for f64 {
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<f64>], usize) -> Vec<F<f64>> {
+        |energy_cache, debug| {
+            if cff.compiled.is_some() {
+                cff.compiled_evaluate_orientations(energy_cache, debug)
+            } else {
+                cff.eager_evaluate_orientations(energy_cache, debug)
+            }
+        }
+    }
+}
+
+impl CFFFloat<VarFloat<113>> for VarFloat<113> {
+    fn get_evaluator(
+        cff: &CFFExpression,
+    ) -> impl Fn(&[F<VarFloat<113>>], usize) -> Vec<F<VarFloat<113>>> {
+        |energy_cache, debug| cff.eager_evaluate_orientations(energy_cache, debug)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrientationExpression {
     pub orientation: Vec<bool>,
@@ -33,6 +69,8 @@ pub struct CFFExpression {
     pub orientations: TiVec<TermId, OrientationExpression>,
     pub esurfaces: EsurfaceCollection,
     pub hsurfaces: HsurfaceCollection,
+    #[serde(skip_serializing)]
+    pub compiled: CompiledCFFExpression,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +81,17 @@ pub enum CFFExpressionNode {
 
 impl CFFExpression {
     #[inline]
-    pub fn evaluate_orientations<T: FloatLike>(
+    pub fn evaluate_orientations<T: FloatLike + CFFFloat<T>>(
+        &self,
+        energy_cache: &[F<T>],
+        debug: usize,
+    ) -> Vec<F<T>> {
+        let evaluator = T::get_evaluator(self);
+        evaluator(energy_cache, debug)
+    }
+
+    #[inline]
+    fn eager_evaluate_orientations<T: FloatLike>(
         &self,
         energy_cache: &[F<T>],
         debug: usize,
@@ -80,6 +128,15 @@ impl CFFExpression {
     }
 
     #[inline]
+    fn compiled_evaluate_orientations(&self, energy_cache: &[F<f64>], debug: usize) -> Vec<F<f64>> {
+        if debug > 3 {
+            println!("evaluating cff orientations in eager mode");
+        }
+
+        self.compiled.evaluate_orientations(energy_cache)
+    }
+
+    #[inline]
     pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
         self.evaluate_orientations(energy_cache, debug)
             .into_iter()
@@ -88,7 +145,15 @@ impl CFFExpression {
     }
 
     #[inline]
-    pub fn evaluate_orientations_from_caches<T: FloatLike>(
+    pub fn eager_evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
+        self.eager_evaluate_orientations(energy_cache, debug)
+            .into_iter()
+            .reduce(|acc, x| &acc + &x)
+            .unwrap_or_else(|| energy_cache[0].zero())
+    }
+
+    #[inline]
+    fn evaluate_orientations_from_caches<T: FloatLike>(
         &self,
         esurface_cache: &EsurfaceCache<F<T>>,
         hsurface_cache: &HsurfaceCache<F<T>>,
@@ -409,6 +474,151 @@ impl CFFExpression {
             temp_dep_mom_expr,
         )
     }
+
+    pub fn build_symbolica_evaluators<T: FloatLike + Default>(
+        &self,
+        params: &[Atom],
+    ) -> Vec<ExpressionEvaluator<F<T>>> {
+        let function_map = FunctionMap::new();
+
+        self.orientations
+            .iter_enumerated()
+            .map(|(term_id, _)| {
+                let atom = self.construct_atom_for_term(term_id, None);
+                let atom_view = atom.as_view();
+
+                let mut tree = atom_view
+                    .to_eval_tree(|r| r.clone(), &function_map, params)
+                    .unwrap();
+
+                tree.horner_scheme();
+                tree.common_subexpression_elimination(1);
+
+                let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
+                tree_ft.linearize()
+            })
+            .collect()
+    }
+
+    pub fn build_joint_symbolica_evaluator<T: FloatLike + Default>(
+        &self,
+        params: &[Atom],
+    ) -> ExpressionEvaluator<F<T>> {
+        let orientation_atoms = self
+            .orientations
+            .iter_enumerated()
+            .map(|(term_id, _)| self.construct_atom_for_term(term_id, None))
+            .collect_vec();
+
+        let orientation_atom_views = orientation_atoms.iter().map(Atom::as_view).collect_vec();
+        let function_map = FunctionMap::new();
+
+        let mut tree: EvalTree<Rational> = AtomView::to_eval_tree_multiple(
+            &orientation_atom_views,
+            |r| r.clone(),
+            &function_map,
+            params,
+        )
+        .unwrap();
+
+        tree.horner_scheme();
+        tree.common_subexpression_elimination(1);
+
+        let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
+        tree_ft.linearize()
+    }
+
+    /// does nothing if compile_cff and compile_separate_orientations are both set to false
+    pub fn build_compiled_experssion<T: FloatLike + Default>(
+        &mut self,
+        params: &[Atom],
+        path: PathBuf,
+        compile_cff: bool,
+        compile_separate_orientations: bool,
+    ) -> Result<(), Report> {
+        if !compile_cff && !compile_separate_orientations {
+            return Ok(());
+        }
+
+        let mut cpp_str = String::new();
+
+        let path_to_compiled = path.join("compiled");
+        std::fs::create_dir_all(&path_to_compiled)?;
+
+        let path_to_code = path_to_compiled.join("expression.cpp");
+
+        info!(
+            "Compiling cff source_code {}",
+            path_to_code
+                .to_str()
+                .ok_or(eyre!("could not convert path to string"))?
+        );
+
+        let path_to_so = path_to_compiled.join("expression.so");
+        let path_to_so_str = path_to_so
+            .to_str()
+            .ok_or(eyre!("could not convert path to string"))?;
+
+        let path_to_code_clone = path_to_code.clone();
+        let path_to_code_str = path_to_code_clone
+            .to_str()
+            .ok_or(eyre!("could not convert path to string"))?;
+
+        if compile_cff {
+            let joint = self.build_joint_symbolica_evaluator::<T>(params);
+            cpp_str.push_str(&joint.export_cpp_str("joint", true));
+        }
+
+        if compile_separate_orientations {
+            let orientations = self.build_symbolica_evaluators::<T>(params);
+            for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
+                let orientation_cpp_str = orientation_evaluator.export_cpp_str(
+                    &format!("orientation_{}", orientation_id),
+                    !compile_cff && orientation_id == 0,
+                );
+
+                cpp_str.push_str(&orientation_cpp_str);
+            }
+        }
+
+        std::fs::write(path_to_code, cpp_str)?;
+        let exported_code = ExportedCode::new(path_to_code_str.to_string(), "joint".to_string());
+        exported_code.compile(path_to_so_str, CompileOptions::default())?;
+
+        let metadata = CompiledCFFExpressionMetaData {
+            name: path_to_compiled,
+            num_orientations: self.get_num_trees(),
+            compile_cff_present: compile_cff,
+            compile_separate_orientations_present: compile_separate_orientations,
+        };
+
+        self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
+
+        info!("Compilation succesful");
+
+        Ok(())
+    }
+
+    pub fn load_compiled(&mut self, path: PathBuf, settings: &Settings) -> Result<(), Report> {
+        let metadata = CompiledCFFExpressionMetaData {
+            name: path.join("compiled"),
+            num_orientations: self.get_num_trees(),
+            compile_cff_present: settings.general.load_compiled_cff,
+            compile_separate_orientations_present: settings
+                .general
+                .load_compiled_separate_orientations,
+        };
+
+        if !settings.general.load_compiled_cff
+            && !settings.general.load_compiled_separate_orientations
+        {
+            self.compiled = CompiledCFFExpression::None;
+            return Ok(());
+        }
+
+        self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
+        Ok(())
+    }
 }
 
 fn recursive_eval_from_node<T: FloatLike>(
@@ -539,4 +749,147 @@ impl CFFLimit {
 pub enum HybridNode {
     Data(HybridSurfaceID),
     Pointer { term_id: TermId, node_id: NodeId },
+}
+
+// custom option so we have control over serialize/deserialize
+pub enum CompiledCFFExpression {
+    Some(InnerCompiledCFF),
+    None,
+}
+
+pub struct InnerCompiledCFF {
+    metadata: CompiledCFFExpressionMetaData,
+    joint: Option<CompiledEvaluator>,
+    orientations: TiVec<TermId, CompiledEvaluator>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CompiledCFFExpressionMetaData {
+    name: PathBuf,
+    num_orientations: usize,
+    compile_cff_present: bool,
+    compile_separate_orientations_present: bool,
+}
+
+impl CompiledCFFExpression {
+    pub fn evaluate_orientations(&self, energy_cache: &[F<f64>]) -> Vec<F<f64>> {
+        let expr = self.unwrap();
+        let mut out = vec![F(0.0); expr.metadata.num_orientations];
+        match &expr.joint {
+            Some(evaluator) => evaluator.evaluate(energy_cache, &mut out),
+            None => {
+                for (id, out_elem) in out.iter_mut().enumerate() {
+                    *out_elem = self.evaluate_one_orientation(id.into(), energy_cache);
+                }
+            }
+        }
+
+        out
+    }
+
+    pub fn evaluate_one_orientation(&self, orientation: TermId, energy_cache: &[F<f64>]) -> F<f64> {
+        let expr = self.unwrap();
+        if expr.orientations.is_empty() {
+            panic!("no orientations to evaluate, most likely they are not generated, set compile_separate_orientations in config to generate them")
+        }
+
+        let mut out = [F(0.0)];
+        expr.orientations[orientation].evaluate(energy_cache, &mut out);
+        out[0]
+    }
+
+    fn from_metedata(metadata: CompiledCFFExpressionMetaData) -> Result<Self, Report> {
+        let path_to_joint = metadata.name.join("expression.so");
+        let path_to_joint_str = path_to_joint
+            .to_str()
+            .ok_or(eyre!("could not convert path to string"))?;
+
+        if metadata.compile_cff_present {
+            let joint =
+                CompiledEvaluator::load(path_to_joint_str, "joint").map_err(|e| eyre!(e))?;
+
+            let orientations = if metadata.compile_separate_orientations_present {
+                (0..metadata.num_orientations)
+                    .map(|orientation| {
+                        joint
+                            .load_new_function(&format!("orientation_{}", orientation))
+                            .map_err(|e| eyre!(e))
+                    })
+                    .collect::<Result<_, Report>>()?
+            } else {
+                vec![].into()
+            };
+
+            let inner = InnerCompiledCFF {
+                metadata,
+                joint: Some(joint),
+                orientations,
+            };
+
+            Ok(Self::Some(inner))
+        } else if metadata.compile_separate_orientations_present {
+            let orientation_zero = CompiledEvaluator::load(path_to_joint_str, "orientation_0")
+                .map_err(|e| eyre!(e))?;
+
+            let mut orientations = vec![orientation_zero];
+
+            for orienatation_id in 1..metadata.num_orientations {
+                let orientation_evaluator = orientations[0]
+                    .load_new_function(&format!("orientation_{}", orienatation_id))
+                    .map_err(|e| eyre!(e))?;
+
+                orientations.push(orientation_evaluator);
+            }
+            let inner = InnerCompiledCFF {
+                metadata,
+                joint: None,
+                orientations: orientations.into(),
+            };
+
+            return Ok(Self::Some(inner));
+        } else {
+            return Ok(Self::None);
+        }
+    }
+
+    fn unwrap(&self) -> &InnerCompiledCFF {
+        match self {
+            CompiledCFFExpression::Some(inner) => inner,
+            CompiledCFFExpression::None => panic!("compiled cff not present"),
+        }
+    }
+
+    fn is_some(&self) -> bool {
+        match self {
+            CompiledCFFExpression::Some(_) => true,
+            CompiledCFFExpression::None => false,
+        }
+    }
+}
+
+impl Clone for CompiledCFFExpression {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Some(inner) => Self::from_metedata(inner.metadata.clone()).unwrap(),
+            Self::None => Self::None,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CompiledCFFExpression {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self::None)
+    }
+}
+
+impl Debug for CompiledCFFExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Some(inner) => CompiledCFFExpressionMetaData::fmt(&inner.metadata, f),
+            Self::None => str::fmt("None", f),
+        }
+    }
 }
