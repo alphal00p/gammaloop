@@ -7,9 +7,14 @@ use log::debug;
 
 use serde::{Deserialize, Serialize};
 use spenso::{
-    arithmetic::ScalarMul, AbstractIndex, BaseRepName, Bispinor, DenseTensor, Euclidean,
-    FallibleAdd, FallibleMul, IndexLess, Lorentz, NamedStructure, PhysReps, RefZero, RepName,
-    VecStructure,
+    arithmetic::ScalarMul,
+    contraction::RefZero,
+    data::DenseTensor,
+    structure::{
+        AbstractIndex, BaseRepName, Bispinor, Euclidean, IndexLess, Lorentz, NamedStructure,
+        PhysReps, RepName, VecStructure,
+    },
+    upgrading_arithmetic::{FallibleAdd, FallibleMul},
 };
 use symbolica::{
     atom::{Atom, Symbol},
@@ -22,7 +27,7 @@ use symbolica::{
     poly::{polynomial::MultivariatePolynomial, Exponent},
 };
 
-use spenso::Complex;
+use spenso::complex::Complex;
 
 use crate::utils::{FloatLike, RefDefault, F};
 
@@ -1601,7 +1606,9 @@ impl<T: LowerExp, U: LowerExp> LowerExp for FourMomentum<T, U> {
 }
 #[cfg(test)]
 mod tests {
-    use spenso::{FallibleAdd, IteratableTensor, TensorStructure};
+    use spenso::{
+        iterators::IteratableTensor, structure::TensorStructure, upgrading_arithmetic::FallibleAdd,
+    };
 
     use crate::utils::F;
 

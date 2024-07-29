@@ -16,7 +16,7 @@ use colored::Colorize;
 use git_version::git_version;
 use itertools::{self, Itertools};
 use log::{info, warn};
-use spenso::Complex;
+use spenso::complex::Complex;
 use std::{
     fs,
     path::{Path, PathBuf},

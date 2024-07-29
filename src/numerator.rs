@@ -8,16 +8,18 @@ use ahash::AHashMap;
 use itertools::Itertools;
 use log::{debug, info};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
-use spenso::{Complex, ParamTensor};
 use spenso::{
-    Lorentz, NamedStructure, PhysReps, RepName, Shadowable, SymbolicTensor, TensorNetwork,
-    TensorStructure,
+    complex::Complex,
+    network::TensorNetwork,
+    parametric::ParamTensor,
+    structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
+    symbolic::SymbolicTensor,
 };
 use symbolica::{
     atom::AtomView,
     domains::float::Complex as SymComplex,
     evaluate::FunctionMap,
-    id::{MatchSettings, Pattern, Replacement},
+    id::{Pattern, Replacement},
 };
 use symbolica::{
     atom::{Atom, FunctionBuilder, Symbol},
@@ -100,7 +102,7 @@ impl<'de> Deserialize<'de> for Numerator {
             .try_into()
             .map_err(serde::de::Error::custom)?;
         let network: TensorNetwork<
-            spenso::ParamTensor<NamedStructure<symbolica::atom::Symbol, Vec<Atom>>>,
+            ParamTensor<NamedStructure<symbolica::atom::Symbol, Vec<Atom>>>,
             Atom,
         > = sym_tensor
             .to_network()
@@ -130,7 +132,7 @@ impl Numerator {
         split_reps.extend(model.external_parameter_re_im_split(fn_map));
     }
 
-    pub fn compile(&mut self, graph: &Graph) {
+    pub fn compile(&mut self, _graph: &Graph) {
 
         // if let Some(net) = self.network {
         //     net.eval_tree(|a| a.clone(), &fn_map, &params).compile();
@@ -289,6 +291,7 @@ impl Numerator {
         self.network = Some(network);
     }
 
+    #[allow(dead_code)]
     fn replace_repeat(&mut self, lhs: Pattern, rhs: Pattern) {
         let atom = self.expression.replace_all(&lhs, &rhs, None, None);
         if atom != self.expression {
@@ -307,6 +310,7 @@ impl Numerator {
         }
     }
 
+    #[allow(dead_code)]
     fn replace_repeat_multiple_atom(expr: &mut Atom, reps: &[Replacement<'_>]) {
         let atom = expr.replace_all_multiple(reps);
         if atom != *expr {
@@ -408,6 +412,7 @@ impl Numerator {
         // self.replace_repeat_multiple(&reps);
     }
 
+    #[allow(dead_code)]
     fn process_color(&mut self) {
         let idlhs = Pattern::parse("T(aind(y___,a_,z___))*id(aind(a_,b_))").unwrap();
 

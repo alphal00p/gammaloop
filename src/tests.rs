@@ -9,8 +9,8 @@ use crate::{
 
 use colored::Colorize;
 use hyperdual::Zero;
-use spenso::Complex;
-use spenso::IsZero;
+use spenso::complex::Complex;
+use spenso::contraction::IsZero;
 use symbolica::domains::float::Complex as SymComplex;
 
 use crate::inspect::inspect;

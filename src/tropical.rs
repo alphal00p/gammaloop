@@ -2,7 +2,7 @@ use ahash::HashSet;
 use color_eyre::Report;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use spenso::IsZero;
+use spenso::contraction::IsZero;
 use symbolica::domains::float::NumericalFloatLike;
 
 use crate::{

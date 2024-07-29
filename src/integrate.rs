@@ -31,7 +31,7 @@ use crate::{IntegratedPhase, IntegrationResult};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use rayon::prelude::*;
-use spenso::Complex;
+use spenso::complex::Complex;
 use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};

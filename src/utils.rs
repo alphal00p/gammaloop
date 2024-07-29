@@ -12,12 +12,12 @@ use rug::float::Constant;
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Serialize};
-use spenso::{ RefOne, RefZero, TrySmallestUpgrade, R};
+use spenso::{contraction::{RefOne, RefZero},upgrading_arithmetic:: TrySmallestUpgrade,complex::{R,Complex}};
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatComparison, NumericalFloatLike,
 };
 use symbolica::evaluate::CompiledEvaluatorFloat;
-use spenso::Complex;
+
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 

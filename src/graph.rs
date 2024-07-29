@@ -32,10 +32,17 @@ use itertools::Itertools;
 use log::{debug, warn};
 use nalgebra::DMatrix;
 #[allow(unused_imports)]
-use spenso::Contract;
+use spenso::contraction::Contract;
 use spenso::{
+    complex::Complex,
+    contraction::{IsZero, RefOne},
+    data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
+    structure::{
+        AbstractIndex, BaseRepName, Euclidean, Lorentz, NamedStructure, PhysReps, Representation,
+        ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND, COLORSEXT,
+        EUCLIDEAN,
+    },
     ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
-    Complex, *,
 };
 
 use core::panic;

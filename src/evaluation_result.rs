@@ -3,7 +3,7 @@ use std::time::Duration;
 use colored::Colorize;
 use log::info;
 use serde::{Deserialize, Serialize};
-use spenso::Complex;
+use spenso::complex::Complex;
 use symbolica::domains::float::ConstructibleFloat;
 
 use crate::{
