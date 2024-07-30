@@ -1601,7 +1601,7 @@ impl Graph {
     }
 
     #[inline]
-    pub fn get_tropical_subgraph_table(&self) -> &SampleGenerator {
+    pub fn get_tropical_subgraph_table(&self) -> &SampleGenerator<3> {
         self.derived_data.tropical_subgraph_table.as_ref().unwrap()
     }
 
@@ -1717,7 +1717,7 @@ pub struct DerivedGraphData {
     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
-    pub tropical_subgraph_table: Option<SampleGenerator>,
+    pub tropical_subgraph_table: Option<SampleGenerator<3>>,
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub static_counterterm: Option<static_counterterm::CounterTerm>,
@@ -1822,7 +1822,7 @@ pub struct SerializableDerivedGraphData {
     pub loop_momentum_bases: Option<Vec<SerializableLoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<SerializableLTDExpression>,
-    pub tropical_subgraph_table: Option<SampleGenerator>,
+    pub tropical_subgraph_table: Option<SampleGenerator<3>>,
     pub edge_groups: Option<Vec<Vec<usize>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub numerator: Option<Numerator>,

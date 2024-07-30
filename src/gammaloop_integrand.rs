@@ -277,13 +277,6 @@ impl GraphIntegrand for AmplitudeGraph {
         let tree_product =
             tree_like_energies.fold(one.clone(), |acc, x| acc * F::<T>::from_f64(2.) * x);
 
-        let two_to_the_e = F::from_f64((1 << tropical_subgraph_table.get_num_edges()) as f64);
-
-        let pi_power = sample.loop_moms[0]
-            .px
-            .PI()
-            .powf(&F::from_f64((sample.loop_moms.len() * 3) as f64 / 2.));
-
         let counterterm = match &self.get_graph().derived_data.static_counterterm {
             Some(counterterm) => {
                 counterterm.evaluate(
@@ -299,7 +292,7 @@ impl GraphIntegrand for AmplitudeGraph {
             None => Complex::new(one.zero(), one.zero()),
         };
 
-        (rep3d - counterterm) * energy_product / tree_product / two_to_the_e * pi_power
+        (rep3d - counterterm) * energy_product / tree_product
     }
 }
 
@@ -848,7 +841,7 @@ impl GammaLoopIntegrand {
                                     &external_moms,
                                 );
 
-                                let shift_momtrop = Vector::from_vec(vec![
+                                let shift_momtrop = Vector::from_array([
                                     shift.spatial.px.0,
                                     shift.spatial.py.0,
                                     shift.spatial.pz.0,
