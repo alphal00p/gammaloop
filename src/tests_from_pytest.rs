@@ -130,10 +130,11 @@ mod tests_scalar_massless_triangle {
 
         assert_eq!(model.name, "scalars");
         assert!(amplitude.amplitude_graphs.len() == 1);
-        assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 6);
+        assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 6);
         assert!(
             amplitude.amplitude_graphs[0]
                 .graph
+                .bare_graph
                 .external_connections
                 .len()
                 == 3
@@ -172,7 +173,7 @@ mod tests_scalar_massless_triangle {
 
         let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
 
-        let energy_product = graph.compute_energy_product(&[k], &[p1, p2]);
+        let energy_product = graph.bare_graph.compute_energy_product(&[k], &[p1, p2]);
 
         let sample = DefaultSample {
             loop_moms: vec![k],
@@ -217,7 +218,7 @@ mod tests_scalar_massless_triangle {
         assert_approx_eq(&ltd_res.re, &absolute_truth.re, &LTD_COMPARISON_TOLERANCE);
         assert_approx_eq(&ltd_res.im, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
 
-        let propagator_groups = graph.group_edges_by_signature();
+        let propagator_groups = graph.bare_graph.group_edges_by_signature();
         assert_eq!(propagator_groups.len(), 3);
 
         let generate_data = graph.generate_esurface_data();
@@ -235,7 +236,7 @@ mod tests_scalar_massless_triangle {
                 .esurfaces,
             graph.derived_data.esurface_derived_data.as_ref().unwrap(),
             &[p1, p2],
-            &graph.loop_momentum_basis,
+            &graph.bare_graph.loop_momentum_basis,
             0,
             F(2.0),
         );
@@ -252,10 +253,10 @@ mod tests_scalar_massless_triangle {
         }
 
         let graph_cff = graph.get_cff();
-        let mut evaluator =
-            graph_cff.build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff());
+        let mut evaluator = graph_cff
+            .build_joint_symbolica_evaluator::<f64>(&graph.bare_graph.build_params_for_cff());
 
-        let energy_cache = graph.compute_onshell_energies(&[k], &[p1, p2]);
+        let energy_cache = graph.bare_graph.compute_onshell_energies(&[k], &[p1, p2]);
 
         let mut out = vec![F(0.0); 6];
         evaluator.evaluate_multiple(&energy_cache, &mut out);
@@ -272,21 +273,29 @@ fn pytest_scalar_fishnet_2x2() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 16);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 13);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 16);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 13
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 4
     );
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-    let cff = generate_cff_expression(&graph).unwrap();
+    let cff = generate_cff_expression(&graph.bare_graph).unwrap();
     assert!(!cff.esurfaces.is_empty());
 
-    // println!("basis size: {:?}", graph.loop_momentum_basis.basis);
+    // println!("basis size: {:?}", graph.bare_graph.loop_momentum_basis.basis);
     graph.generate_loop_momentum_bases();
 
     let k1 = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.));
@@ -297,7 +306,9 @@ fn pytest_scalar_fishnet_2x2() {
     let p2 = FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.).into();
     let p3 = FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.).into();
 
-    let emr = graph.compute_emr(&[k1, k2, k3, k4], &[p1, p2, p3]);
+    let emr = graph
+        .bare_graph
+        .compute_emr(&[k1, k2, k3, k4], &[p1, p2, p3]);
     let n_lmb = graph
         .clone()
         .derived_data
@@ -349,7 +360,9 @@ fn pytest_scalar_fishnet_2x2() {
     let loop_moms_f128 = vec![k1_f128, k2_f128, k3_f128, k4_f128];
     let externals_f128 = vec![p1_f128, p2_f128, p3_f128];
 
-    let energy_product = graph.compute_energy_product(&loop_moms_f128, &externals_f128);
+    let energy_product = graph
+        .bare_graph
+        .compute_energy_product(&loop_moms_f128, &externals_f128);
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms_f128, &externals_f128) / &energy_product;
     let sample = DefaultSample {
@@ -389,7 +402,7 @@ fn pytest_scalar_fishnet_2x2() {
         &ltd_comparison_tolerance128,
     );
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 12);
     // TODO: @Mathijs, you can put your own checks there
 }
@@ -400,11 +413,19 @@ fn pytest_scalar_sunrise() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 5);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 4);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 5);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 4
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 2
@@ -426,7 +447,7 @@ fn pytest_scalar_sunrise() {
     graph.process_numerator(&model);
     graph.generate_ltd();
 
-    let energy_product = graph.compute_energy_product(&[k1, k2], &[p1]);
+    let energy_product = graph.bare_graph.compute_energy_product(&[k1, k2], &[p1]);
 
     let sample = DefaultSample {
         loop_moms: vec![k1, k2],
@@ -447,7 +468,7 @@ fn pytest_scalar_sunrise() {
     assert_approx_eq(&ltd_res.im, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
     println!("ltd correct");
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 3);
 }
 
@@ -458,11 +479,19 @@ fn pytest_scalar_fishnet_2x3() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 21);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 16);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 21);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 16
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 4
@@ -538,6 +567,7 @@ fn pytest_scalar_fishnet_2x3() {
 
     let propagator_groups = amplitude.amplitude_graphs[0]
         .graph
+        .bare_graph
         .group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 17);
 
@@ -550,11 +580,19 @@ fn pytest_scalar_cube() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 20);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 16);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 20);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 16
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 8
@@ -570,6 +608,7 @@ fn pytest_scalar_cube() {
     graph.process_numerator(&model);
 
     let ext = graph
+        .bare_graph
         .edges
         .iter()
         .filter(|e| e.edge_type != EdgeType::Virtual)
@@ -591,9 +630,19 @@ fn pytest_scalar_cube() {
         );
     }
 
-    assert_eq!(graph.loop_momentum_basis.edge_signatures[0].1.len(), 8);
+    assert_eq!(
+        graph.bare_graph.loop_momentum_basis.edge_signatures[0]
+            .1
+            .len(),
+        8
+    );
 
-    assert_eq!(graph.loop_momentum_basis.edge_signatures[0].0.len(), 5);
+    assert_eq!(
+        graph.bare_graph.loop_momentum_basis.edge_signatures[0]
+            .0
+            .len(),
+        5
+    );
 
     let mut loop_momenta: Vec<ThreeMomentum<F<f128>>> = Vec::with_capacity(5);
     for i in 0..5 {
@@ -621,7 +670,7 @@ fn pytest_scalar_cube() {
 
     assert_approx_eq(&cff_res.im, &ltd_res.im, &ltd_comparison_tolerance128);
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 12);
 }
 
@@ -631,11 +680,19 @@ fn pytest_scalar_bubble() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 4);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 4);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 4);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 4
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 2
@@ -646,7 +703,7 @@ fn pytest_scalar_bubble() {
     let p1 = FourMomentum::from_args(F(17. / 19.), F(7. / 11.), F(11. / 13.), F(13. / 17.));
     let k = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.));
 
-    let onshell_energies = graph.compute_onshell_energies(&[k], &[p1, p1]);
+    let onshell_energies = graph.bare_graph.compute_onshell_energies(&[k], &[p1, p1]);
 
     assert_eq!(onshell_energies.len(), 4);
 
@@ -657,7 +714,7 @@ fn pytest_scalar_bubble() {
     // graph.evaluate_model_params(&model);
     graph.process_numerator(&model);
 
-    let energy_product = graph.compute_energy_product(&[k], &[p1, p1]);
+    let energy_product = graph.bare_graph.compute_energy_product(&[k], &[p1, p1]);
 
     let ltd_res = graph.evaluate_ltd_expression(&[k], &[p1]) / energy_product;
 
@@ -676,7 +733,7 @@ fn pytest_scalar_bubble() {
     assert_approx_eq(&ltd_res.re, &absolute_truth.re, &LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(&ltd_res.im, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 2);
 }
 
@@ -687,11 +744,19 @@ fn pytest_scalar_massless_box() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 8);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 8);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 8);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 8
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 4
@@ -735,7 +800,9 @@ fn pytest_scalar_massless_box() {
 
     let loop_moms = vec![k];
 
-    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+    let energy_product = graph
+        .bare_graph
+        .compute_energy_product(&loop_moms, &externals);
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
     let sample = DefaultSample {
@@ -769,7 +836,7 @@ fn pytest_scalar_massless_box() {
         &ltd_comparison_tolerance128,
     );
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 4);
     graph.generate_esurface_data().unwrap();
 
@@ -790,19 +857,20 @@ fn pytest_scalar_massless_box() {
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &box4_e,
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         0,
         F(57.0),
     );
 
     let edge_masses = graph
+        .bare_graph
         .edges
         .iter()
         .map(|edge| edge.particle.mass.value)
         .collect_vec();
 
     find_maximal_overlap(
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         &existing,
         esurfaces,
         &edge_masses,
@@ -813,7 +881,7 @@ fn pytest_scalar_massless_box() {
     assert_eq!(existing.len(), 4);
 
     let maximal_overlap = find_maximal_overlap(
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         &existing,
         esurfaces,
         &edge_masses,
@@ -836,11 +904,19 @@ fn pytest_scalar_double_triangle() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 7);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 6);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 7);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 6
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 2
@@ -871,7 +947,9 @@ fn pytest_scalar_double_triangle() {
     let loop_moms = vec![k0, k1];
     let externals = vec![p1];
 
-    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+    let energy_product = graph
+        .bare_graph
+        .compute_energy_product(&loop_moms, &externals);
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
     let sample = DefaultSample {
@@ -906,7 +984,7 @@ fn pytest_scalar_double_triangle() {
         &ltd_comparison_tolerance128,
     );
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 5);
 
     let loop_moms_f64 = sample
@@ -923,10 +1001,12 @@ fn pytest_scalar_double_triangle() {
 
     let mut evaluator = graph
         .get_cff()
-        .build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff());
+        .build_joint_symbolica_evaluator::<f64>(&graph.bare_graph.build_params_for_cff());
 
     let mut out_f = vec![F(0.0); graph.get_cff().get_num_trees()];
-    let ose = graph.compute_onshell_energies(&loop_moms_f64, &externals_f64);
+    let ose = graph
+        .bare_graph
+        .compute_onshell_energies(&loop_moms_f64, &externals_f64);
     evaluator.evaluate_multiple(&ose, &mut out_f);
     let symbolica_sum =
         out_f.iter().fold(out_f[0].zero(), |acc, x| acc + x) / energy_product.lower();
@@ -945,11 +1025,19 @@ fn pytest_scalar_mercedes() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 9);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 7);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 9);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 7
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 3
@@ -976,7 +1064,9 @@ fn pytest_scalar_mercedes() {
     let loop_moms = vec![k0, k1, k2];
     let externals = vec![p1, p2];
 
-    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+    let energy_product = graph
+        .bare_graph
+        .compute_energy_product(&loop_moms, &externals);
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
 
     let sample = DefaultSample {
@@ -1012,7 +1102,7 @@ fn pytest_scalar_mercedes() {
         &ltd_comparison_tolerance128,
     );
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 6);
 }
 
@@ -1023,11 +1113,19 @@ fn pytest_scalar_triangle_box() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 9);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 8);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 9);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 8
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 3
@@ -1064,7 +1162,9 @@ fn pytest_scalar_triangle_box() {
     let loop_moms = vec![k0, k1];
     let externals = vec![p1, p2];
 
-    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+    let energy_product = graph
+        .bare_graph
+        .compute_energy_product(&loop_moms, &externals);
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
     let sample = DefaultSample {
         loop_moms,
@@ -1100,7 +1200,7 @@ fn pytest_scalar_triangle_box() {
         &ltd_comparison_tolerance128,
     );
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 6);
 }
 
@@ -1110,11 +1210,19 @@ fn pytest_scalar_isopod() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 12);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 10);
+    assert!(amplitude.amplitude_graphs[0].graph.bare_graph.edges.len() == 12);
     assert!(
         amplitude.amplitude_graphs[0]
             .graph
+            .bare_graph
+            .vertices
+            .len()
+            == 10
+    );
+    assert!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
             .external_connections
             .len()
             == 3
@@ -1150,7 +1258,9 @@ fn pytest_scalar_isopod() {
     let loop_moms = [k0, k1, k2];
     let externals = [p1, p2];
 
-    let energy_product = graph.compute_energy_product(&loop_moms, &externals);
+    let energy_product = graph
+        .bare_graph
+        .compute_energy_product(&loop_moms, &externals);
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
     let sample = DefaultSample {
@@ -1191,7 +1301,7 @@ fn pytest_scalar_isopod() {
         &ltd_comparison_tolerance128,
     );
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 9);
 }
 
@@ -1205,7 +1315,7 @@ fn pytest_scalar_raised_triangle() {
 
     let graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    let propagator_groups = graph.group_edges_by_signature();
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 5);
 }
 
@@ -1241,7 +1351,7 @@ fn pytest_scalar_hexagon() {
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         0,
         F(75.),
     );
@@ -1249,6 +1359,7 @@ fn pytest_scalar_hexagon() {
     assert_eq!(existing_esurface.len(), 6);
 
     let edge_masses = graph
+        .bare_graph
         .edges
         .iter()
         .map(|edge| edge.particle.mass.value)
@@ -1256,7 +1367,7 @@ fn pytest_scalar_hexagon() {
 
     let now = std::time::Instant::now();
     let maximal_overlap = find_maximal_overlap(
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         &existing_esurface,
         esurfaces,
         &edge_masses,
@@ -1296,7 +1407,7 @@ fn pytest_scalar_hexagon() {
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &hexagon_10_e,
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         0,
         F(88.),
     );
@@ -1305,7 +1416,7 @@ fn pytest_scalar_hexagon() {
 
     let now = std::time::Instant::now();
     let maximal_overlap = find_maximal_overlap(
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         &existing_esurfaces,
         esurfaces,
         &edge_masses,
@@ -1374,6 +1485,7 @@ fn pytest_scalar_ltd_topology_c() {
     ];
 
     let _edge_masses = graph
+        .bare_graph
         .edges
         .iter()
         .map(|edge| edge.particle.mass.value)
@@ -1394,13 +1506,13 @@ fn pytest_scalar_ltd_topology_c() {
         esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         2,
         F(18.),
     );
 
     let overlap = find_maximal_overlap(
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         &existing_esurfaces,
         esurfaces,
         &_edge_masses,
@@ -1460,6 +1572,7 @@ fn pytest_scalar_massless_pentabox() {
     ];
 
     let edge_masses = graph
+        .bare_graph
         .edges
         .iter()
         .map(|edge| edge.particle.mass.value)
@@ -1485,7 +1598,7 @@ fn pytest_scalar_massless_pentabox() {
             .esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         0,
         F(1.0),
     );
@@ -1493,7 +1606,7 @@ fn pytest_scalar_massless_pentabox() {
     assert_eq!(existing_esurfaces.len(), 17);
 
     let maximal_overlap = find_maximal_overlap(
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         &existing_esurfaces,
         &graph
             .derived_data
@@ -1562,6 +1675,7 @@ fn pytest_scalar_massless_3l_pentabox() {
     ];
 
     let edge_masses = graph
+        .bare_graph
         .edges
         .iter()
         .map(|edge| edge.particle.mass.value)
@@ -1587,17 +1701,17 @@ fn pytest_scalar_massless_3l_pentabox() {
             .esurfaces,
         graph.derived_data.esurface_derived_data.as_ref().unwrap(),
         &kinematics,
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         0,
         F(1.0),
     );
 
-    assert_eq!(graph.loop_momentum_basis.basis.len(), 3);
+    assert_eq!(graph.bare_graph.loop_momentum_basis.basis.len(), 3);
     assert_eq!(existing_esurfaces.len(), 28);
 
     let now = std::time::Instant::now();
     let maximal_overlap = find_maximal_overlap(
-        &graph.loop_momentum_basis,
+        &graph.bare_graph.loop_momentum_basis,
         &existing_esurfaces,
         &graph
             .derived_data
@@ -1640,7 +1754,7 @@ fn pytest_lbl_box() {
 
     //     println!("From edges: ");
     //     for (i, e) in v.edges.clone().iter().enumerate() {
-    //         println!("{} : {:?}", i, graph.edges[*e].particle.name)
+    //         println!("{} : {:?}", i, graph.bare_graph.edges[*e].particle.name)
     //     }
     //     println!("From vertex info: ");
     //     if let VertexInfo::InteractonVertexInfo(s) = &v.vertex_info {
@@ -1652,15 +1766,15 @@ fn pytest_lbl_box() {
     //     }
     // }
 
-    // for e in graph.edges.iter() {
+    // for e in graph.bare_graph.edges.iter() {
     //     println!("edge: {}", e.name);
     //     for v in e.vertices {
     //         if e.is_incoming_to(v) {
-    //             println!("incoming to vertex: {}", graph.vertices[v].name);
+    //             println!("incoming to vertex: {}", graph.bare_graph.vertices[v].name);
     //         } else {
-    //             println!("outgoing to vertex: {}", graph.vertices[v].name);
+    //             println!("outgoing to vertex: {}", graph.bare_graph.vertices[v].name);
     //         }
-    //         let i = graph.vertices[v]
+    //         let i = graph.bare_graph.vertices[v]
     //             .edges
     //             .iter()
     //             .enumerate()
@@ -1668,7 +1782,7 @@ fn pytest_lbl_box() {
     //             .map(|(i, _)| i)
     //             .collect::<Vec<usize>>();
 
-    //         if let VertexInfo::InteractonVertexInfo(s) = &graph.vertices[v].vertex_info {
+    //         if let VertexInfo::InteractonVertexInfo(s) = &graph.bare_graph.vertices[v].vertex_info {
     //             let p = &s.vertex_rule.particles[i[0]];
     //             println!("{:?}", p.name);
     //         }

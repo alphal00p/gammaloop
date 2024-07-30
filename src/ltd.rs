@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    graph::{EdgeType, Graph, LoopMomentumBasisSpecification},
+    graph::{BareGraph, EdgeType, Graph, LoopMomentumBasis},
     momentum::{Energy, FourMomentum, ThreeMomentum},
     utils::{compute_momentum, FloatLike, F},
 };
@@ -416,7 +416,7 @@ impl LTDTerm {
         &self,
         external_moms: &[FourMomentum<F<T>>],
         emr: &[ThreeMomentum<F<T>>],
-        graph: &Graph,
+        graph: &BareGraph,
     ) -> F<T> {
         // compute on shell energies of the momenta in associated_lmb
 
@@ -503,7 +503,7 @@ impl LTDExpression {
         &self,
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
-        graph: &Graph,
+        graph: &BareGraph,
     ) -> F<T> {
         let zero = external_moms[0].temporal.value.zero();
         let emr = graph.compute_emr(loop_moms, external_moms);
@@ -519,11 +519,11 @@ impl LTDExpression {
         &self,
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
-        graph: &Graph,
-        lmb_specification: &LoopMomentumBasisSpecification,
+        graph: &BareGraph,
+        lmb: &LoopMomentumBasis,
     ) -> F<T> {
         let zero = external_moms[0].temporal.value.zero();
-        let emr = graph.compute_emr_in_lmb(loop_moms, external_moms, lmb_specification);
+        let emr = graph.compute_emr_in_lmb(loop_moms, external_moms, lmb);
 
         self.terms
             .iter()
@@ -559,22 +559,32 @@ pub struct SerializableLTDExpression {
 }
 
 pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
-    debug!("generating ltd expression for graph: {:?}", graph.name);
+    debug!(
+        "generating ltd expression for graph: {:?}",
+        graph.bare_graph.name
+    );
 
     let loop_line_signatures = graph
+        .bare_graph
         .get_virtual_edges_iterator()
-        .map(|(index, _e)| graph.loop_momentum_basis.edge_signatures[index].0.clone())
+        .map(|(index, _e)| {
+            graph.bare_graph.loop_momentum_basis.edge_signatures[index]
+                .0
+                .clone()
+        })
         .collect_vec();
 
     let loop_number = loop_line_signatures[0].len();
 
     let position_map = graph
+        .bare_graph
         .get_virtual_edges_iterator()
         .map(|(index, _e)| index)
         .collect_vec();
 
     let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);
-    let countour_closure = vec![ContourClosure::Above; graph.loop_momentum_basis.basis.len()];
+    let countour_closure =
+        vec![ContourClosure::Above; graph.bare_graph.loop_momentum_basis.basis.len()];
     let cut_structure = cut_structure_generator.generate_structure(&countour_closure, true);
 
     graph.generate_loop_momentum_bases_if_not_exists();

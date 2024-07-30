@@ -16,7 +16,7 @@ use crate::{
         },
         expression::CFFLimit,
     },
-    graph::{Graph, LoopMomentumBasis},
+    graph::{BareGraph, Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
     utils::{self, FloatLike, F},
     Settings,
@@ -94,7 +94,7 @@ impl CounterTerm {
             })
             .collect_vec();
 
-        let (dep_mom, dep_mom_expr) = graph.get_dep_mom_expr();
+        let (dep_mom, dep_mom_expr) = graph.bare_graph.get_dep_mom_expr();
 
         let terms_in_counterterms = existing_esurfaces
             .iter()
@@ -112,7 +112,7 @@ impl CounterTerm {
                         existing_esurface,
                         cff.esurfaces[*existing_esurface],
                         cff.esurfaces[*existing_esurface]
-                            .string_format_in_lmb(&graph.loop_momentum_basis),
+                            .string_format_in_lmb(&graph.bare_graph.loop_momentum_basis),
                         error_message
                     ),
                 }
@@ -161,6 +161,7 @@ impl CounterTerm {
         }
 
         let real_mass_vector = graph
+            .bare_graph
             .get_real_mass_vector()
             .into_iter()
             .map(F::from_ff64)
@@ -168,7 +169,7 @@ impl CounterTerm {
 
         let e_cm = F::from_ff64(settings.kinematics.e_cm);
         let esurfaces = &graph.get_cff().esurfaces;
-        let lmb = &graph.loop_momentum_basis;
+        let lmb = &graph.bare_graph.loop_momentum_basis;
 
         let const_builder = &loop_momenta[0].px.zero();
 
@@ -414,8 +415,9 @@ impl CounterTerm {
         }
 
         // match the complex prefactor off cff
-        let loop_number = graph.loop_momentum_basis.basis.len();
-        let internal_vertex_number = graph.vertices.len() - graph.external_connections.len();
+        let loop_number = graph.bare_graph.loop_momentum_basis.basis.len();
+        let internal_vertex_number =
+            graph.bare_graph.vertices.len() - graph.bare_graph.external_connections.len();
 
         let prefactor = Complex::new(const_builder.zero(), const_builder.one())
             .pow(loop_number as u64)
@@ -444,9 +446,12 @@ impl CounterTerm {
             .map(|(k, center)| k * rstar + center)
             .collect_vec();
 
-        let energy_cache = graph.compute_onshell_energies(&loop_momenta_at_star, external_momenta);
+        let energy_cache = graph
+            .bare_graph
+            .compute_onshell_energies(&loop_momenta_at_star, external_momenta);
         let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
         let rstar_energy_product = graph
+            .bare_graph
             .get_virtual_edges_iterator()
             .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
             .fold(rstar.one(), |acc, e| acc * e);

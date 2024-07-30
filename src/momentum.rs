@@ -304,6 +304,16 @@ impl<T> IntoIterator for ThreeMomentum<T> {
     }
 }
 
+impl<'a, T> IntoIterator for &'a ThreeMomentum<T> {
+    type Item = &'a T;
+    type IntoIter = std::array::IntoIter<&'a T, 3>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let [px, py, pz] = [&self.px, &self.py, &self.pz];
+        [px, py, pz].into_iter()
+    }
+}
+
 impl<T: Real> RefDefault for ThreeMomentum<T> {
     fn default(&self) -> Self {
         let zero = self.px.zero();
@@ -1421,6 +1431,21 @@ impl<T> IntoIterator for FourMomentum<T> {
             self.spatial.py,
             self.spatial.pz,
             self.temporal.value,
+        ];
+        [e, px, py, pz].into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a FourMomentum<T> {
+    type Item = &'a T;
+    type IntoIter = std::array::IntoIter<&'a T, 4>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let [e, px, py, pz] = [
+            &self.spatial.px,
+            &self.spatial.py,
+            &self.spatial.pz,
+            &self.temporal.value,
         ];
         [e, px, py, pz].into_iter()
     }

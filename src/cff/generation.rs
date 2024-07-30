@@ -6,11 +6,11 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
-    graph::Graph,
+    graph::BareGraph,
 };
 use ahash::HashMap;
 use color_eyre::Report;
-use eyre::Result;
+use color_eyre::Result;
 use itertools::Itertools;
 use std::fmt::Debug;
 
@@ -136,7 +136,7 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-fn get_orientations(graph: &Graph) -> Vec<CFFGenerationGraph> {
+fn get_orientations(graph: &BareGraph) -> Vec<CFFGenerationGraph> {
     let num_virtual_edges = graph.get_virtual_edges_iterator().count();
     let possible_orientations = iterate_possible_orientations(num_virtual_edges);
 
@@ -149,7 +149,7 @@ fn get_orientations(graph: &Graph) -> Vec<CFFGenerationGraph> {
         .collect()
 }
 
-pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
+pub fn generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Report> {
     // construct a hashmap that contains as keys all vertices that connect to external edges
     // and as values those external edges that it connects to
 

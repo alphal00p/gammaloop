@@ -6,7 +6,7 @@ use spenso::contraction::IsZero;
 use symbolica::domains::float::NumericalFloatLike;
 
 use crate::{
-    graph::{EdgeType, Graph},
+    graph::{BareGraph, EdgeType, Graph},
     utils::{FloatLike, F},
 };
 
@@ -30,7 +30,7 @@ pub struct TropicalGraph {
 
 impl TropicalGraph {
     /// Create the simplfied graph from the full Graph struct
-    pub fn from_graph(graph: &Graph, tropical_edge_weights: &[f64]) -> Self {
+    pub fn from_graph(graph: &BareGraph, tropical_edge_weights: &[f64]) -> Self {
         let dod = tropical_edge_weights.iter().sum::<f64>()
             - DHALF * graph.loop_momentum_basis.basis.len() as f64;
 
@@ -435,7 +435,7 @@ pub struct TropicalSubgraphTable {
 impl TropicalSubgraphTable {
     /// Generate the tropical subgraph table from a graph
     pub fn generate_from_graph(
-        graph: &Graph,
+        graph: &BareGraph,
         tropical_edge_weights: &[f64],
     ) -> Result<Self, Report> {
         debug!("🌴🥥 Generating tropical subgraph table 🥥🌴");
@@ -814,7 +814,8 @@ pub mod tropical_parameterization {
                 .enumerate()
                 .map(|(index, _edge)| {
                     let edge_mass = F::<T>::from_ff64(
-                        match graph.edges[tropical_subgraph_table.tropical_graph.edge_map[index]]
+                        match graph.bare_graph.edges
+                            [tropical_subgraph_table.tropical_graph.edge_map[index]]
                             .particle
                             .mass
                             .value
@@ -824,7 +825,7 @@ pub mod tropical_parameterization {
                         },
                     );
 
-                    let external_signature = &graph.loop_momentum_basis.edge_signatures
+                    let external_signature = &graph.bare_graph.loop_momentum_basis.edge_signatures
                         [tropical_subgraph_table.tropical_graph.edge_map[index]]
                         .1;
                     let accumulator = external_momenta[0].spatial.zero();

@@ -128,11 +128,10 @@ fail-on-warnings = []
 
 [profile.dev.package]
 insta.opt-level = 3
-similar.opt-level = 3
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
-    "shadowing",
-] }
-# spenso = { path = "../spenso" }
+# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master", features = [
+#     "shadowing",
+# ] }
+spenso = { path = "../spenso" }

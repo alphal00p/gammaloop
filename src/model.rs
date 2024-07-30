@@ -1016,16 +1016,12 @@ impl Model {
         atom.clone()
     }
 
-    pub fn external_parameter_re_im_split(
+    pub fn valued_parameter_re_im_split(
         &self,
         fn_map: &mut FunctionMap<Rational>,
     ) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
-        for param in self
-            .parameters
-            .iter()
-            .filter(|p| matches!(p.nature, ParameterNature::External))
-        {
+        for param in self.parameters.iter().filter(|p| p.value.is_some()) {
             let lhs = Atom::parse(&param.name).unwrap().into_pattern();
             if let Some(value) = param.value {
                 let rhs = match param.parameter_type {

@@ -17,6 +17,7 @@ use spenso::{contraction::{RefOne, RefZero},upgrading_arithmetic:: TrySmallestUp
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatComparison, NumericalFloatLike,
 };
+use symbolica::domains::integer::Integer;
 use symbolica::evaluate::CompiledEvaluatorFloat;
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
@@ -127,6 +128,33 @@ impl<const N:u32> From<Float> for VarFloat<N> {
     fn from(x: Float) -> Self {
         VarFloat {
             float: rug::Float::with_val(N, x),
+        }
+    }
+}
+
+
+impl<const N:u32> From<&Rational> for VarFloat<N> {
+    fn from(x: &Rational) -> Self {
+        let n = x.numerator();
+
+        let n =match n {
+            Integer::Double(f)=>Float::with_val(N,f),
+            Integer::Large(f)=>Float::with_val(N,f),
+            Integer::Natural(f)=>Float::with_val(N,f),
+        };
+
+        let d = x.denominator();
+
+        let d =match d {
+            Integer::Double(f)=>Float::with_val(N,f),
+            Integer::Large(f)=>Float::with_val(N,f),
+            Integer::Natural(f)=>Float::with_val(N,f),
+        };
+
+        let r =n/d;
+
+        VarFloat {
+            float: rug::Float::with_val(N, r),
         }
     }
 }
@@ -1224,6 +1252,11 @@ impl FloatLike for f64 {
     fn floor(&self) -> Self {
         f64::floor(*self)
     }
+}
+impl From<F<f64>> for f64{
+  fn from(value: F<f64>) -> Self {
+      value.0
+  }
 }
 
 #[allow(non_camel_case_types)]

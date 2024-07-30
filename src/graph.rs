@@ -26,6 +26,7 @@ use crate::{
 
 use ahash::RandomState;
 
+use color_eyre::Result;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
@@ -67,7 +68,7 @@ use constcat::concat;
 
 const MAX_COLOR_INNER_CONTRACTIONS: usize = 3;
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
     #[serde(rename = "in")]
     Incoming,
@@ -149,10 +150,8 @@ impl InteractionVertexInfo {
         &self,
         edges: &[usize],
         vertex_pos: usize,
-        graph: &Graph,
+        vertex_slots: &VertexSlots,
     ) -> Option<[DataTensor<Atom>; 3]> {
-        let vertex_slots = &graph.derived_data.vertex_slots.as_ref().unwrap()[vertex_pos];
-
         let spin_structure = self
             .vertex_rule
             .lorentz_structures
@@ -314,7 +313,7 @@ fn serializable_vertex_info(vertex_info: &VertexInfo) -> SerializableVertexInfo 
     match vertex_info {
         VertexInfo::ExternalVertexInfo(external_vertex_info) => {
             SerializableVertexInfo::ExternalVertexInfo(SerializableExternalVertexInfo {
-                direction: external_vertex_info.direction.clone(),
+                direction: external_vertex_info.direction,
                 particle: external_vertex_info.particle.name.clone(),
             })
         }
@@ -334,7 +333,7 @@ fn deserialize_vertex_info(
         SerializableVertexInfo::ExternalVertexInfo(external_vertex_info) => {
             VertexInfo::ExternalVertexInfo(
                 ExternalVertexInfo {
-                    direction: external_vertex_info.direction.clone(),
+                    direction: external_vertex_info.direction,
                     particle: model.get_particle(&external_vertex_info.particle),
                 }
                 .clone(),
@@ -360,10 +359,10 @@ pub struct SerializableEdge {
 }
 
 impl SerializableEdge {
-    pub fn from_edge(graph: &Graph, edge: &Edge) -> SerializableEdge {
+    pub fn from_edge(graph: &BareGraph, edge: &Edge) -> SerializableEdge {
         SerializableEdge {
             name: edge.name.clone(),
-            edge_type: edge.edge_type.clone(),
+            edge_type: edge.edge_type,
             particle: edge.particle.name.clone(),
             propagator: edge.propagator.name.clone(),
             vertices: [
@@ -386,7 +385,7 @@ pub struct Edge {
 impl Edge {
     pub fn from_serializable_edge(
         model: &model::Model,
-        graph: &Graph,
+        graph: &BareGraph,
         serializable_edge: &SerializableEdge,
     ) -> Edge {
         Edge {
@@ -409,7 +408,7 @@ impl Edge {
         self.vertices[1] == vertex
     }
 
-    pub fn denominator(&self, graph: &Graph) -> (Atom, Atom) {
+    pub fn denominator(&self, graph: &BareGraph) -> (Atom, Atom) {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = Atom::parse(&format!("Q{num}")).unwrap();
         let mass = self
@@ -422,7 +421,7 @@ impl Edge {
         (mom, mass)
     }
 
-    pub fn substitute_lmb(&self, atom: Atom, graph: &Graph, lmb: &LoopMomentumBasis) -> Atom {
+    pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = Pattern::parse(&format!("Q({num},x_)")).unwrap();
         let mom_rep = lmb.pattern(num);
@@ -434,25 +433,21 @@ impl Edge {
     //     State::get_symbol(format!("Q{num}"))
     // }
 
-    pub fn in_slot(&self, graph: &Graph) -> EdgeSlots<Lorentz> {
+    pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Lorentz> {
         let local_pos_in_sink_vertex =
             graph.vertices[self.vertices[1]].get_local_edge_position(self, graph);
 
-        graph.derived_data.vertex_slots.as_ref().unwrap()[self.vertices[1]]
-            [local_pos_in_sink_vertex]
-            .dual()
+        graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn out_slot(&self, graph: &Graph) -> EdgeSlots<Lorentz> {
+    pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Lorentz> {
         let local_pos_in_sink_vertex =
             graph.vertices[self.vertices[0]].get_local_edge_position(self, graph);
 
-        graph.derived_data.vertex_slots.as_ref().unwrap()[self.vertices[0]]
-            [local_pos_in_sink_vertex]
-            .dual()
+        graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn numerator(&self, graph: &Graph) -> (Atom, usize) {
+    pub fn numerator(&self, graph: &BareGraph) -> (Atom, usize) {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let in_slots = self.in_slot(graph);
         let out_slots = self.out_slot(graph);
@@ -521,7 +516,7 @@ pub struct SerializableVertex {
 }
 
 impl SerializableVertex {
-    pub fn from_vertex(graph: &Graph, vertex: &Vertex) -> SerializableVertex {
+    pub fn from_vertex(graph: &BareGraph, vertex: &Vertex) -> SerializableVertex {
         SerializableVertex {
             name: vertex.name.clone(),
             vertex_info: serializable_vertex_info(&vertex.vertex_info),
@@ -542,7 +537,7 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub fn get_local_edge_position(&self, edge: &Edge, graph: &Graph) -> usize {
+    pub fn get_local_edge_position(&self, edge: &Edge, graph: &BareGraph) -> usize {
         let global_id: usize = graph.edge_name_to_position[&edge.name];
         self.edges
             .iter()
@@ -568,23 +563,20 @@ impl Vertex {
         }
     }
 
-    pub fn is_edge_incoming(&self, edge: usize, graph: &Graph) -> bool {
+    pub fn is_edge_incoming(&self, edge: usize, graph: &BareGraph) -> bool {
         graph.is_edge_incoming(edge, graph.get_vertex_position(&self.name).unwrap())
     }
 
-    pub fn apply_vertex_rule(&self, graph: &Graph) -> Option<[DataTensor<Atom>; 3]> {
+    pub fn apply_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 3]> {
+        let pos = graph.get_vertex_position(&self.name).unwrap();
         match &self.vertex_info {
             VertexInfo::ExternalVertexInfo(_) => None,
             VertexInfo::InteractonVertexInfo(interaction_vertex_info) => interaction_vertex_info
-                .apply_vertex_rule(
-                    &self.edges,
-                    graph.get_vertex_position(&self.name).unwrap(),
-                    graph,
-                ),
+                .apply_vertex_rule(&self.edges, pos, &graph.vertex_slots[pos]),
         }
     }
 
-    pub fn contracted_vertex_rule(&self, graph: &Graph) -> Option<Atom> {
+    pub fn contracted_vertex_rule(&self, graph: &BareGraph) -> Option<Atom> {
         let all = self.apply_vertex_rule(graph)?;
         let scalar = all
             .into_iter()
@@ -615,7 +607,7 @@ pub struct SerializableGraph {
 }
 
 impl SerializableGraph {
-    pub fn from_graph(graph: &Graph) -> SerializableGraph {
+    pub fn from_graph(graph: &BareGraph) -> SerializableGraph {
         SerializableGraph {
             name: graph.name.clone(),
             vertices: graph
@@ -665,6 +657,12 @@ impl SerializableGraph {
 
 #[derive(Debug, Clone)]
 pub struct Graph {
+    pub bare_graph: BareGraph,
+    pub derived_data: DerivedGraphData,
+}
+
+#[derive(Debug, Clone)]
+pub struct BareGraph {
     pub name: SmartString<LazyCompact>,
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
@@ -674,24 +672,11 @@ pub struct Graph {
     pub loop_momentum_basis: LoopMomentumBasis,
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
-    pub derived_data: DerivedGraphData,
+    pub vertex_slots: Vec<VertexSlots>,
     pub shifts: (usize, usize, usize),
 }
 
-impl Graph {
-    fn generate_vertex_slots(&mut self) {
-        let (v, s) = self
-            .vertices
-            .iter()
-            .fold((vec![], self.shifts), |(mut acc, shifts), v| {
-                let (e, new_shifts) = v.generate_vertex_slots(shifts);
-                acc.push(e);
-                (acc, new_shifts)
-            });
-        self.shifts = s;
-        self.derived_data.vertex_slots = Some(v);
-    }
-
+impl BareGraph {
     pub fn dot(&self) -> String {
         let mut dot = String::new();
         dot.push_str("digraph G {\n");
@@ -740,7 +725,7 @@ impl Graph {
         dot.push_str("}\n");
         dot
     }
-    pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> Graph {
+    pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> BareGraph {
         // First build vertices
         let mut vertices: Vec<Vertex> = vec![];
         let mut vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
@@ -751,7 +736,7 @@ impl Graph {
             vertices.push(vertex);
         }
 
-        let mut g = Graph {
+        let mut g = BareGraph {
             name: graph.name.clone(),
             vertices,
             edges: vec![],
@@ -764,7 +749,7 @@ impl Graph {
             },
             vertex_name_to_position,
             edge_name_to_position: HashMap::default(),
-            derived_data: DerivedGraphData::new_empty(),
+            vertex_slots: vec![],
             shifts: (0, 0, MAX_COLOR_INNER_CONTRACTIONS),
         };
 
@@ -842,6 +827,19 @@ impl Graph {
         g
     }
 
+    fn generate_vertex_slots(&mut self) {
+        let (v, s) = self
+            .vertices
+            .iter()
+            .fold((vec![], self.shifts), |(mut acc, shifts), v| {
+                let (e, new_shifts) = v.generate_vertex_slots(shifts);
+                acc.push(e);
+                (acc, new_shifts)
+            });
+        self.shifts = s;
+        self.vertex_slots = v;
+    }
+
     #[inline]
     pub fn get_vertex(&self, name: &SmartString<LazyCompact>) -> Option<&Vertex> {
         match self.vertex_name_to_position.get(name) {
@@ -874,8 +872,7 @@ impl Graph {
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
     ) -> Vec<ThreeMomentum<F<T>>> {
-        let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.compute_emr_in_lmb(loop_moms, external_moms, &lmb_specification)
+        self.compute_emr_in_lmb(loop_moms, external_moms, &self.loop_momentum_basis)
     }
 
     #[inline]
@@ -883,11 +880,8 @@ impl Graph {
         &self,
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
-        lmb_specification: &LoopMomentumBasisSpecification,
+        lmb: &LoopMomentumBasis,
     ) -> Vec<ThreeMomentum<F<T>>> {
-        //do we really want 4-momenta here? -lucien
-        let lmb = lmb_specification.basis(self);
-
         lmb.edge_signatures
             .iter()
             .map(|sig| compute_three_momentum_from_four(sig, loop_moms, external_moms))
@@ -900,8 +894,7 @@ impl Graph {
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
     ) -> Vec<F<T>> {
-        let lmb_sepcification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &lmb_sepcification)
+        self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &self.loop_momentum_basis)
     }
 
     #[inline]
@@ -925,10 +918,8 @@ impl Graph {
         &self,
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
-        lmb_specification: &LoopMomentumBasisSpecification,
+        lmb: &LoopMomentumBasis,
     ) -> Vec<F<T>> {
-        let lmb = lmb_specification.basis(self);
-
         lmb.edge_signatures
             .iter()
             .map(|sig| compute_four_momentum_from_three(sig, loop_moms, external_moms))
@@ -956,8 +947,7 @@ impl Graph {
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
     ) -> F<T> {
-        let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.compute_energy_product_in_lmb(loop_moms, external_moms, &lmb_specification)
+        self.compute_energy_product_in_lmb(loop_moms, external_moms, &self.loop_momentum_basis)
     }
 
     #[inline]
@@ -965,10 +955,9 @@ impl Graph {
         &self,
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
-        lmb_specification: &LoopMomentumBasisSpecification,
+        lmb: &LoopMomentumBasis,
     ) -> F<T> {
-        let all_energies =
-            self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb_specification);
+        let all_energies = self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb);
 
         self.edges
             .iter()
@@ -983,7 +972,211 @@ impl Graph {
         self.edges.iter().map(|e| e.edge_type.clone()).collect()
     }
 
-    pub fn generate_loop_momentum_bases(&mut self) {
+    pub fn generate_lmb_replacement_rules(&self) -> Vec<(Atom, Atom)> {
+        self.loop_momentum_basis_replacement_rule(&self.loop_momentum_basis)
+    }
+
+    fn loop_momentum_basis_replacement_rule(&self, lmb: &LoopMomentumBasis) -> Vec<(Atom, Atom)> {
+        let mut rule = vec![];
+
+        for (i, signature) in lmb.edge_signatures.iter().enumerate() {
+            rule.push((
+                Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
+                self.replacement_rule_from_signature(i, signature),
+            ));
+        }
+
+        rule
+    }
+
+    fn replacement_rule_from_signature(
+        &self,
+        index: usize,
+
+        signature: &(Vec<isize>, Vec<isize>),
+    ) -> Atom {
+        let mut acc = Atom::new_num(0);
+        for (i_l, sign) in signature.0.iter().enumerate() {
+            match sign {
+                1 => {
+                    acc = &acc + &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+                }
+                -1 => {
+                    acc = &acc - &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+                }
+                _ => {}
+            }
+        }
+
+        for (i_e, sign) in signature.1.iter().enumerate() {
+            match sign {
+                1 => {
+                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+                }
+                -1 => {
+                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+                }
+                _ => {}
+            }
+        }
+        acc
+    }
+
+    pub fn denominator(self) -> Vec<(Atom, Atom)> {
+        self.edges.iter().map(|e| e.denominator(&self)).collect()
+    }
+
+    fn emr_from_lmb<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<FourMomentum<F<T>>> {
+        let massless = lmb.to_massless_emr(sample);
+        self.edges
+            .iter()
+            .zip(massless)
+            .map(|(edge, emr)| match edge.edge_type {
+                EdgeType::Virtual => {
+                    emr.spatial
+                        .into_on_shell_four_momentum(edge.particle.mass.value.map(|m| {
+                            if m.im.is_non_zero() {
+                                panic!("Complex masses not yet supported in gammaLoop")
+                            }
+                            F::<T>::from_ff64(m.re)
+                        }))
+                }
+                _ => emr,
+            })
+            .collect()
+    }
+
+    pub fn evaluate_model_params(&mut self, _model: &Model) {}
+
+    #[inline]
+    pub fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
+        self.edges
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.edge_type == EdgeType::Virtual)
+    }
+
+    /// iterate over all edges which are part of a loop, (tree-level attachments removed)
+    #[inline]
+    pub fn get_loop_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
+        self.edges.iter().enumerate().filter(|(index, e)| {
+            e.edge_type == EdgeType::Virtual && {
+                self.loop_momentum_basis.edge_signatures[*index]
+                    .0
+                    .iter()
+                    .any(|x| *x != 0)
+            }
+        })
+    }
+
+    /// iterate over all edges which are virtual but do not carry a loop momentum.
+    #[inline]
+    pub fn get_tree_level_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
+        self.edges.iter().enumerate().filter(|(index, e)| {
+            e.edge_type == EdgeType::Virtual && {
+                self.loop_momentum_basis.edge_signatures[*index]
+                    .0
+                    .iter()
+                    .all(|x| *x == 0)
+            }
+        })
+    }
+
+    /// For a given edge, return the indices of the edges which have the same signature
+    #[inline]
+    pub fn is_edge_raised(&self, edge_index: usize) -> SmallVec<[usize; 2]> {
+        let edge_signature = &self.loop_momentum_basis.edge_signatures[edge_index];
+        let virtual_edges = self.get_virtual_edges_iterator();
+
+        virtual_edges
+            .filter(|(index, _)| {
+                self.loop_momentum_basis.edge_signatures[*index] == *edge_signature
+                    && *index != edge_index
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// Returns groups of edges which all have the same signature
+    pub fn group_edges_by_signature(&self) -> Vec<SmallVec<[usize; 3]>> {
+        let mut edges: Vec<usize> = self
+            .get_virtual_edges_iterator()
+            .map(|(index, _)| index)
+            .collect();
+
+        let mut grouped_edges = Vec::with_capacity(edges.len());
+
+        while !edges.is_empty() {
+            let current_edge = edges.remove(0);
+
+            let mut group = smallvec![current_edge];
+            let mut index = 0;
+
+            while index < edges.len() {
+                if self.loop_momentum_basis.edge_signatures[current_edge]
+                    == self.loop_momentum_basis.edge_signatures[edges[index]]
+                {
+                    group.push(edges.remove(index));
+                } else {
+                    index += 1;
+                }
+            }
+
+            grouped_edges.push(group);
+        }
+
+        grouped_edges
+    }
+
+    pub fn is_edge_incoming(&self, edge: usize, vertex: usize) -> bool {
+        self.edges[edge].is_incoming_to(vertex)
+    }
+
+    pub fn build_params_for_cff(&self) -> Vec<Atom> {
+        self.edges
+            .iter()
+            .enumerate()
+            .map(|(id, edge)| match edge.edge_type {
+                EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
+                _ => Atom::parse(&format!("p{}", id)).unwrap(),
+            })
+            .collect()
+    }
+
+    pub fn get_dep_mom_expr(&self) -> (usize, ExternalShift) {
+        let external_edges = self
+            .edges
+            .iter()
+            .enumerate()
+            .filter(|(_index, edge)| edge.edge_type != EdgeType::Virtual)
+            .collect_vec();
+
+        // find the external leg which does not appear in it's own signature
+        let (_, (dep_mom, _)) = external_edges
+            .iter()
+            .enumerate()
+            .find(|(external_index, (index, _edge))| {
+                self.loop_momentum_basis.edge_signatures[*index].1[*external_index] != 1
+            })
+            .unwrap_or_else(|| panic!("could not determine dependent momenta"));
+
+        let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].1;
+
+        let external_shift = external_edges
+            .iter()
+            .zip(dep_mom_signature.iter())
+            .filter(|(_external_edge, dep_mom_sign)| **dep_mom_sign != 0)
+            .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
+            .collect();
+
+        (*dep_mom, external_shift)
+    }
+
+    pub fn generate_loop_momentum_bases(&self) -> Vec<LoopMomentumBasis> {
         let loop_number = self.loop_momentum_basis.basis.len();
         let num_edges = self.edges.len();
         let external_signature_length = self.loop_momentum_basis.edge_signatures[0].1.len();
@@ -1108,78 +1301,10 @@ impl Graph {
             })
             .collect_vec();
 
-        self.derived_data.loop_momentum_bases = Some(lmbs);
+        lmbs
     }
 
-    pub fn generate_loop_momentum_bases_if_not_exists(&mut self) {
-        if self.derived_data.loop_momentum_bases.is_none() {
-            self.generate_loop_momentum_bases();
-        }
-    }
-
-    pub fn generate_lmb_replacement_rules(&self) -> Vec<(Atom, Atom)> {
-        self.loop_momentum_basis_replacement_rule(&self.loop_momentum_basis)
-    }
-
-    fn loop_momentum_basis_replacement_rule(&self, lmb: &LoopMomentumBasis) -> Vec<(Atom, Atom)> {
-        let mut rule = vec![];
-
-        for (i, signature) in lmb.edge_signatures.iter().enumerate() {
-            rule.push((
-                Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
-                self.replacement_rule_from_signature(i, signature),
-            ));
-        }
-
-        rule
-    }
-
-    fn replacement_rule_from_signature(
-        &self,
-        index: usize,
-
-        signature: &(Vec<isize>, Vec<isize>),
-    ) -> Atom {
-        let mut acc = Atom::new_num(0);
-        for (i_l, sign) in signature.0.iter().enumerate() {
-            match sign {
-                1 => {
-                    acc = &acc + &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
-                }
-                -1 => {
-                    acc = &acc - &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
-                }
-                _ => {}
-            }
-        }
-
-        for (i_e, sign) in signature.1.iter().enumerate() {
-            match sign {
-                1 => {
-                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
-                }
-                -1 => {
-                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
-                }
-                _ => {}
-            }
-        }
-        acc
-    }
-
-    pub fn generate_ltd(&mut self) {
-        self.derived_data.ltd_expression = Some(generate_ltd_expression(self));
-    }
-
-    pub fn denominator(self) -> Vec<(Atom, Atom)> {
-        self.edges.iter().map(|e| e.denominator(&self)).collect()
-    }
-
-    pub fn generate_cff(&mut self) {
-        self.derived_data.cff_expression = Some(generate_cff_expression(self).unwrap());
-    }
-
-    pub fn generate_tropical_subgraph_table(&mut self) {
+    pub fn generate_tropical_subgraph_table(&mut self) -> Result<TropicalSubgraphTable> {
         let num_virtual_loop_edges = self.get_loop_edges_iterator().count();
 
         let num_loops = self.loop_momentum_basis.basis.len();
@@ -1197,7 +1322,51 @@ impl Graph {
 
         let weight_guess = vec![weight; num_virtual_loop_edges];
 
-        let table = TropicalSubgraphTable::generate_from_graph(self, &weight_guess);
+        Ok(TropicalSubgraphTable::generate_from_graph(
+            self,
+            &weight_guess,
+        )?)
+    }
+}
+impl Graph {
+    pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> Self {
+        Graph {
+            derived_data: DerivedGraphData::new_empty(),
+            bare_graph: BareGraph::from_serializable_graph(model, graph),
+        }
+    }
+
+    // == Generation fns
+
+    pub fn generate_loop_momentum_bases(&mut self) {
+        self.derived_data.loop_momentum_bases =
+            Some(self.bare_graph.generate_loop_momentum_bases());
+    }
+    pub fn generate_loop_momentum_bases_if_not_exists(&mut self) {
+        if self.derived_data.loop_momentum_bases.is_none() {
+            self.generate_loop_momentum_bases();
+        }
+    }
+
+    #[inline]
+    pub fn evaluate_cff_expression<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        debug: usize,
+    ) -> Complex<F<T>> {
+        let lmb_specification =
+            LoopMomentumBasisSpecification::Literal(&self.bare_graph.loop_momentum_basis);
+        self.evaluate_cff_expression_in_lmb(sample, &lmb_specification, debug)
+    }
+
+    pub fn process_numerator(&mut self, model: &Model) {
+        self.smart_generate_numerator();
+        let numerator = self.derived_data.numerator.as_mut().unwrap();
+        numerator.process(model, &self.bare_graph);
+    }
+
+    pub fn generate_tropical_subgraph_table(&mut self) {
+        let table = self.bare_graph.generate_tropical_subgraph_table();
 
         if let Ok(table) = table {
             self.derived_data.tropical_subgraph_table = Some(table);
@@ -1207,7 +1376,7 @@ impl Graph {
     }
 
     pub fn generate_numerator(&mut self) {
-        self.derived_data.numerator = Some(Numerator::generate(self));
+        self.derived_data.numerator = Some(Numerator::generate(&mut self.bare_graph));
     }
 
     pub fn smart_generate_numerator(&mut self) {
@@ -1225,14 +1394,14 @@ impl Graph {
         let one = loop_moms[0].px.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
-        let loop_number = self.loop_momentum_basis.basis.len();
+        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
         let prefactor = i.pow(loop_number as u64);
 
         prefactor
             * self.derived_data.ltd_expression.as_ref().unwrap().evaluate(
                 loop_moms,
                 external_moms,
-                self,
+                &self.bare_graph,
             )
     }
 
@@ -1241,12 +1410,12 @@ impl Graph {
         &self,
         loop_moms: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
-        lmb_specification: &LoopMomentumBasisSpecification,
+        lmb: &LoopMomentumBasis,
     ) -> Complex<F<T>> {
         let one = loop_moms[0].px.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
-        let loop_number = self.loop_momentum_basis.basis.len();
+        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
         let prefactor = i.pow(loop_number as u64);
 
         prefactor
@@ -1255,7 +1424,7 @@ impl Graph {
                 .ltd_expression
                 .as_ref()
                 .unwrap()
-                .evaluate_in_lmb(loop_moms, external_moms, self, lmb_specification)
+                .evaluate_in_lmb(loop_moms, external_moms, &self.bare_graph, lmb)
     }
 
     #[inline]
@@ -1266,10 +1435,11 @@ impl Graph {
         lmb_specification: &LoopMomentumBasisSpecification,
         debug: usize,
     ) -> Vec<F<T>> {
-        let energy_cache = self.compute_onshell_energies_in_lmb(
+        let lmb = lmb_specification.basis(self);
+        let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
             &sample.loop_moms,
             &sample.external_moms,
-            lmb_specification,
+            lmb,
         );
 
         self.derived_data
@@ -1285,137 +1455,11 @@ impl Graph {
         }
     }
 
-    fn emr_from_lmb<T: FloatLike>(
-        &self,
-        sample: &DefaultSample<T>,
-        lmb: &LoopMomentumBasis,
-    ) -> Vec<FourMomentum<F<T>>> {
-        let massless = lmb.to_massless_emr(sample);
-        self.edges
-            .iter()
-            .zip(massless)
-            .map(|(edge, emr)| match edge.edge_type {
-                EdgeType::Virtual => {
-                    emr.spatial
-                        .into_on_shell_four_momentum(edge.particle.mass.value.map(|m| {
-                            if m.im.is_non_zero() {
-                                panic!("Complex masses not yet supported in gammaLoop")
-                            }
-                            F::<T>::from_ff64(m.re)
-                        }))
-                }
-                _ => emr,
-            })
-            .collect()
-    }
-
-    pub fn evaluate_model_params(&mut self, _model: &Model) {}
-
-    pub fn evaluate_numerator<T: FloatLike>(&self, emr: Vec<FourMomentum<F<T>>>) -> Complex<F<T>> {
-        self.derived_data
-            .numerator
-            .as_ref()
-            .unwrap()
-            .evaluate(&emr, self)
-    }
-
-    #[inline]
-    /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_numerator_orientations<T: FloatLike>(
-        &self,
-        sample: &DefaultSample<T>,
-        lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<Complex<F<T>>> {
-        let mut out = vec![];
-        let lmb = lmb_specification.basis(self);
-
-        let emr = self.emr_from_lmb(sample, lmb);
-
-        // debug!("Numerator: {}", numerator);
-
-        for orient in self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .iter()
-            .map(|e| e.orientation.clone())
-        {
-            let mut emr = emr.clone();
-            for ((i, _), sign) in self.get_virtual_edges_iterator().zip(orient.into_iter()) {
-                if !sign {
-                    emr[i].temporal.value.negate()
-                }
-            }
-
-            out.push(self.evaluate_numerator(emr));
-        }
-
-        out
-    }
-
-    #[inline]
-    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
-        &self,
-        sample: &DefaultSample<T>,
-        lmb_specification: &LoopMomentumBasisSpecification,
-        debug: usize,
-    ) -> Complex<F<T>> {
-        let one = sample.one();
-        let zero = one.zero();
-        let i = Complex::new(zero.clone(), one.clone());
-
-        let loop_number = self.loop_momentum_basis.basis.len();
-        let internal_vertex_number = self.vertices.len() - self.external_connections.len();
-
-        let prefactor =
-            i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
-
-        // here numerator evaluation can be weaved into the summation
-        let res = prefactor
-            * self
-                .evaluate_cff_orientations(sample, lmb_specification, debug)
-                .into_iter()
-                .zip(
-                    // self.evaluate_numerator_orientations(sample, lmb_specification),
-                    0.., // dummy values for performance test
-                )
-                .map(|(cff, _num)| {
-                    let zero = cff.zero();
-                    Complex::new(cff, zero)
-                })
-                .reduce(|acc, e| acc + &e)
-                .unwrap_or_else(|| panic!("no orientations to evaluate"));
-
-        if debug > 1 {
-            println!("sum over all orientations including numerator: {}", &res)
-        }
-
-        res
-    }
-
-    #[inline]
-    pub fn evaluate_cff_expression<T: FloatLike>(
-        &self,
-        sample: &DefaultSample<T>,
-        debug: usize,
-    ) -> Complex<F<T>> {
-        let lmb_specification = LoopMomentumBasisSpecification::Literal(&self.loop_momentum_basis);
-        self.evaluate_cff_expression_in_lmb(sample, &lmb_specification, debug)
-    }
-
-    pub fn process_numerator(&mut self, model: &Model) {
-        self.smart_generate_numerator();
-        let mut numerator = self.derived_data.numerator.clone().unwrap();
-
-        numerator.process(self, model);
-        self.derived_data.numerator = Some(numerator);
-    }
-
     pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
-        let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
+        let derived_data_path = path.join(format!(
+            "derived_data_{}.bin",
+            self.bare_graph.name.as_str()
+        ));
         let derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
         self.derived_data = derived_data;
 
@@ -1426,7 +1470,7 @@ impl Graph {
             .load_compiled(path.into(), settings)?;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
-        let lmb_indices = self.loop_momentum_basis.basis.clone();
+        let lmb_indices = self.bare_graph.loop_momentum_basis.basis.clone();
         self.set_lmb(&lmb_indices)?;
         Ok(())
     }
@@ -1434,93 +1478,20 @@ impl Graph {
     // attempt to set a new loop momentum basis
     pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
         let position = self.derived_data.search_lmb_position(lmb)?;
-        self.loop_momentum_basis =
+        self.bare_graph.loop_momentum_basis =
             self.derived_data.loop_momentum_bases.as_ref().unwrap()[position].clone();
         Ok(())
     }
 
-    #[inline]
-    pub fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
-        self.edges
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| e.edge_type == EdgeType::Virtual)
+    pub fn generate_cff(&mut self) {
+        self.derived_data.cff_expression = Some(generate_cff_expression(&self.bare_graph).unwrap());
     }
 
-    /// iterate over all edges which are part of a loop, (tree-level attachments removed)
-    #[inline]
-    pub fn get_loop_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
-        self.edges.iter().enumerate().filter(|(index, e)| {
-            e.edge_type == EdgeType::Virtual && {
-                self.loop_momentum_basis.edge_signatures[*index]
-                    .0
-                    .iter()
-                    .any(|x| *x != 0)
-            }
-        })
+    pub fn generate_ltd(&mut self) {
+        self.derived_data.ltd_expression = Some(generate_ltd_expression(self));
     }
-
-    /// iterate over all edges which are virtual but do not carry a loop momentum.
-    #[inline]
-    pub fn get_tree_level_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
-        self.edges.iter().enumerate().filter(|(index, e)| {
-            e.edge_type == EdgeType::Virtual && {
-                self.loop_momentum_basis.edge_signatures[*index]
-                    .0
-                    .iter()
-                    .all(|x| *x == 0)
-            }
-        })
-    }
-
-    /// For a given edge, return the indices of the edges which have the same signature
-    #[inline]
-    pub fn is_edge_raised(&self, edge_index: usize) -> SmallVec<[usize; 2]> {
-        let edge_signature = &self.loop_momentum_basis.edge_signatures[edge_index];
-        let virtual_edges = self.get_virtual_edges_iterator();
-
-        virtual_edges
-            .filter(|(index, _)| {
-                self.loop_momentum_basis.edge_signatures[*index] == *edge_signature
-                    && *index != edge_index
-            })
-            .map(|(index, _)| index)
-            .collect()
-    }
-
-    /// Returns groups of edges which all have the same signature
-    pub fn group_edges_by_signature(&self) -> Vec<SmallVec<[usize; 3]>> {
-        let mut edges: Vec<usize> = self
-            .get_virtual_edges_iterator()
-            .map(|(index, _)| index)
-            .collect();
-
-        let mut grouped_edges = Vec::with_capacity(edges.len());
-
-        while !edges.is_empty() {
-            let current_edge = edges.remove(0);
-
-            let mut group = smallvec![current_edge];
-            let mut index = 0;
-
-            while index < edges.len() {
-                if self.loop_momentum_basis.edge_signatures[current_edge]
-                    == self.loop_momentum_basis.edge_signatures[edges[index]]
-                {
-                    group.push(edges.remove(index));
-                } else {
-                    index += 1;
-                }
-            }
-
-            grouped_edges.push(group);
-        }
-
-        grouped_edges
-    }
-
     pub fn generate_edge_groups(&mut self) {
-        self.derived_data.edge_groups = Some(self.group_edges_by_signature());
+        self.derived_data.edge_groups = Some(self.bare_graph.group_edges_by_signature());
     }
 
     pub fn generate_esurface_data(&mut self) -> Result<(), Report> {
@@ -1528,10 +1499,6 @@ impl Graph {
         self.derived_data.esurface_derived_data = Some(data);
 
         Ok(())
-    }
-
-    pub fn is_edge_incoming(&self, edge: usize, vertex: usize) -> bool {
-        self.edges[edge].is_incoming_to(vertex)
     }
 
     // helper function
@@ -1561,7 +1528,7 @@ impl Graph {
             &self.get_cff().esurfaces,
             self.get_esurface_derived_data(),
             externals,
-            &self.loop_momentum_basis,
+            &self.bare_graph.loop_momentum_basis,
             debug,
             e_cm,
         )
@@ -1576,42 +1543,13 @@ impl Graph {
     ) -> OverlapStructure {
         let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, debug);
         find_maximal_overlap(
-            &self.loop_momentum_basis,
+            &self.bare_graph.loop_momentum_basis,
             &existing_esurfaces,
             &self.get_cff().esurfaces,
-            &self.get_mass_vector(),
+            &self.bare_graph.get_mass_vector(),
             externals,
             debug,
         )
-    }
-
-    pub fn get_dep_mom_expr(&self) -> (usize, ExternalShift) {
-        let external_edges = self
-            .edges
-            .iter()
-            .enumerate()
-            .filter(|(_index, edge)| edge.edge_type != EdgeType::Virtual)
-            .collect_vec();
-
-        // find the external leg which does not appear in it's own signature
-        let (_, (dep_mom, _)) = external_edges
-            .iter()
-            .enumerate()
-            .find(|(external_index, (index, _edge))| {
-                self.loop_momentum_basis.edge_signatures[*index].1[*external_index] != 1
-            })
-            .unwrap_or_else(|| panic!("could not determine dependent momenta"));
-
-        let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].1;
-
-        let external_shift = external_edges
-            .iter()
-            .zip(dep_mom_signature.iter())
-            .filter(|(_external_edge, dep_mom_sign)| **dep_mom_sign != 0)
-            .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
-            .collect();
-
-        (*dep_mom, external_shift)
     }
 
     pub fn build_compiled_expression(
@@ -1620,7 +1558,7 @@ impl Graph {
         compile_cff: bool,
         compile_separate_orientations: bool,
     ) -> Result<(), Report> {
-        let params = self.build_params_for_cff();
+        let params = self.bare_graph.build_params_for_cff();
         match self.derived_data.cff_expression.as_mut() {
             Some(cff) => cff.build_compiled_experssion::<f64>(
                 &params,
@@ -1639,15 +1577,94 @@ impl Graph {
         }
     }
 
-    pub fn build_params_for_cff(&self) -> Vec<Atom> {
-        self.edges
+    pub fn evaluate_numerator<T: FloatLike>(&self, emr: Vec<FourMomentum<F<T>>>) -> Complex<F<T>> {
+        self.derived_data
+            .numerator
+            .as_ref()
+            .unwrap()
+            .evaluate(&emr, &self.bare_graph)
+    }
+
+    #[inline]
+    /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_numerator_orientations<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+    ) -> Vec<Complex<F<T>>> {
+        let mut out = vec![];
+        let lmb = lmb_specification.basis(self);
+
+        let emr = self.bare_graph.emr_from_lmb(sample, lmb);
+
+        // debug!("Numerator: {}", numerator);
+
+        for orient in self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
             .iter()
-            .enumerate()
-            .map(|(id, edge)| match edge.edge_type {
-                EdgeType::Virtual => Atom::parse(&format!("E{}", id)).unwrap(),
-                _ => Atom::parse(&format!("p{}", id)).unwrap(),
-            })
-            .collect()
+            .map(|e| e.orientation.clone())
+        {
+            let mut emr = emr.clone();
+            for ((i, _), sign) in self
+                .bare_graph
+                .get_virtual_edges_iterator()
+                .zip(orient.into_iter())
+            {
+                if !sign {
+                    emr[i].temporal.value.negate()
+                }
+            }
+
+            out.push(self.evaluate_numerator(emr));
+        }
+
+        out
+    }
+
+    #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+        debug: usize,
+    ) -> Complex<F<T>> {
+        let one = sample.one();
+        let zero = one.zero();
+        let i = Complex::new(zero.clone(), one.clone());
+
+        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
+        let internal_vertex_number =
+            self.bare_graph.vertices.len() - self.bare_graph.external_connections.len();
+
+        let prefactor =
+            i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
+
+        // here numerator evaluation can be weaved into the summation
+        let res = prefactor
+            * self
+                .evaluate_cff_orientations(sample, lmb_specification, debug)
+                .into_iter()
+                .zip(
+                    // self.evaluate_numerator_orientations(sample, lmb_specification),
+                    0.., // dummy values for performance test
+                )
+                .map(|(cff, _num)| {
+                    let zero = cff.zero();
+                    Complex::new(cff, zero)
+                })
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or_else(|| panic!("no orientations to evaluate"));
+
+        if debug > 1 {
+            println!("sum over all orientations including numerator: {}", &res)
+        }
+
+        res
     }
 }
 
@@ -1661,7 +1678,6 @@ pub struct DerivedGraphData {
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub static_counterterm: Option<static_counterterm::CounterTerm>,
-    pub vertex_slots: Option<Vec<VertexSlots>>,
     pub numerator: Option<Numerator>,
 }
 
@@ -1676,7 +1692,6 @@ impl DerivedGraphData {
             esurface_derived_data: None,
             numerator: None,
             static_counterterm: None,
-            vertex_slots: None,
         }
     }
 
@@ -1697,7 +1712,6 @@ impl DerivedGraphData {
             }),
             esurface_derived_data: self.esurface_derived_data.clone(),
             numerator: self.numerator.clone(),
-            vertex_slots: self.vertex_slots.clone(),
         }
     }
 
@@ -1719,7 +1733,6 @@ impl DerivedGraphData {
             esurface_derived_data: serializable.esurface_derived_data,
             numerator: serializable.numerator,
             static_counterterm: None,
-            vertex_slots: serializable.vertex_slots,
         }
     }
 
@@ -1766,7 +1779,6 @@ pub struct SerializableDerivedGraphData {
     pub edge_groups: Option<Vec<Vec<usize>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub numerator: Option<Numerator>,
-    pub vertex_slots: Option<Vec<VertexSlots>>,
 }
 
 #[derive(Debug, Clone)]

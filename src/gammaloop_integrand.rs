@@ -108,6 +108,7 @@ impl GraphIntegrand for AmplitudeGraph {
         //map the channel_id to the corresponding lmb
         let channel = channels[channel_id];
         let lmb_specification = LoopMomentumBasisSpecification::FromList(channel);
+        let lmb = lmb_specification.basis(self.get_graph());
 
         let channels_lmbs = channels.iter().map(|&i| &lmb_list[i]);
 
@@ -115,7 +116,7 @@ impl GraphIntegrand for AmplitudeGraph {
             self.get_graph().evaluate_ltd_expression_in_lmb(
                 &sample.loop_moms,
                 &sample.external_moms,
-                &lmb_specification,
+                lmb,
             )
         } else {
             self.get_graph().evaluate_cff_expression_in_lmb(
@@ -125,14 +126,15 @@ impl GraphIntegrand for AmplitudeGraph {
             )
         };
 
-        let onshell_energies = self.get_graph().compute_onshell_energies_in_lmb(
+        let onshell_energies = self.get_graph().bare_graph.compute_onshell_energies_in_lmb(
             &sample.loop_moms,
             &sample.external_moms,
-            &lmb_specification,
+            lmb,
         );
 
         let virtual_energies = self
             .get_graph()
+            .bare_graph
             .edges
             .iter()
             .enumerate()
@@ -216,6 +218,7 @@ impl GraphIntegrand for AmplitudeGraph {
 
         let energy_product = self
             .get_graph()
+            .bare_graph
             .compute_energy_product(&sample.loop_moms, &sample.external_moms);
 
         let counter_terms = self.get_graph().derived_data.static_counterterm.as_ref();
@@ -253,12 +256,14 @@ impl GraphIntegrand for AmplitudeGraph {
 
         let onshell_energies = self
             .get_graph()
+            .bare_graph
             .compute_onshell_energies(&sample.loop_moms, &sample.external_moms);
 
         let tropical_subgraph_table = self.get_graph().get_tropical_subgraph_table();
 
         let virtual_loop_energies = self
             .get_graph()
+            .bare_graph
             .get_loop_edges_iterator()
             .map(|(index, _)| onshell_energies[index].clone());
 
@@ -275,6 +280,7 @@ impl GraphIntegrand for AmplitudeGraph {
 
         let tree_like_energies = self
             .get_graph()
+            .bare_graph
             .get_tree_level_edges_iterator()
             .map(|(index, _)| onshell_energies[index].clone());
 
@@ -291,6 +297,7 @@ impl GraphIntegrand for AmplitudeGraph {
                     settings,
                 ) * self
                     .graph
+                    .bare_graph
                     .compute_energy_product(&sample.loop_moms, &sample.external_moms)
             }
             None => Complex::new(one.zero(), one.zero()),
@@ -369,7 +376,12 @@ fn get_lmb_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
 }
 
 fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
-    graph_integrand.get_graph().loop_momentum_basis.basis.len()
+    graph_integrand
+        .get_graph()
+        .bare_graph
+        .loop_momentum_basis
+        .basis
+        .len()
 }
 
 /// Evaluate the sample correctly according to the sample type
@@ -1045,7 +1057,7 @@ impl GammaLoopIntegrand {
                     println!(
                         "#{} existing esurfaces for graph {}",
                         existing_esurfaces.len(),
-                        graph.name
+                        graph.bare_graph.name
                     );
                 }
 
@@ -1073,8 +1085,8 @@ impl GammaLoopIntegrand {
                         counter_term.print_debug_data(
                             &graph.get_cff().esurfaces,
                             &external_moms,
-                            &graph.loop_momentum_basis,
-                            &graph.get_real_mass_vector(),
+                            &graph.bare_graph.loop_momentum_basis,
+                            &graph.bare_graph.get_real_mass_vector(),
                         );
                     }
 
