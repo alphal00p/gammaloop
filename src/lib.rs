@@ -17,7 +17,6 @@ pub mod h_function_test;
 pub mod inspect;
 pub mod integrands;
 pub mod integrate;
-pub mod linalg;
 pub mod ltd;
 pub mod model;
 pub mod momentum;
@@ -27,7 +26,6 @@ pub mod subtraction;
 
 pub mod tests;
 pub mod tests_from_pytest;
-pub mod tropical;
 pub mod utils;
 
 use color_eyre::{Help, Report};
