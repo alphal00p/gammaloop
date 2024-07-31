@@ -16,7 +16,7 @@ use crate::{
         },
         expression::CFFLimit,
     },
-    graph::{BareGraph, Graph, LoopMomentumBasis},
+    graph::{Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
     utils::{self, FloatLike, F},
     Settings,

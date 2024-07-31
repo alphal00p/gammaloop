@@ -1,9 +1,5 @@
-use ahash::AHashMap;
-use symbolica::atom::Atom;
 
-use crate::numerator::ExtraInfo;
 
-use super::Numerator;
 
 #[test]
 fn color_three_loop_physical_photon() {

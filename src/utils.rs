@@ -1,5 +1,6 @@
 use crate::cff::expression::CFFFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::numerator::NumeratorEvaluateFloat;
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use colored::Colorize;
@@ -687,6 +688,7 @@ pub trait FloatLike:
     + Serialize
     + Display
     + CFFFloat<Self>
+    + NumeratorEvaluateFloat
 {
     
 

@@ -3,16 +3,15 @@ use std::{
     ops::{Add, AddAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use log::debug;
-
 use serde::{Deserialize, Serialize};
 use spenso::{
     arithmetic::ScalarMul,
     contraction::RefZero,
     data::DenseTensor,
+    parametric::FlatCoefficent,
     structure::{
         AbstractIndex, BaseRepName, Bispinor, Euclidean, IndexLess, Lorentz, NamedStructure,
-        PhysReps, RepName, VecStructure,
+        NoArgs, PhysReps, RepName, ToSymbolic, VecStructure,
     },
     upgrading_arithmetic::{FallibleAdd, FallibleMul},
 };
@@ -25,6 +24,7 @@ use symbolica::{
         rational::RationalField,
     },
     poly::{polynomial::MultivariatePolynomial, Exponent},
+    state::State,
 };
 
 use spenso::complex::Complex;
@@ -872,20 +872,60 @@ impl<T: RefZero, U: RefZero> RefZero for FourMomentum<T, U> {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum PolType {
+    U,
+    V,
+    UBar,
+    VBar,
+    Scalar,
+    Epsilon,
+    EpsilonBar,
+}
+
+impl PolType {
+    pub fn bar(self) -> Self {
+        match self {
+            Self::Epsilon => Self::EpsilonBar,
+            Self::Scalar => Self::Scalar,
+            Self::U => Self::UBar,
+            Self::UBar => Self::U,
+            Self::EpsilonBar => Self::Epsilon,
+            Self::VBar => Self::V,
+            Self::V => Self::VBar,
+        }
+    }
+}
+
+impl Display for PolType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::U => write!(f, "u"),
+            Self::V => write!(f, "v"),
+            Self::VBar => write!(f, "vbar"),
+            Self::UBar => write!(f, "ubar"),
+            Self::Scalar => write!(f, ""),
+            Self::Epsilon => write!(f, "ϵ"),
+            Self::EpsilonBar => write!(f, "ϵbar"),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Polarization<T> {
     tensor: DenseTensor<T, IndexLess<PhysReps>>,
+    pol_type: PolType,
 }
 
 impl<T: FloatLike> Display for Polarization<F<T>> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Pol: {}", self.tensor)
+        write!(f, "Pol {}: {}", self.pol_type, self.tensor)
     }
 }
 
 impl<T: FloatLike> Display for Polarization<Complex<F<T>>> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Pol: {}", self.tensor)
+        write!(f, "Pol {}: {}", self.pol_type, self.tensor)
     }
 }
 
@@ -897,6 +937,7 @@ impl<T> Polarization<T> {
                 data: vec![value],
                 structure,
             },
+            pol_type: PolType::Scalar,
         }
     }
 
@@ -908,10 +949,11 @@ impl<T> Polarization<T> {
                 data: vec![v1, v2, v3, v4],
                 structure,
             },
+            pol_type: PolType::Epsilon,
         }
     }
 
-    pub fn bispinor(value: [T; 4]) -> Self {
+    pub fn bispinor_u(value: [T; 4]) -> Self {
         let structure = IndexLess::new(vec![Bispinor::new_dimed_rep_selfless(4).cast()]);
         let [v1, v2, v3, v4] = value;
         Polarization {
@@ -919,7 +961,32 @@ impl<T> Polarization<T> {
                 data: vec![v1, v2, v3, v4],
                 structure,
             },
+            pol_type: PolType::U,
         }
+    }
+
+    pub fn bispinor_v(value: [T; 4]) -> Self {
+        let structure = IndexLess::new(vec![Bispinor::new_dimed_rep_selfless(4).cast()]);
+        let [v1, v2, v3, v4] = value;
+        Polarization {
+            tensor: DenseTensor {
+                data: vec![v1, v2, v3, v4],
+                structure,
+            },
+            pol_type: PolType::V,
+        }
+    }
+
+    pub fn shadow(&self) -> DenseTensor<Atom, IndexLess<PhysReps>> {
+        self.tensor
+            .structure
+            .clone()
+            .to_dense_labeled(|_, i| FlatCoefficent::<NoArgs> {
+                index: i,
+                name: Some(State::get_symbol(self.pol_type.to_string())),
+                args: None,
+            })
+            .unwrap()
     }
 }
 
@@ -937,6 +1004,7 @@ where
     fn ref_zero(&self) -> Self {
         Polarization {
             tensor: self.tensor.ref_zero(),
+            pol_type: self.pol_type,
         }
     }
 }
@@ -949,6 +1017,7 @@ where
     fn mul(self, rhs: &U) -> Self::Output {
         Polarization {
             tensor: self.tensor.scalar_mul(rhs).unwrap(),
+            pol_type: self.pol_type,
         }
     }
 }
@@ -961,6 +1030,7 @@ where
     fn add_fallible(&self, rhs: &Polarization<U>) -> Option<Self::Output> {
         Some(Polarization {
             tensor: self.tensor.add_fallible(&rhs.tensor)?,
+            pol_type: self.pol_type,
         })
     }
 }
@@ -970,6 +1040,7 @@ impl<T: Neg<Output = T>> Neg for Polarization<T> {
     fn neg(self) -> Self::Output {
         Polarization {
             tensor: -self.tensor,
+            pol_type: self.pol_type,
         }
     }
 }
@@ -982,6 +1053,7 @@ impl<T> Polarization<T> {
     {
         Polarization {
             tensor: self.tensor.cast(),
+            pol_type: self.pol_type,
         }
     }
 }
@@ -1230,7 +1302,8 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
     {
         // definition from helas_ref A.2
 
-        debug!("pol_one in: {}", self);
+        // debug!("pol_one in: {}", self);
+
         let pt = self.pt();
         let p = self.spatial.norm();
 
@@ -1244,18 +1317,16 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
             )
         };
 
-        debug!(
-            " (pt.zero(), e1, e2, e3) {} {} {} {}",
-            pt.zero(),
-            e1,
-            e2,
-            e3
-        );
+        // debug!(
+        //     " (pt.zero(), e1, e2, e3) {} {} {} {}",
+        //     pt.zero(),
+        //     e1,
+        //     e2,
+        //     e3
+        // );
+        Polarization::lorentz([pt.zero(), e1, e2, e3])
 
-        let pol = Polarization::lorentz([pt.zero(), e1, e2, e3]);
-
-        debug!("pol :{pol}");
-        pol
+        // debug!("pol :{pol}");
     }
 
     pub fn pol_two(&self) -> Polarization<F<T>>
@@ -1315,7 +1386,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
 
     pub fn u(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
         let zero: Complex<F<T>> = self.temporal.value.zero().into();
-        Polarization::bispinor(match lambda {
+        Polarization::bispinor_u(match lambda {
             Sign::Positive => [
                 zero.clone(),
                 self.omega(Sign::Negative),
@@ -1333,7 +1404,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
 
     pub fn v(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
         let zero: Complex<F<T>> = self.temporal.value.zero().into();
-        Polarization::bispinor(match lambda {
+        Polarization::bispinor_v(match lambda {
             Sign::Negative => [
                 zero.clone(),
                 self.omega(Sign::Negative),
@@ -1354,7 +1425,26 @@ impl<T: FloatLike> Polarization<Complex<F<T>>> {
     pub fn bar(&self) -> Self {
         Polarization {
             tensor: self.tensor.map_data_ref(Complex::conj),
+            pol_type: self.pol_type.bar(),
         }
+    }
+}
+
+impl<T> IntoIterator for Polarization<T> {
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type Item = T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.tensor.data.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a Polarization<T> {
+    type IntoIter = std::slice::Iter<'a, T>;
+    type Item = &'a T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.tensor.data.iter()
     }
 }
 

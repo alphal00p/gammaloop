@@ -6,7 +6,7 @@ use spenso::contraction::IsZero;
 use symbolica::domains::float::NumericalFloatLike;
 
 use crate::{
-    graph::{BareGraph, EdgeType, Graph},
+    graph::{BareGraph, EdgeType},
     utils::{FloatLike, F},
 };
 

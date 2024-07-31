@@ -39,6 +39,37 @@ use symbolica::evaluate::CompileOptions;
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-12);
 
+pub fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample<f64> {
+    let mut external_moms = vec![];
+
+    for i in 0..n_indep_externals {
+        external_moms.push(FourMomentum::from_args(
+            F(i as f64),
+            F(i as f64 + 0.25),
+            F(i as f64 + 0.5),
+            F(i as f64 + 0.75),
+        ));
+    }
+
+    let mut loop_moms = vec![];
+
+    for i in n_indep_externals..n_indep_externals + n_loops {
+        loop_moms.push(ThreeMomentum::new(
+            F(i as f64),
+            F(i as f64 + 0.33),
+            F(i as f64 + 0.66),
+        ));
+    }
+
+    let jacobian = F(1.0);
+
+    DefaultSample {
+        loop_moms,
+        external_moms,
+        jacobian,
+    }
+}
+
 pub fn load_amplitude_output(output_path: &str, load_generic_model: bool) -> (Model, Amplitude) {
     let output_dir = if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
         pytest_output_path
@@ -1805,17 +1836,21 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     graph.generate_numerator();
 
+    graph.generate_cff();
     graph.process_numerator(&model);
 
-    println!(
-        "{}",
-        graph.derived_data.numerator.as_ref().unwrap().expression
-    );
+    let sample = kinematics_builder(5, 3);
 
-    println!(
-        "{}",
-        graph.derived_data.numerator.unwrap().network.unwrap().dot()
-    );
+    graph.evaluate_cff_expression(&sample, 3);
+    // println!(
+    //     "{}",
+    //     graph.derived_data.numerator.as_ref().unwrap().expression
+    // );
+
+    // println!(
+    //     "{}",
+    //     graph.derived_data.numerator.unwrap().network.unwrap().dot()
+    // );
     // let mut onlycolor = Numerator {
     //     expression: Atom::parse("T(aind(coad(8,9),cof(3,8),coaf(3,7)))*T(aind(coad(8,14),cof(3,13),coaf(3,12)))*T(aind(coad(8,21),cof(3,20),coaf(3,19)))*T(aind(coad(8,26),cof(3,25),coaf(3,24)))*id(aind(coaf(3,3),cof(3,4)))*id(aind(coaf(3,4),cof(3,24)))*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,6),cof(3,3)))*id(aind(coaf(3,8),cof(3,5)))*id(aind(coaf(3,10),cof(3,11)))*id(aind(coaf(3,11),cof(3,7)))*id(aind(coaf(3,13),cof(3,10)))*id(aind(coaf(3,15),cof(3,16)))*id(aind(coaf(3,16),cof(3,12)))*id(aind(coaf(3,17),cof(3,18)))*id(aind(coaf(3,18),cof(3,15)))*id(aind(coaf(3,20),cof(3,17)))*id(aind(coaf(3,22),cof(3,23)))*id(aind(coaf(3,23),cof(3,19)))*id(aind(coaf(3,25),cof(3,22)))*id(aind(coad(8,21),coad(8,9)))*id(aind(coad(8,26),coad(8,14)))").unwrap(),
     //     network: None,

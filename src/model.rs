@@ -4,9 +4,13 @@ use crate::utils::{self, FloatLike, F};
 use ahash::{AHashMap, RandomState};
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
+use itertools::Itertools;
+
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
+use spenso::parametric::{ExpandedCoefficent, TensorCoefficient};
+use spenso::structure::{Dimension, ExpandedIndex, FlatIndex, VecStructure, CONCRETEIND};
 use spenso::{
     contraction::IsZero,
     structure::{
@@ -15,6 +19,8 @@ use spenso::{
     },
 };
 use std::fs;
+
+use eyre::Result;
 use std::ops::Index;
 use std::path::Path;
 use symbolica::domains::rational::Rational;
@@ -23,7 +29,7 @@ use symbolica::id::Pattern;
 // use std::str::pattern::Pattern;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
-use symbolica::atom::{Atom, AtomView, FunctionBuilder};
+use symbolica::atom::{Atom, AtomView, FunctionBuilder, Symbol};
 
 use spenso::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
@@ -370,10 +376,102 @@ pub struct EdgeSlots<LorRep: RepName> {
     pub color: Vec<Slot<PhysReps>>,
 }
 
+impl From<EdgeSlots<Lorentz>> for VecStructure {
+    fn from(value: EdgeSlots<Lorentz>) -> Self {
+        VecStructure {
+            structure: value
+                .lorentz
+                .into_iter()
+                .map(|x| x.into())
+                .chain(value.spin.into_iter().map(|a| a.into()))
+                .chain(value.color)
+                .collect_vec(),
+        }
+    }
+}
+
 impl<LorRep: BaseRepName> EdgeSlots<LorRep>
 where
     PhysReps: From<LorRep>,
 {
+    pub fn expanded_index(&self, flat_index: FlatIndex) -> Result<ExpandedIndex> {
+        let mut indices = vec![];
+        let mut index: usize = flat_index.into();
+        for &stride in &self.strides_row_major()? {
+            indices.push(index / stride);
+            index %= stride;
+        }
+        if usize::from(flat_index) < self.size() {
+            Ok(indices.into())
+        } else {
+            Err(eyre!("Index {flat_index} out of bounds"))
+        }
+    }
+
+    fn order(&self) -> usize {
+        self.color.len() + self.lorentz.len() + self.spin.len()
+    }
+
+    fn shape(&self) -> Vec<Dimension> {
+        let mut dims = vec![];
+        dims.extend(self.lorentz.iter().map(|s| s.dim()));
+        dims.extend(self.spin.iter().map(|s| s.dim()));
+        dims.extend(self.color.iter().map(|s| s.dim()));
+        dims
+    }
+
+    fn strides_row_major(&self) -> Result<Vec<usize>> {
+        let mut strides = vec![1; self.order()];
+        if self.order() == 0 {
+            return Ok(strides);
+        }
+
+        for i in (0..self.order() - 1).rev() {
+            strides[i] = strides[i + 1] * usize::try_from(self.shape()[i + 1])?;
+        }
+
+        Ok(strides)
+    }
+    pub fn to_dense_labels<T>(&self, index_to_atom: impl Fn(&Self, FlatIndex) -> T) -> Vec<Atom>
+    where
+        Self: Sized,
+        T: TensorCoefficient,
+    {
+        let mut data = vec![];
+        for index in 0..self.size() {
+            data.push(index_to_atom(self, index.into()).to_atom().unwrap());
+        }
+        data
+    }
+    pub fn size(&self) -> usize {
+        if self.spin.is_empty() && self.lorentz.is_empty() && self.color.is_empty() {
+            0
+        } else {
+            self.spin_size() * self.color_size() * self.lorentz_size()
+        }
+    }
+
+    pub fn lorentz_size(&self) -> usize {
+        self.lorentz
+            .iter()
+            .map(|s| usize::try_from(s.dim()).unwrap())
+            .product()
+    }
+
+    pub fn spin_size(&self) -> usize {
+        self.spin
+            .iter()
+            .map(|s| usize::try_from(s.dim()).unwrap())
+            .product()
+    }
+
+    pub fn color_size(&self) -> usize {
+        self.color
+            .iter()
+            .map(|s| usize::try_from(s.dim()).unwrap())
+            .product()
+    }
+
     pub fn dual(&self) -> EdgeSlots<LorRep::Dual> {
         EdgeSlots {
             lorentz: self.lorentz.iter().map(|l| l.dual()).collect(),
@@ -411,6 +509,24 @@ where
     }
     pub fn to_aind_atom(&self) -> Atom {
         let mut builder = FunctionBuilder::new(State::get_symbol(ABSTRACTIND));
+
+        for l in &self.lorentz {
+            builder = builder.add_arg(l.to_symbolic().as_view());
+        }
+
+        for s in &self.spin {
+            builder = builder.add_arg(s.to_symbolic().as_view());
+        }
+
+        for c in &self.color {
+            builder = builder.add_arg(c.to_symbolic().as_view());
+        }
+
+        builder.finish()
+    }
+
+    pub fn to_cind_atom(&self) -> Atom {
+        let mut builder = FunctionBuilder::new(State::get_symbol(CONCRETEIND));
 
         for l in &self.lorentz {
             builder = builder.add_arg(l.to_symbolic().as_view());
@@ -520,6 +636,58 @@ impl Particle {
             }
             _ => Atom::parse("1").unwrap(),
         }
+    }
+
+    pub fn in_pol_symbol(&self) -> Option<Symbol> {
+        match self.spin {
+            2 => {
+                if self.pdg_code > 0 {
+                    Some(State::get_symbol("u"))
+                } else {
+                    Some(State::get_symbol("vbar"))
+                }
+            }
+            3 => Some(State::get_symbol("ϵ")),
+            _ => None,
+        }
+    }
+
+    pub fn out_pol_symbol(&self) -> Option<Symbol> {
+        match self.spin {
+            2 => {
+                if self.pdg_code > 0 {
+                    Some(State::get_symbol("ubar"))
+                } else {
+                    Some(State::get_symbol("v"))
+                }
+            }
+            3 => Some(State::get_symbol("ϵbar")),
+            _ => None,
+        }
+    }
+
+    pub fn incoming_polarization_atom_concrete(
+        &self,
+        edge_slots: &EdgeSlots<Lorentz>,
+        num: usize,
+    ) -> Vec<Atom> {
+        edge_slots.to_dense_labels(|v, i| ExpandedCoefficent::<usize> {
+            index: v.expanded_index(i).unwrap(),
+            name: self.in_pol_symbol(),
+            args: Some(num),
+        })
+    }
+
+    pub fn outgoing_polarization_atom_concrete(
+        &self,
+        edge_slots: &EdgeSlots<Lorentz>,
+        num: usize,
+    ) -> Vec<Atom> {
+        edge_slots.to_dense_labels(|v, i| ExpandedCoefficent::<usize> {
+            index: v.expanded_index(i).unwrap(),
+            name: self.out_pol_symbol(),
+            args: Some(num),
+        })
     }
 
     pub fn incoming_polarization_match<T: FloatLike>(

@@ -268,7 +268,7 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
             format!("{}", settings.hard_coded_integrand).green(),
             format!("{}", n_samples).blue()
         );
-        let integrand = integrand_factory(&settings);
+        let mut integrand = integrand_factory(&settings);
         let now = Instant::now();
         for _i in 1..n_samples {
             integrand.evaluate_sample(
@@ -375,10 +375,11 @@ fn batch_branch(
     let batch_integrate_input = serializable_batch_input.into_batch_integrate_input(&settings);
 
     // construct integrand
-    let integrand = Integrand::GammaLoopIntegrand(amplitude.generate_integrand(&path_to_settings)?);
+    let mut integrand =
+        Integrand::GammaLoopIntegrand(amplitude.generate_integrand(&path_to_settings)?);
 
     // integrate
-    let batch_result = integrate::batch_integrate(&integrand, batch_integrate_input);
+    let batch_result = integrate::batch_integrate(&mut integrand, batch_integrate_input);
 
     // save result
 

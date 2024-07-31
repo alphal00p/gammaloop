@@ -10,8 +10,8 @@ use crate::{
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, EdgeSlots, Model, VertexSlots},
-    momentum::{FourMomentum, ThreeMomentum},
-    numerator::Numerator,
+    momentum::{FourMomentum, Polarization, ThreeMomentum},
+    numerator::{Evaluate, Numerator},
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm,
@@ -390,7 +390,7 @@ impl Edge {
     ) -> Edge {
         Edge {
             name: serializable_edge.name.clone(),
-            edge_type: serializable_edge.edge_type.clone(),
+            edge_type: serializable_edge.edge_type,
             particle: model.get_particle(&serializable_edge.particle),
             propagator: model.get_propagator(&serializable_edge.propagator),
             vertices: [
@@ -969,7 +969,7 @@ impl BareGraph {
 
     #[inline]
     pub fn get_edge_type_list(&self) -> Vec<EdgeType> {
-        self.edges.iter().map(|e| e.edge_type.clone()).collect()
+        self.edges.iter().map(|e| e.edge_type).collect()
     }
 
     pub fn generate_lmb_replacement_rules(&self) -> Vec<(Atom, Atom)> {
@@ -1322,10 +1322,30 @@ impl BareGraph {
 
         let weight_guess = vec![weight; num_virtual_loop_edges];
 
-        Ok(TropicalSubgraphTable::generate_from_graph(
-            self,
-            &weight_guess,
-        )?)
+        TropicalSubgraphTable::generate_from_graph(self, &weight_guess)
+    }
+
+    pub fn generate_polarizations_from_emr<T: FloatLike>(
+        &self,
+        emr: &[FourMomentum<F<T>>],
+    ) -> Vec<Polarization<Complex<F<T>>>> {
+        let mut pols = vec![];
+
+        for (i, ext) in self
+            .edges
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
+        {
+            match ext.edge_type {
+                EdgeType::Incoming => pols.push(ext.particle.incoming_polarization(&emr[i])),
+
+                EdgeType::Outgoing => pols.push(ext.particle.outgoing_polarization(&emr[i])),
+                _ => {}
+            }
+        }
+
+        pols
     }
 }
 impl Graph {
@@ -1350,13 +1370,12 @@ impl Graph {
 
     #[inline]
     pub fn evaluate_cff_expression<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         debug: usize,
     ) -> Complex<F<T>> {
-        let lmb_specification =
-            LoopMomentumBasisSpecification::Literal(&self.bare_graph.loop_momentum_basis);
-        self.evaluate_cff_expression_in_lmb(sample, &lmb_specification, debug)
+        self.derived_data
+            .evaluate_cff_expression(&self.bare_graph, sample, debug)
     }
 
     pub fn process_numerator(&mut self, model: &Model) {
@@ -1577,37 +1596,48 @@ impl Graph {
         }
     }
 
-    pub fn evaluate_numerator<T: FloatLike>(&self, emr: Vec<FourMomentum<F<T>>>) -> Complex<F<T>> {
+    pub fn evaluate_numerator<T: FloatLike>(
+        &mut self,
+        emr: Vec<FourMomentum<F<T>>>,
+    ) -> Complex<F<T>>
+    where
+        Numerator: Evaluate<T>,
+    {
+        let pols = self.bare_graph.generate_polarizations_from_emr(&emr);
         self.derived_data
             .numerator
-            .as_ref()
+            .as_mut()
             .unwrap()
-            .evaluate(&emr, &self.bare_graph)
+            .evaluate(&emr, &pols)
+            .unwrap()
     }
 
     #[inline]
     /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_numerator_orientations<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<Complex<F<T>>> {
+    ) -> Vec<Complex<F<T>>>
+    where
+        Numerator: Evaluate<T>,
+    {
         let mut out = vec![];
         let lmb = lmb_specification.basis(self);
 
         let emr = self.bare_graph.emr_from_lmb(sample, lmb);
 
         // debug!("Numerator: {}", numerator);
-
-        for orient in self
+        let orientiter = self
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
             .orientations
-            .iter()
-            .map(|e| e.orientation.clone())
-        {
+            .clone()
+            .into_iter();
+
+        for orient in orientiter.map(|e| e.orientation.clone()) {
             let mut emr = emr.clone();
             for ((i, _), sign) in self
                 .bare_graph
@@ -1628,7 +1658,7 @@ impl Graph {
     #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         debug: usize,
@@ -1644,14 +1674,13 @@ impl Graph {
         let prefactor =
             i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
 
+        let cff = self.evaluate_cff_orientations(sample, lmb_specification, debug);
         // here numerator evaluation can be weaved into the summation
         let res = prefactor
-            * self
-                .evaluate_cff_orientations(sample, lmb_specification, debug)
+            * cff
                 .into_iter()
                 .zip(
-                    // self.evaluate_numerator_orientations(sample, lmb_specification),
-                    0.., // dummy values for performance test
+                    self.evaluate_numerator_orientations(sample, lmb_specification), //0.., // dummy values for performance test
                 )
                 .map(|(cff, _num)| {
                     let zero = cff.zero();
@@ -1682,6 +1711,132 @@ pub struct DerivedGraphData {
 }
 
 impl DerivedGraphData {
+    #[inline]
+    pub fn evaluate_cff_expression<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        debug: usize,
+    ) -> Complex<F<T>> {
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
+        self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, debug)
+    }
+
+    #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_cff_orientations<T: FloatLike>(
+        &self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+        debug: usize,
+    ) -> Vec<F<T>> {
+        let lmb = lmb_specification.basis_from_derived(self);
+        let energy_cache =
+            graph.compute_onshell_energies_in_lmb(&sample.loop_moms, &sample.external_moms, lmb);
+
+        self.cff_expression
+            .as_ref()
+            .unwrap()
+            .evaluate_orientations(&energy_cache, debug)
+    }
+
+    #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+        debug: usize,
+    ) -> Complex<F<T>> {
+        let one = sample.one();
+        let zero = one.zero();
+        let i = Complex::new(zero.clone(), one.clone());
+
+        let loop_number = graph.loop_momentum_basis.basis.len();
+        let internal_vertex_number = graph.vertices.len() - graph.external_connections.len();
+
+        let prefactor =
+            i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
+
+        let cff = self.evaluate_cff_orientations(graph, sample, lmb_specification, debug);
+        // here numerator evaluation can be weaved into the summation
+        let res = prefactor
+            * cff
+                .into_iter()
+                .zip(
+                    self.evaluate_numerator_orientations(graph, sample, lmb_specification), //0.., // dummy values for performance test
+                )
+                .map(|(cff, _num)| {
+                    let zero = cff.zero();
+                    Complex::new(cff, zero)
+                })
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or_else(|| panic!("no orientations to evaluate"));
+
+        if debug > 1 {
+            println!("sum over all orientations including numerator: {}", &res)
+        }
+
+        res
+    }
+
+    #[inline]
+    /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_numerator_orientations<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+    ) -> Vec<Complex<F<T>>>
+    where
+        Numerator: Evaluate<T>,
+    {
+        let mut out = vec![];
+        let lmb = lmb_specification.basis_from_derived(self);
+
+        let emr = graph.emr_from_lmb(sample, lmb);
+
+        // debug!("Numerator: {}", numerator);
+        let orientiter = self
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
+            .clone()
+            .into_iter();
+
+        for orient in orientiter.map(|e| e.orientation.clone()) {
+            let mut emr = emr.clone();
+            for ((i, _), sign) in graph.get_virtual_edges_iterator().zip(orient.into_iter()) {
+                if !sign {
+                    emr[i].temporal.value.negate()
+                }
+            }
+
+            out.push(self.evaluate_numerator(graph, emr));
+        }
+
+        out
+    }
+
+    pub fn evaluate_numerator<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        emr: Vec<FourMomentum<F<T>>>,
+    ) -> Complex<F<T>>
+    where
+        Numerator: Evaluate<T>,
+    {
+        let pols = graph.generate_polarizations_from_emr(&emr);
+        self.numerator
+            .as_mut()
+            .unwrap()
+            .evaluate(&emr, &pols)
+            .unwrap()
+    }
+
     fn new_empty() -> Self {
         DerivedGraphData {
             loop_momentum_bases: None,
@@ -1865,6 +2020,16 @@ impl<'a> LoopMomentumBasisSpecification<'a> {
             LoopMomentumBasisSpecification::Literal(basis) => basis,
             LoopMomentumBasisSpecification::FromList(idx) => &graph
                 .derived_data
+                .loop_momentum_bases
+                .as_ref()
+                .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*idx],
+        }
+    }
+
+    pub fn basis_from_derived(&self, derived: &'a DerivedGraphData) -> &'a LoopMomentumBasis {
+        match self {
+            LoopMomentumBasisSpecification::Literal(basis) => basis,
+            LoopMomentumBasisSpecification::FromList(idx) => &derived
                 .loop_momentum_bases
                 .as_ref()
                 .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*idx],

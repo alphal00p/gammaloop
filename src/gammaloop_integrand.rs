@@ -33,12 +33,14 @@ trait GraphIntegrand {
     /// Get the underlying graph
     fn get_graph(&self) -> &Graph;
 
+    fn get_mut_graph(&mut self) -> &mut Graph;
+
     /// Get the channels used for multi channeling
     fn get_multi_channeling_channels(&self) -> &[usize];
 
     /// Most basic form of evaluating the 3D representation of the underlying loop integral
     fn evaluate<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         rotate_overlap_centers: Option<usize>,
         settings: &Settings,
@@ -46,7 +48,7 @@ trait GraphIntegrand {
 
     /// Evaluate in a single LMB-channel
     fn evaluate_channel<T: FloatLike>(
-        &self,
+        &mut self,
         channel_id: usize,
         sample: &DefaultSample<T>,
         alpha: f64,
@@ -55,7 +57,7 @@ trait GraphIntegrand {
 
     /// Evaluate a sum over LMB-channels
     fn evaluate_channel_sum<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
@@ -63,7 +65,7 @@ trait GraphIntegrand {
 
     /// Evaluate to use when tropical sampling, raises the power of the onshell energies in front of the 3D representation according to the chosen weights.
     fn evaluate_tropical<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         rotate_overlap_centers: Option<usize>,
         settings: &Settings,
@@ -75,6 +77,10 @@ impl GraphIntegrand for AmplitudeGraph {
         &self.graph
     }
 
+    fn get_mut_graph(&mut self) -> &mut Graph {
+        &mut self.graph
+    }
+
     fn get_multi_channeling_channels(&self) -> &[usize] {
         &self.multi_channeling_channels
     }
@@ -82,7 +88,7 @@ impl GraphIntegrand for AmplitudeGraph {
     #[inline]
     #[allow(unused_variables)]
     fn evaluate_channel<T: FloatLike>(
-        &self,
+        &mut self,
         channel_id: usize,
         sample: &DefaultSample<T>,
         alpha: f64,
@@ -95,7 +101,7 @@ impl GraphIntegrand for AmplitudeGraph {
             .get_graph()
             .derived_data
             .loop_momentum_bases
-            .as_ref()
+            .clone()
             .unwrap();
 
         // if the channel list is empty, we use all channels.
@@ -108,7 +114,7 @@ impl GraphIntegrand for AmplitudeGraph {
         //map the channel_id to the corresponding lmb
         let channel = channels[channel_id];
         let lmb_specification = LoopMomentumBasisSpecification::FromList(channel);
-        let lmb = lmb_specification.basis(self.get_graph());
+        let lmb = &lmb_list[channel]; // lmb_specification.basis(self.get_graph());
 
         let channels_lmbs = channels.iter().map(|&i| &lmb_list[i]);
 
@@ -119,7 +125,7 @@ impl GraphIntegrand for AmplitudeGraph {
                 lmb,
             )
         } else {
-            self.get_graph().evaluate_cff_expression_in_lmb(
+            self.get_mut_graph().evaluate_cff_expression_in_lmb(
                 sample,
                 &lmb_specification,
                 settings.general.debug,
@@ -171,7 +177,7 @@ impl GraphIntegrand for AmplitudeGraph {
 
     #[inline]
     fn evaluate_channel_sum<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
@@ -201,7 +207,7 @@ impl GraphIntegrand for AmplitudeGraph {
 
     #[inline]
     fn evaluate<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         rotate_overlap_centers: Option<usize>,
         settings: &Settings,
@@ -212,7 +218,7 @@ impl GraphIntegrand for AmplitudeGraph {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
-            self.get_graph()
+            self.get_mut_graph()
                 .evaluate_cff_expression(sample, settings.general.debug)
         };
 
@@ -239,7 +245,7 @@ impl GraphIntegrand for AmplitudeGraph {
 
     #[inline]
     fn evaluate_tropical<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         rotate_overlap_centers: Option<usize>,
         settings: &Settings,
@@ -250,7 +256,7 @@ impl GraphIntegrand for AmplitudeGraph {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
-            self.get_graph()
+            self.get_mut_graph()
                 .evaluate_cff_expression(sample, settings.general.debug)
         };
 
@@ -312,13 +318,17 @@ impl GraphIntegrand for SuperGraph {
         &self.graph
     }
 
+    fn get_mut_graph(&mut self) -> &mut Graph {
+        &mut self.graph
+    }
+
     fn get_multi_channeling_channels(&self) -> &[usize] {
         todo!()
     }
 
     #[allow(unused)]
     fn evaluate_channel<T: FloatLike>(
-        &self,
+        &mut self,
         channel_id: usize,
         sample: &DefaultSample<T>,
         alpha: f64,
@@ -330,7 +340,7 @@ impl GraphIntegrand for SuperGraph {
 
     #[allow(unused)]
     fn evaluate_channel_sum<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         alpha: f64,
         settings: &Settings,
@@ -342,7 +352,7 @@ impl GraphIntegrand for SuperGraph {
     #[allow(unused)]
     #[inline]
     fn evaluate<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         rotate_overlap_centers: Option<usize>,
         settings: &Settings,
@@ -354,7 +364,7 @@ impl GraphIntegrand for SuperGraph {
     #[allow(unused)]
     #[inline]
     fn evaluate_tropical<T: FloatLike>(
-        &self,
+        &mut self,
         sample: &DefaultSample<T>,
         rotate_overlap_centers: Option<usize>,
         settings: &Settings,
@@ -387,7 +397,7 @@ fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
 /// Evaluate the sample correctly according to the sample type
 #[inline]
 fn evaluate<I: GraphIntegrand, T: FloatLike>(
-    graph_integrands: &[I],
+    graph_integrands: &mut [I],
     sample: &GammaLoopSample<T>,
     rotate_overlap_centers: Option<usize>,
     settings: &Settings,
@@ -395,17 +405,17 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
     let zero = sample.zero();
     match sample {
         GammaLoopSample::Default(sample) => graph_integrands
-            .iter()
+            .iter_mut()
             .map(|g| g.evaluate(sample, rotate_overlap_centers, settings))
             .reduce(|acc, e| acc + &e)
             .unwrap_or(zero.clone().into()),
         GammaLoopSample::MultiChanneling { alpha, sample } => graph_integrands
-            .iter()
+            .iter_mut()
             .map(|g| g.evaluate_channel_sum(sample, *alpha, settings))
             .reduce(|acc, e| acc + &e)
             .unwrap_or(zero.clone().into()),
         GammaLoopSample::DiscreteGraph { graph_id, sample } => {
-            let graph = &graph_integrands[*graph_id];
+            let graph = &mut graph_integrands[*graph_id];
             match sample {
                 DiscreteGraphSample::Default(sample) => {
                     graph.evaluate(sample, rotate_overlap_centers, settings)
@@ -529,7 +539,7 @@ impl HasIntegrand for GammaLoopIntegrand {
 
     #[allow(unused_variables)]
     fn evaluate_sample(
-        &self,
+        &mut self,
         sample: &symbolica::numerical_integration::Sample<F<f64>>,
         wgt: F<f64>,
         iter: usize,
@@ -543,7 +553,7 @@ impl HasIntegrand for GammaLoopIntegrand {
             Vec::with_capacity(self.settings.stability.levels.len());
 
         // create an iterator containing the information for evaluation at each stability level
-        let stability_iterator = self.create_stability_iterator(use_f128);
+        let stability_iterator = self.create_stability_vec(use_f128);
 
         let before_parameterization = std::time::Instant::now();
         let sample_point = self.parameterize(sample);
@@ -572,7 +582,7 @@ impl HasIntegrand for GammaLoopIntegrand {
         let prefactor = F(self.compute_2pi_factor().inv());
 
         // iterate over the stability levels, break if the point is stable
-        for stability_level in stability_iterator {
+        for stability_level in &stability_iterator {
             // evaluate the integrand at the current stability level
             let (results, duration) = self.evaluate_at_prec(&samples, stability_level.precision);
             let results_scaled = results
@@ -699,7 +709,7 @@ impl GammaLoopIntegrand {
     /// Evaluate the 3D representation of the integrand at a concrete floating-point precision.
     /// This function performs the evaluation twice, once for the original sample and once for the rotated sample.
     fn evaluate_at_prec(
-        &self,
+        &mut self,
         samples: &[(GammaLoopSample<f64>, Option<usize>)],
         precision: Precision,
     ) -> (Vec<Complex<F<f64>>>, Duration) {
@@ -710,7 +720,7 @@ impl GammaLoopIntegrand {
             Precision::Single => {
                 unimplemented!("From<f64> for f32 can't be implemented")
             }
-            Precision::Double => match &self.graph_integrands {
+            Precision::Double => match &mut self.graph_integrands {
                 GraphIntegrands::Amplitude(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
@@ -734,7 +744,7 @@ impl GammaLoopIntegrand {
                     })
                     .collect(),
             },
-            Precision::Quad => match &self.graph_integrands {
+            Precision::Quad => match &mut self.graph_integrands {
                 GraphIntegrands::Amplitude(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
@@ -779,21 +789,17 @@ impl GammaLoopIntegrand {
 
     /// Create an iterator which specifies the stability levels to be used for the evaluation
     #[inline]
-    fn create_stability_iterator(
-        &self,
-        use_f128: bool,
-    ) -> impl Iterator<Item = &StabilityLevelSetting> {
+    fn create_stability_vec(&self, use_f128: bool) -> Vec<StabilityLevelSetting> {
         if use_f128 {
             // overwrite the stability settings if use_f128 is enabled
-            [StabilityLevelSetting {
+            vec![StabilityLevelSetting {
                 precision: Precision::Quad,
                 required_precision_for_re: F(1e-5),
                 required_precision_for_im: F(1e-5),
                 escalate_for_large_weight_threshold: F(-1.),
             }]
-            .iter()
         } else {
-            self.settings.stability.levels.iter()
+            self.settings.stability.levels.clone()
         }
     }
 
