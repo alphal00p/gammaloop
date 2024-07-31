@@ -1579,7 +1579,7 @@ impl Graph {
     ) -> Result<(), Report> {
         let params = self.bare_graph.build_params_for_cff();
         match self.derived_data.cff_expression.as_mut() {
-            Some(cff) => cff.build_compiled_experssion::<f64>(
+            Some(cff) => cff.build_compiled_expression::<f64>(
                 &params,
                 export_path,
                 compile_cff,

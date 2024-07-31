@@ -529,7 +529,7 @@ impl CFFExpression {
     }
 
     /// does nothing if compile_cff and compile_separate_orientations are both set to false
-    pub fn build_compiled_experssion<T: FloatLike + Default>(
+    pub fn build_compiled_expression<T: FloatLike + Default>(
         &mut self,
         params: &[Atom],
         path: PathBuf,
@@ -566,13 +566,13 @@ impl CFFExpression {
 
         if compile_cff {
             let joint = self.build_joint_symbolica_evaluator::<T>(params);
-            cpp_str.push_str(&joint.export_cpp_str("joint", true));
+            cpp_str.push_str(&joint.export_asm_str("joint", true));
         }
 
         if compile_separate_orientations {
             let orientations = self.build_symbolica_evaluators::<T>(params);
             for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
-                let orientation_cpp_str = orientation_evaluator.export_cpp_str(
+                let orientation_cpp_str = orientation_evaluator.export_asm_str(
                     &format!("orientation_{}", orientation_id),
                     !compile_cff && orientation_id == 0,
                 );

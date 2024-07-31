@@ -22,6 +22,10 @@ lto = "fat"
 name = "cff_scalar"
 harness = false
 
+[[bench]]
+name = "three_loop_photon"
+harness = false
+
 [profile.release]
 lto = "fat"
 
