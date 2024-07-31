@@ -42,9 +42,13 @@ fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample
 }
 
 fn load_helper(path: &str) -> Graph {
-    let (_, mut amplitude) = load_amplitude_output(path, true);
+    let (model, mut amplitude) = load_amplitude_output(path, true);
     amplitude.amplitude_graphs[0].graph.generate_cff();
 
+    amplitude.amplitude_graphs[0].graph.generate_numerator();
+    amplitude.amplitude_graphs[0]
+        .graph
+        .process_numerator(&model);
     let true_path = PathBuf::from(COMPILED_DUMP).join(path);
     amplitude.amplitude_graphs[0]
         .graph
@@ -55,7 +59,7 @@ fn load_helper(path: &str) -> Graph {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
+    // let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
 
     let mut group = c.benchmark_group("scalar cff benchmarks");
 
