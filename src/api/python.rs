@@ -566,19 +566,6 @@ impl PythonWorker {
         Ok(format!("Processed job {}", job_id))
     }
 
-    pub fn write_default_settings(&self, path: &str) -> PyResult<String> {
-        let default = Settings::default();
-        let default_string = serde_yaml::to_string(&default)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        let path = Path::new(path).join("cards").join("run_card.yaml");
-
-        fs::write(path, default_string)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        Ok("Wrote default settings file".to_string())
-    }
-
     pub fn display_master_node_status(&self) {
         if let Some(master_node) = &self.master_node {
             master_node.display_status();

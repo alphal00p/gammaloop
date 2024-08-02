@@ -85,7 +85,6 @@ class GammaLoopConfiguration(object):
                 }
             },
             'export_settings': {
-                'write_default_settings': False,
                 'compile_cff': True,
                 'compile_separate_orientations': False,
             },
