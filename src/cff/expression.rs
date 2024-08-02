@@ -563,18 +563,32 @@ impl CFFExpression {
 
         if export_settings.compile_cff {
             let joint = self.build_joint_symbolica_evaluator::<T>(params);
-            cpp_str.push_str(&joint.export_cpp_str("joint", true));
+
+            let source_string = if export_settings.gammaloop_compile_options.use_asm {
+                joint.export_asm_str("joint", true)
+            } else {
+                joint.export_cpp_str("joint", true)
+            };
+
+            cpp_str.push_str(&source_string);
         }
 
         if export_settings.compile_separate_orientations {
             let orientations = self.build_symbolica_evaluators::<T>(params);
             for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
-                let orientation_cpp_str = orientation_evaluator.export_cpp_str(
-                    &format!("orientation_{}", orientation_id),
-                    !export_settings.compile_cff && orientation_id == 0,
-                );
+                let orientation_source_str = if export_settings.gammaloop_compile_options.use_asm {
+                    orientation_evaluator.export_asm_str(
+                        &format!("orientation_{}", orientation_id),
+                        !export_settings.compile_cff && orientation_id == 0,
+                    )
+                } else {
+                    orientation_evaluator.export_cpp_str(
+                        &format!("orientation_{}", orientation_id),
+                        !export_settings.compile_cff && orientation_id == 0,
+                    )
+                };
 
-                cpp_str.push_str(&orientation_cpp_str);
+                cpp_str.push_str(&orientation_source_str);
             }
         }
 
