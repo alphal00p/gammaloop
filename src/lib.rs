@@ -398,8 +398,9 @@ pub struct SubtractionSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {
-    pub compile_cff: Option<GammaloopCompileOptions>,
-    pub compile_seperate_orientations: Option<GammaloopCompileOptions>,
+    pub compile_cff: bool,
+    pub compile_seperate_orientations: bool,
+    pub gammaloop_compile_options: GammaloopCompileOptions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
