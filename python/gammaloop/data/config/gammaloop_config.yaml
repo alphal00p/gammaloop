@@ -32,3 +32,10 @@ drawing:
 export_settings:
   compile_cff: true
   compile_separate_orientations: false
+  gammaloop_compile_options: 
+    use_asm: false
+    optimization_level: 3 
+    fast_math: true
+    unsafe_math: true 
+    compiler: "g++"
+    custom: []

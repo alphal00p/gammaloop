@@ -280,19 +280,16 @@ impl PythonWorker {
         &mut self,
         export_root: &str,
         amplitude_names: Vec<String>,
-        compile_cff: bool,
-        compile_separate_orientations: bool,
+        export_yaml_str: &str,
     ) -> PyResult<String> {
+        let export_settings = serde_yaml::from_str(export_yaml_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
         let mut n_exported: usize = 0;
         for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.to_string()) {
                 n_exported += 1;
-                let res = amplitude.export(
-                    export_root,
-                    &self.model,
-                    compile_cff,
-                    compile_separate_orientations,
-                );
+                let res = amplitude.export(export_root, &self.model, &export_settings);
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));
                 }

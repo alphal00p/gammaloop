@@ -285,7 +285,7 @@ class AmplitudesExporter(GammaLoopExporter):
 
         # Now address the rust export aspect
         self.gammaloop.rust_worker.export_amplitudes(
-            str(export_root), [amp.name for amp in amplitudes], self.gammaloop.config['export_settings']['compile_cff'], self.gammaloop.config['export_settings']['compile_separate_orientations'])
+            str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']))
 
 
 class CrossSectionsExporter(GammaLoopExporter):
