@@ -9,7 +9,7 @@ use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
 use symbolica::domains::float::ConstructibleFloat;
-use symbolica::domains::float::NumericalFloatComparison;
+use symbolica::domains::float::SingleFloat;
 use symbolica::domains::float::Real;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
@@ -253,7 +253,7 @@ where
             .integral
             .max_eval_positive
             .abs()
-            .max(&integration_state.integral.max_eval_negative.abs());
+            .max(integration_state.integral.max_eval_negative.abs());
 
         user_data.integrand[..cores]
             .par_iter_mut()
@@ -344,7 +344,7 @@ where
                 err_perc: format!(
                     "{:.3e}%",
                     (integration_state.integral.err
-                        / (integration_state.integral.avg.abs()).max(&F(1.0e-99)))
+                        / (integration_state.integral.avg.abs()).max(F(1.0e-99)))
                     .abs()
                         * F(100.)
                 ),
@@ -373,7 +373,7 @@ where
                         err: format!("{:.8e}", b.accumulator.err),
                         err_perc: format!(
                             "{:.3e}%",
-                            (b.accumulator.err / (b.accumulator.avg.abs()).max(&F(1.0e-99))).abs()
+                            (b.accumulator.err / (b.accumulator.avg.abs()).max(F(1.0e-99))).abs()
                                 * F(100.)
                         ),
                         pdf: format!("{:.8e}", b.pdf),
@@ -1156,7 +1156,7 @@ pub fn print_integral_result(
             let mwi = itg
                 .max_eval_negative
                 .abs()
-                .max(&itg.max_eval_positive.abs())
+                .max(itg.max_eval_positive.abs())
                 / (itg.avg.abs() * (F::<f64>::new_from_usize(itg.processed_samples)));
             if mwi > F(1.) {
                 format!("  mwi: {:<10.4e}", mwi.0).red()
