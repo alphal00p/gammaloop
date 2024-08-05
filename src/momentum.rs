@@ -20,7 +20,7 @@ use symbolica::{
     atom::{Atom, Symbol},
     coefficient::Coefficient,
     domains::{
-        float::{NumericalFloatComparison, NumericalFloatLike, Real},
+        float::{NumericalFloatLike, Real, RealNumberLike, SingleFloat},
         integer::IntegerRing,
         rational::RationalField,
     },
@@ -347,7 +347,7 @@ impl<T> ThreeMomentum<T> {
     {
         let structure =
             VecStructure::from_iter(vec![PhysReps::new_slot(Euclidean {}.into(), 3, index)]);
-        DenseTensor::from_data(&[self.px, self.py, self.pz], structure).unwrap()
+        DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 
     pub fn into_dense_param(self, index: AbstractIndex) -> DenseTensor<T, VecStructure>
@@ -356,7 +356,7 @@ impl<T> ThreeMomentum<T> {
     {
         let structure =
             VecStructure::from_iter(vec![PhysReps::new_slot(Euclidean {}.into(), 3, index)]);
-        DenseTensor::from_data(&[self.px, self.py, self.pz], structure).unwrap()
+        DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 }
 
@@ -1111,7 +1111,7 @@ impl<T> FourMomentum<T, T> {
     {
         let structure = VecStructure::from_iter([PhysReps::new_slot(Lorentz {}.into(), 4, index)]);
         DenseTensor::from_data(
-            &[
+            vec![
                 self.temporal.value,
                 self.spatial.px,
                 self.spatial.py,
@@ -1134,7 +1134,7 @@ impl<T> FourMomentum<T, T> {
         let structure = VecStructure::from_iter([PhysReps::new_slot(Lorentz {}.into(), 4, index)])
             .to_named(name, Some(num));
         DenseTensor::from_data(
-            &[
+            vec![
                 self.temporal.value,
                 self.spatial.px,
                 self.spatial.py,
@@ -1157,7 +1157,7 @@ impl<T> FourMomentum<T, T> {
 
     pub fn boost(&self, boost_vector: &FourMomentum<T>) -> FourMomentum<T>
     where
-        T: Real + NumericalFloatComparison,
+        T: Real + SingleFloat+PartialOrd,
     {
         let b2 = boost_vector.spatial.norm_squared();
         let one = b2.one();
@@ -1489,7 +1489,7 @@ impl<T> FourMomentum<T, Atom> {
         let pz =
             Atom::new_num(self.spatial.pz).to_polynomial(&RationalField::new(IntegerRing {}), None);
 
-        DenseTensor::from_data(&[energy, px, py, pz], structure).unwrap()
+        DenseTensor::from_data(vec![energy, px, py, pz], structure).unwrap()
     }
 }
 
