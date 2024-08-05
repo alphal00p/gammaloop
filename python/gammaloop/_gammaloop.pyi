@@ -58,7 +58,7 @@ class Worker:
         """ Exports the cross sections given in argument to the export root given in argument. """
 
     def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str) -> None:
-        """ Exports the amplitudes given in argument to the export root given in argument, use compiled_cff to generate cpp code for the cff expression, possibly slow"""
+        """ Exports the amplitudes given in argument to the export root given in argument, parse export settings as yaml str"""
 
     def export_expressions(self, export_root: str, format: str) -> None:
         """Exports the numerator and denominator to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
