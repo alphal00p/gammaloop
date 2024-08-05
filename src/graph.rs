@@ -1381,6 +1381,7 @@ impl Graph {
     pub fn process_numerator(&mut self, model: &Model) {
         self.smart_generate_numerator();
         let numerator = self.derived_data.numerator.as_mut().unwrap();
+
         numerator.process(model, &self.bare_graph);
     }
 
@@ -1395,7 +1396,16 @@ impl Graph {
     }
 
     pub fn generate_numerator(&mut self) {
-        self.derived_data.numerator = Some(Numerator::generate(&mut self.bare_graph));
+        let orientations = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
+            .iter()
+            .map(|a| a.orientation.clone())
+            .collect();
+        self.derived_data.numerator = Some(Numerator::generate(&mut self.bare_graph, orientations));
     }
 
     pub fn smart_generate_numerator(&mut self) {
@@ -1599,7 +1609,7 @@ impl Graph {
     pub fn evaluate_numerator<T: FloatLike>(
         &mut self,
         emr: Vec<FourMomentum<F<T>>>,
-    ) -> Complex<F<T>>
+    ) -> Vec<Complex<F<T>>>
     where
         Numerator: Evaluate<T>,
     {
@@ -1652,7 +1662,7 @@ impl Graph {
             out.push(self.evaluate_numerator(emr));
         }
 
-        out
+        self.evaluate_numerator(emr)
     }
 
     #[inline]
@@ -1793,39 +1803,37 @@ impl DerivedGraphData {
     where
         Numerator: Evaluate<T>,
     {
-        let mut out = vec![];
         let lmb = lmb_specification.basis_from_derived(self);
-
         let emr = graph.emr_from_lmb(sample, lmb);
 
-        // debug!("Numerator: {}", numerator);
-        let orientiter = self
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .clone()
-            .into_iter();
+        // // debug!("Numerator: {}", numerator);
+        // let orientiter = self
+        //     .cff_expression
+        //     .as_ref()
+        //     .unwrap()
+        //     .orientations
+        //     .clone()
+        //     .into_iter();
 
-        for orient in orientiter.map(|e| e.orientation.clone()) {
-            let mut emr = emr.clone();
-            for ((i, _), sign) in graph.get_virtual_edges_iterator().zip(orient.into_iter()) {
-                if !sign {
-                    emr[i].temporal.value.negate()
-                }
-            }
+        // for orient in orientiter.map(|e| e.orientation.clone()) {
+        //     let mut emr = emr.clone();
+        //     for ((i, _), sign) in graph.get_virtual_edges_iterator().zip(orient.into_iter()) {
+        //         if !sign {
+        //             emr[i].temporal.value.negate()
+        //         }
+        //     }
 
-            out.push(self.evaluate_numerator(graph, emr));
-        }
+        //     out.push(self.evaluate_numerator(graph, emr));
+        // }
 
-        out
+        self.evaluate_numerator(graph, emr)
     }
 
     pub fn evaluate_numerator<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         emr: Vec<FourMomentum<F<T>>>,
-    ) -> Complex<F<T>>
+    ) -> Vec<Complex<F<T>>>
     where
         Numerator: Evaluate<T>,
     {

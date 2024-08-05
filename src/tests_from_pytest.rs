@@ -1834,14 +1834,14 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
+    graph.generate_cff();
     graph.generate_numerator();
 
-    graph.generate_cff();
     graph.process_numerator(&model);
 
     let sample = kinematics_builder(5, 3);
 
-    graph.evaluate_cff_expression(&sample, 3);
+    // graph.evaluate_cff_expression(&sample, 3);
     // println!(
     //     "{}",
     //     graph.derived_data.numerator.as_ref().unwrap().expression

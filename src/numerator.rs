@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Pointer};
+use std::time::{self, Instant};
 
 use crate::graph::{BareGraph, Edge};
 use crate::momentum::Polarization;
@@ -10,10 +11,14 @@ use crate::{
     utils::{FloatLike, F},
 };
 use ahash::AHashMap;
+use bincode::de;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 use log::{debug, info, trace};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use spenso::network::{
+    CompiledTensorNetworkSet, EvalTensorNetworkSet, EvalTreeTensorNetworkSet, TensorNetworkSet,
+};
 use spenso::parametric::EvalTensor;
 use spenso::{
     complex::Complex,
@@ -54,20 +59,18 @@ pub fn apply_replacements(
 
 #[allow(clippy::large_enum_variant)]
 pub enum CompiledNumerator {
-    Compiled(TensorNetwork<CompiledEvalTensor<AtomStructure>, CompiledEvaluator>),
+    Compiled(CompiledTensorNetworkSet<AtomStructure>),
     UnInit,
 }
 
 #[allow(clippy::large_enum_variant, clippy::type_complexity)]
 pub enum EagerNumerator<T: FloatLike> {
-    Eager(
-        TensorNetwork<EvalTensor<Complex<F<T>>, AtomStructure>, ExpressionEvaluator<Complex<F<T>>>>,
-    ),
+    Eager(EvalTensorNetworkSet<Complex<F<T>>, AtomStructure>),
     UnInit,
 }
 
 pub enum EvalNumerator {
-    Eval(TensorNetwork<EvalTreeTensor<Rational, AtomStructure>, EvalTree<Rational>>),
+    Eval(EvalTreeTensorNetworkSet<Rational, AtomStructure>),
     UnInit,
 }
 
@@ -119,6 +122,7 @@ impl<T: FloatLike> Clone for EagerNumerator<T> {
 pub struct ExtraInfo {
     edges: Vec<NumeratorEdge>,
     graph_name: String,
+    orientations: Vec<Vec<bool>>,
 }
 
 impl From<&Edge> for NumeratorEdge {
@@ -228,7 +232,7 @@ pub trait Evaluate<T: FloatLike> {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<Complex<F<T>>>;
+    ) -> Result<Vec<Complex<F<T>>>>;
 }
 
 impl<T: FloatLike> Evaluate<T> for Numerator {
@@ -236,7 +240,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<Complex<F<T>>> {
+    ) -> Result<Vec<Complex<F<T>>>> {
         <T as NumeratorEvaluateFloat>::evaluate(self, emr, polarizations)
     }
 }
@@ -246,7 +250,7 @@ pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
         num: &mut Numerator,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<Complex<F<T>>>;
+    ) -> Result<Vec<Complex<F<T>>>>;
 }
 
 // pub trait Compile<T: FloatLike> {
@@ -258,7 +262,7 @@ impl NumeratorEvaluateFloat for f64 {
         num: &mut Numerator,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<Complex<F<Self>>> {
+    ) -> Result<Vec<Complex<F<Self>>>> {
         let mut params: Vec<Complex<F<f64>>> = emr
             .iter()
             .flat_map(|&p| p.into_iter().map(Complex::new_re))
@@ -289,7 +293,7 @@ impl NumeratorEvaluateFloat for f128 {
         num: &mut Numerator,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<Complex<F<Self>>> {
+    ) -> Result<Vec<Complex<F<Self>>>> {
         let mut params: Vec<Complex<F<f128>>> = emr
             .iter()
             .flat_map(|p| p.into_iter().cloned().map(Complex::new_re))
@@ -427,10 +431,74 @@ impl Numerator {
         // }
 
         if let Some(net) = self.network.as_mut() {
+            let mut set = TensorNetworkSet::new();
+
+            let len = self.extra_info.orientations.len();
             net.contract();
-            let mut eval_tree = net.eval_tree(|a| a.clone(), &fn_map, &params).unwrap();
+            // net.to_polynomial();
+
+            let reps = self
+                .extra_info
+                .edges
+                .iter()
+                .enumerate()
+                .map(|(i, s)| {
+                    (
+                        Pattern::parse(&format!("Q({},cind(1))", i)).unwrap(),
+                        Pattern::parse(&format!("-Q({},cind(1))", i)).unwrap(),
+                    )
+                })
+                .collect_vec();
+
+            for (ni, o) in self.extra_info.orientations.iter().enumerate() {
+                let mut reps = vec![];
+                let time = Instant::now();
+                for (i, &b) in o.iter().enumerate() {
+                    if !b {
+                        reps.push((
+                            Pattern::parse(&format!("Q({},cind(1))", i)).unwrap(),
+                            Pattern::parse(&format!("-Q({},cind(1))", i)).unwrap(),
+                        ));
+                    }
+                }
+                let elapsed_parse = time.elapsed();
+
+                let reps = reps
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, (lhs, rhs))| {
+                        if o[i] {
+                            None
+                        } else {
+                            Some(Replacement::new(lhs, rhs))
+                        }
+                    })
+                    .collect_vec();
+
+                let time = Instant::now();
+                let mut net = net.replace_all_multiple(&reps);
+                let elapsed = time.elapsed();
+                let time = Instant::now();
+
+                let elapsed_contract = time.elapsed();
+
+                debug!(
+                    "Contracted an orientation {:.1}%, parse {},reps{}, contract:{}",
+                    (ni as f64) / (len as f64),
+                    elapsed_parse.as_millis(),
+                    elapsed.as_millis(),
+                    elapsed_contract.as_millis()
+                );
+                set.push(net);
+            }
+            debug!("Generate eval tree set");
+            let mut eval_tree = set.eval_tree(|a| a.clone(), &fn_map, &params).unwrap();
+            debug!("Horner scheme");
+
             eval_tree.horner_scheme();
+            debug!("Common subexpression elimination");
             eval_tree.common_subexpression_elimination(1);
+            debug!("Linearize double");
             self.eval_double = EagerNumerator::Eager(
                 eval_tree
                     .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
@@ -439,6 +507,7 @@ impl Numerator {
                     })
                     .linearize(),
             );
+            debug!("Linearize quad");
 
             self.eval_quad = EagerNumerator::Eager(
                 eval_tree
@@ -773,7 +842,7 @@ impl Numerator {
         // self.replace_repeat(traceadjlhs, traceadjrhs);
     }
 
-    pub fn generate(graph: &mut BareGraph) -> Self {
+    pub fn generate(graph: &mut BareGraph, orientations: Vec<Vec<bool>>) -> Self {
         debug!("generating numerator for graph: {}", graph.name);
 
         let vatoms: Vec<Atom> = graph
@@ -827,6 +896,7 @@ impl Numerator {
             eval_quad: EagerNumerator::UnInit,
             compiled: CompiledNumerator::UnInit,
             extra_info: ExtraInfo {
+                orientations,
                 edges: graph.edges.iter().map(NumeratorEdge::from).collect(),
                 graph_name: graph.name.clone().into(),
             },
