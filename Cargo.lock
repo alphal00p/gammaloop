@@ -2435,7 +2435,6 @@ dependencies = [
  "dyn-clone",
  "libloading",
  "once_cell",
- "pyo3-build-config 0.22.2",
  "rand",
  "rand_xoshiro",
  "rayon",
