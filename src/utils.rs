@@ -15,7 +15,7 @@ use rug::Float;
 use serde::{Deserialize, Serialize};
 use spenso::{contraction::{RefOne, RefZero},upgrading_arithmetic:: TrySmallestUpgrade,complex::{R,Complex}};
 use symbolica::domains::float::{
-    ConstructibleFloat, NumericalFloatComparison, NumericalFloatLike,
+    ConstructibleFloat, RealNumberLike, NumericalFloatLike, SingleFloat,
 };
 use symbolica::evaluate::CompiledEvaluatorFloat;
 
@@ -421,7 +421,7 @@ impl<const N:u32> NumericalFloatLike for VarFloat<N>{
 
 }
 
-impl<const N:u32> NumericalFloatComparison for VarFloat<N> {
+impl<const N:u32> SingleFloat for VarFloat<N> {
     fn is_finite(&self) -> bool {
         self.float.is_finite()
     }
@@ -434,14 +434,9 @@ impl<const N:u32> NumericalFloatComparison for VarFloat<N> {
         self.float == 0.
     }
 
-    fn max(&self, other: &Self) -> Self {
-        if self.float > other.float {
-            self.clone()
-        } else {
-            other.clone()
-        }
-    }
 
+}
+impl<const N:u32> RealNumberLike for VarFloat<N>{
     fn to_f64(&self) -> f64 {
         self.float.to_f64()
     }
@@ -634,7 +629,8 @@ pub trait PrecisionUpgradable {
 pub trait FloatLike:
     Real
     +R
-    + NumericalFloatComparison
+    + PartialOrd
+    + RealNumberLike
     + for<'a> RefAdd<&'a Self, Output = Self>
     // + for<'a> RefMutAdd<&'a Self, Output = Self>
     + RefAdd<Self, Output = Self>
@@ -728,6 +724,26 @@ pub trait FloatLike:
 pub struct F<T: FloatLike>(pub T);
 
 impl<T:FloatLike> R for F<T> {}
+
+impl<T:FloatLike> RealNumberLike for F<T>{
+    delegate!{
+        to self.0{
+            fn to_usize_clamped(&self)->usize;
+            fn to_f64(&self)->f64;
+        }
+    }
+
+}
+
+impl<T:FloatLike> SingleFloat for F<T>{
+    delegate!{
+        to self.0{
+            fn is_zero(&self)->bool;
+            fn is_one(&self)->bool;
+            fn is_finite(&self)->bool;
+        }
+    }
+}
 
 impl<T: FloatLike> PrecisionUpgradable for F<T> where T::Higher: FloatLike, T::Lower: FloatLike{
     type Higher = F<T::Higher>;
@@ -837,21 +853,7 @@ impl<T: FloatLike + ConstructibleFloat> ConstructibleFloat for F<T> {
     }
 }
 
-impl<T: FloatLike> NumericalFloatComparison for F<T> {
-    fn max(&self, other: &Self) -> Self {
-        F(self.0.max(&other.0))
-    }
-    delegate! {
-        #[into]
-        to self.0{
-            fn is_zero(&self) -> bool;
-            fn is_one(&self) -> bool;
-            fn is_finite(&self) -> bool;
-            fn to_usize_clamped(&self) -> usize;
-            fn to_f64(&self) -> f64;
-        }
-    }
-}
+
 
 impl<T: FloatLike> Real for F<T> {
     fn atan2(&self, x: &Self) -> Self {
@@ -892,6 +894,14 @@ impl<T: FloatLike> Real for F<T> {
 use delegate::delegate;
 
 impl<T: FloatLike> F<T> {
+
+    pub fn max(self,other:F<T>)->F<T>{
+        if self < other {
+            other
+        } else {
+            self
+        }
+    }
 
     pub fn negate(&mut self) {
         self.0 = -self.0.clone();

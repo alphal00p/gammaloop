@@ -277,7 +277,7 @@ impl InteractionVertexInfo {
         let i = irep.new_slot(AbstractIndex::try_from(format!("i{}", vertex_pos)).unwrap());
 
         let color_structure = DataTensor::Dense(
-            DenseTensor::from_data(&color_structure, VecStructure::from(vec![i])).unwrap(),
+            DenseTensor::from_data(color_structure, VecStructure::from(vec![i])).unwrap(),
         );
 
         let jrep: Representation<PhysReps> =
@@ -286,7 +286,7 @@ impl InteractionVertexInfo {
         let j = jrep.new_slot(AbstractIndex::try_from(format!("j{}", vertex_pos)).unwrap());
 
         let spin_structure = DataTensor::Dense(
-            DenseTensor::from_data(&spin_structure, VecStructure::from(vec![j])).unwrap(),
+            DenseTensor::from_data(spin_structure, VecStructure::from(vec![j])).unwrap(),
         );
 
         let mut couplings: DataTensor<Atom> =
