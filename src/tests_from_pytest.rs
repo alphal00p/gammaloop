@@ -1839,7 +1839,7 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     graph.process_numerator(&model);
 
-    let sample = kinematics_builder(5, 3);
+    let _sample = kinematics_builder(5, 3);
 
     // graph.evaluate_cff_expression(&sample, 3);
     // println!(

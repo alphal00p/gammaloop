@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Pointer};
-use std::time::{self, Instant};
+use std::time::Instant;
 
 use crate::graph::{BareGraph, Edge};
 use crate::momentum::Polarization;
@@ -11,7 +11,6 @@ use crate::{
     utils::{FloatLike, F},
 };
 use ahash::AHashMap;
-use bincode::de;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 use log::{debug, info, trace};
@@ -19,22 +18,20 @@ use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::network::{
     CompiledTensorNetworkSet, EvalTensorNetworkSet, EvalTreeTensorNetworkSet, TensorNetworkSet,
 };
-use spenso::parametric::EvalTensor;
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
-    parametric::{CompiledEvalTensor, EvalTreeTensor, ParamTensor, PatternReplacement},
+    parametric::{ParamTensor, PatternReplacement},
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
     symbolic::SymbolicTensor,
 };
-use symbolica::evaluate::ExpressionEvaluator;
 use symbolica::{
     atom::AtomView,
     domains::{
         float::{Complex as SymComplex, NumericalFloatLike},
         rational::Rational,
     },
-    evaluate::{CompiledEvaluator, EvalTree, FunctionMap},
+    evaluate::FunctionMap,
     id::{Pattern, Replacement},
 };
 use symbolica::{
@@ -442,7 +439,7 @@ impl Numerator {
                 .edges
                 .iter()
                 .enumerate()
-                .map(|(i, s)| {
+                .map(|(i, _)| {
                     (
                         Pattern::parse(&format!("Q({},cind(1))", i)).unwrap(),
                         Pattern::parse(&format!("-Q({},cind(1))", i)).unwrap(),
@@ -451,16 +448,7 @@ impl Numerator {
                 .collect_vec();
 
             for (ni, o) in self.extra_info.orientations.iter().enumerate() {
-                let mut reps = vec![];
                 let time = Instant::now();
-                for (i, &b) in o.iter().enumerate() {
-                    if !b {
-                        reps.push((
-                            Pattern::parse(&format!("Q({},cind(1))", i)).unwrap(),
-                            Pattern::parse(&format!("-Q({},cind(1))", i)).unwrap(),
-                        ));
-                    }
-                }
                 let elapsed_parse = time.elapsed();
 
                 let reps = reps
@@ -476,7 +464,7 @@ impl Numerator {
                     .collect_vec();
 
                 let time = Instant::now();
-                let mut net = net.replace_all_multiple(&reps);
+                let net = net.replace_all_multiple(&reps);
                 let elapsed = time.elapsed();
                 let time = Instant::now();
 
