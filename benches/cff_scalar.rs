@@ -6,6 +6,7 @@ use _gammaloop::{
     momentum::{FourMomentum, ThreeMomentum},
     tests_from_pytest::load_amplitude_output,
     utils::F,
+    ExportSettings, GammaloopCompileOptions,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 const COMPILED_DUMP: &str = "TMP_COMPILED";
@@ -45,10 +46,23 @@ fn load_helper(path: &str) -> Graph {
     let (_, mut amplitude) = load_amplitude_output(path, true);
     amplitude.amplitude_graphs[0].graph.generate_cff();
 
+    let export_settings = ExportSettings {
+        compile_cff: true,
+        compile_separate_orientations: false,
+        gammaloop_compile_options: GammaloopCompileOptions {
+            use_asm: true,
+            optimization_level: 3,
+            fast_math: true,
+            unsafe_math: true,
+            compiler: "g++".to_string(),
+            custom: vec![],
+        },
+    };
+
     let true_path = PathBuf::from(COMPILED_DUMP).join(path);
     amplitude.amplitude_graphs[0]
         .graph
-        .build_compiled_expression(true_path, true, false)
+        .build_compiled_expression(true_path, &export_settings)
         .unwrap();
 
     amplitude.amplitude_graphs.remove(0).graph
