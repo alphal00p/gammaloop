@@ -1,7 +1,7 @@
 use color_eyre::Report;
 use smallvec::SmallVec;
 use std::ops::{Add, Index, IndexMut, Mul, Sub};
-use symbolica::domains::float::{NumericalFloatComparison, NumericalFloatLike, Real};
+use symbolica::domains::float::{SingleFloat, NumericalFloatLike, Real};
 
 use crate::utils::{FloatLike, F};
 

@@ -20,7 +20,7 @@ use symbolica::{
     atom::{Atom, Symbol},
     coefficient::Coefficient,
     domains::{
-        float::{NumericalFloatComparison, NumericalFloatLike, Real},
+        float::{NumericalFloatLike, Real, RealNumberLike, SingleFloat},
         integer::IntegerRing,
         rational::RationalField,
     },
@@ -1157,7 +1157,7 @@ impl<T> FourMomentum<T, T> {
 
     pub fn boost(&self, boost_vector: &FourMomentum<T>) -> FourMomentum<T>
     where
-        T: Real + NumericalFloatComparison,
+        T: Real + SingleFloat+PartialOrd,
     {
         let b2 = boost_vector.spatial.norm_squared();
         let one = b2.one();
