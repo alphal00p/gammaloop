@@ -1873,3 +1873,39 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     // println!("{}", a.dot_nodes());
 }
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_physical_1L_6photons() {
+    env_logger::init();
+    let (model, amplitude) =
+        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+    graph.generate_numerator();
+
+    graph.process_numerator(&model);
+
+    let sample = kinematics_builder(5, 1);
+    graph.evaluate_cff_expression(&sample, 3);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_physical_2L_6photons() {
+    env_logger::init();
+    let (model, amplitude) =
+        load_amplitude_output("TEST_AMPLITUDE_physical_2L_6photons/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+    graph.generate_numerator();
+
+    graph.process_numerator(&model);
+
+    let sample = kinematics_builder(5, 2);
+    graph.evaluate_cff_expression(&sample, 3);
+}

@@ -472,7 +472,7 @@ impl Numerator {
 
                 debug!(
                     "Contracted an orientation {:.1}%, parse {},reps{}, contract:{}",
-                    (ni as f64) / (len as f64),
+                    100. * (ni as f64) / (len as f64),
                     elapsed_parse.as_millis(),
                     elapsed.as_millis(),
                     elapsed_contract.as_millis()
@@ -640,8 +640,8 @@ impl Numerator {
         self.fill_network();
         info!("Generate evaluators");
         self.generate_evaluators(model, graph);
-        info!("Compiling");
-        self.compile::<f64>();
+        // info!("Compiling");
+        // self.compile::<f64>();
     }
 
     // pub fn generate_fn_map(&self mut){

@@ -1806,26 +1806,6 @@ impl DerivedGraphData {
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.emr_from_lmb(sample, lmb);
 
-        // // debug!("Numerator: {}", numerator);
-        // let orientiter = self
-        //     .cff_expression
-        //     .as_ref()
-        //     .unwrap()
-        //     .orientations
-        //     .clone()
-        //     .into_iter();
-
-        // for orient in orientiter.map(|e| e.orientation.clone()) {
-        //     let mut emr = emr.clone();
-        //     for ((i, _), sign) in graph.get_virtual_edges_iterator().zip(orient.into_iter()) {
-        //         if !sign {
-        //             emr[i].temporal.value.negate()
-        //         }
-        //     }
-
-        //     out.push(self.evaluate_numerator(graph, emr));
-        // }
-
         self.evaluate_numerator(graph, emr)
     }
 

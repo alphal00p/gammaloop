@@ -30,11 +30,25 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("3L physical benchmarks");
 
+    let mut one_loop_graph = load_helper("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT");
+    let one_loop_sample = kinematics_builder(5, 1);
+
+    group.bench_function("Inspect 1l", |b| {
+        b.iter(|| one_loop_graph.evaluate_cff_expression(&one_loop_sample, 0))
+    });
+
+    let mut two_loop_graph = load_helper("TEST_AMPLITUDE_physical_2L_6photons/GL_OUTPUT");
+    let two_loop_sample = kinematics_builder(5, 2);
+
+    group.bench_function("Inspect 2l", |b| {
+        b.iter(|| two_loop_graph.evaluate_cff_expression(&two_loop_sample, 0))
+    });
+
     let mut three_loop_graph =
         load_helper("TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT");
     let three_loop_sample = kinematics_builder(5, 3);
 
-    group.bench_function("Inspect", |b| {
+    group.bench_function("Inspect 3l", |b| {
         b.iter(|| three_loop_graph.evaluate_cff_expression(&three_loop_sample, 0))
     });
 }
