@@ -42,13 +42,13 @@ fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample
     }
 }
 
-fn load_helper(path: &str) -> Graph {
+fn load_helper(path: &str, use_orientations: bool) -> Graph {
     let (_, mut amplitude) = load_amplitude_output(path, true);
     amplitude.amplitude_graphs[0].graph.generate_cff();
 
     let export_settings = ExportSettings {
-        compile_cff: true,
-        compile_separate_orientations: false,
+        compile_cff: !use_orientations,
+        compile_separate_orientations: use_orientations,
         gammaloop_compile_options: GammaloopCompileOptions {
             use_asm: env::var("USE_ASM").is_ok(),
             optimization_level: 3,
@@ -73,7 +73,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("scalar cff benchmarks");
 
-    let triangle_graph = load_helper("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT");
+    let triangle_graph = load_helper("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", false);
     let triangle_sample = kinematics_builder(2, 1);
 
     group.bench_function("Triangle", |b| {
@@ -84,7 +84,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
-    let box_graph = load_helper("TEST_AMPLITUDE_scalar_massless_box/GL_OUTPUT");
+    let box_graph = load_helper("TEST_AMPLITUDE_scalar_massless_box/GL_OUTPUT", false);
     let box_sample = kinematics_builder(3, 1);
 
     group.bench_function("Box", |b| {
@@ -95,7 +95,8 @@ fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
-    let double_triangle_graph = load_helper("TEST_AMPLITUDE_scalar_double_triangle/GL_OUTPUT");
+    let double_triangle_graph =
+        load_helper("TEST_AMPLITUDE_scalar_double_triangle/GL_OUTPUT", false);
     let double_triangle_sample = kinematics_builder(1, 2);
 
     group.bench_function("Double Triangle", |b| {
@@ -106,7 +107,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
-    let isopod_graph = load_helper("TEST_AMPLITUDE_scalar_isopod/GL_OUTPUT");
+    let isopod_graph = load_helper("TEST_AMPLITUDE_scalar_isopod/GL_OUTPUT", false);
     let isopod_sample = kinematics_builder(2, 3);
 
     group.bench_function("Isopod (Triangle-Box-Box)", |b| {
@@ -117,7 +118,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
-    let fishnet_2x2_graph = load_helper("TEST_AMPLITUDE_scalar_fishnet_2x2/GL_OUTPUT");
+    let fishnet_2x2_graph = load_helper("TEST_AMPLITUDE_scalar_fishnet_2x2/GL_OUTPUT", false);
     let fishnet_2x2_sample = kinematics_builder(3, 4);
 
     group.bench_function("Fishnet 2x2", |b| {
@@ -125,6 +126,17 @@ fn criterion_benchmark(c: &mut Criterion) {
             || &fishnet_2x2_graph,
             |graph| graph.evaluate_cff_expression(&fishnet_2x2_sample, 0),
             criterion::BatchSize::SmallInput,
+        )
+    });
+
+    let fishnet_2x3_graph = load_helper("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
+    let fishnet_2x3_sample = kinematics_builder(3, 6);
+
+    group.bench_function("Fishnet 2x3", |b| {
+        b.iter_batched(
+            || &fishnet_2x3_graph,
+            |graph| graph.evaluate_cff_expression(&fishnet_2x3_sample, 0),
+            criterion::BatchSize::LargeInput,
         )
     });
 
