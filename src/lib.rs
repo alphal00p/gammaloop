@@ -40,6 +40,7 @@ use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
+use symbolica::evaluate::CompileOptions;
 use utils::FloatLike;
 use utils::F;
 
@@ -391,4 +392,35 @@ pub struct SubtractionSettings {
     pub dampen_integrable_singularity: bool,
     pub dynamic_sliver: bool,
     pub integrated_ct_hfunction: HFunctionSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportSettings {
+    pub compile_cff: bool,
+    pub compile_separate_orientations: bool,
+    pub gammaloop_compile_options: GammaloopCompileOptions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GammaloopCompileOptions {
+    pub use_asm: bool,
+    pub optimization_level: usize,
+    pub fast_math: bool,
+    pub unsafe_math: bool,
+    pub compiler: String,
+    pub custom: Vec<String>,
+}
+
+impl GammaloopCompileOptions {
+    #[allow(clippy::needless_update)]
+    pub fn to_symbolica_compile_options(&self) -> CompileOptions {
+        CompileOptions {
+            optimization_level: self.optimization_level,
+            fast_math: self.fast_math,
+            unsafe_math: self.unsafe_math,
+            compiler: self.compiler.clone(),
+            custom: self.custom.clone(),
+            ..CompileOptions::default()
+        }
+    }
 }
