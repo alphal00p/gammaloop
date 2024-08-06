@@ -1,6 +1,6 @@
 use crate::{
     utils::{FloatLike, VarFloat, F},
-    Settings,
+    ExportSettings, Settings,
 };
 use color_eyre::Report;
 use derive_more::{From, Into};
@@ -12,9 +12,7 @@ use std::{fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
     domains::{float::NumericalFloatLike, rational::Rational},
-    evaluate::{
-        CompileOptions, CompiledEvaluator, EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap,
-    },
+    evaluate::{CompiledEvaluator, EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap},
 };
 use typed_index_collections::TiVec;
 
@@ -533,10 +531,9 @@ impl CFFExpression {
         &mut self,
         params: &[Atom],
         path: PathBuf,
-        compile_cff: bool,
-        compile_separate_orientations: bool,
+        export_settings: &ExportSettings,
     ) -> Result<(), Report> {
-        if !compile_cff && !compile_separate_orientations {
+        if !export_settings.compile_cff && export_settings.compile_separate_orientations {
             return Ok(());
         }
 
@@ -564,32 +561,51 @@ impl CFFExpression {
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;
 
-        if compile_cff {
+        if export_settings.compile_cff {
             let joint = self.build_joint_symbolica_evaluator::<T>(params);
-            cpp_str.push_str(&joint.export_cpp_str("joint", true));
+
+            let source_string = if export_settings.gammaloop_compile_options.use_asm {
+                joint.export_asm_str("joint", true)
+            } else {
+                joint.export_cpp_str("joint", true)
+            };
+
+            cpp_str.push_str(&source_string);
         }
 
-        if compile_separate_orientations {
+        if export_settings.compile_separate_orientations {
             let orientations = self.build_symbolica_evaluators::<T>(params);
             for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
-                let orientation_cpp_str = orientation_evaluator.export_cpp_str(
-                    &format!("orientation_{}", orientation_id),
-                    !compile_cff && orientation_id == 0,
-                );
+                let orientation_source_str = if export_settings.gammaloop_compile_options.use_asm {
+                    orientation_evaluator.export_asm_str(
+                        &format!("orientation_{}", orientation_id),
+                        !export_settings.compile_cff && orientation_id == 0,
+                    )
+                } else {
+                    orientation_evaluator.export_cpp_str(
+                        &format!("orientation_{}", orientation_id),
+                        !export_settings.compile_cff && orientation_id == 0,
+                    )
+                };
 
-                cpp_str.push_str(&orientation_cpp_str);
+                cpp_str.push_str(&orientation_source_str);
             }
         }
 
         std::fs::write(path_to_code, cpp_str)?;
         let exported_code = ExportedCode::new(path_to_code_str.to_string(), "joint".to_string());
-        exported_code.compile(path_to_so_str, CompileOptions::default())?;
+        exported_code.compile(
+            path_to_so_str,
+            export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options(),
+        )?;
 
         let metadata = CompiledCFFExpressionMetaData {
             name: path_to_compiled,
             num_orientations: self.get_num_trees(),
-            compile_cff_present: compile_cff,
-            compile_separate_orientations_present: compile_separate_orientations,
+            compile_cff_present: export_settings.compile_cff,
+            compile_separate_orientations_present: export_settings.compile_separate_orientations,
         };
 
         self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
