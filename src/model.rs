@@ -6,6 +6,7 @@ use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
 use itertools::Itertools;
 
+use log::{info, trace};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};

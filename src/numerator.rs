@@ -270,14 +270,17 @@ impl NumeratorEvaluateFloat for f64 {
                 params.push(pi)
             }
         }
+
         params.push(Complex {
-            re: F(1.),
-            im: F(0.),
+            re: F(0.),
+            im: F(1.),
         });
 
         if let CompiledNumerator::Compiled(c) = &num.compiled {
+            trace!("Compiled evaluating");
             Ok(c.evaluate(&params).result()?)
         } else if let EagerNumerator::Eager(e) = &mut num.eval_double {
+            trace!("Eager Evaluating double");
             Ok(e.evaluate(&params).result()?)
         } else {
             Err(eyre!("Uninitialized numerator"))
@@ -304,8 +307,8 @@ impl NumeratorEvaluateFloat for f128 {
 
         let zero = f128::new_zero();
         params.push(Complex {
-            re: F(zero.one()),
-            im: F(zero),
+            im: F(zero.one()),
+            re: F(zero),
         });
 
         if let EagerNumerator::Eager(e) = &mut num.eval_quad {
@@ -336,6 +339,7 @@ impl Numerator {
         // }
 
         let mut split_reps = vec![];
+        info!("splitting");
         split_reps.extend(model.valued_coupling_re_im_split(fn_map));
         split_reps.extend(model.valued_parameter_re_im_split(fn_map));
 
@@ -363,9 +367,9 @@ impl Numerator {
             self.compiled = CompiledNumerator::Compiled(
                 eval.map_coeff::<F<T>, _>(&|r| r.into())
                     .linearize()
-                    .compile_asm(
-                        &(self.extra_info.graph_name.clone() + "numerator_asm"),
-                        &(self.extra_info.graph_name.clone() + "libneval_asm"),
+                    .compile(
+                        &(self.extra_info.graph_name.clone() + "numerator"),
+                        &(self.extra_info.graph_name.clone() + "libneval"),
                     ),
             );
         }
@@ -381,6 +385,7 @@ impl Numerator {
     // }
 
     pub fn generate_evaluators(&mut self, model: &Model, graph: &BareGraph) {
+        info!("Generating evaluators");
         let mut fn_map: FunctionMap = FunctionMap::new();
         self.build_const_fn_map_and_split(&mut fn_map, model);
 
@@ -479,7 +484,8 @@ impl Numerator {
                 );
                 set.push(net);
             }
-            debug!("Generate eval tree set");
+            debug!("Generate eval tree set with {} params", params.len());
+
             let mut eval_tree = set.eval_tree(|a| a.clone(), &fn_map, &params).unwrap();
             debug!("Horner scheme");
 
@@ -640,8 +646,8 @@ impl Numerator {
         self.fill_network();
         info!("Generate evaluators");
         self.generate_evaluators(model, graph);
-        // info!("Compiling");
-        // self.compile::<f64>();
+        info!("Compiling");
+        self.compile::<f64>();
     }
 
     // pub fn generate_fn_map(&self mut){

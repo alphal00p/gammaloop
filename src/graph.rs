@@ -1778,10 +1778,7 @@ impl DerivedGraphData {
                 .zip(
                     self.evaluate_numerator_orientations(graph, sample, lmb_specification), //0.., // dummy values for performance test
                 )
-                .map(|(cff, _num)| {
-                    let zero = cff.zero();
-                    Complex::new(cff, zero)
-                })
+                .map(|(cff, num)| num * cff)
                 .reduce(|acc, e| acc + &e)
                 .unwrap_or_else(|| panic!("no orientations to evaluate"));
 

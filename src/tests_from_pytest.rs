@@ -1167,9 +1167,10 @@ fn pytest_scalar_triangle_box() {
     graph.generate_ltd();
     graph.generate_cff();
     graph.process_numerator(&model);
+
     graph.numerator_substitute_model_params(&model);
     // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
+    // graph.process_numerator(&model);
 
     let absolute_truth = Complex::new(
         F::<f128>::from_f64(-1.264_354_742_167_213_3e-7),
@@ -1772,61 +1773,14 @@ fn pytest_lbl_box() {
     let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_lbl_box/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
+    graph.generate_cff();
     graph.process_numerator(&model);
-    // println!();
-
-    // for v in graph
-    //     .vertices
-    //     .iter()
-    //     .filter(|v| v.vertex_info.get_type() == "interacton_vertex_info")
-    // {
-    //     println!("vertex: {}", v.name);
-
-    //     println!("From edges: ");
-    //     for (i, e) in v.edges.clone().iter().enumerate() {
-    //         println!("{} : {:?}", i, graph.bare_graph.edges[*e].particle.name)
-    //     }
-    //     println!("From vertex info: ");
-    //     if let VertexInfo::InteractonVertexInfo(s) = &v.vertex_info {
-    //         s.vertex_rule
-    //             .particles
-    //             .iter()
-    //             .enumerate()
-    //             .for_each(|(i, p)| println!("{} : {:?}", i, p.name));
-    //     }
-    // }
-
-    // for e in graph.bare_graph.edges.iter() {
-    //     println!("edge: {}", e.name);
-    //     for v in e.vertices {
-    //         if e.is_incoming_to(v) {
-    //             println!("incoming to vertex: {}", graph.bare_graph.vertices[v].name);
-    //         } else {
-    //             println!("outgoing to vertex: {}", graph.bare_graph.vertices[v].name);
-    //         }
-    //         let i = graph.bare_graph.vertices[v]
-    //             .edges
-    //             .iter()
-    //             .enumerate()
-    //             .filter(|(_, &es)| es == graph.get_edge_position(&e.name).unwrap())
-    //             .map(|(i, _)| i)
-    //             .collect::<Vec<usize>>();
-
-    //         if let VertexInfo::InteractonVertexInfo(s) = &graph.bare_graph.vertices[v].vertex_info {
-    //             let p = &s.vertex_rule.particles[i[0]];
-    //             println!("{:?}", p.name);
-    //         }
-    //     }
-    // }
-
-    // println!("{}", graph.derived_data.numerator.unwrap().expression);
 }
 
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_3L_6photons_topology_A_inspect() {
-    env_logger::init();
+    // env_logger::init();
     let (model, amplitude) = load_amplitude_output(
         "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
         true,
@@ -1877,7 +1831,7 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_1L_6photons() {
-    env_logger::init();
+    // env_logger::init();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
@@ -1895,7 +1849,7 @@ fn pytest_physical_1L_6photons() {
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_2L_6photons() {
-    env_logger::init();
+    // env_logger::init();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_physical_2L_6photons/GL_OUTPUT", true);
 
