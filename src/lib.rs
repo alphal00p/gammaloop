@@ -414,6 +414,7 @@ pub struct GammaloopCompileOptions {
 }
 
 impl GammaloopCompileOptions {
+    #[allow(clippy::needless_update)]
     pub fn to_symbolica_compile_options(&self) -> CompileOptions {
         CompileOptions {
             optimization_level: self.optimization_level,
@@ -421,6 +422,7 @@ impl GammaloopCompileOptions {
             unsafe_math: self.unsafe_math,
             compiler: self.compiler.clone(),
             custom: self.custom.clone(),
+            ..CompileOptions::default()
         }
     }
 }
