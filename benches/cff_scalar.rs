@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use _gammaloop::{
     gammaloop_integrand::DefaultSample,
@@ -50,7 +50,7 @@ fn load_helper(path: &str) -> Graph {
         compile_cff: true,
         compile_separate_orientations: false,
         gammaloop_compile_options: GammaloopCompileOptions {
-            use_asm: true,
+            use_asm: env::var("USE_ASM").is_ok(),
             optimization_level: 3,
             fast_math: true,
             unsafe_math: true,
