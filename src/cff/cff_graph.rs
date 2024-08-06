@@ -5,7 +5,7 @@ use std::hash::Hash;
 
 use crate::{
     cff::hsurface::Hsurface,
-    graph::{EdgeType, Graph},
+    graph::{BareGraph, EdgeType},
 };
 
 use super::{
@@ -679,7 +679,7 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub fn new(graph: &Graph, virtual_orientation: Vec<bool>) -> Self {
+    pub fn new(graph: &BareGraph, virtual_orientation: Vec<bool>) -> Self {
         let virtual_index_to_edge_index = graph
             .get_virtual_edges_iterator()
             .map(|(_virtual_id, edge)| graph.get_edge_position(&edge.name).unwrap())

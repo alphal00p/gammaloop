@@ -376,6 +376,30 @@ import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'physical_3L_6photons_topo
 output {output_path} --overwrite_output -exp -ef file"""))
     return output_path
 
+@pytest.fixture(scope="session")
+def physical_2L_6photons_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+       "TEST_AMPLITUDE_physical_2L_6photons", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'physical_2L_6photons.py')} -f qgraph --no_compile
+output {output_path} --overwrite_output -exp -ef file"""))
+    return output_path
+
+@pytest.fixture(scope="session")
+def physical_1L_6photons_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+       "TEST_AMPLITUDE_physical_1L_6photons", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'physical_1L_6photons.py')} -f qgraph --no_compile
+output {output_path} --overwrite_output -exp -ef file"""))
+    return output_path
+
 
 @pytest.fixture(scope="session")
 def compile_rust_tests() -> Path | None:

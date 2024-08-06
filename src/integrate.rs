@@ -492,7 +492,7 @@ where
 
 /// Batch integrate function used for distributed runs, used by the worker nodes.
 /// Evaluates a batch of points and returns the results in a manner specified by the user.
-pub fn batch_integrate(integrand: &Integrand, input: BatchIntegrateInput) -> BatchResult {
+pub fn batch_integrate(integrand: &mut Integrand, input: BatchIntegrateInput) -> BatchResult {
     let samples = match input.samples {
         SampleInput::SampleList { samples } => samples,
         SampleInput::Grid {
@@ -615,39 +615,40 @@ fn generate_event_output(
 
 /// This function actually evaluates the list of samples in parallel.
 fn evaluate_sample_list(
-    integrand: &Integrand,
-    samples: &[Sample<F<f64>>],
-    num_cores: usize,
-    iter: usize,
-    max_eval: F<f64>,
+    _integrand: &mut Integrand,
+    _samples: &[Sample<F<f64>>],
+    _num_cores: usize,
+    _iter: usize,
+    _max_eval: F<f64>,
 ) -> (Vec<EvaluationResult>, StatisticsCounter) {
-    let list_size = samples.len();
-    let nvec_per_core = (list_size - 1) / num_cores + 1;
+    todo!()
+    // let list_size = samples.len();
+    // let nvec_per_core = (list_size - 1) / num_cores + 1;
 
-    let sample_chunks = samples.par_chunks(nvec_per_core);
-    let mut evaluation_results_per_core = Vec::with_capacity(num_cores);
+    // let sample_chunks = samples.par_chunks(nvec_per_core);
+    // let mut evaluation_results_per_core = Vec::with_capacity(num_cores);
 
-    sample_chunks
-        .map(|chunk| {
-            let cor_evals = chunk
-                .iter()
-                .map(|sample| {
-                    integrand.evaluate_sample(sample, sample.get_weight(), iter, false, max_eval)
-                })
-                .collect_vec();
+    // sample_chunks
+    //     .map(|chunk| {
+    //         let cor_evals = chunk
+    //             .iter()
+    //             .map(|mut sample| {
+    //                 integrand.evaluate_sample(sample, sample.get_weight(), iter, false, max_eval)
+    //             })
+    //             .collect_vec();
 
-            cor_evals
-        })
-        .collect_into_vec(&mut evaluation_results_per_core);
+    //         cor_evals
+    //     })
+    //     .collect_into_vec(&mut evaluation_results_per_core);
 
-    let evaluation_results = evaluation_results_per_core
-        .into_iter()
-        .flatten()
-        .collect_vec();
+    // let evaluation_results = evaluation_results_per_core
+    //     .into_iter()
+    //     .flatten()
+    //     .collect_vec();
 
-    let meta_data_statistics = StatisticsCounter::from_evaluation_results(&evaluation_results);
+    // let meta_data_statistics = StatisticsCounter::from_evaluation_results(&evaluation_results);
 
-    (evaluation_results, meta_data_statistics)
+    // (evaluation_results, meta_data_statistics)
 }
 
 /// Different ways of passing samples to the batch_integrate function

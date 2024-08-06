@@ -45,7 +45,7 @@ impl SerializableSuperGraphCut {
             cut_edges: supergraph_cut
                 .cut_edges
                 .iter()
-                .map(|&edge| graph.edges[edge].name.clone())
+                .map(|&edge| graph.bare_graph.edges[edge].name.clone())
                 .collect(),
             forward_scattering_graph:
                 SerializableForwardScatteringGraph::from_forward_scattering_graph(
@@ -73,6 +73,7 @@ impl SuperGraphCut {
                 .iter()
                 .map(|edge_name| {
                     graph
+                        .bare_graph
                         .get_edge_position(edge_name)
                         .unwrap_or_else(|| panic!("Could not find edge with name {}", edge_name))
                 })
@@ -100,7 +101,7 @@ impl SerializableSuperGraph {
     pub fn from_supergraph(supergraph: &SuperGraph) -> SerializableSuperGraph {
         SerializableSuperGraph {
             sg_id: supergraph.sg_id,
-            graph: SerializableGraph::from_graph(&supergraph.graph),
+            graph: SerializableGraph::from_graph(&supergraph.graph.bare_graph),
             multiplicity: supergraph.multiplicity,
             topology_class: supergraph.topology_class.clone(),
             cuts: supergraph
@@ -158,7 +159,7 @@ impl SerializableForwardScatteringGraphCut {
             cut_edges: forward_scattering_graph_cut
                 .cut_edges
                 .iter()
-                .map(|&edge| graph.edges[edge].name.clone())
+                .map(|&edge| graph.bare_graph.edges[edge].name.clone())
                 .collect(),
             amplitudes: [
                 SerializableAmplitude::from_amplitude(&forward_scattering_graph_cut.amplitudes[0]),
@@ -185,6 +186,7 @@ impl ForwardScatteringGraphCut {
                 .iter()
                 .map(|edge_name| {
                     graph
+                        .bare_graph
                         .get_edge_position(edge_name)
                         .unwrap_or_else(|| panic!("Could not find edge with name {}", edge_name))
                 })
@@ -219,7 +221,7 @@ impl SerializableForwardScatteringGraph {
         SerializableForwardScatteringGraph {
             sg_id: forward_scattering_graph.sg_id,
             sg_cut_id: forward_scattering_graph.sg_cut_id,
-            graph: SerializableGraph::from_graph(&forward_scattering_graph.graph),
+            graph: SerializableGraph::from_graph(&forward_scattering_graph.graph.bare_graph),
             multiplicity: forward_scattering_graph.multiplicity,
             cuts: forward_scattering_graph
                 .cuts
@@ -286,7 +288,7 @@ impl SerializableAmplitudeGraph {
             sg_cut_id: amplitude_graph.sg_cut_id,
             fs_cut_id: amplitude_graph.fs_cut_id,
             amplitude_side: amplitude_graph.amplitude_side.clone(),
-            graph: SerializableGraph::from_graph(&amplitude_graph.graph),
+            graph: SerializableGraph::from_graph(&amplitude_graph.graph.bare_graph),
             multi_channeling_channels: amplitude_graph.multi_channeling_channels.clone(),
         }
     }
@@ -497,10 +499,11 @@ impl Amplitude {
         for amplitude_graph in self.amplitude_graphs.iter() {
             let dens: Vec<(String, String)> = amplitude_graph
                 .graph
+                .bare_graph
                 .edges
                 .iter()
                 .map(|e| {
-                    let (mom, mass) = e.denominator(&amplitude_graph.graph);
+                    let (mom, mass) = e.denominator(&amplitude_graph.graph.bare_graph);
                     (
                         format!(
                             "{}",
@@ -514,7 +517,10 @@ impl Amplitude {
                 })
                 .collect();
             fs::write(
-                path.join(format!("{}_den.json", amplitude_graph.graph.name)),
+                path.join(format!(
+                    "{}_den.json",
+                    amplitude_graph.graph.bare_graph.name
+                )),
                 serde_json::to_string_pretty(&dens).unwrap(),
             )?;
         }
@@ -535,10 +541,11 @@ impl Amplitude {
             if let Some(num) = &amplitude_graph.graph.derived_data.numerator {
                 let dens: Vec<(String, String)> = amplitude_graph
                     .graph
+                    .bare_graph
                     .edges
                     .iter()
                     .map(|e| {
-                        let (mom, mass) = e.denominator(&amplitude_graph.graph);
+                        let (mom, mass) = e.denominator(&amplitude_graph.graph.bare_graph);
                         (
                             format!(
                                 "{}",
@@ -554,6 +561,7 @@ impl Amplitude {
 
                 let rep_rules: Vec<(String, String)> = amplitude_graph
                     .graph
+                    .bare_graph
                     .generate_lmb_replacement_rules()
                     .iter()
                     .map(|(lhs, rhs)| {
@@ -580,7 +588,10 @@ impl Amplitude {
                 );
 
                 fs::write(
-                    path.join(format!("{}_exp.json", amplitude_graph.graph.name)),
+                    path.join(format!(
+                        "{}_exp.json",
+                        amplitude_graph.graph.bare_graph.name
+                    )),
                     serde_json::to_string_pretty(&out).unwrap(),
                 )?;
             }
@@ -633,8 +644,10 @@ impl Amplitude {
 
             debug!("dumping derived data");
             fs::write(
-                path.clone()
-                    .join(format!("derived_data_{}.bin", amplitude_graph.graph.name)),
+                path.clone().join(format!(
+                    "derived_data_{}.bin",
+                    amplitude_graph.graph.bare_graph.name
+                )),
                 bincode::serialize(&amplitude_graph.graph.derived_data.to_serializable())?,
             )?;
         }

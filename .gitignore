@@ -193,5 +193,14 @@ default.nix
 # Ignore the local test resources
 src/test_resources/qqddg/
 
+
+# Ignore the local compiled numerators 
+/*.cpp
+/*.so
+
+
+# Ignore tmp compiled files:
+
+TMP_COMPILED/
 # My own process outputs
 process_outputs

@@ -532,7 +532,7 @@ pub fn generate_esurface_data(
             let mass_sum: F<f64> = esurface
                 .energies
                 .iter()
-                .map(|&i| graph.edges[i].particle.mass.value)
+                .map(|&i| graph.bare_graph.edges[i].particle.mass.value)
                 .filter(|mass| mass.is_some())
                 .map(|mass| mass.unwrap_or_else(|| unreachable!()).re)
                 .reduce(|acc, x| acc + x)
