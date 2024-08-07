@@ -1831,7 +1831,7 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_1L_6photons() {
-    // env_logger::init();
+    env_logger::init();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 

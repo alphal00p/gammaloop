@@ -86,7 +86,7 @@ permutation = "0.4.1"
 slotmap = { version = "1.0.7", features = ["serde"] }
 ahash = { version = "0.8.8", features = ["serde"] }
 # num = { version = "0.4.1", features = ["serde"] }
-pprof = { version = "0.13.0", features = ["flamegraph"] }
+pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 derive_more = "0.99.17"
 rand_xoshiro = "0.6.0"
 funty = "2.0.0"
@@ -138,5 +138,5 @@ insta.opt-level = 3
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-# spenso = { path = "../../alphal00p/spenso" }
+# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+spenso = { path = "../../alphal00p/spenso" }

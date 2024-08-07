@@ -5,6 +5,7 @@ use _gammaloop::{
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
 };
 use criterion::{criterion_group, criterion_main, Criterion};
+use pprof::criterion::{Output, PProfProfiler};
 const COMPILED_DUMP: &str = "TMP_COMPILED";
 
 fn load_helper(path: &str) -> Graph {
@@ -53,5 +54,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, criterion_benchmark);
+// criterion_group!(benches, criterion_benchmark);
+
+criterion_group! {
+    name = benches;
+    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
+    targets = criterion_benchmark
+}
 criterion_main!(benches);

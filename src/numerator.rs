@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Pointer};
+use std::fmt::Debug;
 use std::time::Instant;
 
 use crate::graph::{BareGraph, Edge};
@@ -15,9 +15,9 @@ use eyre::{eyre, Result};
 use itertools::Itertools;
 use log::{debug, info, trace};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
-use spenso::network::{
-    CompiledTensorNetworkSet, EvalTensorNetworkSet, EvalTreeTensorNetworkSet, TensorNetworkSet,
-};
+use spenso::network::{EvalTensorNetworkSet, EvalTreeTensorNetworkSet, TensorNetworkSet};
+use spenso::parametric::{CompiledEvalTensorSet, EvalTensorSet, EvalTreeTensorSet, ParamTensorSet};
+use spenso::structure::HasStructure;
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
@@ -25,6 +25,7 @@ use spenso::{
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
     symbolic::SymbolicTensor,
 };
+use symbolica::domains::rational::Q;
 use symbolica::{
     atom::AtomView,
     domains::{
@@ -56,25 +57,25 @@ pub fn apply_replacements(
 
 #[allow(clippy::large_enum_variant)]
 pub enum CompiledNumerator {
-    Compiled(CompiledTensorNetworkSet<AtomStructure>),
+    Compiled(CompiledEvalTensorSet<AtomStructure>),
     UnInit,
 }
 
 #[allow(clippy::large_enum_variant, clippy::type_complexity)]
 pub enum EagerNumerator<T: FloatLike> {
-    Eager(EvalTensorNetworkSet<Complex<F<T>>, AtomStructure>),
+    Eager(EvalTensorSet<Complex<F<T>>, AtomStructure>),
     UnInit,
 }
 
 pub enum EvalNumerator {
-    Eval(EvalTreeTensorNetworkSet<Rational, AtomStructure>),
+    Eval(EvalTreeTensorSet<Rational, AtomStructure>),
     UnInit,
 }
 
 impl<T: FloatLike> Debug for EagerNumerator<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            EagerNumerator::Eager(e) => e.fmt(f),
+            EagerNumerator::Eager(e) => write!(f, "eager"),
             EagerNumerator::UnInit => write!(f, "uninit"),
         }
     }
@@ -92,7 +93,7 @@ impl Debug for CompiledNumerator {
 impl Debug for EvalNumerator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            EvalNumerator::Eval(e) => e.fmt(f),
+            EvalNumerator::Eval(e) => write!(f, "eval"),
             EvalNumerator::UnInit => write!(f, "uninit"),
         }
     }
@@ -111,7 +112,7 @@ impl Clone for EvalNumerator {
 
 impl<T: FloatLike> Clone for EagerNumerator<T> {
     fn clone(&self) -> Self {
-        EagerNumerator::UnInit
+        EagerNumerator::<T>::UnInit
     }
 }
 
@@ -216,8 +217,8 @@ impl<'de> Deserialize<'de> for Numerator {
             const_map,
             extra_info: data.extra_info,
             base_eval: EvalNumerator::UnInit,
-            eval_double: EagerNumerator::UnInit,
-            eval_quad: EagerNumerator::UnInit,
+            eval_double: EagerNumerator::<f64>::UnInit,
+            eval_quad: EagerNumerator::<f128>::UnInit,
             compiled: CompiledNumerator::UnInit,
         })
     }
@@ -278,10 +279,15 @@ impl NumeratorEvaluateFloat for f64 {
 
         if let CompiledNumerator::Compiled(c) = &num.compiled {
             trace!("Compiled evaluating");
-            Ok(c.evaluate(&params).result()?)
+
+            let tensors = c.evaluate(&params);
+            let scalars: Option<Vec<_>> = tensors.into_iter().map(|t| t.scalar()).collect();
+            scalars.ok_or(eyre!("Not all tensors are scalars"))
         } else if let EagerNumerator::Eager(e) = &mut num.eval_double {
             trace!("Eager Evaluating double");
-            Ok(e.evaluate(&params).result()?)
+            let tensors = e.evaluate(&params);
+            let scalars: Option<Vec<_>> = tensors.into_iter().map(|t| t.scalar()).collect();
+            scalars.ok_or(eyre!("Not all tensors are scalars"))
         } else {
             Err(eyre!("Uninitialized numerator"))
         }
@@ -312,7 +318,9 @@ impl NumeratorEvaluateFloat for f128 {
         });
 
         if let EagerNumerator::Eager(e) = &mut num.eval_quad {
-            Ok(e.evaluate(&params).result()?)
+            let tensors = e.evaluate(&params);
+            let scalars: Option<Vec<_>> = tensors.into_iter().map(|t| t.scalar()).collect();
+            scalars.ok_or(eyre!("Not all tensors are scalars"))
         } else {
             Err(eyre!("Uninitialized numerator"))
         }
@@ -367,9 +375,11 @@ impl Numerator {
             self.compiled = CompiledNumerator::Compiled(
                 eval.map_coeff::<F<T>, _>(&|r| r.into())
                     .linearize()
-                    .compile(
+                    .compile_asm(
+                        &(self.extra_info.graph_name.clone() + "numerator.cpp"),
                         &(self.extra_info.graph_name.clone() + "numerator"),
-                        &(self.extra_info.graph_name.clone() + "libneval"),
+                        &(self.extra_info.graph_name.clone() + "libneval.so"),
+                        true,
                     ),
             );
         }
@@ -433,11 +443,11 @@ impl Numerator {
         // }
 
         if let Some(net) = self.network.as_mut() {
-            let mut set = TensorNetworkSet::new();
+            let mut set = ParamTensorSet::empty();
 
             let len = self.extra_info.orientations.len();
             net.contract();
-            // net.to_polynomial();
+            let res = net.result_tensor_smart().unwrap();
 
             let reps = self
                 .extra_info
@@ -469,20 +479,16 @@ impl Numerator {
                     .collect_vec();
 
                 let time = Instant::now();
-                let net = net.replace_all_multiple(&reps);
+                let res = res.replace_all_multiple(&reps);
                 let elapsed = time.elapsed();
-                let time = Instant::now();
-
-                let elapsed_contract = time.elapsed();
 
                 debug!(
-                    "Contracted an orientation {:.1}%, parse {},reps{}, contract:{}",
+                    "Contracted an orientation {:.1}%, parse {},reps{}",
                     100. * (ni as f64) / (len as f64),
                     elapsed_parse.as_millis(),
                     elapsed.as_millis(),
-                    elapsed_contract.as_millis()
                 );
-                set.push(net);
+                set.push(res);
             }
             debug!("Generate eval tree set with {} params", params.len());
 
@@ -886,8 +892,8 @@ impl Numerator {
             network: None,
             const_map: AHashMap::new(),
             base_eval: EvalNumerator::UnInit,
-            eval_double: EagerNumerator::UnInit,
-            eval_quad: EagerNumerator::UnInit,
+            eval_double: EagerNumerator::<f64>::UnInit,
+            eval_quad: EagerNumerator::<f128>::UnInit,
             compiled: CompiledNumerator::UnInit,
             extra_info: ExtraInfo {
                 orientations,

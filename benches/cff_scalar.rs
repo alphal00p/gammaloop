@@ -8,6 +8,8 @@ use _gammaloop::{
     utils::F,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
+
+use pprof::criterion::{Output, PProfProfiler};
 const COMPILED_DUMP: &str = "TMP_COMPILED";
 
 fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample<f64> {
@@ -60,6 +62,7 @@ fn load_helper(path: &str) -> Graph {
 
 fn criterion_benchmark(c: &mut Criterion) {
     // let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
+    // env_logger::init();
 
     let mut group = c.benchmark_group("scalar cff benchmarks");
 
@@ -98,8 +101,20 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| fishnet_2x2_graph.evaluate_cff_expression(&fishnet_2x2_sample, 0))
     });
 
+    group.bench_function("Fishnet 2x2 cff", |b| {
+        b.iter(|| fishnet_2x2_graph.evaluate_cff_all_orientations(&fishnet_2x2_sample, 0))
+    });
+
+    group.bench_function("Fishnet 2x2 num", |b| {
+        b.iter(|| fishnet_2x2_graph.evaluate_numerator_all_orientations(&fishnet_2x2_sample, 0))
+    });
+
     std::fs::remove_dir_all(COMPILED_DUMP).unwrap();
 }
 
-criterion_group!(benches, criterion_benchmark);
+criterion_group! {
+    name = benches;
+    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
+    targets = criterion_benchmark
+}
 criterion_main!(benches);

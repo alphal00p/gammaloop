@@ -26,6 +26,7 @@ use crate::{
 
 use ahash::RandomState;
 
+use bincode::de;
 use color_eyre::Result;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
@@ -1378,6 +1379,26 @@ impl Graph {
             .evaluate_cff_expression(&self.bare_graph, sample, debug)
     }
 
+    #[inline]
+    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        debug: usize,
+    ) -> Complex<F<T>> {
+        self.derived_data
+            .evaluate_numerator_all_orientations(&self.bare_graph, sample, debug)
+    }
+
+    #[inline]
+    pub fn evaluate_cff_all_orientations<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        debug: usize,
+    ) -> Complex<F<T>> {
+        self.derived_data
+            .evaluate_cff_all_orientations(&self.bare_graph, sample, debug)
+    }
+
     pub fn process_numerator(&mut self, model: &Model) {
         self.smart_generate_numerator();
         let numerator = self.derived_data.numerator.as_mut().unwrap();
@@ -1732,6 +1753,36 @@ impl DerivedGraphData {
         self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, debug)
     }
 
+    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        debug: usize,
+    ) -> Complex<F<T>> {
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
+        self.evaluate_numerator_orientations(graph, sample, &lmb_specification)
+            .into_iter()
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or_else(|| panic!("no orientations to evaluate"))
+    }
+
+    pub fn evaluate_cff_all_orientations<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        debug: usize,
+    ) -> Complex<F<T>> {
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
+        Complex {
+            re: self
+                .evaluate_cff_orientations(graph, sample, &lmb_specification, debug)
+                .into_iter()
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or_else(|| panic!("no orientations to evaluate")),
+            im: F::new_zero(),
+        }
+    }
+
     #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_orientations<T: FloatLike>(
@@ -1771,6 +1822,7 @@ impl DerivedGraphData {
             i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
 
         let cff = self.evaluate_cff_orientations(graph, sample, lmb_specification, debug);
+        // trace!("CFF: {:?}", cff);
         // here numerator evaluation can be weaved into the summation
         let res = prefactor
             * cff

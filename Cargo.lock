@@ -1798,6 +1798,7 @@ checksum = "ef5c97c51bd34c7e742402e216abdeb44d415fbe6ae41d56b114723e953711cb"
 dependencies = [
  "backtrace",
  "cfg-if",
+ "criterion",
  "findshlibs",
  "inferno",
  "libc",
@@ -2325,7 +2326,6 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=master#006e17b5d258774493ca0ba6605d8a7ddfc31f41"
 dependencies = [
  "ahash",
  "ambassador",
