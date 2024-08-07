@@ -533,7 +533,7 @@ impl CFFExpression {
         path: PathBuf,
         export_settings: &ExportSettings,
     ) -> Result<(), Report> {
-        if !export_settings.compile_cff && export_settings.compile_separate_orientations {
+        if !export_settings.compile_cff && !export_settings.compile_separate_orientations {
             return Ok(());
         }
 
