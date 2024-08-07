@@ -533,7 +533,7 @@ impl CFFExpression {
         path: PathBuf,
         export_settings: &ExportSettings,
     ) -> Result<(), Report> {
-        if !export_settings.compile_cff && export_settings.compile_separate_orientations {
+        if !export_settings.compile_cff && !export_settings.compile_separate_orientations {
             return Ok(());
         }
 
@@ -590,17 +590,16 @@ impl CFFExpression {
 
                 cpp_str.push_str(&orientation_source_str);
             }
-
-            std::fs::write(path_to_code, cpp_str)?;
-            let exported_code =
-                ExportedCode::new(path_to_code_str.to_string(), "joint".to_string());
-            exported_code.compile(
-                path_to_so_str,
-                export_settings
-                    .gammaloop_compile_options
-                    .to_symbolica_compile_options(),
-            )?;
         }
+
+        std::fs::write(path_to_code, cpp_str)?;
+        let exported_code = ExportedCode::new(path_to_code_str.to_string(), "joint".to_string());
+        exported_code.compile(
+            path_to_so_str,
+            export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options(),
+        )?;
 
         let metadata = CompiledCFFExpressionMetaData {
             name: path_to_compiled,
