@@ -20,7 +20,7 @@ use crate::{
         compute_four_momentum_from_three, compute_three_momentum_from_four, sorted_vectorize,
         FloatLike, F,
     },
-    ExportSettings, Settings,
+    ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
 use ahash::{HashSet, RandomState};
@@ -1179,23 +1179,14 @@ impl Graph {
         self.derived_data.cff_expression = Some(generate_cff_expression(self).unwrap());
     }
 
-    pub fn generate_tropical_subgraph_table(&mut self) {
+    pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
         let dimension = 3;
-
         let num_virtual_loop_edges = self.get_loop_edges_iterator().count();
-
         let num_loops = self.loop_momentum_basis.basis.len();
+        let target_omega = settings.target_omega;
 
-        let default_weight = 0.5;
-        let dod =
-            num_virtual_loop_edges as f64 * default_weight - (dimension * num_loops) as f64 / 2.;
-        let minimum_dod = 1.0;
-
-        let weight = if dod < minimum_dod {
-            (minimum_dod + (dimension * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64
-        } else {
-            default_weight
-        };
+        let weight =
+            (target_omega + (dimension * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
 
         debug!(
             "Building tropical subgraph table with all edge weights set to: {}",
@@ -1266,6 +1257,8 @@ impl Graph {
 
         if let Ok(table) = table {
             self.derived_data.tropical_subgraph_table = Some(table);
+        } else if settings.panic_on_fail {
+            panic!("Tropical subgraph table generation failed 🥥");
         } else {
             warn!("Tropical subgraph table generation failed 🥥");
         }
