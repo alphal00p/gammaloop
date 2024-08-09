@@ -1197,6 +1197,11 @@ impl Graph {
             default_weight
         };
 
+        debug!(
+            "Building tropical subgraph table with all edge weights set to: {}",
+            weight
+        );
+
         let tropical_edges = self
             .get_loop_edges_iterator()
             .map(|(_edge_id, edge)| {
