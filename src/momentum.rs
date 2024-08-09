@@ -5,6 +5,7 @@ use std::{
 
 use log::debug;
 
+use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
 use spenso::{
     arithmetic::ScalarMul,
@@ -1602,6 +1603,12 @@ impl<T: Display, U: Display> Display for FourMomentum<T, U> {
 impl<T: LowerExp, U: LowerExp> LowerExp for FourMomentum<T, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:e}, {:e}", self.temporal, self.spatial)
+    }
+}
+
+impl From<Vector<f64, 3>> for ThreeMomentum<F<f64>> {
+    fn from(value: Vector<f64, 3>) -> Self {
+        ThreeMomentum::new(F(value[0]), F(value[1]), F(value[2]))
     }
 }
 #[cfg(test)]
