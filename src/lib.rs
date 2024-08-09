@@ -399,6 +399,7 @@ pub struct ExportSettings {
     pub compile_cff: bool,
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,
+    pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -423,4 +424,10 @@ impl GammaloopCompileOptions {
             ..CompileOptions::default()
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TropicalSubgraphTableSettings {
+    panic_on_fail: bool,
+    target_omega: f64,
 }
