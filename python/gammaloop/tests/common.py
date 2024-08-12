@@ -96,7 +96,7 @@ def check_integration_result(target: float, process_path: Path, max_mc_error_dif
     error_for_check = run_yaml["error"][index_for_check]
 
     absolute_difference = abs(res_for_check - target)
-    assert absolute_difference < max_mc_error_diff * error_for_check
+    assert absolute_difference <= max_mc_error_diff * error_for_check
 
     if abs(target) > 0.:
         relative_difference = absolute_difference / abs(target)

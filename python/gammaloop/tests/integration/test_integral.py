@@ -115,17 +115,18 @@ class TestScalarTopologies:
         command_list.add_command("set e_cm 10.")
         command_list.add_command(
             "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
-        command_list.add_command("set n_start 5000")
-        command_list.add_command("set n_max 10000")
+        command_list.add_command("set n_start 40000")
+        command_list.add_command("set n_max 40000")
+        command_list.add_command("set continuous_dim_learning_rate 0.0")
         command_list.add_command("set seed 1")
         command_list.add_command("integrate scalar_3L_6P_topology_A -r")
 
         gl.run(command_list)
         check_integration_result(
             0., scalar_3L_6P_topology_A_export, imag_phase=False)
-        # This target is approximate, actual reference run showed 2.8555(17)e-36
+        # PySecDec reference run showed 2.8555(17)e-36
         check_integration_result(
-            2.736e-36, scalar_3L_6P_topology_A_export, imag_phase=True, max_mc_error_diff=5.0, max_rel_error_diff=0.1, max_percent_error=0.1)
+            2.8555e-36, scalar_3L_6P_topology_A_export, imag_phase=True, max_mc_error_diff=5.0, max_rel_error_diff=0.1, max_percent_error=0.1)
 
 
 class TestPhysicalTopologies:
