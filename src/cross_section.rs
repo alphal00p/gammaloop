@@ -1,7 +1,7 @@
 use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{Graph, SerializableGraph};
 use crate::model::Model;
-use crate::{utils::*, Settings};
+use crate::{utils::*, ExportSettings, Settings};
 use bincode;
 use color_eyre::{Help, Report};
 #[allow(unused_imports)]
@@ -603,8 +603,7 @@ impl Amplitude {
         &mut self,
         export_root: &str,
         model: &Model,
-        compile_cff: bool,
-        compile_separate_orientations: bool,
+        export_settings: &ExportSettings,
     ) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
@@ -636,11 +635,9 @@ impl Amplitude {
 
         // dump the derived data in a binary file
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
-            amplitude_graph.graph.build_compiled_expression(
-                path.clone(),
-                compile_cff,
-                compile_separate_orientations,
-            )?;
+            amplitude_graph
+                .graph
+                .build_compiled_expression(path.clone(), export_settings)?;
 
             debug!("dumping derived data");
             fs::write(

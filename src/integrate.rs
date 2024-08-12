@@ -9,8 +9,8 @@ use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
 use symbolica::domains::float::ConstructibleFloat;
-use symbolica::domains::float::SingleFloat;
 use symbolica::domains::float::Real;
+use symbolica::domains::float::SingleFloat;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
 use crate::evaluation_result::EvaluationResult;
@@ -306,14 +306,14 @@ where
             settings.integrator.discrete_dim_learning_rate,
             settings.integrator.continuous_dim_learning_rate,
         );
-        integration_state.integral.update_iter();
+        integration_state.integral.update_iter(false);
 
         for i_integrand in 0..N_INTEGRAND_ACCUMULATORS {
             for (s, f) in samples[..cur_points].iter().zip(&f_evals[..cur_points]) {
                 integration_state.all_integrals[i_integrand]
                     .add_sample(f[i_integrand] * s.get_weight(), Some(s));
             }
-            if !integration_state.all_integrals[i_integrand].update_iter() {
+            if !integration_state.all_integrals[i_integrand].update_iter(false) {
                 info!("WARNING: grid update failed, likely due to insufficient number of sample points to be considered.");
             }
         }
@@ -833,8 +833,8 @@ impl MasterNode {
             self.integrator_settings.discrete_dim_learning_rate,
             self.integrator_settings.continuous_dim_learning_rate,
         );
-        self.master_accumulator_re.update_iter();
-        self.master_accumulator_im.update_iter();
+        self.master_accumulator_re.update_iter(false);
+        self.master_accumulator_im.update_iter(false);
 
         self.current_iter += 1;
     }
@@ -1153,10 +1153,7 @@ pub fn print_integral_result(
             "".to_string().normal()
         },
         if itg.avg.abs().0 != 0. {
-            let mwi = itg
-                .max_eval_negative
-                .abs()
-                .max(itg.max_eval_positive.abs())
+            let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
                 / (itg.avg.abs() * (F::<f64>::new_from_usize(itg.processed_samples)));
             if mwi > F(1.) {
                 format!("  mwi: {:<10.4e}", mwi.0).red()
