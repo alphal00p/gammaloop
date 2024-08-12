@@ -493,7 +493,7 @@ impl CFFExpression {
                 tree.common_subexpression_elimination(1);
 
                 let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
-                tree_ft.linearize()
+                tree_ft.linearize(1)
             })
             .collect()
     }
@@ -501,6 +501,7 @@ impl CFFExpression {
     pub fn build_joint_symbolica_evaluator<T: FloatLike + Default>(
         &self,
         params: &[Atom],
+        cpe_rounds: usize,
     ) -> ExpressionEvaluator<F<T>> {
         let orientation_atoms = self
             .orientations
@@ -523,7 +524,7 @@ impl CFFExpression {
         tree.common_subexpression_elimination(1);
 
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
-        tree_ft.linearize()
+        tree_ft.linearize(cpe_rounds)
     }
 
     /// does nothing if compile_cff and compile_separate_orientations are both set to false
@@ -562,9 +563,10 @@ impl CFFExpression {
             .ok_or(eyre!("could not convert path to string"))?;
 
         if export_settings.compile_cff {
-            let joint = self.build_joint_symbolica_evaluator::<T>(params);
+            let joint =
+                self.build_joint_symbolica_evaluator::<T>(params, export_settings.cpe_rounds_cff);
 
-            let source_string = if export_settings.gammaloop_compile_options.use_asm {
+            let source_string = if export_settings.gammaloop_compile_options.inline_asm {
                 joint.export_asm_str("joint", true)
             } else {
                 joint.export_cpp_str("joint", true)
@@ -576,7 +578,8 @@ impl CFFExpression {
         if export_settings.compile_separate_orientations {
             let orientations = self.build_symbolica_evaluators::<T>(params);
             for (orientation_id, orientation_evaluator) in orientations.into_iter().enumerate() {
-                let orientation_source_str = if export_settings.gammaloop_compile_options.use_asm {
+                let orientation_source_str = if export_settings.gammaloop_compile_options.inline_asm
+                {
                     orientation_evaluator.export_asm_str(
                         &format!("orientation_{}", orientation_id),
                         !export_settings.compile_cff && orientation_id == 0,
@@ -593,7 +596,12 @@ impl CFFExpression {
         }
 
         std::fs::write(path_to_code, cpp_str)?;
-        let exported_code = ExportedCode::new(path_to_code_str.to_string(), "joint".to_string());
+
+        let exported_code = ExportedCode::new(
+            path_to_code_str.to_string(),
+            "joint".to_string(),
+            export_settings.gammaloop_compile_options.inline_asm(),
+        );
         exported_code.compile(
             path_to_so_str,
             export_settings

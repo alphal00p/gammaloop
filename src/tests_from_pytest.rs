@@ -253,7 +253,7 @@ mod tests_scalar_massless_triangle {
 
         let graph_cff = graph.get_cff();
         let mut evaluator =
-            graph_cff.build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff());
+            graph_cff.build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff(), 1);
 
         let energy_cache = graph.compute_onshell_energies(&[k], &[p1, p2]);
 
@@ -923,7 +923,7 @@ fn pytest_scalar_double_triangle() {
 
     let mut evaluator = graph
         .get_cff()
-        .build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff());
+        .build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff(), 1);
 
     let mut out_f = vec![F(0.0); graph.get_cff().get_num_trees()];
     let ose = graph.compute_onshell_energies(&loop_moms_f64, &externals_f64);
