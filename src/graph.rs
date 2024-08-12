@@ -26,7 +26,6 @@ use crate::{
 
 use ahash::RandomState;
 
-use bincode::de;
 use color_eyre::Result;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
@@ -1610,14 +1609,11 @@ impl Graph {
         let params = self.bare_graph.build_params_for_cff();
         match self.derived_data.cff_expression.as_mut() {
             Some(cff) => {
-                cff.build_compiled_experssion::<f64>(&params, export_path, export_settings)
+                cff.build_compiled_expression::<f64>(&params, export_path, export_settings)
             }
             None => {
                 self.generate_cff();
-                self.build_compiled_expression(
-                    export_path,
-                    export_settings
-                )
+                self.build_compiled_expression(export_path, export_settings)
             }
         }
     }

@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use _gammaloop::{
     graph::Graph,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
+    ExportSettings, GammaloopCompileOptions,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
@@ -12,6 +13,20 @@ fn load_helper(path: &str) -> Graph {
     let (model, mut amplitude) = load_amplitude_output(path, true);
     amplitude.amplitude_graphs[0].graph.generate_cff();
 
+    let export_settings = ExportSettings {
+        compile_cff: true,
+        cpe_rounds_cff: 1,
+        compile_separate_orientations: false,
+        gammaloop_compile_options: GammaloopCompileOptions {
+            inline_asm: env::var("USE_ASM").is_ok(),
+            optimization_level: 3,
+            fast_math: true,
+            unsafe_math: true,
+            compiler: "g++".to_string(),
+            custom: vec![],
+        },
+    };
+
     amplitude.amplitude_graphs[0].graph.generate_numerator();
     amplitude.amplitude_graphs[0]
         .graph
@@ -19,7 +34,7 @@ fn load_helper(path: &str) -> Graph {
     let true_path = PathBuf::from(COMPILED_DUMP).join(path);
     amplitude.amplitude_graphs[0]
         .graph
-        .build_compiled_expression(true_path, true, false)
+        .build_compiled_expression(true_path, &export_settings)
         .unwrap();
 
     amplitude.amplitude_graphs.remove(0).graph

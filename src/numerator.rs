@@ -26,6 +26,7 @@ use spenso::{
     symbolic::SymbolicTensor,
 };
 use symbolica::domains::rational::Q;
+use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
 use symbolica::{
     atom::AtomView,
     domains::{
@@ -63,7 +64,7 @@ pub enum CompiledNumerator {
 
 #[allow(clippy::large_enum_variant, clippy::type_complexity)]
 pub enum EagerNumerator<T: FloatLike> {
-    Eager(EvalTensorSet<Complex<F<T>>, AtomStructure>),
+    Eager(EvalTensorSet<ExpressionEvaluator<Complex<F<T>>>, AtomStructure>),
     UnInit,
 }
 
@@ -371,16 +372,20 @@ impl Numerator {
     }
 
     pub fn compile<T: FloatLike + Default>(&mut self) {
+        let filename = &(self.extra_info.graph_name.clone() + "numerator.cpp");
+        let function_name = &(self.extra_info.graph_name.clone() + "numerator");
+        let library_name = &(self.extra_info.graph_name.clone() + "libneval.so");
+        let inline_asm = InlineASM::Intel;
         if let EvalNumerator::Eval(eval) = &mut self.base_eval {
             self.compiled = CompiledNumerator::Compiled(
                 eval.map_coeff::<F<T>, _>(&|r| r.into())
-                    .linearize()
-                    .compile_asm(
-                        &(self.extra_info.graph_name.clone() + "numerator.cpp"),
-                        &(self.extra_info.graph_name.clone() + "numerator"),
-                        &(self.extra_info.graph_name.clone() + "libneval.so"),
-                        true,
-                    ),
+                    .linearize(1)
+                    .export_cpp(filename, function_name, true, inline_asm)
+                    .unwrap()
+                    .compile(library_name, CompileOptions::default())
+                    .unwrap()
+                    .load()
+                    .unwrap(),
             );
         }
     }
@@ -505,7 +510,7 @@ impl Numerator {
                         re: F(r.into()),
                         im: F(0.),
                     })
-                    .linearize(),
+                    .linearize(1),
             );
             debug!("Linearize quad");
 
@@ -515,7 +520,7 @@ impl Numerator {
                         re: F(r.into()),
                         im: F(f128::new_zero()),
                     })
-                    .linearize(),
+                    .linearize(1),
             );
             self.base_eval = EvalNumerator::Eval(eval_tree);
         }

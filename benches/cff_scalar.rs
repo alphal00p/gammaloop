@@ -1,3 +1,5 @@
+use std::{env, path::PathBuf, time::Duration};
+
 use _gammaloop::{
     gammaloop_integrand::DefaultSample,
     graph::Graph,
@@ -7,6 +9,8 @@ use _gammaloop::{
     ExportSettings, GammaloopCompileOptions,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
+use pprof::criterion::{Output, PProfProfiler};
+use rand::Rng;
 const COMPILED_DUMP: &str = "TMP_COMPILED";
 
 fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample<f64> {
@@ -59,8 +63,6 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
         },
     };
 
-   
-
     amplitude.amplitude_graphs[0].graph.generate_numerator();
     amplitude.amplitude_graphs[0]
         .graph
@@ -81,7 +83,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("scalar cff benchmarks");
     group.measurement_time(Duration::from_secs(10));
 
-    let mut triangle_graph = load_helper("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", false);
+    let mut triangle_graph =
+        load_helper("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", false);
     let triangle_sample = kinematics_builder(2, 1);
     group.bench_function("Triangle", |b| {
         b.iter(|| triangle_graph.evaluate_cff_expression(&triangle_sample, 0))
@@ -95,7 +98,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let mut double_triangle_graph =
         load_helper("TEST_AMPLITUDE_scalar_double_triangle/GL_OUTPUT", false);
-        let double_triangle_sample = kinematics_builder(1, 2);
+    let double_triangle_sample = kinematics_builder(1, 2);
     group.bench_function("Double Triangle", |b| {
         b.iter(|| double_triangle_graph.evaluate_cff_expression(&double_triangle_sample, 0))
     });
@@ -121,10 +124,9 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| fishnet_2x2_graph.evaluate_numerator_all_orientations(&fishnet_2x2_sample, 0))
     });
 
-    let fishnet_2x3_graph = load_helper("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
-    let fishnet_2x2_sample = kinematics_builder(3, 6);
+    let mut fishnet_2x3_graph = load_helper("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
+    let fishnet_2x3_sample = kinematics_builder(3, 6);
 
-    
     group.bench_function("Fishnet 2x3", |b| {
         b.iter(|| fishnet_2x3_graph.evaluate_cff_expression(&fishnet_2x3_sample, 0))
     });
