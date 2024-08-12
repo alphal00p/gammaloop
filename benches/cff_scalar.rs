@@ -49,9 +49,10 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
 
     let export_settings = ExportSettings {
         compile_cff: !use_orientations,
+        cpe_rounds_cff: 1,
         compile_separate_orientations: use_orientations,
         gammaloop_compile_options: GammaloopCompileOptions {
-            use_asm: env::var("USE_ASM").is_ok(),
+            inline_asm: env::var("USE_ASM").is_ok(),
             optimization_level: 3,
             fast_math: true,
             unsafe_math: true,

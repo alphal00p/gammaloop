@@ -87,8 +87,9 @@ class GammaLoopConfiguration(object):
             'export_settings': {
                 'compile_cff': True,
                 'compile_separate_orientations': False,
+                'cpe_rounds_cff': 1,
                 'gammaloop_compile_options': {
-                    'use_asm': False,
+                    'inline_asm': False,
                     'optimization_level': 3,
                     'fast_math': True,
                     'unsafe_math': True,

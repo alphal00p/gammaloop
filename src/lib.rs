@@ -41,6 +41,7 @@ use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
 use symbolica::evaluate::CompileOptions;
+use symbolica::evaluate::InlineASM;
 use utils::FloatLike;
 use utils::F;
 
@@ -397,6 +398,7 @@ pub struct SubtractionSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {
     pub compile_cff: bool,
+    pub cpe_rounds_cff: usize,
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
@@ -404,7 +406,7 @@ pub struct ExportSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GammaloopCompileOptions {
-    pub use_asm: bool,
+    pub inline_asm: bool,
     pub optimization_level: usize,
     pub fast_math: bool,
     pub unsafe_math: bool,
@@ -413,6 +415,14 @@ pub struct GammaloopCompileOptions {
 }
 
 impl GammaloopCompileOptions {
+    pub fn inline_asm(&self) -> InlineASM {
+        if self.inline_asm {
+            InlineASM::Intel
+        } else {
+            InlineASM::None
+        }
+    }
+
     #[allow(clippy::needless_update)]
     pub fn to_symbolica_compile_options(&self) -> CompileOptions {
         CompileOptions {
