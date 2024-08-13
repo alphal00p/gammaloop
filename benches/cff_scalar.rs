@@ -4,7 +4,7 @@ use _gammaloop::{
     momentum::{FourMomentum, ThreeMomentum},
     tests_from_pytest::load_amplitude_output,
     utils::F,
-    ExportSettings, GammaloopCompileOptions,
+    ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
@@ -51,6 +51,10 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
         compile_cff: !use_orientations,
         cpe_rounds_cff: 1,
         compile_separate_orientations: use_orientations,
+        tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
+            target_omega: 1.0,
+            panic_on_fail: false,
+        },
         gammaloop_compile_options: GammaloopCompileOptions {
             inline_asm: env::var("USE_ASM").is_ok(),
             optimization_level: 3,

@@ -438,6 +438,6 @@ impl GammaloopCompileOptions {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TropicalSubgraphTableSettings {
-    panic_on_fail: bool,
-    target_omega: f64,
+    pub panic_on_fail: bool,
+    pub target_omega: f64,
 }
