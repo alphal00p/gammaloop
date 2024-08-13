@@ -276,7 +276,7 @@ mod tests_integral {
         let mut settings = load_default_settings();
         let mut itg = get_h_function_test_integrand();
         settings.integrator.n_start = 5 * BASE_N_START_SAMPLE;
-        settings.integrator.n_max = 10 * BASE_N_START_SAMPLE;
+        settings.integrator.n_max = 20 * BASE_N_START_SAMPLE;
         settings.integrator.n_increase = 0;
         settings.integrator.n_increase = 0;
         settings.kinematics.e_cm = F(1.);
