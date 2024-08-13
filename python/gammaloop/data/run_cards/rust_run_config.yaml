@@ -1,6 +1,7 @@
 General:
   debug: 0
   use_ltd: false
+  force_orientation: null
   load_compiled_cff: True
   load_compiled_separate_orientations: False
 Integrand:
