@@ -776,11 +776,13 @@ pub enum HybridNode {
 }
 
 // custom option so we have control over serialize/deserialize
+#[derive(Clone)]
 pub enum CompiledCFFExpression {
     Some(InnerCompiledCFF),
     None,
 }
 
+#[derive(Clone)]
 pub struct InnerCompiledCFF {
     metadata: CompiledCFFExpressionMetaData,
     joint: Option<CompiledEvaluator>,
@@ -887,15 +889,6 @@ impl CompiledCFFExpression {
         match self {
             CompiledCFFExpression::Some(_) => true,
             CompiledCFFExpression::None => false,
-        }
-    }
-}
-
-impl Clone for CompiledCFFExpression {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Some(inner) => Self::from_metedata(inner.metadata.clone()).unwrap(),
-            Self::None => Self::None,
         }
     }
 }
