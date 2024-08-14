@@ -140,7 +140,7 @@ pub struct GeneralSettings {
     pub use_ltd: bool,
     pub load_compiled_cff: bool,
     pub load_compiled_separate_orientations: bool,
-    pub force_orientation: Option<usize>,
+    pub force_orientations: Option<Vec<usize>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize)]

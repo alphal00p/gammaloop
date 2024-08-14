@@ -105,7 +105,7 @@ class GammaLoopConfiguration(object):
                 'General': {
                     'debug': 0,
                     'use_ltd': False,
-                    'force_orientation': None,
+                    'force_orientations': None,
                     'load_compiled_cff': True,
                     'load_compiled_separate_orientations': False
                 },
