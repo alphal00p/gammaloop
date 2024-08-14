@@ -198,7 +198,7 @@ where
                 DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
                     String::from(" and a nested discrete grid over lmb-channels")
                 }
-                DiscreteGraphSamplingSettings::TropicalSampling => {
+                DiscreteGraphSamplingSettings::TropicalSampling(_) => {
                     format!(" and 🌴🥥 {} 🥥🌴", "tropical sampling".green().bold())
                 }
                 DiscreteGraphSamplingSettings::MultiChanneling(_) => {

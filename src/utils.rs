@@ -2185,8 +2185,8 @@ pub fn get_n_dim_for_n_loop_momenta(
     force_radius: bool,
     n_edges: Option<usize>, // for tropical parameterization, we need to know the number of edges
 ) -> usize {
-    if settings.sampling
-        == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
+    if matches!(settings.sampling
+        ,SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_)))
     {
         let tropical_part = 2 * n_edges.unwrap() - 1;
         let d_l = 3 * n_loop_momenta;
@@ -2377,8 +2377,8 @@ pub fn global_inv_parameterize<T: FloatLike>(
 ) -> (Vec<F<T>>, F<T>) {
     let one = e_cm_squared.one();
     let zero = one.zero();
-    if settings.sampling
-        == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
+    if matches!(settings.sampling
+        ,SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_)))
     {
         panic!("Trying to inverse parameterize a tropical parametrization.")
     }

@@ -375,6 +375,11 @@ pub struct MultiChannelingSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct TropicalSamplingSettings {
+    pub upcast_on_failure: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(tag = "subtype")]
 pub enum DiscreteGraphSamplingSettings {
     #[default]
@@ -385,7 +390,7 @@ pub enum DiscreteGraphSamplingSettings {
     #[serde(rename = "discrete_multi_channeling")]
     DiscreteMultiChanneling(MultiChannelingSettings),
     #[serde(rename = "tropical")]
-    TropicalSampling,
+    TropicalSampling(TropicalSamplingSettings),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

@@ -829,7 +829,7 @@ impl GammaLoopIntegrand {
                             },
                         })
                     }
-                    DiscreteGraphSamplingSettings::TropicalSampling => {
+                    DiscreteGraphSamplingSettings::TropicalSampling(tropical_sampling_settings) => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
                         let (external_moms, pdf) =
                             self.settings.kinematics.externals.get_externals(xs);
@@ -868,6 +868,7 @@ impl GammaLoopIntegrand {
                         let sampling_result_result = sampler.generate_sample_from_x_space_point(
                             &xs_f64,
                             edge_data,
+                            tropical_sampling_settings.upcast_on_failure,
                             print_debug_info,
                         );
 
