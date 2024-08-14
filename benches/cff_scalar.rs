@@ -2,6 +2,7 @@ use _gammaloop::{
     gammaloop_integrand::DefaultSample,
     graph::Graph,
     momentum::{FourMomentum, ThreeMomentum},
+    tests::load_default_settings,
     tests_from_pytest::load_amplitude_output,
     utils::F,
     ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,
@@ -76,6 +77,7 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
+    let settings = load_default_settings();
 
     let mut group = c.benchmark_group("scalar cff benchmarks");
     group.measurement_time(Duration::from_secs(10));
@@ -85,7 +87,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("Triangle", |b| {
         b.iter_batched_ref(
             || kinematics_builder(2, 1),
-            |sample| triangle_graph.evaluate_cff_expression(sample, 0),
+            |sample| triangle_graph.evaluate_cff_expression(sample, &settings),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -95,7 +97,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("Box", |b| {
         b.iter_batched_ref(
             || kinematics_builder(3, 1),
-            |sample| box_graph.evaluate_cff_expression(sample, 0),
+            |sample| box_graph.evaluate_cff_expression(sample, &settings),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -106,7 +108,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("Double Triangle", |b| {
         b.iter_batched_ref(
             || kinematics_builder(1, 2),
-            |sample| double_triangle_graph.evaluate_cff_expression(sample, 0),
+            |sample| double_triangle_graph.evaluate_cff_expression(sample, &settings),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -116,7 +118,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("Isopod (Triangle-Box-Box)", |b| {
         b.iter_batched_ref(
             || kinematics_builder(2, 3),
-            |sample| isopod_graph.evaluate_cff_expression(sample, 0),
+            |sample| isopod_graph.evaluate_cff_expression(sample, &settings),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -126,7 +128,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("Fishnet 2x2", |b| {
         b.iter_batched_ref(
             || kinematics_builder(3, 4),
-            |sample| fishnet_2x2_graph.evaluate_cff_expression(sample, 0),
+            |sample| fishnet_2x2_graph.evaluate_cff_expression(sample, &settings),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -136,7 +138,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("Fishnet 2x3", |b| {
         b.iter_batched_ref(
             || (kinematics_builder(3, 6)),
-            |sample| fishnet_2x3_graph.evaluate_cff_expression(sample, 0),
+            |sample| fishnet_2x3_graph.evaluate_cff_expression(sample, &settings),
             criterion::BatchSize::SmallInput,
         )
     });
