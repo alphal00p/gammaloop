@@ -112,7 +112,7 @@ impl CFFExpression {
                     &mut term_cache,
                 );
 
-                if settings.general.debug > 3 {
+                if settings.general.debug > 12 {
                     println!(
                         "result of orientation {:?}, {}",
                         self.orientations[t].orientation, orientation_result,
