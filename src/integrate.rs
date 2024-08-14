@@ -1131,7 +1131,7 @@ pub fn print_integral_result(
                 {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        (t - itg.avg).abs() / itg.err,
+                        (t - itg.avg).abs().0 / itg.err.0,
                         if t.abs() > F(0.) {
                             (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {
