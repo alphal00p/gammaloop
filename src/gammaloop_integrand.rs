@@ -525,7 +525,26 @@ impl HasIntegrand for GammaLoopIntegrand {
         let stability_iterator = self.create_stability_iterator(use_f128);
 
         let before_parameterization = std::time::Instant::now();
-        let sample_point = self.parameterize(sample);
+        let sample_point_result = self.parameterize(sample);
+        let sample_point = match sample_point_result {
+            Ok(sample_point) => sample_point,
+            Err(_) => {
+                return EvaluationResult {
+                    integrand_result: Complex::new_zero(),
+                    integrator_weight: F(0.0),
+                    event_buffer: vec![],
+                    evaluation_metadata: EvaluationMetaData {
+                        total_timing: Duration::ZERO,
+                        rep3d_evaluation_time: Duration::ZERO,
+                        parameterization_time: Duration::ZERO,
+                        relative_instability_error: Complex::new_zero(),
+                        highest_precision: Precision::Double,
+                        is_nan: true,
+                    },
+                };
+            }
+        };
+
         let parameterization_time = before_parameterization.elapsed();
 
         // rotate the momenta for the stability tests.
@@ -778,37 +797,37 @@ impl GammaLoopIntegrand {
 
     /// Perform map from unit hypercube to 3-momenta
     #[inline]
-    fn parameterize(&self, sample_point: &Sample<F<f64>>) -> GammaLoopSample<f64> {
+    fn parameterize(&self, sample_point: &Sample<F<f64>>) -> Result<GammaLoopSample<f64>, String> {
         match &self.settings.sampling {
             SamplingSettings::Default => {
                 let xs = unwrap_cont_sample(sample_point);
-                GammaLoopSample::Default(self.default_parametrize(xs))
+                Ok(GammaLoopSample::Default(self.default_parametrize(xs)))
             }
             SamplingSettings::MultiChanneling(multichanneling_settings) => {
                 let xs = unwrap_cont_sample(sample_point);
-                GammaLoopSample::MultiChanneling {
+                Ok(GammaLoopSample::MultiChanneling {
                     alpha: multichanneling_settings.alpha,
                     sample: self.default_parametrize(xs),
-                }
+                })
             }
             SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
                 match discrete_graph_settings {
                     DiscreteGraphSamplingSettings::Default => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
-                        GammaLoopSample::DiscreteGraph {
+                        Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::Default(self.default_parametrize(xs)),
-                        }
+                        })
                     }
                     DiscreteGraphSamplingSettings::MultiChanneling(multichanneling_settings) => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
-                        GammaLoopSample::DiscreteGraph {
+                        Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::MultiChanneling {
                                 alpha: multichanneling_settings.alpha,
                                 sample: self.default_parametrize(xs),
                             },
-                        }
+                        })
                     }
                     DiscreteGraphSamplingSettings::TropicalSampling => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
@@ -846,11 +865,18 @@ impl GammaLoopIntegrand {
                             })
                             .collect_vec();
 
-                        let sampling_result = sampler.generate_sample_from_x_space_point(
+                        let sampling_result_result = sampler.generate_sample_from_x_space_point(
                             &xs_f64,
                             edge_data,
                             print_debug_info,
                         );
+
+                        let sampling_result = match sampling_result_result {
+                            Ok(sampling_result) => sampling_result,
+                            Err(_) => {
+                                return Err(String::from("tropical sampling failed"));
+                            }
+                        };
 
                         let loop_moms = sampling_result
                             .loop_momenta
@@ -864,24 +890,24 @@ impl GammaLoopIntegrand {
                             jacobian: F(sampling_result.jacobian) * pdf,
                         };
 
-                        GammaLoopSample::DiscreteGraph {
+                        Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::Tropical(default_sample),
-                        }
+                        })
                     }
                     DiscreteGraphSamplingSettings::DiscreteMultiChanneling(
                         multichanneling_settings,
                     ) => {
                         let (graph_id, (channel_id, xs)) =
                             unwrap_double_discrete_sample(sample_point);
-                        GammaLoopSample::DiscreteGraph {
+                        Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::DiscreteMultiChanneling {
                                 alpha: multichanneling_settings.alpha,
                                 channel_id,
                                 sample: self.default_parametrize(xs),
                             },
-                        }
+                        })
                     }
                 }
             }
