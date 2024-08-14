@@ -32,16 +32,16 @@ use super::{
 };
 
 pub trait CFFFloat<T: FloatLike> {
-    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<T>], usize) -> Vec<F<T>>;
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<T>], &Settings) -> Vec<F<T>>;
 }
 
 impl CFFFloat<f64> for f64 {
-    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<f64>], usize) -> Vec<F<f64>> {
-        |energy_cache, debug| {
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<f64>], &Settings) -> Vec<F<f64>> {
+        |energy_cache, settings| {
             if cff.compiled.is_some() {
-                cff.compiled_evaluate_orientations(energy_cache, debug)
+                cff.compiled_evaluate_orientations(energy_cache, settings)
             } else {
-                cff.eager_evaluate_orientations(energy_cache, debug)
+                cff.eager_evaluate_orientations(energy_cache, settings)
             }
         }
     }
@@ -50,8 +50,8 @@ impl CFFFloat<f64> for f64 {
 impl CFFFloat<VarFloat<113>> for VarFloat<113> {
     fn get_evaluator(
         cff: &CFFExpression,
-    ) -> impl Fn(&[F<VarFloat<113>>], usize) -> Vec<F<VarFloat<113>>> {
-        |energy_cache, debug| cff.eager_evaluate_orientations(energy_cache, debug)
+    ) -> impl Fn(&[F<VarFloat<113>>], &Settings) -> Vec<F<VarFloat<113>>> {
+        |energy_cache, settings| cff.eager_evaluate_orientations(energy_cache, settings)
     }
 }
 
@@ -82,19 +82,18 @@ impl CFFExpression {
     pub fn evaluate_orientations<T: FloatLike + CFFFloat<T>>(
         &self,
         energy_cache: &[F<T>],
-        debug: usize,
+        settings: &Settings,
     ) -> Vec<F<T>> {
-        let evaluator = T::get_evaluator(self);
-        evaluator(energy_cache, debug)
+        T::get_evaluator(self)(energy_cache, settings)
     }
 
     #[inline]
     fn eager_evaluate_orientations<T: FloatLike>(
         &self,
         energy_cache: &[F<T>],
-        debug: usize,
+        settings: &Settings,
     ) -> Vec<F<T>> {
-        if debug > 3 {
+        if settings.general.debug > 3 {
             println!("evaluating cff orientations in eager mode");
         }
 
@@ -113,7 +112,7 @@ impl CFFExpression {
                     &mut term_cache,
                 );
 
-                if debug > 3 {
+                if settings.general.debug > 3 {
                     println!(
                         "result of orientation {:?}, {}",
                         self.orientations[t].orientation, orientation_result,
@@ -126,25 +125,29 @@ impl CFFExpression {
     }
 
     #[inline]
-    fn compiled_evaluate_orientations(&self, energy_cache: &[F<f64>], debug: usize) -> Vec<F<f64>> {
-        if debug > 3 {
-            println!("evaluating cff orientations in eager mode");
+    fn compiled_evaluate_orientations(
+        &self,
+        energy_cache: &[F<f64>],
+        settings: &Settings,
+    ) -> Vec<F<f64>> {
+        if settings.general.debug > 3 {
+            println!("evaluating cff orientations in compiled mode");
         }
 
         self.compiled.evaluate_orientations(energy_cache)
     }
 
     #[inline]
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
-        self.evaluate_orientations(energy_cache, debug)
+    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], settings: &Settings) -> F<T> {
+        self.evaluate_orientations(energy_cache, settings)
             .into_iter()
             .reduce(|acc, x| &acc + &x)
             .unwrap_or_else(|| energy_cache[0].zero())
     }
 
     #[inline]
-    pub fn eager_evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
-        self.eager_evaluate_orientations(energy_cache, debug)
+    pub fn eager_evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], settings: &Settings) -> F<T> {
+        self.eager_evaluate_orientations(energy_cache, settings)
             .into_iter()
             .reduce(|acc, x| &acc + &x)
             .unwrap_or_else(|| energy_cache[0].zero())

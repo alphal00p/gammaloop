@@ -118,11 +118,8 @@ impl GraphIntegrand for AmplitudeGraph {
                 &lmb_specification,
             )
         } else {
-            self.get_graph().evaluate_cff_expression_in_lmb(
-                sample,
-                &lmb_specification,
-                settings.general.debug,
-            )
+            self.get_graph()
+                .evaluate_cff_expression_in_lmb(sample, &lmb_specification, settings)
         };
 
         let onshell_energies = self.get_graph().compute_onshell_energies_in_lmb(
@@ -210,8 +207,7 @@ impl GraphIntegrand for AmplitudeGraph {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
-            self.get_graph()
-                .evaluate_cff_expression(sample, settings.general.debug)
+            self.get_graph().evaluate_cff_expression(sample, settings)
         };
 
         let energy_product = self
@@ -247,8 +243,7 @@ impl GraphIntegrand for AmplitudeGraph {
             self.get_graph()
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
-            self.get_graph()
-                .evaluate_cff_expression(sample, settings.general.debug)
+            self.get_graph().evaluate_cff_expression(sample, settings)
         };
 
         let onshell_energies = self

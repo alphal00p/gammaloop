@@ -13,6 +13,7 @@ use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::numerator::Numerator;
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
+use crate::tests::load_default_settings;
 use crate::utils::{
     assert_approx_eq, compute_momentum, compute_three_momentum_from_four, PrecisionUpgradable,
 };
@@ -116,6 +117,7 @@ mod tests_scalar_massless_triangle {
         graph::EdgeType,
         momentum::{FourMomentum, ThreeMomentum},
         observables::AFBSettings,
+        tests::load_default_settings,
         utils::F,
     };
 
@@ -123,6 +125,8 @@ mod tests_scalar_massless_triangle {
 
     #[test]
     fn pytest_massless_scalar_triangle() {
+        let default_settings = load_default_settings();
+
         let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
 
         let (model, amplitude) =
@@ -180,11 +184,11 @@ mod tests_scalar_massless_triangle {
             jacobian: F(1.0),
         };
 
-        let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
+        let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / energy_product;
 
         let before_in_house = std::time::Instant::now();
         for _ in 0..1000 {
-            graph.evaluate_cff_expression(&sample, 0);
+            graph.evaluate_cff_expression(&sample, &default_settings);
         }
         let in_house_elapsed = before_in_house.elapsed();
         println!("in house eval: {} ns", in_house_elapsed.as_nanos() / 1000);
@@ -267,6 +271,7 @@ mod tests_scalar_massless_triangle {
 
 #[test]
 fn pytest_scalar_fishnet_2x2() {
+    let default_settings = load_default_settings();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_fishnet_2x2/GL_OUTPUT", true);
 
@@ -358,7 +363,7 @@ fn pytest_scalar_fishnet_2x2() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
     let absolute_truth: Complex<F<f128>> = Complex::new(
         F::<f128>::from_f64(0.000019991301832169422),
@@ -396,6 +401,7 @@ fn pytest_scalar_fishnet_2x2() {
 
 #[test]
 fn pytest_scalar_sunrise() {
+    let default_settings = load_default_settings();
     let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_sunrise/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -434,7 +440,7 @@ fn pytest_scalar_sunrise() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&[k1, k2], &[p1]) / energy_product;
 
     println!("cff_res = {:+e}", cff_res);
@@ -453,6 +459,7 @@ fn pytest_scalar_sunrise() {
 
 #[test]
 fn pytest_scalar_fishnet_2x3() {
+    let default_settings = load_default_settings();
     let (model, mut amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
 
@@ -517,7 +524,7 @@ fn pytest_scalar_fishnet_2x3() {
 
     let cff_res = amplitude.amplitude_graphs[0]
         .graph
-        .evaluate_cff_expression(&sample, 0);
+        .evaluate_cff_expression(&sample, &default_settings);
 
     // let cff_duration = before_cff.elapsed();
     // println!("cff_duration: {}", cff_duration.as_micros());
@@ -546,6 +553,7 @@ fn pytest_scalar_fishnet_2x3() {
 
 #[test]
 fn pytest_scalar_cube() {
+    let default_settings = load_default_settings();
     let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_cube/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -615,7 +623,7 @@ fn pytest_scalar_cube() {
     };
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_momenta, &external_momenta);
-    let cff_res = graph.evaluate_cff_expression(&sample, 0);
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings);
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
     assert_approx_eq(&cff_res.re, &ltd_res.re, &ltd_comparison_tolerance128);
 
@@ -627,6 +635,7 @@ fn pytest_scalar_cube() {
 
 #[test]
 fn pytest_scalar_bubble() {
+    let default_settings = load_default_settings();
     let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_bubble/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -667,7 +676,7 @@ fn pytest_scalar_bubble() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample, 0) / energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / energy_product;
 
     let absolute_truth = Complex::new(F(0.), -F(0.052955801144924944));
 
@@ -682,6 +691,7 @@ fn pytest_scalar_bubble() {
 
 #[test]
 fn pytest_scalar_massless_box() {
+    let default_settings = load_default_settings();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_massless_box/GL_OUTPUT", true);
 
@@ -744,7 +754,7 @@ fn pytest_scalar_massless_box() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -829,6 +839,7 @@ fn pytest_scalar_massless_box() {
 
 #[test]
 fn pytest_scalar_double_triangle() {
+    let default_settings = load_default_settings();
     let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
 
     let (model, amplitude) =
@@ -880,7 +891,7 @@ fn pytest_scalar_double_triangle() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -940,6 +951,7 @@ fn pytest_scalar_double_triangle() {
 
 #[test]
 fn pytest_scalar_mercedes() {
+    let default_settings = load_default_settings();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_mercedes/GL_OUTPUT", true);
 
@@ -984,7 +996,7 @@ fn pytest_scalar_mercedes() {
         external_moms: externals,
         jacobian: F(1.0),
     };
-    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -1018,6 +1030,7 @@ fn pytest_scalar_mercedes() {
 
 #[test]
 fn pytest_scalar_triangle_box() {
+    let default_settings = load_default_settings();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_triangle_box/GL_OUTPUT", true);
 
@@ -1072,7 +1085,7 @@ fn pytest_scalar_triangle_box() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
 
@@ -1106,6 +1119,7 @@ fn pytest_scalar_triangle_box() {
 
 #[test]
 fn pytest_scalar_isopod() {
+    let default_settings = load_default_settings();
     let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_isopod/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -1159,7 +1173,7 @@ fn pytest_scalar_isopod() {
         jacobian: F(1.0),
     };
 
-    let cff_res = graph.evaluate_cff_expression(&sample, 0) / &energy_product;
+    let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
     println!("cff_res = {:+e}", cff_res);
     println!("ltd_res = {:+e}", ltd_res);

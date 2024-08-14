@@ -23,7 +23,7 @@ const BASE_N_START_SAMPLE: usize = 100_000;
 
 const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
 
-fn load_default_settings() -> Settings {
+pub fn load_default_settings() -> Settings {
     Settings::from_file("./src/test_resources/default_tests_config.yaml").unwrap()
 }
 
