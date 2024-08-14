@@ -134,7 +134,7 @@ impl CFFExpression {
             println!("evaluating cff orientations in compiled mode");
         }
 
-        self.compiled.evaluate_orientations(energy_cache)
+        self.compiled.evaluate_orientations(energy_cache, settings)
     }
 
     #[inline]
@@ -801,16 +801,27 @@ struct CompiledCFFExpressionMetaData {
 }
 
 impl CompiledCFFExpression {
-    pub fn evaluate_orientations(&self, energy_cache: &[F<f64>]) -> Vec<F<f64>> {
+    pub fn evaluate_orientations(
+        &self,
+        energy_cache: &[F<f64>],
+        settings: &Settings,
+    ) -> Vec<F<f64>> {
         let expr = self.unwrap();
         let mut out = vec![F(0.0); expr.metadata.num_orientations];
         match &expr.joint {
             Some(evaluator) => evaluator.evaluate(energy_cache, &mut out),
-            None => {
-                for (id, out_elem) in out.iter_mut().enumerate() {
-                    *out_elem = self.evaluate_one_orientation(id.into(), energy_cache);
+            None => match &settings.general.force_orientations {
+                None => {
+                    for (id, out_elem) in out.iter_mut().enumerate() {
+                        *out_elem = self.evaluate_one_orientation(id.into(), energy_cache);
+                    }
                 }
-            }
+                Some(orientations) => {
+                    for id in orientations.iter() {
+                        out[*id] = self.evaluate_one_orientation((*id).into(), energy_cache);
+                    }
+                }
+            },
         }
 
         out
