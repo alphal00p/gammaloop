@@ -1256,6 +1256,7 @@ impl Graph {
         let table = tropical_graph.build_sampler(loop_part, dimension);
 
         if let Ok(table) = table {
+            debug!("min dod: {}", table.get_smallest_dod());
             self.derived_data.tropical_subgraph_table = Some(table);
         } else if settings.panic_on_fail {
             panic!("Tropical subgraph table generation failed 🥥");
