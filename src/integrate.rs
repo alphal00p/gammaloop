@@ -457,7 +457,7 @@ where
             0,
             n_samples_evaluated,
             &target,
-            settings.integrator.show_max_wgt_info,
+            true,
         );
         info!("");
     } else {
