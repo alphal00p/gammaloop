@@ -842,8 +842,6 @@ impl GammaLoopIntegrand {
                         let sampler = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
                         let xs_f64 = xs.iter().map(|x| x.0).collect_vec();
 
-                        let print_debug_info = self.settings.general.debug > 3;
-
                         let edge_data = graph
                             .get_loop_edges_iterator()
                             .map(|(edge_id, edge)| {
@@ -868,8 +866,8 @@ impl GammaLoopIntegrand {
                         let sampling_result_result = sampler.generate_sample_from_x_space_point(
                             &xs_f64,
                             edge_data,
-                            tropical_sampling_settings.upcast_on_failure,
-                            print_debug_info,
+                            &tropical_sampling_settings
+                                .into_tropical_sampling_settings(self.settings.general.debug),
                         );
 
                         let sampling_result = match sampling_result_result {

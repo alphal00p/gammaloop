@@ -375,8 +375,20 @@ pub struct MultiChannelingSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-pub struct TropicalSamplingSettings {
+pub struct GammaloopTropicalSamplingSettings {
     pub upcast_on_failure: bool,
+}
+
+impl GammaloopTropicalSamplingSettings {
+    pub fn into_tropical_sampling_settings(
+        &self,
+        debug: usize,
+    ) -> momtrop::TropicalSamplingSettings {
+        momtrop::TropicalSamplingSettings {
+            upcast_on_failure: self.upcast_on_failure,
+            print_debug_info: debug > 3,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -390,7 +402,7 @@ pub enum DiscreteGraphSamplingSettings {
     #[serde(rename = "discrete_multi_channeling")]
     DiscreteMultiChanneling(MultiChannelingSettings),
     #[serde(rename = "tropical")]
-    TropicalSampling(TropicalSamplingSettings),
+    TropicalSampling(GammaloopTropicalSamplingSettings),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
