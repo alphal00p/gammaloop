@@ -54,7 +54,7 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
         cpe_rounds_cff: 1,
         compile_separate_orientations: use_orientations,
         gammaloop_compile_options: GammaloopCompileOptions {
-            inline_asm: env::var("USE_ASM").is_ok(),
+            inline_asm: env::var("NO_ASM").is_err(),
             optimization_level: 3,
             fast_math: true,
             unsafe_math: true,
@@ -124,14 +124,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| fishnet_2x2_graph.evaluate_numerator_all_orientations(&fishnet_2x2_sample, 0))
     });
 
-    let mut fishnet_2x3_graph = load_helper("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
-    let fishnet_2x3_sample = kinematics_builder(3, 6);
+    // // std::fs::remove_dir_all(COMPILED_DUMP).unwrap();
+    // let mut fishnet_2x3_graph = load_helper("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
+    // let fishnet_2x3_sample = kinematics_builder(3, 6);
 
-    group.bench_function("Fishnet 2x3", |b| {
-        b.iter(|| fishnet_2x3_graph.evaluate_cff_expression(&fishnet_2x3_sample, 0))
-    });
-
-    std::fs::remove_dir_all(COMPILED_DUMP).unwrap();
+    // group.bench_function("Fishnet 2x3", |b| {
+    //     b.iter(|| fishnet_2x3_graph.evaluate_cff_expression(&fishnet_2x3_sample, 0))
+    // });
 }
 
 criterion_group! {

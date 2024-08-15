@@ -18,7 +18,7 @@ fn load_helper(path: &str) -> Graph {
         cpe_rounds_cff: 1,
         compile_separate_orientations: false,
         gammaloop_compile_options: GammaloopCompileOptions {
-            inline_asm: env::var("USE_ASM").is_ok(),
+            inline_asm: env::var("NO_ASM").is_err(),
             optimization_level: 3,
             fast_math: true,
             unsafe_math: true,
@@ -42,7 +42,7 @@ fn load_helper(path: &str) -> Graph {
 
 fn criterion_benchmark(c: &mut Criterion) {
     // let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
-    env_logger::init();
+    // env_logger::builder().is_test(true).try_init().unwrap();
 
     let mut group = c.benchmark_group("3L physical benchmarks");
 
@@ -60,13 +60,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| two_loop_graph.evaluate_cff_expression(&two_loop_sample, 0))
     });
 
-    let mut three_loop_graph =
-        load_helper("TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT");
-    let three_loop_sample = kinematics_builder(5, 3);
+    // let mut three_loop_graph =
+    //     load_helper("TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT");
+    // let three_loop_sample = kinematics_builder(5, 3);
 
-    group.bench_function("Inspect 3l", |b| {
-        b.iter(|| three_loop_graph.evaluate_cff_expression(&three_loop_sample, 0))
-    });
+    // group.bench_function("Inspect 3l", |b| {
+    //     b.iter(|| three_loop_graph.evaluate_cff_expression(&three_loop_sample, 0))
+    // });
 }
 
 // criterion_group!(benches, criterion_benchmark);

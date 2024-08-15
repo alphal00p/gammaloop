@@ -17,6 +17,7 @@ opt-level = 2
 
 [profile.bench]
 lto = "fat"
+opt-level = 3
 
 [[bench]]
 name = "cff_scalar"
@@ -105,6 +106,8 @@ typed-index-collections = { version = "3.1.0", features = [
     "serde-alloc",
 ] }
 indicatif-log-bridge = "0.2.2"
+gat-lending-iterator = "0.1.5"
+gxhash = "3.4.1"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -137,5 +140,5 @@ insta.opt-level = 3
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-# spenso = { path = "../spenso" }
+# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+spenso = { path = "../../alphal00p/spenso" }

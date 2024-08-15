@@ -11,7 +11,7 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, Polarization, ThreeMomentum},
-    numerator::{Evaluate, Numerator},
+    numerator::{AtomStructure, Evaluate, Numerator, RepeatingIterator},
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm,
@@ -33,16 +33,19 @@ use eyre::eyre;
 use itertools::Itertools;
 use log::{debug, warn};
 use nalgebra::DMatrix;
+
+use gat_lending_iterator::LendingIterator;
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
+    arithmetic::ScalarMul,
     complex::Complex,
     contraction::{IsZero, RefOne},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     structure::{
-        AbstractIndex, BaseRepName, Euclidean, Lorentz, NamedStructure, PhysReps, Representation,
-        ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND, COLORSEXT,
-        EUCLIDEAN,
+        AbstractIndex, BaseRepName, Euclidean, HasStructure, Lorentz, NamedStructure, PhysReps,
+        Representation, ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT,
+        COLORFUND, COLORSEXT, EUCLIDEAN,
     },
     ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
 };
@@ -59,6 +62,7 @@ use std::{
 
 use symbolica::{
     atom::Atom,
+    domains::float::Complex as SymComplex,
     domains::float::NumericalFloatLike,
     id::{Pattern, Replacement},
 };
@@ -1376,18 +1380,22 @@ impl Graph {
     ) -> Complex<F<T>> {
         self.derived_data
             .evaluate_cff_expression(&self.bare_graph, sample, debug)
+            .scalar()
+            .unwrap()
     }
 
     #[inline]
-    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
+    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
         debug: usize,
     ) -> Complex<F<T>> {
         self.derived_data
-            .evaluate_numerator_all_orientations(&self.bare_graph, sample, debug)
+            .evaluate_cff_expression_in_lmb(&self.bare_graph, sample, lmb_specification, debug)
+            .scalar()
+            .unwrap()
     }
-
     #[inline]
     pub fn evaluate_cff_all_orientations<T: FloatLike>(
         &mut self,
@@ -1396,6 +1404,35 @@ impl Graph {
     ) -> Complex<F<T>> {
         self.derived_data
             .evaluate_cff_all_orientations(&self.bare_graph, sample, debug)
+    }
+
+    #[inline]
+    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        debug: usize,
+    ) -> DataTensor<SymComplex<T>, AtomStructure> {
+        self.derived_data
+            .evaluate_numerator_all_orientations(&self.bare_graph, sample, debug)
+    }
+
+    #[inline]
+    pub fn evaluate_polarizations<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        _debug: usize,
+    ) -> Vec<Polarization<Complex<F<T>>>> {
+        self.derived_data
+            .evaluate_polarizations(&self.bare_graph, sample)
+    }
+
+    #[inline]
+    pub fn generate_params<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        _debug: usize,
+    ) -> Vec<Complex<F<T>>> {
+        self.derived_data.generate_params(&self.bare_graph, sample)
     }
 
     pub fn process_numerator(&mut self, model: &Model) {
@@ -1621,7 +1658,7 @@ impl Graph {
     pub fn evaluate_numerator<T: FloatLike>(
         &mut self,
         emr: Vec<FourMomentum<F<T>>>,
-    ) -> Vec<Complex<F<T>>>
+    ) -> RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>
     where
         Numerator: Evaluate<T>,
     {
@@ -1632,90 +1669,6 @@ impl Graph {
             .unwrap()
             .evaluate(&emr, &pols)
             .unwrap()
-    }
-
-    #[inline]
-    /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_numerator_orientations<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<Complex<F<T>>>
-    where
-        Numerator: Evaluate<T>,
-    {
-        let mut out = vec![];
-        let lmb = lmb_specification.basis(self);
-
-        let emr = self.bare_graph.emr_from_lmb(sample, lmb);
-
-        // debug!("Numerator: {}", numerator);
-        let orientiter = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .clone()
-            .into_iter();
-
-        for orient in orientiter.map(|e| e.orientation.clone()) {
-            let mut emr = emr.clone();
-            for ((i, _), sign) in self
-                .bare_graph
-                .get_virtual_edges_iterator()
-                .zip(orient.into_iter())
-            {
-                if !sign {
-                    emr[i].temporal.value.negate()
-                }
-            }
-
-            out.push(self.evaluate_numerator(emr));
-        }
-
-        self.evaluate_numerator(emr)
-    }
-
-    #[inline]
-    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        lmb_specification: &LoopMomentumBasisSpecification,
-        debug: usize,
-    ) -> Complex<F<T>> {
-        let one = sample.one();
-        let zero = one.zero();
-        let i = Complex::new(zero.clone(), one.clone());
-
-        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
-        let internal_vertex_number =
-            self.bare_graph.vertices.len() - self.bare_graph.external_connections.len();
-
-        let prefactor =
-            i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
-
-        let cff = self.evaluate_cff_orientations(sample, lmb_specification, debug);
-        // here numerator evaluation can be weaved into the summation
-        let res = prefactor
-            * cff
-                .into_iter()
-                .zip(
-                    self.evaluate_numerator_orientations(sample, lmb_specification), //0.., // dummy values for performance test
-                )
-                .map(|(cff, _num)| {
-                    let zero = cff.zero();
-                    Complex::new(cff, zero)
-                })
-                .reduce(|acc, e| acc + &e)
-                .unwrap_or_else(|| panic!("no orientations to evaluate"));
-
-        if debug > 1 {
-            println!("sum over all orientations including numerator: {}", &res)
-        }
-
-        res
     }
 }
 
@@ -1739,22 +1692,35 @@ impl DerivedGraphData {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         debug: usize,
-    ) -> Complex<F<T>> {
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, debug)
     }
-
     pub fn evaluate_numerator_all_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &DefaultSample<T>,
-        debug: usize,
-    ) -> Complex<F<T>> {
-        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
-        self.evaluate_numerator_orientations(graph, sample, &lmb_specification)
-            .into_iter()
-            .reduce(|acc, e| acc + &e)
-            .unwrap_or_else(|| panic!("no orientations to evaluate"))
+        _debug: usize,
+    ) -> DataTensor<SymComplex<T>, AtomStructure> {
+        let emr = graph.emr_from_lmb(sample, &graph.loop_momentum_basis);
+
+        let pols = graph.generate_polarizations_from_emr(&emr);
+        let mut rep = self
+            .numerator
+            .as_mut()
+            .unwrap()
+            .evaluate_sym(&emr, &pols)
+            .unwrap();
+        if let Some(i) = rep.next() {
+            let mut sum = i.clone();
+
+            while let Some(j) = rep.next() {
+                sum += j;
+            }
+            sum
+        } else {
+            panic!("Empty iterator in sum");
+        }
     }
 
     pub fn evaluate_cff_all_orientations<T: FloatLike>(
@@ -1801,7 +1767,7 @@ impl DerivedGraphData {
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         debug: usize,
-    ) -> Complex<F<T>> {
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero.clone(), one.clone());
@@ -1812,19 +1778,27 @@ impl DerivedGraphData {
         let prefactor =
             i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
 
-        let cff = self.evaluate_cff_orientations(graph, sample, lmb_specification, debug);
-        // trace!("CFF: {:?}", cff);
-        // here numerator evaluation can be weaved into the summation
-        let res = prefactor
-            * cff
-                .into_iter()
-                .zip(
-                    self.evaluate_numerator_orientations(graph, sample, lmb_specification), //0.., // dummy values for performance test
-                )
-                .map(|(cff, num)| num * cff)
-                .reduce(|acc, e| acc + &e)
-                .unwrap_or_else(|| panic!("no orientations to evaluate"));
+        let mut cff = self
+            .evaluate_cff_orientations(graph, sample, lmb_specification, debug)
+            .into_iter();
+        let mut num_iter = self.evaluate_numerator_orientations(graph, sample, lmb_specification);
 
+        let res = {
+            if let Some(i) = num_iter.next() {
+                let c = Complex::new_re(cff.next().unwrap());
+                let mut sum = c; //i.map_data_ref(|n| n * &c);
+
+                while let Some(j) = cff.next() {
+                    // let c = Complex::new_re(cff.next().unwrap());
+                    sum += j; //.map_data_ref(|n| n * &c);
+                }
+                i.map_data_ref(|n| n * &sum)
+            } else {
+                panic!("Empty iterator in sum");
+            }
+            .scalar_mul(&prefactor)
+            .unwrap()
+        };
         if debug > 1 {
             println!("sum over all orientations including numerator: {}", &res)
         }
@@ -1839,21 +1813,26 @@ impl DerivedGraphData {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> Vec<Complex<F<T>>>
+    ) -> RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>
     where
         Numerator: Evaluate<T>,
     {
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.emr_from_lmb(sample, lmb);
 
-        self.evaluate_numerator(graph, emr)
+        let pols = graph.generate_polarizations_from_emr(&emr);
+        self.numerator
+            .as_mut()
+            .unwrap()
+            .evaluate(&emr, &pols)
+            .unwrap()
     }
 
     pub fn evaluate_numerator<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         emr: Vec<FourMomentum<F<T>>>,
-    ) -> Vec<Complex<F<T>>>
+    ) -> RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>
     where
         Numerator: Evaluate<T>,
     {
@@ -1863,6 +1842,44 @@ impl DerivedGraphData {
             .unwrap()
             .evaluate(&emr, &pols)
             .unwrap()
+    }
+
+    pub fn generate_params<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+    ) -> Vec<Complex<F<T>>> {
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
+        let lmb = lmb_specification.basis_from_derived(self);
+        let emr = graph.emr_from_lmb(sample, lmb);
+
+        let polarizations = graph.generate_polarizations_from_emr(&emr);
+        let mut params: Vec<Complex<F<T>>> = emr
+            .into_iter()
+            .flat_map(|p| p.into_iter().map(Complex::new_re))
+            .collect_vec();
+
+        for p in polarizations {
+            for pi in p {
+                params.push(pi)
+            }
+        }
+        params
+    }
+
+    pub fn evaluate_polarizations<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+    ) -> Vec<Polarization<Complex<F<T>>>>
+    where
+        Numerator: Evaluate<T>,
+    {
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
+        let lmb = lmb_specification.basis_from_derived(self);
+        let emr = graph.emr_from_lmb(sample, lmb);
+
+        graph.generate_polarizations_from_emr(&emr)
     }
 
     fn new_empty() -> Self {

@@ -959,7 +959,9 @@ dependencies = [
  "eyre",
  "f128",
  "funty",
+ "gat-lending-iterator",
  "git-version",
+ "gxhash",
  "hyperdual",
  "indexmap",
  "indicatif-log-bridge",
@@ -1059,6 +1061,15 @@ checksum = "b0205cd82059bc63b63cf516d714352a30c44f2c74da9961dfda2617ae6b5918"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "gxhash"
+version = "3.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a197c9b654827513cf53842c5c6d3da2b4b35a785f8e0eff78bdf8e445aba1bb"
+dependencies = [
+ "rustversion",
 ]
 
 [[package]]
@@ -2168,6 +2179,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustversion"
+version = "1.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
+
+[[package]]
 name = "ryu"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2326,7 +2343,6 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=master#a9485c3b46b4b1d79dcae847ba05762359902871"
 dependencies = [
  "ahash",
  "ambassador",

@@ -299,6 +299,7 @@ mod tests_scalar_massless_triangle {
 
 #[test]
 fn pytest_scalar_fishnet_2x2() {
+    env_logger::init();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_fishnet_2x2/GL_OUTPUT", true);
 
@@ -505,6 +506,7 @@ fn pytest_scalar_sunrise() {
 
 #[test]
 fn pytest_scalar_fishnet_2x3() {
+    env_logger::init();
     let (model, mut amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
 
@@ -1238,6 +1240,7 @@ fn pytest_scalar_triangle_box() {
 
 #[test]
 fn pytest_scalar_isopod() {
+    env_logger::init();
     let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_isopod/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -1780,7 +1783,7 @@ fn pytest_lbl_box() {
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_3L_6photons_topology_A_inspect() {
-    // env_logger::init();
+    env_logger::builder().is_test(true).try_init().unwrap();
     let (model, amplitude) = load_amplitude_output(
         "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
         true,
@@ -1831,7 +1834,7 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_1L_6photons() {
-    env_logger::init();
+    env_logger::builder().is_test(true).try_init().unwrap();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
@@ -1849,7 +1852,7 @@ fn pytest_physical_1L_6photons() {
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_2L_6photons() {
-    // env_logger::init();
+    env_logger::builder().is_test(true).try_init().unwrap();
     let (model, amplitude) =
         load_amplitude_output("TEST_AMPLITUDE_physical_2L_6photons/GL_OUTPUT", true);
 
