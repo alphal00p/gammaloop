@@ -11,7 +11,9 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, Polarization, ThreeMomentum},
-    numerator::{AtomStructure, Evaluate, Numerator, RepeatingIterator},
+    numerator::{
+        AtomStructure, Evaluate, Numerator, RepeatingIterator, RepeatingIteratorTensorOrScalar,
+    },
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm,
@@ -35,6 +37,7 @@ use log::{debug, warn};
 use nalgebra::DMatrix;
 
 use gat_lending_iterator::LendingIterator;
+use petgraph::visit::Data;
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
@@ -44,8 +47,8 @@ use spenso::{
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     structure::{
         AbstractIndex, BaseRepName, Euclidean, HasStructure, Lorentz, NamedStructure, PhysReps,
-        Representation, ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT,
-        COLORFUND, COLORSEXT, EUCLIDEAN,
+        Representation, ScalarTensor, ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND,
+        COLORANTISEXT, COLORFUND, COLORSEXT, EUCLIDEAN,
     },
     ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
 };
@@ -1658,7 +1661,7 @@ impl Graph {
     pub fn evaluate_numerator<T: FloatLike>(
         &mut self,
         emr: Vec<FourMomentum<F<T>>>,
-    ) -> RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>
+    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>
     where
         Numerator: Evaluate<T>,
     {
@@ -1705,21 +1708,38 @@ impl DerivedGraphData {
         let emr = graph.emr_from_lmb(sample, &graph.loop_momentum_basis);
 
         let pols = graph.generate_polarizations_from_emr(&emr);
-        let mut rep = self
+        let rep = self
             .numerator
             .as_mut()
             .unwrap()
             .evaluate_sym(&emr, &pols)
             .unwrap();
-        if let Some(i) = rep.next() {
-            let mut sum = i.clone();
 
-            while let Some(j) = rep.next() {
-                sum += j;
+        match rep {
+            RepeatingIteratorTensorOrScalar::Tensors(mut t) => {
+                if let Some(i) = t.next() {
+                    let mut sum = i.clone();
+
+                    while let Some(j) = t.next() {
+                        sum += j;
+                    }
+                    sum
+                } else {
+                    panic!("Empty iterator in sum");
+                }
             }
-            sum
-        } else {
-            panic!("Empty iterator in sum");
+            RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
+                if let Some(i) = s.next() {
+                    let mut sum = i.clone();
+
+                    while let Some(j) = s.next() {
+                        sum += j;
+                    }
+                    DataTensor::new_scalar(sum)
+                } else {
+                    panic!("Empty iterator in sum");
+                }
+            }
         }
     }
 
@@ -1781,29 +1801,38 @@ impl DerivedGraphData {
         let mut cff = self
             .evaluate_cff_orientations(graph, sample, lmb_specification, debug)
             .into_iter();
-        let mut num_iter = self.evaluate_numerator_orientations(graph, sample, lmb_specification);
+        let num_iter = self.evaluate_numerator_orientations(graph, sample, lmb_specification);
 
-        let res = {
-            if let Some(i) = num_iter.next() {
-                let c = Complex::new_re(cff.next().unwrap());
-                let mut sum = c; //i.map_data_ref(|n| n * &c);
-
-                while let Some(j) = cff.next() {
-                    // let c = Complex::new_re(cff.next().unwrap());
-                    sum += j; //.map_data_ref(|n| n * &c);
+        match num_iter {
+            RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
+                if let Some(i) = s.next() {
+                    let c = Complex::new_re(cff.next().unwrap());
+                    let mut sum = i * &c;
+                    for j in cff.by_ref() {
+                        let c = Complex::new_re(j);
+                        sum += c * s.next().unwrap();
+                    }
+                    sum *= prefactor;
+                    DataTensor::new_scalar(sum)
+                } else {
+                    panic!("Empty iterator in sum");
                 }
-                i.map_data_ref(|n| n * &sum)
-            } else {
-                panic!("Empty iterator in sum");
             }
-            .scalar_mul(&prefactor)
-            .unwrap()
-        };
-        if debug > 1 {
-            println!("sum over all orientations including numerator: {}", &res)
-        }
+            RepeatingIteratorTensorOrScalar::Tensors(mut num_iter) => {
+                if let Some(i) = num_iter.next() {
+                    let c = Complex::new_re(cff.next().unwrap());
+                    let mut sum = i.map_data_ref(|n| n * &c);
 
-        res
+                    for j in cff {
+                        let c = Complex::new_re(j);
+                        sum += num_iter.next().unwrap().map_data_ref(|n| n * &c);
+                    }
+                    sum.scalar_mul(&prefactor).unwrap()
+                } else {
+                    panic!("Empty iterator in sum");
+                }
+            }
+        }
     }
 
     #[inline]
@@ -1813,7 +1842,7 @@ impl DerivedGraphData {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>
+    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>
     where
         Numerator: Evaluate<T>,
     {
@@ -1832,7 +1861,7 @@ impl DerivedGraphData {
         &mut self,
         graph: &BareGraph,
         emr: Vec<FourMomentum<F<T>>>,
-    ) -> RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>
+    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>
     where
         Numerator: Evaluate<T>,
     {

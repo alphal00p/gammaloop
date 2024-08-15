@@ -17,12 +17,15 @@ use gxhash::GxBuildHasher;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use log::{debug, info, trace};
+use petgraph::visit::Data;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::data::DataTensor;
 
 use spenso::network::Levels;
-use spenso::parametric::{CompiledEvalTensorSet, EvalTensorSet, EvalTreeTensorSet, ParamTensorSet};
-use spenso::structure::SmartShadowStructure;
+use spenso::parametric::{
+    CompiledEvalTensorSet, EvalTensorSet, EvalTreeTensorSet, ParamTensorSet, TensorSet,
+};
+use spenso::structure::{HasStructure, SmartShadowStructure};
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
@@ -241,13 +244,13 @@ pub trait Evaluate<T: FloatLike> {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>>;
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
 
     fn evaluate_sym(
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIterator<DataTensor<SymComplex<T>, AtomStructure>>>;
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<T>, AtomStructure>>>;
 }
 
 impl<T: FloatLike> Evaluate<T> for Numerator {
@@ -255,7 +258,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>> {
         <T as NumeratorEvaluateFloat>::evaluate(self, emr, polarizations)
     }
 
@@ -263,7 +266,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIterator<DataTensor<SymComplex<T>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<T>, AtomStructure>>> {
         <T as NumeratorEvaluateFloat>::evaluate_sym(self, emr, polarizations)
     }
 }
@@ -273,13 +276,13 @@ pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
         num: &mut Numerator,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIterator<DataTensor<Complex<F<T>>, AtomStructure>>>;
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
 
     fn evaluate_sym(
         num: &mut Numerator,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIterator<DataTensor<SymComplex<T>, AtomStructure>>>;
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<T>, AtomStructure>>>;
 }
 
 // pub trait Compile<T: FloatLike> {
@@ -291,11 +294,29 @@ pub struct RepeatingIterator<T> {
     positions: std::vec::IntoIter<usize>,
 }
 
+pub enum RepeatingIteratorTensorOrScalar<T: HasStructure> {
+    Tensors(RepeatingIterator<T>),
+    Scalars(RepeatingIterator<T::Scalar>),
+}
+
 impl<T> RepeatingIterator<T> {
     pub fn new(positions: Vec<usize>, elements: Vec<T>) -> Self {
         RepeatingIterator {
             elements,
             positions: positions.into_iter(),
+        }
+    }
+}
+
+impl<T: HasStructure> From<(TensorSet<T>, Vec<usize>)> for RepeatingIteratorTensorOrScalar<T> {
+    fn from(value: (TensorSet<T>, Vec<usize>)) -> Self {
+        match value.0 {
+            TensorSet::Tensors(t) => {
+                RepeatingIteratorTensorOrScalar::Tensors(RepeatingIterator::new(value.1, t))
+            }
+            TensorSet::Scalars(s) => {
+                RepeatingIteratorTensorOrScalar::Scalars(RepeatingIterator::new(value.1, s))
+            }
         }
     }
 }
@@ -320,7 +341,7 @@ impl NumeratorEvaluateFloat for f64 {
         num: &mut Numerator,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<RepeatingIterator<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
         let mut params: Vec<Complex<F<f64>>> = emr
             .iter()
             .flat_map(|&p| p.into_iter().map(Complex::new_re))
@@ -339,16 +360,14 @@ impl NumeratorEvaluateFloat for f64 {
 
         if let CompiledNumerator::Compiled(c) = &num.compiled {
             // trace!("Compiled evaluating");
-            Ok(RepeatingIterator::new(
-                num.positions.clone().unwrap(),
-                c.evaluate(&params),
-            ))
+            let res = c.evaluate(&params);
+            let pos = num.positions.clone().unwrap();
+
+            Ok((res, pos).into())
         } else if let EagerNumerator::Eager(e) = &mut num.eval_double {
-            // trace!("Eager Evaluating double");
-            Ok(RepeatingIterator::new(
-                num.positions.clone().unwrap(),
-                e.evaluate(&params),
-            ))
+            let pos = num.positions.clone().unwrap();
+
+            Ok((e.evaluate(&params), pos).into())
         } else {
             Err(eyre!("Uninitialized numerator"))
         }
@@ -358,7 +377,7 @@ impl NumeratorEvaluateFloat for f64 {
         num: &mut Numerator,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<RepeatingIterator<DataTensor<SymComplex<Self>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<Self>, AtomStructure>>> {
         let mut params: Vec<SymComplex<f64>> = emr
             .iter()
             .flat_map(|&p| p.into_iter().map(|p| SymComplex { re: p.0, im: 0. }))
@@ -378,10 +397,9 @@ impl NumeratorEvaluateFloat for f64 {
         if let CompiledNumerator::Compiled(c) = &num.compiled {
             // trace!("Compiled evaluating");
 
-            Ok(RepeatingIterator::new(
-                num.positions.clone().unwrap(),
-                c.evaluate(&params),
-            ))
+            let pos = num.positions.clone().unwrap();
+
+            Ok((c.evaluate(&params), pos).into())
         } else {
             Err(eyre!("Uninitialized numerator"))
         }
@@ -393,7 +411,7 @@ impl NumeratorEvaluateFloat for f128 {
         num: &mut Numerator,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<RepeatingIterator<DataTensor<Complex<F<f128>>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<f128>>, AtomStructure>>> {
         let mut params: Vec<Complex<F<f128>>> = emr
             .iter()
             .flat_map(|p| p.into_iter().cloned().map(Complex::new_re))
@@ -412,10 +430,9 @@ impl NumeratorEvaluateFloat for f128 {
         });
 
         if let EagerNumerator::Eager(e) = &mut num.eval_quad {
-            Ok(RepeatingIterator::new(
-                num.positions.clone().unwrap(),
-                e.evaluate(&params),
-            ))
+            let pos = num.positions.clone().unwrap();
+
+            Ok((e.evaluate(&params), pos).into())
         } else {
             Err(eyre!("Uninitialized numerator"))
         }
@@ -425,7 +442,7 @@ impl NumeratorEvaluateFloat for f128 {
         _num: &mut Numerator,
         _emr: &[FourMomentum<F<Self>>],
         _polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<RepeatingIterator<DataTensor<SymComplex<Self>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<Self>, AtomStructure>>> {
         panic!("Not implemented")
     }
 }
