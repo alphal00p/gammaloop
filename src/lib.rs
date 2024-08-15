@@ -377,6 +377,7 @@ pub struct MultiChannelingSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct GammaloopTropicalSamplingSettings {
     pub upcast_on_failure: bool,
+    pub matrix_stability_test: Option<f64>,
 }
 
 impl GammaloopTropicalSamplingSettings {
@@ -386,6 +387,7 @@ impl GammaloopTropicalSamplingSettings {
     ) -> momtrop::TropicalSamplingSettings {
         momtrop::TropicalSamplingSettings {
             upcast_on_failure: self.upcast_on_failure,
+            matrix_stability_test: self.matrix_stability_test,
             print_debug_info: debug > 3,
         }
     }
