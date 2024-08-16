@@ -8,7 +8,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, ops::Index, path::PathBuf};
+use std::{cell::RefCell, fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
     domains::{
@@ -804,8 +804,8 @@ pub enum CompiledCFFExpression {
 #[derive(Clone)]
 pub struct InnerCompiledCFF {
     metadata: CompiledCFFExpressionMetaData,
-    joint: Option<CompiledEvaluator>,
-    orientations: TiVec<TermId, CompiledEvaluator>,
+    joint: Option<RefCell<CompiledEvaluator>>,
+    orientations: TiVec<TermId, RefCell<CompiledEvaluator>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -825,7 +825,7 @@ impl CompiledCFFExpression {
         let expr = self.unwrap();
         let mut out = vec![F(0.0); expr.metadata.num_orientations];
         match &expr.joint {
-            Some(evaluator) => evaluator.evaluate(energy_cache, &mut out),
+            Some(evaluator) => evaluator.borrow_mut().evaluate(energy_cache, &mut out),
             None => match &settings.general.force_orientations {
                 None => {
                     for (id, out_elem) in out.iter_mut().enumerate() {
@@ -850,7 +850,9 @@ impl CompiledCFFExpression {
         }
 
         let mut out = [F(0.0)];
-        expr.orientations[orientation].evaluate(energy_cache, &mut out);
+        expr.orientations[orientation]
+            .borrow_mut()
+            .evaluate(energy_cache, &mut out);
         out[0]
     }
 
@@ -861,15 +863,18 @@ impl CompiledCFFExpression {
             .ok_or(eyre!("could not convert path to string"))?;
 
         if metadata.compile_cff_present {
-            let joint =
-                CompiledEvaluator::load(path_to_joint_str, "joint").map_err(|e| eyre!(e))?;
+            let joint = CompiledEvaluator::load(path_to_joint_str, "joint")
+                .map(RefCell::new)
+                .map_err(|e| eyre!(e))?;
 
             let orientations = if metadata.compile_separate_orientations_present {
                 (0..metadata.num_orientations)
                     .map(|orientation| {
                         joint
+                            .borrow()
                             .load_new_function(&format!("orientation_{}", orientation))
                             .map_err(|e| eyre!(e))
+                            .map(RefCell::new)
                     })
                     .collect::<Result<_, Report>>()?
             } else {
@@ -885,13 +890,16 @@ impl CompiledCFFExpression {
             Ok(Self::Some(inner))
         } else if metadata.compile_separate_orientations_present {
             let orientation_zero = CompiledEvaluator::load(path_to_joint_str, "orientation_0")
+                .map(RefCell::new)
                 .map_err(|e| eyre!(e))?;
 
             let mut orientations = vec![orientation_zero];
 
             for orienatation_id in 1..metadata.num_orientations {
                 let orientation_evaluator = orientations[0]
+                    .borrow()
                     .load_new_function(&format!("orientation_{}", orienatation_id))
+                    .map(RefCell::new)
                     .map_err(|e| eyre!(e))?;
 
                 orientations.push(orientation_evaluator);

@@ -978,7 +978,7 @@ impl<T: FloatLike> F<T> {
 }
 
 impl CompiledEvaluatorFloat for F<f64> {
-    fn evaluate(eval: &symbolica::evaluate::CompiledEvaluator, args: &[Self], out: &mut [Self]) {
+    fn evaluate(eval: &mut symbolica::evaluate::CompiledEvaluator, args: &[Self], out: &mut [Self]) {
         // cast to f64
         let args_f64: Vec<f64> = args.iter().map(|x| x.0).collect_vec(); 
         let mut out_f64 = out.iter().map(|x| x.0).collect_vec();
