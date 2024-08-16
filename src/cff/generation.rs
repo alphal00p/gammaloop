@@ -487,7 +487,7 @@ mod tests_cff {
     use symbolica::{atom::Atom, domains::float::{NumericalFloatLike, Real},id::Pattern};
     use utils::FloatLike;
 
-    use crate::{cff::cff_graph::CFFEdgeType, momentum::{FourMomentum, ThreeMomentum}, utils::{self, RefDefault, F}};
+    use crate::{cff::cff_graph::CFFEdgeType, momentum::{FourMomentum, ThreeMomentum}, tests::{self, load_default_settings}, utils::{self, RefDefault, F}};
 
     use super::*;
 
@@ -600,8 +600,10 @@ mod tests_cff {
             .map(|e| (F(2.) * e).inv())
             .reduce(|acc, x| acc * x).unwrap();
 
+        let settings = tests::load_default_settings();
+
         let cff_res: F<f64> =
-            energy_prefactor * cff.eager_evaluate(&energy_cache, 0) * F((2. * std::f64::consts::PI).powi(-3));
+            energy_prefactor * cff.eager_evaluate(&energy_cache, &settings) * F((2. * std::f64::consts::PI).powi(-3));
 
         let target_res = F(6.333_549_225_536_17e-9_f64);
         let absolute_error = cff_res - target_res;
@@ -676,6 +678,7 @@ mod tests_cff {
         ];
 
         let external_energy_cache = [q.temporal.value, -q.temporal.value];
+        let settings = tests::load_default_settings();
 
         let mut energy_cache = external_energy_cache.to_vec();
         energy_cache.extend(virtual_energy_cache);
@@ -685,7 +688,7 @@ mod tests_cff {
             .map(|e| (F(2.) * e).inv())
             .reduce(|acc, x| acc * x).unwrap();
 
-        let cff_res = energy_prefactor * cff.eager_evaluate(&energy_cache, 0);
+        let cff_res = energy_prefactor * cff.eager_evaluate(&energy_cache, &settings);
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
@@ -770,7 +773,9 @@ mod tests_cff {
             .map(|e| (F(2.) * e).inv())
             .reduce(|acc, x| acc * x).unwrap();
 
-        let res = cff.eager_evaluate(&energies_cache, 0) * energy_prefactor;
+        let settings = tests::load_default_settings();
+
+        let res = cff.eager_evaluate(&energies_cache, &settings) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
@@ -892,10 +897,12 @@ mod tests_cff {
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
 
+        let settings = load_default_settings();
+
         let energy_cache = [F(3.0); 17];
         let start = std::time::Instant::now();
         for _ in 0..100 {
-            let _res = cff.evaluate(&energy_cache, 0);
+            let _res = cff.evaluate(&energy_cache, &settings);
         }
         let finish = std::time::Instant::now();
         println!("time to evaluate cff: {:?}", (finish - start) / 100);

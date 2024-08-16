@@ -8,10 +8,13 @@ use eyre::eyre;
 use itertools::Itertools;
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, ops::Index, path::PathBuf};
+use std::{cell::RefCell, fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
-    domains::{float::NumericalFloatLike, rational::Rational},
+    domains::{
+        float::{NumericalFloatLike, RealNumberLike},
+        rational::Rational,
+    },
     evaluate::{CompiledEvaluator, EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap},
 };
 use typed_index_collections::TiVec;
@@ -32,16 +35,16 @@ use super::{
 };
 
 pub trait CFFFloat<T: FloatLike> {
-    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<T>], usize) -> Vec<F<T>>;
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<T>], &Settings) -> Vec<F<T>>;
 }
 
 impl CFFFloat<f64> for f64 {
-    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<f64>], usize) -> Vec<F<f64>> {
-        |energy_cache, debug| {
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<f64>], &Settings) -> Vec<F<f64>> {
+        |energy_cache, settings| {
             if cff.compiled.is_some() {
-                cff.compiled_evaluate_orientations(energy_cache, debug)
+                cff.compiled_evaluate_orientations(energy_cache, settings)
             } else {
-                cff.eager_evaluate_orientations(energy_cache, debug)
+                cff.eager_evaluate_orientations(energy_cache, settings)
             }
         }
     }
@@ -50,8 +53,8 @@ impl CFFFloat<f64> for f64 {
 impl CFFFloat<VarFloat<113>> for VarFloat<113> {
     fn get_evaluator(
         cff: &CFFExpression,
-    ) -> impl Fn(&[F<VarFloat<113>>], usize) -> Vec<F<VarFloat<113>>> {
-        |energy_cache, debug| cff.eager_evaluate_orientations(energy_cache, debug)
+    ) -> impl Fn(&[F<VarFloat<113>>], &Settings) -> Vec<F<VarFloat<113>>> {
+        |energy_cache, settings| cff.eager_evaluate_orientations(energy_cache, settings)
     }
 }
 
@@ -82,24 +85,42 @@ impl CFFExpression {
     pub fn evaluate_orientations<T: FloatLike + CFFFloat<T>>(
         &self,
         energy_cache: &[F<T>],
-        debug: usize,
+        settings: &Settings,
     ) -> Vec<F<T>> {
-        let evaluator = T::get_evaluator(self);
-        evaluator(energy_cache, debug)
+        T::get_evaluator(self)(energy_cache, settings)
     }
 
     #[inline]
     fn eager_evaluate_orientations<T: FloatLike>(
         &self,
         energy_cache: &[F<T>],
-        debug: usize,
+        settings: &Settings,
     ) -> Vec<F<T>> {
-        if debug > 3 {
+        if settings.general.debug > 3 {
             println!("evaluating cff orientations in eager mode");
         }
 
         let esurface_cache = self.compute_esurface_cache(energy_cache);
         let hsurface_cache = self.compute_hsurface_cache(energy_cache);
+
+        if settings.general.debug > 3 {
+            let cloned_esurfaces = esurface_cache.clone();
+            let sorted = cloned_esurfaces
+                .into_iter_enumerated()
+                .map(|(id, f)| (id, f.to_f64()))
+                .sorted_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap());
+
+            for (esurface_id, value) in sorted {
+                println!("esuface_{:?} = {}", Into::<usize>::into(esurface_id), value);
+                if settings.general.debug > 5 && value.abs() < 0.1 * settings.kinematics.e_cm.0 {
+                    println!("tiny esurface: {:#?}", self.esurfaces[esurface_id]);
+
+                    for energy_id in self.esurfaces[esurface_id].energies.iter() {
+                        println!("E_{}: {}", energy_id, energy_cache[*energy_id]);
+                    }
+                }
+            }
+        }
 
         let mut term_cache = self.build_term_cache();
 
@@ -113,7 +134,7 @@ impl CFFExpression {
                     &mut term_cache,
                 );
 
-                if debug > 3 {
+                if settings.general.debug > 12 {
                     println!(
                         "result of orientation {:?}, {}",
                         self.orientations[t].orientation, orientation_result,
@@ -126,25 +147,29 @@ impl CFFExpression {
     }
 
     #[inline]
-    fn compiled_evaluate_orientations(&self, energy_cache: &[F<f64>], debug: usize) -> Vec<F<f64>> {
-        if debug > 3 {
-            println!("evaluating cff orientations in eager mode");
+    fn compiled_evaluate_orientations(
+        &self,
+        energy_cache: &[F<f64>],
+        settings: &Settings,
+    ) -> Vec<F<f64>> {
+        if settings.general.debug > 3 {
+            println!("evaluating cff orientations in compiled mode");
         }
 
-        self.compiled.evaluate_orientations(energy_cache)
+        self.compiled.evaluate_orientations(energy_cache, settings)
     }
 
     #[inline]
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
-        self.evaluate_orientations(energy_cache, debug)
+    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], settings: &Settings) -> F<T> {
+        self.evaluate_orientations(energy_cache, settings)
             .into_iter()
             .reduce(|acc, x| &acc + &x)
             .unwrap_or_else(|| energy_cache[0].zero())
     }
 
     #[inline]
-    pub fn eager_evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], debug: usize) -> F<T> {
-        self.eager_evaluate_orientations(energy_cache, debug)
+    pub fn eager_evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], settings: &Settings) -> F<T> {
+        self.eager_evaluate_orientations(energy_cache, settings)
             .into_iter()
             .reduce(|acc, x| &acc + &x)
             .unwrap_or_else(|| energy_cache[0].zero())
@@ -485,15 +510,13 @@ impl CFFExpression {
                 let atom = self.construct_atom_for_term(term_id, None);
                 let atom_view = atom.as_view();
 
-                let mut tree = atom_view
-                    .to_eval_tree(|r| r.clone(), &function_map, params)
-                    .unwrap();
+                let mut tree = atom_view.to_evaluation_tree(&function_map, params).unwrap();
 
                 tree.horner_scheme();
-                tree.common_subexpression_elimination(1);
+                tree.common_subexpression_elimination();
 
                 let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
-                tree_ft.linearize(1)
+                tree_ft.linearize(Some(1))
             })
             .collect()
     }
@@ -501,7 +524,7 @@ impl CFFExpression {
     pub fn build_joint_symbolica_evaluator<T: FloatLike + Default>(
         &self,
         params: &[Atom],
-        cpe_rounds: usize,
+        cpe_rounds: Option<usize>,
     ) -> ExpressionEvaluator<F<T>> {
         let orientation_atoms = self
             .orientations
@@ -512,16 +535,12 @@ impl CFFExpression {
         let orientation_atom_views = orientation_atoms.iter().map(Atom::as_view).collect_vec();
         let function_map = FunctionMap::new();
 
-        let mut tree: EvalTree<Rational> = AtomView::to_eval_tree_multiple(
-            &orientation_atom_views,
-            |r| r.clone(),
-            &function_map,
-            params,
-        )
-        .unwrap();
+        let mut tree: EvalTree<Rational> =
+            AtomView::to_eval_tree_multiple(&orientation_atom_views, &function_map, params)
+                .unwrap();
 
         tree.horner_scheme();
-        tree.common_subexpression_elimination(1);
+        tree.common_subexpression_elimination();
 
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
         tree_ft.linearize(cpe_rounds)
@@ -776,15 +795,17 @@ pub enum HybridNode {
 }
 
 // custom option so we have control over serialize/deserialize
+#[derive(Clone)]
 pub enum CompiledCFFExpression {
     Some(InnerCompiledCFF),
     None,
 }
 
+#[derive(Clone)]
 pub struct InnerCompiledCFF {
     metadata: CompiledCFFExpressionMetaData,
-    joint: Option<CompiledEvaluator>,
-    orientations: TiVec<TermId, CompiledEvaluator>,
+    joint: Option<RefCell<CompiledEvaluator>>,
+    orientations: TiVec<TermId, RefCell<CompiledEvaluator>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -796,16 +817,27 @@ struct CompiledCFFExpressionMetaData {
 }
 
 impl CompiledCFFExpression {
-    pub fn evaluate_orientations(&self, energy_cache: &[F<f64>]) -> Vec<F<f64>> {
+    pub fn evaluate_orientations(
+        &self,
+        energy_cache: &[F<f64>],
+        settings: &Settings,
+    ) -> Vec<F<f64>> {
         let expr = self.unwrap();
         let mut out = vec![F(0.0); expr.metadata.num_orientations];
         match &expr.joint {
-            Some(evaluator) => evaluator.evaluate(energy_cache, &mut out),
-            None => {
-                for (id, out_elem) in out.iter_mut().enumerate() {
-                    *out_elem = self.evaluate_one_orientation(id.into(), energy_cache);
+            Some(evaluator) => evaluator.borrow_mut().evaluate(energy_cache, &mut out),
+            None => match &settings.general.force_orientations {
+                None => {
+                    for (id, out_elem) in out.iter_mut().enumerate() {
+                        *out_elem = self.evaluate_one_orientation(id.into(), energy_cache);
+                    }
                 }
-            }
+                Some(orientations) => {
+                    for id in orientations.iter() {
+                        out[*id] = self.evaluate_one_orientation((*id).into(), energy_cache);
+                    }
+                }
+            },
         }
 
         out
@@ -818,7 +850,9 @@ impl CompiledCFFExpression {
         }
 
         let mut out = [F(0.0)];
-        expr.orientations[orientation].evaluate(energy_cache, &mut out);
+        expr.orientations[orientation]
+            .borrow_mut()
+            .evaluate(energy_cache, &mut out);
         out[0]
     }
 
@@ -829,15 +863,18 @@ impl CompiledCFFExpression {
             .ok_or(eyre!("could not convert path to string"))?;
 
         if metadata.compile_cff_present {
-            let joint =
-                CompiledEvaluator::load(path_to_joint_str, "joint").map_err(|e| eyre!(e))?;
+            let joint = CompiledEvaluator::load(path_to_joint_str, "joint")
+                .map(RefCell::new)
+                .map_err(|e| eyre!(e))?;
 
             let orientations = if metadata.compile_separate_orientations_present {
                 (0..metadata.num_orientations)
                     .map(|orientation| {
                         joint
+                            .borrow()
                             .load_new_function(&format!("orientation_{}", orientation))
                             .map_err(|e| eyre!(e))
+                            .map(RefCell::new)
                     })
                     .collect::<Result<_, Report>>()?
             } else {
@@ -853,13 +890,16 @@ impl CompiledCFFExpression {
             Ok(Self::Some(inner))
         } else if metadata.compile_separate_orientations_present {
             let orientation_zero = CompiledEvaluator::load(path_to_joint_str, "orientation_0")
+                .map(RefCell::new)
                 .map_err(|e| eyre!(e))?;
 
             let mut orientations = vec![orientation_zero];
 
             for orienatation_id in 1..metadata.num_orientations {
                 let orientation_evaluator = orientations[0]
+                    .borrow()
                     .load_new_function(&format!("orientation_{}", orienatation_id))
+                    .map(RefCell::new)
                     .map_err(|e| eyre!(e))?;
 
                 orientations.push(orientation_evaluator);
@@ -887,15 +927,6 @@ impl CompiledCFFExpression {
         match self {
             CompiledCFFExpression::Some(_) => true,
             CompiledCFFExpression::None => false,
-        }
-    }
-}
-
-impl Clone for CompiledCFFExpression {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Some(inner) => Self::from_metedata(inner.metadata.clone()).unwrap(),
-            Self::None => Self::None,
         }
     }
 }

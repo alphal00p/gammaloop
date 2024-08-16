@@ -17,7 +17,6 @@ use gxhash::GxBuildHasher;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use log::{debug, info, trace};
-use petgraph::visit::Data;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::data::DataTensor;
 
@@ -358,7 +357,7 @@ impl NumeratorEvaluateFloat for f64 {
             im: F(1.),
         });
 
-        if let CompiledNumerator::Compiled(c) = &num.compiled {
+        if let CompiledNumerator::Compiled(c) = &mut num.compiled {
             // trace!("Compiled evaluating");
             let res = c.evaluate(&params);
             let pos = num.positions.clone().unwrap();
@@ -394,7 +393,7 @@ impl NumeratorEvaluateFloat for f64 {
 
         params.push(SymComplex { re: 0., im: 1. });
 
-        if let CompiledNumerator::Compiled(c) = &num.compiled {
+        if let CompiledNumerator::Compiled(c) = &mut num.compiled {
             // trace!("Compiled evaluating");
 
             let pos = num.positions.clone().unwrap();
@@ -463,12 +462,12 @@ impl Numerator {
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect_vec();
 
-        fn_map.add_constant(Atom::parse("Nc").unwrap().into(), 3.into());
+        fn_map.add_constant(Atom::parse("Nc").unwrap(), 3.into());
 
-        fn_map.add_constant(Atom::parse("TR").unwrap().into(), Rational::from((1, 2)));
+        fn_map.add_constant(Atom::parse("TR").unwrap(), Rational::from((1, 2)));
 
         fn_map.add_constant(
-            Atom::parse("pi").unwrap().into(),
+            Atom::parse("pi").unwrap(),
             Rational::from(std::f64::consts::PI),
         );
 
@@ -485,7 +484,7 @@ impl Numerator {
         if let EvalNumerator::Eval(eval) = &mut self.base_eval {
             self.compiled = CompiledNumerator::Compiled(
                 eval.map_coeff::<F<T>, _>(&|r| r.into())
-                    .linearize(1)
+                    .linearize(Some(1))
                     .export_cpp(filename, function_name, true, inline_asm)
                     .unwrap()
                     .compile(library_name, CompileOptions::default())
@@ -628,12 +627,12 @@ impl Numerator {
             let set = ParamTensorSet::new(index_map.into_iter().collect_vec());
             debug!("Generate eval tree set with {} params", params.len());
 
-            let mut eval_tree = set.eval_tree(|a| a.clone(), &fn_map, &params).unwrap();
+            let mut eval_tree = set.eval_tree(&fn_map, &params).unwrap();
             debug!("Horner scheme");
 
             eval_tree.horner_scheme();
             debug!("Common subexpression elimination");
-            eval_tree.common_subexpression_elimination(1);
+            eval_tree.common_subexpression_elimination();
             debug!("Linearize double");
             self.eval_double = EagerNumerator::Eager(
                 eval_tree
@@ -641,7 +640,7 @@ impl Numerator {
                         re: F(r.into()),
                         im: F(0.),
                     })
-                    .linearize(1),
+                    .linearize(Some(1)),
             );
             debug!("Linearize quad");
 
@@ -651,7 +650,7 @@ impl Numerator {
                         re: F(r.into()),
                         im: F(f128::new_zero()),
                     })
-                    .linearize(1),
+                    .linearize(Some(1)),
             );
             self.base_eval = EvalNumerator::Eval(eval_tree);
             self.positions = Some(positions);

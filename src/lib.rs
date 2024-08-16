@@ -17,7 +17,6 @@ pub mod h_function_test;
 pub mod inspect;
 pub mod integrands;
 pub mod integrate;
-pub mod linalg;
 pub mod ltd;
 pub mod model;
 pub mod momentum;
@@ -27,7 +26,6 @@ pub mod subtraction;
 
 pub mod tests;
 pub mod tests_from_pytest;
-pub mod tropical;
 pub mod utils;
 
 use color_eyre::{Help, Report};
@@ -136,12 +134,26 @@ pub enum ParameterizationMapping {
     Linear,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
     pub load_compiled_cff: bool,
     pub load_compiled_separate_orientations: bool,
+    pub force_orientations: Option<Vec<usize>>,
+}
+
+#[allow(clippy::derivable_impls)] // we might not want the standard defaults in the future
+impl Default for GeneralSettings {
+    fn default() -> Self {
+        Self {
+            debug: 0,
+            use_ltd: false,
+            load_compiled_cff: false,
+            load_compiled_separate_orientations: false,
+            force_orientations: None,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize)]
@@ -155,14 +167,22 @@ pub enum IntegratedPhase {
     Both,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KinematicsSettings {
     pub e_cm: F<f64>,
-    #[serde(default = "Externals::default")]
     pub externals: Externals,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+impl Default for KinematicsSettings {
+    fn default() -> Self {
+        Self {
+            e_cm: F(64.),
+            externals: Externals::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IntegratorSettings {
     pub n_bins: usize,
     pub bin_number_evolution: Option<Vec<usize>>,
@@ -177,6 +197,26 @@ pub struct IntegratorSettings {
     pub show_max_wgt_info: bool,
     pub max_prob_ratio: F<f64>,
     pub seed: u64,
+}
+
+impl Default for IntegratorSettings {
+    fn default() -> Self {
+        Self {
+            n_bins: 64,
+            bin_number_evolution: None,
+            min_samples_for_update: 1000,
+            n_start: 100000,
+            n_increase: 10000,
+            n_max: 10000000000,
+            integrated_phase: IntegratedPhase::Real,
+            discrete_dim_learning_rate: F(1.5),
+            continuous_dim_learning_rate: F(1.5),
+            train_on_avg: false,
+            show_max_wgt_info: true,
+            max_prob_ratio: F(0.01),
+            seed: 69,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -286,8 +326,8 @@ impl StabilityLevelSetting {
     fn default_quad() -> Self {
         Self {
             precision: Precision::Quad,
-            required_precision_for_re: F(1e-15),
-            required_precision_for_im: F(1e-15),
+            required_precision_for_re: F(1e-5),
+            required_precision_for_im: F(1e-5),
             escalate_for_large_weight_threshold: F(-1.0),
         }
     }
@@ -354,7 +394,10 @@ impl Externals {
 
 impl Default for Externals {
     fn default() -> Self {
-        Externals::Constant(vec![[F(0.0); 4]; 15])
+        Externals::Constant(vec![
+            [F(2.0), F(2.0), F(3.0), F(4.0)],
+            [F(1.0), F(2.0), F(9.0), F(3.0)],
+        ])
     }
 }
 
@@ -370,9 +413,43 @@ pub enum SamplingSettings {
     DiscreteGraphs(DiscreteGraphSamplingSettings),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MultiChannelingSettings {
     pub alpha: f64,
+}
+
+impl Default for MultiChannelingSettings {
+    fn default() -> Self {
+        Self { alpha: 3.0 }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GammaloopTropicalSamplingSettings {
+    pub upcast_on_failure: bool,
+    pub matrix_stability_test: Option<f64>,
+}
+
+impl Default for GammaloopTropicalSamplingSettings {
+    fn default() -> Self {
+        Self {
+            upcast_on_failure: true,
+            matrix_stability_test: Some(1.0e-5),
+        }
+    }
+}
+
+impl GammaloopTropicalSamplingSettings {
+    pub fn into_tropical_sampling_settings(
+        &self,
+        debug: usize,
+    ) -> momtrop::TropicalSamplingSettings {
+        momtrop::TropicalSamplingSettings {
+            upcast_on_failure: self.upcast_on_failure,
+            matrix_stability_test: self.matrix_stability_test,
+            print_debug_info: debug > 3,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -386,10 +463,10 @@ pub enum DiscreteGraphSamplingSettings {
     #[serde(rename = "discrete_multi_channeling")]
     DiscreteMultiChanneling(MultiChannelingSettings),
     #[serde(rename = "tropical")]
-    TropicalSampling,
+    TropicalSampling(GammaloopTropicalSamplingSettings),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SubtractionSettings {
     pub sliver_width: f64,
     pub dampen_integrable_singularity: bool,
@@ -397,12 +474,24 @@ pub struct SubtractionSettings {
     pub integrated_ct_hfunction: HFunctionSettings,
 }
 
+impl Default for SubtractionSettings {
+    fn default() -> Self {
+        Self {
+            sliver_width: 10.0,
+            dampen_integrable_singularity: false,
+            dynamic_sliver: false,
+            integrated_ct_hfunction: HFunctionSettings::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {
     pub compile_cff: bool,
-    pub cpe_rounds_cff: usize,
+    pub cpe_rounds_cff: Option<usize>,
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,
+    pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -435,4 +524,10 @@ impl GammaloopCompileOptions {
             ..CompileOptions::default()
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TropicalSubgraphTableSettings {
+    pub panic_on_fail: bool,
+    pub target_omega: f64,
 }

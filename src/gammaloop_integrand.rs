@@ -11,9 +11,8 @@ use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::subtraction::static_counterterm::CounterTerm;
-use crate::tropical::tropical_parameterization::{self};
 use crate::utils::{
-    f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
+    self, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
     PrecisionUpgradable, F,
 };
 use crate::{
@@ -22,6 +21,7 @@ use crate::{
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
+use momtrop::vector::Vector;
 use spenso::complex::Complex;
 use spenso::contraction::IsZero;
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -128,7 +128,7 @@ impl GraphIntegrand for AmplitudeGraph {
             self.get_mut_graph().evaluate_cff_expression_in_lmb(
                 sample,
                 &lmb_specification,
-                settings.general.debug,
+                settings,
             )
         };
 
@@ -219,7 +219,7 @@ impl GraphIntegrand for AmplitudeGraph {
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
             self.get_mut_graph()
-                .evaluate_cff_expression(sample, settings.general.debug)
+                .evaluate_cff_expression(sample, settings)
         };
 
         let energy_product = self
@@ -257,7 +257,7 @@ impl GraphIntegrand for AmplitudeGraph {
                 .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
         } else {
             self.get_mut_graph()
-                .evaluate_cff_expression(sample, settings.general.debug)
+                .evaluate_cff_expression(sample, settings)
         };
 
         let onshell_energies = self
@@ -273,11 +273,7 @@ impl GraphIntegrand for AmplitudeGraph {
             .get_loop_edges_iterator()
             .map(|(index, _)| onshell_energies[index].clone());
 
-        let weight_iterator = tropical_subgraph_table
-            .tropical_graph
-            .topology
-            .iter()
-            .map(|edge| edge.weight);
+        let weight_iterator = tropical_subgraph_table.iter_edge_weights();
 
         let energy_product = virtual_loop_energies
             .zip(weight_iterator)
@@ -445,7 +441,7 @@ fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> G
         .derived_data
         .tropical_subgraph_table
         .as_ref()
-        .map(|t| t.tropical_graph.topology.len());
+        .map(|t| t.get_num_edges());
 
     let continious_dimension = get_n_dim_for_n_loop_momenta(settings, num_loops, false, n_edges);
 
@@ -556,7 +552,26 @@ impl HasIntegrand for GammaLoopIntegrand {
         let stability_iterator = self.create_stability_vec(use_f128);
 
         let before_parameterization = std::time::Instant::now();
-        let sample_point = self.parameterize(sample);
+        let sample_point_result = self.parameterize(sample);
+        let sample_point = match sample_point_result {
+            Ok(sample_point) => sample_point,
+            Err(_) => {
+                return EvaluationResult {
+                    integrand_result: Complex::new_zero(),
+                    integrator_weight: F(0.0),
+                    event_buffer: vec![],
+                    evaluation_metadata: EvaluationMetaData {
+                        total_timing: Duration::ZERO,
+                        rep3d_evaluation_time: Duration::ZERO,
+                        parameterization_time: Duration::ZERO,
+                        relative_instability_error: Complex::new_zero(),
+                        highest_precision: Precision::Double,
+                        is_nan: true,
+                    },
+                };
+            }
+        };
+
         let parameterization_time = before_parameterization.elapsed();
 
         // rotate the momenta for the stability tests.
@@ -651,12 +666,11 @@ impl HasIntegrand for GammaLoopIntegrand {
 
             let jacobian = sample_point.get_default_sample().jacobian;
             println!("\t{}: {:+e}", "jacobian".yellow(), jacobian);
+            println!("\t{}: {:+e}", "2pi prefactor".yellow(), prefactor);
             println!();
 
             println!("{}", "evaluation result: ".blue());
-            println!("{}: {:+e}", "\tcff expression: ".yellow(), res);
-
-            println!("\t{}: {:+e}", "result".yellow(), res * prefactor);
+            println!("{}: {:+e}", "\tresult: ".yellow(), res);
         }
 
         let mut integrand_result = *res;
@@ -805,39 +819,39 @@ impl GammaLoopIntegrand {
 
     /// Perform map from unit hypercube to 3-momenta
     #[inline]
-    fn parameterize(&self, sample_point: &Sample<F<f64>>) -> GammaLoopSample<f64> {
+    fn parameterize(&self, sample_point: &Sample<F<f64>>) -> Result<GammaLoopSample<f64>, String> {
         match &self.settings.sampling {
             SamplingSettings::Default => {
                 let xs = unwrap_cont_sample(sample_point);
-                GammaLoopSample::Default(self.default_parametrize(xs))
+                Ok(GammaLoopSample::Default(self.default_parametrize(xs)))
             }
             SamplingSettings::MultiChanneling(multichanneling_settings) => {
                 let xs = unwrap_cont_sample(sample_point);
-                GammaLoopSample::MultiChanneling {
+                Ok(GammaLoopSample::MultiChanneling {
                     alpha: multichanneling_settings.alpha,
                     sample: self.default_parametrize(xs),
-                }
+                })
             }
             SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
                 match discrete_graph_settings {
                     DiscreteGraphSamplingSettings::Default => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
-                        GammaLoopSample::DiscreteGraph {
+                        Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::Default(self.default_parametrize(xs)),
-                        }
+                        })
                     }
                     DiscreteGraphSamplingSettings::MultiChanneling(multichanneling_settings) => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
-                        GammaLoopSample::DiscreteGraph {
+                        Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::MultiChanneling {
                                 alpha: multichanneling_settings.alpha,
                                 sample: self.default_parametrize(xs),
                             },
-                        }
+                        })
                     }
-                    DiscreteGraphSamplingSettings::TropicalSampling => {
+                    DiscreteGraphSamplingSettings::TropicalSampling(tropical_sampling_settings) => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
                         let (external_moms, pdf) =
                             self.settings.kinematics.externals.get_externals(xs);
@@ -847,64 +861,76 @@ impl GammaLoopIntegrand {
                             GraphIntegrands::CrossSection(graphs) => &graphs[graph_id].graph,
                         };
 
-                        let (loop_moms_f64, jacobian_f64) =
-                            tropical_parameterization::generate_tropical_sample(
-                                xs,
-                                &external_moms,
-                                graph,
-                                self.settings.general.debug,
-                            )
-                            .unwrap();
+                        let sampler = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
+                        let xs_f64 = xs.iter().map(|x| x.0).collect_vec();
 
-                        let (loop_moms, jacobian) = if jacobian_f64.is_nan() {
-                            let xs_f128 = xs.iter().map(|x| F::<f128>::from_ff64(*x)).collect_vec();
-                            let external_moms_f128 =
-                                external_moms.iter().map(FourMomentum::higher).collect_vec();
+                        let edge_data = graph
+                            .bare_graph
+                            .get_loop_edges_iterator()
+                            .map(|(edge_id, edge)| {
+                                let mass = edge.particle.mass.value;
+                                let mass_re = mass.map(|complex_mass| complex_mass.re.0);
 
-                            let (loop_moms_f128, jacobian_f128) =
-                                tropical_parameterization::generate_tropical_sample(
-                                    &xs_f128,
-                                    &external_moms_f128,
-                                    graph,
-                                    self.settings.general.debug,
-                                )
-                                .unwrap();
+                                let shift = utils::compute_shift_part(
+                                    &graph.bare_graph.loop_momentum_basis.edge_signatures[edge_id]
+                                        .1,
+                                    &external_moms,
+                                );
 
-                            let loop_moms = loop_moms_f128
-                                .iter()
-                                .map(ThreeMomentum::lower)
-                                .collect_vec();
-                            let jacobian = (jacobian_f128).into_ff64();
+                                let shift_momtrop = Vector::from_array([
+                                    shift.spatial.px.0,
+                                    shift.spatial.py.0,
+                                    shift.spatial.pz.0,
+                                ]);
 
-                            (loop_moms, jacobian)
-                        } else {
-                            (loop_moms_f64, jacobian_f64)
+                                (mass_re, shift_momtrop)
+                            })
+                            .collect_vec();
+
+                        let sampling_result_result = sampler.generate_sample_from_x_space_point(
+                            &xs_f64,
+                            edge_data,
+                            &tropical_sampling_settings
+                                .into_tropical_sampling_settings(self.settings.general.debug),
+                        );
+
+                        let sampling_result = match sampling_result_result {
+                            Ok(sampling_result) => sampling_result,
+                            Err(_) => {
+                                return Err(String::from("tropical sampling failed"));
+                            }
                         };
+
+                        let loop_moms = sampling_result
+                            .loop_momenta
+                            .into_iter()
+                            .map(Into::<ThreeMomentum<F<f64>>>::into)
+                            .collect_vec();
 
                         let default_sample = DefaultSample {
                             loop_moms,
                             external_moms,
-                            jacobian: jacobian * pdf,
+                            jacobian: F(sampling_result.jacobian) * pdf,
                         };
 
-                        GammaLoopSample::DiscreteGraph {
+                        Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::Tropical(default_sample),
-                        }
+                        })
                     }
                     DiscreteGraphSamplingSettings::DiscreteMultiChanneling(
                         multichanneling_settings,
                     ) => {
                         let (graph_id, (channel_id, xs)) =
                             unwrap_double_discrete_sample(sample_point);
-                        GammaLoopSample::DiscreteGraph {
+                        Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::DiscreteMultiChanneling {
                                 alpha: multichanneling_settings.alpha,
                                 channel_id,
                                 sample: self.default_parametrize(xs),
                             },
-                        }
+                        })
                     }
                 }
             }
@@ -1056,7 +1082,7 @@ impl GammaLoopIntegrand {
                 let existing_esurfaces = graph.get_existing_esurfaces(
                     &external_moms,
                     settings.kinematics.e_cm,
-                    settings.general.debug,
+                    &settings,
                 );
 
                 if settings.general.debug > 0 {
@@ -1071,7 +1097,7 @@ impl GammaLoopIntegrand {
                     let maximal_overlap = graph.get_maximal_overlap(
                         &external_moms,
                         settings.kinematics.e_cm,
-                        settings.general.debug,
+                        &settings,
                     );
 
                     let maximal_overlap_structure = maximal_overlap

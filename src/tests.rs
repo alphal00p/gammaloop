@@ -23,8 +23,8 @@ const BASE_N_START_SAMPLE: usize = 100_000;
 
 const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
 
-fn load_default_settings() -> Settings {
-    Settings::from_file("./src/test_resources/default_tests_config.yaml").unwrap()
+pub fn load_default_settings() -> Settings {
+    Settings::default()
 }
 
 fn validate_error(error: F<f64>, target_diff: F<f64>) -> bool {

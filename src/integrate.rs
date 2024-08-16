@@ -198,7 +198,7 @@ where
                 DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
                     String::from(" and a nested discrete grid over lmb-channels")
                 }
-                DiscreteGraphSamplingSettings::TropicalSampling => {
+                DiscreteGraphSamplingSettings::TropicalSampling(_) => {
                     format!(" and 🌴🥥 {} 🥥🌴", "tropical sampling".green().bold())
                 }
                 DiscreteGraphSamplingSettings::MultiChanneling(_) => {
@@ -457,7 +457,7 @@ where
             0,
             n_samples_evaluated,
             &target,
-            settings.integrator.show_max_wgt_info,
+            true,
         );
         info!("");
     } else {
@@ -615,40 +615,46 @@ fn generate_event_output(
 
 /// This function actually evaluates the list of samples in parallel.
 fn evaluate_sample_list(
-    _integrand: &mut Integrand,
-    _samples: &[Sample<F<f64>>],
-    _num_cores: usize,
-    _iter: usize,
-    _max_eval: F<f64>,
+    integrand: &mut Integrand,
+    samples: &[Sample<F<f64>>],
+    num_cores: usize,
+    iter: usize,
+    max_eval: F<f64>,
 ) -> (Vec<EvaluationResult>, StatisticsCounter) {
-    todo!()
-    // let list_size = samples.len();
-    // let nvec_per_core = (list_size - 1) / num_cores + 1;
+    // todo!()
+    let list_size = samples.len();
+    let nvec_per_core = (list_size - 1) / num_cores + 1;
 
-    // let sample_chunks = samples.par_chunks(nvec_per_core);
-    // let mut evaluation_results_per_core = Vec::with_capacity(num_cores);
+    let sample_chunks = samples.par_chunks(nvec_per_core);
+    let integrands = (0..nvec_per_core)
+        .map(|_| integrand.clone())
+        .collect_vec()
+        .into_par_iter();
 
-    // sample_chunks
-    //     .map(|chunk| {
-    //         let cor_evals = chunk
-    //             .iter()
-    //             .map(|mut sample| {
-    //                 integrand.evaluate_sample(sample, sample.get_weight(), iter, false, max_eval)
-    //             })
-    //             .collect_vec();
+    let mut evaluation_results_per_core = Vec::with_capacity(num_cores);
 
-    //         cor_evals
-    //     })
-    //     .collect_into_vec(&mut evaluation_results_per_core);
+    sample_chunks
+        .zip(integrands)
+        .map(|(chunk, mut integrand)| {
+            let cor_evals = chunk
+                .iter()
+                .map(|sample| {
+                    integrand.evaluate_sample(sample, sample.get_weight(), iter, false, max_eval)
+                })
+                .collect_vec();
 
-    // let evaluation_results = evaluation_results_per_core
-    //     .into_iter()
-    //     .flatten()
-    //     .collect_vec();
+            cor_evals
+        })
+        .collect_into_vec(&mut evaluation_results_per_core);
 
-    // let meta_data_statistics = StatisticsCounter::from_evaluation_results(&evaluation_results);
+    let evaluation_results = evaluation_results_per_core
+        .into_iter()
+        .flatten()
+        .collect_vec();
 
-    // (evaluation_results, meta_data_statistics)
+    let meta_data_statistics = StatisticsCounter::from_evaluation_results(&evaluation_results);
+
+    (evaluation_results, meta_data_statistics)
 }
 
 /// Different ways of passing samples to the batch_integrate function
@@ -1126,7 +1132,7 @@ pub fn print_integral_result(
                 {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        (t - itg.avg).abs() / itg.err,
+                        (t - itg.avg).abs().0 / itg.err.0,
                         if t.abs() > F(0.) {
                             (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {
@@ -1137,7 +1143,11 @@ pub fn print_integral_result(
                 } else {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        (t - itg.avg).abs().0 / itg.err.0,
+                        if !t.is_zero() && !itg.avg.is_zero() {
+                            (t - itg.avg).abs().0 / itg.err.0
+                        } else {
+                            0.
+                        },
                         if t.abs() > F(0.) {
                             (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {

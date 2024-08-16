@@ -11,22 +11,19 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, Polarization, ThreeMomentum},
-    numerator::{
-        AtomStructure, Evaluate, Numerator, RepeatingIterator, RepeatingIteratorTensorOrScalar,
-    },
+    numerator::{AtomStructure, Evaluate, Numerator, RepeatingIteratorTensorOrScalar},
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm,
     },
-    tropical::{self, TropicalSubgraphTable},
     utils::{
         compute_four_momentum_from_three, compute_three_momentum_from_four, sorted_vectorize,
         FloatLike, F,
     },
-    ExportSettings, Settings,
+    ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
-use ahash::RandomState;
+use ahash::{HashSet, RandomState};
 
 use color_eyre::Result;
 use color_eyre::{Help, Report};
@@ -34,10 +31,11 @@ use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use itertools::Itertools;
 use log::{debug, warn};
+use momtrop::SampleGenerator;
 use nalgebra::DMatrix;
 
 use gat_lending_iterator::LendingIterator;
-use petgraph::visit::Data;
+
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
@@ -1311,25 +1309,86 @@ impl BareGraph {
         lmbs
     }
 
-    pub fn generate_tropical_subgraph_table(&mut self) -> Result<TropicalSubgraphTable> {
+    pub fn generate_tropical_subgraph_table(
+        &mut self,
+        settings: &TropicalSubgraphTableSettings,
+    ) -> Result<SampleGenerator<3>> {
+        let dimension = 3;
         let num_virtual_loop_edges = self.get_loop_edges_iterator().count();
-
         let num_loops = self.loop_momentum_basis.basis.len();
+        let target_omega = settings.target_omega;
 
-        let default_weight = 0.5;
-        let dod =
-            num_virtual_loop_edges as f64 * default_weight - (tropical::D * num_loops) as f64 / 2.;
-        let minimum_dod = 1.0;
+        let weight =
+            (target_omega + (dimension * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
 
-        let weight = if dod < minimum_dod {
-            (minimum_dod + (tropical::D * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64
-        } else {
-            default_weight
+        debug!(
+            "Building tropical subgraph table with all edge weights set to: {}",
+            weight
+        );
+
+        let tropical_edges = self
+            .get_loop_edges_iterator()
+            .map(|(_edge_id, edge)| {
+                let is_massive = match edge.particle.mass.value {
+                    Some(complex_mass) => !complex_mass.is_zero(),
+                    None => false,
+                };
+
+                momtrop::Edge {
+                    is_massive,
+                    weight,
+                    vertices: (edge.vertices[0] as u8, edge.vertices[1] as u8),
+                }
+            })
+            .collect_vec();
+
+        // Candidates to be external vertices of the tree-stripped graph
+        let mut external_vertices_pool = HashSet::default();
+
+        for edge in self
+            .edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Incoming)
+            .chain(
+                self.edges
+                    .iter()
+                    .filter(|e| e.edge_type == EdgeType::Outgoing),
+            )
+        {
+            external_vertices_pool.insert(edge.vertices[0] as u8);
+            external_vertices_pool.insert(edge.vertices[1] as u8);
+        }
+
+        for (_, edge) in self.get_tree_level_edges_iterator() {
+            external_vertices_pool.insert(edge.vertices[0] as u8);
+            external_vertices_pool.insert(edge.vertices[1] as u8);
+        }
+
+        let mut external_vertices = vec![];
+
+        for tropical_edge in &tropical_edges {
+            if external_vertices_pool.contains(&tropical_edge.vertices.0) {
+                external_vertices.push(tropical_edge.vertices.0);
+            }
+
+            if external_vertices_pool.contains(&tropical_edge.vertices.1) {
+                external_vertices.push(tropical_edge.vertices.1);
+            }
+        }
+
+        let tropical_graph = momtrop::Graph {
+            edges: tropical_edges,
+            externals: external_vertices,
         };
 
-        let weight_guess = vec![weight; num_virtual_loop_edges];
+        let loop_part = self
+            .get_loop_edges_iterator()
+            .map(|(edge_id, _edge)| self.loop_momentum_basis.edge_signatures[edge_id].0.clone())
+            .collect_vec();
 
-        TropicalSubgraphTable::generate_from_graph(self, &weight_guess)
+        tropical_graph
+            .build_sampler(loop_part, dimension)
+            .map_err(|e| eyre!(e))
     }
 
     pub fn generate_polarizations_from_emr<T: FloatLike>(
@@ -1379,10 +1438,10 @@ impl Graph {
     pub fn evaluate_cff_expression<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        debug: usize,
+        settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
-            .evaluate_cff_expression(&self.bare_graph, sample, debug)
+            .evaluate_cff_expression(&self.bare_graph, sample, settings)
             .scalar()
             .unwrap()
     }
@@ -1392,10 +1451,10 @@ impl Graph {
         &mut self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-        debug: usize,
+        settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
-            .evaluate_cff_expression_in_lmb(&self.bare_graph, sample, lmb_specification, debug)
+            .evaluate_cff_expression_in_lmb(&self.bare_graph, sample, lmb_specification, settings)
             .scalar()
             .unwrap()
     }
@@ -1403,27 +1462,27 @@ impl Graph {
     pub fn evaluate_cff_all_orientations<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        debug: usize,
+        settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
-            .evaluate_cff_all_orientations(&self.bare_graph, sample, debug)
+            .evaluate_cff_all_orientations(&self.bare_graph, sample, settings)
     }
 
     #[inline]
     pub fn evaluate_numerator_all_orientations<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        debug: usize,
+        settings: &Settings,
     ) -> DataTensor<SymComplex<T>, AtomStructure> {
         self.derived_data
-            .evaluate_numerator_all_orientations(&self.bare_graph, sample, debug)
+            .evaluate_numerator_all_orientations(&self.bare_graph, sample, settings)
     }
 
     #[inline]
     pub fn evaluate_polarizations<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        _debug: usize,
+        _settings: &Settings,
     ) -> Vec<Polarization<Complex<F<T>>>> {
         self.derived_data
             .evaluate_polarizations(&self.bare_graph, sample)
@@ -1433,7 +1492,7 @@ impl Graph {
     pub fn generate_params<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        _debug: usize,
+        _settings: &Settings,
     ) -> Vec<Complex<F<T>>> {
         self.derived_data.generate_params(&self.bare_graph, sample)
     }
@@ -1445,11 +1504,14 @@ impl Graph {
         numerator.process(model, &self.bare_graph);
     }
 
-    pub fn generate_tropical_subgraph_table(&mut self) {
-        let table = self.bare_graph.generate_tropical_subgraph_table();
+    pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
+        let table = self.bare_graph.generate_tropical_subgraph_table(settings);
 
         if let Ok(table) = table {
+            debug!("min dod: {}", table.get_smallest_dod());
             self.derived_data.tropical_subgraph_table = Some(table);
+        } else if settings.panic_on_fail {
+            panic!("Tropical subgraph table generation failed 🥥");
         } else {
             warn!("Tropical subgraph table generation failed 🥥");
         }
@@ -1522,7 +1584,7 @@ impl Graph {
         &self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-        debug: usize,
+        settings: &Settings,
     ) -> Vec<F<T>> {
         let lmb = lmb_specification.basis(self);
         let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
@@ -1535,7 +1597,7 @@ impl Graph {
             .cff_expression
             .as_ref()
             .unwrap()
-            .evaluate_orientations(&energy_cache, debug)
+            .evaluate_orientations(&energy_cache, settings)
     }
 
     pub fn numerator_substitute_model_params(&mut self, model: &Model) {
@@ -1597,7 +1659,7 @@ impl Graph {
     }
 
     #[inline]
-    pub fn get_tropical_subgraph_table(&self) -> &TropicalSubgraphTable {
+    pub fn get_tropical_subgraph_table(&self) -> &SampleGenerator<3> {
         self.derived_data.tropical_subgraph_table.as_ref().unwrap()
     }
 
@@ -1611,14 +1673,14 @@ impl Graph {
         &self,
         externals: &[FourMomentum<F<T>>],
         e_cm: F<f64>,
-        debug: usize,
+        settings: &Settings,
     ) -> ExistingEsurfaces {
         get_existing_esurfaces(
             &self.get_cff().esurfaces,
             self.get_esurface_derived_data(),
             externals,
             &self.bare_graph.loop_momentum_basis,
-            debug,
+            settings.general.debug,
             e_cm,
         )
     }
@@ -1628,16 +1690,16 @@ impl Graph {
         &self,
         externals: &[FourMomentum<F<f64>>],
         e_cm: F<f64>,
-        debug: usize,
+        settings: &Settings,
     ) -> OverlapStructure {
-        let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, debug);
+        let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, settings);
         find_maximal_overlap(
             &self.bare_graph.loop_momentum_basis,
             &existing_esurfaces,
             &self.get_cff().esurfaces,
             &self.bare_graph.get_mass_vector(),
             externals,
-            debug,
+            settings.general.debug,
         )
     }
 
@@ -1681,7 +1743,7 @@ pub struct DerivedGraphData {
     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
-    pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
+    pub tropical_subgraph_table: Option<SampleGenerator<3>>,
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub static_counterterm: Option<static_counterterm::CounterTerm>,
@@ -1694,16 +1756,16 @@ impl DerivedGraphData {
         &mut self,
         graph: &BareGraph,
         sample: &DefaultSample<T>,
-        debug: usize,
+        settings: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
-        self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, debug)
+        self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, settings)
     }
     pub fn evaluate_numerator_all_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &DefaultSample<T>,
-        _debug: usize,
+        _settings: &Settings,
     ) -> DataTensor<SymComplex<T>, AtomStructure> {
         let emr = graph.emr_from_lmb(sample, &graph.loop_momentum_basis);
 
@@ -1747,12 +1809,12 @@ impl DerivedGraphData {
         &mut self,
         graph: &BareGraph,
         sample: &DefaultSample<T>,
-        debug: usize,
+        settings: &Settings,
     ) -> Complex<F<T>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         Complex {
             re: self
-                .evaluate_cff_orientations(graph, sample, &lmb_specification, debug)
+                .evaluate_cff_orientations(graph, sample, &lmb_specification, settings)
                 .into_iter()
                 .reduce(|acc, e| acc + &e)
                 .unwrap_or_else(|| panic!("no orientations to evaluate")),
@@ -1767,7 +1829,7 @@ impl DerivedGraphData {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-        debug: usize,
+        settings: &Settings,
     ) -> Vec<F<T>> {
         let lmb = lmb_specification.basis_from_derived(self);
         let energy_cache =
@@ -1776,7 +1838,7 @@ impl DerivedGraphData {
         self.cff_expression
             .as_ref()
             .unwrap()
-            .evaluate_orientations(&energy_cache, debug)
+            .evaluate_orientations(&energy_cache, settings)
     }
 
     #[inline]
@@ -1786,7 +1848,7 @@ impl DerivedGraphData {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-        debug: usize,
+        settings: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let one = sample.one();
         let zero = one.zero();
@@ -1799,7 +1861,7 @@ impl DerivedGraphData {
             i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
 
         let mut cff = self
-            .evaluate_cff_orientations(graph, sample, lmb_specification, debug)
+            .evaluate_cff_orientations(graph, sample, lmb_specification, settings)
             .into_iter();
         let num_iter = self.evaluate_numerator_orientations(graph, sample, lmb_specification);
 
@@ -2004,7 +2066,7 @@ pub struct SerializableDerivedGraphData {
     pub loop_momentum_bases: Option<Vec<SerializableLoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<SerializableLTDExpression>,
-    pub tropical_subgraph_table: Option<TropicalSubgraphTable>,
+    pub tropical_subgraph_table: Option<SampleGenerator<3>>,
     pub edge_groups: Option<Vec<Vec<usize>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub numerator: Option<Numerator>,

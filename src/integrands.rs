@@ -43,7 +43,7 @@ impl Display for IntegrandSettings {
 
 impl Default for IntegrandSettings {
     fn default() -> IntegrandSettings {
-        IntegrandSettings::UnitSurface(UnitSurfaceSettings { n_3d_momenta: 1 })
+        IntegrandSettings::UnitSurface(UnitSurfaceSettings { n_3d_momenta: 11 })
     }
 }
 

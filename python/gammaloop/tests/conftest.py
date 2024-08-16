@@ -361,6 +361,7 @@ def scalar_3L_6P_topology_A_export(tmpdir_factory: pytest.TempPathFactory) -> Pa
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'scalar_3L_6P_topology_A.py')} -f qgraph --no_compile
+set target_omega 2.0
 output {output_path} -exp -ef file"""))
     return output_path
 
