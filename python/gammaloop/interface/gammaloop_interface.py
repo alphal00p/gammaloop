@@ -96,11 +96,16 @@ class GammaLoopConfiguration(object):
                     'compiler': "g++",
                     'custom': [],
                 },
+                'tropical_subgraph_table_settings': {
+                    'panic_on_fail': False,
+                    'target_omega': 1.0,
+                }
             },
             'run_settings': {
                 'General': {
                     'debug': 0,
                     'use_ltd': False,
+                    'force_orientations': None,
                     'load_compiled_cff': True,
                     'load_compiled_separate_orientations': False
                 },

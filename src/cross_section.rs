@@ -607,7 +607,9 @@ impl Amplitude {
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
             amplitude_graph.graph.generate_cff();
             amplitude_graph.graph.generate_ltd();
-            amplitude_graph.graph.generate_tropical_subgraph_table();
+            amplitude_graph.graph.generate_tropical_subgraph_table(
+                &export_settings.tropical_subgraph_table_settings,
+            );
             amplitude_graph.graph.generate_esurface_data()?;
             amplitude_graph.graph.process_numerator(model);
             amplitude_graph

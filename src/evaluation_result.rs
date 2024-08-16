@@ -93,6 +93,10 @@ impl StatisticsCounter {
                     _ => (),
                 }
 
+                if data_entry.evaluation_metadata.is_nan {
+                    accumulator.num_nan_evals += 1;
+                }
+
                 accumulator
             },
         );

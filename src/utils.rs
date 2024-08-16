@@ -978,7 +978,7 @@ impl<T: FloatLike> F<T> {
 }
 
 impl CompiledEvaluatorFloat for F<f64> {
-    fn evaluate(eval: &symbolica::evaluate::CompiledEvaluator, args: &[Self], out: &mut [Self]) {
+    fn evaluate(eval: &mut symbolica::evaluate::CompiledEvaluator, args: &[Self], out: &mut [Self]) {
         // cast to f64
         let args_f64: Vec<f64> = args.iter().map(|x| x.0).collect_vec(); 
         let mut out_f64 = out.iter().map(|x| x.0).collect_vec();
@@ -2185,8 +2185,8 @@ pub fn get_n_dim_for_n_loop_momenta(
     force_radius: bool,
     n_edges: Option<usize>, // for tropical parameterization, we need to know the number of edges
 ) -> usize {
-    if settings.sampling
-        == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
+    if matches!(settings.sampling
+        ,SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_)))
     {
         let tropical_part = 2 * n_edges.unwrap() - 1;
         let d_l = 3 * n_loop_momenta;
@@ -2377,8 +2377,8 @@ pub fn global_inv_parameterize<T: FloatLike>(
 ) -> (Vec<F<T>>, F<T>) {
     let one = e_cm_squared.one();
     let zero = one.zero();
-    if settings.sampling
-        == SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling)
+    if matches!(settings.sampling
+        ,SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_)))
     {
         panic!("Trying to inverse parameterize a tropical parametrization.")
     }

@@ -351,9 +351,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.1.12"
+version = "1.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68064e60dbf1f17005c2fde4d07c16d8baa506fd7ffed8ccab702d93617975c7"
+checksum = "72db2f7947ecee9b03b510377e8bb9077afa27176fdbff55c51027e976fdcc48"
 dependencies = [
  "shlex",
 ]
@@ -969,6 +969,7 @@ dependencies = [
  "libc",
  "log",
  "lorentz_vector",
+ "momtrop",
  "nalgebra 0.32.6",
  "nohash-hasher",
  "num-complex 0.4.6",
@@ -1250,6 +1251,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1372,6 +1382,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8a240ddb74feaf34a79a7add65a741f3167852fba007066dcac1ca548d89c08"
 dependencies = [
  "adler",
+]
+
+[[package]]
+name = "momtrop"
+version = "0.1.0"
+source = "git+https://github.com/alphal00p/momtrop#8f9f80ae8950bbf0712fbe059557319fb2d75889"
+dependencies = [
+ "ahash",
+ "criterion",
+ "f128",
+ "fastrand",
+ "itertools 0.12.1",
+ "num 0.4.3",
+ "rand",
+ "serde",
+ "smallvec",
+ "statrs",
 ]
 
 [[package]]
@@ -2294,7 +2321,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=master#c838cf3a764060f6fb90c563e3f030552a1ef0db"
+source = "git+https://github.com/alphal00p/spenso?branch=master#e7ca855917cb4ff45d0d040b692049746c2c3b3f"
 dependencies = [
  "ahash",
  "ambassador",

@@ -40,3 +40,6 @@ export_settings:
     unsafe_math: true 
     compiler: "g++"
     custom: []
+  tropical_subgraph_table_settings:
+    panic_on_fail: false
+    target_omega: 1.0

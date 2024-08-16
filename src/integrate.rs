@@ -198,7 +198,7 @@ where
                 DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
                     String::from(" and a nested discrete grid over lmb-channels")
                 }
-                DiscreteGraphSamplingSettings::TropicalSampling => {
+                DiscreteGraphSamplingSettings::TropicalSampling(_) => {
                     format!(" and 🌴🥥 {} 🥥🌴", "tropical sampling".green().bold())
                 }
                 DiscreteGraphSamplingSettings::MultiChanneling(_) => {
@@ -457,7 +457,7 @@ where
             0,
             n_samples_evaluated,
             &target,
-            settings.integrator.show_max_wgt_info,
+            true,
         );
         info!("");
     } else {
@@ -1131,7 +1131,7 @@ pub fn print_integral_result(
                 {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        (t - itg.avg).abs() / itg.err,
+                        (t - itg.avg).abs().0 / itg.err.0,
                         if t.abs() > F(0.) {
                             (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {
@@ -1142,7 +1142,11 @@ pub fn print_integral_result(
                 } else {
                     format!(
                         "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        (t - itg.avg).abs().0 / itg.err.0,
+                        if !t.is_zero() && !itg.avg.is_zero() {
+                            (t - itg.avg).abs().0 / itg.err.0
+                        } else {
+                            0.
+                        },
                         if t.abs() > F(0.) {
                             (t - itg.avg).abs().0 / t.abs().0 * 100.
                         } else {
