@@ -134,4 +134,4 @@ similar.opt-level = 3
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-# spenso = { path = "../spenso" }
+# spenso = { path = "../../alphal00p/spenso" }

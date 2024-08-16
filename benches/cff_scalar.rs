@@ -50,7 +50,7 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
 
     let export_settings = ExportSettings {
         compile_cff: !use_orientations,
-        cpe_rounds_cff: 1,
+        cpe_rounds_cff: Some(1),
         compile_separate_orientations: use_orientations,
         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
             target_omega: 1.0,
