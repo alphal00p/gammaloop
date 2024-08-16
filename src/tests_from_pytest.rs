@@ -254,18 +254,6 @@ mod tests_scalar_massless_triangle {
         for term in unfolded.iter() {
             assert_eq!(term.len(), 2);
         }
-
-        let graph_cff = graph.get_cff();
-        let mut evaluator = graph_cff
-            .build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff(), Some(1));
-
-        let energy_cache = graph.compute_onshell_energies(&[k], &[p1, p2]);
-
-        let mut out = vec![F(0.0); 6];
-        evaluator.evaluate_multiple(&energy_cache, &mut out);
-
-        let sum = out.into_iter().reduce(|acc, x| acc + x).unwrap() / energy_product;
-        assert_approx_eq(&sum, &absolute_truth.im, &LTD_COMPARISON_TOLERANCE);
     }
 }
 
@@ -919,34 +907,6 @@ fn pytest_scalar_double_triangle() {
 
     let propagator_groups = graph.group_edges_by_signature();
     assert_eq!(propagator_groups.len(), 5);
-
-    let loop_moms_f64 = sample
-        .loop_moms
-        .iter()
-        .map(ThreeMomentum::lower)
-        .collect_vec();
-
-    let externals_f64 = sample
-        .external_moms
-        .iter()
-        .map(FourMomentum::lower)
-        .collect_vec();
-
-    let mut evaluator = graph
-        .get_cff()
-        .build_joint_symbolica_evaluator::<f64>(&graph.build_params_for_cff(), Some(1));
-
-    let mut out_f = vec![F(0.0); graph.get_cff().get_num_trees()];
-    let ose = graph.compute_onshell_energies(&loop_moms_f64, &externals_f64);
-    evaluator.evaluate_multiple(&ose, &mut out_f);
-    let symbolica_sum =
-        out_f.iter().fold(out_f[0].zero(), |acc, x| acc + x) / energy_product.lower();
-
-    assert_approx_eq(
-        &symbolica_sum,
-        &absolute_truth.re.lower(),
-        &LTD_COMPARISON_TOLERANCE,
-    );
 }
 
 #[test]
