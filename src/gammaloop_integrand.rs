@@ -639,12 +639,11 @@ impl HasIntegrand for GammaLoopIntegrand {
 
             let jacobian = sample_point.get_default_sample().jacobian;
             println!("\t{}: {:+e}", "jacobian".yellow(), jacobian);
+            println!("\t{}: {:+e}", "2pi prefactor".yellow(), prefactor);
             println!();
 
             println!("{}", "evaluation result: ".blue());
-            println!("{}: {:+e}", "\tcff expression: ".yellow(), res);
-
-            println!("\t{}: {:+e}", "result".yellow(), res * prefactor);
+            println!("{}: {:+e}", "\tresult: ".yellow(), res);
         }
 
         let mut integrand_result = *res;
