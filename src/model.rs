@@ -992,17 +992,17 @@ impl Model {
             if let Some(value) = cpl.value {
                 let rhs = if value.im == 0.0 {
                     let name = Atom::new_var(State::get_symbol(format!("{}_re", cpl.name)));
-                    fn_map.add_constant(name.clone().into(), Rational::from(value.re));
+                    fn_map.add_constant(name.clone(), Rational::from(value.re));
                     name.into_pattern()
                 } else if value.re == 0.0 {
                     let name = Atom::new_var(State::get_symbol(format!("{}_im", cpl.name)));
-                    fn_map.add_constant(name.clone().into(), Rational::from(value.im));
+                    fn_map.add_constant(name.clone(), Rational::from(value.im));
                     name.into_pattern()
                 } else {
                     let name_re = Atom::new_var(State::get_symbol(cpl.name.clone() + "_re"));
-                    fn_map.add_constant(name_re.clone().into(), Rational::from(value.re));
+                    fn_map.add_constant(name_re.clone(), Rational::from(value.re));
                     let name_im = Atom::new_var(State::get_symbol(cpl.name.clone() + "_im"));
-                    fn_map.add_constant(name_im.clone().into(), Rational::from(value.im));
+                    fn_map.add_constant(name_im.clone(), Rational::from(value.im));
                     let i = Atom::new_var(State::I);
                     (&name_re + i * &name_im).into_pattern()
                 };
@@ -1033,22 +1033,22 @@ impl Model {
                         if value.re.is_zero() {
                             let name =
                                 Atom::new_var(State::get_symbol(format!("{}_im", param.name)));
-                            fn_map.add_constant(name.clone().into(), Rational::from(value.im.0));
+                            fn_map.add_constant(name.clone(), Rational::from(value.im.0));
                             name.into_pattern()
                         } else {
                             let name_re =
                                 Atom::new_var(State::get_symbol(param.name.clone() + "_re"));
-                            fn_map.add_constant(name_re.clone().into(), Rational::from(value.re.0));
+                            fn_map.add_constant(name_re.clone(), Rational::from(value.re.0));
                             let name_im =
                                 Atom::new_var(State::get_symbol(param.name.clone() + "_im"));
-                            fn_map.add_constant(name_im.clone().into(), Rational::from(value.im.0));
+                            fn_map.add_constant(name_im.clone(), Rational::from(value.im.0));
                             let i = Atom::new_var(State::I);
                             (&name_re + i * &name_im).into_pattern()
                         }
                     }
                     ParameterType::Real => {
                         let name = Atom::new_var(State::get_symbol(format!("{}_re", param.name)));
-                        fn_map.add_constant(name.clone().into(), Rational::from(value.re.0));
+                        fn_map.add_constant(name.clone(), Rational::from(value.re.0));
                         name.into_pattern()
                     }
                 };

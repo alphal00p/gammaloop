@@ -485,15 +485,13 @@ impl CFFExpression {
                 let atom = self.construct_atom_for_term(term_id, None);
                 let atom_view = atom.as_view();
 
-                let mut tree = atom_view
-                    .to_eval_tree(|r| r.clone(), &function_map, params)
-                    .unwrap();
+                let mut tree = atom_view.to_evaluation_tree(&function_map, params).unwrap();
 
                 tree.horner_scheme();
-                tree.common_subexpression_elimination(1);
+                tree.common_subexpression_elimination();
 
                 let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
-                tree_ft.linearize(1)
+                tree_ft.linearize(Some(1))
             })
             .collect()
     }
@@ -501,7 +499,7 @@ impl CFFExpression {
     pub fn build_joint_symbolica_evaluator<T: FloatLike + Default>(
         &self,
         params: &[Atom],
-        cpe_rounds: usize,
+        cpe_rounds: Option<usize>,
     ) -> ExpressionEvaluator<F<T>> {
         let orientation_atoms = self
             .orientations
@@ -512,16 +510,12 @@ impl CFFExpression {
         let orientation_atom_views = orientation_atoms.iter().map(Atom::as_view).collect_vec();
         let function_map = FunctionMap::new();
 
-        let mut tree: EvalTree<Rational> = AtomView::to_eval_tree_multiple(
-            &orientation_atom_views,
-            |r| r.clone(),
-            &function_map,
-            params,
-        )
-        .unwrap();
+        let mut tree: EvalTree<Rational> =
+            AtomView::to_eval_tree_multiple(&orientation_atom_views, &function_map, params)
+                .unwrap();
 
         tree.horner_scheme();
-        tree.common_subexpression_elimination(1);
+        tree.common_subexpression_elimination();
 
         let tree_ft = tree.map_coeff::<F<T>, _>(&|r| r.into());
         tree_ft.linearize(cpe_rounds)
