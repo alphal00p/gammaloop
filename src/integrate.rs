@@ -625,10 +625,16 @@ fn evaluate_sample_list(
     let nvec_per_core = (list_size - 1) / num_cores + 1;
 
     let sample_chunks = samples.par_chunks(nvec_per_core);
+    let integrands = (0..nvec_per_core)
+        .map(|_| integrand.clone())
+        .collect_vec()
+        .into_par_iter();
+
     let mut evaluation_results_per_core = Vec::with_capacity(num_cores);
 
     sample_chunks
-        .map(|chunk| {
+        .zip(integrands)
+        .map(|(chunk, integrand)| {
             let cor_evals = chunk
                 .iter()
                 .map(|sample| {
