@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
-    domains::{float::NumericalFloatLike, rational::Rational},
+    domains::{
+        float::{NumericalFloatLike, RealNumberLike},
+        rational::Rational,
+    },
     evaluate::{CompiledEvaluator, EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap},
 };
 use typed_index_collections::TiVec;
@@ -99,6 +102,25 @@ impl CFFExpression {
 
         let esurface_cache = self.compute_esurface_cache(energy_cache);
         let hsurface_cache = self.compute_hsurface_cache(energy_cache);
+
+        if settings.general.debug > 3 {
+            let cloned_esurfaces = esurface_cache.clone();
+            let sorted = cloned_esurfaces
+                .into_iter_enumerated()
+                .map(|(id, f)| (id, f.to_f64()))
+                .sorted_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap());
+
+            for (esurface_id, value) in sorted {
+                println!("esuface_{:?} = {}", Into::<usize>::into(esurface_id), value);
+                if settings.general.debug > 5 && value.abs() < 0.1 * settings.kinematics.e_cm.0 {
+                    println!("tiny esurface: {:#?}", self.esurfaces[esurface_id]);
+
+                    for energy_id in self.esurfaces[esurface_id].energies.iter() {
+                        println!("E_{}: {}", energy_id, energy_cache[*energy_id]);
+                    }
+                }
+            }
+        }
 
         let mut term_cache = self.build_term_cache();
 
