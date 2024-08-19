@@ -22,9 +22,10 @@ use spenso::data::DataTensor;
 
 use spenso::network::Levels;
 use spenso::parametric::{
-    CompiledEvalTensorSet, EvalTensorSet, EvalTreeTensorSet, ParamTensorSet, TensorSet,
+    CompiledEvalTensorSet, EvalTensorSet, EvalTreeTensorSet, ParamTensorSet, SerializableAtom,
+    TensorSet,
 };
-use spenso::structure::{HasStructure, SmartShadowStructure};
+use spenso::structure::{HasStructure, SerializableSymbol, SmartShadowStructure};
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
@@ -147,7 +148,7 @@ pub struct NumeratorEdge {
 #[allow(clippy::type_complexity)]
 pub struct Numerator {
     pub expression: Atom,
-    pub network: Option<TensorNetwork<ParamTensor<AtomStructure>, Atom>>,
+    pub network: Option<TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>>,
     pub extra_info: ExtraInfo,
     pub const_map: AHashMap<Atom, Complex<F<f64>>>,
     pub base_eval: EvalNumerator,
@@ -217,7 +218,7 @@ impl<'de> Deserialize<'de> for Numerator {
             .clone()
             .try_into()
             .map_err(serde::de::Error::custom)?;
-        let network: TensorNetwork<ParamTensor<AtomStructure>, Atom> = sym_tensor
+        let network: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom> = sym_tensor
             .to_network()
             .map_err(serde::de::Error::custom)?
             .to_fully_parametric()
@@ -236,7 +237,7 @@ impl<'de> Deserialize<'de> for Numerator {
         })
     }
 }
-pub type AtomStructure = SmartShadowStructure<Symbol, Vec<Atom>>;
+pub type AtomStructure = SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>;
 
 pub trait Evaluate<T: FloatLike> {
     fn evaluate(
@@ -480,7 +481,7 @@ impl Numerator {
         let filename = &(self.extra_info.graph_name.clone() + "numerator.cpp");
         let function_name = &(self.extra_info.graph_name.clone() + "numerator");
         let library_name = &(self.extra_info.graph_name.clone() + "libneval.so");
-        let inline_asm = InlineASM::Intel;
+        let inline_asm = InlineASM::X64;
         if let EvalNumerator::Eval(eval) = &mut self.base_eval {
             self.compiled = CompiledNumerator::Compiled(
                 eval.map_coeff::<F<T>, _>(&|r| r.into())
@@ -521,9 +522,9 @@ impl Numerator {
         let mut params: Vec<Atom> = vec![];
 
         for (i, _) in self.extra_info.edges.iter().enumerate() {
-            let named_structure: NamedStructure<&str> = NamedStructure::from_iter(
+            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
                 [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                "Q",
+                "Q".into(),
                 Some(i),
             );
             params.extend(
@@ -668,9 +669,9 @@ impl Numerator {
             .iter()
             .enumerate()
             .map(|(i, _)| {
-                let named_structure: NamedStructure<&str> = NamedStructure::from_iter(
+                let named_structure: NamedStructure<String> = NamedStructure::from_iter(
                     [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                    "Q",
+                    "Q".into(),
                     Some(i),
                 );
                 named_structure.to_shell().expanded_shadow().unwrap()
@@ -1045,6 +1046,7 @@ impl Numerator {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Num<State: NumeratorState> {
     state: State,
 }
@@ -1055,12 +1057,13 @@ impl<S: NumeratorState> Num<S> {
     }
 }
 
-pub trait NumeratorState {
+pub trait NumeratorState: Serialize {
     fn export(&self) -> String;
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppliedFeynmanRule {
-    expression: Atom,
+    expression: SerializableAtom,
 }
 
 impl AppliedFeynmanRule {
@@ -1108,7 +1111,7 @@ impl AppliedFeynmanRule {
         );
 
         AppliedFeynmanRule {
-            expression: builder,
+            expression: builder.into(),
         }
     }
 
@@ -1132,8 +1135,9 @@ impl Num<AppliedFeynmanRule> {
         }
     }
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColorSymplified {
-    expression: Atom,
+    expression: SerializableAtom,
 }
 
 impl ColorSymplified {
@@ -1145,7 +1149,7 @@ impl ColorSymplified {
 
     pub fn parse(self) -> Network {
         Network {
-            net: TensorNetwork::try_from(self.expression.as_view())
+            net: TensorNetwork::try_from(self.expression.0.as_view())
                 .unwrap()
                 .to_fully_parametric()
                 .cast(),
@@ -1155,7 +1159,7 @@ impl ColorSymplified {
 
 impl NumeratorState for ColorSymplified {
     fn export(&self) -> String {
-        self.expression.to_string()
+        self.expression.0.to_string()
     }
 }
 
@@ -1172,21 +1176,21 @@ impl Num<ColorSymplified> {
         }
     }
 }
-
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GammaSymplified {
-    expression: Atom,
+    expression: SerializableAtom,
 }
 
 impl NumeratorState for GammaSymplified {
     fn export(&self) -> String {
-        self.expression.to_string()
+        self.expression.0.to_string()
     }
 }
 
 impl GammaSymplified {
     pub fn parse(self) -> Network {
         Network {
-            net: TensorNetwork::try_from(self.expression.as_view())
+            net: TensorNetwork::try_from(self.expression.0.as_view())
                 .unwrap()
                 .to_fully_parametric()
                 .cast(),
@@ -1202,8 +1206,9 @@ impl Num<GammaSymplified> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Network {
-    net: TensorNetwork<ParamTensor<AtomStructure>, Atom>,
+    net: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>,
 }
 
 pub enum ContractionSettings<'a, 'b, R> {
@@ -1242,6 +1247,7 @@ impl Num<Network> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contracted {
     tensor: ParamTensor<AtomStructure>,
 }
