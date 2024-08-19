@@ -2,9 +2,11 @@
 //! amplitudes and Local Unitarity crosssections.
 
 use core::panic;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
+use crate::debug_info::DEBUG_LOGGER;
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
@@ -15,8 +17,7 @@ use crate::utils::{
     self, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
     PrecisionUpgradable, F,
 };
-use crate::{
-    debug_info, DiscreteGraphSamplingSettings, Externals, IntegratedPhase, SamplingSettings,
+use crate::{ DiscreteGraphSamplingSettings, Externals, IntegratedPhase, SamplingSettings,
     Settings,
 };
 use crate::{Precision, StabilityLevelSetting};
@@ -518,7 +519,10 @@ impl HasIntegrand for GammaLoopIntegrand {
         max_eval: F<f64>,
     ) -> EvaluationResult {
         if self.settings.general.debug > 0 {
-            debug_info::DEBUG_INFO.get().havana_sample = Some(sample.clone());
+            DEBUG_LOGGER.set(&PathBuf::from("log.jsonl")).unwrap();
+            let havana_sample_json = serde_json::to_string(&sample).unwrap();
+            let log = DEBUG_LOGGER.get();
+            slog::info!(log, "HAVANA_SAMPLE"; "SAMPLE" => &havana_sample_json);
         }
 
         let start_evaluate_sample = Instant::now();
@@ -551,10 +555,6 @@ impl HasIntegrand for GammaLoopIntegrand {
             }
         };
 
-        if self.settings.general.debug > 0 {
-            debug_info::DEBUG_INFO.get().gammaloop_sample = Some(sample_point.clone());
-        }
-
         let parameterization_time = before_parameterization.elapsed();
 
         // rotate the momenta for the stability tests.
@@ -576,8 +576,19 @@ impl HasIntegrand for GammaLoopIntegrand {
             .chain(rotated_sample_points)
             .collect_vec();
 
+        if self.settings.general.debug > 0 {
+            samples.iter().for_each(|(sample_point, _)| {
+                let json_sample = serde_json::to_string(&sample_point).unwrap(); 
+                slog::info!(DEBUG_LOGGER.get(), "gammaloop sample"; "gammaloop_sample" => json_sample);
+            });
+        }
+
         // 1 / (2 pi )^L
         let prefactor = F(self.compute_2pi_factor().inv());
+
+        if self.settings.general.debug > 0 {
+            slog::info!(DEBUG_LOGGER.get(), "One over 2pi to 3L"; "2_pi_prefactor" => prefactor.0);
+        };
 
         // iterate over the stability levels, break if the point is stable
         for stability_level in stability_iterator {

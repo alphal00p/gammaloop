@@ -1,41 +1,39 @@
-use std::sync::{LazyLock, Mutex, MutexGuard};
+use std::{
+    fs::OpenOptions,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
 
-use gammaloop_integrand::GammaLoopSample;
-use serde::{Deserialize, Serialize};
-use symbolica::numerical_integration::Sample;
+use slog::{o, Drain, Logger};
 
-use crate::{gammaloop_integrand, utils::F};
+pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 
-pub static DEBUG_INFO: DebugInfo = DebugInfo::new();
-
-pub struct DebugInfo {
-    data: LazyLock<Mutex<DebugInfoData>>,
+pub struct DebugLogger {
+    logger: OnceLock<Logger>,
 }
 
-impl DebugInfo {
-    const fn new() -> Self {
+impl DebugLogger {
+    const fn init() -> Self {
         Self {
-            data: LazyLock::new(|| Mutex::new(DebugInfoData::new())),
+            logger: OnceLock::new(),
         }
+    }
+
+    pub fn set(&self, path: &PathBuf) -> Result<(), Logger> {
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(path)
+            .unwrap();
+
+        let drain = Arc::new(Mutex::new(slog_json::Json::default(file))).fuse();
+        let logger = slog::Logger::root(drain, o!());
+        self.logger.set(logger)
     }
 
     #[cold]
-    pub fn get(&self) -> MutexGuard<'_, DebugInfoData> {
-        self.data.lock().unwrap()
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct DebugInfoData {
-    pub havana_sample: Option<Sample<F<f64>>>,
-    pub gammaloop_sample: Option<GammaLoopSample<f64>>,
-}
-
-impl DebugInfoData {
-    fn new() -> Self {
-        Self {
-            havana_sample: None,
-            gammaloop_sample: None,
-        }
+    pub fn get(&self) -> &Logger {
+        self.logger.get().unwrap()
     }
 }
