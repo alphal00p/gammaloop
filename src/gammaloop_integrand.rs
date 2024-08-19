@@ -16,12 +16,14 @@ use crate::utils::{
     PrecisionUpgradable, F,
 };
 use crate::{
-    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, SamplingSettings, Settings,
+    debug_info, DiscreteGraphSamplingSettings, Externals, IntegratedPhase, SamplingSettings,
+    Settings,
 };
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
 use momtrop::vector::Vector;
+use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use spenso::contraction::IsZero;
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -515,6 +517,10 @@ impl HasIntegrand for GammaLoopIntegrand {
         use_f128: bool,
         max_eval: F<f64>,
     ) -> EvaluationResult {
+        if self.settings.general.debug > 0 {
+            debug_info::DEBUG_INFO.get().havana_sample = Some(sample.clone());
+        }
+
         let start_evaluate_sample = Instant::now();
 
         // setup the evaluation of the integrand in the different stability levels
@@ -544,6 +550,10 @@ impl HasIntegrand for GammaLoopIntegrand {
                 };
             }
         };
+
+        if self.settings.general.debug > 0 {
+            debug_info::DEBUG_INFO.get().gammaloop_sample = Some(sample_point.clone());
+        }
 
         let parameterization_time = before_parameterization.elapsed();
 
@@ -1122,8 +1132,8 @@ impl GammaLoopIntegrand {
 }
 
 /// Sample whose structure depends on the sampling settings, and enforces these settings.
-#[derive(Debug, Clone)]
-enum GammaLoopSample<T: FloatLike> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GammaLoopSample<T: FloatLike> {
     Default(DefaultSample<T>),
     MultiChanneling {
         alpha: f64,
@@ -1249,7 +1259,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
 
 /// Sample which contains loop momenta, external momenta and the jacobian of the parameterization.
 /// External momenta are part of the sample in order to facilitate the use of non-constant externals.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DefaultSample<T: FloatLike> {
     pub loop_moms: Vec<ThreeMomentum<F<T>>>,
     pub external_moms: Vec<FourMomentum<F<T>>>,
@@ -1343,8 +1353,8 @@ impl<T: FloatLike> DefaultSample<T> {
 }
 
 /// This sample is used when importance sampling over graphs is used.
-#[derive(Debug, Clone)]
-enum DiscreteGraphSample<T: FloatLike> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DiscreteGraphSample<T: FloatLike> {
     Default(DefaultSample<T>),
     MultiChanneling {
         alpha: f64,

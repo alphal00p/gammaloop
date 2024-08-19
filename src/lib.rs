@@ -10,6 +10,7 @@ pub mod api;
 pub mod cff;
 pub mod cli_functions;
 pub mod cross_section;
+pub mod debug_info;
 pub mod evaluation_result;
 pub mod gammaloop_integrand;
 pub mod graph;
