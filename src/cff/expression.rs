@@ -619,7 +619,7 @@ impl CFFExpression {
         let exported_code = ExportedCode::new(
             path_to_code_str.to_string(),
             "joint".to_string(),
-            export_settings.gammaloop_compile_options.inline_asm(),
+            // export_settings.gammaloop_compile_options.inline_asm(),
         );
         exported_code.compile(
             path_to_so_str,
