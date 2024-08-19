@@ -32,10 +32,10 @@ insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 
 [dependencies]
 # These will be patched
-symbolica = { version = "0.8.0" }
+symbolica = { version = "0.9.0" }
 spenso = { version = "0.2.0", features = ["shadowing"] }
 
-momtrop = { git = "https://github.com/alphal00p/momtrop"}
+momtrop = { git = "https://github.com/alphal00p/momtrop" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = "1.3.3"
@@ -133,5 +133,5 @@ similar.opt-level = 3
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+spenso = { git = "https://github.com/alphal00p/spenso", branch = "symbolica_nightly" }
 # spenso = { path = "../../alphal00p/spenso" }
