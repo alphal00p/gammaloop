@@ -488,6 +488,7 @@ impl Default for SubtractionSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {
     pub compile_cff: bool,
+    pub compile_numerator: bool,
     pub cpe_rounds_cff: Option<usize>,
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,

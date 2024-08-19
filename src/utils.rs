@@ -111,19 +111,12 @@ pub trait FloatConvertFrom<U> {
 //     }
 // }
 
-#[derive(Debug, Clone, PartialEq,PartialOrd)]
+#[derive(Debug, Clone, PartialEq,PartialOrd,Serialize,Deserialize)]
 pub struct VarFloat<const N: u32> {
     float: rug::Float,
 }
 
-impl<const N: u32> Serialize for VarFloat<N> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        self.float.to_string().serialize(serializer)
-    }
-}
+
 
 impl<const N:u32> From<Float> for VarFloat<N> {
     fn from(x: Float) -> Self {

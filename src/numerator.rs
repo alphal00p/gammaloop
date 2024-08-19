@@ -4,6 +4,7 @@ use std::time::Instant;
 use crate::graph::{BareGraph, Edge};
 use crate::momentum::Polarization;
 use crate::utils::f128;
+use crate::ExportSettings;
 use crate::{
     graph::{EdgeType, LoopMomentumBasis},
     model::Model,
@@ -22,8 +23,8 @@ use spenso::data::DataTensor;
 
 use spenso::network::Levels;
 use spenso::parametric::{
-    CompiledEvalTensorSet, EvalTensorSet, EvalTreeTensorSet, ParamTensorSet, SerializableAtom,
-    TensorSet,
+    CompiledEvalTensorSet, EvalTensor, EvalTensorSet, EvalTreeTensor, EvalTreeTensorSet,
+    ParamTensorSet, SerializableAtom, SerializableCompiledEvaluator, TensorSet,
 };
 use spenso::structure::{HasStructure, SerializableSymbol, SmartShadowStructure};
 use spenso::{
@@ -33,6 +34,7 @@ use spenso::{
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
     symbolic::SymbolicTensor,
 };
+use statrs::function;
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
 use symbolica::{
     atom::AtomView,
@@ -1055,6 +1057,27 @@ impl<S: NumeratorState> Num<S> {
     fn export(&self) -> String {
         self.state.export()
     }
+
+    fn build_const_fn_map_with_split_reps(
+        fn_map: &mut FunctionMap,
+        model: &Model,
+    ) -> Vec<(Pattern, Pattern)> {
+        let mut split_reps = vec![];
+        info!("splitting");
+        split_reps.extend(model.valued_coupling_re_im_split(fn_map));
+        split_reps.extend(model.valued_parameter_re_im_split(fn_map));
+
+        fn_map.add_constant(Atom::parse("Nc").unwrap(), 3.into());
+
+        fn_map.add_constant(Atom::parse("TR").unwrap(), Rational::from((1, 2)));
+
+        fn_map.add_constant(
+            Atom::parse("pi").unwrap(),
+            Rational::from(std::f64::consts::PI),
+        );
+
+        split_reps
+    }
 }
 
 pub trait NumeratorState: Serialize {
@@ -1252,13 +1275,368 @@ pub struct Contracted {
     tensor: ParamTensor<AtomStructure>,
 }
 
+impl Contracted {
+    // fn preprocess(
+    //     mut self,
+    //     model: &Model,
+    //     graph: &BareGraph,
+    //     extra_info: &ExtraInfo,
+    // ) -> (Self, FunctionMap, Vec<Atom>) {
+    //     let mut fn_map: FunctionMap = FunctionMap::new();
+
+    //     let replacements =
+    //         Num::<Contracted>::build_const_fn_map_with_split_reps(&mut fn_map, model);
+
+    //     let reps = replacements
+    //         .iter()
+    //         .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+    //         .collect_vec();
+
+    //     self.tensor.replace_all_multiple_repeat_mut(&reps);
+
+    //     let mut params: Vec<Atom> = vec![];
+
+    //     for (i, _) in extra_info.edges.iter().enumerate() {
+    //         let named_structure: NamedStructure<String> = NamedStructure::from_iter(
+    //             [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
+    //             "Q".into(),
+    //             Some(i),
+    //         );
+    //         params.extend(
+    //             named_structure
+    //                 .to_shell()
+    //                 .expanded_shadow()
+    //                 .unwrap()
+    //                 .data
+    //                 .clone(),
+    //         );
+    //     }
+
+    //     for (i, ext) in graph
+    //         .edges
+    //         .iter()
+    //         .enumerate()
+    //         .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
+    //     {
+    //         match ext.edge_type {
+    //             EdgeType::Incoming => params.extend(
+    //                 ext.particle
+    //                     .incoming_polarization_atom_concrete(&ext.in_slot(graph), i),
+    //             ),
+
+    //             EdgeType::Outgoing => params.extend(
+    //                 ext.particle
+    //                     .outgoing_polarization_atom_concrete(&ext.in_slot(graph), i),
+    //             ),
+    //             _ => {}
+    //         }
+    //     }
+
+    //     params.push(Atom::new_var(State::I));
+    //     (self, fn_map, params)
+    // }
+
+    pub fn evaluator(
+        mut self,
+        model: &Model,
+        graph: &BareGraph,
+        extra_info: ExtraInfo,
+        export_settings: &ExportSettings,
+    ) -> EvaluatorSingle {
+        let mut fn_map: FunctionMap = FunctionMap::new();
+
+        let replacements =
+            Num::<Contracted>::build_const_fn_map_with_split_reps(&mut fn_map, model);
+
+        let reps = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect_vec();
+
+        self.tensor.replace_all_multiple_repeat_mut(&reps);
+
+        let mut params: Vec<Atom> = vec![];
+
+        for (i, _) in extra_info.edges.iter().enumerate() {
+            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
+                [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
+                "Q".into(),
+                Some(i),
+            );
+            params.extend(
+                named_structure
+                    .to_shell()
+                    .expanded_shadow()
+                    .unwrap()
+                    .data
+                    .clone(),
+            );
+        }
+
+        for (i, ext) in graph
+            .edges
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
+        {
+            match ext.edge_type {
+                EdgeType::Incoming => params.extend(
+                    ext.particle
+                        .incoming_polarization_atom_concrete(&ext.in_slot(graph), i),
+                ),
+
+                EdgeType::Outgoing => params.extend(
+                    ext.particle
+                        .outgoing_polarization_atom_concrete(&ext.in_slot(graph), i),
+                ),
+                _ => {}
+            }
+        }
+
+        params.push(Atom::new_var(State::I));
+
+        debug!("Generate eval tree set with {} params", params.len());
+
+        let mut eval_tree = self.tensor.eval_tree(&fn_map, &params).unwrap();
+        debug!("Horner scheme");
+
+        eval_tree.horner_scheme();
+        debug!("Common subexpression elimination");
+        eval_tree.common_subexpression_elimination();
+        debug!("Linearize double");
+        let eval_double = eval_tree
+            .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
+                re: F(r.into()),
+                im: F(0.),
+            })
+            .linearize(Some(1));
+        debug!("Linearize quad");
+
+        let eval_quad = eval_tree
+            .map_coeff::<Complex<F<f128>>, _>(&|r| Complex {
+                re: F(r.into()),
+                im: F(f128::new_zero()),
+            })
+            .linearize(Some(1));
+
+        let compiled = if export_settings.compile_numerator {
+            let filename = &(extra_info.graph_name.clone() + "numerator_single.cpp");
+            let function_name = &(extra_info.graph_name.clone() + "numerator_single");
+            let library_name = &(extra_info.graph_name.clone() + "libneval_single.so");
+            let inline_asm = InlineASM::X64;
+            Some(
+                eval_double
+                    .export_cpp(filename, function_name, true, inline_asm)
+                    .unwrap()
+                    .compile(library_name, CompileOptions::default())
+                    .unwrap()
+                    .load()
+                    .unwrap(),
+            )
+        } else {
+            None
+        };
+
+        EvaluatorSingle {
+            eval_double,
+            eval_quad,
+            compiled,
+        }
+    }
+
+    pub fn evaluators(
+        mut self,
+        model: &Model,
+        graph: &BareGraph,
+        extra_info: ExtraInfo,
+        export_settings: &ExportSettings,
+    ) -> EvaluatorOrientations {
+        let mut fn_map: FunctionMap = FunctionMap::new();
+
+        let replacements =
+            Num::<Contracted>::build_const_fn_map_with_split_reps(&mut fn_map, model);
+
+        let reps = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect_vec();
+
+        self.tensor.replace_all_multiple_repeat_mut(&reps);
+
+        let mut params: Vec<Atom> = vec![];
+
+        for (i, _) in extra_info.edges.iter().enumerate() {
+            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
+                [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
+                "Q".into(),
+                Some(i),
+            );
+            params.extend(
+                named_structure
+                    .to_shell()
+                    .expanded_shadow()
+                    .unwrap()
+                    .data
+                    .clone(),
+            );
+        }
+
+        for (i, ext) in graph
+            .edges
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
+        {
+            match ext.edge_type {
+                EdgeType::Incoming => params.extend(
+                    ext.particle
+                        .incoming_polarization_atom_concrete(&ext.in_slot(graph), i),
+                ),
+
+                EdgeType::Outgoing => params.extend(
+                    ext.particle
+                        .outgoing_polarization_atom_concrete(&ext.in_slot(graph), i),
+                ),
+                _ => {}
+            }
+        }
+
+        params.push(Atom::new_var(State::I));
+        let mut seen = 0;
+
+        let mut index_map = IndexSet::with_hasher(GxBuildHasher::default());
+        let mut positions = Vec::new();
+
+        let len = extra_info.orientations.len();
+
+        let reps = extra_info
+            .edges
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                (
+                    Pattern::parse(&format!("Q({},cind(1))", i)).unwrap(),
+                    Pattern::parse(&format!("-Q({},cind(1))", i)).unwrap(),
+                )
+            })
+            .collect_vec();
+
+        for (ni, o) in extra_info.orientations.iter().enumerate() {
+            let time = Instant::now();
+            let elapsed_parse = time.elapsed();
+
+            let reps = reps
+                .iter()
+                .enumerate()
+                .filter_map(|(i, (lhs, rhs))| {
+                    if o[i] {
+                        None
+                    } else {
+                        Some(Replacement::new(lhs, rhs))
+                    }
+                })
+                .collect_vec();
+
+            let time = Instant::now();
+            let orientation_replaced_net = self.tensor.replace_all_multiple(&reps);
+            let elapsed = time.elapsed();
+
+            let time = Instant::now();
+            let (entry, is_new) = index_map.insert_full(orientation_replaced_net);
+            let hash_time = time.elapsed();
+            if !is_new {
+                seen += 1;
+            }
+            debug!(
+                "Contracted an orientation {:.1}%, parse:{:?},reps:{:?},hash:{:?}",
+                100. * (ni as f64) / (len as f64),
+                elapsed_parse,
+                elapsed,
+                hash_time,
+            );
+            positions.push(entry);
+        }
+
+        debug!(
+            "Recycled orientations: {:.1}%",
+            100. * (seen as f64) / (len as f64)
+        );
+
+        let set = ParamTensorSet::new(index_map.into_iter().collect_vec());
+
+        debug!("Generate eval tree set with {} params", params.len());
+
+        let mut eval_tree = set.eval_tree(&fn_map, &params).unwrap();
+        debug!("Horner scheme");
+
+        eval_tree.horner_scheme();
+        debug!("Common subexpression elimination");
+        eval_tree.common_subexpression_elimination();
+        debug!("Linearize double");
+        let eval_double = eval_tree
+            .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
+                re: F(r.into()),
+                im: F(0.),
+            })
+            .linearize(Some(1));
+        debug!("Linearize quad");
+
+        let eval_quad = eval_tree
+            .map_coeff::<Complex<F<f128>>, _>(&|r| Complex {
+                re: F(r.into()),
+                im: F(f128::new_zero()),
+            })
+            .linearize(Some(1));
+        let base_eval = EvalNumerator::Eval(eval_tree);
+
+        let compiled = if export_settings.compile_numerator {
+            let filename = &(extra_info.graph_name.clone() + "numerator.cpp");
+            let function_name = &(extra_info.graph_name.clone() + "numerator");
+            let library_name = &(extra_info.graph_name.clone() + "libneval.so");
+            let inline_asm = InlineASM::X64;
+            Some(
+                eval_double
+                    .export_cpp(filename, function_name, true, inline_asm)
+                    .unwrap()
+                    .compile(library_name, CompileOptions::default())
+                    .unwrap()
+                    .load()
+                    .unwrap(),
+            )
+        } else {
+            None
+        };
+
+        EvaluatorOrientations {
+            eval_double,
+            eval_quad,
+            compiled,
+        }
+    }
+}
+
 impl NumeratorState for Contracted {
     fn export(&self) -> String {
         self.tensor.to_string()
     }
 }
 
-impl Num<Contracted> {}
+// impl Num<Contracted> {
+//     fn generate_evaluators(&self, orientations: Vec<Vec<bool>>) -> Evaluator {}
+// }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EvaluatorOrientations {
+    eval_double: EvalTensorSet<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>,
+    eval_quad: EvalTensorSet<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>,
+    compiled: Option<EvalTensorSet<SerializableCompiledEvaluator, AtomStructure>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EvaluatorSingle {
+    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>,
+    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>,
+    compiled: Option<EvalTensor<SerializableCompiledEvaluator, AtomStructure>>,
+}
 #[cfg(test)]
 mod tests;

@@ -16,6 +16,7 @@ fn load_helper(path: &str) -> Graph {
     amplitude.amplitude_graphs[0].graph.generate_cff();
     let export_settings = ExportSettings {
         compile_cff: true,
+        compile_numerator: true,
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: false,
         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {

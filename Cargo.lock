@@ -2172,6 +2172,7 @@ dependencies = [
  "gmp-mpfr-sys",
  "libc",
  "libm",
+ "serde",
 ]
 
 [[package]]
@@ -2379,6 +2380,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
+source = "git+https://github.com/alphal00p/spenso?branch=master#80dfe68a0d439eaeca9856941f3699baa85cc81e"
 dependencies = [
  "ahash",
  "ambassador",
