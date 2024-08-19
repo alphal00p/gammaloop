@@ -387,6 +387,89 @@ impl PythonWorker {
         }
     }
 
+    pub fn inspect_lmw_integrand(
+        &mut self,
+        integrand: &str,
+        workspace_path: &str,
+        use_f128: bool,
+    ) -> PyResult<(f64, f64)> {
+        match self.integrands.get_mut(integrand) {
+            Some(integrand_struct) => {
+                let new_settings = match integrand_struct {
+                    Integrand::GammaLoopIntegrand(integrand_struct) => {
+                        integrand_struct.settings.clone()
+                    }
+                    _ => todo!(),
+                };
+
+                let workspace_path = PathBuf::from(workspace_path);
+                let path_to_state = workspace_path.join("integration_state");
+
+                match fs::read(path_to_state) {
+                    Ok(state_bytes) => {
+                        let serializable_state: SerializableIntegrationState =
+                            bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
+                                .unwrap();
+                        let path_to_workspace_settings = workspace_path.join("settings.yaml");
+                        let workspace_settings_string =
+                            fs::read_to_string(path_to_workspace_settings)
+                                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                        let mut workspace_settings: Settings =
+                            serde_yaml::from_str(&workspace_settings_string)
+                                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                        workspace_settings.general.debug = new_settings.general.debug;
+
+                        let integration_state =
+                            serializable_state.into_integration_state(&workspace_settings);
+
+                        let max_weight_sample = if integration_state.integral.max_eval_positive
+                            > integration_state.integral.max_eval_negative.abs()
+                        {
+                            integration_state.integral.max_eval_positive_xs.unwrap()
+                        } else {
+                            integration_state.integral.max_eval_negative_xs.unwrap()
+                        };
+
+                        // bypass inspect function as it does not take a symbolica sample as input
+                        let eval_result = integrand_struct.evaluate_sample(
+                            &max_weight_sample,
+                            F(0.0),
+                            1,
+                            use_f128,
+                            F(0.0),
+                        );
+
+                        let eval = eval_result.integrand_result;
+
+                        info!(
+                            "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
+                            format!(
+                                "( {:?} )",
+                                max_weight_sample,
+                            )
+                            .blue(),
+                            integrand,
+                            format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
+                        );
+
+                        return Ok((eval.re.0, eval.im.0));
+                    }
+                    Err(_) => {
+                        return Err(exceptions::PyException::new_err(format!(
+                            "No previous run to extract max weight from"
+                        )));
+                    }
+                };
+            }
+            None => Err(exceptions::PyException::new_err(format!(
+                "Could not find integrand {}",
+                integrand
+            ))),
+        }
+    }
+
     pub fn integrate_integrand(
         &mut self,
         integrand: &str,

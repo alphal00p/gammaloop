@@ -1128,6 +1128,8 @@ class GammaLoop(object):
     inspect_parser.add_argument(
         '--no_sync', '-ns', action='store_true', default=False,
         help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
+    inspect_parser.add_argument('--last_max_weight', '-lmw', action='store_true',
+                                default=False, help='Inspect the max weight point of the previous run')
 
     def do_inspect(self, str_args: str) -> complex:
         if str_args == 'help':
@@ -1139,14 +1141,15 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        if self.launched_output is None:
-            raise GammaLoopError(
-                "No output launched. Please launch an output first with 'launch' command.")
-
         self.sync_worker_with_output(args.no_sync)
 
-        res: tuple[float, float] = self.rust_worker.inspect_integrand(
-            args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
+        if args.last_max_weight:
+            workspace_path = self.launched_output.joinpath("workspace")
+            res: tuple[float, float] = self.rust_worker.inspect_lmw_integrand(
+                args.integrand, str(workspace_path), args.use_f128)
+        else:
+            res: tuple[float, float] = self.rust_worker.inspect_integrand(
+                args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
 
         return complex(res[0], res[1])
 
