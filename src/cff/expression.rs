@@ -85,6 +85,11 @@ impl CFFExpression {
         energy_cache: &[F<T>],
         settings: &Settings,
     ) -> Vec<F<T>> {
+        if settings.general.debug > 0 {
+            let json_str = serde_json::to_string(&self.esurfaces).unwrap();
+            slog::info!(DEBUG_LOGGER.get(), "Esurfaces in CFF"; "esurfaces" => json_str)
+        }
+
         T::get_evaluator(self)(energy_cache, settings)
     }
 
