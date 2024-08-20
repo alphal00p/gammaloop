@@ -5,6 +5,8 @@ use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
 use itertools::Itertools;
+use serde::Deserialize;
+use serde::Serialize;
 use spenso::complex::Complex;
 
 use crate::cff::esurface::EsurfaceCollection;
@@ -16,13 +18,13 @@ use crate::momentum::ThreeMomentum;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub center: Vec<ThreeMomentum<F<f64>>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
 }

@@ -13,6 +13,7 @@ use typed_index_collections::TiVec;
 
 use crate::graph::{Graph, LoopMomentumBasis};
 use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::numerator::NumeratorState;
 use crate::utils::{
     compute_loop_part, compute_momentum, compute_shift_part, compute_t_part_of_shift_part,
     format_momentum, FloatLike, RefDefault, F,
@@ -496,8 +497,8 @@ impl EsurfaceData {
     }
 }
 
-pub fn generate_esurface_data(
-    graph: &Graph,
+pub fn generate_esurface_data<S: NumeratorState>(
+    graph: &Graph<S>,
     esurfaces: &EsurfaceCollection,
 ) -> Result<EsurfaceDerivedData, Report> {
     let lmbs = graph

@@ -3,6 +3,7 @@ use core::panic;
 use crate::{
     graph::{BareGraph, EdgeType, Graph, LoopMomentumBasis},
     momentum::{Energy, FourMomentum, ThreeMomentum},
+    numerator::NumeratorState,
     utils::{compute_momentum, FloatLike, F},
 };
 use itertools::Itertools;
@@ -405,7 +406,7 @@ impl Heaviside {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct LTDTerm {
     associated_lmb: Vec<(usize, f64)>,
     signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
@@ -493,7 +494,7 @@ pub struct SerializableLTDTerm {
     signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LTDExpression {
     terms: Vec<LTDTerm>,
 }
@@ -558,7 +559,7 @@ pub struct SerializableLTDExpression {
     terms: Vec<SerializableLTDTerm>,
 }
 
-pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
+pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDExpression {
     debug!(
         "generating ltd expression for graph: {:?}",
         graph.bare_graph.name

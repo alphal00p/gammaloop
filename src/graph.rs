@@ -11,7 +11,10 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
     model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, Polarization, ThreeMomentum},
-    numerator::{AtomStructure, Evaluate, Numerator, RepeatingIteratorTensorOrScalar},
+    numerator::{
+        AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
+        Num, Numerator, NumeratorState, PythonState, RepeatingIteratorTensorOrScalar, UnInit,
+    },
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm,
@@ -36,6 +39,8 @@ use nalgebra::DMatrix;
 
 use gat_lending_iterator::LendingIterator;
 
+use petgraph::graph;
+use rand::distributions::uniform::UniformChar;
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
@@ -52,19 +57,27 @@ use spenso::{
 };
 
 use core::panic;
-use serde::{Deserialize, Serialize};
+use serde::{
+    de::{self, DeserializeOwned, MapAccess, Visitor},
+    ser::SerializeStruct,
+    Deserialize, Deserializer, Serialize,
+};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{
     collections::HashMap,
+    fmt,
+    marker::PhantomData,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use symbolica::{
     atom::Atom,
-    domains::float::Complex as SymComplex,
-    domains::float::NumericalFloatLike,
+    domains::{
+        float::{Complex as SymComplex, NumericalFloatLike},
+        rational::Rational,
+    },
     id::{Pattern, Replacement},
 };
 //use symbolica::{atom::Symbol,state::State};
@@ -661,9 +674,19 @@ impl SerializableGraph {
 }
 
 #[derive(Debug, Clone)]
-pub struct Graph {
+pub struct Graph<S: NumeratorState = Evaluators> {
     pub bare_graph: BareGraph,
-    pub derived_data: DerivedGraphData,
+    pub derived_data: DerivedGraphData<S>,
+}
+
+impl Graph<PythonState> {
+    pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
+        let derived_data = DerivedGraphData::load_python_from_path::<S>(path)?;
+
+        self.derived_data = derived_data;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1413,8 +1436,35 @@ impl BareGraph {
 
         pols
     }
+
+    pub fn load_derived_data<NumState: NumeratorState + DeserializeOwned>(
+        self,
+        path: &Path,
+        settings: &Settings,
+    ) -> Result<Graph<NumState>, Report> {
+        let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
+        let mut derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
+
+        derived_data
+            .cff_expression
+            .as_mut()
+            .unwrap()
+            .load_compiled(path.into(), settings)?;
+
+        // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
+        let lmb_indices = self.loop_momentum_basis.basis.clone();
+
+        let mut graph = Graph {
+            bare_graph: self,
+            derived_data,
+        };
+        graph.set_lmb(&lmb_indices)?;
+
+        Ok(graph)
+    }
 }
-impl Graph {
+
+impl Graph<UnInit> {
     pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> Self {
         Graph {
             derived_data: DerivedGraphData::new_empty(),
@@ -1422,218 +1472,41 @@ impl Graph {
         }
     }
 
-    // == Generation fns
-
-    pub fn generate_loop_momentum_bases(&mut self) {
-        self.derived_data.loop_momentum_bases =
-            Some(self.bare_graph.generate_loop_momentum_bases());
-    }
-    pub fn generate_loop_momentum_bases_if_not_exists(&mut self) {
-        if self.derived_data.loop_momentum_bases.is_none() {
-            self.generate_loop_momentum_bases();
-        }
-    }
-
-    #[inline]
-    pub fn evaluate_cff_expression<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        settings: &Settings,
-    ) -> Complex<F<T>> {
-        self.derived_data
-            .evaluate_cff_expression(&self.bare_graph, sample, settings)
-            .scalar()
-            .unwrap()
-    }
-
-    #[inline]
-    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        lmb_specification: &LoopMomentumBasisSpecification,
-        settings: &Settings,
-    ) -> Complex<F<T>> {
-        self.derived_data
-            .evaluate_cff_expression_in_lmb(&self.bare_graph, sample, lmb_specification, settings)
-            .scalar()
-            .unwrap()
-    }
-    #[inline]
-    pub fn evaluate_cff_all_orientations<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        settings: &Settings,
-    ) -> Complex<F<T>> {
-        self.derived_data
-            .evaluate_cff_all_orientations(&self.bare_graph, sample, settings)
-    }
-
-    #[inline]
-    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        settings: &Settings,
-    ) -> DataTensor<SymComplex<T>, AtomStructure> {
-        self.derived_data
-            .evaluate_numerator_all_orientations(&self.bare_graph, sample, settings)
-    }
-
-    #[inline]
-    pub fn evaluate_polarizations<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        _settings: &Settings,
-    ) -> Vec<Polarization<Complex<F<T>>>> {
-        self.derived_data
-            .evaluate_polarizations(&self.bare_graph, sample)
-    }
-
-    #[inline]
-    pub fn generate_params<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        _settings: &Settings,
-    ) -> Vec<Complex<F<T>>> {
-        self.derived_data.generate_params(&self.bare_graph, sample)
-    }
-
-    pub fn process_numerator(&mut self, model: &Model) {
-        self.smart_generate_numerator();
-        let numerator = self.derived_data.numerator.as_mut().unwrap();
-
-        numerator.process(model, &self.bare_graph);
-    }
-
-    pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
-        let table = self.bare_graph.generate_tropical_subgraph_table(settings);
-
-        if let Ok(table) = table {
-            debug!("min dod: {}", table.get_smallest_dod());
-            self.derived_data.tropical_subgraph_table = Some(table);
-        } else if settings.panic_on_fail {
-            panic!("Tropical subgraph table generation failed 🥥");
-        } else {
-            warn!("Tropical subgraph table generation failed 🥥");
-        }
-    }
-
-    pub fn generate_numerator(&mut self) {
-        let orientations = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .iter()
-            .map(|a| a.orientation.clone())
-            .collect();
-        self.derived_data.numerator = Some(Numerator::generate(&mut self.bare_graph, orientations));
-    }
-
-    pub fn smart_generate_numerator(&mut self) {
-        if self.derived_data.numerator.is_none() {
-            self.generate_numerator();
-        }
-    }
-
-    #[inline]
-    pub fn evaluate_ltd_expression<T: FloatLike>(
-        &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
-    ) -> Complex<F<T>> {
-        let one = loop_moms[0].px.one();
-        let zero = one.zero();
-        let i = Complex::new(zero, one);
-        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
-        let prefactor = i.pow(loop_number as u64);
-
-        prefactor
-            * self.derived_data.ltd_expression.as_ref().unwrap().evaluate(
-                loop_moms,
-                external_moms,
-                &self.bare_graph,
-            )
-    }
-
-    #[inline]
-    pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
-        &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
-        lmb: &LoopMomentumBasis,
-    ) -> Complex<F<T>> {
-        let one = loop_moms[0].px.one();
-        let zero = one.zero();
-        let i = Complex::new(zero, one);
-        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
-        let prefactor = i.pow(loop_number as u64);
-
-        prefactor
-            * self
-                .derived_data
-                .ltd_expression
-                .as_ref()
-                .unwrap()
-                .evaluate_in_lmb(loop_moms, external_moms, &self.bare_graph, lmb)
-    }
-
-    #[inline]
-    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_cff_orientations<T: FloatLike>(
-        &self,
-        sample: &DefaultSample<T>,
-        lmb_specification: &LoopMomentumBasisSpecification,
-        settings: &Settings,
-    ) -> Vec<F<T>> {
-        let lmb = lmb_specification.basis(self);
-        let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
-            &sample.loop_moms,
-            &sample.external_moms,
-            lmb,
+    pub fn process_numerator(
+        mut self,
+        model: &Model,
+        contraction_settings: ContractionSettings<Rational>,
+        export_path: PathBuf,
+        export_settings: &ExportSettings,
+    ) -> Graph {
+        let processed_data = self.derived_data.process_numerator(
+            &mut self.bare_graph,
+            model,
+            contraction_settings,
+            export_path,
+            export_settings,
         );
-
-        self.derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .evaluate_orientations(&energy_cache, settings)
-    }
-
-    pub fn numerator_substitute_model_params(&mut self, model: &Model) {
-        if let Some(numerator) = self.derived_data.numerator.as_mut() {
-            numerator.substitute_model_params(model);
+        Graph {
+            bare_graph: self.bare_graph,
+            derived_data: processed_data,
         }
     }
 
-    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
-        let derived_data_path = path.join(format!(
-            "derived_data_{}.bin",
-            self.bare_graph.name.as_str()
-        ));
-        let derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
-        self.derived_data = derived_data;
-
-        self.derived_data
-            .cff_expression
-            .as_mut()
-            .unwrap()
-            .load_compiled(path.into(), settings)?;
-
-        // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
-        let lmb_indices = self.bare_graph.loop_momentum_basis.basis.clone();
-        self.set_lmb(&lmb_indices)?;
-        Ok(())
+    pub fn apply_feynman_rules(mut self) -> Graph<AppliedFeynmanRule> {
+        let processed_data = self.derived_data.apply_feynman_rules(&mut self.bare_graph);
+        Graph {
+            bare_graph: self.bare_graph,
+            derived_data: processed_data,
+        }
     }
-
-    // attempt to set a new loop momentum basis
-    pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
-        let position = self.derived_data.search_lmb_position(lmb)?;
-        self.bare_graph.loop_momentum_basis =
-            self.derived_data.loop_momentum_bases.as_ref().unwrap()[position].clone();
-        Ok(())
+}
+impl<S: NumeratorState> Graph<S> {
+    pub fn forget_type(self) -> Graph<PythonState> {
+        Graph {
+            bare_graph: self.bare_graph,
+            derived_data: self.derived_data.forget_type(),
+        }
     }
-
     pub fn generate_cff(&mut self) {
         self.derived_data.cff_expression = Some(generate_cff_expression(&self.bare_graph).unwrap());
     }
@@ -1719,27 +1592,171 @@ impl Graph {
             }
         }
     }
+    // == Generation fns
 
-    pub fn evaluate_numerator<T: FloatLike>(
+    pub fn generate_loop_momentum_bases(&mut self) {
+        self.derived_data.loop_momentum_bases =
+            Some(self.bare_graph.generate_loop_momentum_bases());
+    }
+    pub fn generate_loop_momentum_bases_if_not_exists(&mut self) {
+        if self.derived_data.loop_momentum_bases.is_none() {
+            self.generate_loop_momentum_bases();
+        }
+    }
+
+    // attempt to set a new loop momentum basis
+    pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
+        let position = self.derived_data.search_lmb_position(lmb)?;
+        self.bare_graph.loop_momentum_basis =
+            self.derived_data.loop_momentum_bases.as_ref().unwrap()[position].clone();
+        Ok(())
+    }
+
+    #[inline]
+    pub fn generate_params<T: FloatLike>(
         &mut self,
-        emr: Vec<FourMomentum<F<T>>>,
-    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>
-    where
-        Numerator: Evaluate<T>,
-    {
-        let pols = self.bare_graph.generate_polarizations_from_emr(&emr);
+        sample: &DefaultSample<T>,
+        _settings: &Settings,
+    ) -> Vec<Complex<F<T>>> {
+        self.derived_data.generate_params(&self.bare_graph, sample)
+    }
+
+    pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
+        let table = self.bare_graph.generate_tropical_subgraph_table(settings);
+
+        if let Ok(table) = table {
+            debug!("min dod: {}", table.get_smallest_dod());
+            self.derived_data.tropical_subgraph_table = Some(table);
+        } else if settings.panic_on_fail {
+            panic!("Tropical subgraph table generation failed 🥥");
+        } else {
+            warn!("Tropical subgraph table generation failed 🥥");
+        }
+    }
+}
+impl Graph<Evaluators> {
+    #[inline]
+    pub fn evaluate_cff_expression<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
         self.derived_data
-            .numerator
-            .as_mut()
+            .evaluate_cff_expression(&self.bare_graph, sample, settings)
+            .scalar()
             .unwrap()
-            .evaluate(&emr, &pols)
+    }
+
+    #[inline]
+    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        self.derived_data
+            .evaluate_cff_expression_in_lmb(&self.bare_graph, sample, lmb_specification, settings)
+            .scalar()
             .unwrap()
+    }
+    #[inline]
+    pub fn evaluate_cff_all_orientations<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        self.derived_data
+            .evaluate_cff_all_orientations(&self.bare_graph, sample, settings)
+    }
+
+    #[inline]
+    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        self.derived_data
+            .evaluate_numerator_all_orientations(&self.bare_graph, sample, settings)
+    }
+
+    #[inline]
+    pub fn evaluate_polarizations<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        _settings: &Settings,
+    ) -> Vec<Polarization<Complex<F<T>>>> {
+        self.derived_data
+            .evaluate_polarizations(&self.bare_graph, sample)
+    }
+
+    #[inline]
+    pub fn evaluate_ltd_expression<T: FloatLike>(
+        &self,
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> Complex<F<T>> {
+        let one = loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero, one);
+        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
+        let prefactor = i.pow(loop_number as u64);
+
+        prefactor
+            * self.derived_data.ltd_expression.as_ref().unwrap().evaluate(
+                loop_moms,
+                external_moms,
+                &self.bare_graph,
+            )
+    }
+
+    #[inline]
+    pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
+        &self,
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+        lmb: &LoopMomentumBasis,
+    ) -> Complex<F<T>> {
+        let one = loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero, one);
+        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
+        let prefactor = i.pow(loop_number as u64);
+
+        prefactor
+            * self
+                .derived_data
+                .ltd_expression
+                .as_ref()
+                .unwrap()
+                .evaluate_in_lmb(loop_moms, external_moms, &self.bare_graph, lmb)
+    }
+
+    #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_cff_orientations<T: FloatLike>(
+        &self,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+        settings: &Settings,
+    ) -> Vec<F<T>> {
+        let lmb = lmb_specification.basis(self);
+        let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
+            &sample.loop_moms,
+            &sample.external_moms,
+            lmb,
+        );
+
+        self.derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .evaluate_orientations(&energy_cache, settings)
     }
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub struct DerivedGraphData {
+pub struct DerivedGraphData<NumState: NumeratorState> {
     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
@@ -1747,100 +1764,140 @@ pub struct DerivedGraphData {
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub static_counterterm: Option<static_counterterm::CounterTerm>,
-    pub numerator: Option<Numerator>,
+    pub numerator: Num<NumState>,
 }
 
-impl DerivedGraphData {
-    #[inline]
-    pub fn evaluate_cff_expression<T: FloatLike>(
-        &mut self,
-        graph: &BareGraph,
-        sample: &DefaultSample<T>,
-        settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
-        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
-        self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, settings)
-    }
-    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
-        &mut self,
-        graph: &BareGraph,
-        sample: &DefaultSample<T>,
-        _settings: &Settings,
-    ) -> DataTensor<SymComplex<T>, AtomStructure> {
-        let emr = graph.emr_from_lmb(sample, &graph.loop_momentum_basis);
-
-        let pols = graph.generate_polarizations_from_emr(&emr);
-        let rep = self
-            .numerator
-            .as_mut()
-            .unwrap()
-            .evaluate_sym(&emr, &pols)
-            .unwrap();
-
-        match rep {
-            RepeatingIteratorTensorOrScalar::Tensors(mut t) => {
-                if let Some(i) = t.next() {
-                    let mut sum = i.clone();
-
-                    while let Some(j) = t.next() {
-                        sum += j;
-                    }
-                    sum
-                } else {
-                    panic!("Empty iterator in sum");
-                }
+impl DerivedGraphData<PythonState> {
+    pub fn load_python_from_path<S: NumeratorState>(path: &Path) -> Result<Self, Report> {
+        match std::fs::read(path) {
+            Ok(derived_data_bytes) => {
+                let derived_data: DerivedGraphData<S> = bincode::deserialize(&derived_data_bytes)?;
+                Ok(derived_data.forget_type())
             }
-            RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
-                if let Some(i) = s.next() {
-                    let mut sum = i.clone();
-
-                    while let Some(j) = s.next() {
-                        sum += j;
-                    }
-                    DataTensor::new_scalar(sum)
-                } else {
-                    panic!("Empty iterator in sum");
-                }
+            Err(_) => {
+                Err(eyre!("no derived data found"))
+                // Ok(Self::new_empty())
             }
         }
     }
+}
 
-    pub fn evaluate_cff_all_orientations<T: FloatLike>(
-        &mut self,
-        graph: &BareGraph,
-        sample: &DefaultSample<T>,
-        settings: &Settings,
-    ) -> Complex<F<T>> {
-        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
-        Complex {
-            re: self
-                .evaluate_cff_orientations(graph, sample, &lmb_specification, settings)
-                .into_iter()
-                .reduce(|acc, e| acc + &e)
-                .unwrap_or_else(|| panic!("no orientations to evaluate")),
-            im: F::new_zero(),
+impl<NumState: NumeratorState> Serialize for DerivedGraphData<NumState> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("DerivedGraphData", 7)?;
+        state.serialize_field("loop_momentum_bases", &self.loop_momentum_bases)?;
+        state.serialize_field("cff_expression", &self.cff_expression)?;
+        state.serialize_field("ltd_expression", &self.ltd_expression)?;
+        state.serialize_field("tropical_subgraph_table", &self.tropical_subgraph_table)?;
+        state.serialize_field("edge_groups", &self.edge_groups)?;
+        state.serialize_field("esurface_derived_data", &self.esurface_derived_data)?;
+        state.serialize_field("static_counterterm", &self.static_counterterm)?;
+        state.serialize_field("numerator", &self.numerator)?;
+        state.end()
+    }
+}
+impl<'de, NumState: NumeratorState> Deserialize<'de> for DerivedGraphData<NumState> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct DerivedGraphDataVisitor<NumState: NumeratorState>(PhantomData<NumState>);
+
+        impl<'de, NumState: NumeratorState> Visitor<'de> for DerivedGraphDataVisitor<NumState> {
+            type Value = DerivedGraphData<NumState>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct DerivedGraphData")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut loop_momentum_bases = None;
+                let mut cff_expression = None;
+                let mut ltd_expression = None;
+                let mut tropical_subgraph_table = None;
+                let mut edge_groups = None;
+                let mut esurface_derived_data = None;
+                let mut static_counterterm = None;
+                let mut numerator = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        "loop_momentum_bases" => {
+                            loop_momentum_bases = Some(map.next_value()?);
+                        }
+                        "cff_expression" => {
+                            cff_expression = Some(map.next_value()?);
+                        }
+                        "ltd_expression" => {
+                            ltd_expression = Some(map.next_value()?);
+                        }
+                        "tropical_subgraph_table" => {
+                            tropical_subgraph_table = Some(map.next_value()?);
+                        }
+                        "edge_groups" => {
+                            edge_groups = Some(map.next_value()?);
+                        }
+                        "esurface_derived_data" => {
+                            esurface_derived_data = Some(map.next_value()?);
+                        }
+                        "static_counterterm" => {
+                            static_counterterm = Some(map.next_value()?);
+                        }
+                        "numerator" => {
+                            numerator = Some(map.next_value()?);
+                        }
+                        _ => {
+                            return Err(de::Error::unknown_field(key, FIELDS));
+                        }
+                    }
+                }
+
+                Ok(DerivedGraphData {
+                    loop_momentum_bases: loop_momentum_bases
+                        .ok_or_else(|| de::Error::missing_field("loop_momentum_bases"))?,
+                    cff_expression: cff_expression
+                        .ok_or_else(|| de::Error::missing_field("cff_expression"))?,
+                    ltd_expression: ltd_expression
+                        .ok_or_else(|| de::Error::missing_field("ltd_expression"))?,
+                    tropical_subgraph_table: tropical_subgraph_table
+                        .ok_or_else(|| de::Error::missing_field("tropical_subgraph_table"))?,
+                    edge_groups: edge_groups
+                        .ok_or_else(|| de::Error::missing_field("edge_groups"))?,
+                    esurface_derived_data: esurface_derived_data
+                        .ok_or_else(|| de::Error::missing_field("esurface_derived_data"))?,
+                    static_counterterm: static_counterterm
+                        .ok_or_else(|| de::Error::missing_field("static_counterterm"))?,
+                    numerator: numerator.ok_or_else(|| de::Error::missing_field("numerator"))?,
+                })
+            }
         }
+
+        const FIELDS: &[&str] = &[
+            "loop_momentum_bases",
+            "cff_expression",
+            "ltd_expression",
+            "tropical_subgraph_table",
+            "edge_groups",
+            "esurface_derived_data",
+            "static_counterterm",
+            "numerator",
+        ];
+
+        deserializer.deserialize_struct(
+            "DerivedGraphData",
+            FIELDS,
+            DerivedGraphDataVisitor(PhantomData),
+        )
     }
+}
 
-    #[inline]
-    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_cff_orientations<T: FloatLike>(
-        &self,
-        graph: &BareGraph,
-        sample: &DefaultSample<T>,
-        lmb_specification: &LoopMomentumBasisSpecification,
-        settings: &Settings,
-    ) -> Vec<F<T>> {
-        let lmb = lmb_specification.basis_from_derived(self);
-        let energy_cache =
-            graph.compute_onshell_energies_in_lmb(&sample.loop_moms, &sample.external_moms, lmb);
-
-        self.cff_expression
-            .as_ref()
-            .unwrap()
-            .evaluate_orientations(&energy_cache, settings)
-    }
-
+impl DerivedGraphData<Evaluators> {
     #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
@@ -1897,6 +1954,48 @@ impl DerivedGraphData {
         }
     }
 
+    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        _settings: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let emr = graph.emr_from_lmb(sample, &graph.loop_momentum_basis);
+
+        let pols = graph.generate_polarizations_from_emr(&emr);
+        let rep = self
+            .numerator
+            .evaluate_all_orientations(&emr, &pols)
+            .unwrap();
+
+        match rep {
+            RepeatingIteratorTensorOrScalar::Tensors(mut t) => {
+                if let Some(i) = t.next() {
+                    let mut sum = i.clone();
+
+                    while let Some(j) = t.next() {
+                        sum += j;
+                    }
+                    sum
+                } else {
+                    panic!("Empty iterator in sum");
+                }
+            }
+            RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
+                if let Some(i) = s.next() {
+                    let mut sum = i.clone();
+
+                    while let Some(j) = s.next() {
+                        sum += j;
+                    }
+                    DataTensor::new_scalar(sum)
+                } else {
+                    panic!("Empty iterator in sum");
+                }
+            }
+        }
+    }
+
     #[inline]
     /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_numerator_orientations<T: FloatLike>(
@@ -1904,19 +2003,25 @@ impl DerivedGraphData {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>
-    where
-        Numerator: Evaluate<T>,
-    {
+    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>> {
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.emr_from_lmb(sample, lmb);
 
         let pols = graph.generate_polarizations_from_emr(&emr);
         self.numerator
-            .as_mut()
+            .evaluate_all_orientations(&emr, &pols)
             .unwrap()
-            .evaluate(&emr, &pols)
-            .unwrap()
+    }
+
+    #[inline]
+    pub fn evaluate_cff_expression<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
+        self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, settings)
     }
 
     pub fn evaluate_numerator<T: FloatLike>(
@@ -1929,10 +2034,132 @@ impl DerivedGraphData {
     {
         let pols = graph.generate_polarizations_from_emr(&emr);
         self.numerator
-            .as_mut()
+            .evaluate_all_orientations(&emr, &pols)
             .unwrap()
-            .evaluate(&emr, &pols)
+    }
+}
+
+impl DerivedGraphData<UnInit> {
+    fn new_empty() -> Self {
+        Self {
+            loop_momentum_bases: None,
+            cff_expression: None,
+            ltd_expression: None,
+            tropical_subgraph_table: None,
+            edge_groups: None,
+            esurface_derived_data: None,
+            numerator: Num::new(),
+            static_counterterm: None,
+        }
+    }
+
+    fn process_numerator(
+        self,
+        base_graph: &mut BareGraph,
+        model: &Model,
+        contraction_settings: ContractionSettings<Rational>,
+        export_path: PathBuf,
+        export_settings: &ExportSettings,
+    ) -> DerivedGraphData<Evaluators> {
+        let extra_info = self.generate_extra_info(export_path);
+        let numerator = self
+            .numerator
+            .from_graph(base_graph)
+            .color_symplify()
+            .parse()
+            .contract(contraction_settings)
             .unwrap()
+            .generate_evaluators(model, &base_graph, &extra_info, export_settings);
+        DerivedGraphData {
+            loop_momentum_bases: self.loop_momentum_bases,
+            cff_expression: self.cff_expression,
+            ltd_expression: self.ltd_expression,
+            tropical_subgraph_table: self.tropical_subgraph_table,
+            edge_groups: self.edge_groups,
+            esurface_derived_data: self.esurface_derived_data,
+            numerator,
+            static_counterterm: self.static_counterterm,
+        }
+    }
+
+    fn apply_feynman_rules(
+        self,
+        base_graph: &mut BareGraph,
+    ) -> DerivedGraphData<AppliedFeynmanRule> {
+        let numerator = self.numerator.from_graph(base_graph);
+        DerivedGraphData {
+            loop_momentum_bases: self.loop_momentum_bases,
+            cff_expression: self.cff_expression,
+            ltd_expression: self.ltd_expression,
+            tropical_subgraph_table: self.tropical_subgraph_table,
+            edge_groups: self.edge_groups,
+            esurface_derived_data: self.esurface_derived_data,
+            numerator,
+            static_counterterm: self.static_counterterm,
+        }
+    }
+}
+
+impl<NumState: NumeratorState> DerivedGraphData<NumState> {
+    pub fn forget_type(self) -> DerivedGraphData<PythonState> {
+        DerivedGraphData {
+            loop_momentum_bases: self.loop_momentum_bases,
+            cff_expression: self.cff_expression,
+            ltd_expression: self.ltd_expression,
+            tropical_subgraph_table: self.tropical_subgraph_table,
+            edge_groups: self.edge_groups,
+            esurface_derived_data: self.esurface_derived_data,
+            static_counterterm: self.static_counterterm,
+            numerator: self.numerator.forget_type(),
+        }
+    }
+    fn generate_extra_info(&self, export_path: PathBuf) -> ExtraInfo {
+        ExtraInfo {
+            orientations: self
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations
+                .iter()
+                .map(|a| a.orientation.clone())
+                .collect(),
+            path: export_path,
+        }
+    }
+    pub fn evaluate_cff_all_orientations<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
+        Complex {
+            re: self
+                .evaluate_cff_orientations(graph, sample, &lmb_specification, settings)
+                .into_iter()
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or_else(|| panic!("no orientations to evaluate")),
+            im: F::new_zero(),
+        }
+    }
+
+    #[inline]
+    /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
+    pub fn evaluate_cff_orientations<T: FloatLike>(
+        &self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        lmb_specification: &LoopMomentumBasisSpecification,
+        settings: &Settings,
+    ) -> Vec<F<T>> {
+        let lmb = lmb_specification.basis_from_derived(self);
+        let energy_cache =
+            graph.compute_onshell_energies_in_lmb(&sample.loop_moms, &sample.external_moms, lmb);
+
+        self.cff_expression
+            .as_ref()
+            .unwrap()
+            .evaluate_orientations(&energy_cache, settings)
     }
 
     pub fn generate_params<T: FloatLike>(
@@ -1962,10 +2189,7 @@ impl DerivedGraphData {
         &mut self,
         graph: &BareGraph,
         sample: &DefaultSample<T>,
-    ) -> Vec<Polarization<Complex<F<T>>>>
-    where
-        Numerator: Evaluate<T>,
-    {
+    ) -> Vec<Polarization<Complex<F<T>>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.emr_from_lmb(sample, lmb);
@@ -1973,70 +2197,15 @@ impl DerivedGraphData {
         graph.generate_polarizations_from_emr(&emr)
     }
 
-    fn new_empty() -> Self {
-        DerivedGraphData {
-            loop_momentum_bases: None,
-            cff_expression: None,
-            ltd_expression: None,
-            tropical_subgraph_table: None,
-            edge_groups: None,
-            esurface_derived_data: None,
-            numerator: None,
-            static_counterterm: None,
-        }
-    }
-
-    pub fn to_serializable(&self) -> SerializableDerivedGraphData {
-        SerializableDerivedGraphData {
-            loop_momentum_bases: self
-                .loop_momentum_bases
-                .clone()
-                .map(|lmbs| lmbs.iter().map(|lmb| lmb.to_serializable()).collect_vec()),
-            cff_expression: self.cff_expression.clone(),
-            ltd_expression: self.ltd_expression.clone().map(|ltd| ltd.to_serializable()),
-            tropical_subgraph_table: self.tropical_subgraph_table.clone(),
-            edge_groups: self.edge_groups.clone().map(|groups| {
-                groups
-                    .iter()
-                    .map(|group| group.clone().into_iter().collect())
-                    .collect()
-            }),
-            esurface_derived_data: self.esurface_derived_data.clone(),
-            numerator: self.numerator.clone(),
-        }
-    }
-
-    pub fn from_serializable(serializable: SerializableDerivedGraphData) -> Self {
-        DerivedGraphData {
-            loop_momentum_bases: serializable.loop_momentum_bases.map(|lmbs| {
-                lmbs.iter()
-                    .map(LoopMomentumBasis::from_serializable)
-                    .collect_vec()
-            }),
-            cff_expression: serializable.cff_expression,
-            ltd_expression: serializable
-                .ltd_expression
-                .map(LTDExpression::from_serializable),
-            tropical_subgraph_table: serializable.tropical_subgraph_table,
-            edge_groups: serializable
-                .edge_groups
-                .map(|groups| groups.into_iter().map(|group| group.into()).collect()),
-            esurface_derived_data: serializable.esurface_derived_data,
-            numerator: serializable.numerator,
-            static_counterterm: None,
-        }
-    }
-
     pub fn load_from_path(path: &Path) -> Result<Self, Report> {
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
-                let derived_data: SerializableDerivedGraphData =
-                    bincode::deserialize(&derived_data_bytes)?;
-                Ok(Self::from_serializable(derived_data))
+                let derived_data: Self = bincode::deserialize(&derived_data_bytes)?;
+                Ok(derived_data)
             }
             Err(_) => {
-                warn!("no derived data found");
-                Ok(Self::new_empty())
+                Err(eyre!("no derived data found"))
+                // Ok(Self::new_empty())
             }
         }
     }
@@ -2062,37 +2231,12 @@ impl DerivedGraphData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerializableDerivedGraphData {
-    pub loop_momentum_bases: Option<Vec<SerializableLoopMomentumBasis>>,
-    pub cff_expression: Option<CFFExpression>,
-    pub ltd_expression: Option<SerializableLTDExpression>,
-    pub tropical_subgraph_table: Option<SampleGenerator<3>>,
-    pub edge_groups: Option<Vec<Vec<usize>>>,
-    pub esurface_derived_data: Option<EsurfaceDerivedData>,
-    pub numerator: Option<Numerator>,
-}
-
-#[derive(Debug, Clone)]
 pub struct LoopMomentumBasis {
     pub basis: Vec<usize>,
     pub edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,
 }
 
 impl LoopMomentumBasis {
-    pub fn to_serializable(&self) -> SerializableLoopMomentumBasis {
-        SerializableLoopMomentumBasis {
-            basis: self.basis.clone(),
-            edge_signatures: self.edge_signatures.clone(),
-        }
-    }
-
-    pub fn from_serializable(serializable: &SerializableLoopMomentumBasis) -> LoopMomentumBasis {
-        LoopMomentumBasis {
-            basis: serializable.basis.clone(),
-            edge_signatures: serializable.edge_signatures.clone(),
-        }
-    }
-
     pub fn to_massless_emr<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
@@ -2162,7 +2306,10 @@ impl<'a> LoopMomentumBasisSpecification<'a> {
         }
     }
 
-    pub fn basis_from_derived(&self, derived: &'a DerivedGraphData) -> &'a LoopMomentumBasis {
+    pub fn basis_from_derived<S: NumeratorState>(
+        &self,
+        derived: &'a DerivedGraphData<S>,
+    ) -> &'a LoopMomentumBasis {
         match self {
             LoopMomentumBasisSpecification::Literal(basis) => basis,
             LoopMomentumBasisSpecification::FromList(idx) => &derived

@@ -1,11 +1,17 @@
 use crate::gammaloop_integrand::GammaLoopIntegrand;
-use crate::graph::{Graph, SerializableGraph};
+use crate::graph::{BareGraph, Graph, SerializableGraph};
 use crate::model::Model;
+use crate::numerator::{
+    AppliedFeynmanRule, ContractionSettings, Evaluators, NumeratorState, PythonState, UnInit,
+    UnexpandedNumerator,
+};
 use crate::{utils::*, ExportSettings, Settings};
 use bincode;
+use color_eyre::Result;
 use color_eyre::{Help, Report};
 #[allow(unused_imports)]
 use eyre::{eyre, Context};
+use hyperdual::Num;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
@@ -38,14 +44,14 @@ pub struct SerializableSuperGraphCut {
 
 impl SerializableSuperGraphCut {
     pub fn from_supergraph_cut(
-        graph: &Graph,
+        graph: &BareGraph,
         supergraph_cut: &SuperGraphCut,
     ) -> SerializableSuperGraphCut {
         SerializableSuperGraphCut {
             cut_edges: supergraph_cut
                 .cut_edges
                 .iter()
-                .map(|&edge| graph.bare_graph.edges[edge].name.clone())
+                .map(|&edge| graph.edges[edge].name.clone())
                 .collect(),
             forward_scattering_graph:
                 SerializableForwardScatteringGraph::from_forward_scattering_graph(
@@ -64,7 +70,7 @@ pub struct SuperGraphCut {
 impl SuperGraphCut {
     pub fn from_serializable_supergraph_cut(
         model: &Model,
-        graph: &Graph,
+        graph: &BareGraph,
         serializable_supergraph_cut: &SerializableSuperGraphCut,
     ) -> SuperGraphCut {
         SuperGraphCut {
@@ -73,7 +79,6 @@ impl SuperGraphCut {
                 .iter()
                 .map(|edge_name| {
                     graph
-                        .bare_graph
                         .get_edge_position(edge_name)
                         .unwrap_or_else(|| panic!("Could not find edge with name {}", edge_name))
                 })
@@ -107,7 +112,12 @@ impl SerializableSuperGraph {
             cuts: supergraph
                 .cuts
                 .iter()
-                .map(|cut| SerializableSuperGraphCut::from_supergraph_cut(&supergraph.graph, cut))
+                .map(|cut| {
+                    SerializableSuperGraphCut::from_supergraph_cut(
+                        &supergraph.graph.bare_graph,
+                        cut,
+                    )
+                })
                 .collect(),
         }
     }
@@ -116,7 +126,7 @@ impl SerializableSuperGraph {
 #[derive(Debug, Clone)]
 pub struct SuperGraph {
     pub sg_id: usize,
-    pub graph: Graph,
+    pub graph: Graph<Evaluators>,
     pub multiplicity: f64,
     // This identifier of the topology class is mostly a stub for now
     pub topology_class: Vec<usize>,
@@ -128,19 +138,20 @@ impl SuperGraph {
         model: &Model,
         serializable_supergraph: &SerializableSuperGraph,
     ) -> SuperGraph {
-        let g = Graph::from_serializable_graph(model, &serializable_supergraph.graph);
-        let cuts = serializable_supergraph
-            .cuts
-            .iter()
-            .map(|cut| SuperGraphCut::from_serializable_supergraph_cut(model, &g, cut))
-            .collect();
-        SuperGraph {
-            sg_id: serializable_supergraph.sg_id,
-            graph: g,
-            multiplicity: serializable_supergraph.multiplicity,
-            topology_class: serializable_supergraph.topology_class.clone(),
-            cuts,
-        }
+        let _g = Graph::from_serializable_graph(model, &serializable_supergraph.graph);
+        // let cuts = serializable_supergraph
+        //     .cuts
+        //     .iter()
+        //     .map(|cut| SuperGraphCut::from_serializable_supergraph_cut(model, &g.bare_graph, cut))
+        //     .collect();
+        // SuperGraph {
+        //     sg_id: serializable_supergraph.sg_id,
+        //     graph: g,
+        //     multiplicity: serializable_supergraph.multiplicity,
+        //     topology_class: serializable_supergraph.topology_class.clone(),
+        //     cuts,
+        // }
+        unimplemented!()
     }
 }
 
@@ -152,14 +163,14 @@ pub struct SerializableForwardScatteringGraphCut {
 
 impl SerializableForwardScatteringGraphCut {
     pub fn from_forward_scattering_graph_cut(
-        graph: &Graph,
+        graph: &BareGraph,
         forward_scattering_graph_cut: &ForwardScatteringGraphCut,
     ) -> SerializableForwardScatteringGraphCut {
         SerializableForwardScatteringGraphCut {
             cut_edges: forward_scattering_graph_cut
                 .cut_edges
                 .iter()
-                .map(|&edge| graph.bare_graph.edges[edge].name.clone())
+                .map(|&edge| graph.edges[edge].name.clone())
                 .collect(),
             amplitudes: [
                 SerializableAmplitude::from_amplitude(&forward_scattering_graph_cut.amplitudes[0]),
@@ -171,13 +182,13 @@ impl SerializableForwardScatteringGraphCut {
 #[derive(Debug, Clone)]
 pub struct ForwardScatteringGraphCut {
     pub cut_edges: Vec<usize>,
-    pub amplitudes: [Amplitude; 2],
+    pub amplitudes: [Amplitude<UnInit>; 2],
 }
 
 impl ForwardScatteringGraphCut {
     pub fn from_serializable_forward_scattering_graph_cut(
         model: &Model,
-        graph: &Graph,
+        graph: &BareGraph,
         serializable_forward_scattering_graph_cut: &SerializableForwardScatteringGraphCut,
     ) -> ForwardScatteringGraphCut {
         ForwardScatteringGraphCut {
@@ -186,7 +197,6 @@ impl ForwardScatteringGraphCut {
                 .iter()
                 .map(|edge_name| {
                     graph
-                        .bare_graph
                         .get_edge_position(edge_name)
                         .unwrap_or_else(|| panic!("Could not find edge with name {}", edge_name))
                 })
@@ -221,7 +231,7 @@ impl SerializableForwardScatteringGraph {
         SerializableForwardScatteringGraph {
             sg_id: forward_scattering_graph.sg_id,
             sg_cut_id: forward_scattering_graph.sg_cut_id,
-            graph: SerializableGraph::from_graph(&forward_scattering_graph.graph.bare_graph),
+            graph: SerializableGraph::from_graph(&forward_scattering_graph.graph),
             multiplicity: forward_scattering_graph.multiplicity,
             cuts: forward_scattering_graph
                 .cuts
@@ -241,7 +251,7 @@ impl SerializableForwardScatteringGraph {
 pub struct ForwardScatteringGraph {
     pub sg_id: usize,
     pub sg_cut_id: usize,
-    pub graph: Graph,
+    pub graph: BareGraph,
     pub multiplicity: f64,
     pub cuts: Vec<ForwardScatteringGraphCut>,
 }
@@ -251,7 +261,7 @@ impl ForwardScatteringGraph {
         model: &Model,
         forward_scattering_graph: &SerializableForwardScatteringGraph,
     ) -> ForwardScatteringGraph {
-        let g = Graph::from_serializable_graph(model, &forward_scattering_graph.graph);
+        let g = BareGraph::from_serializable_graph(model, &forward_scattering_graph.graph);
         let cuts = forward_scattering_graph
             .cuts
             .iter()
@@ -282,7 +292,9 @@ pub struct SerializableAmplitudeGraph {
 }
 
 impl SerializableAmplitudeGraph {
-    pub fn from_amplitude_graph(amplitude_graph: &AmplitudeGraph) -> SerializableAmplitudeGraph {
+    pub fn from_amplitude_graph<S: NumeratorState>(
+        amplitude_graph: &AmplitudeGraph<S>,
+    ) -> SerializableAmplitudeGraph {
         SerializableAmplitudeGraph {
             sg_id: amplitude_graph.sg_id,
             sg_cut_id: amplitude_graph.sg_cut_id,
@@ -295,21 +307,57 @@ impl SerializableAmplitudeGraph {
 }
 
 #[derive(Debug, Clone)]
-pub struct AmplitudeGraph {
+pub struct AmplitudeGraph<NumState: NumeratorState> {
     pub sg_id: usize,
     pub sg_cut_id: usize,
     pub fs_cut_id: usize,
     pub amplitude_side: Side,
-    pub graph: Graph,
+    pub graph: Graph<NumState>,
     pub multi_channeling_channels: Vec<usize>,
 }
 
-impl AmplitudeGraph {
+impl AmplitudeGraph<PythonState> {
+    pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
+        self.graph.load_derived_data::<S>(path)
+    }
+}
+
+impl<S: NumeratorState> AmplitudeGraph<S> {
+    pub fn map<F, U: NumeratorState>(self, mut f: F) -> AmplitudeGraph<U>
+    where
+        F: FnMut(Graph<S>) -> Graph<U>,
+    {
+        AmplitudeGraph {
+            sg_id: self.sg_id,
+            sg_cut_id: self.sg_cut_id,
+            fs_cut_id: self.fs_cut_id,
+            amplitude_side: self.amplitude_side,
+            graph: f(self.graph),
+            multi_channeling_channels: self.multi_channeling_channels,
+        }
+    }
+
+    pub fn map_res<F, U: NumeratorState, E>(self, mut f: F) -> Result<AmplitudeGraph<U>, E>
+    where
+        F: FnMut(Graph<S>) -> Result<Graph<U>, E>,
+    {
+        Ok(AmplitudeGraph {
+            sg_id: self.sg_id,
+            sg_cut_id: self.sg_cut_id,
+            fs_cut_id: self.fs_cut_id,
+            amplitude_side: self.amplitude_side,
+            graph: f(self.graph)?,
+            multi_channeling_channels: self.multi_channeling_channels,
+        })
+    }
+}
+
+impl AmplitudeGraph<UnInit> {
     pub fn from_amplitude_graph(
         model: &Model,
         amplitude_graph: &SerializableAmplitudeGraph,
-    ) -> AmplitudeGraph {
-        AmplitudeGraph {
+    ) -> Self {
+        Self {
             sg_id: amplitude_graph.sg_id,
             sg_cut_id: amplitude_graph.sg_cut_id,
             fs_cut_id: amplitude_graph.fs_cut_id,
@@ -317,6 +365,35 @@ impl AmplitudeGraph {
             graph: Graph::from_serializable_graph(model, &amplitude_graph.graph),
             multi_channeling_channels: amplitude_graph.multi_channeling_channels.clone(),
         }
+    }
+
+    pub fn apply_feynman_rules(self) -> AmplitudeGraph<AppliedFeynmanRule> {
+        let graph = self.graph.apply_feynman_rules();
+        AmplitudeGraph {
+            sg_id: self.sg_id,
+            sg_cut_id: self.sg_cut_id,
+            fs_cut_id: self.fs_cut_id,
+            amplitude_side: self.amplitude_side,
+            graph,
+            multi_channeling_channels: self.multi_channeling_channels,
+        }
+    }
+
+    pub fn load_derived_data<S: NumeratorState>(
+        self,
+        path: &Path,
+        settings: &Settings,
+    ) -> Result<AmplitudeGraph<S>, Report> {
+        let filled_g = self.graph.bare_graph.load_derived_data(path, settings)?;
+
+        Ok(AmplitudeGraph {
+            sg_id: self.sg_id,
+            sg_cut_id: self.sg_cut_id,
+            fs_cut_id: self.fs_cut_id,
+            amplitude_side: self.amplitude_side,
+            graph: filled_g,
+            multi_channeling_channels: self.multi_channeling_channels.clone(),
+        })
     }
 }
 
@@ -421,7 +498,7 @@ pub struct SerializableAmplitude {
 }
 
 impl SerializableAmplitude {
-    pub fn from_amplitude(amplitude: &Amplitude) -> SerializableAmplitude {
+    pub fn from_amplitude<S: NumeratorState>(amplitude: &Amplitude<S>) -> SerializableAmplitude {
         SerializableAmplitude {
             name: amplitude.name.clone(),
             amplitude_graphs: amplitude
@@ -449,19 +526,51 @@ impl SerializableAmplitude {
 }
 
 #[derive(Debug, Clone)]
-pub struct Amplitude {
+pub struct Amplitude<NumState: NumeratorState = Evaluators> {
     pub name: SmartString<LazyCompact>,
-    pub amplitude_graphs: Vec<AmplitudeGraph>,
+    pub amplitude_graphs: Vec<AmplitudeGraph<NumState>>,
 }
 
-impl Amplitude {
-    pub fn from_file(model: &Model, file_path: String) -> Result<Amplitude, Report> {
+impl Amplitude<PythonState> {
+    pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
+        for amplitude_graph in self.amplitude_graphs.iter_mut() {
+            amplitude_graph.load_derived_data::<S>(path)?;
+        }
+        Ok(())
+    }
+}
+
+impl<S: NumeratorState> Amplitude<S> {
+    pub fn map<F, U: NumeratorState>(self, f: F) -> Amplitude<U>
+    where
+        F: FnMut(AmplitudeGraph<S>) -> AmplitudeGraph<U>,
+    {
+        Amplitude {
+            name: self.name,
+            amplitude_graphs: self.amplitude_graphs.into_iter().map(f).collect(),
+        }
+    }
+
+    pub fn map_res<F, U: NumeratorState, E>(self, f: F) -> Result<Amplitude<U>, E>
+    where
+        F: FnMut(AmplitudeGraph<S>) -> Result<AmplitudeGraph<U>, E>,
+    {
+        let new_amp_graphs: Result<_, E> = self.amplitude_graphs.into_iter().map(f).collect();
+        Ok(Amplitude {
+            name: self.name,
+            amplitude_graphs: new_amp_graphs?,
+        })
+    }
+}
+
+impl Amplitude<UnInit> {
+    pub fn from_file(model: &Model, file_path: String) -> Result<Self, Report> {
         SerializableAmplitude::from_file(file_path).map(|serializable_amplitude| {
             Amplitude::from_serializable_amplitude(model, &serializable_amplitude)
         })
     }
 
-    pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<Amplitude, Report> {
+    pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<Self, Report> {
         SerializableAmplitude::from_yaml_str(yaml_str).map(|serializable_amplitude| {
             Amplitude::from_serializable_amplitude(model, &serializable_amplitude)
         })
@@ -470,8 +579,8 @@ impl Amplitude {
     pub fn from_serializable_amplitude(
         model: &Model,
         serializable_amplitude: &SerializableAmplitude,
-    ) -> Amplitude {
-        Amplitude {
+    ) -> Self {
+        Self {
             name: serializable_amplitude.name.clone(),
             amplitude_graphs: serializable_amplitude
                 .amplitude_graphs
@@ -481,6 +590,158 @@ impl Amplitude {
         }
     }
 
+    pub fn export(
+        self,
+        export_root: &str,
+        model: &Model,
+        export_settings: &ExportSettings,
+    ) -> Result<Amplitude<Evaluators>, Report> {
+        // TODO process amplitude by adding lots of additional information necessary for runtime.
+        // e.g. generate e-surface, cff expression, counterterms, etc.
+
+        // Then dumped the new yaml representation of the amplitude now containing all that additional information
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str());
+
+        // generate cff and ltd for each graph in the ampltiudes, ltd also generates lmbs
+
+        let amp = self.map_res(|a| {
+            a.map_res(|mut g| {
+                g.generate_cff();
+                g.generate_ltd();
+                g.generate_tropical_subgraph_table(
+                    &export_settings.tropical_subgraph_table_settings,
+                );
+                g.generate_esurface_data()?;
+                g.build_compiled_expression(path.clone(), export_settings)?;
+                let g = g.process_numerator(
+                    model,
+                    ContractionSettings::Normal,
+                    path.clone(),
+                    export_settings,
+                );
+                Result::<_, Report>::Ok(g)
+            })
+        })?;
+
+        fs::write(
+            path.clone().join("amplitude.yaml"),
+            serde_yaml::to_string(&amp.to_serializable())?,
+        )?;
+
+        // dump the derived data in a binary file
+        for amplitude_graph in amp.amplitude_graphs.iter() {
+            debug!("dumping derived data");
+            fs::write(
+                path.clone().join(format!(
+                    "derived_data_{}.bin",
+                    amplitude_graph.graph.bare_graph.name
+                )),
+                bincode::serialize(&amplitude_graph.graph.derived_data)?,
+            )?;
+        }
+
+        // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
+
+        Ok(amp)
+    }
+
+    pub fn apply_feynman_rules(self) -> Amplitude<AppliedFeynmanRule> {
+        let graphs = self
+            .amplitude_graphs
+            .into_iter()
+            .map(AmplitudeGraph::apply_feynman_rules)
+            .collect();
+
+        Amplitude {
+            name: self.name,
+            amplitude_graphs: graphs,
+        }
+    }
+
+    pub fn load_derived_data<S: NumeratorState>(
+        self,
+        path: &Path,
+        settings: &Settings,
+    ) -> Result<Amplitude<S>, Report> {
+        self.map_res(|a| a.load_derived_data(path, settings))
+    }
+}
+impl<S: UnexpandedNumerator> Amplitude<S> {
+    pub fn export_expressions(
+        &self,
+        export_root: &str,
+        printer_ops: PrintOptions,
+    ) -> Result<(), Report> {
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str())
+            .join("expressions");
+        for amplitude_graph in self.amplitude_graphs.iter() {
+            let num = &amplitude_graph.graph.derived_data.numerator.expr();
+            let dens: Vec<(String, String)> = amplitude_graph
+                .graph
+                .bare_graph
+                .edges
+                .iter()
+                .map(|e| {
+                    let (mom, mass) = e.denominator(&amplitude_graph.graph.bare_graph);
+                    (
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                        ),
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                        ),
+                    )
+                })
+                .collect();
+
+            let rep_rules: Vec<(String, String)> = amplitude_graph
+                .graph
+                .bare_graph
+                .generate_lmb_replacement_rules()
+                .iter()
+                .map(|(lhs, rhs)| {
+                    (
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
+                        ),
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
+                        ),
+                    )
+                })
+                .collect();
+
+            let out = (
+                format!(
+                    "{}",
+                    AtomPrinter::new_with_options(num.0.as_view(), printer_ops)
+                ),
+                rep_rules,
+                dens,
+            );
+
+            fs::write(
+                path.join(format!(
+                    "{}_exp.json",
+                    amplitude_graph.graph.bare_graph.name
+                )),
+                serde_json::to_string_pretty(&out).unwrap(),
+            )?;
+        }
+        Ok(())
+    }
+}
+impl<S: NumeratorState> Amplitude<S> {
     pub fn to_serializable(&self) -> SerializableAmplitude {
         SerializableAmplitude::from_amplitude(self)
     }
@@ -526,143 +787,8 @@ impl Amplitude {
         }
         Ok(())
     }
-
-    pub fn export_expressions(
-        &self,
-        export_root: &str,
-        printer_ops: PrintOptions,
-    ) -> Result<(), Report> {
-        let path = Path::new(export_root)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str())
-            .join("expressions");
-        for amplitude_graph in self.amplitude_graphs.iter() {
-            if let Some(num) = &amplitude_graph.graph.derived_data.numerator {
-                let dens: Vec<(String, String)> = amplitude_graph
-                    .graph
-                    .bare_graph
-                    .edges
-                    .iter()
-                    .map(|e| {
-                        let (mom, mass) = e.denominator(&amplitude_graph.graph.bare_graph);
-                        (
-                            format!(
-                                "{}",
-                                AtomPrinter::new_with_options(mom.as_view(), printer_ops)
-                            ),
-                            format!(
-                                "{}",
-                                AtomPrinter::new_with_options(mass.as_view(), printer_ops)
-                            ),
-                        )
-                    })
-                    .collect();
-
-                let rep_rules: Vec<(String, String)> = amplitude_graph
-                    .graph
-                    .bare_graph
-                    .generate_lmb_replacement_rules()
-                    .iter()
-                    .map(|(lhs, rhs)| {
-                        (
-                            format!(
-                                "{}",
-                                AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
-                            ),
-                            format!(
-                                "{}",
-                                AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
-                            ),
-                        )
-                    })
-                    .collect();
-
-                let out = (
-                    format!(
-                        "{}",
-                        AtomPrinter::new_with_options(num.expression.as_view(), printer_ops)
-                    ),
-                    rep_rules,
-                    dens,
-                );
-
-                fs::write(
-                    path.join(format!(
-                        "{}_exp.json",
-                        amplitude_graph.graph.bare_graph.name
-                    )),
-                    serde_json::to_string_pretty(&out).unwrap(),
-                )?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn export(
-        &mut self,
-        export_root: &str,
-        model: &Model,
-        export_settings: &ExportSettings,
-    ) -> Result<(), Report> {
-        // TODO process amplitude by adding lots of additional information necessary for runtime.
-        // e.g. generate e-surface, cff expression, counterterms, etc.
-
-        // Then dumped the new yaml representation of the amplitude now containing all that additional information
-        let path = Path::new(export_root)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str());
-
-        // generate cff and ltd for each graph in the ampltiudes, ltd also generates lmbs
-        for amplitude_graph in self.amplitude_graphs.iter_mut() {
-            amplitude_graph.graph.generate_cff();
-            amplitude_graph.graph.generate_ltd();
-            amplitude_graph.graph.generate_tropical_subgraph_table(
-                &export_settings.tropical_subgraph_table_settings,
-            );
-            amplitude_graph.graph.generate_esurface_data()?;
-            amplitude_graph.graph.process_numerator(model);
-            amplitude_graph
-                .graph
-                .numerator_substitute_model_params(model);
-            // graph.evaluate_model_params(&model);
-            amplitude_graph.graph.process_numerator(model);
-        }
-
-        fs::write(
-            path.clone().join("amplitude.yaml"),
-            serde_yaml::to_string(&self.to_serializable())?,
-        )?;
-
-        // dump the derived data in a binary file
-        for amplitude_graph in self.amplitude_graphs.iter_mut() {
-            amplitude_graph
-                .graph
-                .build_compiled_expression(path.clone(), export_settings)?;
-
-            debug!("dumping derived data");
-            fs::write(
-                path.clone().join(format!(
-                    "derived_data_{}.bin",
-                    amplitude_graph.graph.bare_graph.name
-                )),
-                bincode::serialize(&amplitude_graph.graph.derived_data.to_serializable())?,
-            )?;
-        }
-
-        // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
-
-        Ok(())
-    }
-
-    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
-        for ampltitude_graph in self.amplitude_graphs.iter_mut() {
-            ampltitude_graph.graph.load_derived_data(path, settings)?;
-        }
-        Ok(())
-    }
-
+}
+impl Amplitude<Evaluators> {
     pub fn generate_integrand(
         &self,
         path_to_settings: &Path,
@@ -686,7 +812,6 @@ impl Amplitude {
         ))
     }
 }
-
 #[derive(Debug, Clone, Default)]
 pub struct CrossSectionList {
     pub container: Vec<CrossSection>,
@@ -753,12 +878,45 @@ impl CrossSectionList {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct AmplitudeList {
-    pub container: Vec<Amplitude>,
+pub struct AmplitudeList<S: NumeratorState> {
+    pub container: Vec<Amplitude<S>>,
 }
 
-impl AmplitudeList {
-    pub fn from_file(model: &Model, file_path: String) -> Result<AmplitudeList, Report> {
+impl AmplitudeList<PythonState> {
+    pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
+        for amplitude in self.container.iter_mut() {
+            amplitude.load_derived_data::<S>(path)?;
+        }
+        Ok(())
+    }
+}
+
+impl<S: NumeratorState> AmplitudeList<S> {
+    pub fn map<F, U: NumeratorState>(self, f: F) -> AmplitudeList<U>
+    where
+        F: FnMut(Amplitude<S>) -> Amplitude<U>,
+    {
+        AmplitudeList {
+            container: self.container.into_iter().map(f).collect(),
+        }
+    }
+
+    pub fn map_res<F, U: NumeratorState, E>(self, mut f: F) -> Result<AmplitudeList<U>, E>
+    where
+        F: FnMut(Amplitude<S>) -> Result<Amplitude<U>, E>,
+    {
+        Ok(AmplitudeList {
+            container: self
+                .container
+                .into_iter()
+                .map(|a| f(a))
+                .collect::<Result<_, E>>()?,
+        })
+    }
+}
+
+impl AmplitudeList<UnInit> {
+    pub fn from_file(model: &Model, file_path: String) -> Result<Self, Report> {
         let f = File::open(file_path.clone())
             .wrap_err_with(|| format!("Could not open amplitude list yaml file {}", file_path))
             .suggestion("Does the path exist?")?;
@@ -770,7 +928,7 @@ impl AmplitudeList {
             })
     }
 
-    pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<AmplitudeList, Report> {
+    pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<Self, Report> {
         serde_yaml::from_str(yaml_str.as_str())
             .wrap_err("Could not parse amplitude list yaml content")
             .suggestion("Is it a correct yaml file")
@@ -782,8 +940,8 @@ impl AmplitudeList {
     pub fn from_serializable_amplitudes(
         model: &Model,
         serializable_amplitudes: &[SerializableAmplitude],
-    ) -> AmplitudeList {
-        AmplitudeList {
+    ) -> Self {
+        Self {
             container: serializable_amplitudes
                 .iter()
                 .map(|sg| Amplitude::from_serializable_amplitude(model, sg))
@@ -791,6 +949,35 @@ impl AmplitudeList {
         }
     }
 
+    pub fn load_derived_data<S: NumeratorState>(
+        self,
+        path: &Path,
+        settings: &Settings,
+    ) -> Result<AmplitudeList<S>, Report> {
+        self.map_res(|a| {
+            let a = a.map_res(|g| {
+                g.map_res(|mut g| {
+                    g.generate_esurface_data()?;
+                    Result::<_, Report>::Ok(g)
+                })
+            })?;
+            let ampltitude_path = path.join(a.name.as_str());
+            a.load_derived_data::<S>(&ampltitude_path, settings)
+        })
+    }
+
+    pub fn generate_numerator(self) -> AmplitudeList<AppliedFeynmanRule> {
+        let container = self
+            .container
+            .into_iter()
+            .map(Amplitude::apply_feynman_rules)
+            .collect();
+
+        AmplitudeList { container }
+    }
+}
+
+impl<S: NumeratorState> AmplitudeList<S> {
     pub fn to_serializable(&self) -> Vec<SerializableAmplitude> {
         self.container
             .iter()
@@ -802,26 +989,7 @@ impl AmplitudeList {
         serde_yaml::to_string(&self.to_serializable())
     }
 
-    pub fn add_amplitude(&mut self, amplitude: Amplitude) {
+    pub fn add_amplitude(&mut self, amplitude: Amplitude<S>) {
         self.container.push(amplitude);
-    }
-
-    pub fn load_derived_data(&mut self, path: &Path, settings: &Settings) -> Result<(), Report> {
-        for amplitude in self.container.iter_mut() {
-            let ampltitude_path = path.join(amplitude.name.as_str());
-            amplitude.load_derived_data(&ampltitude_path, settings)?;
-            for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
-                amplitude_graph.graph.generate_esurface_data()?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn generate_numerator(&mut self, model: &Model) {
-        for amplitude in self.container.iter_mut() {
-            for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
-                amplitude_graph.graph.process_numerator(model);
-            }
-        }
     }
 }

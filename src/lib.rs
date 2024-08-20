@@ -36,6 +36,8 @@ use eyre::WrapErr;
 use integrands::*;
 use momentum::FourMomentum;
 use momentum::ThreeMomentum;
+use numerator::NumeratorCompileOptions;
+use numerator::NumeratorEvaluatorOptions;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
@@ -139,6 +141,7 @@ pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
     pub load_compiled_cff: bool,
+    pub load_compiled_numerator: bool,
     pub load_compiled_separate_orientations: bool,
     pub force_orientations: Option<Vec<usize>>,
 }
@@ -149,6 +152,7 @@ impl Default for GeneralSettings {
         Self {
             debug: 0,
             use_ltd: false,
+            load_compiled_numerator: false,
             load_compiled_cff: false,
             load_compiled_separate_orientations: false,
             force_orientations: None,
@@ -488,7 +492,7 @@ impl Default for SubtractionSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {
     pub compile_cff: bool,
-    pub compile_numerator: bool,
+    pub numerator_settings: NumeratorEvaluatorOptions,
     pub cpe_rounds_cff: Option<usize>,
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,

@@ -10,6 +10,7 @@ use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::numerator::{Evaluators, NumeratorState};
 use crate::subtraction::static_counterterm::CounterTerm;
 use crate::utils::{
     self, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
@@ -72,7 +73,7 @@ trait GraphIntegrand {
     ) -> Complex<F<T>>;
 }
 
-impl GraphIntegrand for AmplitudeGraph {
+impl GraphIntegrand for AmplitudeGraph<Evaluators> {
     fn get_graph(&self) -> &Graph {
         &self.graph
     }
@@ -479,7 +480,7 @@ fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> G
 /// Struct that represents a list of graph contirbuting to a single amplitude or cross-section.
 #[derive(Clone)]
 enum GraphIntegrands {
-    Amplitude(Vec<AmplitudeGraph>),
+    Amplitude(Vec<AmplitudeGraph<Evaluators>>),
     CrossSection(Vec<SuperGraph>),
 }
 
@@ -858,7 +859,7 @@ impl GammaLoopIntegrand {
 
                         let graph = match &self.graph_integrands {
                             GraphIntegrands::Amplitude(graphs) => &graphs[graph_id].graph,
-                            GraphIntegrands::CrossSection(graphs) => &graphs[graph_id].graph,
+                            GraphIntegrands::CrossSection(_graphs) => unimplemented!(), //,
                         };
 
                         let sampler = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
@@ -1064,7 +1065,10 @@ impl GammaLoopIntegrand {
         (2. * std::f64::consts::PI).powi(loop_number as i32 * 3)
     }
 
-    pub fn amplitude_integrand_constructor(mut amplitude: Amplitude, settings: Settings) -> Self {
+    pub fn amplitude_integrand_constructor(
+        mut amplitude: Amplitude<Evaluators>,
+        settings: Settings,
+    ) -> Self {
         #[allow(irrefutable_let_patterns)]
         // for amplitudes we can construct counterterms beforehand if external momenta are constant
         if let Externals::Constant(_) = settings.kinematics.externals {

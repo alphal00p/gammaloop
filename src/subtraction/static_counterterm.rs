@@ -2,6 +2,7 @@
 use colored::Colorize;
 use itertools::Itertools;
 use ref_ops::RefNeg;
+use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 
@@ -18,6 +19,7 @@ use crate::{
     },
     graph::{Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
+    numerator::NumeratorState,
     utils::{self, FloatLike, F},
     Settings,
 };
@@ -25,7 +27,7 @@ use crate::{
 use super::overlap::OverlapStructure;
 
 #[allow(clippy::type_complexity)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CounterTerm {
     existing_esurfaces: ExistingEsurfaces,
     maximal_overlap: OverlapStructure,
@@ -75,10 +77,10 @@ impl CounterTerm {
         }
     }
 
-    pub fn construct(
+    pub fn construct<S: NumeratorState>(
         maximal_overlap: OverlapStructure,
         existing_esurfaces: &ExistingEsurfaces,
-        graph: &Graph,
+        graph: &Graph<S>,
     ) -> Self {
         let cff = graph.get_cff();
         let complements_of_overlap = maximal_overlap

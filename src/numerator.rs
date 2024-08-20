@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::graph::{BareGraph, Edge};
@@ -18,6 +19,8 @@ use gxhash::GxBuildHasher;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use log::{debug, info, trace};
+use rand::distributions::uniform::UniformChar;
+use serde::de::DeserializeOwned;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::data::DataTensor;
 
@@ -128,9 +131,8 @@ impl<T: FloatLike> Clone for EagerNumerator<T> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtraInfo {
-    edges: Vec<NumeratorEdge>,
-    graph_name: String,
-    orientations: Vec<Vec<bool>>,
+    pub path: PathBuf,
+    pub orientations: Vec<Vec<bool>>,
 }
 
 impl From<&Edge> for NumeratorEdge {
@@ -242,49 +244,58 @@ impl<'de> Deserialize<'de> for Numerator {
 pub type AtomStructure = SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>;
 
 pub trait Evaluate<T: FloatLike> {
-    fn evaluate(
+    fn evaluate_all_orientations(
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
 
-    fn evaluate_sym(
+    fn evaluate_single(
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<T>, AtomStructure>>>;
+    ) -> DataTensor<Complex<F<T>>, AtomStructure>;
 }
 
-impl<T: FloatLike> Evaluate<T> for Numerator {
-    fn evaluate(
+impl<T: FloatLike> Evaluate<T> for Num<Evaluators> {
+    fn evaluate_all_orientations(
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>> {
-        <T as NumeratorEvaluateFloat>::evaluate(self, emr, polarizations)
+        <T as NumeratorEvaluateFloat>::evaluate_all_orientations(
+            self,
+            &<T as NumeratorEvaluateFloat>::params(emr, polarizations),
+        )
     }
 
-    fn evaluate_sym(
+    fn evaluate_single(
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<T>, AtomStructure>>> {
-        <T as NumeratorEvaluateFloat>::evaluate_sym(self, emr, polarizations)
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        <T as NumeratorEvaluateFloat>::evaluate_single(
+            self,
+            &<T as NumeratorEvaluateFloat>::params(emr, polarizations),
+        )
     }
 }
 
 pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
-    fn evaluate(
-        num: &mut Numerator,
-        emr: &[FourMomentum<F<T>>],
-        polarizations: &[Polarization<Complex<F<T>>>],
+    fn evaluate_all_orientations(
+        num: &mut Num<Evaluators>,
+        params: &[Complex<F<T>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
 
-    fn evaluate_sym(
-        num: &mut Numerator,
+    fn evaluate_single(
+        num: &mut Num<Evaluators>,
+        params: &[Complex<F<T>>],
+    ) -> DataTensor<Complex<F<T>>, AtomStructure>;
+
+    fn params(
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<T>, AtomStructure>>>;
+    ) -> Vec<Complex<F<T>>>;
 }
 
 // pub trait Compile<T: FloatLike> {
@@ -339,82 +350,65 @@ impl<T> LendingIterator for RepeatingIterator<T> {
 }
 
 impl NumeratorEvaluateFloat for f64 {
-    fn evaluate(
-        num: &mut Numerator,
+    fn params(
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
-        let mut params: Vec<Complex<F<f64>>> = emr
+    ) -> Vec<Complex<F<Self>>> {
+        let mut params: Vec<Complex<F<Self>>> = emr
             .iter()
-            .flat_map(|&p| p.into_iter().map(Complex::new_re))
+            .flat_map(|p| p.into_iter().cloned().map(Complex::new_re))
             .collect_vec();
 
         for p in polarizations {
-            for &pi in p {
-                params.push(pi)
+            for pi in p {
+                params.push(pi.clone())
             }
         }
 
+        let zero = f64::new_zero();
         params.push(Complex {
-            re: F(0.),
-            im: F(1.),
+            im: F(zero.one()),
+            re: F(zero),
         });
 
-        if let CompiledNumerator::Compiled(c) = &mut num.compiled {
-            // trace!("Compiled evaluating");
-            let res = c.evaluate(&params);
-            let pos = num.positions.clone().unwrap();
+        params
+    }
 
+    fn evaluate_all_orientations(
+        num: &mut Num<Evaluators>,
+        params: &[Complex<F<Self>>],
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+        if let Some(orientation_evaluator) = &mut num.state.orientated {
+            let pos = orientation_evaluator.positions.clone();
+            let res = if let Some(c) = &mut orientation_evaluator.compiled.evaluator {
+                c.evaluate(&params)
+            } else {
+                orientation_evaluator.eval_double.evaluate(&params)
+            };
             Ok((res, pos).into())
-        } else if let EagerNumerator::Eager(e) = &mut num.eval_double {
-            let pos = num.positions.clone().unwrap();
-
-            Ok((e.evaluate(&params), pos).into())
         } else {
-            Err(eyre!("Uninitialized numerator"))
+            Err(eyre!("No multi-orientation evaluator for numerator"))
         }
     }
 
-    fn evaluate_sym(
-        num: &mut Numerator,
-        emr: &[FourMomentum<F<Self>>],
-        polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<Self>, AtomStructure>>> {
-        let mut params: Vec<SymComplex<f64>> = emr
-            .iter()
-            .flat_map(|&p| p.into_iter().map(|p| SymComplex { re: p.0, im: 0. }))
-            .collect_vec();
-
-        for p in polarizations {
-            for &pi in p {
-                params.push(SymComplex {
-                    re: pi.re.0,
-                    im: pi.im.0,
-                });
-            }
-        }
-
-        params.push(SymComplex { re: 0., im: 1. });
-
-        if let CompiledNumerator::Compiled(c) = &mut num.compiled {
-            // trace!("Compiled evaluating");
-
-            let pos = num.positions.clone().unwrap();
-
-            Ok((c.evaluate(&params), pos).into())
+    fn evaluate_single(
+        num: &mut Num<Evaluators>,
+        params: &[Complex<F<Self>>],
+    ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+        if let Some(c) = &mut num.state.single.compiled.evaluator {
+            c.evaluate(params)
         } else {
-            Err(eyre!("Uninitialized numerator"))
+            num.state.single.eval_double.evaluate(params)
         }
     }
 }
 
 impl NumeratorEvaluateFloat for f128 {
-    fn evaluate(
-        num: &mut Numerator,
+    fn params(
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<f128>>, AtomStructure>>> {
-        let mut params: Vec<Complex<F<f128>>> = emr
+    ) -> Vec<Complex<F<Self>>> {
+        let mut params: Vec<Complex<F<Self>>> = emr
             .iter()
             .flat_map(|p| p.into_iter().cloned().map(Complex::new_re))
             .collect_vec();
@@ -431,21 +425,27 @@ impl NumeratorEvaluateFloat for f128 {
             re: F(zero),
         });
 
-        if let EagerNumerator::Eager(e) = &mut num.eval_quad {
-            let pos = num.positions.clone().unwrap();
+        params
+    }
 
-            Ok((e.evaluate(&params), pos).into())
+    fn evaluate_all_orientations(
+        num: &mut Num<Evaluators>,
+        params: &[Complex<F<Self>>],
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+        if let Some(orientation_evaluator) = &mut num.state.orientated {
+            let pos = orientation_evaluator.positions.clone();
+            let res = orientation_evaluator.eval_quad.evaluate(&params);
+            Ok((res, pos).into())
         } else {
-            Err(eyre!("Uninitialized numerator"))
+            Err(eyre!("No multi-orientation evaluator for numerator"))
         }
     }
 
-    fn evaluate_sym(
-        _num: &mut Numerator,
-        _emr: &[FourMomentum<F<Self>>],
-        _polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<SymComplex<Self>, AtomStructure>>> {
-        panic!("Not implemented")
+    fn evaluate_single(
+        num: &mut Num<Evaluators>,
+        params: &[Complex<F<Self>>],
+    ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+        num.state.single.eval_quad.evaluate(params)
     }
 }
 
@@ -477,349 +477,6 @@ impl Numerator {
         if let Some(net) = &mut self.network {
             net.replace_all_multiple_repeat_mut(&reps);
         }
-    }
-
-    pub fn compile<T: FloatLike + Default>(&mut self) {
-        let filename = &(self.extra_info.graph_name.clone() + "numerator.cpp");
-        let function_name = &(self.extra_info.graph_name.clone() + "numerator");
-        let library_name = &(self.extra_info.graph_name.clone() + "libneval.so");
-        let inline_asm = InlineASM::X64;
-        if let EvalNumerator::Eval(eval) = &mut self.base_eval {
-            self.compiled = CompiledNumerator::Compiled(
-                eval.map_coeff::<F<T>, _>(&|r| r.into())
-                    .linearize(Some(1))
-                    .export_cpp(filename, function_name, true, inline_asm)
-                    .unwrap()
-                    .compile(library_name, CompileOptions::default())
-                    .unwrap()
-                    .load()
-                    .unwrap(),
-            );
-        }
-    }
-
-    // pub fn compile_from_linear(&mut self) {
-    //     if let EagerNumerator::Eager(eval) = &mut self.eval_double {
-    //         self.compiled = CompiledNumerator::Compiled(eval.compile_asm(
-    //             &(self.extra_info.graph_name.clone() + "numerator_asm"),
-    //             &(self.extra_info.graph_name.clone() + "libneval_asm"),
-    //         ));
-    //     }
-    // }
-
-    pub fn contract(&mut self) -> Result<ParamTensor<AtomStructure>> {
-        if let Some(net) = self.network.as_mut() {
-            net.contract();
-            Ok(net.result_tensor_smart()?)
-        } else {
-            Err(eyre!("No network"))
-        }
-    }
-
-    pub fn generate_evaluators(&mut self, model: &Model, graph: &BareGraph) {
-        info!("Generating evaluators");
-        let mut fn_map: FunctionMap = FunctionMap::new();
-        self.build_const_fn_map_and_split(&mut fn_map, model);
-
-        let mut params: Vec<Atom> = vec![];
-
-        for (i, _) in self.extra_info.edges.iter().enumerate() {
-            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-                [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                "Q".into(),
-                Some(i),
-            );
-            params.extend(
-                named_structure
-                    .to_shell()
-                    .expanded_shadow()
-                    .unwrap()
-                    .data
-                    .clone(),
-            );
-        }
-
-        for (i, ext) in graph
-            .edges
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
-        {
-            match ext.edge_type {
-                EdgeType::Incoming => params.extend(
-                    ext.particle
-                        .incoming_polarization_atom_concrete(&ext.in_slot(graph), i),
-                ),
-
-                EdgeType::Outgoing => params.extend(
-                    ext.particle
-                        .outgoing_polarization_atom_concrete(&ext.in_slot(graph), i),
-                ),
-                _ => {}
-            }
-        }
-
-        params.push(Atom::new_var(State::I));
-        // for p in &params {
-        //     println!("{}", p);
-        // }
-        let mut seen = 0;
-
-        if let Some(net) = self.network.as_mut() {
-            let mut index_map = IndexSet::with_hasher(GxBuildHasher::default());
-            let mut positions = Vec::new();
-
-            let len = self.extra_info.orientations.len();
-            net.contract();
-            let contracted_net = net.result_tensor_smart().unwrap();
-
-            let reps = self
-                .extra_info
-                .edges
-                .iter()
-                .enumerate()
-                .map(|(i, _)| {
-                    (
-                        Pattern::parse(&format!("Q({},cind(1))", i)).unwrap(),
-                        Pattern::parse(&format!("-Q({},cind(1))", i)).unwrap(),
-                    )
-                })
-                .collect_vec();
-
-            for (ni, o) in self.extra_info.orientations.iter().enumerate() {
-                let time = Instant::now();
-                let elapsed_parse = time.elapsed();
-
-                let reps = reps
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, (lhs, rhs))| {
-                        if o[i] {
-                            None
-                        } else {
-                            Some(Replacement::new(lhs, rhs))
-                        }
-                    })
-                    .collect_vec();
-
-                let time = Instant::now();
-                let orientation_replaced_net = contracted_net.replace_all_multiple(&reps);
-                let elapsed = time.elapsed();
-
-                let time = Instant::now();
-                let (entry, is_new) = index_map.insert_full(orientation_replaced_net);
-                let hash_time = time.elapsed();
-                if !is_new {
-                    seen += 1;
-                }
-                debug!(
-                    "Contracted an orientation {:.1}%, parse:{:?},reps:{:?},hash:{:?}",
-                    100. * (ni as f64) / (len as f64),
-                    elapsed_parse,
-                    elapsed,
-                    hash_time,
-                );
-                positions.push(entry);
-            }
-
-            debug!(
-                "Recycled orientations: {:.1}%",
-                100. * (seen as f64) / (len as f64)
-            );
-
-            let set = ParamTensorSet::new(index_map.into_iter().collect_vec());
-            debug!("Generate eval tree set with {} params", params.len());
-
-            let mut eval_tree = set.eval_tree(&fn_map, &params).unwrap();
-            debug!("Horner scheme");
-
-            eval_tree.horner_scheme();
-            debug!("Common subexpression elimination");
-            eval_tree.common_subexpression_elimination();
-            debug!("Linearize double");
-            self.eval_double = EagerNumerator::Eager(
-                eval_tree
-                    .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
-                        re: F(r.into()),
-                        im: F(0.),
-                    })
-                    .linearize(Some(1)),
-            );
-            debug!("Linearize quad");
-
-            self.eval_quad = EagerNumerator::Eager(
-                eval_tree
-                    .map_coeff::<Complex<F<f128>>, _>(&|r| Complex {
-                        re: F(r.into()),
-                        im: F(f128::new_zero()),
-                    })
-                    .linearize(Some(1)),
-            );
-            self.base_eval = EvalNumerator::Eval(eval_tree);
-            self.positions = Some(positions);
-        }
-    }
-
-    pub fn evaluate<T: FloatLike>(
-        &self,
-        emr: &[FourMomentum<F<T>>],
-        _polarizations: &[Polarization<F<T>>],
-        graph: &BareGraph,
-    ) -> Complex<F<T>> {
-        let emr_params = graph
-            .edges
-            .iter()
-            .enumerate()
-            .map(|(i, _)| {
-                let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-                    [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                    "Q".into(),
-                    Some(i),
-                );
-                named_structure.to_shell().expanded_shadow().unwrap()
-            })
-            .collect_vec();
-
-        let mut constmap: AHashMap<AtomView<'_>, SymComplex<F<T>>> = AHashMap::new();
-
-        let mut pols = Vec::new();
-        for (i, ext) in graph
-            .edges
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
-        {
-            match ext.edge_type {
-                EdgeType::Incoming => {
-                    for (a, p) in ext
-                        .particle
-                        .incoming_polarization_match(i, &emr[i])
-                        .into_iter()
-                    {
-                        pols.push((a, p));
-                    }
-                }
-
-                EdgeType::Outgoing => {
-                    for (a, p) in ext
-                        .particle
-                        .outgoing_polarization_match(i, &emr[i])
-                        .into_iter()
-                    {
-                        pols.push((a, p));
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        for (a, p) in &pols {
-            constmap.insert(a.as_view(), p.clone().into());
-        }
-
-        for (key, value) in self.const_map.iter() {
-            let v = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
-            constmap.insert(key.as_view(), v.into());
-        }
-
-        for (i, pe) in emr.iter().enumerate() {
-            constmap.insert(
-                emr_params[i][1.into()].as_view(),
-                Complex::new_re(pe.spatial.px.clone()).into(),
-            );
-
-            constmap.insert(
-                emr_params[i][2.into()].as_view(),
-                Complex::new_re(pe.spatial.py.clone()).into(),
-            );
-
-            constmap.insert(
-                emr_params[i][3.into()].as_view(),
-                Complex::new_re(pe.spatial.pz.clone()).into(),
-            );
-
-            constmap.insert(
-                emr_params[i][0.into()].as_view(),
-                Complex::new_re(pe.temporal.value.clone()).into(),
-            );
-        }
-
-        // let mut file = File::create("serializable_map.json").unwrap();
-
-        // debug!("Serializable map: {}", serialized);
-        // file.write_all(serialized.as_bytes()).unwrap();
-
-        // println!(
-        //     "Numerator evaluated: {}",
-        //     numerator_network.scalar.as_ref().unwrap()
-        // );
-
-        let serializable_map: AHashMap<String, Complex<F<T>>> = constmap
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.clone().into()))
-            .collect();
-
-        let serialized = serde_json::to_string(&serializable_map).unwrap();
-        debug!("Serializable map: {:?}", serialized);
-
-        let mut evaluated = self
-            .network
-            .as_ref()
-            .unwrap()
-            .evaluate::<SymComplex<F<T>>, _>(|c| c.into(), &constmap);
-
-        evaluated.contract();
-
-        evaluated.result().unwrap().into()
-    }
-
-    pub fn process(&mut self, model: &Model, graph: &BareGraph) {
-        let mut const_map = AHashMap::new();
-        model.append_parameter_map(&mut const_map);
-
-        let i_float = Complex::new_i();
-        let i = Atom::new_var(State::I);
-        const_map.insert(i, i_float);
-        self.const_map.extend(const_map);
-
-        self.substitute_model_params(model);
-        info!("Processing color");
-        trace!("Starting expression:{}", self.expression);
-        self.process_color_simple();
-        trace!("Final expression:{}", self.expression);
-        info!("filling network");
-        self.fill_network();
-        info!("Generate evaluators");
-        self.generate_evaluators(model, graph);
-        info!("Compiling");
-        self.compile::<f64>();
-    }
-
-    // pub fn generate_fn_map(&self mut){
-    //     let mut replacements = vec![];
-    //     let mut fn_map: FunctionMap<Rational> = FunctionMap::new();
-
-    //     for (k, v) in const_atom_map.iter() {
-    //     let name_re = Atom::new_var(State::get_symbol(k.to_string() + "_re"));
-    //     let name_im = Atom::new_var(State::get_symbol(k.to_string() + "_im"));
-    //     let i = Atom::new_var(State::I);
-    //     let pat = &name_re + i * &name_im;
-    //     replacements.push((Atom::new_var(*k).into_pattern(), pat.into_pattern()));
-
-    //     fn_map.add_constant(name_re.into(), Rational::from(v.re));
-    //     fn_map.add_constant(name_im.into(), Rational::from(v.im));
-    // }
-    // }
-
-    pub fn fill_network(&mut self) {
-        let sym_tensor: SymbolicTensor = self.expression.clone().try_into().unwrap();
-
-        let network = sym_tensor
-            .to_network()
-            .unwrap()
-            .to_fully_parametric()
-            .cast();
-        self.network = Some(network);
     }
 
     #[allow(dead_code)]
@@ -985,77 +642,93 @@ impl Numerator {
         // self.replace_repeat(traceadjlhs, traceadjrhs);
     }
 
-    pub fn generate(graph: &mut BareGraph, orientations: Vec<Vec<bool>>) -> Self {
-        debug!("generating numerator for graph: {}", graph.name);
+    // pub fn generate(graph: &mut BareGraph, orientations: Vec<Vec<bool>>) -> Self {
+    //     debug!("generating numerator for graph: {}", graph.name);
 
-        let vatoms: Vec<Atom> = graph
-            .vertices
-            .iter()
-            .flat_map(|v| v.contracted_vertex_rule(graph))
-            .collect();
+    //     let vatoms: Vec<Atom> = graph
+    //         .vertices
+    //         .iter()
+    //         .flat_map(|v| v.contracted_vertex_rule(graph))
+    //         .collect();
 
-        let mut eatoms: Vec<Atom> = vec![];
-        let mut shift = 0;
-        for e in &graph.edges {
-            let (n, i) = e.numerator(graph);
-            eatoms.push(n);
-            shift += i;
-            graph.shifts.0 += shift;
-        }
-        let mut builder = Atom::new_num(1);
+    //     let mut eatoms: Vec<Atom> = vec![];
+    //     let mut shift = 0;
+    //     for e in &graph.edges {
+    //         let (n, i) = e.numerator(graph);
+    //         eatoms.push(n);
+    //         shift += i;
+    //         graph.shifts.0 += shift;
+    //     }
+    //     let mut builder = Atom::new_num(1);
 
-        for v in &vatoms {
-            builder = builder * v;
-        }
+    //     for v in &vatoms {
+    //         builder = builder * v;
+    //     }
 
-        for e in &eatoms {
-            builder = builder * e;
-        }
+    //     for e in &eatoms {
+    //         builder = builder * e;
+    //     }
 
-        let i = Atom::new_var(State::I);
-        let a = Atom::new_var(State::get_symbol("a_"));
-        let b = Atom::new_var(State::get_symbol("b_"));
+    //     let i = Atom::new_var(State::I);
+    //     let a = Atom::new_var(State::get_symbol("a_"));
+    //     let b = Atom::new_var(State::get_symbol("b_"));
 
-        let complex = FunctionBuilder::new(State::get_symbol("complex"))
-            .add_arg(&a)
-            .add_arg(&b)
-            .finish();
+    //     let complex = FunctionBuilder::new(State::get_symbol("complex"))
+    //         .add_arg(&a)
+    //         .add_arg(&b)
+    //         .finish();
 
-        builder = complex.into_pattern().replace_all(
-            builder.as_view(),
-            &(&a + &b * &i).into_pattern(),
-            None,
-            None,
-        );
+    //     builder = complex.into_pattern().replace_all(
+    //         builder.as_view(),
+    //         &(&a + &b * &i).into_pattern(),
+    //         None,
+    //         None,
+    //     );
 
-        let expression = builder.clone();
+    //     let expression = builder.clone();
 
-        Numerator {
-            expression,
-            network: None,
-            positions: None,
-            const_map: AHashMap::new(),
-            base_eval: EvalNumerator::UnInit,
-            eval_double: EagerNumerator::<f64>::UnInit,
-            eval_quad: EagerNumerator::<f128>::UnInit,
-            compiled: CompiledNumerator::UnInit,
-            extra_info: ExtraInfo {
-                orientations,
-                edges: graph.edges.iter().map(NumeratorEdge::from).collect(),
-                graph_name: graph.name.clone().into(),
-            },
-        }
-    }
+    //     Numerator {
+    //         expression,
+    //         network: None,
+    //         positions: None,
+    //         const_map: AHashMap::new(),
+    //         base_eval: EvalNumerator::UnInit,
+    //         eval_double: EagerNumerator::<f64>::UnInit,
+    //         eval_quad: EagerNumerator::<f128>::UnInit,
+    //         compiled: CompiledNumerator::UnInit,
+    //         extra_info: ExtraInfo {
+    //             orientations,
+    //             edges: graph.edges.iter().map(NumeratorEdge::from).collect(),
+    //             graph_name: graph.name.clone().into(),
+    //         },
+    //     }
+    // }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Num<State: NumeratorState> {
     state: State,
 }
 
+impl<'de, State: NumeratorState> Deserialize<'de> for Num<State> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let state = State::deserialize(deserializer)?;
+        Ok(Num { state })
+    }
+}
+
 impl<S: NumeratorState> Num<S> {
-    fn export(&self) -> String {
+    pub fn export(&self) -> String {
         self.state.export()
+    }
+
+    pub fn forget_type(self) -> Num<PythonState> {
+        Num {
+            state: self.state.forget_type(),
+        }
     }
 
     fn build_const_fn_map_with_split_reps(
@@ -1080,8 +753,49 @@ impl<S: NumeratorState> Num<S> {
     }
 }
 
-pub trait NumeratorState: Serialize {
+impl<S: UnexpandedNumerator> Num<S> {
+    pub fn expr(&self) -> SerializableAtom {
+        self.state.expr()
+    }
+}
+pub trait NumeratorState: Serialize + Clone + DeserializeOwned + Debug {
     fn export(&self) -> String;
+
+    fn forget_type(self) -> PythonState;
+}
+
+pub trait UnexpandedNumerator: NumeratorState {
+    fn expr(&self) -> SerializableAtom;
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnInit;
+
+impl Default for UnInit {
+    fn default() -> Self {
+        UnInit
+    }
+}
+
+impl NumeratorState for UnInit {
+    fn export(&self) -> String {
+        "Uninitialized".to_string()
+    }
+
+    fn forget_type(self) -> PythonState {
+        PythonState::UnInit(self)
+    }
+}
+
+impl Num<UnInit> {
+    pub fn from_graph(self, graph: &mut BareGraph) -> Num<AppliedFeynmanRule> {
+        Num {
+            state: AppliedFeynmanRule::from_graph(graph),
+        }
+    }
+
+    pub fn new() -> Self {
+        Num { state: UnInit }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1145,9 +859,19 @@ impl AppliedFeynmanRule {
     }
 }
 
+impl UnexpandedNumerator for AppliedFeynmanRule {
+    fn expr(&self) -> SerializableAtom {
+        self.expression.clone()
+    }
+}
+
 impl NumeratorState for AppliedFeynmanRule {
     fn export(&self) -> String {
         self.expression.to_string()
+    }
+
+    fn forget_type(self) -> PythonState {
+        PythonState::AppliedFeynmanRule(self)
     }
 }
 
@@ -1184,6 +908,16 @@ impl NumeratorState for ColorSymplified {
     fn export(&self) -> String {
         self.expression.0.to_string()
     }
+
+    fn forget_type(self) -> PythonState {
+        PythonState::ColorSymplified(self)
+    }
+}
+
+impl UnexpandedNumerator for ColorSymplified {
+    fn expr(&self) -> SerializableAtom {
+        self.expression.clone()
+    }
 }
 
 impl Num<ColorSymplified> {
@@ -1208,6 +942,10 @@ impl NumeratorState for GammaSymplified {
     fn export(&self) -> String {
         self.expression.0.to_string()
     }
+
+    fn forget_type(self) -> PythonState {
+        PythonState::GammaSymplified(self)
+    }
 }
 
 impl GammaSymplified {
@@ -1218,6 +956,12 @@ impl GammaSymplified {
                 .to_fully_parametric()
                 .cast(),
         }
+    }
+}
+
+impl UnexpandedNumerator for GammaSymplified {
+    fn expr(&self) -> SerializableAtom {
+        self.expression.clone()
     }
 }
 
@@ -1261,6 +1005,10 @@ impl NumeratorState for Network {
     fn export(&self) -> String {
         " self.expression.to_string()".to_string()
     }
+
+    fn forget_type(self) -> PythonState {
+        PythonState::Network(self)
+    }
 }
 
 impl Num<Network> {
@@ -1276,71 +1024,11 @@ pub struct Contracted {
 }
 
 impl Contracted {
-    // fn preprocess(
-    //     mut self,
-    //     model: &Model,
-    //     graph: &BareGraph,
-    //     extra_info: &ExtraInfo,
-    // ) -> (Self, FunctionMap, Vec<Atom>) {
-    //     let mut fn_map: FunctionMap = FunctionMap::new();
-
-    //     let replacements =
-    //         Num::<Contracted>::build_const_fn_map_with_split_reps(&mut fn_map, model);
-
-    //     let reps = replacements
-    //         .iter()
-    //         .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-    //         .collect_vec();
-
-    //     self.tensor.replace_all_multiple_repeat_mut(&reps);
-
-    //     let mut params: Vec<Atom> = vec![];
-
-    //     for (i, _) in extra_info.edges.iter().enumerate() {
-    //         let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-    //             [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-    //             "Q".into(),
-    //             Some(i),
-    //         );
-    //         params.extend(
-    //             named_structure
-    //                 .to_shell()
-    //                 .expanded_shadow()
-    //                 .unwrap()
-    //                 .data
-    //                 .clone(),
-    //         );
-    //     }
-
-    //     for (i, ext) in graph
-    //         .edges
-    //         .iter()
-    //         .enumerate()
-    //         .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
-    //     {
-    //         match ext.edge_type {
-    //             EdgeType::Incoming => params.extend(
-    //                 ext.particle
-    //                     .incoming_polarization_atom_concrete(&ext.in_slot(graph), i),
-    //             ),
-
-    //             EdgeType::Outgoing => params.extend(
-    //                 ext.particle
-    //                     .outgoing_polarization_atom_concrete(&ext.in_slot(graph), i),
-    //             ),
-    //             _ => {}
-    //         }
-    //     }
-
-    //     params.push(Atom::new_var(State::I));
-    //     (self, fn_map, params)
-    // }
-
     pub fn evaluator(
         mut self,
         model: &Model,
         graph: &BareGraph,
-        extra_info: ExtraInfo,
+        path: PathBuf,
         export_settings: &ExportSettings,
     ) -> EvaluatorSingle {
         let mut fn_map: FunctionMap = FunctionMap::new();
@@ -1355,45 +1043,7 @@ impl Contracted {
 
         self.tensor.replace_all_multiple_repeat_mut(&reps);
 
-        let mut params: Vec<Atom> = vec![];
-
-        for (i, _) in extra_info.edges.iter().enumerate() {
-            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-                [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                "Q".into(),
-                Some(i),
-            );
-            params.extend(
-                named_structure
-                    .to_shell()
-                    .expanded_shadow()
-                    .unwrap()
-                    .data
-                    .clone(),
-            );
-        }
-
-        for (i, ext) in graph
-            .edges
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
-        {
-            match ext.edge_type {
-                EdgeType::Incoming => params.extend(
-                    ext.particle
-                        .incoming_polarization_atom_concrete(&ext.in_slot(graph), i),
-                ),
-
-                EdgeType::Outgoing => params.extend(
-                    ext.particle
-                        .outgoing_polarization_atom_concrete(&ext.in_slot(graph), i),
-                ),
-                _ => {}
-            }
-        }
-
-        params.push(Atom::new_var(State::I));
+        let params = Self::generate_params(graph);
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -1404,12 +1054,13 @@ impl Contracted {
         debug!("Common subexpression elimination");
         eval_tree.common_subexpression_elimination();
         debug!("Linearize double");
+        let cpe_rounds = export_settings.numerator_settings.cpe_rounds();
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
                 re: F(r.into()),
                 im: F(0.),
             })
-            .linearize(Some(1));
+            .linearize(cpe_rounds);
         debug!("Linearize quad");
 
         let eval_quad = eval_tree
@@ -1417,16 +1068,24 @@ impl Contracted {
                 re: F(r.into()),
                 im: F(f128::new_zero()),
             })
-            .linearize(Some(1));
+            .linearize(cpe_rounds);
 
-        let compiled = if export_settings.compile_numerator {
-            let filename = &(extra_info.graph_name.clone() + "numerator_single.cpp");
-            let function_name = &(extra_info.graph_name.clone() + "numerator_single");
-            let library_name = &(extra_info.graph_name.clone() + "libneval_single.so");
+        let compiled = if export_settings
+            .numerator_settings
+            .compile_options()
+            .compile()
+        {
+            let mut filename = path.clone();
+            filename.push("numerator_single.cpp");
+            let filename = filename.to_string_lossy();
+
+            let function_name = "numerator_single";
+
+            let library_name = "libneval_single.so";
             let inline_asm = InlineASM::X64;
-            Some(
+            CompiledEvaluator::new(
                 eval_double
-                    .export_cpp(filename, function_name, true, inline_asm)
+                    .export_cpp(&filename, function_name, true, inline_asm)
                     .unwrap()
                     .compile(library_name, CompileOptions::default())
                     .unwrap()
@@ -1434,38 +1093,22 @@ impl Contracted {
                     .unwrap(),
             )
         } else {
-            None
+            CompiledEvaluator::default()
         };
 
         EvaluatorSingle {
+            tensor: self.tensor,
             eval_double,
             eval_quad,
             compiled,
         }
     }
 
-    pub fn evaluators(
-        mut self,
-        model: &Model,
-        graph: &BareGraph,
-        extra_info: ExtraInfo,
-        export_settings: &ExportSettings,
-    ) -> EvaluatorOrientations {
-        let mut fn_map: FunctionMap = FunctionMap::new();
-
-        let replacements =
-            Num::<Contracted>::build_const_fn_map_with_split_reps(&mut fn_map, model);
-
-        let reps = replacements
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect_vec();
-
-        self.tensor.replace_all_multiple_repeat_mut(&reps);
-
+    pub fn generate_params(graph: &BareGraph) -> Vec<Atom> {
         let mut params: Vec<Atom> = vec![];
+        let mut pols = Vec::new();
 
-        for (i, _) in extra_info.edges.iter().enumerate() {
+        for (i, ext) in graph.edges.iter().enumerate() {
             let named_structure: NamedStructure<String> = NamedStructure::from_iter(
                 [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
                 "Q".into(),
@@ -1479,21 +1122,13 @@ impl Contracted {
                     .data
                     .clone(),
             );
-        }
-
-        for (i, ext) in graph
-            .edges
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
-        {
             match ext.edge_type {
-                EdgeType::Incoming => params.extend(
+                EdgeType::Incoming => pols.extend(
                     ext.particle
                         .incoming_polarization_atom_concrete(&ext.in_slot(graph), i),
                 ),
 
-                EdgeType::Outgoing => params.extend(
+                EdgeType::Outgoing => pols.extend(
                     ext.particle
                         .outgoing_polarization_atom_concrete(&ext.in_slot(graph), i),
                 ),
@@ -1501,7 +1136,150 @@ impl Contracted {
             }
         }
 
+        params.extend(pols);
         params.push(Atom::new_var(State::I));
+        params
+    }
+}
+
+impl NumeratorState for Contracted {
+    fn export(&self) -> String {
+        self.tensor.to_string()
+    }
+    fn forget_type(self) -> PythonState {
+        PythonState::Contracted(self)
+    }
+}
+
+impl Num<Contracted> {
+    pub fn generate_evaluators(
+        self,
+        model: &Model,
+        graph: &BareGraph,
+        extra_info: &ExtraInfo,
+        export_settings: &ExportSettings,
+    ) -> Num<Evaluators> {
+        let single = self
+            .state
+            .evaluator(model, graph, extra_info.path.clone(), export_settings);
+
+        match export_settings.numerator_settings {
+            NumeratorEvaluatorOptions::Combined(_) => Num {
+                state: Evaluators {
+                    orientated: Some(single.orientated(model, graph, extra_info, export_settings)),
+                    single,
+                },
+            },
+            _ => Num {
+                state: Evaluators {
+                    orientated: None,
+                    single,
+                },
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NumeratorEvaluatorOptions {
+    Single(EvaluatorOptions),
+    Combined(EvaluatorOptions),
+}
+
+impl Default for NumeratorEvaluatorOptions {
+    fn default() -> Self {
+        NumeratorEvaluatorOptions::Single(EvaluatorOptions::default())
+    }
+}
+
+impl NumeratorEvaluatorOptions {
+    pub fn compile_options(&self) -> NumeratorCompileOptions {
+        match self {
+            NumeratorEvaluatorOptions::Single(options) => options.compile_options,
+            NumeratorEvaluatorOptions::Combined(options) => options.compile_options,
+        }
+    }
+
+    pub fn cpe_rounds(&self) -> Option<usize> {
+        match self {
+            NumeratorEvaluatorOptions::Single(options) => options.cpe_rounds,
+            NumeratorEvaluatorOptions::Combined(options) => options.cpe_rounds,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
+pub struct EvaluatorOptions {
+    cpe_rounds: Option<usize>,
+    compile_options: NumeratorCompileOptions,
+}
+
+impl Default for EvaluatorOptions {
+    fn default() -> Self {
+        EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
+pub enum NumeratorCompileOptions {
+    Compiled,
+    NotCompiled,
+}
+
+impl NumeratorCompileOptions {
+    pub fn compile(&self) -> bool {
+        matches!(self, NumeratorCompileOptions::Compiled)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EvaluatorOrientations {
+    pub eval_double: EvalTensorSet<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>,
+    pub eval_quad: EvalTensorSet<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>,
+    pub compiled: CompiledEvaluator<EvalTensorSet<SerializableCompiledEvaluator, AtomStructure>>,
+    pub positions: Vec<usize>,
+}
+
+impl Debug for EvaluatorOrientations {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EvaluatorOrientations")
+            .field(
+                "eval_double",
+                &"EvalTensorSet<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>",
+            )
+            .field(
+                "eval_quad",
+                &"EvalTensorSet<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>",
+            )
+            .field("compiled", &self.compiled.is_compiled())
+            .finish()
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EvaluatorSingle {
+    tensor: ParamTensor<AtomStructure>,
+    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>,
+    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>,
+    compiled: CompiledEvaluator<EvalTensor<SerializableCompiledEvaluator, AtomStructure>>,
+}
+
+impl EvaluatorSingle {
+    pub fn orientated(
+        &self,
+        model: &Model,
+        graph: &BareGraph,
+        extra_info: &ExtraInfo,
+        export_settings: &ExportSettings,
+    ) -> EvaluatorOrientations {
+        let mut fn_map: FunctionMap = FunctionMap::new();
+
+        let _ = Num::<Contracted>::build_const_fn_map_with_split_reps(&mut fn_map, model);
+
+        let params = Contracted::generate_params(graph);
         let mut seen = 0;
 
         let mut index_map = IndexSet::with_hasher(GxBuildHasher::default());
@@ -1509,7 +1287,7 @@ impl Contracted {
 
         let len = extra_info.orientations.len();
 
-        let reps = extra_info
+        let reps = graph
             .edges
             .iter()
             .enumerate()
@@ -1564,6 +1342,8 @@ impl Contracted {
 
         let set = ParamTensorSet::new(index_map.into_iter().collect_vec());
 
+        let cpe_rounds = export_settings.numerator_settings.cpe_rounds();
+
         debug!("Generate eval tree set with {} params", params.len());
 
         let mut eval_tree = set.eval_tree(&fn_map, &params).unwrap();
@@ -1578,7 +1358,7 @@ impl Contracted {
                 re: F(r.into()),
                 im: F(0.),
             })
-            .linearize(Some(1));
+            .linearize(cpe_rounds);
         debug!("Linearize quad");
 
         let eval_quad = eval_tree
@@ -1586,17 +1366,24 @@ impl Contracted {
                 re: F(r.into()),
                 im: F(f128::new_zero()),
             })
-            .linearize(Some(1));
-        let base_eval = EvalNumerator::Eval(eval_tree);
+            .linearize(cpe_rounds);
 
-        let compiled = if export_settings.compile_numerator {
-            let filename = &(extra_info.graph_name.clone() + "numerator.cpp");
-            let function_name = &(extra_info.graph_name.clone() + "numerator");
-            let library_name = &(extra_info.graph_name.clone() + "libneval.so");
+        let compiled = if export_settings
+            .numerator_settings
+            .compile_options()
+            .compile()
+        {
+            let mut filename = extra_info.path.clone();
+            filename.push("numerator.cpp");
+            let filename = filename.to_string_lossy();
+
+            let function_name = "numerator";
+
+            let library_name = "libneval.so";
             let inline_asm = InlineASM::X64;
-            Some(
+            CompiledEvaluator::new(
                 eval_double
-                    .export_cpp(filename, function_name, true, inline_asm)
+                    .export_cpp(&filename, function_name, true, inline_asm)
                     .unwrap()
                     .compile(library_name, CompileOptions::default())
                     .unwrap()
@@ -1604,10 +1391,11 @@ impl Contracted {
                     .unwrap(),
             )
         } else {
-            None
+            CompiledEvaluator::default()
         };
 
         EvaluatorOrientations {
+            positions,
             eval_double,
             eval_quad,
             compiled,
@@ -1615,28 +1403,136 @@ impl Contracted {
     }
 }
 
-impl NumeratorState for Contracted {
-    fn export(&self) -> String {
-        self.tensor.to_string()
+impl Debug for EvaluatorSingle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EvaluatorSingle")
+            .field(
+                "eval_double",
+                &"EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>",
+            )
+            .field(
+                "eval_quad",
+                &"EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>",
+            )
+            .field("compiled", &self.compiled.is_compiled())
+            .finish()
     }
 }
 
-// impl Num<Contracted> {
-//     fn generate_evaluators(&self, orientations: Vec<Vec<bool>>) -> Evaluator {}
-// }
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct EvaluatorOrientations {
-    eval_double: EvalTensorSet<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>,
-    eval_quad: EvalTensorSet<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>,
-    compiled: Option<EvalTensorSet<SerializableCompiledEvaluator, AtomStructure>>,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct CompiledEvaluator<E> {
+    state: CompiledState,
+    pub evaluator: Option<E>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct EvaluatorSingle {
-    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>,
-    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>,
-    compiled: Option<EvalTensor<SerializableCompiledEvaluator, AtomStructure>>,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum CompiledState {
+    Enabled,
+    Disabled,
 }
+
+impl<E> Default for CompiledEvaluator<E> {
+    fn default() -> Self {
+        CompiledEvaluator {
+            state: CompiledState::Disabled,
+            evaluator: None,
+        }
+    }
+}
+
+impl<E> CompiledEvaluator<E> {
+    pub fn new(evaluator: E) -> Self {
+        CompiledEvaluator {
+            state: CompiledState::Enabled,
+            evaluator: Some(evaluator),
+        }
+    }
+    pub fn disable(&mut self) -> Result<()> {
+        if self.evaluator.is_some() {
+            self.state = CompiledState::Disabled;
+            Ok(())
+        } else {
+            Err(eyre!("Cannot disable evaluator that is not compiled"))
+        }
+    }
+
+    pub fn enable(&mut self) -> Result<()> {
+        if self.evaluator.is_some() {
+            self.state = CompiledState::Enabled;
+            Ok(())
+        } else {
+            Err(eyre!("Cannot enable evaluator that is not compiled"))
+        }
+    }
+
+    pub fn is_compiled(&self) -> bool {
+        self.evaluator.is_some()
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        matches!(self.state, CompiledState::Enabled)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Evaluators {
+    orientated: Option<EvaluatorOrientations>,
+    single: EvaluatorSingle,
+}
+
+impl NumeratorState for Evaluators {
+    fn export(&self) -> String {
+        "evaluators".to_string()
+    }
+
+    fn forget_type(self) -> PythonState {
+        PythonState::Evaluators(self)
+    }
+}
+
+impl Num<Evaluators> {
+    pub fn disable_compiled(&mut self) {
+        if let Some(orientated) = &mut self.state.orientated {
+            orientated.compiled.disable().unwrap();
+        }
+        self.state.single.compiled.disable().unwrap();
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PythonState {
+    UnInit(UnInit),
+    AppliedFeynmanRule(AppliedFeynmanRule),
+    ColorSymplified(ColorSymplified),
+    GammaSymplified(GammaSymplified),
+    Network(Network),
+    Contracted(Contracted),
+    Evaluators(Evaluators),
+}
+
+impl Default for PythonState {
+    fn default() -> Self {
+        PythonState::UnInit(UnInit)
+    }
+}
+
+impl NumeratorState for PythonState {
+    fn export(&self) -> String {
+        match self {
+            PythonState::UnInit(state) => state.export(),
+            PythonState::AppliedFeynmanRule(state) => state.export(),
+            PythonState::ColorSymplified(state) => state.export(),
+            PythonState::GammaSymplified(state) => state.export(),
+            PythonState::Network(state) => state.export(),
+            PythonState::Contracted(state) => state.export(),
+            PythonState::Evaluators(state) => state.export(),
+        }
+    }
+
+    fn forget_type(self) -> PythonState {
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests;

@@ -8,6 +8,7 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
+    numerator::{Evaluators, PythonState},
     utils::F,
     HasIntegrand, Settings,
 };
@@ -78,7 +79,7 @@ pub struct OutputOptions {}
 pub struct PythonWorker {
     pub model: Model,
     pub cross_sections: CrossSectionList,
-    pub amplitudes: AmplitudeList,
+    pub amplitudes: AmplitudeList<PythonState>,
     pub integrands: HashMap<String, Integrand>,
     pub master_node: Option<MasterNode>,
 }
@@ -190,7 +191,8 @@ impl PythonWorker {
         }
         match Amplitude::from_yaml_str(&self.model, String::from(yaml_str)) {
             Ok(amp) => {
-                self.amplitudes.add_amplitude(amp);
+                self.amplitudes
+                    .add_amplitude(amp.map(|a| a.map(|ag| ag.forget_type())));
                 Ok(())
             }
             Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
@@ -205,7 +207,7 @@ impl PythonWorker {
         }
         AmplitudeList::from_file(&self.model, String::from(file_path))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| self.amplitudes = a)
+            .map(|a| self.amplitudes = a.map(|a| a.map(|ag| ag.map(|g| g.forget_type()))))
     }
 
     pub fn load_amplitudes_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
@@ -216,7 +218,7 @@ impl PythonWorker {
         }
         AmplitudeList::from_yaml_str(&self.model, String::from(yaml_str))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| self.amplitudes = a)
+            .map(|a| self.amplitudes = a.map(|a| a.map(|ag| ag.map(|g| g.forget_type()))))
     }
 
     pub fn load_amplitudes_derived_data(&mut self, path: &str) -> PyResult<()> {
@@ -230,12 +232,12 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         self.amplitudes
-            .load_derived_data(&path_to_amplitudes, &settings)
+            .load_derived_data::<Evaluators>(&path_to_amplitudes)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
     pub fn generate_numerators(&mut self) {
-        self.amplitudes.generate_numerator(&self.model);
+        self.amplitudes.map(|ag|);
     }
 
     // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,

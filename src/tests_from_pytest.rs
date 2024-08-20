@@ -10,7 +10,9 @@ use crate::graph::{
 };
 use crate::model::Model;
 use crate::momentum::{FourMomentum, ThreeMomentum};
-use crate::numerator::Numerator;
+use crate::numerator::{
+    ContractionSettings, Evaluators, Numerator, NumeratorEvaluatorOptions, UnInit,
+};
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
 use crate::tests::load_default_settings;
@@ -18,6 +20,7 @@ use crate::utils::{
     assert_approx_eq, compute_momentum, compute_three_momentum_from_four, PrecisionUpgradable,
 };
 use crate::utils::{f128, F};
+use crate::{ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings};
 use ahash::AHashMap;
 use colored::Colorize;
 use itertools::{FormatWith, Itertools};
@@ -30,7 +33,7 @@ use serde;
 use spenso::complex::Complex;
 use statrs::function::evaluate;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{clone, env};
 use symbolica;
 use symbolica::atom::Atom;
@@ -39,6 +42,27 @@ use symbolica::evaluate::CompileOptions;
 
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-12);
+
+pub fn test_export_settings() -> ExportSettings {
+    ExportSettings {
+        compile_cff: true,
+        numerator_settings: NumeratorEvaluatorOptions::default(),
+        cpe_rounds_cff: Some(1),
+        compile_separate_orientations: false,
+        tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
+            target_omega: 1.0,
+            panic_on_fail: false,
+        },
+        gammaloop_compile_options: GammaloopCompileOptions {
+            inline_asm: env::var("NO_ASM").is_err(),
+            optimization_level: 3,
+            fast_math: true,
+            unsafe_math: true,
+            compiler: "g++".to_string(),
+            custom: vec![],
+        },
+    }
+}
 
 pub fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample<f64> {
     let mut external_moms = vec![];
@@ -71,7 +95,10 @@ pub fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSa
     }
 }
 
-pub fn load_amplitude_output(output_path: &str, load_generic_model: bool) -> (Model, Amplitude) {
+pub fn load_amplitude_output(
+    output_path: &str,
+    load_generic_model: bool,
+) -> (Model, Amplitude<UnInit>) {
     let output_dir = if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
         pytest_output_path
     } else {
@@ -179,10 +206,13 @@ mod tests_scalar_massless_triangle {
         graph.generate_loop_momentum_bases();
 
         graph.generate_cff();
-        graph.process_numerator(&model);
-        graph.numerator_substitute_model_params(&model);
-        // graph.evaluate_model_params(&model);
-        graph.process_numerator(&model);
+        let export_settings = test_export_settings();
+        let mut graph = graph.process_numerator(
+            &model,
+            ContractionSettings::Normal,
+            PathBuf::new(),
+            &export_settings,
+        );
         assert_eq!(
             graph
                 .derived_data
@@ -343,10 +373,13 @@ fn pytest_scalar_fishnet_2x2() {
     //println!("number of lmbs: {}", n_lmb);
 
     graph.generate_cff();
-    graph.process_numerator(&model);
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
     graph.generate_ltd();
 
     for basis in graph
@@ -466,10 +499,13 @@ fn pytest_scalar_sunrise() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
     graph.generate_loop_momentum_bases();
     graph.generate_cff();
-    graph.process_numerator(&model);
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
     graph.generate_ltd();
 
     let energy_product = graph.bare_graph.compute_energy_product(&[k1, k2], &[p1]);
@@ -523,19 +559,20 @@ fn pytest_scalar_fishnet_2x3() {
             == 4
     );
 
-    // generate cff
-    amplitude.amplitude_graphs[0].graph.generate_cff();
-    amplitude.amplitude_graphs[0]
-        .graph
-        .process_numerator(&model);
-    amplitude.amplitude_graphs[0]
-        .graph
-        .numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    amplitude.amplitude_graphs[0]
-        .graph
-        .process_numerator(&model);
-    amplitude.amplitude_graphs[0].graph.generate_ltd();
+    let export_settings = test_export_settings();
+
+    let mut amplitude = amplitude.map(|ag| {
+        ag.map(|mut g| {
+            g.generate_cff();
+            g.generate_ltd();
+            g.process_numerator(
+                &model,
+                ContractionSettings::Normal,
+                PathBuf::new(),
+                &export_settings,
+            )
+        })
+    });
 
     let externals: Vec<FourMomentum<F<f128>>> = (0..3)
         .map(|i| {
@@ -629,10 +666,13 @@ fn pytest_scalar_cube() {
     graph.generate_loop_momentum_bases();
     graph.generate_cff();
     graph.generate_ltd();
-    graph.process_numerator(&model);
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 
     let ext = graph
         .bare_graph
@@ -737,10 +777,14 @@ fn pytest_scalar_bubble() {
 
     graph.generate_ltd();
     graph.generate_cff();
-    graph.process_numerator(&model);
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
+
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 
     let energy_product = graph.bare_graph.compute_energy_product(&[k], &[p1, p1]);
 
@@ -795,10 +839,13 @@ fn pytest_scalar_massless_box() {
 
     graph.generate_ltd();
     graph.generate_cff();
-    graph.process_numerator(&model);
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 
     let p1: FourMomentum<F<f128>> =
         FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.)
@@ -956,11 +1003,13 @@ fn pytest_scalar_double_triangle() {
 
     graph.generate_ltd();
     graph.generate_cff();
-    graph.process_numerator(&model);
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
-
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
     let absolute_truth = Complex::new(F(0.00009115369712210525), F(0.)).higher();
 
     let p1 = FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.)
@@ -1048,11 +1097,13 @@ fn pytest_scalar_mercedes() {
 
     graph.generate_ltd();
     graph.generate_cff();
-    graph.process_numerator(&model);
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
-
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
     let absolute_truth = Complex::new(F(0.0), F(2.3081733247975594e-13)).higher();
 
     let k0: ThreeMomentum<F<f128>> = ThreeMomentum::new(3., 4., 5.).cast().higher();
@@ -1137,11 +1188,13 @@ fn pytest_scalar_triangle_box() {
 
     graph.generate_ltd();
     graph.generate_cff();
-    graph.process_numerator(&model);
-
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    // graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 
     let absolute_truth = Complex::new(
         F::<f128>::from_f64(-1.264_354_742_167_213_3e-7),
@@ -1236,10 +1289,13 @@ fn pytest_scalar_isopod() {
 
     graph.generate_ltd();
     graph.generate_cff();
-    graph.process_numerator(&model);
-    graph.numerator_substitute_model_params(&model);
-    // graph.evaluate_model_params(&model);
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 
     let absolute_truth = Complex::new(F(0.0), F(-2.9299520787585056e-23)).higher();
 
@@ -1746,7 +1802,13 @@ fn pytest_lbl_box() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
     graph.generate_cff();
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 }
 
 #[test]
@@ -1761,9 +1823,13 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     graph.generate_cff();
-    graph.generate_numerator();
-
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 
     let _sample = kinematics_builder(5, 3);
 
@@ -1811,9 +1877,13 @@ fn pytest_physical_1L_6photons() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     graph.generate_cff();
-    graph.generate_numerator();
-
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 
     let sample = kinematics_builder(5, 1);
     graph.evaluate_cff_expression(&sample, &default_settings);
@@ -1831,9 +1901,13 @@ fn pytest_physical_2L_6photons() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     graph.generate_cff();
-    graph.generate_numerator();
-
-    graph.process_numerator(&model);
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
 
     let sample = kinematics_builder(5, 2);
     graph.evaluate_cff_expression(&sample, &default_settings);
