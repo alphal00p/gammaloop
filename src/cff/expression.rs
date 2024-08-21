@@ -87,7 +87,7 @@ impl CFFExpression {
     ) -> Vec<F<T>> {
         if settings.general.debug > 0 {
             let json_str = serde_json::to_string(&self.esurfaces).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "Esurfaces in CFF"; "esurfaces" => json_str)
+            slog::info!(DEBUG_LOGGER.get(), "esurface_equations"; "value" => json_str)
         }
 
         T::get_evaluator(self)(energy_cache, settings)
@@ -111,7 +111,7 @@ impl CFFExpression {
 
         if settings.general.debug > 0 {
             let json_str = serde_json::to_string(&esurface_cache).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "esurface values"; "values" => json_str);
+            slog::info!(DEBUG_LOGGER.get(), "esurface_values"; "value" => json_str);
         }
 
         let mut term_cache = self.build_term_cache();
@@ -140,7 +140,7 @@ impl CFFExpression {
 
         if settings.general.debug > 0 {
             let json_str = serde_json::to_string(&res).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "orientation values"; "values" => json_str);
+            slog::info!(DEBUG_LOGGER.get(), "orientations"; "value" => json_str);
         }
 
         res
@@ -163,7 +163,7 @@ impl CFFExpression {
 
         if settings.general.debug > 0 {
             let json_str = serde_json::to_string(&res).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "orientation values"; "values" => json_str);
+            slog::info!(DEBUG_LOGGER.get(), "orientations"; "value" => json_str);
         }
 
         res
@@ -495,8 +495,6 @@ impl CFFExpression {
             .unzip();
 
         let ref_to_esurface = &self.esurfaces[esurface_id];
-
-        // let (dep_mom, dep_mom_expr) = todo!("construct these objects from somewhere");
 
         generate_cff_limit(
             dag_left,
