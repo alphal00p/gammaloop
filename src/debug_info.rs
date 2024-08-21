@@ -2,7 +2,7 @@ use std::{
     fs::{File, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex, OnceLock},
+    sync::OnceLock,
     time::SystemTime,
 };
 
@@ -41,7 +41,7 @@ impl DebugLogger {
         };
 
         let json_log_message = serde_json::to_string(&log_message).unwrap();
-        writeln!(self.logger.get().unwrap(), "{}", json_log_message);
+        writeln!(self.logger.get().unwrap(), "{}", json_log_message).unwrap();
     }
 }
 

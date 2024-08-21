@@ -86,7 +86,6 @@ impl CFFExpression {
         settings: &Settings,
     ) -> Vec<F<T>> {
         if settings.general.debug > 0 {
-            let json_str = serde_json::to_string(&self.esurfaces).unwrap();
             DEBUG_LOGGER.write("esurface_equation", &self.esurfaces);
         }
 
@@ -99,13 +98,10 @@ impl CFFExpression {
         energy_cache: &[F<T>],
         settings: &Settings,
     ) -> Vec<F<T>> {
-        if settings.general.debug > 0 {}
-
         let esurface_cache = self.compute_esurface_cache(energy_cache);
         let hsurface_cache = self.compute_hsurface_cache(energy_cache);
 
         if settings.general.debug > 0 {
-            let json_str = serde_json::to_string(&esurface_cache).unwrap();
             DEBUG_LOGGER.write("esurface_values", &esurface_cache);
         }
 
@@ -134,7 +130,6 @@ impl CFFExpression {
             .collect();
 
         if settings.general.debug > 0 {
-            let json_str = serde_json::to_string(&res).unwrap();
             DEBUG_LOGGER.write("orientations", &res);
         }
 
@@ -150,7 +145,6 @@ impl CFFExpression {
         let res = self.compiled.evaluate_orientations(energy_cache, settings);
 
         if settings.general.debug > 0 {
-            let json_str = serde_json::to_string(&res).unwrap();
             DEBUG_LOGGER.write("orientations", &res);
         }
 

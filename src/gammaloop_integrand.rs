@@ -251,9 +251,6 @@ impl GraphIntegrand for AmplitudeGraph {
         };
 
         if settings.general.debug > 0 {
-            let rep3d_string = serde_json::to_string(&rep3d).unwrap();
-            let ose_product_string = serde_json::to_string(&energy_product).unwrap();
-            let counter_terms_string = serde_json::to_string(&counter_term_eval).unwrap();
             DEBUG_LOGGER.write("rep3d", &rep3d);
             DEBUG_LOGGER.write("ose_product", &energy_product);
             DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
@@ -322,10 +319,6 @@ impl GraphIntegrand for AmplitudeGraph {
         let final_energy_product = &energy_product / &tree_product;
 
         if settings.general.debug > 0 {
-            let rep3d_string = serde_json::to_string(&rep3d).unwrap();
-            let ose_product_string = serde_json::to_string(&energy_product).unwrap();
-            let counter_terms_string = serde_json::to_string(&counterterm).unwrap();
-            let onshell_energies_string = serde_json::to_string(&onshell_energies).unwrap();
             DEBUG_LOGGER.write("rep3d", &rep3d);
             DEBUG_LOGGER.write("ose_product", &energy_product);
             DEBUG_LOGGER.write("onshell_energies", &onshell_energies);
@@ -618,7 +611,6 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         if self.settings.general.debug > 0 {
             samples.iter().for_each(|(sample_point, _)| {
-                let json_sample = serde_json::to_string(&sample_point).unwrap();
                 DEBUG_LOGGER.write("gammaloop_sample", sample_point);
             });
         }
@@ -711,7 +703,6 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!("{}", "evaluation result: ".blue());
             println!("{}: {:+e}", "\tresult: ".yellow(), res);
 
-            let res_str = serde_json::to_string(res).unwrap();
             DEBUG_LOGGER.write("final_result", res);
         }
 
