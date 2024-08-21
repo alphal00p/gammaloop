@@ -1,15 +1,17 @@
 use std::{
-    fs::OpenOptions,
+    fs::{File, OpenOptions},
+    io::Write,
     path::PathBuf,
     sync::{Arc, Mutex, OnceLock},
+    time::SystemTime,
 };
 
-use slog::{o, Drain, Logger};
+use serde::Serialize;
 
 pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 
 pub struct DebugLogger {
-    logger: OnceLock<Logger>,
+    logger: OnceLock<File>,
 }
 
 impl DebugLogger {
@@ -19,7 +21,7 @@ impl DebugLogger {
         }
     }
 
-    pub fn set(&self, path: &PathBuf) -> Result<(), Logger> {
+    pub fn set(&self, path: &PathBuf) -> Result<(), File> {
         let file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -27,13 +29,25 @@ impl DebugLogger {
             .open(path)
             .unwrap();
 
-        let drain = Arc::new(Mutex::new(slog_json::Json::default(file))).fuse();
-        let logger = slog::Logger::root(drain, o!());
-        self.logger.set(logger)
+        self.logger.set(file)
     }
 
     #[cold]
-    pub fn get(&self) -> &Logger {
-        self.logger.get().unwrap()
+    pub fn write<T: Serialize>(&self, msg: &str, data: &T) {
+        let log_message = LogMessage {
+            msg,
+            data,
+            ts: SystemTime::now(),
+        };
+
+        let json_log_message = serde_json::to_string(&log_message).unwrap();
+        writeln!(self.logger.get().unwrap(), "{}", json_log_message);
     }
+}
+
+#[derive(Serialize, Clone, Debug)]
+struct LogMessage<'a, T> {
+    msg: &'a str,
+    ts: std::time::SystemTime,
+    data: &'a T,
 }

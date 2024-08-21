@@ -92,7 +92,7 @@ impl GraphIntegrand for AmplitudeGraph {
         settings: &Settings,
     ) -> Complex<F<T>> {
         if settings.general.debug > 0 {
-            slog::info!(DEBUG_LOGGER.get(), "channel_id"; "value" => channel_id);
+            DEBUG_LOGGER.write("channel_id", &channel_id);
         }
 
         let one = sample.one();
@@ -137,7 +137,7 @@ impl GraphIntegrand for AmplitudeGraph {
 
         if settings.general.debug > 0 {
             let energy_string = serde_json::to_string(&onshell_energies).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "onshell_energies"; "values" => energy_string);
+            DEBUG_LOGGER.write("onshell_energies", &onshell_energies);
         }
 
         let virtual_energies = self
@@ -179,8 +179,9 @@ impl GraphIntegrand for AmplitudeGraph {
             let multichanneling_prefactor_str =
                 serde_json::to_string(&multichanneling_prefactor).unwrap();
             let rep3d_str = serde_json::to_string(&rep3d).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "multichanneling_prefactor"; "value" => multichanneling_prefactor_str);
-            slog::info!(DEBUG_LOGGER.get(), "rep3d"; "value" => rep3d_str);
+
+            DEBUG_LOGGER.write("multichanneling_prefactor", &multichanneling_prefactor);
+            DEBUG_LOGGER.write("rep3d", &rep3d);
         }
 
         multichanneling_prefactor * rep3d
@@ -194,10 +195,6 @@ impl GraphIntegrand for AmplitudeGraph {
         settings: &Settings,
     ) -> Complex<F<T>> {
         let zero = sample.zero();
-
-        if settings.general.debug > 0 {
-            slog::info!(DEBUG_LOGGER.get(), "summing all multichanneling channels")
-        }
 
         // a bit annoying that this is duplicated from evaluate_channel
         let lmb_list = self
@@ -257,9 +254,9 @@ impl GraphIntegrand for AmplitudeGraph {
             let rep3d_string = serde_json::to_string(&rep3d).unwrap();
             let ose_product_string = serde_json::to_string(&energy_product).unwrap();
             let counter_terms_string = serde_json::to_string(&counter_term_eval).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "rep3d"; "value" => rep3d_string);
-            slog::info!(DEBUG_LOGGER.get(), "ose_product"; "value" => ose_product_string);
-            slog::info!(DEBUG_LOGGER.get(), "counter_terms"; "value" => counter_terms_string);
+            DEBUG_LOGGER.write("rep3d", &rep3d);
+            DEBUG_LOGGER.write("ose_product", &energy_product);
+            DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
         }
 
         rep3d / energy_product - counter_term_eval
@@ -329,10 +326,10 @@ impl GraphIntegrand for AmplitudeGraph {
             let ose_product_string = serde_json::to_string(&energy_product).unwrap();
             let counter_terms_string = serde_json::to_string(&counterterm).unwrap();
             let onshell_energies_string = serde_json::to_string(&onshell_energies).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "rep3d"; "value" => rep3d_string);
-            slog::info!(DEBUG_LOGGER.get(), "ose_product"; "value" => ose_product_string);
-            slog::info!(DEBUG_LOGGER.get(), "onshell_energies"; "value" => onshell_energies_string);
-            slog::info!(DEBUG_LOGGER.get(), "counter_terms"; "value" => counter_terms_string);
+            DEBUG_LOGGER.write("rep3d", &rep3d);
+            DEBUG_LOGGER.write("ose_product", &energy_product);
+            DEBUG_LOGGER.write("onshell_energies", &onshell_energies);
+            DEBUG_LOGGER.write("counter_terms", &counterterm);
         }
 
         (rep3d - counterterm) * final_energy_product
@@ -565,9 +562,7 @@ impl HasIntegrand for GammaLoopIntegrand {
     ) -> EvaluationResult {
         if self.settings.general.debug > 0 {
             DEBUG_LOGGER.set(&PathBuf::from("log.jsonl")).unwrap();
-            let havana_sample_json = serde_json::to_string(&sample).unwrap();
-            let log = DEBUG_LOGGER.get();
-            slog::info!(log, "havana_sample"; "value" => &havana_sample_json);
+            DEBUG_LOGGER.write("havana_sample", sample);
         }
 
         let start_evaluate_sample = Instant::now();
@@ -624,7 +619,7 @@ impl HasIntegrand for GammaLoopIntegrand {
         if self.settings.general.debug > 0 {
             samples.iter().for_each(|(sample_point, _)| {
                 let json_sample = serde_json::to_string(&sample_point).unwrap();
-                slog::info!(DEBUG_LOGGER.get(), "gammaloop_sample"; "value" => json_sample);
+                DEBUG_LOGGER.write("gammaloop_sample", sample_point);
             });
         }
 
@@ -632,14 +627,14 @@ impl HasIntegrand for GammaLoopIntegrand {
         let prefactor = F(self.compute_2pi_factor().inv());
 
         if self.settings.general.debug > 0 {
-            slog::info!(DEBUG_LOGGER.get(), "pi_prefactor"; "value" => prefactor.0);
+            DEBUG_LOGGER.write("pi_prefactor", &prefactor.0);
         };
 
         // iterate over the stability levels, break if the point is stable
         for stability_level in stability_iterator {
             if self.settings.general.debug > 0 {
                 let stab_level_str = serde_json::to_string(&stability_level.precision).unwrap();
-                slog::info!(DEBUG_LOGGER.get(), "prec_level"; "value" => stab_level_str);
+                DEBUG_LOGGER.write("prec_level", &stability_level.precision);
             }
 
             // evaluate the integrand at the current stability level
@@ -717,7 +712,7 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!("{}: {:+e}", "\tresult: ".yellow(), res);
 
             let res_str = serde_json::to_string(res).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "final_result"; "value" => res_str);
+            DEBUG_LOGGER.write("final_result", res);
         }
 
         let mut integrand_result = *res;

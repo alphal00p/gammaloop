@@ -87,7 +87,7 @@ impl CFFExpression {
     ) -> Vec<F<T>> {
         if settings.general.debug > 0 {
             let json_str = serde_json::to_string(&self.esurfaces).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "esurface_equations"; "value" => json_str)
+            DEBUG_LOGGER.write("esurface_equation", &self.esurfaces);
         }
 
         T::get_evaluator(self)(energy_cache, settings)
@@ -99,19 +99,14 @@ impl CFFExpression {
         energy_cache: &[F<T>],
         settings: &Settings,
     ) -> Vec<F<T>> {
-        if settings.general.debug > 0 {
-            slog::info!(
-                DEBUG_LOGGER.get(),
-                "evaluating cff orientations in eager mode"
-            );
-        }
+        if settings.general.debug > 0 {}
 
         let esurface_cache = self.compute_esurface_cache(energy_cache);
         let hsurface_cache = self.compute_hsurface_cache(energy_cache);
 
         if settings.general.debug > 0 {
             let json_str = serde_json::to_string(&esurface_cache).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "esurface_values"; "value" => json_str);
+            DEBUG_LOGGER.write("esurface_values", &esurface_cache);
         }
 
         let mut term_cache = self.build_term_cache();
@@ -140,7 +135,7 @@ impl CFFExpression {
 
         if settings.general.debug > 0 {
             let json_str = serde_json::to_string(&res).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "orientations"; "value" => json_str);
+            DEBUG_LOGGER.write("orientations", &res);
         }
 
         res
@@ -152,18 +147,11 @@ impl CFFExpression {
         energy_cache: &[F<f64>],
         settings: &Settings,
     ) -> Vec<F<f64>> {
-        if settings.general.debug > 0 {
-            slog::info!(
-                DEBUG_LOGGER.get(),
-                "evaluating cff orientations in compiled mode"
-            );
-        }
-
         let res = self.compiled.evaluate_orientations(energy_cache, settings);
 
         if settings.general.debug > 0 {
             let json_str = serde_json::to_string(&res).unwrap();
-            slog::info!(DEBUG_LOGGER.get(), "orientations"; "value" => json_str);
+            DEBUG_LOGGER.write("orientations", &res);
         }
 
         res
