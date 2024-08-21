@@ -1,8 +1,7 @@
-from os.path import exists
+from logging import log
 from typing import Dict, Any
 import json
-
-from symbolica import Sample
+from gammaloop.misc.common import logger
 
 
 def build_debug_dict(log_file: str) -> Dict[str, Any]:
@@ -25,18 +24,30 @@ def build_debug_dict(log_file: str) -> Dict[str, Any]:
 # I assume one sample from the integrator per point
 def display_havana_sample(debug_dict: Dict[str, Any]) -> None:
     if 'havana_sample' not in debug_dict:
-        print("no havana sample in debug info")
+        logger.info("no havana sample in debug info")
         return
 
-    nested_sample = (debug_dict['havana_sample'][0])
-    continuous_found = False
+    sample = debug_dict['havana_sample'][0]
+    logger.info("havana sample: ")
+    logger.info(sample)
 
-    while continuous_found is False:
-        if 'Continuous' in nested_sample:
-            continuous_found = True
-            continuous_sample = nested_sample["Continuous"]
-            print(continuous_sample)
+
+def display_momenta_samples(debug_dict: Dict[str, Any]) -> None:
+    if 'momenta_sample' not in debug_dict:
+        logger.info("no momenta sample in debug info")
+
+    for gammaloop_sample in debug_dict['momenta_sample']:
+        logger.info("momenta sampled: ")
+        for index, loop_momentum in enumerate(gammaloop_sample['loop_moms']):
+            logger.info("\t loop momentum {}: {}".format(index, loop_momentum))
+
+        for index, external_momentum in enumerate(gammaloop_sample['external_moms']):
+            logger.info("\t external momentum {}: {}".format(
+                index, external_momentum))
+
+        logger.info("\t jacobian: {}".format(gammaloop_sample['jacobian']))
 
 
 def display_default(debug_dict: Dict[str, Any]) -> None:
     display_havana_sample(debug_dict)
+    display_momenta_samples(debug_dict)

@@ -610,8 +610,8 @@ impl HasIntegrand for GammaLoopIntegrand {
             .collect_vec();
 
         if self.settings.general.debug > 0 {
-            samples.iter().for_each(|(sample_point, _)| {
-                DEBUG_LOGGER.write("gammaloop_sample", sample_point);
+            samples.iter().for_each(|(sample, _)| {
+                DEBUG_LOGGER.write("momenta_sample", sample.get_default_sample());
             });
         }
 
