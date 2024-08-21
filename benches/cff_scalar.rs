@@ -4,6 +4,7 @@ use _gammaloop::{
     gammaloop_integrand::DefaultSample,
     graph::Graph,
     momentum::{FourMomentum, ThreeMomentum},
+    numerator::ContractionSettings,
     tests::load_default_settings,
     tests_from_pytest::load_amplitude_output,
     utils::F,
@@ -69,17 +70,21 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
         },
     };
 
-    amplitude.amplitude_graphs[0].graph.generate_numerator();
-    amplitude.amplitude_graphs[0]
-        .graph
-        .process_numerator(&model);
     let true_path = PathBuf::from(COMPILED_DUMP).join(path);
-    amplitude.amplitude_graphs[0]
-        .graph
-        .build_compiled_expression(true_path, &export_settings)
-        .unwrap();
 
-    amplitude.amplitude_graphs.remove(0).graph
+    let mut g = amplitude
+        .amplitude_graphs
+        .remove(0)
+        .graph
+        .process_numerator(
+            &model,
+            ContractionSettings::Normal,
+            true_path.clone(),
+            &export_settings,
+        );
+    g.build_compiled_expression(true_path, &export_settings)
+        .unwrap();
+    g
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

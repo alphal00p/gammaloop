@@ -503,6 +503,8 @@ pub fn generate_esurface_data<S: NumeratorState>(
 ) -> Result<EsurfaceDerivedData, Report> {
     let lmbs = graph
         .derived_data
+        .as_ref()
+        .unwrap()
         .loop_momentum_bases
         .as_ref()
         .ok_or_else(|| {

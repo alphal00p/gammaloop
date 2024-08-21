@@ -98,7 +98,7 @@ pub fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSa
 pub fn load_amplitude_output(
     output_path: &str,
     load_generic_model: bool,
-) -> (Model, Amplitude<UnInit>) {
+) -> (Model, Amplitude<UnInit>, PathBuf) {
     let output_dir = if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
         pytest_output_path
     } else {
@@ -153,7 +153,7 @@ pub fn load_amplitude_output(
         ),
     )
     .unwrap();
-    (model, amplitude)
+    (model, amplitude, path)
 }
 
 #[cfg(test)]
@@ -187,7 +187,7 @@ mod tests_scalar_massless_triangle {
 
         let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
 
-        let (model, amplitude) =
+        let (model, amplitude, _) =
             load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", true);
 
         assert_eq!(model.name, "scalars");
@@ -216,6 +216,8 @@ mod tests_scalar_massless_triangle {
         assert_eq!(
             graph
                 .derived_data
+                .as_ref()
+                .unwrap()
                 .cff_expression
                 .as_ref()
                 .unwrap()
@@ -225,6 +227,8 @@ mod tests_scalar_massless_triangle {
         assert_eq!(
             graph
                 .derived_data
+                .as_ref()
+                .unwrap()
                 .cff_expression
                 .as_ref()
                 .unwrap()
@@ -261,6 +265,8 @@ mod tests_scalar_massless_triangle {
         assert_eq!(
             graph
                 .derived_data
+                .as_ref()
+                .unwrap()
                 .loop_momentum_bases
                 .as_ref()
                 .unwrap()
@@ -295,11 +301,19 @@ mod tests_scalar_massless_triangle {
         let existing = get_existing_esurfaces(
             &graph
                 .derived_data
+                .as_ref()
+                .unwrap()
                 .cff_expression
                 .as_ref()
                 .unwrap()
                 .esurfaces,
-            graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+            graph
+                .derived_data
+                .as_ref()
+                .unwrap()
+                .esurface_derived_data
+                .as_ref()
+                .unwrap(),
             &[p1, p2],
             &graph.bare_graph.loop_momentum_basis,
             0,
@@ -322,7 +336,7 @@ mod tests_scalar_massless_triangle {
 #[test]
 fn pytest_scalar_fishnet_2x2() {
     let default_settings = load_default_settings();
-    let (model, amplitude) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_fishnet_2x2/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -366,6 +380,7 @@ fn pytest_scalar_fishnet_2x2() {
     let n_lmb = graph
         .clone()
         .derived_data
+        .unwrap()
         .loop_momentum_bases
         .unwrap()
         .len();
@@ -384,6 +399,8 @@ fn pytest_scalar_fishnet_2x2() {
 
     for basis in graph
         .derived_data
+        .as_ref()
+        .unwrap()
         .loop_momentum_bases
         .as_ref()
         .unwrap()
@@ -467,7 +484,8 @@ fn pytest_scalar_fishnet_2x2() {
 #[test]
 fn pytest_scalar_sunrise() {
     let default_settings = load_default_settings();
-    let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_sunrise/GL_OUTPUT", true);
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_sunrise/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -536,7 +554,7 @@ fn pytest_scalar_sunrise() {
 #[test]
 fn pytest_scalar_fishnet_2x3() {
     let default_settings = load_default_settings();
-    let (model, mut amplitude) =
+    let (model, mut amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -640,7 +658,7 @@ fn pytest_scalar_fishnet_2x3() {
 #[test]
 fn pytest_scalar_cube() {
     let default_settings = load_default_settings();
-    let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_cube/GL_OUTPUT", true);
+    let (model, amplitude, _) = load_amplitude_output("TEST_AMPLITUDE_scalar_cube/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -744,7 +762,8 @@ fn pytest_scalar_cube() {
 #[test]
 fn pytest_scalar_bubble() {
     let default_settings = load_default_settings();
-    let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_bubble/GL_OUTPUT", true);
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_bubble/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -812,7 +831,7 @@ fn pytest_scalar_bubble() {
 #[test]
 fn pytest_scalar_massless_box() {
     let default_settings = load_default_settings();
-    let (model, amplitude) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_massless_box/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -924,6 +943,8 @@ fn pytest_scalar_massless_box() {
 
     let esurfaces = &graph
         .derived_data
+        .as_ref()
+        .unwrap()
         .cff_expression
         .as_ref()
         .unwrap()
@@ -931,7 +952,13 @@ fn pytest_scalar_massless_box() {
 
     let existing = get_existing_esurfaces(
         esurfaces,
-        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
         &box4_e,
         &graph.bare_graph.loop_momentum_basis,
         0,
@@ -976,7 +1003,7 @@ fn pytest_scalar_double_triangle() {
     let default_settings = load_default_settings();
     let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
 
-    let (model, amplitude) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_double_triangle/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -1070,7 +1097,7 @@ fn pytest_scalar_double_triangle() {
 #[test]
 fn pytest_scalar_mercedes() {
     let default_settings = load_default_settings();
-    let (model, amplitude) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_mercedes/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -1161,7 +1188,7 @@ fn pytest_scalar_mercedes() {
 #[test]
 fn pytest_scalar_triangle_box() {
     let default_settings = load_default_settings();
-    let (model, amplitude) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_triangle_box/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -1263,7 +1290,8 @@ fn pytest_scalar_triangle_box() {
 #[test]
 fn pytest_scalar_isopod() {
     let default_settings = load_default_settings();
-    let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_isopod/GL_OUTPUT", true);
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_isopod/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -1367,7 +1395,7 @@ fn pytest_scalar_isopod() {
 
 #[test]
 fn pytest_scalar_raised_triangle() {
-    let (model, amplitude) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_raised_triangle/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -1381,7 +1409,8 @@ fn pytest_scalar_raised_triangle() {
 
 #[test]
 fn pytest_scalar_hexagon() {
-    let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_scalar_hexagon/GL_OUTPUT", true);
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_hexagon/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -1394,6 +1423,8 @@ fn pytest_scalar_hexagon() {
 
     let esurfaces = &graph
         .derived_data
+        .as_ref()
+        .unwrap()
         .cff_expression
         .as_ref()
         .unwrap()
@@ -1409,7 +1440,13 @@ fn pytest_scalar_hexagon() {
 
     let existing_esurface = get_existing_esurfaces(
         esurfaces,
-        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
         &kinematics,
         &graph.bare_graph.loop_momentum_basis,
         0,
@@ -1465,7 +1502,13 @@ fn pytest_scalar_hexagon() {
 
     let existing_esurfaces = get_existing_esurfaces(
         esurfaces,
-        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
         &hexagon_10_e,
         &graph.bare_graph.loop_momentum_basis,
         0,
@@ -1507,7 +1550,7 @@ fn pytest_scalar_hexagon() {
 
 #[test]
 fn pytest_scalar_ltd_topology_c() {
-    let (model, amplitude) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_ltd_topology_c/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -1521,6 +1564,8 @@ fn pytest_scalar_ltd_topology_c() {
 
     let esurfaces = &graph
         .derived_data
+        .as_ref()
+        .unwrap()
         .cff_expression
         .as_ref()
         .unwrap()
@@ -1564,7 +1609,13 @@ fn pytest_scalar_ltd_topology_c() {
 
     let existing_esurfaces = get_existing_esurfaces(
         esurfaces,
-        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
         &kinematics,
         &graph.bare_graph.loop_momentum_basis,
         2,
@@ -1594,7 +1645,7 @@ fn pytest_scalar_ltd_topology_c() {
 
 #[test]
 fn pytest_scalar_massless_pentabox() {
-    let (_model, amplitude) =
+    let (_model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_massless_pentabox/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
@@ -1652,11 +1703,19 @@ fn pytest_scalar_massless_pentabox() {
     let existing_esurfaces = get_existing_esurfaces(
         &graph
             .derived_data
+            .as_ref()
+            .unwrap()
             .cff_expression
             .as_ref()
             .unwrap()
             .esurfaces,
-        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
         &kinematics,
         &graph.bare_graph.loop_momentum_basis,
         0,
@@ -1670,6 +1729,8 @@ fn pytest_scalar_massless_pentabox() {
         &existing_esurfaces,
         &graph
             .derived_data
+            .as_ref()
+            .unwrap()
             .cff_expression
             .as_ref()
             .unwrap()
@@ -1697,7 +1758,7 @@ fn pytest_scalar_massless_pentabox() {
 
 #[test]
 fn pytest_scalar_massless_3l_pentabox() {
-    let (_model, amplitude) =
+    let (_model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_massless_3l_pentabox/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
@@ -1755,11 +1816,19 @@ fn pytest_scalar_massless_3l_pentabox() {
     let existing_esurfaces = get_existing_esurfaces(
         &graph
             .derived_data
+            .as_ref()
+            .unwrap()
             .cff_expression
             .as_ref()
             .unwrap()
             .esurfaces,
-        graph.derived_data.esurface_derived_data.as_ref().unwrap(),
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
         &kinematics,
         &graph.bare_graph.loop_momentum_basis,
         0,
@@ -1775,6 +1844,8 @@ fn pytest_scalar_massless_3l_pentabox() {
         &existing_esurfaces,
         &graph
             .derived_data
+            .as_ref()
+            .unwrap()
             .cff_expression
             .as_ref()
             .unwrap()
@@ -1798,7 +1869,7 @@ fn pytest_scalar_massless_3l_pentabox() {
 
 #[test]
 fn pytest_lbl_box() {
-    let (model, amplitude) = load_amplitude_output("TEST_AMPLITUDE_lbl_box/GL_OUTPUT", true);
+    let (model, amplitude, _) = load_amplitude_output("TEST_AMPLITUDE_lbl_box/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
     graph.generate_cff();
@@ -1815,7 +1886,7 @@ fn pytest_lbl_box() {
 #[allow(non_snake_case)]
 fn pytest_physical_3L_6photons_topology_A_inspect() {
     env_logger::builder().is_test(true).try_init().unwrap();
-    let (model, amplitude) = load_amplitude_output(
+    let (model, amplitude, _) = load_amplitude_output(
         "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
         true,
     );
@@ -1836,12 +1907,12 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
     // graph.evaluate_cff_expression(&sample, 3);
     // println!(
     //     "{}",
-    //     graph.derived_data.numerator.as_ref().unwrap().expression
+    //     graph.derived_data.as_ref().unwrap().numerator.as_ref().unwrap().expression
     // );
 
     // println!(
     //     "{}",
-    //     graph.derived_data.numerator.unwrap().network.unwrap().dot()
+    //     graph.derived_data.as_ref().unwrap().numerator.unwrap().network.unwrap().dot()
     // );
     // let mut onlycolor = Numerator {
     //     expression: Atom::parse("T(aind(coad(8,9),cof(3,8),coaf(3,7)))*T(aind(coad(8,14),cof(3,13),coaf(3,12)))*T(aind(coad(8,21),cof(3,20),coaf(3,19)))*T(aind(coad(8,26),cof(3,25),coaf(3,24)))*id(aind(coaf(3,3),cof(3,4)))*id(aind(coaf(3,4),cof(3,24)))*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,6),cof(3,3)))*id(aind(coaf(3,8),cof(3,5)))*id(aind(coaf(3,10),cof(3,11)))*id(aind(coaf(3,11),cof(3,7)))*id(aind(coaf(3,13),cof(3,10)))*id(aind(coaf(3,15),cof(3,16)))*id(aind(coaf(3,16),cof(3,12)))*id(aind(coaf(3,17),cof(3,18)))*id(aind(coaf(3,18),cof(3,15)))*id(aind(coaf(3,20),cof(3,17)))*id(aind(coaf(3,22),cof(3,23)))*id(aind(coaf(3,23),cof(3,19)))*id(aind(coaf(3,25),cof(3,22)))*id(aind(coad(8,21),coad(8,9)))*id(aind(coad(8,26),coad(8,14)))").unwrap(),
@@ -1871,7 +1942,7 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 fn pytest_physical_1L_6photons() {
     let default_settings = load_default_settings();
     env_logger::builder().is_test(true).try_init().unwrap();
-    let (model, amplitude) =
+    let (model, amplitude, true_path) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
@@ -1881,7 +1952,7 @@ fn pytest_physical_1L_6photons() {
     let mut graph = graph.process_numerator(
         &model,
         ContractionSettings::Normal,
-        PathBuf::new(),
+        true_path,
         &export_settings,
     );
 
@@ -1895,7 +1966,7 @@ fn pytest_physical_2L_6photons() {
     let default_settings = load_default_settings();
     // env_logger::builder().is_test(true).try_init().unwrap();
     env_logger::init();
-    let (model, amplitude) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_physical_2L_6photons/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();

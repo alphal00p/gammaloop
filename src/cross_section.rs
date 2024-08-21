@@ -2,8 +2,8 @@ use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{BareGraph, Graph, SerializableGraph};
 use crate::model::Model;
 use crate::numerator::{
-    AppliedFeynmanRule, ContractionSettings, Evaluators, NumeratorState, PythonState, UnInit,
-    UnexpandedNumerator,
+    AppliedFeynmanRule, ContractionSettings, Evaluators, NumeratorState, PythonState,
+    TypedNumeratorState, UnInit, UnexpandedNumerator,
 };
 use crate::{utils::*, ExportSettings, Settings};
 use bincode;
@@ -11,7 +11,6 @@ use color_eyre::Result;
 use color_eyre::{Help, Report};
 #[allow(unused_imports)]
 use eyre::{eyre, Context};
-use hyperdual::Num;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
@@ -316,6 +315,12 @@ pub struct AmplitudeGraph<NumState: NumeratorState> {
     pub multi_channeling_channels: Vec<usize>,
 }
 
+impl<S: TypedNumeratorState> AmplitudeGraph<S> {
+    pub fn try_from_python(ag: AmplitudeGraph<PythonState>) -> Result<Self> {
+        ag.map_res(Graph::<S>::try_from_python)
+    }
+}
+
 impl AmplitudeGraph<PythonState> {
     pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
         self.graph.load_derived_data::<S>(path)
@@ -335,6 +340,13 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             graph: f(self.graph),
             multi_channeling_channels: self.multi_channeling_channels,
         }
+    }
+
+    pub fn map_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut Graph<S>),
+    {
+        f(&mut self.graph);
     }
 
     pub fn map_res<F, U: NumeratorState, E>(self, mut f: F) -> Result<AmplitudeGraph<U>, E>
@@ -531,6 +543,12 @@ pub struct Amplitude<NumState: NumeratorState = Evaluators> {
     pub amplitude_graphs: Vec<AmplitudeGraph<NumState>>,
 }
 
+impl<S: TypedNumeratorState> Amplitude<S> {
+    pub fn try_from_python(amp: Amplitude<PythonState>) -> Result<Self> {
+        amp.map_res(AmplitudeGraph::<S>::try_from_python)
+    }
+}
+
 impl Amplitude<PythonState> {
     pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
@@ -549,6 +567,13 @@ impl<S: NumeratorState> Amplitude<S> {
             name: self.name,
             amplitude_graphs: self.amplitude_graphs.into_iter().map(f).collect(),
         }
+    }
+
+    pub fn map_mut<F>(&mut self, f: F)
+    where
+        F: FnMut(&mut AmplitudeGraph<S>),
+    {
+        self.amplitude_graphs.iter_mut().for_each(f);
     }
 
     pub fn map_res<F, U: NumeratorState, E>(self, f: F) -> Result<Amplitude<U>, E>
@@ -669,6 +694,71 @@ impl Amplitude<UnInit> {
         self.map_res(|a| a.load_derived_data(path, settings))
     }
 }
+
+impl Amplitude<PythonState> {
+    pub fn export(
+        &mut self,
+        export_root: &str,
+        model: &Model,
+        export_settings: &ExportSettings,
+    ) -> Result<(), Report> {
+        // TODO process amplitude by adding lots of additional information necessary for runtime.
+        // e.g. generate e-surface, cff expression, counterterms, etc.
+
+        // Then dumped the new yaml representation of the amplitude now containing all that additional information
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str());
+
+        // generate cff and ltd for each graph in the ampltiudes, ltd also generates lmbs
+
+        self.map_mut(|a| {
+            a.map_mut(|g| {
+                g.generate_cff();
+                g.generate_ltd();
+                g.generate_tropical_subgraph_table(
+                    &export_settings.tropical_subgraph_table_settings,
+                );
+                g.generate_esurface_data().unwrap();
+                g.build_compiled_expression(path.clone(), export_settings)
+                    .unwrap();
+
+                g.statefull_apply::<_, UnInit, Evaluators>(|d, b| {
+                    d.process_numerator(
+                        b,
+                        model,
+                        ContractionSettings::Normal,
+                        path.clone(),
+                        export_settings,
+                    )
+                })
+                .unwrap();
+            })
+        });
+
+        fs::write(
+            path.clone().join("amplitude.yaml"),
+            serde_yaml::to_string(&self.to_serializable())?,
+        )?;
+
+        // dump the derived data in a binary file
+        for amplitude_graph in self.amplitude_graphs.iter() {
+            debug!("dumping derived data");
+            fs::write(
+                path.clone().join(format!(
+                    "derived_data_{}.bin",
+                    amplitude_graph.graph.bare_graph.name
+                )),
+                bincode::serialize(&amplitude_graph.graph.derived_data)?,
+            )?;
+        }
+
+        // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
+
+        Ok(())
+    }
+}
 impl<S: UnexpandedNumerator> Amplitude<S> {
     pub fn export_expressions(
         &self,
@@ -681,7 +771,13 @@ impl<S: UnexpandedNumerator> Amplitude<S> {
             .join(self.name.as_str())
             .join("expressions");
         for amplitude_graph in self.amplitude_graphs.iter() {
-            let num = &amplitude_graph.graph.derived_data.numerator.expr();
+            let num = &amplitude_graph
+                .graph
+                .derived_data
+                .as_ref()
+                .unwrap()
+                .numerator
+                .expr();
             let dens: Vec<(String, String)> = amplitude_graph
                 .graph
                 .bare_graph
@@ -724,7 +820,7 @@ impl<S: UnexpandedNumerator> Amplitude<S> {
             let out = (
                 format!(
                     "{}",
-                    AtomPrinter::new_with_options(num.0.as_view(), printer_ops)
+                    AtomPrinter::new_with_options(num.as_ref().unwrap().0.as_view(), printer_ops)
                 ),
                 rep_rules,
                 dens,
@@ -788,7 +884,7 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(())
     }
 }
-impl Amplitude<Evaluators> {
+impl Amplitude<PythonState> {
     pub fn generate_integrand(
         &self,
         path_to_settings: &Path,
@@ -807,7 +903,7 @@ impl Amplitude<Evaluators> {
             .suggestion("Is it a correct yaml file")?;
 
         Ok(GammaLoopIntegrand::amplitude_integrand_constructor(
-            self.clone(),
+            Amplitude::<Evaluators>::try_from_python(self.clone())?,
             settings.clone(),
         ))
     }
@@ -882,6 +978,12 @@ pub struct AmplitudeList<S: NumeratorState> {
     pub container: Vec<Amplitude<S>>,
 }
 
+impl<S: TypedNumeratorState> AmplitudeList<S> {
+    pub fn try_from_python(al: AmplitudeList<PythonState>) -> Result<AmplitudeList<S>> {
+        al.map_res(Amplitude::<S>::try_from_python)
+    }
+}
+
 impl AmplitudeList<PythonState> {
     pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
         for amplitude in self.container.iter_mut() {
@@ -901,7 +1003,23 @@ impl<S: NumeratorState> AmplitudeList<S> {
         }
     }
 
-    pub fn map_res<F, U: NumeratorState, E>(self, mut f: F) -> Result<AmplitudeList<U>, E>
+    pub fn map_mut<F>(&mut self, f: F)
+    where
+        F: FnMut(&mut Amplitude<S>),
+    {
+        self.container.iter_mut().for_each(f);
+    }
+
+    pub fn map_mut_graphs<F>(&mut self, f: F)
+    where
+        F: FnMut(&mut Graph<S>) + Copy,
+    {
+        self.container
+            .iter_mut()
+            .for_each(|a| a.map_mut(|ag| ag.map_mut(f)));
+    }
+
+    pub fn map_res<F, U: NumeratorState, E>(self, f: F) -> Result<AmplitudeList<U>, E>
     where
         F: FnMut(Amplitude<S>) -> Result<Amplitude<U>, E>,
     {
@@ -909,7 +1027,7 @@ impl<S: NumeratorState> AmplitudeList<S> {
             container: self
                 .container
                 .into_iter()
-                .map(|a| f(a))
+                .map(f)
                 .collect::<Result<_, E>>()?,
         })
     }

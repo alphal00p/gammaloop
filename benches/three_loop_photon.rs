@@ -2,7 +2,7 @@ use std::{env, path::PathBuf};
 
 use _gammaloop::{
     graph::Graph,
-    numerator::NumeratorEvaluatorOptions,
+    numerator::{ContractionSettings, NumeratorEvaluatorOptions},
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
     ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,
@@ -33,18 +33,21 @@ fn load_helper(path: &str) -> Graph {
             custom: vec![],
         },
     };
-
-    amplitude.amplitude_graphs[0].graph.generate_numerator();
-    amplitude.amplitude_graphs[0]
-        .graph
-        .process_numerator(&model);
     let true_path = PathBuf::from(COMPILED_DUMP).join(path);
-    amplitude.amplitude_graphs[0]
-        .graph
-        .build_compiled_expression(true_path, &export_settings)
-        .unwrap();
 
-    amplitude.amplitude_graphs.remove(0).graph
+    let mut g = amplitude
+        .amplitude_graphs
+        .remove(0)
+        .graph
+        .process_numerator(
+            &model,
+            ContractionSettings::Normal,
+            true_path.clone(),
+            &export_settings,
+        );
+    g.build_compiled_expression(true_path, &export_settings)
+        .unwrap();
+    g
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

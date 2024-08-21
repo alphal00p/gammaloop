@@ -101,6 +101,8 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let lmb_list = self
             .get_graph()
             .derived_data
+            .as_ref()
+            .unwrap()
             .loop_momentum_bases
             .clone()
             .unwrap();
@@ -189,6 +191,8 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let lmb_list = self
             .get_graph()
             .derived_data
+            .as_ref()
+            .unwrap()
             .loop_momentum_bases
             .as_ref()
             .unwrap();
@@ -228,7 +232,13 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             .bare_graph
             .compute_energy_product(&sample.loop_moms, &sample.external_moms);
 
-        let counter_terms = self.get_graph().derived_data.static_counterterm.as_ref();
+        let counter_terms = self
+            .get_graph()
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .static_counterterm
+            .as_ref();
 
         let counter_term_eval = match counter_terms {
             None => Complex::new(zero_builder.zero(), zero_builder.zero()),
@@ -290,7 +300,13 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let tree_product =
             tree_like_energies.fold(one.clone(), |acc, x| acc * F::<T>::from_f64(2.) * x);
 
-        let counterterm = match &self.get_graph().derived_data.static_counterterm {
+        let counterterm = match &self
+            .get_graph()
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .static_counterterm
+        {
             Some(counterterm) => {
                 counterterm.evaluate(
                     &sample.loop_moms,
@@ -376,6 +392,8 @@ fn get_lmb_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
     graph_integrand
         .get_graph()
         .derived_data
+        .as_ref()
+        .unwrap()
         .loop_momentum_bases
         .as_ref()
         .unwrap_or_else(|| panic!("Loop momentum bases not generated"))
@@ -440,6 +458,8 @@ fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> G
     let n_edges = graph_integrand
         .get_graph()
         .derived_data
+        .as_ref()
+        .unwrap()
         .tropical_subgraph_table
         .as_ref()
         .map(|t| t.get_num_edges());
@@ -862,7 +882,13 @@ impl GammaLoopIntegrand {
                             GraphIntegrands::CrossSection(_graphs) => unimplemented!(), //,
                         };
 
-                        let sampler = graph.derived_data.tropical_subgraph_table.as_ref().unwrap();
+                        let sampler = graph
+                            .derived_data
+                            .as_ref()
+                            .unwrap()
+                            .tropical_subgraph_table
+                            .as_ref()
+                            .unwrap();
                         let xs_f64 = xs.iter().map(|x| x.0).collect_vec();
 
                         let edge_data = graph
@@ -1126,7 +1152,9 @@ impl GammaLoopIntegrand {
                         );
                     }
 
-                    graph.derived_data.static_counterterm = Some(counter_term);
+                    if let Some(derived_data) = &mut graph.derived_data {
+                        derived_data.static_counterterm = Some(counter_term);
+                    }
                 }
             }
         } else {

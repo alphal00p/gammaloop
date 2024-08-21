@@ -8,11 +8,12 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
-    numerator::{Evaluators, PythonState},
+    numerator::{AppliedFeynmanRule, Evaluators, PythonState, UnInit},
     utils::F,
     HasIntegrand, Settings,
 };
 use ahash::HashMap;
+
 use colored::Colorize;
 use git_version::git_version;
 use itertools::{self, Itertools};
@@ -237,7 +238,12 @@ impl PythonWorker {
     }
 
     pub fn generate_numerators(&mut self) {
-        self.amplitudes.map(|ag|);
+        self.amplitudes.map_mut_graphs(|g| {
+            g.statefull_apply::<_, UnInit, AppliedFeynmanRule>(|d, b| {
+                d.map_numerator(|n| n.from_graph(b))
+            })
+            .unwrap()
+        });
     }
 
     // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,

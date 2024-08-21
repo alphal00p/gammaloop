@@ -13,11 +13,13 @@ use crate::{
     utils::{FloatLike, F},
 };
 use ahash::AHashMap;
+use color_eyre::Report;
 use eyre::{eyre, Result};
 use gat_lending_iterator::LendingIterator;
 use gxhash::GxBuildHasher;
 use indexmap::IndexSet;
-use itertools::Itertools;
+use itertools::{iproduct, Itertools};
+use libc::EILSEQ;
 use log::{debug, info, trace};
 use rand::distributions::uniform::UniformChar;
 use serde::de::DeserializeOwned;
@@ -754,18 +756,49 @@ impl<S: NumeratorState> Num<S> {
 }
 
 impl<S: UnexpandedNumerator> Num<S> {
-    pub fn expr(&self) -> SerializableAtom {
+    pub fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
         self.state.expr()
+    }
+}
+
+pub trait TypedNumeratorState:
+    NumeratorState + TryFrom<PythonState, Error: std::error::Error + Send + Sync + 'static>
+{
+    fn apply<F, S: TypedNumeratorState>(
+        state: &mut Num<PythonState>,
+        f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<Self>) -> Num<S>;
+}
+
+impl Num<PythonState> {
+    pub fn try_from<S: TypedNumeratorState>(self) -> Result<Num<S>, Report> {
+        Ok(Num {
+            state: self.state.try_into()?,
+        })
+    }
+
+    pub fn apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+        &mut self,
+        f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<S>) -> Num<T>,
+    {
+        S::apply(self, f)
     }
 }
 pub trait NumeratorState: Serialize + Clone + DeserializeOwned + Debug {
     fn export(&self) -> String;
 
     fn forget_type(self) -> PythonState;
+
+    // fn try_from(state: PythonState) -> Result<Self>;
 }
 
 pub trait UnexpandedNumerator: NumeratorState {
-    fn expr(&self) -> SerializableAtom;
+    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError>;
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnInit;
@@ -776,13 +809,50 @@ impl Default for UnInit {
     }
 }
 
+impl TryFrom<PythonState> for UnInit {
+    type Error = NumeratorStateError;
+
+    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
+        match value {
+            PythonState::UnInit(s) => {
+                if let Some(s) = s {
+                    Ok(s)
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            _ => Err(NumeratorStateError::NotUnit),
+        }
+    }
+}
+
 impl NumeratorState for UnInit {
     fn export(&self) -> String {
         "Uninitialized".to_string()
     }
 
     fn forget_type(self) -> PythonState {
-        PythonState::UnInit(self)
+        PythonState::UnInit(Some(self))
+    }
+}
+
+impl TypedNumeratorState for UnInit {
+    fn apply<F, S: TypedNumeratorState>(
+        num: &mut Num<PythonState>,
+        mut f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<Self>) -> Num<S>,
+    {
+        if let PythonState::UnInit(s) = &mut num.state {
+            if let Some(s) = s.take() {
+                *num = f(Num { state: s }).forget_type();
+                return Ok(());
+            } else {
+                return Err(NumeratorStateError::NoneVariant);
+            }
+        }
+        Err(NumeratorStateError::NotUnit)
     }
 }
 
@@ -801,6 +871,23 @@ impl Num<UnInit> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppliedFeynmanRule {
     expression: SerializableAtom,
+}
+
+impl TryFrom<PythonState> for AppliedFeynmanRule {
+    type Error = NumeratorStateError;
+
+    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
+        match value {
+            PythonState::AppliedFeynmanRule(s) => {
+                if let Some(s) = s {
+                    Ok(s)
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            _ => Err(NumeratorStateError::NotAppliedFeynmanRule),
+        }
+    }
 }
 
 impl AppliedFeynmanRule {
@@ -852,7 +939,87 @@ impl AppliedFeynmanRule {
         }
     }
 
-    pub fn color_symplify(self) -> ColorSymplified {
+    fn isolate_color(&mut self) {
+        let color_fn = FunctionBuilder::new(State::get_symbol("color"))
+            .add_arg(&Atom::new_num(1))
+            .finish();
+        self.expression.0 = &self.expression.0 * color_fn;
+        let replacements = vec![
+            (
+                Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,aind(y___,cof(i__),z___)))").unwrap(),
+            ),
+            (
+                Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,aind(y___,coaf(i__),z___)))").unwrap(),
+            ),
+            (
+                Pattern::parse("f_(x___,aind(y___,coad(i__),z___))*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,aind(y___,coad(i__),z___)))").unwrap(),
+            ),
+        ];
+        let reps: Vec<Replacement> = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect();
+
+        self.expression.replace_repeat_multiple(&reps);
+    }
+
+    pub fn color_symplify(mut self) -> ColorSymplified {
+        self.isolate_color();
+        let (mut coefs, rem) = self
+            .expression
+            .0
+            .coefficient_list(State::get_symbol("color"));
+
+        let replacements = vec![
+            (Pattern::parse("color(a___)").unwrap(),Pattern::parse("a___").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*id(aind(coaf(i__),cof(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(j__),z___))").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,cof(j__),z___))*id(aind(cof(i__),coaf(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(i__),z___))").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*id(aind(cof(j__),coaf(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coaf(j__),z___))").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*id(aind(coaf(j__),cof(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coaf(j__),z___))").unwrap()),
+            (Pattern::parse("f_(x___,aind(y___,coad(i__),z___))*id(aind(coad(j__),coad(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coad(j__),z___))").unwrap()),
+            (
+                Pattern::parse("id(aind(coaf(3,a_),cof(3,a_)))").unwrap(),
+                Pattern::parse("Nc").unwrap(),
+            ),
+            (
+                Pattern::parse("id(aind(cof(3,a_),coaf(3,a_)))").unwrap(),
+                Pattern::parse("Nc").unwrap(),
+            ),
+            (
+                Pattern::parse("id(aind(coad(8,a_),coad(8,a_)))").unwrap(),
+                Pattern::parse("Nc*Nc -1").unwrap(),
+            ),
+            (
+                Pattern::parse("T(aind(coad(8,b_),cof(3,a_),coaf(3,a_)))").unwrap(),
+                Pattern::parse("0").unwrap(),
+            ),
+            (
+                Pattern::parse("T(aind(coad(8,c_),cof(3,a_),coaf(3,b_)))T(aind(coad(8,d_),cof(3,b_),coaf(3,a_)))").unwrap(),
+                Pattern::parse("TR* id(aind(coad(8,c_),coad(8,d_)))").unwrap(),
+            ),
+            (
+                Pattern::parse("T(aind(coad(8,g_),cof(3,a_),coaf(3,b_)))*T(aind(coad(8,g_),cof(3,c_),coaf(3,d_)))").unwrap(),
+                Pattern::parse("TR* (id(aind(cof(3,a_),coaf(3,d_)))* id(aind(cof(3,c_),coaf(3,b_)))-1/Nc id(aind(cof(3,a_),coaf(3,b_)))* id(aind(cof(3,c_),coaf(3,d_))))").unwrap(),
+            )
+        ];
+
+        let reps: Vec<Replacement> = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect();
+
+        let mut atom = Atom::new_num(0);
+        for (key, coef) in coefs.iter_mut() {
+            SerializableAtom::replace_repeat_multiple_atom_expand(key, &reps);
+
+            atom = atom + coef.factor() * key.factor();
+            // println!("coef {i}:{}\n", coef.factor());
+        }
+        atom = atom + rem;
+        self.expression.0 = atom;
         ColorSymplified {
             expression: self.expression,
         }
@@ -860,8 +1027,8 @@ impl AppliedFeynmanRule {
 }
 
 impl UnexpandedNumerator for AppliedFeynmanRule {
-    fn expr(&self) -> SerializableAtom {
-        self.expression.clone()
+    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
+        Ok(self.expression.clone())
     }
 }
 
@@ -871,7 +1038,27 @@ impl NumeratorState for AppliedFeynmanRule {
     }
 
     fn forget_type(self) -> PythonState {
-        PythonState::AppliedFeynmanRule(self)
+        PythonState::AppliedFeynmanRule(Some(self))
+    }
+}
+
+impl TypedNumeratorState for AppliedFeynmanRule {
+    fn apply<F, S: TypedNumeratorState>(
+        num: &mut Num<PythonState>,
+        mut f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<Self>) -> Num<S>,
+    {
+        if let PythonState::AppliedFeynmanRule(s) = &mut num.state {
+            if let Some(s) = s.take() {
+                *num = f(Num { state: s }).forget_type();
+                return Ok(());
+            } else {
+                return Err(NumeratorStateError::NoneVariant);
+            }
+        }
+        Err(NumeratorStateError::NotAppliedFeynmanRule)
     }
 }
 
@@ -885,6 +1072,23 @@ impl Num<AppliedFeynmanRule> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColorSymplified {
     expression: SerializableAtom,
+}
+
+impl TryFrom<PythonState> for ColorSymplified {
+    type Error = NumeratorStateError;
+
+    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
+        match value {
+            PythonState::ColorSymplified(s) => {
+                if let Some(s) = s {
+                    Ok(s)
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            _ => Err(NumeratorStateError::NotColorSymplified),
+        }
+    }
 }
 
 impl ColorSymplified {
@@ -910,13 +1114,33 @@ impl NumeratorState for ColorSymplified {
     }
 
     fn forget_type(self) -> PythonState {
-        PythonState::ColorSymplified(self)
+        PythonState::ColorSymplified(Some(self))
+    }
+}
+
+impl TypedNumeratorState for ColorSymplified {
+    fn apply<F, S: TypedNumeratorState>(
+        num: &mut Num<PythonState>,
+        mut f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<Self>) -> Num<S>,
+    {
+        if let PythonState::ColorSymplified(s) = &mut num.state {
+            if let Some(s) = s.take() {
+                *num = f(Num { state: s }).forget_type();
+                return Ok(());
+            } else {
+                return Err(NumeratorStateError::NoneVariant);
+            }
+        }
+        Err(NumeratorStateError::NotColorSymplified)
     }
 }
 
 impl UnexpandedNumerator for ColorSymplified {
-    fn expr(&self) -> SerializableAtom {
-        self.expression.clone()
+    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
+        Ok(self.expression.clone())
     }
 }
 
@@ -938,13 +1162,30 @@ pub struct GammaSymplified {
     expression: SerializableAtom,
 }
 
+impl TryFrom<PythonState> for GammaSymplified {
+    type Error = NumeratorStateError;
+
+    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
+        match value {
+            PythonState::GammaSymplified(s) => {
+                if let Some(s) = s {
+                    Ok(s)
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            _ => Err(NumeratorStateError::NotGammaSymplified),
+        }
+    }
+}
+
 impl NumeratorState for GammaSymplified {
     fn export(&self) -> String {
         self.expression.0.to_string()
     }
 
     fn forget_type(self) -> PythonState {
-        PythonState::GammaSymplified(self)
+        PythonState::GammaSymplified(Some(self))
     }
 }
 
@@ -960,8 +1201,28 @@ impl GammaSymplified {
 }
 
 impl UnexpandedNumerator for GammaSymplified {
-    fn expr(&self) -> SerializableAtom {
-        self.expression.clone()
+    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
+        Ok(self.expression.clone())
+    }
+}
+
+impl TypedNumeratorState for GammaSymplified {
+    fn apply<F, S: TypedNumeratorState>(
+        num: &mut Num<PythonState>,
+        mut f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<Self>) -> Num<S>,
+    {
+        if let PythonState::GammaSymplified(s) = &mut num.state {
+            if let Some(s) = s.take() {
+                *num = f(Num { state: s }).forget_type();
+                return Ok(());
+            } else {
+                return Err(NumeratorStateError::NoneVariant);
+            }
+        }
+        Err(NumeratorStateError::NotGammaSymplified)
     }
 }
 
@@ -978,6 +1239,22 @@ pub struct Network {
     net: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>,
 }
 
+impl TryFrom<PythonState> for Network {
+    type Error = NumeratorStateError;
+
+    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
+        match value {
+            PythonState::Network(s) => {
+                if let Some(s) = s {
+                    Ok(s)
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            _ => Err(NumeratorStateError::NotNetwork),
+        }
+    }
+}
 pub enum ContractionSettings<'a, 'b, R> {
     Levelled((usize, &'a mut FunctionMap<'b, R>)),
     Normal,
@@ -1007,7 +1284,27 @@ impl NumeratorState for Network {
     }
 
     fn forget_type(self) -> PythonState {
-        PythonState::Network(self)
+        PythonState::Network(Some(self))
+    }
+}
+
+impl TypedNumeratorState for Network {
+    fn apply<F, S: TypedNumeratorState>(
+        num: &mut Num<PythonState>,
+        mut f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<Self>) -> Num<S>,
+    {
+        if let PythonState::Network(s) = &mut num.state {
+            if let Some(s) = s.take() {
+                *num = f(Num { state: s }).forget_type();
+                return Ok(());
+            } else {
+                return Err(NumeratorStateError::NoneVariant);
+            }
+        }
+        Err(NumeratorStateError::NotNetwork)
     }
 }
 
@@ -1021,6 +1318,23 @@ impl Num<Network> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contracted {
     tensor: ParamTensor<AtomStructure>,
+}
+
+impl TryFrom<PythonState> for Contracted {
+    type Error = NumeratorStateError;
+
+    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
+        match value {
+            PythonState::Contracted(s) => {
+                if let Some(s) = s {
+                    Ok(s)
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            _ => Err(NumeratorStateError::NotContracted),
+        }
+    }
 }
 
 impl Contracted {
@@ -1070,6 +1384,9 @@ impl Contracted {
             })
             .linearize(cpe_rounds);
 
+        let eval = eval_tree
+            .map_coeff::<F<f64>, _>(&|r| r.into())
+            .linearize(cpe_rounds);
         let compiled = if export_settings
             .numerator_settings
             .compile_options()
@@ -1079,13 +1396,14 @@ impl Contracted {
             filename.push("numerator_single.cpp");
             let filename = filename.to_string_lossy();
 
+            println!("filename: {}", filename);
+
             let function_name = "numerator_single";
 
             let library_name = "libneval_single.so";
             let inline_asm = InlineASM::X64;
             CompiledEvaluator::new(
-                eval_double
-                    .export_cpp(&filename, function_name, true, inline_asm)
+                eval.export_cpp(&filename, function_name, true, inline_asm)
                     .unwrap()
                     .compile(library_name, CompileOptions::default())
                     .unwrap()
@@ -1147,7 +1465,27 @@ impl NumeratorState for Contracted {
         self.tensor.to_string()
     }
     fn forget_type(self) -> PythonState {
-        PythonState::Contracted(self)
+        PythonState::Contracted(Some(self))
+    }
+}
+
+impl TypedNumeratorState for Contracted {
+    fn apply<F, S: TypedNumeratorState>(
+        num: &mut Num<PythonState>,
+        mut f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<Self>) -> Num<S>,
+    {
+        if let PythonState::Contracted(s) = &mut num.state {
+            if let Some(s) = s.take() {
+                *num = f(Num { state: s }).forget_type();
+                return Ok(());
+            } else {
+                return Err(NumeratorStateError::NoneVariant);
+            }
+        }
+        Err(NumeratorStateError::NotContracted)
     }
 }
 
@@ -1188,7 +1526,7 @@ pub enum NumeratorEvaluatorOptions {
 
 impl Default for NumeratorEvaluatorOptions {
     fn default() -> Self {
-        NumeratorEvaluatorOptions::Single(EvaluatorOptions::default())
+        NumeratorEvaluatorOptions::Combined(EvaluatorOptions::default())
     }
 }
 
@@ -1368,6 +1706,10 @@ impl EvaluatorSingle {
             })
             .linearize(cpe_rounds);
 
+        let eval = eval_tree
+            .map_coeff::<F<f64>, _>(&|r| r.into())
+            .linearize(cpe_rounds);
+
         let compiled = if export_settings
             .numerator_settings
             .compile_options()
@@ -1382,8 +1724,7 @@ impl EvaluatorSingle {
             let library_name = "libneval.so";
             let inline_asm = InlineASM::X64;
             CompiledEvaluator::new(
-                eval_double
-                    .export_cpp(&filename, function_name, true, inline_asm)
+                eval.export_cpp(&filename, function_name, true, inline_asm)
                     .unwrap()
                     .compile(library_name, CompileOptions::default())
                     .unwrap()
@@ -1480,13 +1821,50 @@ pub struct Evaluators {
     single: EvaluatorSingle,
 }
 
+impl TryFrom<PythonState> for Evaluators {
+    type Error = NumeratorStateError;
+
+    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
+        match value {
+            PythonState::Evaluators(s) => {
+                if let Some(s) = s {
+                    Ok(s)
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            _ => Err(NumeratorStateError::NotEvaluators),
+        }
+    }
+}
+
 impl NumeratorState for Evaluators {
     fn export(&self) -> String {
         "evaluators".to_string()
     }
 
     fn forget_type(self) -> PythonState {
-        PythonState::Evaluators(self)
+        PythonState::Evaluators(Some(self))
+    }
+}
+
+impl TypedNumeratorState for Evaluators {
+    fn apply<F, S: TypedNumeratorState>(
+        num: &mut Num<PythonState>,
+        mut f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<Self>) -> Num<S>,
+    {
+        if let PythonState::Evaluators(s) = &mut num.state {
+            if let Some(s) = s.take() {
+                *num = f(Num { state: s }).forget_type();
+                return Ok(());
+            } else {
+                return Err(NumeratorStateError::NoneVariant);
+            }
+        }
+        Err(NumeratorStateError::NotEvaluators)
     }
 }
 
@@ -1499,33 +1877,101 @@ impl Num<Evaluators> {
     }
 }
 
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum NumeratorStateError {
+    #[error("Not UnInit")]
+    NotUnit,
+    #[error("Not AppliedFeynmanRule")]
+    NotAppliedFeynmanRule,
+    #[error("Not ColorSymplified")]
+    NotColorSymplified,
+    #[error("Not GammaSymplified")]
+    NotGammaSymplified,
+    #[error("Not Network")]
+    NotNetwork,
+    #[error("Not Contracted")]
+    NotContracted,
+    #[error("Not Evaluators")]
+    NotEvaluators,
+    #[error("None variant")]
+    NoneVariant,
+    #[error("Expanded")]
+    Expanded,
+    #[error("Any")]
+    Any(#[from] eyre::Report),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PythonState {
-    UnInit(UnInit),
-    AppliedFeynmanRule(AppliedFeynmanRule),
-    ColorSymplified(ColorSymplified),
-    GammaSymplified(GammaSymplified),
-    Network(Network),
-    Contracted(Contracted),
-    Evaluators(Evaluators),
+    UnInit(Option<UnInit>),
+    AppliedFeynmanRule(Option<AppliedFeynmanRule>),
+    ColorSymplified(Option<ColorSymplified>),
+    GammaSymplified(Option<GammaSymplified>),
+    Network(Option<Network>),
+    Contracted(Option<Contracted>),
+    Evaluators(Option<Evaluators>),
 }
 
 impl Default for PythonState {
     fn default() -> Self {
-        PythonState::UnInit(UnInit)
+        PythonState::UnInit(Some(UnInit))
     }
 }
 
 impl NumeratorState for PythonState {
     fn export(&self) -> String {
         match self {
-            PythonState::UnInit(state) => state.export(),
-            PythonState::AppliedFeynmanRule(state) => state.export(),
-            PythonState::ColorSymplified(state) => state.export(),
-            PythonState::GammaSymplified(state) => state.export(),
-            PythonState::Network(state) => state.export(),
-            PythonState::Contracted(state) => state.export(),
-            PythonState::Evaluators(state) => state.export(),
+            PythonState::UnInit(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
+            PythonState::AppliedFeynmanRule(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
+            PythonState::ColorSymplified(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
+            PythonState::GammaSymplified(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
+            PythonState::Network(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
+            PythonState::Contracted(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
+            PythonState::Evaluators(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
         }
     }
 
@@ -1534,5 +1980,35 @@ impl NumeratorState for PythonState {
     }
 }
 
+impl UnexpandedNumerator for PythonState {
+    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
+        match self {
+            PythonState::AppliedFeynmanRule(state) => {
+                if let Some(s) = state {
+                    s.expr()
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            PythonState::ColorSymplified(state) => {
+                if let Some(s) = state {
+                    s.expr()
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            PythonState::GammaSymplified(state) => {
+                if let Some(s) = state {
+                    s.expr()
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
+            _ => Err(NumeratorStateError::Expanded),
+        }
+    }
+}
+
+impl PythonState {}
 #[cfg(test)]
 mod tests;

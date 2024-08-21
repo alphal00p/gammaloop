@@ -593,6 +593,8 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
         "number of spanning trees: {}",
         graph
             .derived_data
+            .as_ref()
+            .unwrap()
             .loop_momentum_bases
             .as_ref()
             .unwrap()
@@ -614,6 +616,8 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
 
         for loop_momentum_basis in graph
             .derived_data
+            .as_ref()
+            .unwrap()
             .loop_momentum_bases
             .as_ref()
             .unwrap()
@@ -639,7 +643,7 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
                 "cut structure has no equivalent in the lmb: cut_structure: {:?}. associated_lmb: {:?}. all_lmbs: {:?}",
                 cut_signature,
                 associated_lmb  ,
-                graph.derived_data.loop_momentum_bases.as_ref().unwrap(),
+                graph.derived_data.as_ref().unwrap().loop_momentum_bases.as_ref().unwrap(),
             )
         }
     }

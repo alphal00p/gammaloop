@@ -13,7 +13,8 @@ use crate::{
     momentum::{FourMomentum, Polarization, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
-        Num, Numerator, NumeratorState, PythonState, RepeatingIteratorTensorOrScalar, UnInit,
+        Num, Numerator, NumeratorState, NumeratorStateError, PythonState,
+        RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
@@ -676,16 +677,47 @@ impl SerializableGraph {
 #[derive(Debug, Clone)]
 pub struct Graph<S: NumeratorState = Evaluators> {
     pub bare_graph: BareGraph,
-    pub derived_data: DerivedGraphData<S>,
+    pub derived_data: Option<DerivedGraphData<S>>,
 }
 
 impl Graph<PythonState> {
     pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
         let derived_data = DerivedGraphData::load_python_from_path::<S>(path)?;
 
-        self.derived_data = derived_data;
+        self.derived_data = Some(derived_data);
 
         Ok(())
+    }
+
+    pub fn numerator_apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+        &mut self,
+        f: F,
+    ) -> Result<()>
+    where
+        F: FnMut(Num<S>) -> Num<T> + Copy,
+    {
+        self.statefull_apply::<_, S, T>(|d, _| d.map_numerator(f))
+    }
+
+    pub fn statefull_apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+        &mut self,
+        mut f: F,
+    ) -> Result<()>
+    where
+        F: FnMut(DerivedGraphData<S>, &mut BareGraph) -> DerivedGraphData<T>,
+    {
+        if let Some(d) = self.derived_data.take() {
+            self.derived_data = Some(
+                f(
+                    DerivedGraphData::<S>::try_from_python(d)?,
+                    &mut self.bare_graph,
+                )
+                .forget_type(),
+            );
+            Ok(())
+        } else {
+            Err(eyre!("No derived data found"))
+        }
     }
 }
 
@@ -1456,7 +1488,7 @@ impl BareGraph {
 
         let mut graph = Graph {
             bare_graph: self,
-            derived_data,
+            derived_data: Some(derived_data),
         };
         graph.set_lmb(&lmb_indices)?;
 
@@ -1467,7 +1499,7 @@ impl BareGraph {
 impl Graph<UnInit> {
     pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> Self {
         Graph {
-            derived_data: DerivedGraphData::new_empty(),
+            derived_data: Some(DerivedGraphData::new_empty()),
             bare_graph: BareGraph::from_serializable_graph(model, graph),
         }
     }
@@ -1479,13 +1511,15 @@ impl Graph<UnInit> {
         export_path: PathBuf,
         export_settings: &ExportSettings,
     ) -> Graph {
-        let processed_data = self.derived_data.process_numerator(
-            &mut self.bare_graph,
-            model,
-            contraction_settings,
-            export_path,
-            export_settings,
-        );
+        let processed_data = self.derived_data.map(|d| {
+            d.process_numerator(
+                &mut self.bare_graph,
+                model,
+                contraction_settings,
+                export_path,
+                export_settings,
+            )
+        });
         Graph {
             bare_graph: self.bare_graph,
             derived_data: processed_data,
@@ -1493,34 +1527,52 @@ impl Graph<UnInit> {
     }
 
     pub fn apply_feynman_rules(mut self) -> Graph<AppliedFeynmanRule> {
-        let processed_data = self.derived_data.apply_feynman_rules(&mut self.bare_graph);
+        let processed_data = self
+            .derived_data
+            .map(|d| d.apply_feynman_rules(&mut self.bare_graph));
         Graph {
             bare_graph: self.bare_graph,
             derived_data: processed_data,
         }
     }
 }
+
+impl<S: TypedNumeratorState> Graph<S> {
+    pub fn try_from_python(g: Graph<PythonState>) -> Result<Self> {
+        let derived_data = if let Some(d) = g.derived_data {
+            Some(DerivedGraphData::<S>::try_from_python(d)?)
+        } else {
+            None
+        };
+        Ok(Graph {
+            bare_graph: g.bare_graph,
+            derived_data,
+        })
+    }
+}
 impl<S: NumeratorState> Graph<S> {
     pub fn forget_type(self) -> Graph<PythonState> {
         Graph {
             bare_graph: self.bare_graph,
-            derived_data: self.derived_data.forget_type(),
+            derived_data: self.derived_data.map(|d| d.forget_type()),
         }
     }
     pub fn generate_cff(&mut self) {
-        self.derived_data.cff_expression = Some(generate_cff_expression(&self.bare_graph).unwrap());
+        self.derived_data.as_mut().unwrap().cff_expression =
+            Some(generate_cff_expression(&self.bare_graph).unwrap());
     }
 
     pub fn generate_ltd(&mut self) {
-        self.derived_data.ltd_expression = Some(generate_ltd_expression(self));
+        self.derived_data.as_mut().unwrap().ltd_expression = Some(generate_ltd_expression(self));
     }
     pub fn generate_edge_groups(&mut self) {
-        self.derived_data.edge_groups = Some(self.bare_graph.group_edges_by_signature());
+        self.derived_data.as_mut().unwrap().edge_groups =
+            Some(self.bare_graph.group_edges_by_signature());
     }
 
     pub fn generate_esurface_data(&mut self) -> Result<(), Report> {
         let data = generate_esurface_data(self, &self.get_cff().esurfaces)?;
-        self.derived_data.esurface_derived_data = Some(data);
+        self.derived_data.as_mut().unwrap().esurface_derived_data = Some(data);
 
         Ok(())
     }
@@ -1528,17 +1580,32 @@ impl<S: NumeratorState> Graph<S> {
     // helper function
     #[inline]
     pub fn get_cff(&self) -> &CFFExpression {
-        self.derived_data.cff_expression.as_ref().unwrap()
+        self.derived_data
+            .as_ref()
+            .unwrap()
+            .cff_expression
+            .as_ref()
+            .unwrap()
     }
 
     #[inline]
     pub fn get_tropical_subgraph_table(&self) -> &SampleGenerator<3> {
-        self.derived_data.tropical_subgraph_table.as_ref().unwrap()
+        self.derived_data
+            .as_ref()
+            .unwrap()
+            .tropical_subgraph_table
+            .as_ref()
+            .unwrap()
     }
 
     #[inline]
     pub fn get_esurface_derived_data(&self) -> &EsurfaceDerivedData {
-        self.derived_data.esurface_derived_data.as_ref().unwrap()
+        self.derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap()
     }
 
     #[inline]
@@ -1582,7 +1649,7 @@ impl<S: NumeratorState> Graph<S> {
         export_settings: &ExportSettings,
     ) -> Result<(), Report> {
         let params = self.bare_graph.build_params_for_cff();
-        match self.derived_data.cff_expression.as_mut() {
+        match self.derived_data.as_mut().unwrap().cff_expression.as_mut() {
             Some(cff) => {
                 cff.build_compiled_expression::<f64>(&params, export_path, export_settings)
             }
@@ -1595,20 +1662,36 @@ impl<S: NumeratorState> Graph<S> {
     // == Generation fns
 
     pub fn generate_loop_momentum_bases(&mut self) {
-        self.derived_data.loop_momentum_bases =
+        self.derived_data.as_mut().unwrap().loop_momentum_bases =
             Some(self.bare_graph.generate_loop_momentum_bases());
     }
     pub fn generate_loop_momentum_bases_if_not_exists(&mut self) {
-        if self.derived_data.loop_momentum_bases.is_none() {
+        if self
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .loop_momentum_bases
+            .is_none()
+        {
             self.generate_loop_momentum_bases();
         }
     }
 
     // attempt to set a new loop momentum basis
     pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
-        let position = self.derived_data.search_lmb_position(lmb)?;
-        self.bare_graph.loop_momentum_basis =
-            self.derived_data.loop_momentum_bases.as_ref().unwrap()[position].clone();
+        let position = self
+            .derived_data
+            .as_mut()
+            .unwrap()
+            .search_lmb_position(lmb)?;
+        self.bare_graph.loop_momentum_basis = self
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .loop_momentum_bases
+            .as_ref()
+            .unwrap()[position]
+            .clone();
         Ok(())
     }
 
@@ -1618,7 +1701,10 @@ impl<S: NumeratorState> Graph<S> {
         sample: &DefaultSample<T>,
         _settings: &Settings,
     ) -> Vec<Complex<F<T>>> {
-        self.derived_data.generate_params(&self.bare_graph, sample)
+        self.derived_data
+            .as_mut()
+            .unwrap()
+            .generate_params(&self.bare_graph, sample)
     }
 
     pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
@@ -1626,7 +1712,9 @@ impl<S: NumeratorState> Graph<S> {
 
         if let Ok(table) = table {
             debug!("min dod: {}", table.get_smallest_dod());
-            self.derived_data.tropical_subgraph_table = Some(table);
+            if let Some(d) = &mut self.derived_data {
+                d.tropical_subgraph_table = Some(table);
+            }
         } else if settings.panic_on_fail {
             panic!("Tropical subgraph table generation failed 🥥");
         } else {
@@ -1642,6 +1730,8 @@ impl Graph<Evaluators> {
         settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
+            .as_mut()
+            .unwrap()
             .evaluate_cff_expression(&self.bare_graph, sample, settings)
             .scalar()
             .unwrap()
@@ -1655,6 +1745,8 @@ impl Graph<Evaluators> {
         settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
+            .as_mut()
+            .unwrap()
             .evaluate_cff_expression_in_lmb(&self.bare_graph, sample, lmb_specification, settings)
             .scalar()
             .unwrap()
@@ -1666,6 +1758,8 @@ impl Graph<Evaluators> {
         settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
+            .as_mut()
+            .unwrap()
             .evaluate_cff_all_orientations(&self.bare_graph, sample, settings)
     }
 
@@ -1676,6 +1770,8 @@ impl Graph<Evaluators> {
         settings: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         self.derived_data
+            .as_mut()
+            .unwrap()
             .evaluate_numerator_all_orientations(&self.bare_graph, sample, settings)
     }
 
@@ -1686,6 +1782,8 @@ impl Graph<Evaluators> {
         _settings: &Settings,
     ) -> Vec<Polarization<Complex<F<T>>>> {
         self.derived_data
+            .as_mut()
+            .unwrap()
             .evaluate_polarizations(&self.bare_graph, sample)
     }
 
@@ -1702,11 +1800,14 @@ impl Graph<Evaluators> {
         let prefactor = i.pow(loop_number as u64);
 
         prefactor
-            * self.derived_data.ltd_expression.as_ref().unwrap().evaluate(
-                loop_moms,
-                external_moms,
-                &self.bare_graph,
-            )
+            * self
+                .derived_data
+                .as_ref()
+                .unwrap()
+                .ltd_expression
+                .as_ref()
+                .unwrap()
+                .evaluate(loop_moms, external_moms, &self.bare_graph)
     }
 
     #[inline]
@@ -1725,6 +1826,8 @@ impl Graph<Evaluators> {
         prefactor
             * self
                 .derived_data
+                .as_ref()
+                .unwrap()
                 .ltd_expression
                 .as_ref()
                 .unwrap()
@@ -1747,6 +1850,8 @@ impl Graph<Evaluators> {
         );
 
         self.derived_data
+            .as_ref()
+            .unwrap()
             .cff_expression
             .as_ref()
             .unwrap()
@@ -1780,6 +1885,16 @@ impl DerivedGraphData<PythonState> {
             }
         }
     }
+
+    pub fn apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+        &mut self,
+        f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Num<S>) -> Num<T>,
+    {
+        self.numerator.apply(f)
+    }
 }
 
 impl<NumState: NumeratorState> Serialize for DerivedGraphData<NumState> {
@@ -1799,6 +1914,47 @@ impl<NumState: NumeratorState> Serialize for DerivedGraphData<NumState> {
         state.end()
     }
 }
+
+impl<NumState: NumeratorState> DerivedGraphData<NumState> {
+    pub fn map_numerator<F, T: NumeratorState>(self, f: F) -> DerivedGraphData<T>
+    where
+        F: FnOnce(Num<NumState>) -> Num<T>,
+    {
+        DerivedGraphData {
+            loop_momentum_bases: self.loop_momentum_bases,
+            cff_expression: self.cff_expression,
+            ltd_expression: self.ltd_expression,
+            tropical_subgraph_table: self.tropical_subgraph_table,
+            edge_groups: self.edge_groups,
+            esurface_derived_data: self.esurface_derived_data,
+            static_counterterm: self.static_counterterm,
+            numerator: f(self.numerator),
+        }
+    }
+
+    pub fn map_numerator_res<E, F, T: NumeratorState>(self, f: F) -> Result<DerivedGraphData<T>, E>
+    where
+        F: FnOnce(Num<NumState>) -> Result<Num<T>, E>,
+    {
+        Ok(DerivedGraphData {
+            loop_momentum_bases: self.loop_momentum_bases,
+            cff_expression: self.cff_expression,
+            ltd_expression: self.ltd_expression,
+            tropical_subgraph_table: self.tropical_subgraph_table,
+            edge_groups: self.edge_groups,
+            esurface_derived_data: self.esurface_derived_data,
+            static_counterterm: self.static_counterterm,
+            numerator: f(self.numerator)?,
+        })
+    }
+}
+
+impl<NumState: TypedNumeratorState> DerivedGraphData<NumState> {
+    fn try_from_python(value: DerivedGraphData<PythonState>) -> Result<Self> {
+        Ok(value.map_numerator_res(|n| n.try_from())?)
+    }
+}
+
 impl<'de, NumState: NumeratorState> Deserialize<'de> for DerivedGraphData<NumState> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -2053,7 +2209,7 @@ impl DerivedGraphData<UnInit> {
         }
     }
 
-    fn process_numerator(
+    pub fn process_numerator(
         self,
         base_graph: &mut BareGraph,
         model: &Model,
@@ -2062,6 +2218,7 @@ impl DerivedGraphData<UnInit> {
         export_settings: &ExportSettings,
     ) -> DerivedGraphData<Evaluators> {
         let extra_info = self.generate_extra_info(export_path);
+
         let numerator = self
             .numerator
             .from_graph(base_graph)
@@ -2300,6 +2457,8 @@ impl<'a> LoopMomentumBasisSpecification<'a> {
             LoopMomentumBasisSpecification::Literal(basis) => basis,
             LoopMomentumBasisSpecification::FromList(idx) => &graph
                 .derived_data
+                .as_ref()
+                .unwrap()
                 .loop_momentum_bases
                 .as_ref()
                 .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*idx],

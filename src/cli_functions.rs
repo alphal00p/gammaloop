@@ -4,7 +4,6 @@ use crate::{
     integrands::{integrand_factory, HasIntegrand},
     integrate::{self, havana_integrate, SerializableBatchIntegrateInput, UserData},
     model::Model,
-    numerator::Evaluators,
     utils::{print_banner, F, VERSION},
     Integrand, Settings,
 };
@@ -356,7 +355,7 @@ fn batch_branch(
     let path_to_amplitude_yaml_as_string = path_to_amplitude_yaml.to_str().unwrap().to_string();
 
     // this is all very amplitude focused, will be generalized later when the structure is clearer
-    let amplitude: Amplitude<Evaluators> = {
+    let amplitude: Amplitude<_> = {
         let amp = Amplitude::from_file(&model, path_to_amplitude_yaml_as_string)?;
 
         let derived_data_path = process_output_file
