@@ -20,7 +20,8 @@ import gammaloop.cross_section.cross_section as cross_section
 import gammaloop.cross_section.supergraph as supergraph
 from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExporter, OutputMetaData, update_run_card_in_output
 # This is the pyo3 binding of the gammaloop rust engine
-import gammaloop._gammaloop as gl_rust  # pylint: disable=import-error, no-name-in-module # type: ignore
+import gammaloop._gammaloop as gl_rust
+import gammaloop.interface.debug_display as debug_display
 
 # pylint: disable=unused-variable
 
@@ -41,7 +42,8 @@ AVAILABLE_COMMANDS = [
     'set',
     'set_model_param',
     'reset',
-    'generate_graph'
+    'generate_graph',
+    'display_debug_log'
 ]
 
 
@@ -1338,3 +1340,16 @@ class GammaLoop(object):
                 self.rust_worker.display_master_node_status()
 
         shutil.rmtree(workspace_path)
+
+    log_parser = ArgumentParser(prog='display_debug_log')
+    log_parser.add_argument('--log_file', '-lf', type=str,
+                            help='Log file to display', default=None)
+
+    def do_display_debug_log(self, str_args: str) -> None:
+        args = self.log_parser.parse_args(split_str_args(str_args))
+
+        if args.log_file is None:
+            raise GammaLoopError(
+                "No log file to display, please provide a file using -lf")
+
+        debug_dict = debug_display.build_debug_dict(args.log_file)
