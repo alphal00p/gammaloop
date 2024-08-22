@@ -2391,6 +2391,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
+source = "git+https://github.com/alphal00p/spenso?branch=symbolica_nightly#98e1ee8dd54df0edab294635def6cfb83be6d193"
 dependencies = [
  "ahash",
  "ambassador",
