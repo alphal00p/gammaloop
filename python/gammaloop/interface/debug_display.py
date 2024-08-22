@@ -58,13 +58,7 @@ def display_final_result(debug_dict: Dict[str, Any]) -> None:
         return
 
     res = debug_dict['final_result'][0]
-    res_real = res['re']
-    res_imag = res['im']
-
-    if res_imag >= 0:
-        format_result = "{} + {}i".format(res_real, res_imag)
-    else:
-        format_result = "{} - {}i".format(res_real, abs(res_imag))
+    format_result = format_complex(res['re'], res['im'])
 
     logger.info("final result: {}".format(format_result))
 
@@ -93,15 +87,33 @@ def display_default(debug_dict: Dict[str, Any]) -> None:
     display_momenta_samples(debug_dict)
     display_onshell_energies(debug_dict)
     display_largest_and_smallest_orientation(debug_dict)
+    display_rep3d(debug_dict)
     display_final_result(debug_dict)
 
 
 def display_onshell_energies(debug_dict: Dict[str, Any]) -> None:
     if 'onshell_energies' not in debug_dict:
-        logger.info("onshell energies not logged")
+        logger.warn("onshell energies not logged")
         return
 
     for onshell_energies in debug_dict['onshell_energies']:
         logger.info("onshell energies: ")
         logger.info(onshell_energies)
         logger.info('')
+
+
+def display_rep3d(debug_dict: Dict[str, Any]) -> None:
+    if 'rep3d' not in debug_dict:
+        logger.warn("no rep3d in debug info")
+
+    for rep3d in debug_dict['rep3d']:
+        logger.info(
+            "3-dimensional representation: {}".format(format_complex(rep3d['re'], rep3d['im'])))
+        logger.info('')
+
+
+def format_complex(re: float, im: float) -> str:
+    if im >= 0:
+        return "{} + {}i".format(re, im)
+    else:
+        return "{} - {}i".format(re, im)
