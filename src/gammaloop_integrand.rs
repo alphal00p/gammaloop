@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
 use crate::debug_info::DEBUG_LOGGER;
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
-use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
+use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification, SerializableGraph};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::{FourMomentum, ThreeMomentum};
@@ -93,6 +93,7 @@ impl GraphIntegrand for AmplitudeGraph {
     ) -> Complex<F<T>> {
         if settings.general.debug > 0 {
             DEBUG_LOGGER.write("channel_id", &channel_id);
+            DEBUG_LOGGER.write("graph", &SerializableGraph::from_graph(self.get_graph()));
         }
 
         let one = sample.one();
@@ -246,6 +247,7 @@ impl GraphIntegrand for AmplitudeGraph {
         };
 
         if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("graph", &SerializableGraph::from_graph(self.get_graph()));
             DEBUG_LOGGER.write("rep3d", &rep3d);
             DEBUG_LOGGER.write("ose_product", &energy_product);
             DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
@@ -317,6 +319,7 @@ impl GraphIntegrand for AmplitudeGraph {
             DEBUG_LOGGER.write("rep3d", &rep3d);
             DEBUG_LOGGER.write("ose_product", &energy_product);
             DEBUG_LOGGER.write("counter_terms", &counterterm);
+            DEBUG_LOGGER.write("graph", &SerializableGraph::from_graph(self.get_graph()));
         }
 
         (rep3d - counterterm) * final_energy_product

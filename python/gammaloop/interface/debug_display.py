@@ -8,7 +8,7 @@ def build_debug_dict(log_file: str) -> Dict[str, Any]:
     log = open(log_file, 'r')
     res = {}
 
-    # certain messaages may appear multiple times due to the stability check,
+    # certain messaages may appear multiple times due to the stability check or multichanneling,
     # this ensures we keep them all
     for line in log.readlines():
         json_line = json.loads(line)

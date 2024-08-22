@@ -111,22 +111,13 @@ impl CFFExpression {
         let res = self
             .iter_term_ids()
             .map(|t| {
-                let orientation_result = evaluate_tree(
+                evaluate_tree(
                     &self.orientations[t].expression,
                     t,
                     &esurface_cache,
                     &hsurface_cache,
                     &mut term_cache,
-                );
-
-                if settings.general.debug > 0 {
-                    println!(
-                        "result of orientation {:?}, {}",
-                        self.orientations[t].orientation, orientation_result,
-                    )
-                }
-
-                orientation_result
+                )
             })
             .collect();
 
