@@ -108,7 +108,7 @@ typed-index-collections = { version = "3.1.0", features = [
 ] }
 indicatif-log-bridge = "0.2.2"
 gat-lending-iterator = "0.1.5"
-gxhash = "3.4.1"
+# gxhash = "3.4.1"
 thiserror = "1.0.63"
 
 [dependencies.pyo3]

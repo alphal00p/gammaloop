@@ -17,7 +17,7 @@ use bincode::{Decode, Encode};
 use color_eyre::Report;
 use eyre::{eyre, Result};
 use gat_lending_iterator::LendingIterator;
-use gxhash::GxBuildHasher;
+// use gxhash::GxBuildHasher;
 use indexmap::IndexSet;
 use itertools::Itertools;
 
@@ -1632,7 +1632,7 @@ impl EvaluatorSingle {
         let params = Contracted::generate_params(graph);
         let mut seen = 0;
 
-        let mut index_map = IndexSet::with_hasher(GxBuildHasher::default());
+        let mut index_map = IndexSet::new();
         let mut positions = Vec::new();
 
         let len = extra_info.orientations.len();

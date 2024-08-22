@@ -14,7 +14,7 @@ set externals.momenta [\
 ]
 set integrated_phase 'imag'
 set e_cm 10.
-set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
 set n_start 10000
 set n_max 200000000
 #set continuous_learning_rate 0.0
