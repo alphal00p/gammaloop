@@ -135,11 +135,6 @@ impl GraphIntegrand for AmplitudeGraph {
             &lmb_specification,
         );
 
-        if settings.general.debug > 0 {
-            let energy_string = serde_json::to_string(&onshell_energies).unwrap();
-            DEBUG_LOGGER.write("onshell_energies", &onshell_energies);
-        }
-
         let virtual_energies = self
             .get_graph()
             .edges
@@ -321,7 +316,6 @@ impl GraphIntegrand for AmplitudeGraph {
         if settings.general.debug > 0 {
             DEBUG_LOGGER.write("rep3d", &rep3d);
             DEBUG_LOGGER.write("ose_product", &energy_product);
-            DEBUG_LOGGER.write("onshell_energies", &onshell_energies);
             DEBUG_LOGGER.write("counter_terms", &counterterm);
         }
 

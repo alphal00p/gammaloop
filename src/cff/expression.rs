@@ -87,6 +87,7 @@ impl CFFExpression {
     ) -> Vec<F<T>> {
         if settings.general.debug > 0 {
             DEBUG_LOGGER.write("esurface_equation", &self.esurfaces);
+            DEBUG_LOGGER.write("onshell_energies", &energy_cache);
         }
 
         T::get_evaluator(self)(energy_cache, settings)

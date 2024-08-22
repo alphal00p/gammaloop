@@ -72,4 +72,16 @@ def display_final_result(debug_dict: Dict[str, Any]) -> None:
 def display_default(debug_dict: Dict[str, Any]) -> None:
     display_havana_sample(debug_dict)
     display_momenta_samples(debug_dict)
+    display_onshell_energies(debug_dict)
     display_final_result(debug_dict)
+
+
+def display_onshell_energies(debug_dict: Dict[str, Any]) -> None:
+    if 'onshell_energies' not in debug_dict:
+        logger.info("onshell energies not logged")
+        return
+
+    for onshell_energies in debug_dict['onshell_energies']:
+        logger.info("onshell energies: ")
+        logger.info(onshell_energies)
+        logger.info('')
