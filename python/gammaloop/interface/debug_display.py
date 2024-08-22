@@ -69,10 +69,30 @@ def display_final_result(debug_dict: Dict[str, Any]) -> None:
     logger.info("final result: {}".format(format_result))
 
 
+def display_largest_and_smallest_orientation(debug_dict: Dict[str, Any]) -> None:
+    if 'orientations' not in debug_dict:
+        logger.warn("no orientations in debug info")
+        return
+
+    for (index, orientation) in enumerate(debug_dict['orientations']):
+        max_or = max(orientation)
+        max_or_ind = orientation.index(max_or)
+        min_or = min(orientation)
+        min_or_ind = orientation.index(min_or)
+
+        logger.info("largest orienatation: {}, value: {}".format(
+            max_or_ind, max_or))
+        logger.info("smallest orientation: {}, value: {}".format(
+            min_or_ind, min_or))
+
+        logger.info("")
+
+
 def display_default(debug_dict: Dict[str, Any]) -> None:
     display_havana_sample(debug_dict)
     display_momenta_samples(debug_dict)
     display_onshell_energies(debug_dict)
+    display_largest_and_smallest_orientation(debug_dict)
     display_final_result(debug_dict)
 
 
