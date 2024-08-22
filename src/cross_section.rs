@@ -321,13 +321,42 @@ impl<S: TypedNumeratorState> AmplitudeGraph<S> {
     }
 }
 
-impl AmplitudeGraph<PythonState> {
-    pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
-        self.graph.load_derived_data::<S>(path)
-    }
-}
+impl AmplitudeGraph<PythonState> {}
 
 impl<S: NumeratorState> AmplitudeGraph<S> {
+    pub fn load_derived_data_mut(&mut self, path: &Path, settings: &Settings) -> Result<()> {
+        let g = self
+            .graph
+            .bare_graph
+            .clone()
+            .load_derived_data::<S>(path, settings)?;
+
+        self.graph = g;
+        Ok(())
+        //  load_derived_data::<S>(path)
+    }
+
+    pub fn load_derived_data<T: NumeratorState>(
+        self,
+        path: &Path,
+        settings: &Settings,
+    ) -> Result<AmplitudeGraph<T>> {
+        let g = self
+            .graph
+            .bare_graph
+            .load_derived_data::<T>(path, settings)?;
+
+        Ok(AmplitudeGraph {
+            sg_id: self.sg_id,
+            sg_cut_id: self.sg_cut_id,
+            fs_cut_id: self.fs_cut_id,
+            amplitude_side: self.amplitude_side,
+            graph: g,
+            multi_channeling_channels: self.multi_channeling_channels,
+        })
+        //  load_derived_data::<S>(path)
+    }
+
     pub fn map<F, U: NumeratorState>(self, mut f: F) -> AmplitudeGraph<U>
     where
         F: FnMut(Graph<S>) -> Graph<U>,
@@ -389,23 +418,6 @@ impl AmplitudeGraph<UnInit> {
             graph,
             multi_channeling_channels: self.multi_channeling_channels,
         }
-    }
-
-    pub fn load_derived_data<S: NumeratorState>(
-        self,
-        path: &Path,
-        settings: &Settings,
-    ) -> Result<AmplitudeGraph<S>, Report> {
-        let filled_g = self.graph.bare_graph.load_derived_data(path, settings)?;
-
-        Ok(AmplitudeGraph {
-            sg_id: self.sg_id,
-            sg_cut_id: self.sg_cut_id,
-            fs_cut_id: self.fs_cut_id,
-            amplitude_side: self.amplitude_side,
-            graph: filled_g,
-            multi_channeling_channels: self.multi_channeling_channels.clone(),
-        })
     }
 }
 
@@ -549,16 +561,16 @@ impl<S: TypedNumeratorState> Amplitude<S> {
     }
 }
 
-impl Amplitude<PythonState> {
-    pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
+impl Amplitude<PythonState> {}
+
+impl<S: NumeratorState> Amplitude<S> {
+    pub fn load_derived_data_mut(&mut self, path: &Path, settings: &Settings) -> Result<()> {
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
-            amplitude_graph.load_derived_data::<S>(path)?;
+            amplitude_graph.load_derived_data_mut(path, settings)?;
         }
         Ok(())
     }
-}
 
-impl<S: NumeratorState> Amplitude<S> {
     pub fn map<F, U: NumeratorState>(self, f: F) -> Amplitude<U>
     where
         F: FnMut(AmplitudeGraph<S>) -> AmplitudeGraph<U>,
@@ -658,13 +670,20 @@ impl Amplitude<UnInit> {
 
         // dump the derived data in a binary file
         for amplitude_graph in amp.amplitude_graphs.iter() {
-            debug!("dumping derived data");
+            debug!("dumping derived data to {:?}", path);
             fs::write(
                 path.clone().join(format!(
                     "derived_data_{}.bin",
                     amplitude_graph.graph.bare_graph.name
                 )),
-                bincode::serialize(&amplitude_graph.graph.derived_data)?,
+                &bincode::encode_to_vec(
+                    &amplitude_graph
+                        .graph
+                        .derived_data
+                        .as_ref()
+                        .ok_or(eyre!("empty derived data"))?,
+                    bincode::config::standard(),
+                )?,
             )?;
         }
 
@@ -750,7 +769,14 @@ impl Amplitude<PythonState> {
                     "derived_data_{}.bin",
                     amplitude_graph.graph.bare_graph.name
                 )),
-                bincode::serialize(&amplitude_graph.graph.derived_data)?,
+                &bincode::encode_to_vec(
+                    &amplitude_graph
+                        .graph
+                        .derived_data
+                        .as_ref()
+                        .ok_or(eyre!("Empty derived data"))?,
+                    bincode::config::standard(),
+                )?,
             )?;
         }
 
@@ -984,16 +1010,19 @@ impl<S: TypedNumeratorState> AmplitudeList<S> {
     }
 }
 
-impl AmplitudeList<PythonState> {
-    pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
+impl AmplitudeList<PythonState> {}
+
+impl<S: NumeratorState> AmplitudeList<S> {
+    pub fn load_derived_data_mut(&mut self, path: &Path, settings: &Settings) -> Result<()> {
         for amplitude in self.container.iter_mut() {
-            amplitude.load_derived_data::<S>(path)?;
+            let ampltitude_path = path.join(amplitude.name.as_str());
+            amplitude.load_derived_data_mut(&ampltitude_path, settings)?;
+            for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
+                amplitude_graph.graph.generate_esurface_data()?;
+            }
         }
         Ok(())
     }
-}
-
-impl<S: NumeratorState> AmplitudeList<S> {
     pub fn map<F, U: NumeratorState>(self, f: F) -> AmplitudeList<U>
     where
         F: FnMut(Amplitude<S>) -> Amplitude<U>,

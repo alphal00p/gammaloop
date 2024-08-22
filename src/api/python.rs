@@ -233,11 +233,11 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         self.amplitudes
-            .load_derived_data::<Evaluators>(&path_to_amplitudes)
+            .load_derived_data_mut(&path_to_amplitudes, &settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
-    pub fn generate_numerators(&mut self) {
+    pub fn apply_feynman_rules(&mut self) {
         self.amplitudes.map_mut_graphs(|g| {
             g.statefull_apply::<_, UnInit, AppliedFeynmanRule>(|d, b| {
                 d.map_numerator(|n| n.from_graph(b))
@@ -338,7 +338,7 @@ impl PythonWorker {
     }
 
     pub fn export_expressions(&mut self, export_root: &str, format: &str) -> PyResult<String> {
-        self.generate_numerators();
+        self.apply_feynman_rules();
 
         for amplitude in self.amplitudes.container.iter_mut() {
             amplitude
@@ -427,8 +427,12 @@ impl PythonWorker {
                             info!("");
 
                             let serializable_state: SerializableIntegrationState =
-                                bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
-                                    .unwrap();
+                                bincode::decode_from_slice::<SerializableIntegrationState, _>(
+                                    &state_bytes,
+                                    bincode::config::standard(),
+                                )
+                                .unwrap()
+                                .0;
 
                             let path_to_workspace_settings = workspace_path.join("settings.yaml");
                             let workspace_settings_string =
@@ -562,7 +566,10 @@ impl PythonWorker {
         let job_out_path = Path::new(workspace_path).join(job_out_name);
 
         let output_file = std::fs::read(job_out_path)?;
-        let batch_result: BatchResult = bincode::deserialize(&output_file).unwrap();
+        let batch_result: BatchResult =
+            bincode::decode_from_slice(&output_file, bincode::config::standard())
+                .unwrap()
+                .0;
 
         master_node
             .process_batch_output(batch_result)

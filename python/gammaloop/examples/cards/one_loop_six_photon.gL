@@ -1,7 +1,7 @@
 import_model sm-full
 import_graphs python/gammaloop/tests/test_data/qgraf_outputs/physical_1L_6photons.py -f qgraph --no_compile
 !rm -rf GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P
-output GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P -exp -ef file
+output GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P 
 launch GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P
 #set_model_param mass_scalar_1 172.0
 set externals.momenta [\
@@ -14,9 +14,9 @@ set externals.momenta [\
 ]
 set integrated_phase 'imag'
 set e_cm 10.
-set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}
 set n_start 10000
 set n_max 200000000
 #set continuous_learning_rate 0.0
 set seed 1
-integrate physical_1L_6photons_topology_A -r -c 10
+integrate physical_1L_6photons -r -c 10

@@ -6,6 +6,7 @@ use crate::{
     numerator::NumeratorState,
     utils::{compute_momentum, FloatLike, F},
 };
+use bincode::{Decode, Encode};
 use itertools::Itertools;
 use log::debug;
 use nalgebra::DMatrix;
@@ -406,7 +407,7 @@ impl Heaviside {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 struct LTDTerm {
     associated_lmb: Vec<(usize, f64)>,
     signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
@@ -494,7 +495,7 @@ pub struct SerializableLTDTerm {
     signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct LTDExpression {
     terms: Vec<LTDTerm>,
 }

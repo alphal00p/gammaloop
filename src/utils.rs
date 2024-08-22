@@ -3,6 +3,7 @@ use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::numerator::NumeratorEvaluateFloat;
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
+use bincode::{Decode, Encode};
 use colored::Colorize;
 
 use itertools::{izip, Itertools};
@@ -111,8 +112,9 @@ pub trait FloatConvertFrom<U> {
 //     }
 // }
 
-#[derive(Debug, Clone, PartialEq,PartialOrd,Serialize,Deserialize)]
+#[derive(Debug, Clone, PartialEq,PartialOrd,Serialize,Deserialize,Encode,Decode)]
 pub struct VarFloat<const N: u32> {
+    #[bincode(with_serde)]
     float: rug::Float,
 }
 
@@ -743,7 +745,7 @@ pub trait FloatLike:
 
 
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize,Encode,Decode)]
 pub struct F<T: FloatLike>(pub T);
 
 impl<T:FloatLike> R for F<T> {}

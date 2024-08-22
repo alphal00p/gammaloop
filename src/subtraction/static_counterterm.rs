@@ -1,3 +1,4 @@
+use bincode::{Decode, Encode};
 /// Counterterm for amplitudes with constant externals.
 use colored::Colorize;
 use itertools::Itertools;
@@ -27,11 +28,15 @@ use crate::{
 use super::overlap::OverlapStructure;
 
 #[allow(clippy::type_complexity)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CounterTerm {
+    #[bincode(with_serde)]
     existing_esurfaces: ExistingEsurfaces,
+    #[bincode(with_serde)]
     maximal_overlap: OverlapStructure,
+    #[bincode(with_serde)]
     complements_of_overlap: Vec<Vec<ExistingEsurfaceId>>,
+    #[bincode(with_serde)]
     terms_in_counterterms: Vec<CFFLimit>,
 }
 

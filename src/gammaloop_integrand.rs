@@ -10,7 +10,7 @@ use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::{FourMomentum, ThreeMomentum};
-use crate::numerator::{Evaluators, NumeratorState};
+use crate::numerator::Evaluators;
 use crate::subtraction::static_counterterm::CounterTerm;
 use crate::utils::{
     self, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,

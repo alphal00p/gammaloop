@@ -1,17 +1,21 @@
 #![allow(unused_imports)]
 use crate::cff::esurface::{
-    get_existing_esurfaces, Esurface, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
+    get_existing_esurfaces, Esurface, EsurfaceCollection, EsurfaceDerivedData, EsurfaceID,
+    ExistingEsurfaceId, ExistingEsurfaces,
 };
 use crate::cff::generation::generate_cff_expression;
+use crate::cff::hsurface::HsurfaceCollection;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::gammaloop_integrand::DefaultSample;
 use crate::graph::{
-    Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, SerializableGraph, VertexInfo,
+    DerivedGraphData, Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, SerializableGraph,
+    VertexInfo,
 };
 use crate::model::Model;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::numerator::{
-    ContractionSettings, Evaluators, Numerator, NumeratorEvaluatorOptions, UnInit,
+    ContractionSettings, EvaluatorOptions, Evaluators, Num, Numerator, NumeratorCompileOptions,
+    NumeratorEvaluatorOptions, PythonState, UnInit,
 };
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
@@ -22,6 +26,7 @@ use crate::utils::{
 use crate::utils::{f128, F};
 use crate::{ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings};
 use ahash::AHashMap;
+use bincode::{Decode, Encode};
 use colored::Colorize;
 use itertools::{FormatWith, Itertools};
 //use libc::__c_anonymous_ptrace_syscall_info_exit;
@@ -29,16 +34,19 @@ use lorentz_vector::LorentzVector;
 use petgraph::algo::greedy_matching;
 use petgraph::graph;
 use rayon::prelude::IndexedParallelIterator;
-use serde;
+use serde::{self, Deserialize, Serialize};
 use spenso::complex::Complex;
 use statrs::function::evaluate;
 use std::fs::File;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::{clone, env};
 use symbolica;
 use symbolica::atom::Atom;
 use symbolica::domains::float::{Complex as SymComplex, NumericalFloatLike};
 use symbolica::evaluate::CompileOptions;
+use symbolica::state::State;
+use typed_index_collections::TiVec;
 
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-12);
@@ -46,7 +54,10 @@ const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-12);
 pub fn test_export_settings() -> ExportSettings {
     ExportSettings {
         compile_cff: true,
-        numerator_settings: NumeratorEvaluatorOptions::default(),
+        numerator_settings: NumeratorEvaluatorOptions::Combined(EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        }),
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: false,
         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
@@ -554,7 +565,7 @@ fn pytest_scalar_sunrise() {
 #[test]
 fn pytest_scalar_fishnet_2x3() {
     let default_settings = load_default_settings();
-    let (model, mut amplitude, _) =
+    let (model, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_scalar_fishnet_2x3/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
@@ -1874,7 +1885,7 @@ fn pytest_lbl_box() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
     graph.generate_cff();
     let export_settings = test_export_settings();
-    let mut graph = graph.process_numerator(
+    let _graph = graph.process_numerator(
         &model,
         ContractionSettings::Normal,
         PathBuf::new(),
@@ -1895,7 +1906,7 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     graph.generate_cff();
     let export_settings = test_export_settings();
-    let mut graph = graph.process_numerator(
+    let _graph = graph.process_numerator(
         &model,
         ContractionSettings::Normal,
         PathBuf::new(),
@@ -1937,6 +1948,76 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
     // println!("{}", a.dot_nodes());
 }
 
+// #[allow(dead_code)]
+// #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+// pub struct DerivedGraphData<NumState> {
+//     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
+//     pub cff_expression: Option<CFFExpression>,
+//     pub ltd_expression: Option<LTDExpression>,
+//     #[bincode(with_serde)]
+//     pub tropical_subgraph_table: Option<SampleGenerator<3>>,
+//     #[bincode(with_serde)]
+//     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
+//     pub esurface_derived_data: Option<EsurfaceDerivedData>,
+//     pub static_counterterm: Option<static_counterterm::CounterTerm>,
+//     pub numerator: Num<NumState>,
+// }
+use crate::ltd::LTDExpression;
+
+use crate::cff::expression::{CFFExpression, CompiledCFFExpression, OrientationExpression, TermId};
+use momtrop::SampleGenerator;
+use smallvec::SmallVec;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+pub struct MyCFFExpression {
+    #[bincode(with_serde)]
+    pub orientations: TiVec<TermId, OrientationExpression>,
+    #[bincode(with_serde)]
+    pub esurfaces: EsurfaceCollection,
+    #[bincode(with_serde)]
+    pub hsurfaces: HsurfaceCollection,
+    #[bincode(with_serde)]
+    pub compiled: CompiledCFFExpression,
+}
+
+impl From<CFFExpression> for MyCFFExpression {
+    fn from(value: CFFExpression) -> Self {
+        MyCFFExpression {
+            compiled: value.compiled,
+            orientations: value.orientations,
+            esurfaces: value.esurfaces,
+            hsurfaces: value.hsurfaces,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+pub struct Derived<NumState> {
+    pub cff_expression: Option<MyCFFExpression>,
+    pub ltd_expression: Option<LTDExpression>,
+    #[bincode(with_serde)]
+    pub tropical_subgraph_table: Option<SampleGenerator<3>>,
+    #[bincode(with_serde)]
+    pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
+    pub esurface_derived_data: Option<EsurfaceDerivedData>,
+    pub static_counterterm: Option<static_counterterm::CounterTerm>,
+    pub numerator: Num<NumState>,
+}
+
+impl<State> From<DerivedGraphData<State>> for Derived<State> {
+    fn from(value: DerivedGraphData<State>) -> Self {
+        Derived {
+            cff_expression: value.cff_expression.map(MyCFFExpression::from),
+            ltd_expression: value.ltd_expression,
+            tropical_subgraph_table: value.tropical_subgraph_table,
+            edge_groups: value.edge_groups,
+            esurface_derived_data: value.esurface_derived_data,
+            static_counterterm: value.static_counterterm,
+            numerator: value.numerator,
+        }
+    }
+}
+
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_1L_6photons() {
@@ -1949,6 +2030,8 @@ fn pytest_physical_1L_6photons() {
 
     graph.generate_cff();
     let export_settings = test_export_settings();
+
+    println!("{}", serde_yaml::to_string(&export_settings).unwrap());
     let mut graph = graph.process_numerator(
         &model,
         ContractionSettings::Normal,
@@ -1958,8 +2041,21 @@ fn pytest_physical_1L_6photons() {
 
     let sample = kinematics_builder(5, 1);
     graph.evaluate_cff_expression(&sample, &default_settings);
+
+    let eval: DerivedGraphData<PythonState> = graph.derived_data.unwrap().forget_type();
+
+    let v = serde_json::to_string(&eval).unwrap();
+    let u: DerivedGraphData<PythonState> = serde_json::from_str(&v).unwrap();
 }
 
+#[test]
+fn state_export_import() {
+    let mut export = vec![];
+    State::export(&mut export).unwrap();
+
+    let i = State::import(Cursor::new(&export), None).unwrap();
+    assert!(i.is_empty());
+}
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_2L_6photons() {

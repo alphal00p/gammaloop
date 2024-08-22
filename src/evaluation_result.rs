@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use bincode::{Decode, Encode};
 use colored::Colorize;
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -57,7 +58,7 @@ impl EvaluationMetaData {
 }
 
 /// This struct merges the evaluation metadata of many evaluations into a single struct
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct StatisticsCounter {
     pub num_evals: usize,
     sum_rep3d_evaluation_time: Duration,

@@ -48,7 +48,7 @@ fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample
 }
 
 fn load_helper(path: &str, use_orientations: bool) -> Graph {
-    let (model, mut amplitude) = load_amplitude_output(path, true);
+    let (model, mut amplitude, _) = load_amplitude_output(path, true);
     amplitude.amplitude_graphs[0].graph.generate_cff();
 
     let export_settings = ExportSettings {

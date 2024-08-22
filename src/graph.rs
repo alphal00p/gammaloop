@@ -8,7 +8,7 @@ use crate::{
         generation::generate_cff_expression,
     },
     gammaloop_integrand::DefaultSample,
-    ltd::{generate_ltd_expression, LTDExpression, SerializableLTDExpression},
+    ltd::{generate_ltd_expression, LTDExpression},
     model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, Polarization, ThreeMomentum},
     numerator::{
@@ -29,6 +29,7 @@ use crate::{
 
 use ahash::{HashSet, RandomState};
 
+use bincode::{Decode, Encode};
 use color_eyre::Result;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
@@ -59,7 +60,7 @@ use spenso::{
 
 use core::panic;
 use serde::{
-    de::{self, DeserializeOwned, MapAccess, Visitor},
+    de::{self, DeserializeOwned, MapAccess, SeqAccess, Visitor},
     ser::SerializeStruct,
     Deserialize, Deserializer, Serialize,
 };
@@ -716,7 +717,7 @@ impl Graph<PythonState> {
             );
             Ok(())
         } else {
-            Err(eyre!("No derived data found"))
+            Err(eyre!("Derived data is None"))
         }
     }
 }
@@ -1475,6 +1476,7 @@ impl BareGraph {
         settings: &Settings,
     ) -> Result<Graph<NumState>, Report> {
         let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
+        debug!("Loading derived data from {:?}", derived_data_path);
         let mut derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
 
         derived_data
@@ -1860,12 +1862,14 @@ impl Graph<Evaluators> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub struct DerivedGraphData<NumState: NumeratorState> {
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+pub struct DerivedGraphData<NumState> {
     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
+    #[bincode(with_serde)]
     pub tropical_subgraph_table: Option<SampleGenerator<3>>,
+    #[bincode(with_serde)]
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub static_counterterm: Option<static_counterterm::CounterTerm>,
@@ -1876,11 +1880,15 @@ impl DerivedGraphData<PythonState> {
     pub fn load_python_from_path<S: NumeratorState>(path: &Path) -> Result<Self, Report> {
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
-                let derived_data: DerivedGraphData<S> = bincode::deserialize(&derived_data_bytes)?;
+                let derived_data: DerivedGraphData<S> =
+                    bincode::decode_from_slice(&derived_data_bytes, bincode::config::standard())?.0;
                 Ok(derived_data.forget_type())
             }
             Err(_) => {
-                Err(eyre!("no derived data found"))
+                Err(eyre!(
+                    "Could not read derived data from path: {}",
+                    path.display()
+                ))
                 // Ok(Self::new_empty())
             }
         }
@@ -1897,23 +1905,23 @@ impl DerivedGraphData<PythonState> {
     }
 }
 
-impl<NumState: NumeratorState> Serialize for DerivedGraphData<NumState> {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("DerivedGraphData", 7)?;
-        state.serialize_field("loop_momentum_bases", &self.loop_momentum_bases)?;
-        state.serialize_field("cff_expression", &self.cff_expression)?;
-        state.serialize_field("ltd_expression", &self.ltd_expression)?;
-        state.serialize_field("tropical_subgraph_table", &self.tropical_subgraph_table)?;
-        state.serialize_field("edge_groups", &self.edge_groups)?;
-        state.serialize_field("esurface_derived_data", &self.esurface_derived_data)?;
-        state.serialize_field("static_counterterm", &self.static_counterterm)?;
-        state.serialize_field("numerator", &self.numerator)?;
-        state.end()
-    }
-}
+// impl<NumState: NumeratorState> Serialize for DerivedGraphData<NumState> {
+//     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         let mut state = serializer.serialize_struct("DerivedGraphData", 7)?;
+//         state.serialize_field("loop_momentum_bases", &self.loop_momentum_bases)?;
+//         state.serialize_field("cff_expression", &self.cff_expression)?;
+//         state.serialize_field("ltd_expression", &self.ltd_expression)?;
+//         state.serialize_field("tropical_subgraph_table", &self.tropical_subgraph_table)?;
+//         state.serialize_field("edge_groups", &self.edge_groups)?;
+//         state.serialize_field("esurface_derived_data", &self.esurface_derived_data)?;
+//         state.serialize_field("static_counterterm", &self.static_counterterm)?;
+//         state.serialize_field("numerator", &self.numerator)?;
+//         state.end()
+//     }
+// }
 
 impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn map_numerator<F, T: NumeratorState>(self, f: F) -> DerivedGraphData<T>
@@ -1951,107 +1959,148 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 
 impl<NumState: TypedNumeratorState> DerivedGraphData<NumState> {
     fn try_from_python(value: DerivedGraphData<PythonState>) -> Result<Self> {
-        Ok(value.map_numerator_res(|n| n.try_from())?)
+        value.map_numerator_res(|n| n.try_from())
     }
 }
 
-impl<'de, NumState: NumeratorState> Deserialize<'de> for DerivedGraphData<NumState> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct DerivedGraphDataVisitor<NumState: NumeratorState>(PhantomData<NumState>);
+// impl<'de, NumState: NumeratorState> Deserialize<'de> for DerivedGraphData<NumState> {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         struct DerivedGraphDataVisitor<NumState: NumeratorState>(PhantomData<NumState>);
 
-        impl<'de, NumState: NumeratorState> Visitor<'de> for DerivedGraphDataVisitor<NumState> {
-            type Value = DerivedGraphData<NumState>;
+//         impl<'de, NumState: NumeratorState> Visitor<'de> for DerivedGraphDataVisitor<NumState> {
+//             type Value = DerivedGraphData<NumState>;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("struct DerivedGraphData")
-            }
+//             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+//                 formatter.write_str("struct DerivedGraphData")
+//             }
 
-            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut loop_momentum_bases = None;
-                let mut cff_expression = None;
-                let mut ltd_expression = None;
-                let mut tropical_subgraph_table = None;
-                let mut edge_groups = None;
-                let mut esurface_derived_data = None;
-                let mut static_counterterm = None;
-                let mut numerator = None;
+//             fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
+//             where
+//                 V: SeqAccess<'de>,
+//             {
+//                 let loop_momentum_bases = seq
+//                     .next_element()?
+//                     .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+//                 let cff_expression = seq
+//                     .next_element()?
+//                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+//                 let ltd_expression = seq
+//                     .next_element()?
+//                     .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+//                 let tropical_subgraph_table = seq
+//                     .next_element()?
+//                     .ok_or_else(|| de::Error::invalid_length(3, &self))?;
+//                 let edge_groups = seq
+//                     .next_element()?
+//                     .ok_or_else(|| de::Error::invalid_length(4, &self))?;
+//                 let esurface_derived_data = seq
+//                     .next_element()?
+//                     .ok_or_else(|| de::Error::invalid_length(5, &self))?;
+//                 let static_counterterm = seq
+//                     .next_element()?
+//                     .ok_or_else(|| de::Error::invalid_length(6, &self))?;
+//                 let numerator = seq
+//                     .next_element()?
+//                     .ok_or_else(|| de::Error::invalid_length(7, &self))?;
 
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        "loop_momentum_bases" => {
-                            loop_momentum_bases = Some(map.next_value()?);
-                        }
-                        "cff_expression" => {
-                            cff_expression = Some(map.next_value()?);
-                        }
-                        "ltd_expression" => {
-                            ltd_expression = Some(map.next_value()?);
-                        }
-                        "tropical_subgraph_table" => {
-                            tropical_subgraph_table = Some(map.next_value()?);
-                        }
-                        "edge_groups" => {
-                            edge_groups = Some(map.next_value()?);
-                        }
-                        "esurface_derived_data" => {
-                            esurface_derived_data = Some(map.next_value()?);
-                        }
-                        "static_counterterm" => {
-                            static_counterterm = Some(map.next_value()?);
-                        }
-                        "numerator" => {
-                            numerator = Some(map.next_value()?);
-                        }
-                        _ => {
-                            return Err(de::Error::unknown_field(key, FIELDS));
-                        }
-                    }
-                }
+//                 Ok(DerivedGraphData {
+//                     loop_momentum_bases,
+//                     cff_expression,
+//                     ltd_expression,
+//                     tropical_subgraph_table,
+//                     edge_groups,
+//                     esurface_derived_data,
+//                     static_counterterm,
+//                     numerator,
+//                 })
+//             }
 
-                Ok(DerivedGraphData {
-                    loop_momentum_bases: loop_momentum_bases
-                        .ok_or_else(|| de::Error::missing_field("loop_momentum_bases"))?,
-                    cff_expression: cff_expression
-                        .ok_or_else(|| de::Error::missing_field("cff_expression"))?,
-                    ltd_expression: ltd_expression
-                        .ok_or_else(|| de::Error::missing_field("ltd_expression"))?,
-                    tropical_subgraph_table: tropical_subgraph_table
-                        .ok_or_else(|| de::Error::missing_field("tropical_subgraph_table"))?,
-                    edge_groups: edge_groups
-                        .ok_or_else(|| de::Error::missing_field("edge_groups"))?,
-                    esurface_derived_data: esurface_derived_data
-                        .ok_or_else(|| de::Error::missing_field("esurface_derived_data"))?,
-                    static_counterterm: static_counterterm
-                        .ok_or_else(|| de::Error::missing_field("static_counterterm"))?,
-                    numerator: numerator.ok_or_else(|| de::Error::missing_field("numerator"))?,
-                })
-            }
-        }
+//             fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+//             where
+//                 V: MapAccess<'de>,
+//             {
+//                 let mut loop_momentum_bases = None;
+//                 let mut cff_expression = None;
+//                 let mut ltd_expression = None;
+//                 let mut tropical_subgraph_table = None;
+//                 let mut edge_groups = None;
+//                 let mut esurface_derived_data = None;
+//                 let mut static_counterterm = None;
+//                 let mut numerator = None;
 
-        const FIELDS: &[&str] = &[
-            "loop_momentum_bases",
-            "cff_expression",
-            "ltd_expression",
-            "tropical_subgraph_table",
-            "edge_groups",
-            "esurface_derived_data",
-            "static_counterterm",
-            "numerator",
-        ];
+//                 while let Some(key) = map.next_key()? {
+//                     match key {
+//                         "loop_momentum_bases" => {
+//                             loop_momentum_bases = Some(map.next_value()?);
+//                         }
+//                         "cff_expression" => {
+//                             cff_expression = Some(map.next_value()?);
+//                         }
+//                         "ltd_expression" => {
+//                             ltd_expression = Some(map.next_value()?);
+//                         }
+//                         "tropical_subgraph_table" => {
+//                             tropical_subgraph_table = Some(map.next_value()?);
+//                         }
+//                         "edge_groups" => {
+//                             edge_groups = Some(map.next_value()?);
+//                         }
+//                         "esurface_derived_data" => {
+//                             esurface_derived_data = Some(map.next_value()?);
+//                         }
+//                         "static_counterterm" => {
+//                             static_counterterm = Some(map.next_value()?);
+//                         }
+//                         "numerator" => {
+//                             numerator = Some(map.next_value()?);
+//                         }
+//                         _ => {
+//                             return Err(de::Error::unknown_field(key, FIELDS));
+//                         }
+//                     }
+//                 }
 
-        deserializer.deserialize_struct(
-            "DerivedGraphData",
-            FIELDS,
-            DerivedGraphDataVisitor(PhantomData),
-        )
-    }
-}
+//                 Ok(DerivedGraphData {
+//                     loop_momentum_bases: loop_momentum_bases
+//                         .ok_or_else(|| de::Error::missing_field("loop_momentum_bases"))?,
+//                     cff_expression: cff_expression
+//                         .ok_or_else(|| de::Error::missing_field("cff_expression"))?,
+//                     ltd_expression: ltd_expression
+//                         .ok_or_else(|| de::Error::missing_field("ltd_expression"))?,
+//                     tropical_subgraph_table: tropical_subgraph_table
+//                         .ok_or_else(|| de::Error::missing_field("tropical_subgraph_table"))?,
+//                     edge_groups: edge_groups
+//                         .ok_or_else(|| de::Error::missing_field("edge_groups"))?,
+//                     esurface_derived_data: esurface_derived_data
+//                         .ok_or_else(|| de::Error::missing_field("esurface_derived_data"))?,
+//                     static_counterterm: static_counterterm
+//                         .ok_or_else(|| de::Error::missing_field("static_counterterm"))?,
+//                     numerator: numerator.ok_or_else(|| de::Error::missing_field("numerator"))?,
+//                 })
+//             }
+//         }
+
+//         const FIELDS: &[&str] = &[
+//             "loop_momentum_bases",
+//             "cff_expression",
+//             "ltd_expression",
+//             "tropical_subgraph_table",
+//             "edge_groups",
+//             "esurface_derived_data",
+//             "static_counterterm",
+//             "numerator",
+//         ];
+
+//         deserializer.deserialize_struct(
+//             "DerivedGraphData",
+//             FIELDS,
+//             DerivedGraphDataVisitor(PhantomData),
+//         )
+//     }
+// }
 
 impl DerivedGraphData<Evaluators> {
     #[inline]
@@ -2357,11 +2406,15 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn load_from_path(path: &Path) -> Result<Self, Report> {
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
-                let derived_data: Self = bincode::deserialize(&derived_data_bytes)?;
+                let derived_data: Self =
+                    bincode::decode_from_slice(&derived_data_bytes, bincode::config::standard())?.0;
                 Ok(derived_data)
             }
             Err(_) => {
-                Err(eyre!("no derived data found"))
+                Err(eyre!(
+                    "Could not read derived data from path: {}",
+                    path.display()
+                ))
                 // Ok(Self::new_empty())
             }
         }
@@ -2387,7 +2440,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct LoopMomentumBasis {
     pub basis: Vec<usize>,
     pub edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,

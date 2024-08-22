@@ -370,7 +370,11 @@ fn batch_branch(
 
     let batch_input_bytes = std::fs::read(batch_input_file)?;
     let serializable_batch_input =
-        bincode::deserialize::<SerializableBatchIntegrateInput>(&batch_input_bytes)?;
+        bincode::decode_from_slice::<SerializableBatchIntegrateInput, _>(
+            &batch_input_bytes,
+            bincode::config::standard(),
+        )?
+        .0;
     let batch_integrate_input = serializable_batch_input.into_batch_integrate_input(&settings);
 
     // construct integrand
@@ -382,7 +386,7 @@ fn batch_branch(
 
     // save result
 
-    let batch_result_bytes = bincode::serialize(&batch_result)?;
+    let batch_result_bytes = bincode::encode_to_vec(&batch_result, bincode::config::standard())?;
     fs::write(output_name, batch_result_bytes)?;
 
     Ok(())

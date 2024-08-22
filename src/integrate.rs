@@ -3,6 +3,8 @@
 //! The havana_integrate function is mostly used for local runs.
 //! The master node in combination with batch_integrate is for distributed runs.  
 
+use bincode::Decode;
+use bincode::Encode;
 use color_eyre::Report;
 use colored::Colorize;
 use itertools::Itertools;
@@ -107,12 +109,15 @@ impl IntegrationState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Encode, Decode)]
 pub struct SerializableIntegrationState {
     num_points: usize,
+    #[bincode(with_serde)]
     integral: StatisticsAccumulator<F<f64>>,
+    #[bincode(with_serde)]
     all_integrals: Vec<StatisticsAccumulator<F<f64>>>,
     stats: StatisticsCounter,
+    #[bincode(with_serde)]
     grid: Grid<F<f64>>,
     iter: usize,
 }
@@ -425,8 +430,11 @@ where
 
             match fs::write(
                 integration_state_path,
-                bincode::serialize(&serializable_integration_state)
-                    .unwrap_or_else(|_| panic!("failed to serialize the integration state")),
+                &bincode::encode_to_vec(
+                    &serializable_integration_state,
+                    bincode::config::standard(),
+                )
+                .unwrap_or_else(|_| panic!("failed to serialize the integration state")),
             ) {
                 Ok(_) => {}
                 Err(_) => warn!("Warning: failed to write integration state to disk"),
@@ -692,10 +700,12 @@ pub enum EventOutput {
 }
 
 /// The result of evaluating a batch of points
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Encode, Decode)]
 pub struct BatchResult {
     pub statistics: StatisticsCounter,
+    #[bincode(with_serde)]
     pub integrand_data: BatchIntegrateOutput,
+    #[bincode(with_serde)]
     pub event_data: EventOutput,
 }
 
@@ -727,12 +737,15 @@ pub enum EventOutputSettings {
     Histogram,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Encode, Decode)]
 pub struct SerializableBatchIntegrateInput {
     pub max_eval: F<f64>,
     pub iter: usize,
+    #[bincode(with_serde)]
     pub samples: SampleInput,
+    #[bincode(with_serde)]
     pub integrand_output_settings: IntegralOutputSettings,
+    #[bincode(with_serde)]
     pub event_output_settings: EventOutputSettings,
     pub num_cores: usize,
 }
@@ -898,7 +911,7 @@ impl MasterNode {
             event_output_settings: EventOutputSettings::None,
         };
 
-        let input_bytes = bincode::serialize(&input)?;
+        let input_bytes = bincode::encode_to_vec(&input, bincode::config::standard())?;
         let job_name = format!("job_{}", job_id);
         let job_path = std::path::Path::new(workspace_path).join(job_name);
 

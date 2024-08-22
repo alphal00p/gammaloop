@@ -13,14 +13,15 @@ use crate::{
     utils::{FloatLike, F},
 };
 use ahash::AHashMap;
+use bincode::{Decode, Encode};
 use color_eyre::Report;
 use eyre::{eyre, Result};
 use gat_lending_iterator::LendingIterator;
 use gxhash::GxBuildHasher;
 use indexmap::IndexSet;
-use itertools::{iproduct, Itertools};
-use libc::EILSEQ;
-use log::{debug, info, trace};
+use itertools::Itertools;
+
+use log::{debug, info};
 use rand::distributions::uniform::UniformChar;
 use serde::de::DeserializeOwned;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
@@ -707,20 +708,20 @@ impl Numerator {
     // }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Num<State: NumeratorState> {
-    state: State,
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+pub struct Num<State> {
+    pub state: State,
 }
 
-impl<'de, State: NumeratorState> Deserialize<'de> for Num<State> {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let state = State::deserialize(deserializer)?;
-        Ok(Num { state })
-    }
-}
+// impl<'de, State: NumeratorState> Deserialize<'de> for Num<State> {
+//     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de>,
+//     {
+//         let state = State::deserialize(deserializer)?;
+//         Ok(Num { state })
+//     }
+// }
 
 impl<S: NumeratorState> Num<S> {
     pub fn export(&self) -> String {
@@ -789,7 +790,7 @@ impl Num<PythonState> {
         S::apply(self, f)
     }
 }
-pub trait NumeratorState: Serialize + Clone + DeserializeOwned + Debug {
+pub trait NumeratorState: Serialize + Clone + DeserializeOwned + Debug + Encode + Decode {
     fn export(&self) -> String;
 
     fn forget_type(self) -> PythonState;
@@ -800,7 +801,7 @@ pub trait NumeratorState: Serialize + Clone + DeserializeOwned + Debug {
 pub trait UnexpandedNumerator: NumeratorState {
     fn expr(&self) -> Result<SerializableAtom, NumeratorStateError>;
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct UnInit;
 
 impl Default for UnInit {
@@ -868,8 +869,9 @@ impl Num<UnInit> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct AppliedFeynmanRule {
+    #[bincode(with_serde)]
     expression: SerializableAtom,
 }
 
@@ -1069,8 +1071,9 @@ impl Num<AppliedFeynmanRule> {
         }
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ColorSymplified {
+    #[bincode(with_serde)]
     expression: SerializableAtom,
 }
 
@@ -1157,8 +1160,9 @@ impl Num<ColorSymplified> {
         }
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct GammaSymplified {
+    #[bincode(with_serde)]
     expression: SerializableAtom,
 }
 
@@ -1234,8 +1238,9 @@ impl Num<GammaSymplified> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Network {
+    #[bincode(with_serde)]
     net: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>,
 }
 
@@ -1315,8 +1320,9 @@ impl Num<Network> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Contracted {
+    #[bincode(with_serde)]
     tensor: ParamTensor<AtomStructure>,
 }
 
@@ -1518,9 +1524,12 @@ impl Num<Contracted> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[serde(tag = "type")]
 pub enum NumeratorEvaluatorOptions {
+    #[serde(rename = "Single")]
     Single(EvaluatorOptions),
+    #[serde(rename = "Combined")]
     Combined(EvaluatorOptions),
 }
 
@@ -1546,10 +1555,10 @@ impl NumeratorEvaluatorOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash, Encode, Decode)]
 pub struct EvaluatorOptions {
-    cpe_rounds: Option<usize>,
-    compile_options: NumeratorCompileOptions,
+    pub cpe_rounds: Option<usize>,
+    pub compile_options: NumeratorCompileOptions,
 }
 
 impl Default for EvaluatorOptions {
@@ -1561,9 +1570,12 @@ impl Default for EvaluatorOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash, Encode, Decode)]
+#[serde(tag = "subtype")]
 pub enum NumeratorCompileOptions {
+    #[serde(rename = "Compiled")]
     Compiled,
+    #[serde(rename = "NotCompiled")]
     NotCompiled,
 }
 
@@ -1715,18 +1727,31 @@ impl EvaluatorSingle {
             .compile_options()
             .compile()
         {
+            let path = extra_info.path.join("compiled");
+            // let res = std::fs::create_dir_all(&path);
+            match std::fs::create_dir(&path) {
+                Ok(_) => {}
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::AlreadyExists => {}
+                    _ => {
+                        panic!("Error creating directory: {}", e)
+                    }
+                },
+            }
+
             let mut filename = extra_info.path.clone();
             filename.push("numerator.cpp");
             let filename = filename.to_string_lossy();
 
             let function_name = "numerator";
 
-            let library_name = "libneval.so";
+            let library_name = extra_info.path.join("numerator.so");
+            let library_name = library_name.to_string_lossy();
             let inline_asm = InlineASM::X64;
             CompiledEvaluator::new(
                 eval.export_cpp(&filename, function_name, true, inline_asm)
                     .unwrap()
-                    .compile(library_name, CompileOptions::default())
+                    .compile(&library_name, CompileOptions::default())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -1815,9 +1840,11 @@ impl<E> CompiledEvaluator<E> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct Evaluators {
+    #[bincode(with_serde)]
     orientated: Option<EvaluatorOrientations>,
+    #[bincode(with_serde)]
     single: EvaluatorSingle,
 }
 
@@ -1903,7 +1930,7 @@ pub enum NumeratorStateError {
     Any(#[from] eyre::Report),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum PythonState {
     UnInit(Option<UnInit>),
     AppliedFeynmanRule(Option<AppliedFeynmanRule>),

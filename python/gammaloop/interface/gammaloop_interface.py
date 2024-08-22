@@ -24,6 +24,16 @@ import gammaloop._gammaloop as gl_rust  # pylint: disable=import-error, no-name-
 
 # pylint: disable=unused-variable
 
+
+
+class TaggedScalar(yaml.ScalarNode):
+    def __init__(self, tag, value):
+        super().__init__(tag, value)
+
+def tagged_scalar_representer(dumper, data):
+    return data
+yaml.add_representer(TaggedScalar, tagged_scalar_representer)
+
 AVAILABLE_COMMANDS = [
     'import_model',
     'export_model',
@@ -86,19 +96,26 @@ class GammaLoopConfiguration(object):
             },
             'export_settings': {
                 'compile_cff': True,
-                'compile_separate_orientations': False,
+                'numerator_settings': {  
+                    'type': 'Combined',
+                    'cpe_rounds': 1, 
+                    'compile_options': {
+                        'subtype': 'Compiled',
+                    } 
+                },
                 'cpe_rounds_cff': 1,
+                'compile_separate_orientations': False,
                 'gammaloop_compile_options': {
-                    'inline_asm': False,
+                    'inline_asm': True,
                     'optimization_level': 3,
                     'fast_math': True,
                     'unsafe_math': True,
-                    'compiler': "g++",
-                    'custom': [],
+                    'compiler': 'g++',
+                    'custom': []
                 },
                 'tropical_subgraph_table_settings': {
-                    'panic_on_fail': False,
-                    'target_omega': 1.0,
+                  'panic_on_fail': False,
+                  'target_omega': 1.0
                 }
             },
             'run_settings': {
@@ -107,6 +124,7 @@ class GammaLoopConfiguration(object):
                     'use_ltd': False,
                     'force_orientations': None,
                     'load_compiled_cff': True,
+                    'load_compiled_numerator':True,
                     'load_compiled_separate_orientations': False
                 },
                 'Integrand': {

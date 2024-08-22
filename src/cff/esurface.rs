@@ -1,5 +1,6 @@
 use std::ops::Index;
 
+use bincode::{Decode, Encode};
 use color_eyre::Report;
 use colored::Colorize;
 use derive_more::{From, Into};
@@ -286,7 +287,7 @@ pub fn compute_esurface_cache<T: FloatLike>(
 pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq, Encode, Decode)]
 pub struct EsurfaceID(usize);
 
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
@@ -436,7 +437,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     existing_esurfaces
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct EsurfaceDerivedData {
     esurface_data: Vec<EsurfaceData>,
     orientation_pairs: Vec<(EsurfaceID, EsurfaceID)>,
@@ -450,7 +451,7 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct EsurfaceData {
     cut_momentum_basis: usize,
     mass_sum_squared: F<f64>,

@@ -36,7 +36,6 @@ use eyre::WrapErr;
 use integrands::*;
 use momentum::FourMomentum;
 use momentum::ThreeMomentum;
-use numerator::NumeratorCompileOptions;
 use numerator::NumeratorEvaluatorOptions;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;

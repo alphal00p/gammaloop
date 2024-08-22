@@ -2,12 +2,14 @@ use crate::{
     utils::{FloatLike, VarFloat, F},
     ExportSettings, Settings,
 };
+use bincode::{Decode, Encode};
 use color_eyre::Report;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use log::info;
 use serde::{Deserialize, Serialize};
+use spenso::parametric::SerializableCompiledEvaluator;
 use std::{cell::RefCell, fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
@@ -65,12 +67,15 @@ pub struct OrientationExpression {
     pub expression: Tree<CFFExpressionNode>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CFFExpression {
+    #[bincode(with_serde)]
     pub orientations: TiVec<TermId, OrientationExpression>,
+    #[bincode(with_serde)]
     pub esurfaces: EsurfaceCollection,
+    #[bincode(with_serde)]
     pub hsurfaces: HsurfaceCollection,
-    #[serde(skip_serializing)]
+    #[bincode(with_serde)]
     pub compiled: CompiledCFFExpression,
 }
 
@@ -795,17 +800,24 @@ pub enum HybridNode {
 }
 
 // custom option so we have control over serialize/deserialize
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum CompiledCFFExpression {
+    // #[serde(skip)]
     Some(InnerCompiledCFF),
     None,
 }
 
-#[derive(Clone)]
+impl Default for CompiledCFFExpression {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InnerCompiledCFF {
     metadata: CompiledCFFExpressionMetaData,
-    joint: Option<RefCell<CompiledEvaluator>>,
-    orientations: TiVec<TermId, RefCell<CompiledEvaluator>>,
+    joint: Option<RefCell<SerializableCompiledEvaluator>>,
+    orientations: TiVec<TermId, RefCell<SerializableCompiledEvaluator>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -863,7 +875,7 @@ impl CompiledCFFExpression {
             .ok_or(eyre!("could not convert path to string"))?;
 
         if metadata.compile_cff_present {
-            let joint = CompiledEvaluator::load(path_to_joint_str, "joint")
+            let joint = SerializableCompiledEvaluator::load(path_to_joint_str, "joint")
                 .map(RefCell::new)
                 .map_err(|e| eyre!(e))?;
 
@@ -889,9 +901,10 @@ impl CompiledCFFExpression {
 
             Ok(Self::Some(inner))
         } else if metadata.compile_separate_orientations_present {
-            let orientation_zero = CompiledEvaluator::load(path_to_joint_str, "orientation_0")
-                .map(RefCell::new)
-                .map_err(|e| eyre!(e))?;
+            let orientation_zero =
+                SerializableCompiledEvaluator::load(path_to_joint_str, "orientation_0")
+                    .map(RefCell::new)
+                    .map_err(|e| eyre!(e))?;
 
             let mut orientations = vec![orientation_zero];
 
@@ -928,15 +941,6 @@ impl CompiledCFFExpression {
             CompiledCFFExpression::Some(_) => true,
             CompiledCFFExpression::None => false,
         }
-    }
-}
-
-impl<'de> Deserialize<'de> for CompiledCFFExpression {
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Ok(Self::None)
     }
 }
 

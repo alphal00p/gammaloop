@@ -12,7 +12,7 @@ use pprof::criterion::{Output, PProfProfiler};
 const COMPILED_DUMP: &str = "TMP_COMPILED";
 
 fn load_helper(path: &str) -> Graph {
-    let (model, mut amplitude) = load_amplitude_output(path, true);
+    let (model, mut amplitude, _) = load_amplitude_output(path, true);
 
     amplitude.amplitude_graphs[0].graph.generate_cff();
     let export_settings = ExportSettings {
