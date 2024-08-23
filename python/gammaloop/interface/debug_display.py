@@ -1,4 +1,4 @@
-from logging import log
+from logging import LogRecord, log
 from typing import Dict, Any
 import json
 from gammaloop.misc.common import logger
@@ -88,6 +88,7 @@ def display_default(debug_dict: Dict[str, Any]) -> None:
     display_onshell_energies(debug_dict)
     display_largest_and_smallest_orientation(debug_dict)
     display_rep3d(debug_dict)
+    display_counterterm(debug_dict)
     display_final_result(debug_dict)
 
 
@@ -112,8 +113,39 @@ def display_rep3d(debug_dict: Dict[str, Any]) -> None:
         logger.info('')
 
 
+def display_counterterm(debug_dict: Dict[str, Any]) -> None:
+    if 'counter_terms' not in debug_dict:
+        logger.warn("no threshold counterterm in debug info")
+
+    for ct in debug_dict['counter_terms']:
+        logger.info("threshold counterterm: {}".format(
+            format_complex(ct['re'], ct['im'])))
+        logger.info('')
+
+
 def format_complex(re: float, im: float) -> str:
     if im >= 0:
         return "{} + {}i".format(re, im)
     else:
         return "{} - {}i".format(re, abs(im))
+
+
+def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
+    if 'overlap_structure' not in debug_dict:
+        logger.info('no subtraction performed')
+        return
+
+    logger.warn(
+        "this printout has only been checked when the stability test is disabled")
+
+    counter = 0
+    for overlap_structure in debug_dict['overlap_structure']:
+        logger.info("overlap_structure: ")
+        logger.info("\tesurfaces: {}".format(overlap_structure[0]))
+        logger.info("\tcenter: {}".format(overlap_structure[1]))
+        logger.info("")
+
+        for index in range(len(overlap_structure[0])):
+            esurface_subtraction_data = debug_dict["esurface_subtraction"][counter + index]
+            logger.info("\t\tsubtraction: ")
+            logger.info("\t\t{}".format(esurface_subtraction_data))

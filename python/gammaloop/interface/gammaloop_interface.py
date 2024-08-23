@@ -1344,6 +1344,9 @@ class GammaLoop(object):
     log_parser.add_argument('--log_file', '-lf', type=str,
                             help='Log file to display', default=None)
 
+    log_parser.add_argument('--subtraction', '-s',  action='store_true',
+                            default=False, help='Show subtraction debug info')
+
     def do_display_debug_log(self, str_args: str) -> None:
         args = self.log_parser.parse_args(split_str_args(str_args))
 
@@ -1353,3 +1356,9 @@ class GammaLoop(object):
 
         debug_dict = debug_display.build_debug_dict(args.log_file)
         debug_display.display_default(debug_dict)
+
+        if args.subtraction:
+            logger.info("")
+            logger.info("subtraction: ")
+            logger.info("")
+            debug_display.display_subtraction_data(debug_dict)
