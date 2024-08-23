@@ -116,4 +116,4 @@ def format_complex(re: float, im: float) -> str:
     if im >= 0:
         return "{} + {}i".format(re, im)
     else:
-        return "{} - {}i".format(re, im)
+        return "{} - {}i".format(re, abs(im))
