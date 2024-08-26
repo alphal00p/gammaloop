@@ -2,17 +2,16 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crate::graph::{BareGraph, Edge};
+use crate::graph::BareGraph;
 use crate::momentum::Polarization;
 use crate::utils::f128;
 use crate::ExportSettings;
 use crate::{
-    graph::{EdgeType, LoopMomentumBasis},
+    graph::EdgeType,
     model::Model,
     momentum::FourMomentum,
     utils::{FloatLike, F},
 };
-use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use eyre::{eyre, Result};
@@ -23,13 +22,13 @@ use itertools::Itertools;
 
 use log::{debug, info};
 use serde::de::DeserializeOwned;
-use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use spenso::data::DataTensor;
 
 use spenso::network::Levels;
 use spenso::parametric::{
-    CompiledEvalTensorSet, EvalTensor, EvalTensorSet, EvalTreeTensorSet, ParamTensorSet,
-    SerializableAtom, SerializableCompiledEvaluator, TensorSet,
+    EvalTensor, EvalTensorSet, ParamTensorSet, SerializableAtom, SerializableCompiledEvaluator,
+    TensorSet,
 };
 use spenso::structure::{HasStructure, SerializableSymbol, SmartShadowStructure};
 use spenso::{
@@ -37,12 +36,10 @@ use spenso::{
     network::TensorNetwork,
     parametric::{ParamTensor, PatternReplacement},
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
-    symbolic::SymbolicTensor,
 };
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
 use symbolica::{
     atom::{Atom, FunctionBuilder},
-    printer::{AtomPrinter, PrintOptions},
     state::State,
 };
 use symbolica::{
@@ -51,193 +48,12 @@ use symbolica::{
     id::{Pattern, Replacement},
 };
 
-pub fn apply_replacements(
-    graph: &BareGraph,
-    model: &Model,
-    lmb: &LoopMomentumBasis,
-    mut atom: Atom,
-) -> Atom {
-    atom = model.substitute_model_params(&atom);
-
-    for edge in &graph.edges {
-        atom = edge.substitute_lmb(atom, graph, lmb);
-    }
-    atom
-}
-
-#[allow(clippy::large_enum_variant)]
-pub enum CompiledNumerator {
-    Compiled(CompiledEvalTensorSet<AtomStructure>),
-    UnInit,
-}
-
-#[allow(clippy::large_enum_variant, clippy::type_complexity)]
-pub enum EagerNumerator<T: FloatLike> {
-    Eager(EvalTensorSet<ExpressionEvaluator<Complex<F<T>>>, AtomStructure>),
-    UnInit,
-}
-
-pub enum EvalNumerator {
-    Eval(EvalTreeTensorSet<Rational, AtomStructure>),
-    UnInit,
-}
-
-impl<T: FloatLike> Debug for EagerNumerator<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EagerNumerator::Eager(_e) => write!(f, "eager"),
-            EagerNumerator::UnInit => write!(f, "uninit"),
-        }
-    }
-}
-
-impl Debug for CompiledNumerator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CompiledNumerator::Compiled(e) => e.fmt(f),
-            CompiledNumerator::UnInit => write!(f, "uninit"),
-        }
-    }
-}
-
-impl Debug for EvalNumerator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EvalNumerator::Eval(_e) => write!(f, "eval"),
-            EvalNumerator::UnInit => write!(f, "uninit"),
-        }
-    }
-}
-
-impl Clone for CompiledNumerator {
-    fn clone(&self) -> Self {
-        CompiledNumerator::UnInit
-    }
-}
-impl Clone for EvalNumerator {
-    fn clone(&self) -> Self {
-        EvalNumerator::UnInit
-    }
-}
-
-impl<T: FloatLike> Clone for EagerNumerator<T> {
-    fn clone(&self) -> Self {
-        EagerNumerator::<T>::UnInit
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtraInfo {
     pub path: PathBuf,
     pub orientations: Vec<Vec<bool>>,
 }
 
-impl From<&Edge> for NumeratorEdge {
-    fn from(value: &Edge) -> Self {
-        NumeratorEdge {
-            edge_type: value.edge_type,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NumeratorEdge {
-    pub edge_type: EdgeType,
-}
-
-#[derive(Debug, Clone)]
-#[allow(clippy::type_complexity)]
-pub struct Numerator {
-    pub expression: Atom,
-    pub network: Option<TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>>,
-    pub extra_info: ExtraInfo,
-    pub const_map: AHashMap<Atom, Complex<F<f64>>>,
-    pub base_eval: EvalNumerator,
-    pub positions: Option<Vec<usize>>,
-    pub eval_double: EagerNumerator<f64>,
-    pub eval_quad: EagerNumerator<f128>,
-    pub compiled: CompiledNumerator,
-}
-
-pub struct NumeratorEvaluator {
-    pub compiled: CompiledNumerator,
-    pub eval_double: EagerNumerator<f64>,
-    pub eval_quad: EagerNumerator<f128>,
-}
-
-impl Serialize for Numerator {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let expression =
-            AtomPrinter::new_with_options(self.expression.as_view(), PrintOptions::file())
-                .to_string();
-
-        let const_map: AHashMap<String, Complex<F<f64>>> = self
-            .const_map
-            .iter()
-            .map(|(k, &v)| {
-                (
-                    AtomPrinter::new_with_options(k.as_view(), PrintOptions::file()).to_string(),
-                    v,
-                )
-            })
-            .collect();
-
-        let mut state = serializer.serialize_struct("Numerator", 3)?;
-        state.serialize_field("expression", &expression)?;
-        state.serialize_field("const_map", &const_map)?;
-        state.serialize_field("extra_info", &self.extra_info)?;
-        state.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for Numerator {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct NumeratorData {
-            expression: String,
-            extra_info: ExtraInfo,
-            const_map: AHashMap<String, Complex<F<f64>>>,
-        }
-
-        let data = NumeratorData::deserialize(deserializer)?;
-
-        let expression = Atom::parse(&data.expression).map_err(serde::de::Error::custom)?;
-
-        let const_map: AHashMap<Atom, Complex<F<f64>>> = data
-            .const_map
-            .into_iter()
-            .map(|(k, v)| (Atom::parse(&k).unwrap(), v))
-            .collect();
-
-        let sym_tensor: SymbolicTensor = expression
-            .clone()
-            .try_into()
-            .map_err(serde::de::Error::custom)?;
-        let network: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom> = sym_tensor
-            .to_network()
-            .map_err(serde::de::Error::custom)?
-            .to_fully_parametric()
-            .cast();
-
-        Ok(Numerator {
-            expression,
-            network: Some(network),
-            const_map,
-            positions: None,
-            extra_info: data.extra_info,
-            base_eval: EvalNumerator::UnInit,
-            eval_double: EagerNumerator::<f64>::UnInit,
-            eval_quad: EagerNumerator::<f128>::UnInit,
-            compiled: CompiledNumerator::UnInit,
-        })
-    }
-}
 pub type AtomStructure = SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>;
 
 pub trait Evaluate<T: FloatLike> {
@@ -295,10 +111,6 @@ pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
     ) -> Vec<Complex<F<T>>>;
 }
 
-// pub trait Compile<T: FloatLike> {
-//     fn compile(&mut self, emr: &[FourMomentum<F<T>>]) -> Result<Complex<F<T>>>;
-// }
-
 pub struct RepeatingIterator<T> {
     elements: Vec<T>,
     positions: std::vec::IntoIter<usize>,
@@ -311,6 +123,14 @@ pub enum RepeatingIteratorTensorOrScalar<T: HasStructure> {
 
 impl<T> RepeatingIterator<T> {
     pub fn new(positions: Vec<usize>, elements: Vec<T>) -> Self {
+        RepeatingIterator {
+            elements,
+            positions: positions.into_iter(),
+        }
+    }
+
+    pub fn new_not_repeating(elements: Vec<T>) -> Self {
+        let positions: Vec<usize> = (0..elements.len()).collect();
         RepeatingIterator {
             elements,
             positions: positions.into_iter(),
@@ -330,13 +150,6 @@ impl<T: HasStructure> From<(TensorSet<T>, Vec<usize>)> for RepeatingIteratorTens
         }
     }
 }
-
-// impl<T: Clone> Iterator for RepeatingIterator<T> {
-//     type Item = T;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         Some(self.elements[self.positions.next()?].clone())
-//     }
-// }
 
 impl<T> LendingIterator for RepeatingIterator<T> {
     type Item<'a> = &'a T where Self:'a ;
@@ -384,7 +197,24 @@ impl NumeratorEvaluateFloat for f64 {
             };
             Ok((res, pos).into())
         } else {
-            Err(eyre!("No multi-orientation evaluator for numerator"))
+            let mut oriented_params = params.to_vec();
+            let mut tensors = Vec::new();
+            let orientations = num.state.orientations.clone();
+            for o in orientations {
+                for (i, &sign) in o.iter().enumerate() {
+                    if sign {
+                        oriented_params[i] = -oriented_params[i];
+                    }
+                }
+                tensors.push(<Self as NumeratorEvaluateFloat>::evaluate_single(
+                    num,
+                    &oriented_params,
+                ));
+                oriented_params = params.to_vec();
+            }
+            Ok(RepeatingIteratorTensorOrScalar::Tensors(
+                RepeatingIterator::new_not_repeating(tensors),
+            ))
         }
     }
 
@@ -434,7 +264,24 @@ impl NumeratorEvaluateFloat for f128 {
             let res = orientation_evaluator.eval_quad.evaluate(params);
             Ok((res, pos).into())
         } else {
-            Err(eyre!("No multi-orientation evaluator for numerator"))
+            let mut oriented_params = params.to_vec();
+            let mut tensors = Vec::new();
+            let orientations = num.state.orientations.clone();
+            for o in orientations {
+                for (i, &sign) in o.iter().enumerate() {
+                    if sign {
+                        oriented_params[i] *= F(f128::from_f64(-1.0));
+                    }
+                }
+                tensors.push(<Self as NumeratorEvaluateFloat>::evaluate_single(
+                    num,
+                    &oriented_params,
+                ));
+                oriented_params = params.to_vec();
+            }
+            Ok(RepeatingIteratorTensorOrScalar::Tensors(
+                RepeatingIterator::new_not_repeating(tensors),
+            ))
         }
     }
 
@@ -446,276 +293,10 @@ impl NumeratorEvaluateFloat for f128 {
     }
 }
 
-impl Numerator {
-    pub fn substitute_model_params(&mut self, model: &Model) {
-        self.expression = model.substitute_model_params(&self.expression);
-    }
-
-    pub fn build_const_fn_map_and_split(&mut self, fn_map: &mut FunctionMap, model: &Model) {
-        let mut split_reps = vec![];
-        info!("splitting");
-        split_reps.extend(model.valued_coupling_re_im_split(fn_map));
-        split_reps.extend(model.valued_parameter_re_im_split(fn_map));
-
-        let reps = split_reps
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect_vec();
-
-        fn_map.add_constant(Atom::parse("Nc").unwrap(), 3.into());
-
-        fn_map.add_constant(Atom::parse("TR").unwrap(), Rational::from((1, 2)));
-
-        fn_map.add_constant(
-            Atom::parse("pi").unwrap(),
-            Rational::from(std::f64::consts::PI),
-        );
-
-        if let Some(net) = &mut self.network {
-            net.replace_all_multiple_repeat_mut(&reps);
-        }
-    }
-
-    #[allow(dead_code)]
-    fn replace_repeat(&mut self, lhs: Pattern, rhs: Pattern) {
-        let atom = self.expression.replace_all(&lhs, &rhs, None, None);
-        if atom != self.expression {
-            self.expression = atom;
-            self.replace_repeat(lhs, rhs);
-        }
-    }
-
-    fn replace_repeat_multiple(&mut self, reps: &[Replacement<'_>]) {
-        let atom = self.expression.replace_all_multiple(reps);
-        // info!("expanded rep");
-        if atom != self.expression {
-            // info!("applied replacement");
-            self.expression = atom;
-            self.replace_repeat_multiple(reps);
-        }
-    }
-
-    #[allow(dead_code)]
-    fn replace_repeat_multiple_atom(expr: &mut Atom, reps: &[Replacement<'_>]) {
-        let atom = expr.replace_all_multiple(reps);
-        if atom != *expr {
-            *expr = atom;
-            Self::replace_repeat_multiple_atom(expr, reps)
-        }
-    }
-
-    fn replace_repeat_multiple_atom_expand(expr: &mut Atom, reps: &[Replacement<'_>]) {
-        let a = expr.expand();
-        let atom = a.replace_all_multiple(reps);
-        if atom != *expr {
-            *expr = atom;
-            Self::replace_repeat_multiple_atom_expand(expr, reps)
-        }
-    }
-
-    pub fn isolate_color(&mut self) {
-        let color_fn = FunctionBuilder::new(State::get_symbol("color"))
-            .add_arg(&Atom::new_num(1))
-            .finish();
-        self.expression = &self.expression * color_fn;
-        let replacements = vec![
-            (
-                Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,aind(y___,cof(i__),z___)))").unwrap(),
-            ),
-            (
-                Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,aind(y___,coaf(i__),z___)))").unwrap(),
-            ),
-            (
-                Pattern::parse("f_(x___,aind(y___,coad(i__),z___))*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,aind(y___,coad(i__),z___)))").unwrap(),
-            ),
-        ];
-        let reps: Vec<Replacement> = replacements
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect();
-
-        self.replace_repeat_multiple(&reps)
-    }
-
-    pub fn process_color_simple(&mut self) {
-        self.isolate_color();
-        let (mut coefs, rem) = self.expression.coefficient_list(State::get_symbol("color"));
-
-        let replacements = vec![
-            (Pattern::parse("color(a___)").unwrap(),Pattern::parse("a___").unwrap()),
-            (Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*id(aind(coaf(i__),cof(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(j__),z___))").unwrap()),
-            (Pattern::parse("f_(x___,aind(y___,cof(j__),z___))*id(aind(cof(i__),coaf(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(i__),z___))").unwrap()),
-            (Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*id(aind(cof(j__),coaf(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coaf(j__),z___))").unwrap()),
-            (Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*id(aind(coaf(j__),cof(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coaf(j__),z___))").unwrap()),
-            (Pattern::parse("f_(x___,aind(y___,coad(i__),z___))*id(aind(coad(j__),coad(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coad(j__),z___))").unwrap()),
-            (
-                Pattern::parse("id(aind(coaf(3,a_),cof(3,a_)))").unwrap(),
-                Pattern::parse("Nc").unwrap(),
-            ),
-            (
-                Pattern::parse("id(aind(cof(3,a_),coaf(3,a_)))").unwrap(),
-                Pattern::parse("Nc").unwrap(),
-            ),
-            (
-                Pattern::parse("id(aind(coad(8,a_),coad(8,a_)))").unwrap(),
-                Pattern::parse("Nc*Nc -1").unwrap(),
-            ),
-            (
-                Pattern::parse("T(aind(coad(8,b_),cof(3,a_),coaf(3,a_)))").unwrap(),
-                Pattern::parse("0").unwrap(),
-            ),
-            (
-                Pattern::parse("T(aind(coad(8,c_),cof(3,a_),coaf(3,b_)))T(aind(coad(8,d_),cof(3,b_),coaf(3,a_)))").unwrap(),
-                Pattern::parse("TR* id(aind(coad(8,c_),coad(8,d_)))").unwrap(),
-            ),
-            (
-                Pattern::parse("T(aind(coad(8,g_),cof(3,a_),coaf(3,b_)))*T(aind(coad(8,g_),cof(3,c_),coaf(3,d_)))").unwrap(),
-                Pattern::parse("TR* (id(aind(cof(3,a_),coaf(3,d_)))* id(aind(cof(3,c_),coaf(3,b_)))-1/Nc id(aind(cof(3,a_),coaf(3,b_)))* id(aind(cof(3,c_),coaf(3,d_))))").unwrap(),
-            )
-        ];
-
-        let reps: Vec<Replacement> = replacements
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect();
-
-        let mut atom = Atom::new_num(0);
-        for (key, coef) in coefs.iter_mut() {
-            Self::replace_repeat_multiple_atom_expand(key, &reps);
-
-            atom = atom + coef.factor() * key.factor();
-            // println!("coef {i}:{}\n", coef.factor());
-        }
-        atom = atom + rem;
-        self.expression = atom;
-
-        // println!("rem:{}", rem);
-
-        // self.replace_repeat_multiple(&reps);
-    }
-
-    #[allow(dead_code)]
-    fn process_color(&mut self) {
-        let idlhs = Pattern::parse("T(aind(y___,a_,z___))*id(aind(a_,b_))").unwrap();
-
-        let idrhs = Pattern::parse("T(aind(y___,b_,z___))").unwrap();
-
-        self.replace_repeat(idlhs, idrhs);
-
-        // // T(a,...,i,j)T(b,...,j,k) = T(a,...,b,...,i,k)
-        // let contractfundlhs = Pattern::parse("T(aind(y___,i_,j_))*T(aind(z___,j_,k_))").unwrap();
-
-        // let contractfundrhs = Pattern::parse("T(aind(y___,z___,i_,k_))").unwrap();
-
-        // self.replace_repeat(contractfundlhs, contractfundrhs);
-
-        // //T(a,x,b,i,j)T(c,x,d,k,l) = 1/2(T(a,d,i,l)T(c,b,k,j)
-        // //-1/Nc T(a,b,i,j)T(c,d,k,l))
-        // let contractadjlhs =
-        //     Pattern::parse("T(aind(a___,x__,b___,i_,j_))T(aind(c___,x__,d___,k_,l_))").unwrap();
-
-        // let contractadjrhs =
-        //     Pattern::parse("1/2(T(aind(a___,d___,i_,l_))T(aind(c___,b___,k_,j_))-1/Nc T(aind(a___,b___,i_,j_))T(aind(c___,d___,k_,l_)))").unwrap();
-
-        // self.replace_repeat(contractadjlhs, contractadjrhs);
-
-        // //T(a,b,c,...,i,i) = Tr(a,b,c,...)
-        // let tracefundlhs = Pattern::parse("T(aind(a___,i_,i_)").unwrap();
-
-        // let tracefundrhs = Pattern::parse("Tr(a___)").unwrap();
-
-        // self.replace_repeat(tracefundlhs, tracefundrhs);
-
-        // //T(a,x,b,x,c,i,j) = 1/2(T(a,c,i,j)Tr(b)-1/Nc T(a,b,c,i,j))
-
-        // let traceadjlhs = Pattern::parse("T(a_,x_,b_,x_,c_,i_,j_)").unwrap();
-
-        // let traceadjrhs =
-        //     Pattern::parse("1/2(T(a_,c_,i_,j_)Tr(b_)-1/Nc T(aind(a_,b_,c_,i_,j_)))").unwrap();
-
-        // self.replace_repeat(traceadjlhs, traceadjrhs);
-    }
-
-    // pub fn generate(graph: &mut BareGraph, orientations: Vec<Vec<bool>>) -> Self {
-    //     debug!("generating numerator for graph: {}", graph.name);
-
-    //     let vatoms: Vec<Atom> = graph
-    //         .vertices
-    //         .iter()
-    //         .flat_map(|v| v.contracted_vertex_rule(graph))
-    //         .collect();
-
-    //     let mut eatoms: Vec<Atom> = vec![];
-    //     let mut shift = 0;
-    //     for e in &graph.edges {
-    //         let (n, i) = e.numerator(graph);
-    //         eatoms.push(n);
-    //         shift += i;
-    //         graph.shifts.0 += shift;
-    //     }
-    //     let mut builder = Atom::new_num(1);
-
-    //     for v in &vatoms {
-    //         builder = builder * v;
-    //     }
-
-    //     for e in &eatoms {
-    //         builder = builder * e;
-    //     }
-
-    //     let i = Atom::new_var(State::I);
-    //     let a = Atom::new_var(State::get_symbol("a_"));
-    //     let b = Atom::new_var(State::get_symbol("b_"));
-
-    //     let complex = FunctionBuilder::new(State::get_symbol("complex"))
-    //         .add_arg(&a)
-    //         .add_arg(&b)
-    //         .finish();
-
-    //     builder = complex.into_pattern().replace_all(
-    //         builder.as_view(),
-    //         &(&a + &b * &i).into_pattern(),
-    //         None,
-    //         None,
-    //     );
-
-    //     let expression = builder.clone();
-
-    //     Numerator {
-    //         expression,
-    //         network: None,
-    //         positions: None,
-    //         const_map: AHashMap::new(),
-    //         base_eval: EvalNumerator::UnInit,
-    //         eval_double: EagerNumerator::<f64>::UnInit,
-    //         eval_quad: EagerNumerator::<f128>::UnInit,
-    //         compiled: CompiledNumerator::UnInit,
-    //         extra_info: ExtraInfo {
-    //             orientations,
-    //             edges: graph.edges.iter().map(NumeratorEdge::from).collect(),
-    //             graph_name: graph.name.clone().into(),
-    //         },
-    //     }
-    // }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Num<State> {
     pub state: State,
 }
-
-// impl<'de, State: NumeratorState> Deserialize<'de> for Num<State> {
-//     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         let state = State::deserialize(deserializer)?;
-//         Ok(Num { state })
-//     }
-// }
 
 impl<S: NumeratorState> Num<S> {
     pub fn export(&self) -> String {
@@ -1508,12 +1089,14 @@ impl Num<Contracted> {
                 state: Evaluators {
                     orientated: Some(single.orientated(model, graph, extra_info, export_settings)),
                     single,
+                    orientations: extra_info.orientations.clone(),
                 },
             },
             _ => Num {
                 state: Evaluators {
                     orientated: None,
                     single,
+                    orientations: extra_info.orientations.clone(),
                 },
             },
         }
@@ -1842,6 +1425,7 @@ pub struct Evaluators {
     orientated: Option<EvaluatorOrientations>,
     #[bincode(with_serde)]
     single: EvaluatorSingle,
+    orientations: Vec<Vec<bool>>,
 }
 
 impl TryFrom<PythonState> for Evaluators {

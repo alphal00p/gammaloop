@@ -14,7 +14,7 @@ use crate::graph::{
 use crate::model::Model;
 use crate::momentum::{FourMomentum, Helicity, ThreeMomentum};
 use crate::numerator::{
-    ContractionSettings, EvaluatorOptions, Evaluators, Num, Numerator, NumeratorCompileOptions,
+    ContractionSettings, EvaluatorOptions, Evaluators, Num, NumeratorCompileOptions,
     NumeratorEvaluatorOptions, NumeratorState, PythonState, UnInit,
 };
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
