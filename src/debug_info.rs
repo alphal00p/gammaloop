@@ -1,4 +1,5 @@
 use std::{
+    collections::hash_map::Entry::Vacant,
     ffi::OsStr,
     fs::{create_dir_all, File, OpenOptions},
     io::Write,
@@ -25,14 +26,12 @@ pub enum EvalState {
 }
 
 impl EvalState {
-    fn to_file_path(&self) -> PathBuf {
+    fn as_file_path(&self) -> PathBuf {
         match self {
             Self::General => PathBuf::from("general.jsonl"),
-            Self::PrecRot((rotation_method, prec)) => PathBuf::from(format!(
-                "{}_{}.jsonl",
-                rotation_method.to_str(),
-                prec.to_string()
-            )),
+            Self::PrecRot((rotation_method, prec)) => {
+                PathBuf::from(format!("{}_{}.jsonl", rotation_method.as_str(), prec,))
+            }
         }
     }
 }
@@ -55,18 +54,30 @@ impl DebugLogger {
     }
 
     #[cold]
-    pub fn new(&self, path: &PathBuf) -> Result<(), Report> {
-        self.logger.lock().unwrap().new(path)
+    pub fn new_log(&self, path: &PathBuf) {
+        self.logger
+            .lock()
+            .unwrap()
+            .new_log(path)
+            .expect("failed to create log")
     }
 
     #[cold]
-    pub fn write<T: Serialize>(&self, msg: &str, data: &T) -> Result<(), Report> {
-        self.logger.lock().unwrap().write(msg, data)
+    pub fn write<T: Serialize>(&self, msg: &str, data: &T) {
+        self.logger
+            .lock()
+            .unwrap()
+            .write(msg, data)
+            .expect("failed to write log")
     }
 
     #[cold]
-    pub fn set_state(&self, state: EvalState) -> Result<(), Report> {
-        self.logger.lock().unwrap().set_state(state)
+    pub fn set_state(&self, state: EvalState) {
+        self.logger
+            .lock()
+            .unwrap()
+            .set_state(state)
+            .expect("failed to change state")
     }
 }
 
@@ -77,14 +88,14 @@ struct LogImpl {
 }
 
 impl LogImpl {
-    fn new(&mut self, path: &PathBuf) -> Result<(), Report> {
+    fn new_log(&mut self, path: &PathBuf) -> Result<(), Report> {
         self.files.clear();
         self.current = EvalState::General;
         self.path = path.clone();
 
         let extension = path.extension().and_then(OsStr::to_str).map_or_else(
             || Err(eyre!("could not determine extension, is it a .glog?")),
-            |s| Ok(s),
+            Ok,
         )?;
 
         assert_eq!(extension, "glog");
@@ -105,10 +116,8 @@ impl LogImpl {
 
     fn set_state(&mut self, state: EvalState) -> Result<(), Report> {
         self.current = state;
-        if self.files.contains_key(&state) {
-            Ok(())
-        } else {
-            let path = self.path.join(state.to_file_path());
+        if let Vacant(e) = self.files.entry(state) {
+            let path = self.path.join(state.as_file_path());
 
             let file = OpenOptions::new()
                 .create(true)
@@ -116,8 +125,10 @@ impl LogImpl {
                 .truncate(true)
                 .open(path)?;
 
-            self.files.insert(state, file);
+            e.insert(file);
 
+            Ok(())
+        } else {
             Ok(())
         }
     }

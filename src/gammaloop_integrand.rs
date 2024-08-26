@@ -552,7 +552,7 @@ impl HasIntegrand for GammaLoopIntegrand {
         max_eval: F<f64>,
     ) -> EvaluationResult {
         if self.settings.general.debug > 0 {
-            DEBUG_LOGGER.new(&PathBuf::from("log.glog")).unwrap();
+            DEBUG_LOGGER.new_log(&PathBuf::from("log.glog"));
             DEBUG_LOGGER.write("havana_sample", sample);
         }
 
@@ -666,7 +666,7 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!("{}", "parametrisation result".blue());
 
             for (sample, rotation) in samples.iter() {
-                let rotation_string = rotation.to_str();
+                let rotation_string = rotation.as_str();
 
                 println!("\trotation: {}", rotation_string);
                 println!("{}", "\tloop momenta: ".yellow());

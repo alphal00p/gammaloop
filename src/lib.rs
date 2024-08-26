@@ -39,6 +39,7 @@ use momentum::FourMomentum;
 use momentum::ThreeMomentum;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
+use std::fmt::Display;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
 use symbolica::evaluate::CompileOptions;
@@ -359,7 +360,7 @@ impl RotationMethod {
         }
     }
 
-    fn to_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         match self {
             Self::Pi2X => "x",
             Self::Pi2Y => "y",
@@ -379,13 +380,19 @@ pub enum Precision {
 }
 
 impl Precision {
-    fn to_string(&self) -> String {
+    fn as_string(self) -> String {
         match self {
             Self::Single => "f32".to_owned(),
             Self::Double => "f64".to_owned(),
             Self::Quad => "f128".to_owned(),
             Self::Arb(prec) => format!("arb_prec_{}", prec),
         }
+    }
+}
+
+impl Display for Precision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_string())
     }
 }
 
