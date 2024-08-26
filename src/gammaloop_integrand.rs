@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
-use crate::debug_info::DEBUG_LOGGER;
+use crate::debug_info::{EvalState, DEBUG_LOGGER};
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification, SerializableGraph};
 use crate::integrands::{HasIntegrand, Integrand};
@@ -646,6 +646,10 @@ impl HasIntegrand for GammaLoopIntegrand {
             }
         }
 
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.set_state(EvalState::General);
+        }
+
         let (res, stable, precision, duration) = results_of_stability_levels.last().unwrap_or_else(
             || panic!("No evaluation was done, perhaps the final stability level has a non-negative escalation threshold?")
         );
@@ -756,6 +760,13 @@ impl GammaLoopIntegrand {
                 GraphIntegrands::Amplitude(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
+                        if self.settings.general.debug > 0 {
+                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                *rotate_overlap_centers,
+                                precision,
+                            )));
+                        }
+
                         evaluate(
                             graph_integrands,
                             sample,
@@ -767,6 +778,12 @@ impl GammaLoopIntegrand {
                 GraphIntegrands::CrossSection(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
+                        if self.settings.general.debug > 0 {
+                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                *rotate_overlap_centers,
+                                precision,
+                            )));
+                        }
                         evaluate(
                             graph_integrands,
                             sample,
@@ -780,6 +797,13 @@ impl GammaLoopIntegrand {
                 GraphIntegrands::Amplitude(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
+                        if self.settings.general.debug > 0 {
+                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                *rotate_overlap_centers,
+                                precision,
+                            )));
+                        }
+
                         evaluate(
                             graph_integrands,
                             &sample.higher_precision(),
@@ -792,6 +816,13 @@ impl GammaLoopIntegrand {
                 GraphIntegrands::CrossSection(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
+                        if self.settings.general.debug > 0 {
+                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                *rotate_overlap_centers,
+                                precision,
+                            )));
+                        }
+
                         evaluate(
                             graph_integrands,
                             &sample.higher_precision(),

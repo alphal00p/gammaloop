@@ -63,6 +63,11 @@ impl DebugLogger {
     pub fn write<T: Serialize>(&self, msg: &str, data: &T) -> Result<(), Report> {
         self.logger.lock().unwrap().write(msg, data)
     }
+
+    #[cold]
+    pub fn set_state(&self, state: EvalState) -> Result<(), Report> {
+        self.logger.lock().unwrap().set_state(state)
+    }
 }
 
 struct LogImpl {
