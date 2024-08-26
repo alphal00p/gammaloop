@@ -407,6 +407,10 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
     rotation_for_overlap: RotationMethod,
     settings: &Settings,
 ) -> Complex<F<T>> {
+    if settings.general.debug > 0 {
+        DEBUG_LOGGER.write("momenta_sample", sample.get_default_sample());
+    }
+
     let zero = sample.zero();
     match sample {
         GammaLoopSample::Default(sample) => graph_integrands
@@ -601,12 +605,6 @@ impl HasIntegrand for GammaLoopIntegrand {
             .into_iter()
             .chain(rotated_sample_points)
             .collect_vec();
-
-        if self.settings.general.debug > 0 {
-            samples.iter().for_each(|(sample, _)| {
-                DEBUG_LOGGER.write("momenta_sample", sample.get_default_sample());
-            });
-        }
 
         // 1 / (2 pi )^L
         let prefactor = F(self.compute_2pi_factor().inv());
