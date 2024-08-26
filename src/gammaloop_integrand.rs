@@ -551,7 +551,7 @@ impl HasIntegrand for GammaLoopIntegrand {
         max_eval: F<f64>,
     ) -> EvaluationResult {
         if self.settings.general.debug > 0 {
-            DEBUG_LOGGER.set(&PathBuf::from("log.jsonl")).unwrap();
+            DEBUG_LOGGER.new(&PathBuf::from("log.glog")).unwrap();
             DEBUG_LOGGER.write("havana_sample", sample);
         }
 
@@ -621,11 +621,6 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         // iterate over the stability levels, break if the point is stable
         for stability_level in stability_iterator {
-            if self.settings.general.debug > 0 {
-                let stab_level_str = serde_json::to_string(&stability_level.precision).unwrap();
-                DEBUG_LOGGER.write("prec_level", &stability_level.precision);
-            }
-
             // evaluate the integrand at the current stability level
             let (results, duration) = self.evaluate_at_prec(&samples, stability_level.precision);
             let results_scaled = results

@@ -1,47 +1,138 @@
 use std::{
-    fs::{File, OpenOptions},
+    ffi::OsStr,
+    fs::{create_dir_all, File, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::OnceLock,
+    sync::{LazyLock, Mutex},
     time::SystemTime,
 };
 
+use ahash::HashMap;
+use color_eyre::Report;
+use eyre::eyre;
 use serde::Serialize;
+
+use crate::{Precision, RotationMethod};
 
 pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 
+/// This could also include channel_id or graph_id if the user is doing the explicit sum over lmb channels/graphs, but I don't
+/// support it for now, as it is not used much especially not when debugging.
+#[derive(Hash, Copy, Clone, Debug, Eq, PartialEq)]
+pub enum EvalState {
+    General,
+    PrecRot((RotationMethod, Precision)),
+}
+
+impl EvalState {
+    fn to_file_path(&self) -> PathBuf {
+        match self {
+            Self::General => PathBuf::from("general.jsonl"),
+            Self::PrecRot((rotation_method, prec)) => PathBuf::from(format!(
+                "{}_{}.jsonl",
+                rotation_method.to_str(),
+                prec.to_string()
+            )),
+        }
+    }
+}
+
 pub struct DebugLogger {
-    logger: OnceLock<File>,
+    logger: LazyLock<Mutex<LogImpl>>,
 }
 
 impl DebugLogger {
     const fn init() -> Self {
         Self {
-            logger: OnceLock::new(),
+            logger: LazyLock::new(|| {
+                Mutex::new(LogImpl {
+                    files: HashMap::default(),
+                    current: EvalState::General,
+                    path: PathBuf::new(),
+                })
+            }),
         }
     }
 
-    pub fn set(&self, path: &PathBuf) -> Result<(), File> {
+    #[cold]
+    pub fn new(&self, path: &PathBuf) -> Result<(), Report> {
+        self.logger.lock().unwrap().new(path)
+    }
+
+    #[cold]
+    pub fn write<T: Serialize>(&self, msg: &str, data: &T) -> Result<(), Report> {
+        self.logger.lock().unwrap().write(msg, data)
+    }
+}
+
+struct LogImpl {
+    files: HashMap<EvalState, File>,
+    current: EvalState,
+    path: PathBuf,
+}
+
+impl LogImpl {
+    fn new(&mut self, path: &PathBuf) -> Result<(), Report> {
+        self.files.clear();
+        self.current = EvalState::General;
+        self.path = path.clone();
+
+        let extension = path.extension().and_then(OsStr::to_str).map_or_else(
+            || Err(eyre!("could not determine extension, is it a .glog?")),
+            |s| Ok(s),
+        )?;
+
+        assert_eq!(extension, "glog");
+
+        create_dir_all(path)?;
+        let general_path = path.join("general.jsonl");
+
         let file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
-            .open(path)
-            .unwrap();
+            .open(general_path)?;
 
-        self.logger.set(file)
+        self.files.insert(EvalState::General, file);
+
+        Ok(())
     }
 
-    #[cold]
-    pub fn write<T: Serialize>(&self, msg: &str, data: &T) {
+    fn set_state(&mut self, state: EvalState) -> Result<(), Report> {
+        self.current = state;
+        if self.files.contains_key(&state) {
+            Ok(())
+        } else {
+            let path = self.path.join(state.to_file_path());
+
+            let file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(path)?;
+
+            self.files.insert(state, file);
+
+            Ok(())
+        }
+    }
+
+    fn write<T: Serialize>(&mut self, msg: &str, data: &T) -> Result<(), Report> {
         let log_message = LogMessage {
             msg,
             data,
             ts: SystemTime::now(),
         };
 
-        let json_log_message = serde_json::to_string(&log_message).unwrap();
-        writeln!(self.logger.get().unwrap(), "{}", json_log_message).unwrap();
+        let json_log_message = serde_json::to_string(&log_message)?;
+
+        writeln!(
+            self.files.get(&self.current).unwrap(),
+            "{}",
+            json_log_message
+        )?;
+
+        Ok(())
     }
 }
 

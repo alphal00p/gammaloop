@@ -334,7 +334,7 @@ impl StabilityLevelSetting {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Hash, Eq, PartialEq)]
 pub enum RotationMethod {
     #[serde(rename = "x")]
     #[default]
@@ -358,15 +358,35 @@ impl RotationMethod {
             RotationMethod::None => |vector: &ThreeMomentum<F<T>>| vector.clone(),
         }
     }
+
+    fn to_str(&self) -> &str {
+        match self {
+            Self::Pi2X => "x",
+            Self::Pi2Y => "y",
+            Self::Pi2Z => "z",
+            Self::None => "none",
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Hash, Eq)]
 pub enum Precision {
     Single, // this might be useful for eventual deployment on gpu
     #[default]
     Double,
     Quad,
     Arb(usize),
+}
+
+impl Precision {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Single => "f32".to_owned(),
+            Self::Double => "f64".to_owned(),
+            Self::Quad => "f128".to_owned(),
+            Self::Arb(prec) => format!("arb_prec_{}", prec),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

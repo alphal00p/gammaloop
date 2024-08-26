@@ -214,7 +214,7 @@ impl CounterTerm {
                     .collect_vec();
 
                 if settings.general.debug > 0 {
-                    DEBUG_LOGGER.write("rotated_center", &rotated_center)
+                    DEBUG_LOGGER.write("rotated_center", &rotated_center);
                 }
 
                 rotated_center
