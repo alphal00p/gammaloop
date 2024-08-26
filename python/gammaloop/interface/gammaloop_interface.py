@@ -1354,7 +1354,10 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No log file to display, please provide a file using -lf")
 
-        debug_dict = debug_display.build_debug_dict(args.log_file)
+        debug_dict = debug_display.build_general_debug_dict(args.log_file)
+        debug_display.display_general(debug_dict)
+        stop
+
         debug_display.display_default(debug_dict)
 
         if args.subtraction:

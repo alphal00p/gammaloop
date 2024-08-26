@@ -1,33 +1,37 @@
 from logging import LogRecord, log
 from typing import Dict, Any
 import json
-from gammaloop.misc.common import logger
+from gammaloop.misc.common import logger, pjoin
+from pathlib import Path
 
 
-def build_debug_dict(log_file: str) -> Dict[str, Any]:
-    log = open(log_file, 'r')
-    res = {}
+def build_general_debug_dict(log_file: str) -> Dict[str, Any]:
+    general_log_path = pjoin(log_file, "general.jsonl")
+    log = open(general_log_path, 'r')
+    general_log = {}
 
     # certain messaages may appear multiple times due to the stability check or multichanneling,
     # this ensures we keep them all
     for line in log.readlines():
         json_line = json.loads(line)
         msg = json_line['msg']
-        if msg in res:
-            res[msg].append(json_line['data'])
-        else:
-            res[msg] = [json_line['data']]
+        general_log[msg] = json_line['data']
+    return general_log
 
-    return res
+
+def display_general(general_debug_dict: Dict[str, Any]) -> None:
+    display_havana_sample(general_debug_dict)
+    display_jacobian(general_debug_dict)
+    display_final_result(general_debug_dict)
 
 
 # I assume one sample from the integrator per point
-def display_havana_sample(debug_dict: Dict[str, Any]) -> None:
-    if 'havana_sample' not in debug_dict:
+def display_havana_sample(general_debug_dict: Dict[str, Any]) -> None:
+    if 'havana_sample' not in general_debug_dict:
         logger.warn("no havana sample in debug info")
         return
 
-    sample = debug_dict['havana_sample'][0]
+    sample = general_debug_dict['havana_sample']
     logger.info("havana sample: ")
     logger.info(sample)
 
@@ -52,12 +56,12 @@ def display_momenta_samples(debug_dict: Dict[str, Any]) -> None:
         logger.info("")
 
 
-def display_final_result(debug_dict: Dict[str, Any]) -> None:
-    if 'final_result' not in debug_dict:
+def display_final_result(general_debug_dict: Dict[str, Any]) -> None:
+    if 'final_result' not in general_debug_dict:
         logger.warn("no final result in debug info")
         return
 
-    res = debug_dict['final_result'][0]
+    res = general_debug_dict['final_result']
     format_result = format_complex(res['re'], res['im'])
 
     logger.info("final result: {}".format(format_result))
@@ -139,13 +143,22 @@ def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
         "this printout has only been checked when the stability test is disabled")
 
     counter = 0
-    for overlap_structure in debug_dict['overlap_structure']:
+    for overlap_index, overlap_structure in enumerate(debug_dict['overlap_structure']):
         logger.info("overlap_structure: ")
         logger.info("\tesurfaces: {}".format(overlap_structure[0]))
         logger.info("\tcenter: {}".format(overlap_structure[1]))
+        logger.info("\themispherical_radius: {}".format(
+            debug_dict['hemispherical_radius'][overlap_index]))
         logger.info("")
 
         for index in range(len(overlap_structure[0])):
             esurface_subtraction_data = debug_dict["esurface_subtraction"][counter + index]
             logger.info("\t\tsubtraction: ")
             logger.info("\t\t{}".format(esurface_subtraction_data))
+
+
+def display_jacobian(general_debug_dict: Dict[str, Any]) -> None:
+    if 'jacobian' not in general_debug_dict:
+        logger.warn("no jacobian in debug info")
+
+    logger.info("jacobian: {}".format(general_debug_dict['jacobian']))
