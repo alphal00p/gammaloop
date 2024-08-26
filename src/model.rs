@@ -1,4 +1,4 @@
-use crate::momentum::{FourMomentum, Polarization, Sign, SignOrZero};
+use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::utils::{self, FloatLike, F};
 
 use ahash::{AHashMap, RandomState};
@@ -695,13 +695,14 @@ impl Particle {
         &self,
         num: usize,
         mom: &FourMomentum<F<T>>,
+        helicity: Helicity,
     ) -> Vec<(Atom, Complex<F<T>>)> {
         let mut out = vec![];
 
         match self.spin {
             2 => {
                 if self.pdg_code > 0 {
-                    let pol = self.incoming_polarization(mom);
+                    let pol = self.incoming_polarization(mom, helicity);
                     let (u1, u2, u3, u4) = (
                         pol[0].clone(),
                         pol[1].clone(),
@@ -713,7 +714,7 @@ impl Particle {
                     out.push((Atom::parse(&format!("u({num},cind(2))")).unwrap(), u3));
                     out.push((Atom::parse(&format!("u({num},cind(3))")).unwrap(), u4));
                 } else {
-                    let pol = self.incoming_polarization(mom);
+                    let pol = self.incoming_polarization(mom, helicity);
                     let (v1, v2, v3, v4) = (
                         pol[0].clone(),
                         pol[1].clone(),
@@ -727,7 +728,7 @@ impl Particle {
                 }
             }
             3 => {
-                let pol = self.incoming_polarization(mom);
+                let pol = self.incoming_polarization(mom, helicity);
                 let (e1, e2, e3, e4) = (
                     pol[0].clone(),
                     pol[1].clone(),
@@ -747,24 +748,19 @@ impl Particle {
     pub fn incoming_polarization<T: FloatLike>(
         &self,
         mom: &FourMomentum<F<T>>,
+        helicity: Helicity,
     ) -> Polarization<Complex<F<T>>> {
         let one: Complex<F<T>> = mom.temporal.value.one().into();
         match self.spin {
             1 => Polarization::scalar(one),
             2 => {
                 if self.pdg_code > 0 {
-                    mom.u(Sign::Positive)
+                    mom.u(helicity.try_into().unwrap())
                 } else {
-                    mom.v(Sign::Positive).bar()
+                    mom.v(helicity.try_into().unwrap()).bar()
                 }
             }
-            3 => {
-                if self.mass.value.is_none() {
-                    mom.pol(SignOrZero::Sign(Sign::Positive))
-                } else {
-                    mom.pol(SignOrZero::Sign(Sign::Negative))
-                }
-            }
+            3 => mom.pol(helicity),
             i => panic!("Spin {}/2 not implemented", i - 1),
         }
     }
@@ -798,24 +794,19 @@ impl Particle {
     pub fn outgoing_polarization<T: FloatLike>(
         &self,
         mom: &FourMomentum<F<T>>,
+        helicity: Helicity,
     ) -> Polarization<Complex<F<T>>> {
         let one: Complex<F<T>> = mom.temporal.value.one().into();
         match self.spin {
             1 => Polarization::scalar(one),
             2 => {
                 if self.pdg_code > 0 {
-                    mom.u(Sign::Negative).bar()
+                    mom.u(helicity.try_into().unwrap()).bar()
                 } else {
-                    mom.v(Sign::Negative)
+                    mom.v(helicity.try_into().unwrap())
                 }
             }
-            3 => {
-                if self.mass.value.is_none() {
-                    mom.pol(SignOrZero::Zero)
-                } else {
-                    mom.pol(SignOrZero::Sign(Sign::Positive))
-                }
-            }
+            3 => mom.pol(helicity),
             i => panic!("Spin {}/2 not implemented", i - 1),
         }
     }
@@ -824,13 +815,14 @@ impl Particle {
         &self,
         num: usize,
         mom: &FourMomentum<F<T>>,
+        helicity: Helicity,
     ) -> Vec<(Atom, Complex<F<T>>)> {
         let mut out = vec![];
 
         match self.spin {
             2 => {
                 if self.pdg_code > 0 {
-                    let pol = self.outgoing_polarization(mom);
+                    let pol = self.outgoing_polarization(mom, helicity);
                     let (ubar1, ubar2, ubar3, ubar4) = (
                         pol[0].clone(),
                         pol[1].clone(),
@@ -842,7 +834,7 @@ impl Particle {
                     out.push((Atom::parse(&format!("ubar({num},cind(2))")).unwrap(), ubar3));
                     out.push((Atom::parse(&format!("ubar({num},cind(3))")).unwrap(), ubar4));
                 } else {
-                    let pol = self.outgoing_polarization(mom);
+                    let pol = self.outgoing_polarization(mom, helicity);
                     let (v1, v2, v3, v4) = (
                         pol[0].clone(),
                         pol[1].clone(),
@@ -856,7 +848,7 @@ impl Particle {
                 }
             }
             3 => {
-                let pol = self.outgoing_polarization(mom);
+                let pol = self.outgoing_polarization(mom, helicity);
                 let (e1, e2, e3, e4) = (
                     pol[0].clone(),
                     pol[1].clone(),

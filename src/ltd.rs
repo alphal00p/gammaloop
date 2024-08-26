@@ -1,10 +1,10 @@
 use core::panic;
 
 use crate::{
-    graph::{BareGraph, EdgeType, Graph, LoopMomentumBasis},
-    momentum::{Energy, FourMomentum, ThreeMomentum},
+    graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
+    momentum::{Energy, FourMomentum, Signature, ThreeMomentum},
     numerator::NumeratorState,
-    utils::{compute_momentum, FloatLike, F},
+    utils::{FloatLike, F},
 };
 use bincode::{Decode, Encode};
 use itertools::Itertools;
@@ -20,13 +20,13 @@ enum ContourClosure {
 }
 
 struct CutStructureGenerator {
-    loop_line_signatures: Vec<Vec<isize>>,
+    loop_line_signatures: Vec<Signature>,
     n_loops: usize,
     n_loop_lines: usize,
 }
 
 impl CutStructureGenerator {
-    fn new(loop_line_signatures: Vec<Vec<isize>>) -> Self {
+    fn new(loop_line_signatures: Vec<Signature>) -> Self {
         let n_loops = loop_line_signatures[0].len();
         let n_loop_lines = loop_line_signatures.len();
 
@@ -113,7 +113,7 @@ impl CutStructureGenerator {
                 self.n_loops,
                 reference_signature_matrix
                     .iter()
-                    .flat_map(|row| row.iter().map(|s| *s as f64).collect_vec())
+                    .flat_map(|row| row.into_iter().map(|s| (s as i8) as f64).collect_vec())
                     .collect_vec(),
             );
 
@@ -133,12 +133,12 @@ impl CutStructureGenerator {
 
 struct SpanningTreeGenerator {
     n_loops: usize,
-    reference_signature_matrix: Vec<Vec<isize>>,
+    reference_signature_matrix: Vec<Signature>,
     basis: Vec<usize>,
 }
 
 impl SpanningTreeGenerator {
-    fn new(reference_signature_matrix: Vec<Vec<isize>>, basis: Vec<usize>) -> Self {
+    fn new(reference_signature_matrix: Vec<Signature>, basis: Vec<usize>) -> Self {
         Self {
             n_loops: reference_signature_matrix[0].len(),
             reference_signature_matrix,
@@ -217,7 +217,12 @@ impl SpanningTreeGenerator {
                 let sub_matrix = permutated_signature_matrix
                     .iter()
                     .take(r + 1)
-                    .map(|row| row.iter().take(r + 1).map(|s| *s as f64).collect_vec())
+                    .map(|row| {
+                        row.into_iter()
+                            .take(r + 1)
+                            .map(|s| (s as i8) as f64)
+                            .collect_vec()
+                    })
                     .collect_vec();
 
                 let sub_matrix = DMatrix::from_vec(r + 1, r + 1, sub_matrix.concat());
@@ -234,7 +239,7 @@ impl SpanningTreeGenerator {
                     self.n_loops,
                     &permutated_signature_matrix
                         .iter()
-                        .flat_map(|row| row.iter().map(|s| *s as f64).collect_vec())
+                        .flat_map(|row| row.into_iter().map(|s| (s as i8) as f64).collect_vec())
                         .collect_vec(),
                 );
 
@@ -410,7 +415,7 @@ impl Heaviside {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 struct LTDTerm {
     associated_lmb: Vec<(usize, f64)>,
-    signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
+    signature_of_lmb: Vec<LoopExtSignature>,
 }
 
 impl LTDTerm {
@@ -450,11 +455,8 @@ impl LTDTerm {
         for (index, edge) in graph.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && self.associated_lmb.iter().all(|(i, _)| i != index)
         }) {
-            let momentum = compute_momentum(
-                &self.signature_of_lmb[index],
-                &edge_momenta_of_associated_lmb,
-                external_moms,
-            );
+            let momentum = self.signature_of_lmb[index]
+                .compute_momentum(&edge_momenta_of_associated_lmb, external_moms);
 
             match edge.particle.mass.value {
                 Some(mass) => {
@@ -473,26 +475,6 @@ impl LTDTerm {
 
         inv_res.inv() * energy_product
     }
-
-    fn to_serializable(&self) -> SerializableLTDTerm {
-        SerializableLTDTerm {
-            associated_lmb: self.associated_lmb.clone(),
-            signature_of_lmb: self.signature_of_lmb.clone(),
-        }
-    }
-
-    fn from_serializable(serializable: SerializableLTDTerm) -> Self {
-        Self {
-            associated_lmb: serializable.associated_lmb,
-            signature_of_lmb: serializable.signature_of_lmb,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerializableLTDTerm {
-    associated_lmb: Vec<(usize, f64)>,
-    signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -533,31 +515,6 @@ impl LTDExpression {
             .reduce(|acc, e| acc + &e)
             .unwrap_or(zero.clone())
     }
-
-    pub fn to_serializable(&self) -> SerializableLTDExpression {
-        SerializableLTDExpression {
-            terms: self
-                .terms
-                .iter()
-                .map(|term| term.to_serializable())
-                .collect(),
-        }
-    }
-
-    pub fn from_serializable(serializable: SerializableLTDExpression) -> Self {
-        Self {
-            terms: serializable
-                .terms
-                .into_iter()
-                .map(LTDTerm::from_serializable)
-                .collect(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerializableLTDExpression {
-    terms: Vec<SerializableLTDTerm>,
 }
 
 pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDExpression {
@@ -571,7 +528,7 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
         .get_virtual_edges_iterator()
         .map(|(index, _e)| {
             graph.bare_graph.loop_momentum_basis.edge_signatures[index]
-                .0
+                .internal
                 .clone()
         })
         .collect_vec();
@@ -751,7 +708,11 @@ mod tests {
         let test_sigmas_1 = [1., -1., 1.];
         let test_sigmas_2 = [-1., 1., -1.];
 
-        let reference_signature_matrix = vec![vec![-1, 0, 1], vec![0, 1, 0], vec![1, 0, 0]];
+        let reference_signature_matrix = vec![
+            vec![-1, 0, 1].into(),
+            vec![0, 1, 0].into(),
+            vec![1, 0, 0].into(),
+        ];
         let spanning_tree_generator = SpanningTreeGenerator::new(reference_signature_matrix, basis);
 
         let residue_generators = spanning_tree_generator.get_residue_generators();
@@ -784,12 +745,12 @@ mod tests {
     #[test]
     fn test_ltd() {
         let loop_line_signatures = vec![
-            vec![1, 0, 0],
-            vec![0, 1, 0],
-            vec![0, 0, 1],
-            vec![1, -1, 0],
-            vec![-1, 0, 1],
-            vec![0, 1, -1],
+            vec![1, 0, 0].into(),
+            vec![0, 1, 0].into(),
+            vec![0, 0, 1].into(),
+            vec![1, -1, 0].into(),
+            vec![-1, 0, 1].into(),
+            vec![0, 1, -1].into(),
         ];
 
         let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);

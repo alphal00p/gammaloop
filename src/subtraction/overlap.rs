@@ -12,6 +12,7 @@ use spenso::complex::Complex;
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
+use crate::graph::LoopExtSignature;
 use crate::graph::LoopMomentumBasis;
 use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
@@ -31,10 +32,9 @@ pub struct OverlapStructure {
 
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {
-    propagator_id: usize,            // index into the graph's edges
-    mass_pointer: Option<usize>,     // pointer to value of unique mass
-    loop_signature: &'a [isize],     // loop signature of the propagator
-    external_signature: &'a [isize], // external signature of the propagator
+    propagator_id: usize,        // index into the graph's edges
+    mass_pointer: Option<usize>, // pointer to value of unique mass
+    signature: &'a LoopExtSignature,
 }
 
 impl<'a> PropagatorConstraint<'a> {
@@ -102,13 +102,12 @@ fn construct_solver(
                     }
                 });
 
-                let (loop_signature, external_signature) = &lmb.edge_signatures[edge_id];
+                let signature = &lmb.edge_signatures[edge_id];
 
                 let propagator_constraint = PropagatorConstraint {
                     propagator_id,
                     mass_pointer,
-                    loop_signature,
-                    external_signature,
+                    signature,
                 };
 
                 propagator_constraints.push(propagator_constraint);
@@ -180,22 +179,22 @@ fn construct_solver(
         vertical_offset += 1;
 
         let spatial_shift =
-            compute_shift_part(propagator_constraint.external_signature, external_momenta);
+            compute_shift_part(&propagator_constraint.signature.external, external_momenta);
 
         b_vector[vertical_offset] = spatial_shift.spatial.px.0;
         b_vector[vertical_offset + 1] = spatial_shift.spatial.py.0;
         b_vector[vertical_offset + 2] = spatial_shift.spatial.pz.0;
 
         for (loop_index, individual_loop_signature) in
-            propagator_constraint.loop_signature.iter().enumerate()
+            propagator_constraint.signature.internal.iter().enumerate()
         {
-            if *individual_loop_signature != 0 {
+            if individual_loop_signature.is_sign() {
                 a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index] =
-                    -*individual_loop_signature as f64;
+                    -(*individual_loop_signature as i8) as f64;
                 a_matrix[vertical_offset + 1][loop_momentum_offset + 3 * loop_index + 1] =
-                    -*individual_loop_signature as f64;
+                    -(*individual_loop_signature as i8) as f64;
                 a_matrix[vertical_offset + 2][loop_momentum_offset + 3 * loop_index + 2] =
-                    -*individual_loop_signature as f64;
+                    -(*individual_loop_signature as i8) as f64;
             }
         }
 
@@ -638,7 +637,7 @@ mod tests {
             cff_graph::VertexSet,
             esurface::{Esurface, EsurfaceID},
         },
-        graph::LoopMomentumBasis,
+        graph::{LoopExtSignature, LoopMomentumBasis},
     };
 
     struct HelperBoxStructure {
@@ -667,14 +666,14 @@ mod tests {
 
             let box_basis = vec![4];
             let box_signatures = vec![
-                (vec![0], vec![1, 0, 0]),
-                (vec![0], vec![0, 1, 0]),
-                (vec![0], vec![0, 0, 1]),
-                (vec![0], vec![-1, -1, -1]),
-                (vec![1], vec![0, 0, 0]),
-                (vec![1], vec![1, 0, 0]),
-                (vec![1], vec![1, 1, 0]),
-                (vec![1], vec![1, 1, 1]),
+                (vec![0], vec![1, 0, 0]).into(),
+                (vec![0], vec![0, 1, 0]).into(),
+                (vec![0], vec![0, 0, 1]).into(),
+                (vec![0], vec![-1, -1, -1]).into(),
+                (vec![1], vec![0, 0, 0]).into(),
+                (vec![1], vec![1, 0, 0]).into(),
+                (vec![1], vec![1, 1, 0]).into(),
+                (vec![1], vec![1, 1, 1]).into(),
             ];
 
             let box_lmb = LoopMomentumBasis {
@@ -749,11 +748,26 @@ mod tests {
             )];
             let banana_basis = vec![2, 3];
             let banana_edge_sigs = vec![
-                (vec![0, 0], vec![1]),
-                (vec![0, 0], vec![-1]),
-                (vec![1, 0], vec![0]),
-                (vec![0, 1], vec![0]),
-                (vec![1, 1], vec![-1]),
+                LoopExtSignature {
+                    internal: vec![0, 0].into(),
+                    external: vec![1].into(),
+                },
+                LoopExtSignature {
+                    internal: vec![0, 0].into(),
+                    external: vec![-1].into(),
+                },
+                LoopExtSignature {
+                    internal: vec![1, 0].into(),
+                    external: vec![0].into(),
+                },
+                LoopExtSignature {
+                    internal: vec![0, 1].into(),
+                    external: vec![0].into(),
+                },
+                LoopExtSignature {
+                    internal: vec![1, 1].into(),
+                    external: vec![-1].into(),
+                },
             ];
 
             let banana_lmb = LoopMomentumBasis {

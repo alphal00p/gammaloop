@@ -6,10 +6,10 @@ use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
-use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification};
+use crate::graph::{BareGraph, EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
-use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::momentum::{FourMomentum, Helicity, Polarization, ThreeMomentum};
 use crate::numerator::Evaluators;
 use crate::subtraction::static_counterterm::CounterTerm;
 use crate::utils::{
@@ -844,13 +844,13 @@ impl GammaLoopIntegrand {
         match &self.settings.sampling {
             SamplingSettings::Default => {
                 let xs = unwrap_cont_sample(sample_point);
-                Ok(GammaLoopSample::Default(self.default_parametrize(xs)))
+                Ok(GammaLoopSample::Default(self.default_parametrize(xs, 0)))
             }
             SamplingSettings::MultiChanneling(multichanneling_settings) => {
                 let xs = unwrap_cont_sample(sample_point);
                 Ok(GammaLoopSample::MultiChanneling {
                     alpha: multichanneling_settings.alpha,
-                    sample: self.default_parametrize(xs),
+                    sample: self.default_parametrize(xs, 0),
                 })
             }
             SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
@@ -859,7 +859,9 @@ impl GammaLoopIntegrand {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
                         Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
-                            sample: DiscreteGraphSample::Default(self.default_parametrize(xs)),
+                            sample: DiscreteGraphSample::Default(
+                                self.default_parametrize(xs, graph_id),
+                            ),
                         })
                     }
                     DiscreteGraphSamplingSettings::MultiChanneling(multichanneling_settings) => {
@@ -868,7 +870,7 @@ impl GammaLoopIntegrand {
                             graph_id,
                             sample: DiscreteGraphSample::MultiChanneling {
                                 alpha: multichanneling_settings.alpha,
-                                sample: self.default_parametrize(xs),
+                                sample: self.default_parametrize(xs, graph_id),
                             },
                         })
                     }
@@ -900,7 +902,7 @@ impl GammaLoopIntegrand {
 
                                 let shift = utils::compute_shift_part(
                                     &graph.bare_graph.loop_momentum_basis.edge_signatures[edge_id]
-                                        .1,
+                                        .external,
                                     &external_moms,
                                 );
 
@@ -934,12 +936,15 @@ impl GammaLoopIntegrand {
                             .map(Into::<ThreeMomentum<F<f64>>>::into)
                             .collect_vec();
 
-                        let default_sample = DefaultSample {
+                        let helicities = self.settings.kinematics.externals.get_helicities();
+
+                        let default_sample = DefaultSample::new(
                             loop_moms,
                             external_moms,
-                            jacobian: F(sampling_result.jacobian) * pdf,
-                        };
-
+                            F(sampling_result.jacobian) * pdf,
+                            helicities,
+                            &graph.bare_graph,
+                        );
                         Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::Tropical(default_sample),
@@ -955,7 +960,7 @@ impl GammaLoopIntegrand {
                             sample: DiscreteGraphSample::DiscreteMultiChanneling {
                                 alpha: multichanneling_settings.alpha,
                                 channel_id,
-                                sample: self.default_parametrize(xs),
+                                sample: self.default_parametrize(xs, graph_id),
                             },
                         })
                     }
@@ -966,8 +971,10 @@ impl GammaLoopIntegrand {
 
     /// Default parametrize is basically everything except tropical sampling.
     #[inline]
-    fn default_parametrize(&self, xs: &[F<f64>]) -> DefaultSample<f64> {
+    fn default_parametrize(&self, xs: &[F<f64>], graph_id: usize) -> DefaultSample<f64> {
         let (external_moms, pdf) = self.settings.kinematics.externals.get_externals(xs);
+
+        let helicities = self.settings.kinematics.externals.get_helicities();
         let (loop_moms_vec, param_jacobian) = global_parameterize(
             xs,
             self.settings.kinematics.e_cm * self.settings.kinematics.e_cm,
@@ -982,11 +989,18 @@ impl GammaLoopIntegrand {
 
         let jacobian = param_jacobian * pdf;
 
-        DefaultSample {
+        let graph = match &self.graph_integrands {
+            GraphIntegrands::Amplitude(graphs) => &graphs[graph_id].graph,
+            GraphIntegrands::CrossSection(_graphs) => unimplemented!(), //,
+        };
+
+        DefaultSample::new(
             loop_moms,
             external_moms,
             jacobian,
-        }
+            helicities,
+            &graph.bare_graph,
+        )
     }
 
     /// Compute the average and check the accuracy of the result
@@ -1097,7 +1111,7 @@ impl GammaLoopIntegrand {
     ) -> Self {
         #[allow(irrefutable_let_patterns)]
         // for amplitudes we can construct counterterms beforehand if external momenta are constant
-        if let Externals::Constant(_) = settings.kinematics.externals {
+        if let Externals::Constant { .. } = settings.kinematics.externals {
             let dummy = [];
             let (external_moms, _) = settings.kinematics.externals.get_externals(&dummy);
 
@@ -1310,10 +1324,47 @@ impl<T: FloatLike> GammaLoopSample<T> {
 pub struct DefaultSample<T: FloatLike> {
     pub loop_moms: Vec<ThreeMomentum<F<T>>>,
     pub external_moms: Vec<FourMomentum<F<T>>>,
+    pub polarizations: Vec<Polarization<Complex<F<T>>>>,
     pub jacobian: F<f64>,
 }
 
 impl<T: FloatLike> DefaultSample<T> {
+    pub fn new(
+        loop_moms: Vec<ThreeMomentum<F<T>>>,
+        external_moms: Vec<FourMomentum<F<T>>>,
+        jacobian: F<f64>,
+        helicities: &[Helicity],
+        graph: &BareGraph,
+    ) -> Self {
+        let mut polarizations = vec![];
+        let dep_ext_mom = graph.get_dependent_externals(&external_moms);
+        for ((ext_mom, hel), ext) in dep_ext_mom
+            .iter()
+            .zip(helicities.iter())
+            .zip(graph.external_edges.iter())
+        {
+            let particle = &graph.edges[*ext].particle;
+            match graph.edges[*ext].edge_type {
+                EdgeType::Incoming => {
+                    polarizations.push(particle.incoming_polarization(ext_mom, *hel));
+                }
+                EdgeType::Outgoing => {
+                    polarizations.push(particle.outgoing_polarization(ext_mom, *hel));
+                }
+                _ => {
+                    panic!("Edge type should not be virtual")
+                }
+            }
+        }
+
+        Self {
+            polarizations,
+            loop_moms,
+            external_moms,
+            jacobian,
+        }
+    }
+
     pub fn one(&self) -> F<T> {
         self.loop_moms[0].px.one()
     }
@@ -1339,6 +1390,7 @@ impl<T: FloatLike> DefaultSample<T> {
                     p
                 })
                 .collect_vec(),
+            polarizations: self.polarizations.clone(), // should rotate..
             jacobian: self.jacobian,
         }
     }
@@ -1356,11 +1408,16 @@ impl<T: FloatLike> DefaultSample<T> {
                 .iter()
                 .map(FourMomentum::cast)
                 .collect_vec(),
+            polarizations: self
+                .polarizations
+                .iter()
+                .map(Polarization::complex_cast)
+                .collect_vec(),
             jacobian: self.jacobian,
         }
     }
 
-    fn higher_precision(&self) -> DefaultSample<T::Higher>
+    pub fn higher_precision(&self) -> DefaultSample<T::Higher>
     where
         T::Higher: FloatLike,
     {
@@ -1375,11 +1432,16 @@ impl<T: FloatLike> DefaultSample<T> {
                 .iter()
                 .map(FourMomentum::higher)
                 .collect_vec(),
+            polarizations: self
+                .polarizations
+                .iter()
+                .map(Polarization::higher)
+                .collect_vec(),
             jacobian: self.jacobian,
         }
     }
 
-    fn lower_precision(&self) -> DefaultSample<T::Lower>
+    pub fn lower_precision(&self) -> DefaultSample<T::Lower>
     where
         T::Lower: FloatLike,
     {
@@ -1393,6 +1455,11 @@ impl<T: FloatLike> DefaultSample<T> {
                 .external_moms
                 .iter()
                 .map(FourMomentum::lower)
+                .collect_vec(),
+            polarizations: self
+                .polarizations
+                .iter()
+                .map(Polarization::lower)
                 .collect_vec(),
             jacobian: self.jacobian,
         }

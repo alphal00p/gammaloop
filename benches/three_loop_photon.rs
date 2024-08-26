@@ -61,14 +61,20 @@ fn criterion_benchmark(c: &mut Criterion) {
     let settings = &default_settings;
 
     let mut one_loop_graph = load_helper("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT");
-    let one_loop_sample = kinematics_builder(5, 1);
+    let one_loop_sample = kinematics_builder(5, 1, &one_loop_graph.bare_graph);
+
+    let one_loop_quad_sample = one_loop_sample.higher_precision();
 
     group.bench_function("Inspect 1l", |b| {
         b.iter(|| one_loop_graph.evaluate_cff_expression(&one_loop_sample, settings))
     });
 
+    group.bench_function("Inspect 1l quad", |b| {
+        b.iter(|| one_loop_graph.evaluate_cff_expression(&one_loop_quad_sample, settings))
+    });
+
     let mut two_loop_graph = load_helper("TEST_AMPLITUDE_physical_2L_6photons/GL_OUTPUT");
-    let two_loop_sample = kinematics_builder(5, 2);
+    let two_loop_sample = kinematics_builder(5, 2, &two_loop_graph.bare_graph);
 
     group.bench_function("Inspect 2l", |b| {
         b.iter(|| two_loop_graph.evaluate_cff_expression(&two_loop_sample, settings))

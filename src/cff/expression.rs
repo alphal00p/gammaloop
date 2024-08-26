@@ -17,7 +17,7 @@ use symbolica::{
         float::{NumericalFloatLike, RealNumberLike},
         rational::Rational,
     },
-    evaluate::{CompiledEvaluator, EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap},
+    evaluate::{EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap},
 };
 use typed_index_collections::TiVec;
 

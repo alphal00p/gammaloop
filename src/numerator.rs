@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::graph::{BareGraph, Edge};
@@ -22,15 +22,14 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 
 use log::{debug, info};
-use rand::distributions::uniform::UniformChar;
 use serde::de::DeserializeOwned;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::data::DataTensor;
 
 use spenso::network::Levels;
 use spenso::parametric::{
-    CompiledEvalTensorSet, EvalTensor, EvalTensorSet, EvalTreeTensor, EvalTreeTensorSet,
-    ParamTensorSet, SerializableAtom, SerializableCompiledEvaluator, TensorSet,
+    CompiledEvalTensorSet, EvalTensor, EvalTensorSet, EvalTreeTensorSet, ParamTensorSet,
+    SerializableAtom, SerializableCompiledEvaluator, TensorSet,
 };
 use spenso::structure::{HasStructure, SerializableSymbol, SmartShadowStructure};
 use spenso::{
@@ -40,21 +39,16 @@ use spenso::{
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
     symbolic::SymbolicTensor,
 };
-use statrs::function;
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
 use symbolica::{
-    atom::AtomView,
-    domains::{
-        float::{Complex as SymComplex, NumericalFloatLike},
-        rational::Rational,
-    },
-    evaluate::FunctionMap,
-    id::{Pattern, Replacement},
-};
-use symbolica::{
-    atom::{Atom, FunctionBuilder, Symbol},
+    atom::{Atom, FunctionBuilder},
     printer::{AtomPrinter, PrintOptions},
     state::State,
+};
+use symbolica::{
+    domains::{float::NumericalFloatLike, rational::Rational},
+    evaluate::FunctionMap,
+    id::{Pattern, Replacement},
 };
 
 pub fn apply_replacements(
@@ -363,8 +357,8 @@ impl NumeratorEvaluateFloat for f64 {
             .collect_vec();
 
         for p in polarizations {
-            for pi in p {
-                params.push(pi.clone())
+            for &pi in p {
+                params.push(pi)
             }
         }
 
@@ -384,9 +378,9 @@ impl NumeratorEvaluateFloat for f64 {
         if let Some(orientation_evaluator) = &mut num.state.orientated {
             let pos = orientation_evaluator.positions.clone();
             let res = if let Some(c) = &mut orientation_evaluator.compiled.evaluator {
-                c.evaluate(&params)
+                c.evaluate(params)
             } else {
-                orientation_evaluator.eval_double.evaluate(&params)
+                orientation_evaluator.eval_double.evaluate(params)
             };
             Ok((res, pos).into())
         } else {
@@ -437,7 +431,7 @@ impl NumeratorEvaluateFloat for f128 {
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
         if let Some(orientation_evaluator) = &mut num.state.orientated {
             let pos = orientation_evaluator.positions.clone();
-            let res = orientation_evaluator.eval_quad.evaluate(&params);
+            let res = orientation_evaluator.eval_quad.evaluate(params);
             Ok((res, pos).into())
         } else {
             Err(eyre!("No multi-orientation evaluator for numerator"))
@@ -863,8 +857,10 @@ impl Num<UnInit> {
             state: AppliedFeynmanRule::from_graph(graph),
         }
     }
+}
 
-    pub fn new() -> Self {
+impl Default for Num<UnInit> {
+    fn default() -> Self {
         Num { state: UnInit }
     }
 }
@@ -1931,6 +1927,7 @@ pub enum NumeratorStateError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[allow(clippy::large_enum_variant)]
 pub enum PythonState {
     UnInit(Option<UnInit>),
     AppliedFeynmanRule(Option<AppliedFeynmanRule>),

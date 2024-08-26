@@ -10,20 +10,17 @@ use crate::{
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, EdgeSlots, Model, VertexSlots},
-    momentum::{FourMomentum, Polarization, ThreeMomentum},
+    momentum::{FourMomentum, Signature, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
-        Num, Numerator, NumeratorState, NumeratorStateError, PythonState,
-        RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
+        Num, NumeratorState, NumeratorStateError, PythonState, RepeatingIteratorTensorOrScalar,
+        TypedNumeratorState, UnInit,
     },
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm,
     },
-    utils::{
-        compute_four_momentum_from_three, compute_three_momentum_from_four, sorted_vectorize,
-        FloatLike, F,
-    },
+    utils::{sorted_vectorize, FloatLike, F},
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
@@ -40,15 +37,12 @@ use momtrop::SampleGenerator;
 use nalgebra::DMatrix;
 
 use gat_lending_iterator::LendingIterator;
-
-use petgraph::graph;
-use rand::distributions::uniform::UniformChar;
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
     arithmetic::ScalarMul,
     complex::Complex,
-    contraction::{IsZero, RefOne},
+    contraction::{IsZero, RefOne, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     structure::{
         AbstractIndex, BaseRepName, Euclidean, HasStructure, Lorentz, NamedStructure, PhysReps,
@@ -59,27 +53,19 @@ use spenso::{
 };
 
 use core::panic;
-use serde::{
-    de::{self, DeserializeOwned, MapAccess, SeqAccess, Visitor},
-    ser::SerializeStruct,
-    Deserialize, Deserializer, Serialize,
-};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{
     collections::HashMap,
-    fmt,
-    marker::PhantomData,
+    ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use symbolica::{
     atom::Atom,
-    domains::{
-        float::{Complex as SymComplex, NumericalFloatLike},
-        rational::Rational,
-    },
+    domains::{float::NumericalFloatLike, rational::Rational},
     id::{Pattern, Replacement},
 };
 //use symbolica::{atom::Symbol,state::State};
@@ -663,7 +649,7 @@ impl SerializableGraph {
                 .edge_signatures
                 .iter()
                 .enumerate()
-                .map(|(i_e, sig)| (graph.edges[i_e].name.clone(), sig.clone()))
+                .map(|(i_e, sig)| (graph.edges[i_e].name.clone(), sig.to_momtrop_format()))
                 .collect(),
         }
     }
@@ -738,6 +724,20 @@ pub struct BareGraph {
 }
 
 impl BareGraph {
+    pub fn get_dependent_externals<T: FloatLike>(
+        &self,
+        indep_externals: &[FourMomentum<F<T>>],
+    ) -> Vec<FourMomentum<F<T>>> {
+        self.external_edges
+            .iter()
+            .map(|&i| {
+                self.loop_momentum_basis.edge_signatures[i]
+                    .external
+                    .apply(indep_externals)
+            })
+            .collect()
+    }
+
     pub fn dot(&self) -> String {
         let mut dot = String::new();
         dot.push_str("digraph G {\n");
@@ -849,12 +849,12 @@ impl BareGraph {
         }
         g.edge_name_to_position = edge_name_to_position;
 
-        let mut edge_signatures: Vec<(Vec<isize>, Vec<isize>)> =
-            vec![(vec![], vec![]); graph.edges.len()];
+        let mut edge_signatures: Vec<_> = vec![None; graph.edges.len()];
         for (e_name, sig) in graph.edge_signatures.iter() {
-            edge_signatures[g.get_edge_position(e_name).unwrap()] = sig.clone();
+            edge_signatures[g.get_edge_position(e_name).unwrap()] = Some(sig.clone().into());
         }
-        g.loop_momentum_basis.edge_signatures = edge_signatures;
+        g.loop_momentum_basis.edge_signatures =
+            edge_signatures.into_iter().collect::<Option<_>>().unwrap();
 
         g.external_connections = graph
             .external_connections
@@ -945,7 +945,7 @@ impl BareGraph {
     ) -> Vec<ThreeMomentum<F<T>>> {
         lmb.edge_signatures
             .iter()
-            .map(|sig| compute_three_momentum_from_four(sig, loop_moms, external_moms))
+            .map(|sig| sig.compute_three_momentum_from_four(loop_moms, external_moms))
             .collect()
     }
 
@@ -983,7 +983,7 @@ impl BareGraph {
     ) -> Vec<F<T>> {
         lmb.edge_signatures
             .iter()
-            .map(|sig| compute_four_momentum_from_three(sig, loop_moms, external_moms))
+            .map(|sig| sig.compute_four_momentum_from_three(loop_moms, external_moms))
             .zip(self.edges.iter())
             .map(|(emr_mom, edge)| match edge.edge_type {
                 EdgeType::Virtual => {
@@ -1050,35 +1050,16 @@ impl BareGraph {
         rule
     }
 
-    fn replacement_rule_from_signature(
-        &self,
-        index: usize,
-
-        signature: &(Vec<isize>, Vec<isize>),
-    ) -> Atom {
+    fn replacement_rule_from_signature(&self, index: usize, signature: &LoopExtSignature) -> Atom {
         let mut acc = Atom::new_num(0);
-        for (i_l, sign) in signature.0.iter().enumerate() {
-            match sign {
-                1 => {
-                    acc = &acc + &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
-                }
-                -1 => {
-                    acc = &acc - &Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
-                }
-                _ => {}
-            }
+        for (i_l, &sign) in signature.internal.iter().enumerate() {
+            let k = sign * Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+            acc = &acc + &k;
         }
 
-        for (i_e, sign) in signature.1.iter().enumerate() {
-            match sign {
-                1 => {
-                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
-                }
-                -1 => {
-                    acc = &acc + &Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
-                }
-                _ => {}
-            }
+        for (i_e, &sign) in signature.external.iter().enumerate() {
+            let p = sign * Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+            acc = &acc + &p;
         }
         acc
     }
@@ -1127,9 +1108,9 @@ impl BareGraph {
         self.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && {
                 self.loop_momentum_basis.edge_signatures[*index]
-                    .0
+                    .internal
                     .iter()
-                    .any(|x| *x != 0)
+                    .any(|x| x.is_sign())
             }
         })
     }
@@ -1140,9 +1121,9 @@ impl BareGraph {
         self.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && {
                 self.loop_momentum_basis.edge_signatures[*index]
-                    .0
+                    .internal
                     .iter()
-                    .all(|x| *x == 0)
+                    .all(|x| x.is_zero())
             }
         })
     }
@@ -1221,16 +1202,18 @@ impl BareGraph {
             .iter()
             .enumerate()
             .find(|(external_index, (index, _edge))| {
-                self.loop_momentum_basis.edge_signatures[*index].1[*external_index] != 1
+                self.loop_momentum_basis.edge_signatures[*index].external[*external_index]
+                    .is_positive()
+                    .not()
             })
             .unwrap_or_else(|| panic!("could not determine dependent momenta"));
 
-        let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].1;
+        let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].external;
 
         let external_shift = external_edges
             .iter()
             .zip(dep_mom_signature.iter())
-            .filter(|(_external_edge, dep_mom_sign)| **dep_mom_sign != 0)
+            .filter(|(_external_edge, dep_mom_sign)| dep_mom_sign.is_sign())
             .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
             .collect();
 
@@ -1240,14 +1223,14 @@ impl BareGraph {
     pub fn generate_loop_momentum_bases(&self) -> Vec<LoopMomentumBasis> {
         let loop_number = self.loop_momentum_basis.basis.len();
         let num_edges = self.edges.len();
-        let external_signature_length = self.loop_momentum_basis.edge_signatures[0].1.len();
+        let external_signature_length = self.loop_momentum_basis.edge_signatures[0].external.len();
 
         // the full virtual signature matrix in the form of a flattened vector
         let signature_matrix_flattened = self
             .loop_momentum_basis
             .edge_signatures
             .iter()
-            .flat_map(|sig| sig.0.iter().map(|s| *s as f64).collect_vec())
+            .flat_map(|sig| sig.internal.iter().map(|s| (*s as i8) as f64).collect_vec())
             .collect_vec();
 
         // convert to dmatrix
@@ -1259,7 +1242,7 @@ impl BareGraph {
             .loop_momentum_basis
             .edge_signatures
             .iter()
-            .flat_map(|sig| sig.1.iter().map(|s| *s as f64).collect_vec())
+            .flat_map(|sig| sig.external.iter().map(|&s| (s as i8) as f64).collect_vec())
             .collect_vec();
 
         // convert to dmatrix
@@ -1282,9 +1265,9 @@ impl BareGraph {
                     .iter()
                     .flat_map(|e| {
                         self.loop_momentum_basis.edge_signatures[*e]
-                            .0
+                            .internal
                             .iter()
-                            .map(|s| *s as f64)
+                            .map(|s| (*s as i8) as f64)
                     })
                     .collect_vec();
 
@@ -1317,9 +1300,9 @@ impl BareGraph {
                     .iter()
                     .flat_map(|&e| {
                         self.loop_momentum_basis.edge_signatures[e]
-                            .1
+                            .external
                             .iter()
-                            .map(|s| *s as f64)
+                            .map(|s| (*s as i8) as f64)
                     })
                     .collect_vec();
 
@@ -1345,15 +1328,18 @@ impl BareGraph {
                     let new_virtual_signature = new_virtual_signatures
                         .row(edge_id)
                         .iter()
-                        .map(|s| s.round() as isize)
-                        .collect_vec();
+                        .map(|s| s.round() as i8)
+                        .collect();
                     let new_external_signature = new_external_signatures
                         .row(edge_id)
                         .iter()
-                        .map(|s| s.round() as isize)
-                        .collect_vec();
+                        .map(|s| s.round() as i8)
+                        .collect();
 
-                    *new_signature = (new_virtual_signature, new_external_signature);
+                    *new_signature = LoopExtSignature {
+                        internal: new_virtual_signature,
+                        external: new_external_signature,
+                    };
                 }
                 LoopMomentumBasis {
                     basis,
@@ -1439,35 +1425,17 @@ impl BareGraph {
 
         let loop_part = self
             .get_loop_edges_iterator()
-            .map(|(edge_id, _edge)| self.loop_momentum_basis.edge_signatures[edge_id].0.clone())
+            .map(|(edge_id, _edge)| {
+                self.loop_momentum_basis.edge_signatures[edge_id]
+                    .internal
+                    .clone()
+                    .to_momtrop_format()
+            })
             .collect_vec();
 
         tropical_graph
             .build_sampler(loop_part, dimension)
             .map_err(|e| eyre!(e))
-    }
-
-    pub fn generate_polarizations_from_emr<T: FloatLike>(
-        &self,
-        emr: &[FourMomentum<F<T>>],
-    ) -> Vec<Polarization<Complex<F<T>>>> {
-        let mut pols = vec![];
-
-        for (i, ext) in self
-            .edges
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| !matches!(e.edge_type, EdgeType::Virtual))
-        {
-            match ext.edge_type {
-                EdgeType::Incoming => pols.push(ext.particle.incoming_polarization(&emr[i])),
-
-                EdgeType::Outgoing => pols.push(ext.particle.outgoing_polarization(&emr[i])),
-                _ => {}
-            }
-        }
-
-        pols
     }
 
     pub fn load_derived_data<NumState: NumeratorState + DeserializeOwned>(
@@ -1778,18 +1746,6 @@ impl Graph<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_polarizations<T: FloatLike>(
-        &mut self,
-        sample: &DefaultSample<T>,
-        _settings: &Settings,
-    ) -> Vec<Polarization<Complex<F<T>>>> {
-        self.derived_data
-            .as_mut()
-            .unwrap()
-            .evaluate_polarizations(&self.bare_graph, sample)
-    }
-
-    #[inline]
     pub fn evaluate_ltd_expression<T: FloatLike>(
         &self,
         loop_moms: &[ThreeMomentum<F<T>>],
@@ -1963,145 +1919,6 @@ impl<NumState: TypedNumeratorState> DerivedGraphData<NumState> {
     }
 }
 
-// impl<'de, NumState: NumeratorState> Deserialize<'de> for DerivedGraphData<NumState> {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         struct DerivedGraphDataVisitor<NumState: NumeratorState>(PhantomData<NumState>);
-
-//         impl<'de, NumState: NumeratorState> Visitor<'de> for DerivedGraphDataVisitor<NumState> {
-//             type Value = DerivedGraphData<NumState>;
-
-//             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-//                 formatter.write_str("struct DerivedGraphData")
-//             }
-
-//             fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
-//             where
-//                 V: SeqAccess<'de>,
-//             {
-//                 let loop_momentum_bases = seq
-//                     .next_element()?
-//                     .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-//                 let cff_expression = seq
-//                     .next_element()?
-//                     .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-//                 let ltd_expression = seq
-//                     .next_element()?
-//                     .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-//                 let tropical_subgraph_table = seq
-//                     .next_element()?
-//                     .ok_or_else(|| de::Error::invalid_length(3, &self))?;
-//                 let edge_groups = seq
-//                     .next_element()?
-//                     .ok_or_else(|| de::Error::invalid_length(4, &self))?;
-//                 let esurface_derived_data = seq
-//                     .next_element()?
-//                     .ok_or_else(|| de::Error::invalid_length(5, &self))?;
-//                 let static_counterterm = seq
-//                     .next_element()?
-//                     .ok_or_else(|| de::Error::invalid_length(6, &self))?;
-//                 let numerator = seq
-//                     .next_element()?
-//                     .ok_or_else(|| de::Error::invalid_length(7, &self))?;
-
-//                 Ok(DerivedGraphData {
-//                     loop_momentum_bases,
-//                     cff_expression,
-//                     ltd_expression,
-//                     tropical_subgraph_table,
-//                     edge_groups,
-//                     esurface_derived_data,
-//                     static_counterterm,
-//                     numerator,
-//                 })
-//             }
-
-//             fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
-//             where
-//                 V: MapAccess<'de>,
-//             {
-//                 let mut loop_momentum_bases = None;
-//                 let mut cff_expression = None;
-//                 let mut ltd_expression = None;
-//                 let mut tropical_subgraph_table = None;
-//                 let mut edge_groups = None;
-//                 let mut esurface_derived_data = None;
-//                 let mut static_counterterm = None;
-//                 let mut numerator = None;
-
-//                 while let Some(key) = map.next_key()? {
-//                     match key {
-//                         "loop_momentum_bases" => {
-//                             loop_momentum_bases = Some(map.next_value()?);
-//                         }
-//                         "cff_expression" => {
-//                             cff_expression = Some(map.next_value()?);
-//                         }
-//                         "ltd_expression" => {
-//                             ltd_expression = Some(map.next_value()?);
-//                         }
-//                         "tropical_subgraph_table" => {
-//                             tropical_subgraph_table = Some(map.next_value()?);
-//                         }
-//                         "edge_groups" => {
-//                             edge_groups = Some(map.next_value()?);
-//                         }
-//                         "esurface_derived_data" => {
-//                             esurface_derived_data = Some(map.next_value()?);
-//                         }
-//                         "static_counterterm" => {
-//                             static_counterterm = Some(map.next_value()?);
-//                         }
-//                         "numerator" => {
-//                             numerator = Some(map.next_value()?);
-//                         }
-//                         _ => {
-//                             return Err(de::Error::unknown_field(key, FIELDS));
-//                         }
-//                     }
-//                 }
-
-//                 Ok(DerivedGraphData {
-//                     loop_momentum_bases: loop_momentum_bases
-//                         .ok_or_else(|| de::Error::missing_field("loop_momentum_bases"))?,
-//                     cff_expression: cff_expression
-//                         .ok_or_else(|| de::Error::missing_field("cff_expression"))?,
-//                     ltd_expression: ltd_expression
-//                         .ok_or_else(|| de::Error::missing_field("ltd_expression"))?,
-//                     tropical_subgraph_table: tropical_subgraph_table
-//                         .ok_or_else(|| de::Error::missing_field("tropical_subgraph_table"))?,
-//                     edge_groups: edge_groups
-//                         .ok_or_else(|| de::Error::missing_field("edge_groups"))?,
-//                     esurface_derived_data: esurface_derived_data
-//                         .ok_or_else(|| de::Error::missing_field("esurface_derived_data"))?,
-//                     static_counterterm: static_counterterm
-//                         .ok_or_else(|| de::Error::missing_field("static_counterterm"))?,
-//                     numerator: numerator.ok_or_else(|| de::Error::missing_field("numerator"))?,
-//                 })
-//             }
-//         }
-
-//         const FIELDS: &[&str] = &[
-//             "loop_momentum_bases",
-//             "cff_expression",
-//             "ltd_expression",
-//             "tropical_subgraph_table",
-//             "edge_groups",
-//             "esurface_derived_data",
-//             "static_counterterm",
-//             "numerator",
-//         ];
-
-//         deserializer.deserialize_struct(
-//             "DerivedGraphData",
-//             FIELDS,
-//             DerivedGraphDataVisitor(PhantomData),
-//         )
-//     }
-// }
-
 impl DerivedGraphData<Evaluators> {
     #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
@@ -2167,10 +1984,9 @@ impl DerivedGraphData<Evaluators> {
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let emr = graph.emr_from_lmb(sample, &graph.loop_momentum_basis);
 
-        let pols = graph.generate_polarizations_from_emr(&emr);
         let rep = self
             .numerator
-            .evaluate_all_orientations(&emr, &pols)
+            .evaluate_all_orientations(&emr, &sample.polarizations)
             .unwrap();
 
         match rep {
@@ -2212,9 +2028,8 @@ impl DerivedGraphData<Evaluators> {
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.emr_from_lmb(sample, lmb);
 
-        let pols = graph.generate_polarizations_from_emr(&emr);
         self.numerator
-            .evaluate_all_orientations(&emr, &pols)
+            .evaluate_all_orientations(&emr, &sample.polarizations)
             .unwrap()
     }
 
@@ -2228,20 +2043,6 @@ impl DerivedGraphData<Evaluators> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, settings)
     }
-
-    pub fn evaluate_numerator<T: FloatLike>(
-        &mut self,
-        graph: &BareGraph,
-        emr: Vec<FourMomentum<F<T>>>,
-    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>
-    where
-        Numerator: Evaluate<T>,
-    {
-        let pols = graph.generate_polarizations_from_emr(&emr);
-        self.numerator
-            .evaluate_all_orientations(&emr, &pols)
-            .unwrap()
-    }
 }
 
 impl DerivedGraphData<UnInit> {
@@ -2253,7 +2054,7 @@ impl DerivedGraphData<UnInit> {
             tropical_subgraph_table: None,
             edge_groups: None,
             esurface_derived_data: None,
-            numerator: Num::new(),
+            numerator: Num::default(),
             static_counterterm: None,
         }
     }
@@ -2275,7 +2076,7 @@ impl DerivedGraphData<UnInit> {
             .parse()
             .contract(contraction_settings)
             .unwrap()
-            .generate_evaluators(model, &base_graph, &extra_info, export_settings);
+            .generate_evaluators(model, base_graph, &extra_info, export_settings);
         DerivedGraphData {
             loop_momentum_bases: self.loop_momentum_bases,
             cff_expression: self.cff_expression,
@@ -2377,30 +2178,17 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.emr_from_lmb(sample, lmb);
 
-        let polarizations = graph.generate_polarizations_from_emr(&emr);
         let mut params: Vec<Complex<F<T>>> = emr
             .into_iter()
             .flat_map(|p| p.into_iter().map(Complex::new_re))
             .collect_vec();
 
-        for p in polarizations {
+        for p in &sample.polarizations {
             for pi in p {
-                params.push(pi)
+                params.push(pi.clone());
             }
         }
         params
-    }
-
-    pub fn evaluate_polarizations<T: FloatLike>(
-        &mut self,
-        graph: &BareGraph,
-        sample: &DefaultSample<T>,
-    ) -> Vec<Polarization<Complex<F<T>>>> {
-        let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
-        let lmb = lmb_specification.basis_from_derived(self);
-        let emr = graph.emr_from_lmb(sample, lmb);
-
-        graph.generate_polarizations_from_emr(&emr)
     }
 
     pub fn load_from_path(path: &Path) -> Result<Self, Report> {
@@ -2443,7 +2231,106 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct LoopMomentumBasis {
     pub basis: Vec<usize>,
-    pub edge_signatures: Vec<(Vec<isize>, Vec<isize>)>,
+    pub edge_signatures: Vec<LoopExtSignature>,
+}
+
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, PartialOrd, Eq, Ord, Hash,
+)]
+pub struct LoopExtSignature {
+    pub internal: Signature,
+    pub external: Signature,
+}
+
+impl From<(Signature, Signature)> for LoopExtSignature {
+    fn from((loops, external_signature): (Signature, Signature)) -> Self {
+        Self {
+            internal: loops,
+            external: external_signature,
+        }
+    }
+}
+
+impl From<(Vec<isize>, Vec<isize>)> for LoopExtSignature {
+    fn from((loops, external_signature): (Vec<isize>, Vec<isize>)) -> Self {
+        Self {
+            internal: Signature::from_iter(loops),
+            external: Signature::from_iter(external_signature),
+        }
+    }
+}
+
+impl LoopExtSignature {
+    pub fn compute_momentum<'a, 'b: 'a, T>(&self, loop_moms: &'a [T], external_moms: &'b [T]) -> T
+    where
+        T: RefZero + Clone + Neg<Output = T> + AddAssign<T>,
+    {
+        let mut res = self.internal.apply(loop_moms);
+        res += self.external.apply(external_moms);
+        res
+    }
+
+    pub fn to_momtrop_format(&self) -> (Vec<isize>, Vec<isize>) {
+        (
+            self.internal.to_momtrop_format(),
+            self.external.to_momtrop_format(),
+        )
+    }
+
+    /// Usefull for debugging
+    pub fn format_momentum(&self) -> String {
+        let mut res = String::new();
+        let mut first = true;
+
+        for (i, sign) in (&self.internal).into_iter().enumerate() {
+            if !first {
+                res.push_str(&sign.to_string());
+            } else {
+                first = false;
+            }
+            if sign.is_sign() {
+                res.push_str(&format!("k_{}", i));
+            }
+        }
+
+        for (i, sign) in (&self.external).into_iter().enumerate() {
+            if !first {
+                res.push_str(&sign.to_string());
+            } else {
+                first = false;
+            }
+            if sign.is_sign() {
+                res.push_str(&format!("l_{}", i));
+            }
+        }
+
+        res
+    }
+
+    #[allow(unused)]
+    pub fn compute_four_momentum_from_three<T: FloatLike>(
+        &self,
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> FourMomentum<F<T>> {
+        let loop_moms = loop_moms
+            .iter()
+            .map(|m| m.clone().into_on_shell_four_momentum(None))
+            .collect_vec();
+        self.compute_momentum(&loop_moms, external_moms)
+    }
+
+    pub fn compute_three_momentum_from_four<T: FloatLike>(
+        &self,
+        loop_moms: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+    ) -> ThreeMomentum<F<T>> {
+        let external_moms = external_moms
+            .iter()
+            .map(|m| m.spatial.clone())
+            .collect_vec();
+        self.compute_momentum(loop_moms, &external_moms)
+    }
 }
 
 impl LoopMomentumBasis {
@@ -2454,38 +2341,25 @@ impl LoopMomentumBasis {
         self.edge_signatures
             .iter()
             .map(|sig| {
-                compute_four_momentum_from_three(sig, &sample.loop_moms, &sample.external_moms)
+                sig.compute_four_momentum_from_three(&sample.loop_moms, &sample.external_moms)
             })
             .collect()
     }
 
     pub fn pattern(&self, edge_id: usize) -> Pattern {
-        let (loop_signature, external_signature) = self.edge_signatures[edge_id].clone();
+        let signature = self.edge_signatures[edge_id].clone();
 
         let mut atom = Atom::new_num(0);
 
-        for (i, sign) in loop_signature.iter().enumerate() {
-            match sign {
-                1 => {
-                    atom = &atom + &Atom::parse(&format!("K({},x_))", i)).unwrap();
-                }
-                -1 => {
-                    atom = &atom - &Atom::parse(&format!("K({},x_)", i)).unwrap();
-                }
-                _ => {}
-            }
+        for (i, sign) in signature.internal.into_iter().enumerate() {
+            let k = sign * Atom::parse(&format!("K({},x_)", i)).unwrap();
+
+            atom = &atom + &k;
         }
 
-        for (i, sign) in external_signature.iter().enumerate() {
-            match sign {
-                1 => {
-                    atom = &atom + &Atom::parse(&format!("P({},x_)", i)).unwrap();
-                }
-                -1 => {
-                    atom = &atom - &Atom::parse(&format!("P({},x_)", i)).unwrap();
-                }
-                _ => {}
-            }
+        for (i, sign) in signature.external.into_iter().enumerate() {
+            let p = sign * Atom::parse(&format!("P({},x_)", i)).unwrap();
+            atom = &atom + &p;
         }
 
         atom.into_pattern()

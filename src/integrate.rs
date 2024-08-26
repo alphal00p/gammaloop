@@ -430,7 +430,7 @@ where
 
             match fs::write(
                 integration_state_path,
-                &bincode::encode_to_vec(
+                bincode::encode_to_vec(
                     &serializable_integration_state,
                     bincode::config::standard(),
                 )

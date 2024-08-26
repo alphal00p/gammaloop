@@ -4,7 +4,7 @@ import_graphs python/gammaloop/tests/test_data/qgraf_outputs/physical_1L_6photon
 output GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P 
 launch GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P
 #set_model_param mass_scalar_1 172.0
-set externals.momenta [\
+set externals.data.momenta [\
 [5.,0.,0.,5.],\
 [5.,0.,0.,-5.],\
 [8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\
@@ -12,9 +12,11 @@ set externals.momenta [\
 [1.523581094674306e0,-1.058809596665922e0,-9.770963832697570e-1,4.954838522679282e-1],\
 [4.307611382509676e0,2.318312618377385e0,3.595630405248305e0,-5.023787565702210e-1],\
 ]
+set externals.data.helicities [1,1,1,1,1,1]
 set integrated_phase 'imag'
 set e_cm 10.
 set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+set debug 0
 set n_start 10000
 set n_max 200000000
 #set continuous_learning_rate 0.0

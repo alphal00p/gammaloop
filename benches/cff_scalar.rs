@@ -1,51 +1,15 @@
 use std::{env, path::PathBuf, time::Duration};
 
 use _gammaloop::{
-    gammaloop_integrand::DefaultSample,
     graph::Graph,
-    momentum::{FourMomentum, ThreeMomentum},
     numerator::ContractionSettings,
     tests::load_default_settings,
-    tests_from_pytest::load_amplitude_output,
-    utils::F,
+    tests_from_pytest::{kinematics_builder, load_amplitude_output},
     ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
-use rand::Rng;
 const COMPILED_DUMP: &str = "TMP_COMPILED";
-
-fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample<f64> {
-    let mut external_moms = vec![];
-    let mut rng = rand::thread_rng();
-
-    for i in 0..n_indep_externals {
-        external_moms.push(FourMomentum::from_args(
-            F(i as f64),
-            F(i as f64 + rng.gen::<f64>() * 0.25),
-            F(i as f64 + rng.gen::<f64>() * 0.5),
-            F(i as f64 + rng.gen::<f64>() * 0.75),
-        ));
-    }
-
-    let mut loop_moms = vec![];
-
-    for i in n_indep_externals..n_indep_externals + n_loops {
-        loop_moms.push(ThreeMomentum::new(
-            F(i as f64 * rng.gen::<f64>()),
-            F(i as f64 + 0.33 * rng.gen::<f64>()),
-            F(i as f64 + 0.66 * rng.gen::<f64>()),
-        ));
-    }
-
-    let jacobian = F(1.0);
-
-    DefaultSample {
-        loop_moms,
-        external_moms,
-        jacobian,
-    }
-}
 
 fn load_helper(path: &str, use_orientations: bool) -> Graph {
     let (model, mut amplitude, _) = load_amplitude_output(path, true);
@@ -99,33 +63,33 @@ fn criterion_benchmark(c: &mut Criterion) {
     let settings = &default_settings;
     let mut triangle_graph =
         load_helper("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", false);
-    let triangle_sample = kinematics_builder(2, 1);
+    let triangle_sample = kinematics_builder(2, 1, &triangle_graph.bare_graph);
     group.bench_function("Triangle", |b| {
         b.iter(|| triangle_graph.evaluate_cff_expression(&triangle_sample, settings))
     });
 
     let mut box_graph = load_helper("TEST_AMPLITUDE_scalar_massless_box/GL_OUTPUT", false);
-    let box_sample = kinematics_builder(3, 1);
+    let box_sample = kinematics_builder(3, 1, &box_graph.bare_graph);
     group.bench_function("Box", |b| {
         b.iter(|| box_graph.evaluate_cff_expression(&box_sample, settings))
     });
 
     let mut double_triangle_graph =
         load_helper("TEST_AMPLITUDE_scalar_double_triangle/GL_OUTPUT", false);
-    let double_triangle_sample = kinematics_builder(1, 2);
+    let double_triangle_sample = kinematics_builder(1, 2, &double_triangle_graph.bare_graph);
     group.bench_function("Double Triangle", |b| {
         b.iter(|| double_triangle_graph.evaluate_cff_expression(&double_triangle_sample, settings))
     });
 
     let mut isopod_graph = load_helper("TEST_AMPLITUDE_scalar_isopod/GL_OUTPUT", false);
-    let isopod_sample = kinematics_builder(2, 3);
+    let isopod_sample = kinematics_builder(2, 3, &isopod_graph.bare_graph);
 
     group.bench_function("Isopod (Triangle-Box-Box)", move |b| {
         b.iter(|| isopod_graph.evaluate_cff_expression(&isopod_sample, settings))
     });
 
     let mut fishnet_2x2_graph = load_helper("TEST_AMPLITUDE_scalar_fishnet_2x2/GL_OUTPUT", false);
-    let fishnet_2x2_sample = kinematics_builder(3, 4);
+    let fishnet_2x2_sample = kinematics_builder(3, 4, &fishnet_2x2_graph.bare_graph);
     group.bench_function("Fishnet 2x2", |b| {
         b.iter(|| fishnet_2x2_graph.evaluate_cff_expression(&fishnet_2x2_sample, settings))
     });

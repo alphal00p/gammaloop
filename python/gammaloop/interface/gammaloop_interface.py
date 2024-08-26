@@ -134,7 +134,10 @@ class GammaLoopConfiguration(object):
                     'e_cm': 3.0,
                     'externals': {
                         'type': 'constant',
-                        'momenta': None  # Will be set automatically
+                        'data':{
+                            'momenta':None,  # Will be set automatically
+                            'helicities':None,
+                        } 
                     }
                 },
                 'Parameterization': {

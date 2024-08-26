@@ -8,7 +8,7 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
-    numerator::{AppliedFeynmanRule, Evaluators, PythonState, UnInit},
+    numerator::{AppliedFeynmanRule, PythonState, UnInit},
     utils::F,
     HasIntegrand, Settings,
 };

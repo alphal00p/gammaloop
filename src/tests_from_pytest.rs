@@ -6,25 +6,27 @@ use crate::cff::esurface::{
 use crate::cff::generation::generate_cff_expression;
 use crate::cff::hsurface::HsurfaceCollection;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
-use crate::gammaloop_integrand::DefaultSample;
+use crate::gammaloop_integrand::{DefaultSample, GammaLoopIntegrand};
 use crate::graph::{
-    DerivedGraphData, Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, SerializableGraph,
-    VertexInfo,
+    BareGraph, DerivedGraphData, Edge, EdgeType, HasVertexInfo, InteractionVertexInfo,
+    SerializableGraph, VertexInfo,
 };
 use crate::model::Model;
-use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::momentum::{FourMomentum, Helicity, ThreeMomentum};
 use crate::numerator::{
     ContractionSettings, EvaluatorOptions, Evaluators, Num, Numerator, NumeratorCompileOptions,
-    NumeratorEvaluatorOptions, PythonState, UnInit,
+    NumeratorEvaluatorOptions, NumeratorState, PythonState, UnInit,
 };
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
 use crate::tests::load_default_settings;
-use crate::utils::{
-    assert_approx_eq, compute_momentum, compute_three_momentum_from_four, PrecisionUpgradable,
-};
+use crate::utils::{assert_approx_eq, PrecisionUpgradable};
 use crate::utils::{f128, F};
-use crate::{ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings};
+use crate::{
+    inspect::inspect, ExportSettings, GammaloopCompileOptions, Settings,
+    TropicalSubgraphTableSettings,
+};
+use crate::{Externals, Integrand, RotationMethod};
 use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use colored::Colorize;
@@ -34,6 +36,7 @@ use lorentz_vector::LorentzVector;
 use petgraph::algo::greedy_matching;
 use petgraph::graph;
 use rayon::prelude::IndexedParallelIterator;
+use rayon::vec;
 use serde::{self, Deserialize, Serialize};
 use spenso::complex::Complex;
 use statrs::function::evaluate;
@@ -75,7 +78,11 @@ pub fn test_export_settings() -> ExportSettings {
     }
 }
 
-pub fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSample<f64> {
+pub fn kinematics_builder(
+    n_indep_externals: usize,
+    n_loops: usize,
+    bare_graph: &BareGraph,
+) -> DefaultSample<f64> {
     let mut external_moms = vec![];
 
     for i in 0..n_indep_externals {
@@ -99,11 +106,9 @@ pub fn kinematics_builder(n_indep_externals: usize, n_loops: usize) -> DefaultSa
 
     let jacobian = F(1.0);
 
-    DefaultSample {
-        loop_moms,
-        external_moms,
-        jacobian,
-    }
+    let helicities = vec![Helicity::Plus; n_indep_externals + 1];
+
+    DefaultSample::new(loop_moms, external_moms, jacobian, &helicities, bare_graph)
 }
 
 pub fn load_amplitude_output(
@@ -255,11 +260,13 @@ mod tests_scalar_massless_triangle {
 
         let energy_product = graph.bare_graph.compute_energy_product(&[k], &[p1, p2]);
 
-        let sample = DefaultSample {
-            loop_moms: vec![k],
-            external_moms: vec![p1, p2],
-            jacobian: F(1.0),
-        };
+        let sample = DefaultSample::new(
+            vec![k],
+            vec![p1, p2],
+            F(1.0),
+            &[Helicity::Plus, Helicity::Plus],
+            &graph.bare_graph,
+        );
 
         let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / energy_product;
 
@@ -421,7 +428,7 @@ fn pytest_scalar_fishnet_2x2() {
         let new_emr = basis
             .edge_signatures
             .iter()
-            .map(|s| compute_three_momentum_from_four(s, &momenta_in_basis, &[p1, p2, p3]))
+            .map(|s| s.compute_three_momentum_from_four(&momenta_in_basis, &[p1, p2, p3]))
             .collect_vec();
         assert_eq!(emr.len(), new_emr.len());
 
@@ -450,11 +457,18 @@ fn pytest_scalar_fishnet_2x2() {
         .compute_energy_product(&loop_moms_f128, &externals_f128);
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms_f128, &externals_f128) / &energy_product;
-    let sample = DefaultSample {
-        loop_moms: loop_moms_f128,
-        external_moms: externals_f128,
-        jacobian: F(1.0),
-    };
+    let sample = DefaultSample::new(
+        loop_moms_f128,
+        externals_f128,
+        F(1.0),
+        &[
+            Helicity::Plus,
+            Helicity::Plus,
+            Helicity::Plus,
+            Helicity::Plus,
+        ],
+        &graph.bare_graph,
+    );
 
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
@@ -539,11 +553,13 @@ fn pytest_scalar_sunrise() {
 
     let energy_product = graph.bare_graph.compute_energy_product(&[k1, k2], &[p1]);
 
-    let sample = DefaultSample {
-        loop_moms: vec![k1, k2],
-        external_moms: vec![p1],
-        jacobian: F(1.0),
-    };
+    let sample = DefaultSample::new(
+        vec![k1, k2],
+        vec![p1],
+        F(1.0),
+        &[Helicity::Plus],
+        &graph.bare_graph,
+    );
 
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / energy_product;
     let ltd_res = graph.evaluate_ltd_expression(&[k1, k2], &[p1]) / energy_product;
@@ -630,11 +646,13 @@ fn pytest_scalar_fishnet_2x3() {
 
     // let before_cff = std::time::Instant::now();
 
-    let sample = DefaultSample {
-        loop_moms: loop_moms.clone(),
-        external_moms: externals.clone(),
-        jacobian: F(1.0),
-    };
+    let sample = DefaultSample::new(
+        loop_moms.clone(),
+        externals.clone(),
+        F(1.0),
+        &[Helicity::Plus, Helicity::Plus, Helicity::Plus],
+        &amplitude.amplitude_graphs[0].graph.bare_graph,
+    );
 
     let cff_res = amplitude.amplitude_graphs[0]
         .graph
@@ -728,14 +746,14 @@ fn pytest_scalar_cube() {
 
     assert_eq!(
         graph.bare_graph.loop_momentum_basis.edge_signatures[0]
-            .1
+            .external
             .len(),
         8
     );
 
     assert_eq!(
         graph.bare_graph.loop_momentum_basis.edge_signatures[0]
-            .0
+            .internal
             .len(),
         5
     );
@@ -753,11 +771,18 @@ fn pytest_scalar_cube() {
         );
     }
 
-    let sample = DefaultSample {
-        loop_moms: loop_momenta.clone(),
-        external_moms: external_momenta.clone(),
-        jacobian: F(1.0),
-    };
+    let sample = DefaultSample::new(
+        loop_momenta.clone(),
+        external_momenta.clone(),
+        F(1.0),
+        &[
+            Helicity::Plus,
+            Helicity::Plus,
+            Helicity::Plus,
+            Helicity::Plus,
+        ],
+        &graph.bare_graph,
+    );
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_momenta, &external_momenta);
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings);
@@ -820,11 +845,13 @@ fn pytest_scalar_bubble() {
 
     let ltd_res = graph.evaluate_ltd_expression(&[k], &[p1]) / energy_product;
 
-    let sample = DefaultSample {
-        loop_moms: vec![k],
-        external_moms: vec![p1],
-        jacobian: F(1.0),
-    };
+    let sample = DefaultSample::new(
+        vec![k],
+        vec![p1],
+        F(1.0),
+        &[Helicity::Plus],
+        &graph.bare_graph,
+    );
 
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / energy_product;
 
@@ -911,11 +938,13 @@ fn pytest_scalar_massless_box() {
         .compute_energy_product(&loop_moms, &externals);
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
-    let sample = DefaultSample {
+    let sample = DefaultSample::new(
         loop_moms,
-        external_moms: externals,
-        jacobian: F(1.0),
-    };
+        externals,
+        F(1.0),
+        &[Helicity::Plus, Helicity::Plus, Helicity::Plus],
+        &graph.bare_graph,
+    );
 
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
@@ -1069,11 +1098,13 @@ fn pytest_scalar_double_triangle() {
         .compute_energy_product(&loop_moms, &externals);
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
-    let sample = DefaultSample {
+    let sample = DefaultSample::new(
         loop_moms,
-        external_moms: externals,
-        jacobian: F(1.0),
-    };
+        externals,
+        F(1.0),
+        &[Helicity::Plus],
+        &graph.bare_graph,
+    );
 
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
@@ -1159,11 +1190,13 @@ fn pytest_scalar_mercedes() {
         .compute_energy_product(&loop_moms, &externals);
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
 
-    let sample = DefaultSample {
+    let sample = DefaultSample::new(
         loop_moms,
-        external_moms: externals,
-        jacobian: F(1.0),
-    };
+        externals,
+        F(1.0),
+        &[Helicity::Plus, Helicity::Plus],
+        &graph.bare_graph,
+    );
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
     let ltd_comparison_tolerance128 = F::<f128>::from_ff64(LTD_COMPARISON_TOLERANCE);
@@ -1260,11 +1293,13 @@ fn pytest_scalar_triangle_box() {
         .bare_graph
         .compute_energy_product(&loop_moms, &externals);
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
-    let sample = DefaultSample {
+    let sample = DefaultSample::new(
         loop_moms,
-        external_moms: externals,
-        jacobian: F(1.0),
-    };
+        externals,
+        F(1.0),
+        &[Helicity::Plus, Helicity::Plus],
+        &graph.bare_graph,
+    );
 
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
@@ -1362,11 +1397,13 @@ fn pytest_scalar_isopod() {
         .compute_energy_product(&loop_moms, &externals);
 
     let ltd_res = graph.evaluate_ltd_expression(&loop_moms, &externals) / &energy_product;
-    let sample = DefaultSample {
-        loop_moms: loop_moms.to_vec(),
-        external_moms: externals.to_vec(),
-        jacobian: F(1.0),
-    };
+    let sample = DefaultSample::new(
+        loop_moms.to_vec(),
+        externals.to_vec(),
+        F(1.0),
+        &[Helicity::Plus, Helicity::Plus],
+        &graph.bare_graph,
+    );
 
     let cff_res = graph.evaluate_cff_expression(&sample, &default_settings) / &energy_product;
 
@@ -1407,7 +1444,7 @@ fn pytest_scalar_isopod() {
 #[test]
 fn pytest_scalar_raised_triangle() {
     let (model, amplitude, _) =
-        load_amplitude_output("TEST_AMPLITUDE_scalar_raised_triangle/GL_OUTPUT", true);
+        load_amplitude_output("TEST_AMPLITUDE_raised_triangle/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -1906,156 +1943,97 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
 
     graph.generate_cff();
     let export_settings = test_export_settings();
-    let _graph = graph.process_numerator(
+    let graph = graph.process_numerator(
         &model,
         ContractionSettings::Normal,
         PathBuf::new(),
         &export_settings,
     );
 
-    let _sample = kinematics_builder(5, 3);
-
-    // graph.evaluate_cff_expression(&sample, 3);
-    // println!(
-    //     "{}",
-    //     graph.derived_data.as_ref().unwrap().numerator.as_ref().unwrap().expression
-    // );
-
-    // println!(
-    //     "{}",
-    //     graph.derived_data.as_ref().unwrap().numerator.unwrap().network.unwrap().dot()
-    // );
-    // let mut onlycolor = Numerator {
-    //     expression: Atom::parse("T(aind(coad(8,9),cof(3,8),coaf(3,7)))*T(aind(coad(8,14),cof(3,13),coaf(3,12)))*T(aind(coad(8,21),cof(3,20),coaf(3,19)))*T(aind(coad(8,26),cof(3,25),coaf(3,24)))*id(aind(coaf(3,3),cof(3,4)))*id(aind(coaf(3,4),cof(3,24)))*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,6),cof(3,3)))*id(aind(coaf(3,8),cof(3,5)))*id(aind(coaf(3,10),cof(3,11)))*id(aind(coaf(3,11),cof(3,7)))*id(aind(coaf(3,13),cof(3,10)))*id(aind(coaf(3,15),cof(3,16)))*id(aind(coaf(3,16),cof(3,12)))*id(aind(coaf(3,17),cof(3,18)))*id(aind(coaf(3,18),cof(3,15)))*id(aind(coaf(3,20),cof(3,17)))*id(aind(coaf(3,22),cof(3,23)))*id(aind(coaf(3,23),cof(3,19)))*id(aind(coaf(3,25),cof(3,22)))*id(aind(coad(8,21),coad(8,9)))*id(aind(coad(8,26),coad(8,14)))").unwrap(),
-    //     network: None,
-    //     const_map: AHashMap::new(),
-    // };
-
-    // onlycolor.fill_network();
-    // println!("{}", onlycolor.network.as_ref().unwrap().dot());
-
-    // onlycolor.process_color_simple();
-    // println!("{}", onlycolor.expression);
-    // let a = graph
-    //     .derived_data
-    //     .numerator
-    //     .as_ref()
-    //     .unwrap()
-    //     .network
-    //     .as_ref()
-    //     .unwrap();
-
-    // println!("{}", a.dot_nodes());
-}
-
-// #[allow(dead_code)]
-// #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
-// pub struct DerivedGraphData<NumState> {
-//     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
-//     pub cff_expression: Option<CFFExpression>,
-//     pub ltd_expression: Option<LTDExpression>,
-//     #[bincode(with_serde)]
-//     pub tropical_subgraph_table: Option<SampleGenerator<3>>,
-//     #[bincode(with_serde)]
-//     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
-//     pub esurface_derived_data: Option<EsurfaceDerivedData>,
-//     pub static_counterterm: Option<static_counterterm::CounterTerm>,
-//     pub numerator: Num<NumState>,
-// }
-use crate::ltd::LTDExpression;
-
-use crate::cff::expression::{CFFExpression, CompiledCFFExpression, OrientationExpression, TermId};
-use momtrop::SampleGenerator;
-use smallvec::SmallVec;
-
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub struct MyCFFExpression {
-    #[bincode(with_serde)]
-    pub orientations: TiVec<TermId, OrientationExpression>,
-    #[bincode(with_serde)]
-    pub esurfaces: EsurfaceCollection,
-    #[bincode(with_serde)]
-    pub hsurfaces: HsurfaceCollection,
-    #[bincode(with_serde)]
-    pub compiled: CompiledCFFExpression,
-}
-
-impl From<CFFExpression> for MyCFFExpression {
-    fn from(value: CFFExpression) -> Self {
-        MyCFFExpression {
-            compiled: value.compiled,
-            orientations: value.orientations,
-            esurfaces: value.esurfaces,
-            hsurfaces: value.hsurfaces,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
-pub struct Derived<NumState> {
-    pub cff_expression: Option<MyCFFExpression>,
-    pub ltd_expression: Option<LTDExpression>,
-    #[bincode(with_serde)]
-    pub tropical_subgraph_table: Option<SampleGenerator<3>>,
-    #[bincode(with_serde)]
-    pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
-    pub esurface_derived_data: Option<EsurfaceDerivedData>,
-    pub static_counterterm: Option<static_counterterm::CounterTerm>,
-    pub numerator: Num<NumState>,
-}
-
-impl<State> From<DerivedGraphData<State>> for Derived<State> {
-    fn from(value: DerivedGraphData<State>) -> Self {
-        Derived {
-            cff_expression: value.cff_expression.map(MyCFFExpression::from),
-            ltd_expression: value.ltd_expression,
-            tropical_subgraph_table: value.tropical_subgraph_table,
-            edge_groups: value.edge_groups,
-            esurface_derived_data: value.esurface_derived_data,
-            static_counterterm: value.static_counterterm,
-            numerator: value.numerator,
-        }
-    }
+    let _sample = kinematics_builder(5, 3, &graph.bare_graph);
 }
 
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_1L_6photons() {
-    let default_settings = load_default_settings();
+    let _ = load_default_settings();
     env_logger::builder().is_test(true).try_init().unwrap();
     let (model, amplitude, true_path) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    graph.generate_cff();
     let export_settings = test_export_settings();
+    let amp = amplitude
+        .export(
+            true_path.to_str().as_ref().unwrap(),
+            &model,
+            &export_settings,
+        )
+        .unwrap();
+    // .map(|a| a.map(|ag| ag.forget_type()));
 
-    println!("{}", serde_yaml::to_string(&export_settings).unwrap());
-    let mut graph = graph.process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        true_path,
-        &export_settings,
+    let mut settings: Settings = Default::default();
+
+    match &mut settings.kinematics.externals {
+        Externals::Constant {
+            momenta,
+            helicities,
+        } => {
+            *momenta = vec![
+                [F(1.0), F(0.0), F(0.0), F(1.0)],
+                [F(1.0), F(0.0), F(0.0), F(-1.0)],
+                [F(-0.5), F(0.5), F(0.5), F(0.5)],
+                [F(-0.5), F(-0.5), F(-0.5), F(-0.5)],
+                [F(0.5), F(-0.5), F(-0.5), F(0.5)],
+                [F(0.5), F(0.5), F(0.5), F(-0.5)],
+            ];
+            *helicities = vec![
+                Helicity::Plus,
+                Helicity::Plus,
+                Helicity::Minus,
+                Helicity::Minus,
+                Helicity::Minus,
+                Helicity::Minus,
+            ];
+        }
+    }
+
+    settings.stability.rotation_axis = vec![
+        RotationMethod::Pi2Z,
+        RotationMethod::Pi2X,
+        RotationMethod::Pi2Y,
+    ];
+
+    let mut integrand = Integrand::GammaLoopIntegrand(
+        GammaLoopIntegrand::amplitude_integrand_constructor(amp, settings.clone()),
     );
+    let point = vec![F(0.123), F(0.3242), F(0.4233)];
 
-    let sample = kinematics_builder(5, 1);
-    graph.evaluate_cff_expression(&sample, &default_settings);
+    let _a = inspect(&settings, &mut integrand, point, &[], false, true, true);
+    // integrand.inspect();
 
-    let eval: DerivedGraphData<PythonState> = graph.derived_data.unwrap().forget_type();
+    // amp.generate_integrand(path_to_settings)
 
-    let v = serde_json::to_string(&eval).unwrap();
-    let u: DerivedGraphData<PythonState> = serde_json::from_str(&v).unwrap();
+    // let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    // graph.generate_cff();
+
+    // println!("{}", serde_yaml::to_string(&export_settings).unwrap());
+    // let mut graph = graph.process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     true_path,
+    //     &export_settings,
+    // );
+
+    // let sample = kinematics_builder(5, 1);
+    // graph.evaluate_cff_expression(&sample, &default_settings);
+
+    // let eval: DerivedGraphData<PythonState> = graph.derived_data.unwrap().forget_type();
+
+    // let v = serde_json::to_string(&eval).unwrap();
+    // let u: DerivedGraphData<PythonState> = serde_json::from_str(&v).unwrap();
 }
 
-#[test]
-fn state_export_import() {
-    let mut export = vec![];
-    State::export(&mut export).unwrap();
-
-    let i = State::import(Cursor::new(&export), None).unwrap();
-    assert!(i.is_empty());
-}
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_2L_6photons() {
@@ -2066,6 +2044,7 @@ fn pytest_physical_2L_6photons() {
         load_amplitude_output("TEST_AMPLITUDE_physical_2L_6photons/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    let sample = kinematics_builder(5, 2, &graph.bare_graph);
 
     graph.generate_cff();
     let export_settings = test_export_settings();
@@ -2076,6 +2055,31 @@ fn pytest_physical_2L_6photons() {
         &export_settings,
     );
 
-    let sample = kinematics_builder(5, 2);
+    graph.evaluate_cff_expression(&sample, &default_settings);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_physical_1L_6photons_generate() {
+    let default_settings = load_default_settings();
+    // env_logger::builder().is_test(true).try_init().unwrap();
+    env_logger::init();
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    println!("{:?}", graph.bare_graph.loop_momentum_basis);
+    let sample = kinematics_builder(5, 1, &graph.bare_graph);
+
+    graph.generate_cff();
+    let export_settings = test_export_settings();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        PathBuf::new(),
+        &export_settings,
+    );
+
     graph.evaluate_cff_expression(&sample, &default_settings);
 }

@@ -40,7 +40,7 @@ def update_run_card_in_output(process_dir: Path, settings: gammaloop_interface.G
 
     run_config = copy.deepcopy(settings.get_setting('run_settings'))
     # Do not update settings meant to be automatically adjusted if not explicitly set
-    if run_config['Kinematics']['externals']['type'] == 'constant' and run_config['Kinematics']['externals']['momenta'] is None:
+    if run_config['Kinematics']['externals']['type'] == 'constant' and run_config['Kinematics']['externals']['data']['momenta'] is None:
         del run_config['Kinematics']
     process_config.update({'run_settings': run_config})
 
@@ -109,7 +109,7 @@ class GammaLoopExporter(object):
                     n_columns=self.gammaloop.config['drawing']['combined_graphs_pdf_grid_shape'][1]
                 ))
 
-    def build_external_momenta_from_connections(self, external_connections: list[tuple[Vertex | None, Vertex | None]], e_cm: float) -> tuple[float, list[list[float]]]:
+    def build_external_momenta_from_connections(self, external_connections: list[tuple[Vertex | None, Vertex | None]], e_cm: float) -> tuple[float, list[list[float]], list[int]]:
 
         # (orientation_sign, mass, direction [in/out] )
         conf: list[tuple[int, float, int]] = []
@@ -219,8 +219,11 @@ class GammaLoopExporter(object):
             # note: this last leg will not be onshell!
             externals.insert(0,
                              [conf[0][0]*conf[0][2] * pi for pi in first_leg_momentum])
+            
+        helicities = [1] * len(externals)
 
-        return (e_cm, externals)
+
+        return (e_cm, externals, helicities)
 
 
 class AmplitudesExporter(GammaLoopExporter):
@@ -232,18 +235,20 @@ class AmplitudesExporter(GammaLoopExporter):
     def adjust_run_settings(self, amplitudes: AmplitudeList):
 
         if self.configuration_for_process.get_setting('run_settings.Kinematics.externals.type') == 'constant' and \
-                self.configuration_for_process.get_setting('run_settings.Kinematics.externals.momenta') is None:
+                self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.momenta') is None:
             if len(amplitudes) == 0 or len(amplitudes[0].amplitude_graphs) == 0:
                 logger.warning(
                     "Could not identify external momenta structure.")
                 return
-            e_cm, external_momenta = self.build_external_momenta_from_connections(
+            e_cm, external_momenta,helicities = self.build_external_momenta_from_connections(
                 amplitudes[0].amplitude_graphs[0].graph.external_connections,
                 self.configuration_for_process.get_setting(
                     'run_settings.Kinematics.e_cm')
             )
             self.configuration_for_process.set_setting(
-                'run_settings.Kinematics.externals.momenta', external_momenta)
+                'run_settings.Kinematics.externals.data.momenta', external_momenta)
+            self.configuration_for_process.set_setting(
+                'run_settings.Kinematics.externals.data.helicities', helicities)
             self.configuration_for_process.set_setting(
                 'run_settings.Kinematics.e_cm', e_cm)
 

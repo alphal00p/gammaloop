@@ -35,6 +35,7 @@ use eyre::WrapErr;
 
 use integrands::*;
 use momentum::FourMomentum;
+use momentum::Helicity;
 use momentum::ThreeMomentum;
 use numerator::NumeratorEvaluatorOptions;
 use observables::ObservableSettings;
@@ -372,10 +373,13 @@ pub enum Precision {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "type", content = "momenta")]
+#[serde(tag = "type", content = "data")]
 pub enum Externals {
     #[serde(rename = "constant")]
-    Constant(Vec<[F<f64>; 4]>),
+    Constant {
+        momenta: Vec<[F<f64>; 4]>,
+        helicities: Vec<Helicity>,
+    },
     // add different type of pdfs here when needed
 }
 
@@ -384,8 +388,11 @@ impl Externals {
     #[inline]
     pub fn get_externals(&self, x_space_point: &[F<f64>]) -> (Vec<FourMomentum<F<f64>>>, F<f64>) {
         match self {
-            Externals::Constant(externals) => (
-                externals
+            Externals::Constant {
+                momenta,
+                helicities,
+            } => (
+                momenta
                     .iter()
                     .map(|[e0, e1, e2, e3]| FourMomentum::from_args(*e0, *e1, *e2, *e3))
                     .collect(),
@@ -393,14 +400,23 @@ impl Externals {
             ),
         }
     }
+
+    pub fn get_helicities(&self) -> &[Helicity] {
+        match self {
+            Externals::Constant { helicities, .. } => helicities,
+        }
+    }
 }
 
 impl Default for Externals {
     fn default() -> Self {
-        Externals::Constant(vec![
-            [F(2.0), F(2.0), F(3.0), F(4.0)],
-            [F(1.0), F(2.0), F(9.0), F(3.0)],
-        ])
+        Externals::Constant {
+            momenta: vec![
+                [F(2.0), F(2.0), F(3.0), F(4.0)],
+                [F(1.0), F(2.0), F(9.0), F(3.0)],
+            ],
+            helicities: vec![Helicity::Plus, Helicity::Minus],
+        }
     }
 }
 

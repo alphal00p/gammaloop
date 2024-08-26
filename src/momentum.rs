@@ -1,10 +1,13 @@
 use std::{
+    borrow::Borrow,
     fmt::{Display, LowerExp},
     ops::{Add, AddAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
+use bincode::{Decode, Encode};
 use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
     arithmetic::ScalarMul,
     contraction::RefZero,
@@ -213,8 +216,17 @@ impl<T> Energy<T> {
     // }
 }
 
-impl<T: RefZero> RefZero for Energy<T> {
-    fn ref_zero(&self) -> Self {
+// impl<U: Borrow<T>, T> Borrow<Energy<T>> for Energy<U> {
+//     fn borrow(&self) -> &Energy<T> {
+
+//     }
+// }
+
+impl<U, T: RefZero<U>> RefZero<Energy<U>> for Energy<T>
+where
+    Energy<T>: Borrow<Energy<U>>,
+{
+    fn ref_zero(&self) -> Energy<U> {
         Energy {
             value: self.value.ref_zero(),
         }
@@ -259,6 +271,61 @@ pub struct ThreeMomentum<T> {
     pub px: T,
     pub py: T,
     pub pz: T,
+}
+
+pub struct ThreeRotation<T> {
+    pub map: fn(ThreeMomentum<T>) -> ThreeMomentum<T>,
+    pub inv_map: fn(ThreeMomentum<T>) -> ThreeMomentum<T>,
+}
+
+impl<T: Neg<Output = T>> ThreeRotation<T> {
+    pub fn half_pi_x() -> Self {
+        let map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
+            std::mem::swap(&mut momentum.py, &mut momentum.pz);
+            momentum.pz = -momentum.pz;
+            momentum
+        };
+
+        let inv_map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
+            momentum.pz = -momentum.pz;
+            std::mem::swap(&mut momentum.py, &mut momentum.pz);
+            momentum
+        };
+
+        ThreeRotation { map, inv_map }
+    }
+
+    pub fn half_pi_y() -> Self {
+        let map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
+            std::mem::swap(&mut momentum.px, &mut momentum.pz);
+            momentum.px = -momentum.px;
+            momentum
+        };
+
+        let inv_map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
+            momentum.px = -momentum.px;
+            std::mem::swap(&mut momentum.px, &mut momentum.pz);
+            momentum
+        };
+
+        ThreeRotation { map, inv_map }
+    }
+
+    pub fn half_pi_z() -> Self {
+        let map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
+            std::mem::swap(&mut momentum.px, &mut momentum.py);
+            momentum.py = -momentum.py;
+            momentum
+        };
+
+        let inv_map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
+            momentum.py = -momentum.py;
+            std::mem::swap(&mut momentum.px, &mut momentum.py);
+            momentum
+        };
+
+        ThreeRotation { map, inv_map }
+    }
 }
 
 impl<T: FloatLike> ThreeMomentum<F<T>> {
@@ -873,6 +940,15 @@ impl<T: RefZero, U: RefZero> RefZero for FourMomentum<T, U> {
     }
 }
 
+impl<T: RefZero, U: RefZero> RefZero<FourMomentum<T, U>> for &FourMomentum<T, U> {
+    fn ref_zero(&self) -> FourMomentum<T, U> {
+        FourMomentum {
+            temporal: self.temporal.ref_zero(),
+            spatial: self.spatial.ref_zero(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum PolType {
     U,
@@ -1047,13 +1123,50 @@ impl<T: Neg<Output = T>> Neg for Polarization<T> {
 }
 
 impl<T> Polarization<T> {
-    fn cast<U>(&self) -> Polarization<U>
+    pub fn cast<U>(&self) -> Polarization<U>
     where
         T: Clone,
         U: Clone + From<T>,
     {
         Polarization {
             tensor: self.tensor.cast(),
+            pol_type: self.pol_type,
+        }
+    }
+}
+
+impl<T> Polarization<Complex<T>> {
+    pub fn complex_cast<U>(&self) -> Polarization<Complex<U>>
+    where
+        T: Clone,
+        U: Clone + From<T>,
+    {
+        Polarization {
+            tensor: self
+                .tensor
+                .map_data_ref(|d| d.map_ref(|r| r.clone().into())),
+            pol_type: self.pol_type,
+        }
+    }
+}
+
+impl<T: FloatLike> Polarization<Complex<F<T>>> {
+    pub fn higher(&self) -> Polarization<Complex<F<T::Higher>>>
+    where
+        T::Higher: FloatLike,
+    {
+        Polarization {
+            tensor: self.tensor.map_data_ref(|t| t.map_ref(|r| r.higher())),
+            pol_type: self.pol_type,
+        }
+    }
+
+    pub fn lower(&self) -> Polarization<Complex<F<T::Lower>>>
+    where
+        T::Lower: FloatLike,
+    {
+        Polarization {
+            tensor: self.tensor.map_data_ref(|t| t.map_ref(|r| r.lower())),
             pol_type: self.pol_type,
         }
     }
@@ -1360,7 +1473,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         Polarization::lorentz([e0, e1, e2, e3])
     }
 
-    pub fn pol(&self, lambda: SignOrZero) -> Polarization<Complex<F<T>>> {
+    pub fn pol(&self, lambda: Helicity) -> Polarization<Complex<F<T>>> {
         if lambda.is_zero() {
             self.pol_three().cast()
         } else {
@@ -1450,10 +1563,60 @@ impl<'a, T> IntoIterator for &'a Polarization<T> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[repr(i8)]
 pub enum Sign {
-    Positive,
-    Negative,
+    Positive = 1,
+    Negative = -1,
 }
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum SignError {
+    #[error("Invalid value for Sign")]
+    InvalidValue,
+    #[error("Zero is not a valid value for Sign")]
+    ZeroValue,
+}
+
+impl TryFrom<SignOrZero> for Sign {
+    type Error = SignError;
+    fn try_from(value: SignOrZero) -> Result<Self, Self::Error> {
+        match value {
+            SignOrZero::Zero => Err(SignError::ZeroValue),
+            SignOrZero::Plus => Ok(Sign::Positive),
+            SignOrZero::Minus => Ok(Sign::Negative),
+        }
+    }
+}
+// impl Serialize for Sign {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer,
+//     {
+//         let value = match *self {
+//             Sign::Positive => 1,
+//             Sign::Negative => -1,
+//         };
+//         serializer.serialize_i32(value)
+//     }
+// }
+
+// impl<'de> Deserialize<'de> for Sign {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         let value = i32::deserialize(deserializer)?;
+//         match value {
+//             1 => Ok(Sign::Positive),
+//             -1 => Ok(Sign::Negative),
+//             _ => Err(de::Error::custom(
+//                 "Expected 1 for Positive or -1 for Negative",
+//             )),
+//         }
+//     }
+// }
 
 impl<T: Neg<Output = T>> Mul<T> for Sign {
     type Output = T;
@@ -1475,39 +1638,326 @@ impl Neg for Sign {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    Serialize_repr,
+    Deserialize_repr,
+    Encode,
+    Decode,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
+#[repr(i8)]
 pub enum SignOrZero {
-    Sign(Sign),
-    Zero,
+    Zero = 0,
+    Plus = 1,
+    Minus = -1,
 }
 
-impl SignOrZero {
-    fn is_zero(&self) -> bool {
-        matches!(self, SignOrZero::Zero)
-    }
-
-    #[allow(dead_code)]
-    fn is_sign(&self) -> bool {
-        matches!(self, SignOrZero::Sign(_))
-    }
-}
-
-impl<T: Neg<Output = T> + RefZero> Mul<T> for SignOrZero {
-    type Output = T;
-    fn mul(self, rhs: T) -> Self::Output {
+impl Display for SignOrZero {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SignOrZero::Sign(s) => s * rhs,
-            SignOrZero::Zero => rhs.ref_zero(),
+            SignOrZero::Zero => write!(f, ""),
+            SignOrZero::Plus => write!(f, "+"),
+            SignOrZero::Minus => write!(f, "-"),
         }
     }
 }
 
-impl Neg for SignOrZero {
+pub type Helicity = SignOrZero;
+
+#[derive(
+    Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Encode, Decode, PartialOrd, Ord, Hash,
+)]
+pub struct Signature(Vec<SignOrZero>);
+
+impl FromIterator<SignOrZero> for Signature {
+    fn from_iter<I: IntoIterator<Item = SignOrZero>>(iter: I) -> Self {
+        Signature(iter.into_iter().collect())
+    }
+}
+
+impl FromIterator<i8> for Signature {
+    fn from_iter<I: IntoIterator<Item = i8>>(iter: I) -> Self {
+        Signature(
+            iter.into_iter()
+                .map(|x| match x {
+                    0 => SignOrZero::Zero,
+                    1 => SignOrZero::Plus,
+                    -1 => SignOrZero::Minus,
+                    _ => panic!("Invalid value for Signature"),
+                })
+                .collect(),
+        )
+    }
+}
+
+impl FromIterator<isize> for Signature {
+    fn from_iter<I: IntoIterator<Item = isize>>(iter: I) -> Self {
+        Signature(
+            iter.into_iter()
+                .map(|x| match x {
+                    0 => SignOrZero::Zero,
+                    1 => SignOrZero::Plus,
+                    -1 => SignOrZero::Minus,
+                    _ => panic!("Invalid value for Signature"),
+                })
+                .collect(),
+        )
+    }
+}
+
+impl From<Vec<i8>> for Signature {
+    fn from(value: Vec<i8>) -> Self {
+        Signature::from_iter(value)
+    }
+}
+
+impl IntoIterator for Signature {
+    type Item = SignOrZero;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Signature {
+    type Item = SignOrZero;
+    type IntoIter = std::iter::Copied<std::slice::Iter<'a, Self::Item>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter().copied()
+    }
+}
+
+impl Index<usize> for Signature {
+    type Output = SignOrZero;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl Signature {
+    pub fn validate_basis<T>(&self, basis: &[T]) -> bool {
+        self.len() == basis.len()
+    }
+
+    pub fn panic_validate_basis<T>(&self, basis: &[T]) {
+        if !self.validate_basis(basis) {
+            panic!(
+                "Invalid basis for Signature, expected length {}, got length {}",
+                self.len(),
+                basis.len()
+            );
+        }
+    }
+
+    pub fn to_momtrop_format(&self) -> Vec<isize> {
+        self.0
+            .iter()
+            .map(|x| match x {
+                SignOrZero::Zero => 0,
+                SignOrZero::Plus => 1,
+                SignOrZero::Minus => -1,
+            })
+            .collect()
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<SignOrZero> {
+        self.0.iter()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn apply<T>(&self, basis: &[T]) -> T
+    where
+        T: RefZero + Clone + Neg<Output = T> + AddAssign<T>,
+    {
+        // self.panic_validate_basis(basis);
+        let mut result = basis[0].ref_zero();
+        for (&sign, t) in self.0.iter().zip(basis.iter().cloned()) {
+            result += sign * t;
+        }
+        result
+    }
+
+    pub fn apply_iter<I, T>(&self, basis: I) -> Option<T>
+    where
+        I: IntoIterator,
+        I::Item: RefZero<T>,
+        T: Clone + SubAssign<I::Item> + AddAssign<I::Item>,
+    {
+        let mut basis_iter = basis.into_iter();
+        let mut signature_iter = self.into_iter();
+
+        while let (Some(sign), Some(item)) = (signature_iter.next(), basis_iter.next()) {
+            if sign.is_sign() {
+                // Initialize the result based on the first non-zero sign
+                let mut result = item.ref_zero();
+                match sign {
+                    SignOrZero::Zero => {
+                        panic!("unreachable");
+                        // return None;
+                    }
+                    SignOrZero::Plus => {
+                        result += item;
+                    }
+                    SignOrZero::Minus => {
+                        result -= item;
+                    }
+                }
+
+                // Continue processing the rest of the iterator
+                while let (Some(sign), Some(item)) = (signature_iter.next(), basis_iter.next()) {
+                    match sign {
+                        SignOrZero::Zero => {}
+                        SignOrZero::Plus => {
+                            result += item;
+                        }
+                        SignOrZero::Minus => {
+                            result -= item;
+                        }
+                    }
+                }
+
+                return Some(result);
+            }
+        }
+
+        // Return None if no non-zero sign was found
+        None
+    }
+
+    pub fn label_with(&self, label: &str) -> String {
+        let mut result = String::new();
+        let mut first = true;
+        for (i, sign) in self.0.iter().enumerate() {
+            if !first {
+                result.push_str(&sign.to_string());
+            } else {
+                first = false;
+            }
+            if sign.is_sign() {
+                result.push_str(&format!("{}_{}", label, i));
+            }
+        }
+        result
+    }
+}
+
+#[test]
+fn test_signature() {
+    let sig = Signature(vec![SignOrZero::Plus, SignOrZero::Minus]);
+    let basis: Vec<i32> = vec![1, 2];
+    assert_eq!(sig.apply(&basis), 1 - 2);
+    assert_eq!(sig.apply_iter(basis.iter()), Some(-1));
+
+    let basis: [FourMomentum<i32>; 4] = [
+        FourMomentum::from_args(1, 1, 0, 0),
+        FourMomentum::from_args(1, 0, 1, 0),
+        FourMomentum::from_args(1, 0, 0, 1),
+        FourMomentum::from_args(1, 1, 1, 1),
+    ];
+
+    let sig = Signature(vec![
+        SignOrZero::Plus,
+        SignOrZero::Minus,
+        SignOrZero::Zero,
+        SignOrZero::Plus,
+    ]);
+
+    assert_eq!(sig.apply(&basis), FourMomentum::from_args(1, 2, 0, 1));
+    let sig = Signature(vec![
+        SignOrZero::Zero,
+        SignOrZero::Zero,
+        SignOrZero::Zero,
+        SignOrZero::Zero,
+    ]);
+    assert_eq!(sig.apply_iter(basis.iter()), None);
+    let sig = Signature(vec![
+        SignOrZero::Zero,
+        SignOrZero::Zero,
+        SignOrZero::Zero,
+        SignOrZero::Minus,
+    ]);
+    assert_eq!(sig.apply_iter(basis.iter()), Some(-basis[3]));
+}
+
+// impl Serialize for Helicity {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer,
+//     {
+//         match *self {
+//             Helicity::Sign(ref sign) => sign.serialize(serializer),
+//             Helicity::Zero => serializer.serialize_i32(0),
+//         }
+//     }
+// }
+
+// impl<'de> Deserialize<'de> for Helicity {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         let value = i32::deserialize(deserializer)?;
+//         match value {
+//             1 => Ok(Helicity::Sign(Sign::Positive)),
+//             -1 => Ok(Helicity::Sign(Sign::Negative)),
+//             0 => Ok(Helicity::Zero),
+//             _ => Err(de::Error::custom(
+//                 "Expected 1 for Positive, -1 for Negative, or 0 for Zero",
+//             )),
+//         }
+//     }
+// }
+#[allow(non_upper_case_globals)]
+impl Helicity {
+    pub fn is_zero(&self) -> bool {
+        matches!(self, Helicity::Zero)
+    }
+
+    pub fn is_sign(&self) -> bool {
+        matches!(self, Helicity::Plus | Helicity::Minus)
+    }
+
+    pub fn is_positive(&self) -> bool {
+        matches!(self, Helicity::Plus)
+    }
+
+    pub fn is_negative(&self) -> bool {
+        matches!(self, Helicity::Minus)
+    }
+}
+
+impl<T: Neg<Output = T> + RefZero> Mul<T> for Helicity {
+    type Output = T;
+    fn mul(self, rhs: T) -> Self::Output {
+        match self {
+            Helicity::Plus => rhs,
+            Helicity::Minus => -rhs,
+            Helicity::Zero => rhs.ref_zero(),
+        }
+    }
+}
+
+impl Neg for Helicity {
     type Output = Self;
     fn neg(self) -> Self::Output {
         match self {
-            SignOrZero::Sign(s) => SignOrZero::Sign(-s),
-            SignOrZero::Zero => SignOrZero::Zero,
+            Helicity::Plus => Helicity::Minus,
+            Helicity::Minus => Helicity::Plus,
+            Helicity::Zero => Helicity::Zero,
         }
     }
 }
@@ -1734,7 +2184,7 @@ mod tests {
 
     use crate::utils::F;
 
-    use super::FourMomentum;
+    use super::*;
 
     #[test]
     fn polarization() {
@@ -1754,5 +2204,17 @@ mod tests {
         pol.tensor
             .iter_flat()
             .for_each(|(i, d)| println!("{}{}", i, d));
+    }
+
+    #[test]
+    fn serialization() {
+        let helicity = Helicity::Plus;
+        let minus = Helicity::Minus;
+        let hels = vec![helicity, minus, Helicity::Zero, helicity, minus];
+        let serialized = serde_json::to_string(&hels).unwrap();
+        println!("{}", serialized);
+        let deserialized: Vec<Helicity> = serde_json::from_str("[1,-1,0,1]").unwrap();
+
+        println!("{:?}", deserialized);
     }
 }

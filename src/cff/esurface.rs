@@ -13,11 +13,10 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
 
 use crate::graph::{Graph, LoopMomentumBasis};
-use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::momentum::{FourMomentum, Signature, ThreeMomentum};
 use crate::numerator::NumeratorState;
 use crate::utils::{
-    compute_loop_part, compute_momentum, compute_shift_part, compute_t_part_of_shift_part,
-    format_momentum, FloatLike, RefDefault, F,
+    compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, FloatLike, F,
 };
 
 use super::cff_graph::VertexSet;
@@ -106,7 +105,7 @@ impl Esurface {
             .iter()
             .map(|index| {
                 let signature = &lmb.edge_signatures[*index];
-                let momentum = compute_momentum(signature, loop_moms, &spatial_part_of_externals);
+                let momentum = signature.compute_momentum(loop_moms, &spatial_part_of_externals);
                 let mass = &real_mass_vector[*index];
 
                 (momentum.norm_squared() + mass * mass).sqrt()
@@ -127,7 +126,7 @@ impl Esurface {
         self.external_shift
             .iter()
             .map(|(index, sign)| {
-                let external_signature = &lmb.edge_signatures[*index].1;
+                let external_signature = &lmb.edge_signatures[*index].external;
                 F::from_f64(*sign as f64)
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
@@ -164,8 +163,8 @@ impl Esurface {
             .map(|&index| {
                 let signature = &lmb.edge_signatures[index];
 
-                let momentum = compute_momentum(signature, &loops, &spatial_part_of_externals);
-                let unit_loop_part = compute_loop_part(&signature.0, shifted_unit_loops);
+                let momentum = signature.compute_momentum(&loops, &spatial_part_of_externals);
+                let unit_loop_part = compute_loop_part(&signature.internal, shifted_unit_loops);
 
                 let energy = (momentum.norm_squared()
                     + &real_mass_vector[index] * &real_mass_vector[index])
@@ -219,7 +218,7 @@ impl Esurface {
             .iter()
             .map(|index| {
                 let signature = &lmb.edge_signatures[*index];
-                format!("|{}|", format_momentum(signature))
+                format!("|{}|", signature.format_momentum())
             })
             .join(" + ");
 
@@ -236,7 +235,7 @@ impl Esurface {
                 } else {
                     format!("+{}", sign)
                 };
-                format!(" {} ({})^0", sign, format_momentum(signature))
+                format!(" {} ({})^0", sign, signature.format_momentum())
             })
             .join("");
 
@@ -455,22 +454,14 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
 pub struct EsurfaceData {
     cut_momentum_basis: usize,
     mass_sum_squared: F<f64>,
-    shift_signature: Vec<isize>,
+    shift_signature: Signature,
 }
 
 impl EsurfaceData {
     #[allow(dead_code)]
     fn existence_condition<T: FloatLike>(&self, externals: &[FourMomentum<F<T>>]) -> (F<T>, F<T>) {
-        let mut shift = externals[0].default();
+        let shift = self.shift_signature.apply(externals);
 
-        for (i, external) in externals.iter().enumerate() {
-            match self.shift_signature[i] {
-                1 => shift += external,
-                -1 => shift -= external,
-                0 => {}
-                _ => unreachable!("Shift signature must be -1, 0 or 1"),
-            }
-        }
         let shift_squared = shift.square();
 
         (
@@ -483,18 +474,9 @@ impl EsurfaceData {
         &self,
         externals: &[FourMomentum<F<T>>],
     ) -> F<T> {
-        let mut shift = externals[0].temporal.value.zero();
-
-        for (i, external) in externals.iter().enumerate() {
-            match self.shift_signature[i] {
-                1 => shift += &external.temporal.value,
-                -1 => shift -= &external.temporal.value,
-                0 => {}
-                _ => unreachable!("Shift signature must be -1, 0 or 1"),
-            }
-        }
-
-        shift
+        self.shift_signature
+            .apply_iter::<_, F<T>>(externals.iter().map(|mom| &mom.temporal.value))
+            .unwrap()
     }
 }
 
@@ -531,7 +513,7 @@ pub fn generate_esurface_data<S: NumeratorState>(
                 .find(|&i| !lmb.basis.contains(i))
                 .ok_or_else(|| eyre!("No remaining edge in esurface"))?;
 
-            let shift_signature = lmb.edge_signatures[energy_not_in_cmb].1.clone();
+            let shift_signature = lmb.edge_signatures[energy_not_in_cmb].external.clone();
 
             let mass_sum: F<f64> = esurface
                 .energies

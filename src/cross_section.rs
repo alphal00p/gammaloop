@@ -677,7 +677,7 @@ impl Amplitude<UnInit> {
                     amplitude_graph.graph.bare_graph.name
                 )),
                 &bincode::encode_to_vec(
-                    &amplitude_graph
+                    amplitude_graph
                         .graph
                         .derived_data
                         .as_ref()
@@ -770,7 +770,7 @@ impl Amplitude<PythonState> {
                     amplitude_graph.graph.bare_graph.name
                 )),
                 &bincode::encode_to_vec(
-                    &amplitude_graph
+                    amplitude_graph
                         .graph
                         .derived_data
                         .as_ref()

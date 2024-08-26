@@ -1,5 +1,5 @@
 use crate::cff::expression::CFFFloat;
-use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::momentum::{FourMomentum, Signature, ThreeMomentum};
 use crate::numerator::NumeratorEvaluateFloat;
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
@@ -749,6 +749,12 @@ pub trait FloatLike:
 pub struct F<T: FloatLike>(pub T);
 
 impl<T:FloatLike> R for F<T> {}
+
+impl<T:FloatLike> RefZero<F<T>> for &F<T>{
+    fn ref_zero(&self) -> F<T> {
+        F(self.0.ref_zero())
+    }
+}
 
 impl<T:FloatLike> RealNumberLike for F<T>{
     delegate!{
@@ -1832,187 +1838,29 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
 }
 
 pub fn compute_loop_part<T: FloatLike>(
-    loop_signature: &[isize],
+    loop_signature: &Signature,
     loop_moms: &[ThreeMomentum<F<T>>],
 ) -> ThreeMomentum<F<T>> {
-    let mut res = loop_moms[0].default();
-
-    for i_l in loop_signature.iter().enumerate() {
-        match i_l.1 {
-            1 => {
-                res += &loop_moms[i_l.0];
-            }
-            -1 => {
-                res -= &loop_moms[i_l.0];
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-
-    res
+    loop_signature.apply(loop_moms)
 }
 
 pub fn compute_shift_part<T: FloatLike>(
-    external_signature: &[isize],
+    external_signature: &Signature,
     external_moms: &[FourMomentum<F<T>>],
 ) -> FourMomentum<F<T>> {
-    let mut res = external_moms[0].default();
-
-    for i_l in external_signature.iter().enumerate() {
-        match i_l.1 {
-            1 => {
-                res += &external_moms[i_l.0];
-            }
-            -1 => {
-                res -= &external_moms[i_l.0];
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-
-    res
+    external_signature.apply(external_moms)
 }
 
 pub fn compute_t_part_of_shift_part<T: FloatLike>(
-    external_signature: &[isize],
+    external_signature: &Signature,
     external_moms: &[FourMomentum<F<T>>],
 ) -> F<T> {
-    let mut res = external_moms[0].temporal.value.zero();
-
-    for i_l in external_signature.iter().enumerate() {
-        match i_l.1 {
-            1 => {
-                res += &external_moms[i_l.0].temporal.value;
-            }
-            -1 => {
-                res -= &external_moms[i_l.0].temporal.value;
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-
-    res
+    // external_signature.panic_validate_basis(external_moms);
+    external_signature.apply_iter(external_moms.iter().map(|m| m.temporal.value.clone())).unwrap()
 }
 
 
-pub fn compute_momentum<'a, 'b: 'a, T>(
-    signature: &(Vec<isize>, Vec<isize>),
-    loop_moms: &'a [T],
-    external_moms: &'b [T],
-) -> T
-where
-    T: RefDefault + Clone,
-    T: AddAssign<T> + SubAssign<T>,
-{
-    let mut res = loop_moms[0].default();
-    for (i_l, sign) in signature.0.iter().enumerate() {
-        match sign {
-            1 => {
-                res += loop_moms[i_l].clone();
-            }
-            -1 => {
-                res -= loop_moms[i_l].clone();
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-    for (i_l, sign) in signature.1.iter().enumerate() {
-        match sign {
-            1 => {
-                res += external_moms[i_l].clone();
-            }
-            -1 => {
-                res -= external_moms[i_l].clone();
-            }
-            0 => {}
-            _ => unreachable!("Sign should be, -1,0,1"),
-        }
-    }
-    res
-}
 
-/// Usefull for debugging
-pub fn format_momentum(signature: &(Vec<isize>, Vec<isize>)) -> String {
-    let mut res = String::new();
-    let mut first = true;
-
-    for (i_l, sign) in signature.0.iter().enumerate() {
-        match sign {
-            1 => {
-                if first {
-                    res.push_str(&format!("k_{}", i_l));
-                    first = false;
-                } else {
-                    res.push_str(&format!(" + k_{}", i_l));
-                }
-            }
-            -1 => {
-                if first {
-                    res.push_str(&format!("-k_{}", i_l));
-                    first = false;
-                } else {
-                    res.push_str(&format!(" - k_{}", i_l));
-                }
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-
-    for (i_l, sign) in signature.1.iter().enumerate() {
-        match sign {
-            1 => {
-                if first {
-                    res.push_str(&format!("p_{}", i_l));
-                    first = false;
-                } else {
-                    res.push_str(&format!(" + p_{}", i_l));
-                }
-            }
-            -1 => {
-                if first {
-                    res.push_str(&format!("-p_{}", i_l));
-                    first = false;
-                } else {
-                    res.push_str(&format!(" - p_{}", i_l));
-                }
-            }
-            0 => {}
-            _ => unreachable!("Sign should be -1,0,1"),
-        }
-    }
-
-    res
-}
-
-#[allow(unused)]
-pub fn compute_four_momentum_from_three<T: FloatLike>(
-    signature: &(Vec<isize>, Vec<isize>),
-    loop_moms: &[ThreeMomentum<F<T>>],
-    external_moms: &[FourMomentum<F<T>>],
-) -> FourMomentum<F<T>> {
-    let loop_moms = loop_moms
-        .iter()
-        .map(|m| m.clone().into_on_shell_four_momentum(None))
-        .collect_vec();
-    compute_momentum(signature, &loop_moms, external_moms)
-}
-
-pub fn compute_three_momentum_from_four<T: FloatLike>(
-    signature: &(Vec<isize>, Vec<isize>),
-    loop_moms: &[ThreeMomentum<F<T>>],
-    external_moms: &[FourMomentum<F<T>>],
-) -> ThreeMomentum<F<T>> {
-    let external_moms = external_moms
-        .iter()
-        .map(|m| m.spatial.clone())
-        .collect_vec();
-    compute_momentum(signature, loop_moms, &external_moms)
-}
 
 // Bilinear form for E-surface defined as sqrt[(k+p1)^2+m1sq] + sqrt[(k+p2)^2+m2sq] + e_shift
 // The Bilinear system then reads 4 k.a.k + 4 k.n + C = 0
