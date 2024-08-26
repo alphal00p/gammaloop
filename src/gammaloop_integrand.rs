@@ -590,6 +590,10 @@ impl HasIntegrand for GammaLoopIntegrand {
             }
         };
 
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write("jacobian", &sample_point.get_default_sample().jacobian);
+        }
+
         let parameterization_time = before_parameterization.elapsed();
 
         // rotate the momenta for the stability tests.
