@@ -21,7 +21,7 @@ use crate::{
     graph::{Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
     utils::{self, into_complex_ff64, FloatLike, F},
-    Settings,
+    RotationMethod, Settings,
 };
 
 use super::overlap::OverlapStructure;
@@ -155,7 +155,7 @@ impl CounterTerm {
         loop_momenta: &[ThreeMomentum<F<T>>],
         external_momenta: &[FourMomentum<F<T>>],
         graph: &Graph,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
         if settings.general.debug > 1 {
@@ -198,9 +198,8 @@ impl CounterTerm {
                 );
             }
 
-            let center_t = if let Some(func_index) = rotate_overlap_centers {
-                let rotation_function =
-                    settings.stability.rotation_axis[func_index].rotation_function();
+            let center_t = {
+                let rotation_function = rotation_for_overlap.rotation_function();
                 let rotated_center = center
                     .iter()
                     .map(rotation_function)
@@ -214,21 +213,10 @@ impl CounterTerm {
                     .collect_vec();
 
                 if settings.general.debug > 0 {
-                    DEBUG_LOGGER.write("rotated_center", &rotated_center);
+                    DEBUG_LOGGER.write("center", &rotated_center);
                 }
 
                 rotated_center
-            } else {
-                center
-                    .iter()
-                    .map(|c_vec| {
-                        ThreeMomentum::new(
-                            F::from_ff64(c_vec.px),
-                            F::from_ff64(c_vec.py),
-                            F::from_ff64(c_vec.pz),
-                        )
-                    })
-                    .collect_vec()
             };
 
             let shifted_momenta = loop_momenta

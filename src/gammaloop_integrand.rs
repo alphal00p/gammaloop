@@ -18,7 +18,8 @@ use crate::utils::{
     PrecisionUpgradable, F,
 };
 use crate::{
-    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, SamplingSettings, Settings,
+    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, RotationMethod, SamplingSettings,
+    Settings,
 };
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
@@ -43,7 +44,7 @@ trait GraphIntegrand {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>>;
 
@@ -68,7 +69,7 @@ trait GraphIntegrand {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>>;
 }
@@ -217,7 +218,7 @@ impl GraphIntegrand for AmplitudeGraph {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
         let zero_builder = &sample.loop_moms[0].px;
@@ -241,7 +242,7 @@ impl GraphIntegrand for AmplitudeGraph {
                 &sample.loop_moms,
                 &sample.external_moms,
                 self.get_graph(),
-                rotate_overlap_centers,
+                rotation_for_overlap,
                 settings,
             ),
         };
@@ -260,7 +261,7 @@ impl GraphIntegrand for AmplitudeGraph {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> where {
         let one = sample.one();
@@ -304,7 +305,7 @@ impl GraphIntegrand for AmplitudeGraph {
                     &sample.loop_moms,
                     &sample.external_moms,
                     self.get_graph(),
-                    rotate_overlap_centers,
+                    rotation_for_overlap,
                     settings,
                 ) * self
                     .graph
@@ -363,7 +364,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotate_overlap_centers: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
         // sum over channels
@@ -375,7 +376,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate_tropical<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotate_overlap_centers: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
         // sum over channels
@@ -403,14 +404,14 @@ fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
 fn evaluate<I: GraphIntegrand, T: FloatLike>(
     graph_integrands: &[I],
     sample: &GammaLoopSample<T>,
-    rotate_overlap_centers: Option<usize>,
+    rotation_for_overlap: RotationMethod,
     settings: &Settings,
 ) -> Complex<F<T>> {
     let zero = sample.zero();
     match sample {
         GammaLoopSample::Default(sample) => graph_integrands
             .iter()
-            .map(|g| g.evaluate(sample, rotate_overlap_centers, settings))
+            .map(|g| g.evaluate(sample, rotation_for_overlap, settings))
             .reduce(|acc, e| acc + &e)
             .unwrap_or(zero.clone().into()),
         GammaLoopSample::MultiChanneling { alpha, sample } => graph_integrands
@@ -422,13 +423,13 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
             let graph = &graph_integrands[*graph_id];
             match sample {
                 DiscreteGraphSample::Default(sample) => {
-                    graph.evaluate(sample, rotate_overlap_centers, settings)
+                    graph.evaluate(sample, rotation_for_overlap, settings)
                 }
                 DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                     graph.evaluate_channel_sum(sample, *alpha, settings)
                 }
                 DiscreteGraphSample::Tropical(sample) => {
-                    graph.evaluate_tropical(sample, rotate_overlap_centers, settings)
+                    graph.evaluate_tropical(sample, rotation_for_overlap, settings)
                 }
                 DiscreteGraphSample::DiscreteMultiChanneling {
                     alpha,
@@ -594,14 +595,9 @@ impl HasIntegrand for GammaLoopIntegrand {
             .rotation_axis
             .iter()
             .enumerate()
-            .map(|(func_index, f)| {
-                (
-                    sample_point.get_rotated_sample(f.rotation_function()),
-                    Some(func_index),
-                )
-            });
+            .map(|(func_index, f)| (sample_point.get_rotated_sample(f.rotation_function()), *f));
 
-        let samples = [(sample_point.clone(), None)]
+        let samples = [(sample_point.clone(), RotationMethod::None)]
             .into_iter()
             .chain(rotated_sample_points)
             .collect_vec();
@@ -666,10 +662,7 @@ impl HasIntegrand for GammaLoopIntegrand {
             println!("{}", "parametrisation result".blue());
 
             for (sample, rotation) in samples.iter() {
-                let rotation_string = match rotation {
-                    None => String::from("None"),
-                    Some(index) => format!("{:?}", self.settings.stability.rotation_axis[*index]),
-                };
+                let rotation_string = rotation.to_str();
 
                 println!("\trotation: {}", rotation_string);
                 println!("{}", "\tloop momenta: ".yellow());
@@ -749,7 +742,7 @@ impl GammaLoopIntegrand {
     /// This function performs the evaluation twice, once for the original sample and once for the rotated sample.
     fn evaluate_at_prec(
         &self,
-        samples: &[(GammaLoopSample<f64>, Option<usize>)],
+        samples: &[(GammaLoopSample<f64>, RotationMethod)],
         precision: Precision,
     ) -> (Vec<Complex<F<f64>>>, Duration) {
         // measure timing if we are below the max number if we are below the max number
