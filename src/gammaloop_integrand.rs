@@ -2,7 +2,6 @@
 //! amplitudes and Local Unitarity crosssections.
 
 use core::panic;
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
@@ -556,7 +555,6 @@ impl HasIntegrand for GammaLoopIntegrand {
         max_eval: F<f64>,
     ) -> EvaluationResult {
         if self.settings.general.debug > 0 {
-            DEBUG_LOGGER.new_log(&PathBuf::from("log.glog"));
             DEBUG_LOGGER.write("havana_sample", sample);
         }
 

@@ -1,6 +1,7 @@
 use crate::{
     cli_functions::cli,
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
+    debug_info::DEBUG_LOGGER,
     inspect,
     integrands::Integrand,
     integrate::{
@@ -576,6 +577,16 @@ impl PythonWorker {
                 "Could not find integrand {}",
                 integrand
             ))),
+        }
+    }
+
+    pub fn new_log(&mut self, log_file: &str) -> PyResult<String> {
+        match DEBUG_LOGGER
+            .new_log(&PathBuf::from(log_file))
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+        {
+            Ok(()) => Ok(format!("set log file at {}", log_file)),
+            Err(e) => Err(e),
         }
     }
 

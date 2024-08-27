@@ -54,12 +54,8 @@ impl DebugLogger {
     }
 
     #[cold]
-    pub fn new_log(&self, path: &PathBuf) {
-        self.logger
-            .lock()
-            .unwrap()
-            .new_log(path)
-            .expect("failed to create log")
+    pub fn new_log(&self, path: &PathBuf) -> Result<(), Report> {
+        self.logger.lock().unwrap().new_log(path)
     }
 
     #[cold]

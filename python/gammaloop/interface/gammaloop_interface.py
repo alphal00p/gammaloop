@@ -1131,6 +1131,8 @@ class GammaLoop(object):
         help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
     inspect_parser.add_argument('--last_max_weight', '-lmw', action='store_true',
                                 default=False, help='Inspect the max weight point of the previous run')
+    inspect_parser.add_argument('--log_file', '-l', type=str,
+                                default="log.glog", help="where to store the debug log")
 
     def do_inspect(self, str_args: str) -> complex:
         if str_args == 'help':
@@ -1142,6 +1144,7 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
+        self.rust_worker.new_log(args.log_file)
         self.sync_worker_with_output(args.no_sync)
 
         if args.last_max_weight:
@@ -1342,7 +1345,7 @@ class GammaLoop(object):
 
     log_parser = ArgumentParser(prog='display_debug_log')
     log_parser.add_argument('--log_file', '-lf', type=str,
-                            help='Log file to display', default=None)
+                            help='Log file to display', default="log.glog")
     log_parser.add_argument(
         '-eval', '-e', type=str, default=None)
     log_parser.add_argument('--subtraction', '-s',  action='store_true',
