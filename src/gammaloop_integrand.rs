@@ -655,43 +655,6 @@ impl HasIntegrand for GammaLoopIntegrand {
         );
 
         if self.settings.general.debug > 0 {
-            println!("{}", "
-            |  DEBUG -------------------------------------------------------------------------------------  |".green());
-            println!();
-
-            println!("{}", "sample from havana: ".blue());
-            println!("\tsampled x: {:?}", sample);
-            println!();
-
-            println!("{}", "parametrisation result".blue());
-
-            for (sample, rotation) in samples.iter() {
-                let rotation_string = rotation.as_str();
-
-                println!("\trotation: {}", rotation_string);
-                println!("{}", "\tloop momenta: ".yellow());
-
-                let loop_moms = &sample.get_default_sample().loop_moms;
-                for (index, loop_mom) in loop_moms.iter().enumerate() {
-                    println!("\t\tloop momentum {}: {:?}", index, loop_mom);
-                }
-
-                println!("{}", "\texternal momenta: ".yellow());
-
-                let external_moms = &sample.get_default_sample().external_moms;
-                for (index, external_mom) in external_moms.iter().enumerate() {
-                    println!("\t\texternal momentum {}: {:?}", index, external_mom);
-                }
-            }
-
-            let jacobian = sample_point.get_default_sample().jacobian;
-            println!("\t{}: {:+e}", "jacobian".yellow(), jacobian);
-            println!("\t{}: {:+e}", "2pi prefactor".yellow(), prefactor);
-            println!();
-
-            println!("{}", "evaluation result: ".blue());
-            println!("{}: {:+e}", "\tresult: ".yellow(), res);
-
             DEBUG_LOGGER.write("final_result", res);
         }
 
