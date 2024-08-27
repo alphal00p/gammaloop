@@ -37,6 +37,7 @@ def display_general(general_debug_dict: Dict[str, Any]) -> None:
     display_havana_sample(general_debug_dict)
     display_jacobian(general_debug_dict)
     display_final_result(general_debug_dict)
+    logger.info("")
 
 
 def display_havana_sample(general_debug_dict: Dict[str, Any]) -> None:

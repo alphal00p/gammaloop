@@ -1361,17 +1361,18 @@ class GammaLoop(object):
 
         if args.eval is not None:
             tmp = eval(args.eval)
-            rotation, precision = tmp[0], tmp[1]
-            eval_dict = debug_display.build_eval_debug_dict(
-                args.log_file, rotation, precision)
+            for tmp_elem in tmp:
+                rotation, precision = tmp_elem[0], tmp_elem[1]
+                eval_dict = debug_display.build_eval_debug_dict(
+                    args.log_file, rotation, precision)
 
-            logger.info("Debug info for for rotation '%s%s%s' and precision '%s%s%s'",
-                        Colour.BLUE, rotation, Colour.END, Colour.BLUE, precision, Colour.END)
+                logger.info("Debug info for for rotation '%s%s%s' and precision '%s%s%s'",
+                            Colour.BLUE, rotation, Colour.END, Colour.BLUE, precision, Colour.END)
 
-            debug_display.display_eval_default(eval_dict)
+                debug_display.display_eval_default(eval_dict)
 
-            if args.subtraction:
-                logger.info("")
-                logger.info("subtraction: ")
-                logger.info("")
-                debug_display.display_subtraction_data(eval_dict)
+                if args.subtraction:
+                    logger.info("")
+                    logger.info("subtraction: ")
+                    logger.info("")
+                    debug_display.display_subtraction_data(eval_dict)
