@@ -1,4 +1,5 @@
 from logging import LogRecord, log
+from re import A
 from typing import Dict, Any
 import json
 from gammaloop.misc.common import logger, pjoin
@@ -14,7 +15,10 @@ def parse_log_impl(file: str) -> Dict[str, Any]:
     for line in log.readlines():
         json_line = json.loads(line)
         msg = json_line['msg']
-        res[msg] = json_line['data']
+        if msg in res:
+            res[msg].append(json_line['data'])
+        else:
+            res[msg] = [json_line['data']]
     return res
 
 
@@ -35,13 +39,13 @@ def display_general(general_debug_dict: Dict[str, Any]) -> None:
     display_final_result(general_debug_dict)
 
 
-# I assume one sample from the integrator per point
 def display_havana_sample(general_debug_dict: Dict[str, Any]) -> None:
     if 'havana_sample' not in general_debug_dict:
         logger.warn("no havana sample in debug info")
         return
 
-    sample = general_debug_dict['havana_sample']
+    # assume single sample
+    sample = general_debug_dict['havana_sample'][0]
     logger.info("havana sample: ")
     logger.info(sample)
 
@@ -50,7 +54,7 @@ def display_jacobian(general_debug_dict: Dict[str, Any]) -> None:
     if 'jacobian' not in general_debug_dict:
         logger.warn("no jacobian in debug info")
 
-    logger.info("jacobian: '%s%s%s'".format(general_debug_dict['jacobian']))
+    logger.info("jacobian: %s", general_debug_dict['jacobian'][0])
 
 
 def display_final_result(general_debug_dict: Dict[str, Any]) -> None:
@@ -58,7 +62,7 @@ def display_final_result(general_debug_dict: Dict[str, Any]) -> None:
         logger.warn("no final result in debug info")
         return
 
-    res = general_debug_dict['final_result']
+    res = general_debug_dict['final_result'][0]
     format_result = format_complex(res['re'], res['im'])
 
     logger.info("final result: {}".format(format_result))
@@ -69,7 +73,7 @@ def display_momenta_samples(eval_debug_dict: Dict[str, Any]) -> None:
         logger.warn("no momenta sample in debug info")
         return
 
-    gammaloop_sample = eval_debug_dict['momenta_sample']
+    gammaloop_sample = eval_debug_dict['momenta_sample'][0]
     logger.info("momenta sampled: ")
     for index, loop_momentum in enumerate(gammaloop_sample['loop_moms']):
         logger.info("\t loop momentum {}: {}".format(
@@ -90,7 +94,7 @@ def display_largest_and_smallest_orientation(eval_debug_dict: Dict[str, Any]) ->
         logger.warn("no orientations in debug info")
         return
 
-    orientation = eval_debug_dict['orientations']
+    orientation = eval_debug_dict['orientations'][0]
     max_or = max(orientation)
     max_or_ind = orientation.index(max_or)
     min_or = min(orientation)
@@ -109,7 +113,7 @@ def display_onshell_energies(eval_debug_dict: Dict[str, Any]) -> None:
         logger.warn("onshell energies not logged")
         return
 
-    onshell_energies = eval_debug_dict['onshell_energies']
+    onshell_energies = eval_debug_dict['onshell_energies'][0]
     logger.info("onshell energies: ")
     logger.info(onshell_energies)
     logger.info('')
@@ -119,7 +123,7 @@ def display_rep3d(eval_debug_dict: Dict[str, Any]) -> None:
     if 'rep3d' not in eval_debug_dict:
         logger.warn("no rep3d in debug info")
 
-    rep3d = eval_debug_dict['rep3d']
+    rep3d = eval_debug_dict['rep3d'][0]
     logger.info(
         "3-dimensional representation: {}".format(format_complex(rep3d['re'], rep3d['im'])))
     logger.info('')
@@ -129,7 +133,7 @@ def display_counterterm(eval_debug_dict: Dict[str, Any]) -> None:
     if 'counter_terms' not in eval_debug_dict:
         logger.warn("no threshold counterterm in debug info")
 
-    ct = eval_debug_dict['counter_terms']
+    ct = eval_debug_dict['counter_terms'][0]
     logger.info("threshold counterterm: {}".format(
         format_complex(ct['re'], ct['im'])))
     logger.info('')
@@ -159,15 +163,58 @@ def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
     for overlap_index, overlap_structure in enumerate(debug_dict['overlap_structure']):
         logger.info("overlap_structure: ")
         logger.info("\tesurfaces: {}".format(overlap_structure[0]))
-        logger.info("\tcenter: {}".format(overlap_structure[1]))
+        logger.info("\tcenter:")
+        for momentum in overlap_structure[1]:
+            logger.info("\t\t{}".format(format_3_momentum(momentum)))
+
         logger.info("\themispherical_radius: {}".format(
             debug_dict['hemispherical_radius'][overlap_index]))
         logger.info("")
 
         for index in range(len(overlap_structure[0])):
             esurface_subtraction_data = debug_dict["esurface_subtraction"][counter + index]
-            logger.info("\t\tsubtraction: ")
-            logger.info("\t\t{}".format(esurface_subtraction_data))
+            logger.info("subtracting esurface %s",
+                        esurface_subtraction_data['esurface_id'])
+            logger.info("initial guess: r_0 = '%s'",
+                        esurface_subtraction_data['initial_radius'])
+            plus_solution, minus_solution = esurface_subtraction_data[
+                'plus_solution'], esurface_subtraction_data['minus_solution']
+
+            logger.info("r*+  = %s, r*-  = %s",
+                        plus_solution['solution'], minus_solution['solution'])
+
+            logger.info("∇η*+ = %s, ∇η*+ = %s",
+                        plus_solution['derivative_at_solution'], minus_solution['derivative_at_solution'])
+
+            logger.info("j*+/j = %s, j*-/j = %s",
+                        esurface_subtraction_data['jacobian_ratio_plus'], esurface_subtraction_data['jacobian_ratio_minus'])
+
+            logger.info("uv_d+ = %s, uv_d = %s",
+                        esurface_subtraction_data['uv_damper_plus'], esurface_subtraction_data['uv_damper_minus'])
+
+            logger.info("ir_d+ = %s, ir_d = %s",
+                        esurface_subtraction_data['singularity_dampener_plus'], esurface_subtraction_data['singularity_dampener_minus'])
+
+            ct_plus_dict = esurface_subtraction_data['ct_plus']
+            ct_minus_dict = esurface_subtraction_data['ct_minus']
+            ict_plus_dict = esurface_subtraction_data['integrated_ct_plus']
+            ict_minus_dict = esurface_subtraction_data['integrated_ct_minus']
+
+            ct_plus = format_complex(ct_plus_dict['re'], ct_plus_dict['im'])
+            ct_minus = format_complex(ct_minus_dict['re'], ct_minus_dict['im'])
+            ict_plus = format_complex(ict_plus_dict['re'], ict_plus_dict['im'])
+            ict_minus = format_complex(
+                ict_minus_dict['re'], ict_minus_dict['im'])
+
+            logger.info("ct+ = %s, ct- = %s",
+                        ct_plus, ct_minus)
+
+            logger.info("ict+ = %s, ict- = %s",
+                        ict_plus, ict_minus)
+
+            logger.info("")
+
+        counter += len(overlap_structure[0])
 
 
 def format_3_momentum(momentum_dict: Dict[str, Any]) -> str:

@@ -1370,8 +1370,8 @@ class GammaLoop(object):
 
             debug_display.display_eval_default(eval_dict)
 
-        if args.subtraction:
-            logger.info("")
-            logger.info("subtraction: ")
-            logger.info("")
-            debug_display.display_subtraction_data(general_debug_dict)
+            if args.subtraction:
+                logger.info("")
+                logger.info("subtraction: ")
+                logger.info("")
+                debug_display.display_subtraction_data(eval_dict)
