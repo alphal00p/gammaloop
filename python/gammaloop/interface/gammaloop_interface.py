@@ -1343,7 +1343,8 @@ class GammaLoop(object):
     log_parser = ArgumentParser(prog='display_debug_log')
     log_parser.add_argument('--log_file', '-lf', type=str,
                             help='Log file to display', default=None)
-
+    log_parser.add_argument(
+        '-eval', '-e', type=str, default=None)
     log_parser.add_argument('--subtraction', '-s',  action='store_true',
                             default=False, help='Show subtraction debug info')
 
@@ -1354,14 +1355,23 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No log file to display, please provide a file using -lf")
 
-        debug_dict = debug_display.build_general_debug_dict(args.log_file)
-        debug_display.display_general(debug_dict)
-        stop
+        general_debug_dict = debug_display.build_general_debug_dict(
+            args.log_file)
+        debug_display.display_general(general_debug_dict)
 
-        debug_display.display_default(debug_dict)
+        if args.eval is not None:
+            tmp = eval(args.eval)
+            rotation, precision = tmp[0], tmp[1]
+            eval_dict = debug_display.build_eval_debug_dict(
+                args.log_file, rotation, precision)
+
+            logger.info("Debug info for for rotation '%s%s%s' and precision '%s%s%s'",
+                        Colour.BLUE, rotation, Colour.END, Colour.BLUE, precision, Colour.END)
+
+            debug_display.display_eval_default(eval_dict)
 
         if args.subtraction:
             logger.info("")
             logger.info("subtraction: ")
             logger.info("")
-            debug_display.display_subtraction_data(debug_dict)
+            debug_display.display_subtraction_data(general_debug_dict)
