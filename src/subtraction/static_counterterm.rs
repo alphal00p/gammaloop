@@ -158,10 +158,6 @@ impl CounterTerm {
         rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
-        if settings.general.debug > 1 {
-            println!("{}", "Start evaluation of threshold counterterms".green());
-        }
-
         let real_mass_vector = graph
             .get_real_mass_vector()
             .into_iter()
@@ -237,22 +233,12 @@ impl CounterTerm {
                 let esurface_id = &self.existing_esurfaces[*existing_esurface_id];
                 let esurface = &esurfaces[*esurface_id];
 
-                if settings.general.debug > 1 {
-                    println!("subtracting esurface: {:?}", esurface_id);
-                    println!("energies: {:?}", &esurface.energies);
-                    println!("external shift: {:?}", &esurface.external_shift);
-                }
-
                 // solve the radius
                 let radius_guess = esurface.get_radius_guess(
                     &hemispherical_unit_shifted_momenta,
                     external_momenta,
                     lmb,
                 );
-
-                if settings.general.debug > 1 {
-                    println!("Initial condition for newton iterations: ±{}", radius_guess);
-                }
 
                 let function = |r: &_| {
                     esurface.compute_self_and_r_derivative(
