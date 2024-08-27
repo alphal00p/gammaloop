@@ -571,7 +571,7 @@ impl<T: FloatLike> NewtonIterationResult<T> {
     fn as_f64(&self) -> NewtonIterationResult<f64> {
         NewtonIterationResult {
             solution: self.solution.into_ff64(),
-            derivative_at_solution: self.solution.into_ff64(),
+            derivative_at_solution: self.derivative_at_solution.into_ff64(),
             error_of_function: self.error_of_function.into_ff64(),
             num_iterations_used: self.num_iterations_used,
         }
