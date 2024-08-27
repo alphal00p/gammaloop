@@ -195,3 +195,6 @@ src/test_resources/qqddg/
 
 # My own process outputs
 process_outputs
+
+# the default log file
+log.glog/
