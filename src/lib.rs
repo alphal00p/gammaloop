@@ -475,7 +475,7 @@ impl GammaloopTropicalSamplingSettings {
         momtrop::TropicalSamplingSettings {
             upcast_on_failure: self.upcast_on_failure,
             matrix_stability_test: self.matrix_stability_test,
-            print_debug_info: debug > 3,
+            print_debug_info: debug > 0,
         }
     }
 }
