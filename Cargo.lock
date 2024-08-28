@@ -532,9 +532,9 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cpp_demangle"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e8227005286ec39567949b33df9896bcadfa6051bccca2488129f108ca23119"
+checksum = "96e58d342ad113c2b878f16d5d034c03be492ae460cdbc02b7f0f2284d310c7d"
 dependencies = [
  "cfg-if",
 ]
@@ -2159,7 +2159,6 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=master#afe041b7783bee6ab2b8d4d5fdcbbabc448ee7a7"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2235,9 +2234,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "symbolic-common"
-version = "12.10.0"
+version = "12.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16629323a4ec5268ad23a575110a724ad4544aae623451de600c747bf87b36cf"
+checksum = "b1944ea8afd197111bca0c0edea1e1f56abb3edd030e240c1035cc0e3ff51fec"
 dependencies = [
  "debugid",
  "memmap2",
@@ -2247,9 +2246,9 @@ dependencies = [
 
 [[package]]
 name = "symbolic-demangle"
-version = "12.10.0"
+version = "12.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c043a45f08f41187414592b3ceb53fb0687da57209cc77401767fb69d5b596"
+checksum = "ddaccaf1bf8e73c4f64f78dbb30aadd6965c71faa4ff3fba33f8d7296cf94a87"
 dependencies = [
  "cpp_demangle",
  "rustc-demangle",
@@ -2269,6 +2268,7 @@ dependencies = [
  "dyn-clone",
  "libloading",
  "once_cell",
+ "pyo3-build-config 0.22.2",
  "rand",
  "rand_xoshiro",
  "rayon",

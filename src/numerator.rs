@@ -513,6 +513,7 @@ impl AppliedFeynmanRule {
         let mut builder = Atom::new_num(1);
 
         for v in &vatoms {
+            // println!("vertex: {v}");
             builder = builder * v;
         }
 
@@ -701,12 +702,13 @@ impl ColorSymplified {
     }
 
     pub fn parse(self) -> Network {
-        Network {
-            net: TensorNetwork::try_from(self.expression.0.as_view())
-                .unwrap()
-                .to_fully_parametric()
-                .cast(),
-        }
+        let net = TensorNetwork::try_from(self.expression.0.as_view())
+            .unwrap()
+            .to_fully_parametric()
+            .cast();
+
+        // println!("net scalar{}", net.scalar.as_ref().unwrap());
+        Network { net }
     }
 }
 
@@ -794,12 +796,13 @@ impl NumeratorState for GammaSymplified {
 
 impl GammaSymplified {
     pub fn parse(self) -> Network {
-        Network {
-            net: TensorNetwork::try_from(self.expression.0.as_view())
-                .unwrap()
-                .to_fully_parametric()
-                .cast(),
-        }
+        let net = TensorNetwork::try_from(self.expression.0.as_view())
+            .unwrap()
+            .to_fully_parametric()
+            .cast();
+
+        // println!("net scalar{}", net.scalar.as_ref().unwrap());
+        Network { net }
     }
 }
 
@@ -874,9 +877,9 @@ impl Network {
             }
             ContractionSettings::Normal => {
                 self.net.contract();
-                Ok(Contracted {
-                    tensor: self.net.result_tensor_smart()?,
-                })
+                let tensor = self.net.result_tensor_smart()?;
+                // println!("contracted tensor: {}", tensor);
+                Ok(Contracted { tensor })
             }
         }
     }
@@ -1005,7 +1008,8 @@ impl Contracted {
 
             let function_name = "numerator_single";
 
-            let library_name = "libneval_single.so";
+            let library_name = path.join("numerator_single.so");
+            let library_name = library_name.to_string_lossy();
             let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
 
             let compile_options = export_settings
@@ -1015,7 +1019,7 @@ impl Contracted {
             CompiledEvaluator::new(
                 eval.export_cpp(&filename, function_name, true, inline_asm)
                     .unwrap()
-                    .compile(library_name, compile_options)
+                    .compile(&library_name, compile_options)
                     .unwrap()
                     .load()
                     .unwrap(),

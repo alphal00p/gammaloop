@@ -635,8 +635,8 @@ fn pytest_scalar_fishnet_2x3() {
         cff_phase: F(0.),
 
         tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1,
-        n_overlap_groups: 2,
+        n_existing_per_overlap: 1, //bogus
+        n_overlap_groups: 2,       //bogus
     };
 
     check_amplitude(amp_check);
@@ -1477,7 +1477,9 @@ fn pytest_physical_1L_6photons_generate() {
     let sample = kinematics_builder(5, 1, &graph.bare_graph);
 
     graph.generate_cff();
-    let export_settings = test_export_settings();
+    let mut export_settings = test_export_settings();
+
+    export_settings.gammaloop_compile_options.inline_asm = false;
 
     println!(
         "{}",
