@@ -1496,3 +1496,4 @@ fn pytest_physical_1L_6photons_generate() {
 
     graph.evaluate_cff_expression(&sample, &default_settings);
 }
+

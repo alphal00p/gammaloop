@@ -990,7 +990,7 @@ impl Display for PolType {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Polarization<T> {
-    tensor: DenseTensor<T, IndexLess<PhysReps>>,
+    pub tensor: DenseTensor<T, IndexLess<PhysReps>>,
     pol_type: PolType,
 }
 
@@ -1425,7 +1425,11 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         let p = self.spatial.norm();
 
         let (e1, e2, e3) = if pt.is_zero() {
-            (pt.one(), pt.zero(), pt.zero())
+            if self.spatial.pz.positive() {
+                (pt.one(), pt.zero(), pt.zero())
+            } else {
+                (-pt.one(), pt.zero(), pt.zero())
+            }
         } else {
             (
                 &self.spatial.px * &self.spatial.pz / (&pt * &p),
@@ -1453,7 +1457,11 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         // definition from helas_ref A.2
         let pt = self.pt();
         let (e1, e2, e3) = if pt.is_zero() {
-            (pt.zero(), pt.zero(), pt.zero())
+            if self.spatial.pz.positive() {
+                (pt.zero(), pt.one(), pt.zero())
+            } else {
+                (pt.zero(), -pt.one(), pt.zero())
+            }
         } else {
             (-(&self.spatial.py / &pt), &self.spatial.px / &pt, pt.zero())
         };
@@ -1484,9 +1492,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
             let sqrt_2_inv: Complex<F<T>> = (&one + &one).sqrt().inv().into();
             let i = one.i();
 
-            i.add_fallible(&i).unwrap();
-
-            let eone: Polarization<Complex<F<T>>> = lambda * self.pol_one().cast();
+            let eone: Polarization<Complex<F<T>>> = -lambda * self.pol_one().cast();
 
             let etwo: Polarization<Complex<F<T>>> = self.pol_two().cast();
 

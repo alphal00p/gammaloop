@@ -22,7 +22,7 @@ use spenso::{
 use std::fs;
 
 use eyre::Result;
-use std::ops::Index;
+use std::ops::{Index, Neg};
 use std::path::Path;
 use symbolica::domains::rational::Rational;
 use symbolica::evaluate::FunctionMap;
@@ -635,7 +635,7 @@ impl Particle {
                 e = e.add_arg(&edge_slots.to_aind_atom());
                 e.finish()
             }
-            _ => panic!("higher spin not supported")//Atom::parse("1").unwrap(),
+            _ => panic!("higher spin not supported"), //Atom::parse("1").unwrap(),
         }
     }
 
@@ -750,11 +750,20 @@ impl Particle {
         mom: &FourMomentum<F<T>>,
         helicity: Helicity,
     ) -> Polarization<Complex<F<T>>> {
+        Self::incoming_polarization_impl(self.spin, self.pdg_code, mom, helicity)
+    }
+
+    pub fn incoming_polarization_impl<T: FloatLike>(
+        spin: isize,
+        pdg_code: isize,
+        mom: &FourMomentum<F<T>>,
+        helicity: Helicity,
+    ) -> Polarization<Complex<F<T>>> {
         let one: Complex<F<T>> = mom.temporal.value.one().into();
-        match self.spin {
+        match spin {
             1 => Polarization::scalar(one),
             2 => {
-                if self.pdg_code > 0 {
+                if pdg_code > 0 {
                     mom.u(helicity.try_into().unwrap())
                 } else {
                     mom.v(helicity.try_into().unwrap()).bar()
@@ -796,17 +805,32 @@ impl Particle {
         mom: &FourMomentum<F<T>>,
         helicity: Helicity,
     ) -> Polarization<Complex<F<T>>> {
+        Self::outgoing_polarization_impl(self.spin, self.pdg_code, mom, helicity)
+    }
+
+    pub fn outgoing_polarization_impl<T: FloatLike>(
+        spin: isize,
+        pdg_code: isize,
+        mom: &FourMomentum<F<T>>,
+        helicity: Helicity,
+    ) -> Polarization<Complex<F<T>>> {
         let one: Complex<F<T>> = mom.temporal.value.one().into();
-        match self.spin {
+
+        match spin {
             1 => Polarization::scalar(one),
             2 => {
-                if self.pdg_code > 0 {
+                if pdg_code > 0 {
                     mom.u(helicity.try_into().unwrap()).bar()
                 } else {
                     mom.v(helicity.try_into().unwrap())
                 }
             }
-            3 => mom.pol(helicity),
+            3 => {
+                let mut mom = mom.clone();
+                mom.temporal = -mom.temporal;
+                mom.spatial = -mom.spatial;
+                mom.pol(helicity)
+            }
             i => panic!("Spin {}/2 not implemented", i - 1),
         }
     }
@@ -864,6 +888,37 @@ impl Particle {
         }
         out
     }
+}
+
+#[test]
+fn test_polarization() {
+    let mom = FourMomentum::from_args(F(1.0), F(0.0), F(0.0), F(1.0));
+
+    let sqrt_2_inv = F(f64::sqrt(2.)).inv();
+    let isqrt_inv = Complex::new_i() * sqrt_2_inv;
+    let zero = Complex::new_zero();
+    let sqrt_inv = Complex::new_re(sqrt_2_inv);
+
+    let pol_in_plus = Particle::incoming_polarization_impl(3, 1, &mom, Helicity::Plus);
+    let pol_out_plus = Particle::outgoing_polarization_impl(3, 1, &mom, Helicity::Plus);
+    let pol_in_minus = Particle::incoming_polarization_impl(3, 1, &mom, Helicity::Minus);
+    let pol_out_minus = Particle::outgoing_polarization_impl(3, 1, &mom, Helicity::Minus);
+    assert_eq!(
+        vec![zero, -sqrt_inv, isqrt_inv, zero],
+        pol_out_minus.tensor.data
+    );
+    assert_eq!(
+        vec![zero, sqrt_inv, -isqrt_inv, zero],
+        pol_in_minus.tensor.data
+    );
+    assert_eq!(
+        vec![zero, sqrt_inv, isqrt_inv, zero],
+        pol_out_plus.tensor.data
+    );
+    assert_eq!(
+        vec![zero, -sqrt_inv, -isqrt_inv, zero],
+        pol_in_plus.tensor.data
+    );
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
