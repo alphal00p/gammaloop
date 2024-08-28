@@ -1007,6 +1007,9 @@ impl<T: FloatLike> Display for Polarization<Complex<F<T>>> {
 }
 
 impl<T> Polarization<T> {
+    pub fn is_scalar(&self) -> bool {
+        self.pol_type == PolType::Scalar
+    }
     pub fn scalar(value: T) -> Self {
         let structure = IndexLess::new(vec![]);
         Polarization {

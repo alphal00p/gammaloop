@@ -1953,6 +1953,19 @@ pub fn assert_approx_eq<T: FloatLike>(res: &F<T>, target: &F<T>, tolerance: &F<T
     }
 }
 
+use color_eyre::Result;
+use eyre::eyre;
+#[allow(unused)]
+pub fn approx_eq_res<T: FloatLike>(res: &F<T>, target: &F<T>, tolerance: &F<T>)->Result<()>{
+    if approx_eq(res, target, tolerance) {
+        Ok(())
+    } else {
+        Err(eyre!(
+            "assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",
+            res, target, tolerance
+        ))
+    }
+}
 #[allow(unused)]
 pub fn one_loop_eval_e_surf<T: FloatLike>(
     k: &[F<T>; 3],

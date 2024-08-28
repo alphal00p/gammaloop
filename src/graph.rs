@@ -1931,13 +1931,31 @@ impl DerivedGraphData<Evaluators> {
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let one = sample.one();
         let zero = one.zero();
-        let i = Complex::new(zero.clone(), one.clone());
+        let ni = Complex::new(zero.clone(), -one.clone());
 
         let loop_number = graph.loop_momentum_basis.basis.len();
         let internal_vertex_number = graph.vertices.len() - graph.external_connections.len();
 
-        let prefactor =
-            i.pow(loop_number as u64) * (-i.ref_one()).pow(internal_vertex_number as u64 - 1);
+        println!(
+            "Ext: {},L: {loop_number},V: {},E:{}",
+            graph.external_connections.len(),
+            graph.vertices.len(),
+            graph.edges.len()
+        );
+
+        let nint_edges = graph.edges.len() - graph.external_connections.len();
+        let nint_vertices = internal_vertex_number;
+
+        let a = 0;
+        let b = 1;
+        let c = 1;
+        let shift: usize = 0;
+
+        let prefactor = ni.pow((loop_number) as u64); // (ni).pow(loop_number as u64) * (-(ni.ref_one())).pow(internal_vertex_number as u64 - 1);
+
+        println!("i^{}", (3 * loop_number) % 4);
+
+        println!("prefactor: {}", prefactor);
 
         let mut cff = self
             .evaluate_cff_orientations(graph, sample, lmb_specification, settings)
@@ -1947,6 +1965,7 @@ impl DerivedGraphData<Evaluators> {
         match num_iter {
             RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
                 if let Some(i) = s.next() {
+                    println!("numerator scalar {}", i);
                     let c = Complex::new_re(cff.next().unwrap());
                     let mut sum = i * &c;
                     for j in cff.by_ref() {

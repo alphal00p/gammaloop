@@ -480,8 +480,14 @@ impl EsurfacePairs {
     }
 
     fn new_empty(num_existing_esurfaces: usize) -> Self {
+        let capacity = match num_existing_esurfaces {
+            0 => 0,
+            1 => 0,
+            _ => num_existing_esurfaces * (num_existing_esurfaces - 1) / 2,
+        };
+
         Self {
-            data: HashMap::with_capacity(num_existing_esurfaces * (num_existing_esurfaces - 1) / 2),
+            data: HashMap::with_capacity(capacity),
             has_pair_with: vec![Vec::with_capacity(num_existing_esurfaces); num_existing_esurfaces],
         }
     }

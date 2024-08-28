@@ -170,8 +170,10 @@ impl NumeratorEvaluateFloat for f64 {
             .collect_vec();
 
         for p in polarizations {
-            for &pi in p {
-                params.push(pi)
+            if !p.is_scalar() {
+                for pi in p {
+                    params.push(pi.clone())
+                }
             }
         }
 
@@ -188,6 +190,9 @@ impl NumeratorEvaluateFloat for f64 {
         num: &mut Num<Evaluators>,
         params: &[Complex<F<Self>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+        if num.state.single.param_len != params.len() {
+            return Err(eyre!("params length mismatch"));
+        }
         if let Some(orientation_evaluator) = &mut num.state.orientated {
             let pos = orientation_evaluator.positions.clone();
             let res = if let Some(c) = &mut orientation_evaluator.compiled.evaluator {
@@ -195,6 +200,7 @@ impl NumeratorEvaluateFloat for f64 {
             } else {
                 orientation_evaluator.eval_double.evaluate(params)
             };
+
             Ok((res, pos).into())
         } else {
             let mut oriented_params = params.to_vec();
@@ -222,6 +228,9 @@ impl NumeratorEvaluateFloat for f64 {
         num: &mut Num<Evaluators>,
         params: &[Complex<F<Self>>],
     ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+        if num.state.single.param_len != params.len() {
+            panic!("params length mismatch");
+        }
         if let Some(c) = &mut num.state.single.compiled.evaluator {
             c.evaluate(params)
         } else {
@@ -241,8 +250,10 @@ impl NumeratorEvaluateFloat for f128 {
             .collect_vec();
 
         for p in polarizations {
-            for pi in p {
-                params.push(pi.clone())
+            if !p.is_scalar() {
+                for pi in p {
+                    params.push(pi.clone())
+                }
             }
         }
 
@@ -259,6 +270,9 @@ impl NumeratorEvaluateFloat for f128 {
         num: &mut Num<Evaluators>,
         params: &[Complex<F<Self>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+        if num.state.single.param_len != params.len() {
+            return Err(eyre!("params length mismatch"));
+        }
         if let Some(orientation_evaluator) = &mut num.state.orientated {
             let pos = orientation_evaluator.positions.clone();
             let res = orientation_evaluator.eval_quad.evaluate(params);
@@ -289,6 +303,9 @@ impl NumeratorEvaluateFloat for f128 {
         num: &mut Num<Evaluators>,
         params: &[Complex<F<Self>>],
     ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+        if num.state.single.param_len != params.len() {
+            panic!("params length mismatch");
+        }
         num.state.single.eval_quad.evaluate(params)
     }
 }
@@ -481,10 +498,16 @@ impl AppliedFeynmanRule {
 
         let mut eatoms: Vec<Atom> = vec![];
         let mut shift = 0;
+        let i = Atom::new_var(State::I);
         for e in &graph.edges {
-            let (n, i) = e.numerator(graph);
+            let (n, s) = e.numerator(graph);
+            let n = if matches!(e.edge_type, EdgeType::Virtual) {
+                &n * &i
+            } else {
+                n
+            };
             eatoms.push(n);
-            shift += i;
+            shift += s;
             graph.shifts.0 += shift;
         }
         let mut builder = Atom::new_num(1);
@@ -497,7 +520,6 @@ impl AppliedFeynmanRule {
             builder = builder * e;
         }
 
-        let i = Atom::new_var(State::I);
         let a = Atom::new_var(State::get_symbol("a_"));
         let b = Atom::new_var(State::get_symbol("b_"));
 
@@ -984,11 +1006,16 @@ impl Contracted {
             let function_name = "numerator_single";
 
             let library_name = "libneval_single.so";
-            let inline_asm = InlineASM::X64;
+            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
+
+            let compile_options = export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options();
+
             CompiledEvaluator::new(
                 eval.export_cpp(&filename, function_name, true, inline_asm)
                     .unwrap()
-                    .compile(library_name, CompileOptions::default())
+                    .compile(library_name, compile_options)
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -1002,6 +1029,7 @@ impl Contracted {
             eval_double,
             eval_quad,
             compiled,
+            param_len: params.len(),
         }
     }
 
@@ -1089,6 +1117,7 @@ impl Num<Contracted> {
                 state: Evaluators {
                     orientated: Some(single.orientated(model, graph, extra_info, export_settings)),
                     single,
+                    choice: SingleOrCombined::Combined,
                     orientations: extra_info.orientations.clone(),
                 },
             },
@@ -1096,6 +1125,7 @@ impl Num<Contracted> {
                 state: Evaluators {
                     orientated: None,
                     single,
+                    choice: SingleOrCombined::Single,
                     orientations: extra_info.orientations.clone(),
                 },
             },
@@ -1194,6 +1224,7 @@ pub struct EvaluatorSingle {
     eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>,
     eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>,
     compiled: CompiledEvaluator<EvalTensor<SerializableCompiledEvaluator, AtomStructure>>,
+    param_len: usize, //to validate length of params at run time
 }
 
 impl EvaluatorSingle {
@@ -1326,11 +1357,15 @@ impl EvaluatorSingle {
 
             let library_name = extra_info.path.join("numerator.so");
             let library_name = library_name.to_string_lossy();
-            let inline_asm = InlineASM::X64;
+            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
+
+            let compile_options = export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options();
             CompiledEvaluator::new(
                 eval.export_cpp(&filename, function_name, true, inline_asm)
                     .unwrap()
-                    .compile(&library_name, CompileOptions::default())
+                    .compile(&library_name, compile_options)
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -1425,7 +1460,14 @@ pub struct Evaluators {
     orientated: Option<EvaluatorOrientations>,
     #[bincode(with_serde)]
     single: EvaluatorSingle,
+    choice: SingleOrCombined,
     orientations: Vec<Vec<bool>>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
+pub enum SingleOrCombined {
+    Single,
+    Combined,
 }
 
 impl TryFrom<PythonState> for Evaluators {
@@ -1481,6 +1523,37 @@ impl Num<Evaluators> {
             orientated.compiled.disable().unwrap();
         }
         self.state.single.compiled.disable().unwrap();
+    }
+
+    pub fn disable_combined(&mut self) {
+        if self.state.orientated.is_some() {
+            self.state.choice = SingleOrCombined::Single;
+        }
+    }
+
+    pub fn enable_compiled(&mut self) {
+        if let Some(orientated) = &mut self.state.orientated {
+            orientated.compiled.enable().unwrap();
+        }
+        self.state.single.compiled.enable().unwrap();
+    }
+
+    pub fn enable_combined(
+        &mut self,
+        generate: Option<(&Model, &BareGraph, &ExtraInfo, &ExportSettings)>,
+    ) {
+        if self.state.orientated.is_some() {
+            self.state.choice = SingleOrCombined::Combined;
+        } else if let Some((model, graph, extra_info, export_settings)) = generate {
+            let orientated =
+                self.state
+                    .single
+                    .orientated(model, graph, extra_info, export_settings);
+            self.state.orientated = Some(orientated);
+            self.state.choice = SingleOrCombined::Combined;
+        } else {
+            panic!("Cannot enable combined without generating the evaluators")
+        }
     }
 }
 

@@ -423,13 +423,9 @@ impl CounterTerm {
 
         // match the complex prefactor off cff
         let loop_number = graph.bare_graph.loop_momentum_basis.basis.len();
-        let internal_vertex_number =
-            graph.bare_graph.vertices.len() - graph.bare_graph.external_connections.len();
 
-        let prefactor = Complex::new(const_builder.zero(), const_builder.one())
-            .pow(loop_number as u64)
-            * Complex::new(-const_builder.one(), const_builder.zero())
-                .pow(internal_vertex_number as u64 - 1);
+        let prefactor =
+            Complex::new(const_builder.zero(), -const_builder.one()).pow(loop_number as u64);
 
         res * prefactor
     }

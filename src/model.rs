@@ -635,7 +635,7 @@ impl Particle {
                 e = e.add_arg(&edge_slots.to_aind_atom());
                 e.finish()
             }
-            _ => Atom::parse("1").unwrap(),
+            _ => panic!("higher spin not supported")//Atom::parse("1").unwrap(),
         }
     }
 
