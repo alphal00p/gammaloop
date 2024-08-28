@@ -1934,28 +1934,8 @@ impl DerivedGraphData<Evaluators> {
         let ni = Complex::new(zero.clone(), -one.clone());
 
         let loop_number = graph.loop_momentum_basis.basis.len();
-        let internal_vertex_number = graph.vertices.len() - graph.external_connections.len();
-
-        println!(
-            "Ext: {},L: {loop_number},V: {},E:{}",
-            graph.external_connections.len(),
-            graph.vertices.len(),
-            graph.edges.len()
-        );
-
-        let nint_edges = graph.edges.len() - graph.external_connections.len();
-        let nint_vertices = internal_vertex_number;
-
-        let a = 0;
-        let b = 1;
-        let c = 1;
-        let shift: usize = 0;
 
         let prefactor = ni.pow((loop_number) as u64); // (ni).pow(loop_number as u64) * (-(ni.ref_one())).pow(internal_vertex_number as u64 - 1);
-
-        println!("i^{}", (3 * loop_number) % 4);
-
-        println!("prefactor: {}", prefactor);
 
         let mut cff = self
             .evaluate_cff_orientations(graph, sample, lmb_specification, settings)

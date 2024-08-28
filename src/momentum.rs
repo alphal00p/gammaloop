@@ -1453,7 +1453,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         // definition from helas_ref A.2
         let pt = self.pt();
         let (e1, e2, e3) = if pt.is_zero() {
-            (pt.zero(), pt.one(), pt.zero())
+            (pt.zero(), pt.zero(), pt.zero())
         } else {
             (-(&self.spatial.py / &pt), &self.spatial.px / &pt, pt.zero())
         };

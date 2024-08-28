@@ -1473,11 +1473,22 @@ fn pytest_physical_1L_6photons_generate() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    println!("{:?}", graph.bare_graph.loop_momentum_basis);
+    // println!("{:?}", graph.bare_graph.loop_momentum_basis);
     let sample = kinematics_builder(5, 1, &graph.bare_graph);
 
     graph.generate_cff();
     let export_settings = test_export_settings();
+
+    println!(
+        "{}",
+        graph
+            .clone()
+            .apply_feynman_rules()
+            .derived_data
+            .unwrap()
+            .numerator
+            .export()
+    );
     let mut graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
