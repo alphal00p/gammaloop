@@ -1,6 +1,7 @@
 use std::{
     collections::hash_map::Entry::Vacant,
     ffi::OsStr,
+    fmt::Debug,
     fs::{create_dir_all, File, OpenOptions},
     io::Write,
     path::PathBuf,
@@ -38,6 +39,12 @@ impl EvalState {
 
 pub struct DebugLogger {
     logger: LazyLock<Mutex<LogImpl>>,
+}
+
+impl momtrop::log::Logger for DebugLogger {
+    fn write<T: Serialize>(&self, msg: &str, data: &T) {
+        self.write(msg, data)
+    }
 }
 
 impl DebugLogger {

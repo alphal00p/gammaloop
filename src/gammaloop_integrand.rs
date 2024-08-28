@@ -906,6 +906,7 @@ impl GammaLoopIntegrand {
                             edge_data,
                             &tropical_sampling_settings
                                 .into_tropical_sampling_settings(self.settings.general.debug),
+                            &DEBUG_LOGGER,
                         );
 
                         let sampling_result = match sampling_result_result {
