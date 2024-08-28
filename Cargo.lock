@@ -1387,7 +1387,7 @@ dependencies = [
 [[package]]
 name = "momtrop"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/momtrop#8f9f80ae8950bbf0712fbe059557319fb2d75889"
+source = "git+https://github.com/alphal00p/momtrop?branch=logger_feature#1ba9c31e20768e479d50d44ca69885b5e9fb3c95"
 dependencies = [
  "ahash",
  "criterion",
