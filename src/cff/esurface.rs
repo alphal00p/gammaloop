@@ -1,7 +1,6 @@
 use std::ops::Index;
 
 use color_eyre::Report;
-use colored::Colorize;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
@@ -11,6 +10,7 @@ use symbolica::atom::Atom;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
 
+use crate::debug_info::DEBUG_LOGGER;
 use crate::graph::{Graph, LoopMomentumBasis};
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::utils::{
@@ -312,13 +312,6 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     debug: usize,
     e_cm: F<f64>,
 ) -> ExistingEsurfaces {
-    if debug > 1 {
-        println!(
-            "{}",
-            "Determining all esurfaces which can satisfy the existence condition".green()
-        )
-    }
-
     let mut existing_esurfaces = ExistingEsurfaces::with_capacity(MAX_EXPECTED_CAPACITY);
 
     for orientation_pair in &esurface_derived_data.orientation_pairs {
@@ -328,19 +321,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
             let esurface = &esurfaces[*esurface_id];
 
             if debug > 1 {
-                println!(
-                    "checking pair:  ({:?}, {:?})",
-                    esurface_id, other_esurface_id
-                );
-
-                let other_esurface = &esurfaces[*other_esurface_id];
-
-                println!("edges: {:?}", esurface.energies);
-                println!("shift of {}: {:?}", esurface_id.0, esurface.external_shift);
-                println!(
-                    "shift of {}: {:?}",
-                    other_esurface_id.0, other_esurface.external_shift
-                );
+                DEBUG_LOGGER.write("esurface_pair", &(esurface_id, other_esurface_id));
             }
 
             let shift_part = esurface.compute_shift_part_from_momenta(lmb, externals);
@@ -348,41 +329,17 @@ pub fn get_existing_esurfaces<T: FloatLike>(
 
             if shift_part < -F::from_ff64(SHIFT_THRESHOLD * e_cm) {
                 if debug > 1 {
-                    println!(
-                        "{}",
-                        format!(
-                            "esurface {} has negative_shift, shift: {}",
-                            esurface_id.0,
-                            -shift_part.abs()
-                        )
-                        .yellow()
-                    );
+                    DEBUG_LOGGER.write("negative_shift_esurface", &(esurface_id, shift_part));
                 }
 
                 Some((*esurface_id, shift_zero_sq))
             } else if shift_part > F::from_ff64(SHIFT_THRESHOLD * e_cm) {
                 if debug > 1 {
-                    println!(
-                        "{}",
-                        format!(
-                            "esurface {} has negative shift, shift: {}",
-                            other_esurface_id.0,
-                            -shift_part.abs()
-                        )
-                        .yellow()
-                    );
+                    DEBUG_LOGGER.write("negative_shift_esurface", &(other_esurface_id, shift_part));
                 }
 
                 Some((*other_esurface_id, shift_zero_sq))
             } else {
-                if debug > 1 {
-                    println!(
-                        "{}",
-                        "No member of this pair can satisfy the existence condition"
-                            .to_string()
-                            .green(),
-                    );
-                }
                 None
             }
         } {
@@ -390,49 +347,46 @@ pub fn get_existing_esurfaces<T: FloatLike>(
 
             let esurface_shift = compute_shift_part(shift_signature, externals);
 
-            if debug > 1 {
-                println!("Shift in cut momentum basis: {}", &esurface_shift);
-            }
-
             let shift_spatial_sq = esurface_shift.spatial.norm_squared();
-
-            if debug > 1 {
-                println!("Shift squared: {}", &shift_spatial_sq);
-            }
 
             let mass_sum_squared = esurface_derived_data[esurface_to_check_id].mass_sum_squared;
 
             let existence_condition =
-                &shift_zero_sq - shift_spatial_sq - F::from_ff64(mass_sum_squared);
+                &shift_zero_sq - &shift_spatial_sq - F::from_ff64(mass_sum_squared);
 
             if debug > 1 {
-                println!("Sum of masses squared: {}", &mass_sum_squared);
-                println!("existence condition: {}", existence_condition);
+                let helper_struct = ExistenceCheckDebug {
+                    esurface_id: esurface_to_check_id,
+                    shift_zero_sq: shift_zero_sq.into_ff64(),
+                    shift_spatial_sq: shift_spatial_sq.into_ff64(),
+                    mass_sum_sq: mass_sum_squared.into_ff64(),
+                    existence_condition: existence_condition.into_ff64(),
+                    threshold: F::from_ff64(
+                        EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm,
+                    ),
+                };
+
+                DEBUG_LOGGER.write("existence_check", &helper_struct);
             }
 
             if existence_condition
                 > F::from_ff64(EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm)
             {
-                if debug > 1 {
-                    println!(
-                        "{}",
-                        format!("existing esurface found: {}", esurface_to_check_id.0).red()
-                    );
-                }
                 existing_esurfaces.push(esurface_to_check_id);
-            } else if debug > 1 {
-                println!(
-                    "{}",
-                    format!(
-                        "Esurface {} can not satisfy existence condition",
-                        esurface_to_check_id.0
-                    )
-                    .green()
-                )
             }
         }
     }
     existing_esurfaces
+}
+
+#[derive(Serialize)]
+struct ExistenceCheckDebug {
+    esurface_id: EsurfaceID,
+    shift_zero_sq: F<f64>,
+    shift_spatial_sq: F<f64>,
+    mass_sum_sq: F<f64>,
+    existence_condition: F<f64>,
+    threshold: F<f64>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
