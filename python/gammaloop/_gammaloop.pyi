@@ -93,8 +93,5 @@ class Worker:
     def display_master_node_status(self) -> None:
         """display information about the current run"""
 
-    def new_log(self, log_file: str) -> None:
-        """set a new log file to write to"""
-
     def update_iter(self) -> None:
         """finish the iteration"""

@@ -580,16 +580,6 @@ impl PythonWorker {
         }
     }
 
-    pub fn new_log(&mut self, log_file: &str) -> PyResult<String> {
-        match DEBUG_LOGGER
-            .new_log(&PathBuf::from(log_file))
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-        {
-            Ok(()) => Ok(format!("set log file at {}", log_file)),
-            Err(e) => Err(e),
-        }
-    }
-
     pub fn load_master_node(&mut self, integrand: &str) -> PyResult<String> {
         let selected_integrand = if let Some(selected_integrand) = self.integrands.get(integrand) {
             selected_integrand

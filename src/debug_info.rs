@@ -51,18 +51,28 @@ impl DebugLogger {
     const fn init() -> Self {
         Self {
             logger: LazyLock::new(|| {
+                let path = PathBuf::from("log.glog");
+                let path_to_general = path.join("general.jsonl");
+
+                create_dir_all(&path).expect("unable to create log file");
+
+                let general_file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(path_to_general)
+                    .expect("unable to create log file");
+
+                let mut files = HashMap::default();
+                files.insert(EvalState::General, general_file);
+
                 Mutex::new(LogImpl {
-                    files: HashMap::default(),
+                    files,
                     current: EvalState::General,
-                    path: PathBuf::new(),
+                    path,
                 })
             }),
         }
-    }
-
-    #[cold]
-    pub fn new_log(&self, path: &PathBuf) -> Result<(), Report> {
-        self.logger.lock().unwrap().new_log(path)
     }
 
     #[cold]
@@ -91,32 +101,6 @@ struct LogImpl {
 }
 
 impl LogImpl {
-    fn new_log(&mut self, path: &PathBuf) -> Result<(), Report> {
-        self.files.clear();
-        self.current = EvalState::General;
-        self.path = path.clone();
-
-        let extension = path.extension().and_then(OsStr::to_str).map_or_else(
-            || Err(eyre!("could not determine extension, is it a .glog?")),
-            Ok,
-        )?;
-
-        assert_eq!(extension, "glog");
-
-        create_dir_all(path)?;
-        let general_path = path.join("general.jsonl");
-
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(general_path)?;
-
-        self.files.insert(EvalState::General, file);
-
-        Ok(())
-    }
-
     fn set_state(&mut self, state: EvalState) -> Result<(), Report> {
         self.current = state;
         if let Vacant(e) = self.files.entry(state) {
