@@ -1,6 +1,5 @@
 use std::{
     collections::hash_map::Entry::Vacant,
-    ffi::OsStr,
     fmt::Debug,
     fs::{create_dir_all, File, OpenOptions},
     io::Write,
@@ -11,7 +10,6 @@ use std::{
 
 use ahash::HashMap;
 use color_eyre::Report;
-use eyre::eyre;
 use serde::Serialize;
 
 use crate::{Precision, RotationMethod};
