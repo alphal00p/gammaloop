@@ -1,7 +1,6 @@
 use crate::{
     cli_functions::cli,
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
-    debug_info::DEBUG_LOGGER,
     inspect,
     integrands::Integrand,
     integrate::{
@@ -455,14 +454,12 @@ impl PythonWorker {
                             format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
                         );
 
-                        return Ok((eval.re.0, eval.im.0));
+                        Ok((eval.re.0, eval.im.0))
                     }
-                    Err(_) => {
-                        return Err(exceptions::PyException::new_err(format!(
-                            "No previous run to extract max weight from"
-                        )));
-                    }
-                };
+                    Err(_) => Err(exceptions::PyException::new_err(
+                        "No previous run to extract max weight from".to_string(),
+                    )),
+                }
             }
             None => Err(exceptions::PyException::new_err(format!(
                 "Could not find integrand {}",
