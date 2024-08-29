@@ -1425,15 +1425,11 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         let p = self.spatial.norm();
 
         let (e1, e2, e3) = if pt.is_zero() {
-            if self.spatial.pz.positive() {
-                (pt.one(), pt.zero(), pt.zero())
-            } else {
-                (-pt.one(), pt.zero(), pt.zero())
-            }
+            (pt.one(), pt.zero(), pt.zero())
         } else {
             (
                 &self.spatial.px * &self.spatial.pz / (&pt * &p),
-                &self.spatial.pz * &self.spatial.pz / (&pt * &p),
+                &self.spatial.py * &self.spatial.pz / (&pt * &p),
                 -(&pt / &p),
             )
         };

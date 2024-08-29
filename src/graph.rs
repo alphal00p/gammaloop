@@ -1945,7 +1945,6 @@ impl DerivedGraphData<Evaluators> {
         match num_iter {
             RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
                 if let Some(i) = s.next() {
-                    println!("numerator scalar {}", i);
                     let c = Complex::new_re(cff.next().unwrap());
                     let mut sum = i * &c;
                     for j in cff.by_ref() {
