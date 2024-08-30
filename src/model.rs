@@ -38,6 +38,7 @@ use symbolica::domains::float::NumericalFloatLike;
 use symbolica::fun;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::State;
+use utils::approx_eq_cmplx_vec;
 
 #[allow(unused)]
 fn normalise_complex(atom: &Atom) -> Atom {
@@ -918,6 +919,88 @@ fn test_polarization() {
     assert_eq!(
         vec![zero, -sqrt_inv, -isqrt_inv, zero],
         pol_in_plus.tensor.data
+    );
+}
+
+#[test]
+fn test_polarization_with_transverse_momentum() {
+    let mom = FourMomentum::from_args(F(13.0), F(3.0), F(4.0), F(12.0));
+
+    let cmplx_zero = Complex::new_zero();
+    let zero = mom.temporal.value.zero();
+    let threshold = F(1e-12);
+
+    let pol_in_plus = Particle::incoming_polarization_impl(3, 1, &mom, Helicity::Plus);
+    let pol_out_plus = Particle::outgoing_polarization_impl(3, 1, &mom, Helicity::Plus);
+    let pol_in_minus = Particle::incoming_polarization_impl(3, 1, &mom, Helicity::Minus);
+    let pol_out_minus = Particle::outgoing_polarization_impl(3, 1, &mom, Helicity::Minus);
+
+    let target_pol_in_minus = [
+        &cmplx_zero,
+        &Complex::new(F(0.3916283711187033), F(0.5656854249492381)),
+        &Complex::new(F(0.5221711614916043), F(-0.4242640687119285)),
+        &Complex::new(F(-0.2719641466102106), zero),
+    ];
+    assert!(
+        approx_eq_cmplx_vec(
+            &target_pol_in_minus,
+            &pol_in_minus.tensor.data.iter().collect_vec(),
+            &threshold
+        ),
+        "pol(in,-) does not match:\n{:?}\n!=\n{:?}",
+        pol_in_minus.tensor.data,
+        target_pol_in_minus
+    );
+
+    let target_pol_out_minus = [
+        &cmplx_zero,
+        &Complex::new(F(0.3916283711187033), F(-0.5656854249492381)),
+        &Complex::new(F(0.5221711614916043), F(0.4242640687119285)),
+        &Complex::new(F(-0.2719641466102106), zero),
+    ];
+    assert!(
+        approx_eq_cmplx_vec(
+            &target_pol_out_minus,
+            &pol_out_minus.tensor.data.iter().collect_vec(),
+            &threshold
+        ),
+        "pol(out,-) does not match:\n{:?}\n!=\n{:?}",
+        pol_out_minus.tensor.data,
+        target_pol_out_minus
+    );
+
+    let target_pol_in_plus = [
+        &cmplx_zero,
+        &Complex::new(F(-0.3916283711187033), F(0.5656854249492381)),
+        &Complex::new(F(-0.5221711614916043), F(-0.4242640687119285)),
+        &Complex::new(F(0.2719641466102106), zero),
+    ];
+    assert!(
+        approx_eq_cmplx_vec(
+            &target_pol_in_plus,
+            &pol_in_plus.tensor.data.iter().collect_vec(),
+            &threshold
+        ),
+        "pol(out,-) does not match:\n{:?}\n!=\n{:?}",
+        pol_in_plus.tensor.data,
+        target_pol_in_plus
+    );
+
+    let target_pol_out_plus = [
+        &cmplx_zero,
+        &Complex::new(F(-0.3916283711187033), F(-0.5656854249492381)),
+        &Complex::new(F(-0.5221711614916043), F(0.4242640687119285)),
+        &Complex::new(F(0.2719641466102106), zero),
+    ];
+    assert!(
+        approx_eq_cmplx_vec(
+            &target_pol_out_plus,
+            &pol_out_plus.tensor.data.iter().collect_vec(),
+            &threshold
+        ),
+        "pol(out,-) does not match:\n{:?}\n!=\n{:?}",
+        pol_out_plus.tensor.data,
+        target_pol_out_plus
     );
 }
 

@@ -33,7 +33,7 @@ use symbolica::{
 
 use spenso::complex::Complex;
 
-use crate::utils::{FloatLike, RefDefault, F};
+use crate::utils::{approx_eq_vec, FloatLike, RefDefault, F};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct Energy<T> {
@@ -946,6 +946,26 @@ impl<T: RefZero, U: RefZero> RefZero<FourMomentum<T, U>> for &FourMomentum<T, U>
             temporal: self.temporal.ref_zero(),
             spatial: self.spatial.ref_zero(),
         }
+    }
+}
+
+impl<T: FloatLike> FourMomentum<T> {
+    pub fn approx_eq(&self, other: &FourMomentum<T>, threshold: T) -> bool {
+        approx_eq_vec(
+            &[
+                &F(self.temporal.value.clone()),
+                &F(self.spatial.px.clone()),
+                &F(self.spatial.py.clone()),
+                &F(self.spatial.pz.clone()),
+            ],
+            &[
+                &F(other.temporal.value.clone()),
+                &F(other.spatial.px.clone()),
+                &F(other.spatial.py.clone()),
+                &F(other.spatial.pz.clone()),
+            ],
+            &F(threshold),
+        )
     }
 }
 

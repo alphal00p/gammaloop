@@ -2863,6 +2863,33 @@ pub fn format_sample(sample: &Sample<F<f64>>) -> String {
     }
 }
 
+pub fn approx_eq_vec<T>(vec_a: &[&F<T>], vec_b: &[&F<T>], threshold: &F<T>) -> bool 
+where
+T: FloatLike, {
+    for (&vi, &ovi) in vec_a
+    .iter()
+    .zip(vec_b) {
+        if !approx_eq(ovi, vi, threshold) {
+            return false
+        }
+    }
+    true
+}
+
+pub fn approx_eq_cmplx_vec<T>(vec_a: &[&Complex<F<T>>], vec_b: &[&Complex<F<T>>], threshold: &F<T>) -> bool 
+where
+T: FloatLike, {
+    approx_eq_vec(
+        &vec_a.iter().map(|c| &c.re).collect_vec(),
+        &vec_b.iter().map(|c| &c.re).collect_vec(),
+        threshold,
+    ) && approx_eq_vec(
+        &vec_a.iter().map(|c| &c.im).collect_vec(),
+        &vec_b.iter().map(|c| &c.im).collect_vec(),
+        threshold,
+    )
+}
+
 pub fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
     vec1: &TiSlice<K, T>,
     vec2: &TiSlice<K, T>,
