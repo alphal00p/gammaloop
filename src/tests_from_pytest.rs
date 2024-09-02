@@ -51,6 +51,7 @@ use symbolica;
 use symbolica::atom::Atom;
 use symbolica::domains::float::{Complex as SymComplex, NumericalFloatLike, Real};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, FunctionMap, OptimizationSettings};
+use symbolica::id::{Pattern, Replacement};
 use symbolica::state::State;
 use typed_index_collections::TiVec;
 
@@ -534,7 +535,7 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
 }
 
 fn init() {
-    // let _ = env_logger::builder().is_test(true).try_init();
+    let _ = env_logger::builder().is_test(true).try_init();
 }
 #[test]
 fn pytest_scalar_massless_triangle() {
@@ -1479,7 +1480,7 @@ fn pytest_physical_1L_6photons_generate() {
     graph.generate_cff();
     let mut export_settings = test_export_settings();
 
-    export_settings.gammaloop_compile_options.inline_asm = false;
+    export_settings.gammaloop_compile_options.inline_asm = true;
 
     println!(
         "{}",
@@ -1497,3 +1498,62 @@ fn pytest_physical_1L_6photons_generate() {
     graph.evaluate_cff_expression(&sample, &default_settings);
 }
 
+#[test]
+fn gamma_symplify() {
+    init();
+    let default_settings = load_default_settings();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    // graph.bare_graph.dot_internal_vertices()
+
+    let num = graph.apply_feynman_rules().derived_data.unwrap().numerator;
+
+    let mut a = num.color_symplify().state.expression;
+
+    println!("Before: {}", a);
+
+    a.0 = a.0.expand();
+
+    let pats = vec![(
+        Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
+        Pattern::parse("t_(aind(d___,a_,c___))").unwrap(),
+    )];
+    let reps: Vec<Replacement> = pats
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect();
+    a.replace_repeat_multiple(&reps);
+
+    let pats = vec![
+        (
+            Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))").unwrap(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))").unwrap(),
+        ),
+        (
+            Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))").unwrap(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))").unwrap(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
+            Pattern::parse("gamma_trace(aind(a__))").unwrap(),
+        ),
+    ];
+    let reps: Vec<Replacement> = pats
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect();
+    a.replace_repeat_multiple(&reps);
+
+    println!("After: {}", a);
+}

@@ -169,7 +169,7 @@ impl InteractionVertexInfo {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern =
-                        Pattern::parse(&format!("Q({},aind(lord(4,indexid(x_))))", e)).unwrap();
+                        Pattern::parse(&format!("Q({},aind(lord(4,indexid(x_))))", e)).unwrap(); //TODO flip based on flow
 
                     atom = momentum_in_pattern.replace_all(
                         atom.as_view(),
@@ -441,16 +441,16 @@ impl Edge {
 
     pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Lorentz> {
         let local_pos_in_sink_vertex =
-            graph.vertices[self.vertices[1]].get_local_edge_position(self, graph);
+            graph.vertices[self.vertices[0]].get_local_edge_position(self, graph);
 
-        graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
+        graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
     }
 
     pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Lorentz> {
         let local_pos_in_sink_vertex =
-            graph.vertices[self.vertices[0]].get_local_edge_position(self, graph);
+            graph.vertices[self.vertices[1]].get_local_edge_position(self, graph);
 
-        graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
+        graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
     }
 
     pub fn numerator(&self, graph: &BareGraph) -> (Atom, usize) {
@@ -459,8 +459,8 @@ impl Edge {
         let out_slots = self.out_slot(graph);
 
         match self.edge_type {
-            EdgeType::Incoming => (self.particle.incoming_polarization_atom(&in_slots, num), 0),
-            EdgeType::Outgoing => (self.particle.outgoing_polarization_atom(&out_slots, num), 0),
+            EdgeType::Incoming => (self.particle.incoming_polarization_atom(&out_slots, num), 0),
+            EdgeType::Outgoing => (self.particle.outgoing_polarization_atom(&in_slots, num), 0),
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 

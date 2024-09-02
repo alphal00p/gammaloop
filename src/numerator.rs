@@ -171,8 +171,8 @@ impl NumeratorEvaluateFloat for f64 {
 
         for p in polarizations {
             if !p.is_scalar() {
-                for pi in p {
-                    params.push(pi.clone())
+                for &pi in p {
+                    params.push(pi)
                 }
             }
         }
@@ -674,7 +674,7 @@ impl Num<AppliedFeynmanRule> {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ColorSymplified {
     #[bincode(with_serde)]
-    expression: SerializableAtom,
+    pub expression: SerializableAtom,
 }
 
 impl TryFrom<PythonState> for ColorSymplified {
@@ -696,6 +696,16 @@ impl TryFrom<PythonState> for ColorSymplified {
 
 impl ColorSymplified {
     pub fn gamma_symplify(self) -> GammaSymplified {
+        let replacements = vec![(
+            Pattern::parse("color(a___)").unwrap(),
+            Pattern::parse("a___").unwrap(),
+        )];
+
+        let reps: Vec<Replacement> = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect();
+
         GammaSymplified {
             expression: self.expression,
         }
@@ -966,6 +976,19 @@ impl Contracted {
         self.tensor.replace_all_multiple_repeat_mut(&reps);
 
         let params = Self::generate_params(graph);
+        let reps = params
+            .iter()
+            .map(|a| (a.clone().into_pattern(), Atom::new_num(1).into_pattern()))
+            .collect_vec();
+
+        let reps = reps
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect_vec();
+
+        let mut scalar_test = self.tensor.clone();
+
+        scalar_test.replace_all_multiple_repeat_mut(&reps);
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -1003,8 +1026,6 @@ impl Contracted {
             let mut filename = path.clone();
             filename.push("numerator_single.cpp");
             let filename = filename.to_string_lossy();
-
-            println!("filename: {}", filename);
 
             let function_name = "numerator_single";
 
