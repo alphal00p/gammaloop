@@ -33,11 +33,11 @@ export_settings:
   compile_cff: true
   compile_separate_orientations: false
   cpe_rounds_cff: 1
-  gammaloop_compile_options: 
-    inline_asm: false
-    optimization_level: 3 
+  gammaloop_compile_options:
+    inline_asm: true
+    optimization_level: 3
     fast_math: true
-    unsafe_math: true 
+    unsafe_math: true
     compiler: "g++"
     custom: []
   tropical_subgraph_table_settings:

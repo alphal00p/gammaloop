@@ -1440,12 +1440,15 @@ impl BareGraph {
 
     pub fn load_derived_data<NumState: NumeratorState + DeserializeOwned>(
         self,
+        model: &Model,
         path: &Path,
         settings: &Settings,
     ) -> Result<Graph<NumState>, Report> {
         let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
         debug!("Loading derived data from {:?}", derived_data_path);
         let mut derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
+
+        derived_data.numerator.update_model(model)?;
 
         derived_data
             .cff_expression

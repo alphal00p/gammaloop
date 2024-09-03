@@ -324,12 +324,17 @@ impl<S: TypedNumeratorState> AmplitudeGraph<S> {
 impl AmplitudeGraph<PythonState> {}
 
 impl<S: NumeratorState> AmplitudeGraph<S> {
-    pub fn load_derived_data_mut(&mut self, path: &Path, settings: &Settings) -> Result<()> {
+    pub fn load_derived_data_mut(
+        &mut self,
+        model: &Model,
+        path: &Path,
+        settings: &Settings,
+    ) -> Result<()> {
         let g = self
             .graph
             .bare_graph
             .clone()
-            .load_derived_data::<S>(path, settings)?;
+            .load_derived_data::<S>(model, path, settings)?;
 
         self.graph = g;
         Ok(())
@@ -338,13 +343,14 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
     pub fn load_derived_data<T: NumeratorState>(
         self,
+        model: &Model,
         path: &Path,
         settings: &Settings,
     ) -> Result<AmplitudeGraph<T>> {
         let g = self
             .graph
             .bare_graph
-            .load_derived_data::<T>(path, settings)?;
+            .load_derived_data::<T>(model, path, settings)?;
 
         Ok(AmplitudeGraph {
             sg_id: self.sg_id,
@@ -564,9 +570,14 @@ impl<S: TypedNumeratorState> Amplitude<S> {
 impl Amplitude<PythonState> {}
 
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn load_derived_data_mut(&mut self, path: &Path, settings: &Settings) -> Result<()> {
+    pub fn load_derived_data_mut(
+        &mut self,
+        model: &Model,
+        path: &Path,
+        settings: &Settings,
+    ) -> Result<()> {
         for amplitude_graph in self.amplitude_graphs.iter_mut() {
-            amplitude_graph.load_derived_data_mut(path, settings)?;
+            amplitude_graph.load_derived_data_mut(model, path, settings)?;
         }
         Ok(())
     }
@@ -707,10 +718,11 @@ impl Amplitude<UnInit> {
 
     pub fn load_derived_data<S: NumeratorState>(
         self,
+        model: &Model,
         path: &Path,
         settings: &Settings,
     ) -> Result<Amplitude<S>, Report> {
-        self.map_res(|a| a.load_derived_data(path, settings))
+        self.map_res(|a| a.load_derived_data(model, path, settings))
     }
 }
 
@@ -1013,10 +1025,15 @@ impl<S: TypedNumeratorState> AmplitudeList<S> {
 impl AmplitudeList<PythonState> {}
 
 impl<S: NumeratorState> AmplitudeList<S> {
-    pub fn load_derived_data_mut(&mut self, path: &Path, settings: &Settings) -> Result<()> {
+    pub fn load_derived_data_mut(
+        &mut self,
+        model: &Model,
+        path: &Path,
+        settings: &Settings,
+    ) -> Result<()> {
         for amplitude in self.container.iter_mut() {
             let ampltitude_path = path.join(amplitude.name.as_str());
-            amplitude.load_derived_data_mut(&ampltitude_path, settings)?;
+            amplitude.load_derived_data_mut(model, &ampltitude_path, settings)?;
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 amplitude_graph.graph.generate_esurface_data()?;
             }
@@ -1098,6 +1115,7 @@ impl AmplitudeList<UnInit> {
 
     pub fn load_derived_data<S: NumeratorState>(
         self,
+        model: &Model,
         path: &Path,
         settings: &Settings,
     ) -> Result<AmplitudeList<S>, Report> {
@@ -1109,7 +1127,7 @@ impl AmplitudeList<UnInit> {
                 })
             })?;
             let ampltitude_path = path.join(a.name.as_str());
-            a.load_derived_data::<S>(&ampltitude_path, settings)
+            a.load_derived_data::<S>(model, &ampltitude_path, settings)
         })
     }
 

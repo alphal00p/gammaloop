@@ -13,8 +13,8 @@ use crate::{
     utils::{FloatLike, F},
 };
 use bincode::{Decode, Encode};
-use color_eyre::Report;
-use eyre::{eyre, Result};
+use color_eyre::{Report, Result};
+use eyre::eyre;
 use gat_lending_iterator::LendingIterator;
 // use gxhash::GxBuildHasher;
 use indexmap::IndexSet;
@@ -76,10 +76,8 @@ impl<T: FloatLike> Evaluate<T> for Num<Evaluators> {
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>> {
-        <T as NumeratorEvaluateFloat>::evaluate_all_orientations(
-            self,
-            &<T as NumeratorEvaluateFloat>::params(emr, polarizations),
-        )
+        <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations);
+        <T as NumeratorEvaluateFloat>::evaluate_all_orientations(self)
     }
 
     fn evaluate_single(
@@ -87,28 +85,23 @@ impl<T: FloatLike> Evaluate<T> for Num<Evaluators> {
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
-        <T as NumeratorEvaluateFloat>::evaluate_single(
-            self,
-            &<T as NumeratorEvaluateFloat>::params(emr, polarizations),
-        )
+        <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations);
+        <T as NumeratorEvaluateFloat>::evaluate_single(self)
     }
 }
 
 pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
     fn evaluate_all_orientations(
         num: &mut Num<Evaluators>,
-        params: &[Complex<F<T>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
 
-    fn evaluate_single(
-        num: &mut Num<Evaluators>,
-        params: &[Complex<F<T>>],
-    ) -> DataTensor<Complex<F<T>>, AtomStructure>;
+    fn evaluate_single(num: &mut Num<Evaluators>) -> DataTensor<Complex<F<T>>, AtomStructure>;
 
-    fn params(
+    fn update_params(
+        num: &mut Num<Evaluators>,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-    ) -> Vec<Complex<F<T>>>;
+    );
 }
 
 pub struct RepeatingIterator<T> {
@@ -160,38 +153,39 @@ impl<T> LendingIterator for RepeatingIterator<T> {
 }
 
 impl NumeratorEvaluateFloat for f64 {
-    fn params(
+    fn update_params(
+        num: &mut Num<Evaluators>,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Vec<Complex<F<Self>>> {
-        let mut params: Vec<Complex<F<Self>>> = emr
-            .iter()
+    ) {
+        let params = &mut num.state.double_param_values;
+        emr.iter()
             .flat_map(|p| p.into_iter().cloned().map(Complex::new_re))
-            .collect_vec();
+            .enumerate()
+            .for_each(|(i, c)| params[i] = c);
+
+        let mut i = 4 * emr.len();
 
         for p in polarizations {
             if !p.is_scalar() {
                 for &pi in p {
-                    params.push(pi)
+                    params[i] = pi;
+                    i += 1;
                 }
             }
         }
-
-        let zero = f64::new_zero();
-        params.push(Complex {
-            im: F(zero.one()),
-            re: F(zero),
-        });
-
-        params
     }
 
     fn evaluate_all_orientations(
         num: &mut Num<Evaluators>,
-        params: &[Complex<F<Self>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+        let params = &num.state.double_param_values;
         if num.state.single.param_len != params.len() {
-            return Err(eyre!("params length mismatch"));
+            return Err(eyre!(
+                "params length mismatch {} not equal to {}",
+                num.state.single.param_len,
+                params.len()
+            ));
         }
         if let Some(orientation_evaluator) = &mut num.state.orientated {
             let pos = orientation_evaluator.positions.clone();
@@ -204,6 +198,7 @@ impl NumeratorEvaluateFloat for f64 {
             Ok((res, pos).into())
         } else {
             let mut oriented_params = params.to_vec();
+            let base_params = params.clone();
             let mut tensors = Vec::new();
             let orientations = num.state.orientations.clone();
             for o in orientations {
@@ -212,11 +207,8 @@ impl NumeratorEvaluateFloat for f64 {
                         oriented_params[i] = -oriented_params[i];
                     }
                 }
-                tensors.push(<Self as NumeratorEvaluateFloat>::evaluate_single(
-                    num,
-                    &oriented_params,
-                ));
-                oriented_params = params.to_vec();
+                tensors.push(<Self as NumeratorEvaluateFloat>::evaluate_single(num));
+                oriented_params = base_params.clone();
             }
             Ok(RepeatingIteratorTensorOrScalar::Tensors(
                 RepeatingIterator::new_not_repeating(tensors),
@@ -224,10 +216,8 @@ impl NumeratorEvaluateFloat for f64 {
         }
     }
 
-    fn evaluate_single(
-        num: &mut Num<Evaluators>,
-        params: &[Complex<F<Self>>],
-    ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+    fn evaluate_single(num: &mut Num<Evaluators>) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+        let params = &num.state.double_param_values;
         if num.state.single.param_len != params.len() {
             panic!("params length mismatch");
         }
@@ -240,36 +230,33 @@ impl NumeratorEvaluateFloat for f64 {
 }
 
 impl NumeratorEvaluateFloat for f128 {
-    fn params(
+    fn update_params(
+        num: &mut Num<Evaluators>,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-    ) -> Vec<Complex<F<Self>>> {
-        let mut params: Vec<Complex<F<Self>>> = emr
-            .iter()
+    ) {
+        let params = &mut num.state.quad_param_values;
+        emr.iter()
             .flat_map(|p| p.into_iter().cloned().map(Complex::new_re))
-            .collect_vec();
+            .enumerate()
+            .for_each(|(i, c)| params[i] = c);
+
+        let mut i = 4 * emr.len();
 
         for p in polarizations {
             if !p.is_scalar() {
                 for pi in p {
-                    params.push(pi.clone())
+                    params[i] = pi.clone();
+                    i += 1;
                 }
             }
         }
-
-        let zero = f128::new_zero();
-        params.push(Complex {
-            im: F(zero.one()),
-            re: F(zero),
-        });
-
-        params
     }
 
     fn evaluate_all_orientations(
         num: &mut Num<Evaluators>,
-        params: &[Complex<F<Self>>],
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+        let params = &num.state.quad_param_values;
         if num.state.single.param_len != params.len() {
             return Err(eyre!("params length mismatch"));
         }
@@ -279,6 +266,7 @@ impl NumeratorEvaluateFloat for f128 {
             Ok((res, pos).into())
         } else {
             let mut oriented_params = params.to_vec();
+            let base_params = params.clone();
             let mut tensors = Vec::new();
             let orientations = num.state.orientations.clone();
             for o in orientations {
@@ -287,11 +275,8 @@ impl NumeratorEvaluateFloat for f128 {
                         oriented_params[i] *= F(f128::from_f64(-1.0));
                     }
                 }
-                tensors.push(<Self as NumeratorEvaluateFloat>::evaluate_single(
-                    num,
-                    &oriented_params,
-                ));
-                oriented_params = params.to_vec();
+                tensors.push(<Self as NumeratorEvaluateFloat>::evaluate_single(num));
+                oriented_params = base_params.clone();
             }
             Ok(RepeatingIteratorTensorOrScalar::Tensors(
                 RepeatingIterator::new_not_repeating(tensors),
@@ -299,10 +284,8 @@ impl NumeratorEvaluateFloat for f128 {
         }
     }
 
-    fn evaluate_single(
-        num: &mut Num<Evaluators>,
-        params: &[Complex<F<Self>>],
-    ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+    fn evaluate_single(num: &mut Num<Evaluators>) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+        let params = &num.state.quad_param_values;
         if num.state.single.param_len != params.len() {
             panic!("params length mismatch");
         }
@@ -326,15 +309,11 @@ impl<S: NumeratorState> Num<S> {
         }
     }
 
-    fn build_const_fn_map_with_split_reps(
-        fn_map: &mut FunctionMap,
-        model: &Model,
-    ) -> Vec<(Pattern, Pattern)> {
-        let mut split_reps = vec![];
-        info!("splitting");
-        split_reps.extend(model.valued_coupling_re_im_split(fn_map));
-        split_reps.extend(model.valued_parameter_re_im_split(fn_map));
+    pub fn update_model(&mut self, model: &Model) -> Result<()> {
+        self.state.update_model(model)
+    }
 
+    fn add_consts_to_fn_map(fn_map: &mut FunctionMap) {
         fn_map.add_constant(Atom::parse("Nc").unwrap(), 3.into());
 
         fn_map.add_constant(Atom::parse("TR").unwrap(), Rational::from((1, 2)));
@@ -343,8 +322,6 @@ impl<S: NumeratorState> Num<S> {
             Atom::parse("pi").unwrap(),
             Rational::from(std::f64::consts::PI),
         );
-
-        split_reps
     }
 }
 
@@ -387,6 +364,7 @@ pub trait NumeratorState: Serialize + Clone + DeserializeOwned + Debug + Encode 
 
     fn forget_type(self) -> PythonState;
 
+    fn update_model(&mut self, model: &Model) -> Result<()>;
     // fn try_from(state: PythonState) -> Result<Self>;
 }
 
@@ -426,6 +404,10 @@ impl NumeratorState for UnInit {
 
     fn forget_type(self) -> PythonState {
         PythonState::UnInit(Some(self))
+    }
+
+    fn update_model(&mut self, model: &Model) -> Result<()> {
+        Err(eyre!("Uninitialized, nothing to update"))
     }
 }
 
@@ -642,6 +624,10 @@ impl NumeratorState for AppliedFeynmanRule {
     fn forget_type(self) -> PythonState {
         PythonState::AppliedFeynmanRule(Some(self))
     }
+
+    fn update_model(&mut self, model: &Model) -> Result<()> {
+        Err(eyre!("Only applied feynman rule, nothing to update"))
+    }
 }
 
 impl TypedNumeratorState for AppliedFeynmanRule {
@@ -730,6 +716,12 @@ impl NumeratorState for ColorSymplified {
     fn forget_type(self) -> PythonState {
         PythonState::ColorSymplified(Some(self))
     }
+
+    fn update_model(&mut self, model: &Model) -> Result<()> {
+        Err(eyre!(
+            "Only applied feynman rule,and simplified color, nothing to update"
+        ))
+    }
 }
 
 impl TypedNumeratorState for ColorSymplified {
@@ -801,6 +793,12 @@ impl NumeratorState for GammaSymplified {
 
     fn forget_type(self) -> PythonState {
         PythonState::GammaSymplified(Some(self))
+    }
+
+    fn update_model(&mut self, model: &Model) -> Result<()> {
+        Err(eyre!(
+            "Only applied feynman rule, simplified color and gamma, nothing to update"
+        ))
     }
 }
 
@@ -903,6 +901,12 @@ impl NumeratorState for Network {
     fn forget_type(self) -> PythonState {
         PythonState::Network(Some(self))
     }
+
+    fn update_model(&mut self, model: &Model) -> Result<()> {
+        Err(eyre!(
+            "Only applied feynman rule, simplified color, gamma and parsed into network, nothing to update"
+        ))
+    }
 }
 
 impl TypedNumeratorState for Network {
@@ -957,42 +961,18 @@ impl TryFrom<PythonState> for Contracted {
 
 impl Contracted {
     pub fn evaluator(
-        mut self,
-        model: &Model,
-        graph: &BareGraph,
+        self,
         path: PathBuf,
         export_settings: &ExportSettings,
+        params: &[Atom],
     ) -> EvaluatorSingle {
         let mut fn_map: FunctionMap = FunctionMap::new();
 
-        let replacements =
-            Num::<Contracted>::build_const_fn_map_with_split_reps(&mut fn_map, model);
-
-        let reps = replacements
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect_vec();
-
-        self.tensor.replace_all_multiple_repeat_mut(&reps);
-
-        let params = Self::generate_params(graph);
-        let reps = params
-            .iter()
-            .map(|a| (a.clone().into_pattern(), Atom::new_num(1).into_pattern()))
-            .collect_vec();
-
-        let reps = reps
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect_vec();
-
-        let mut scalar_test = self.tensor.clone();
-
-        scalar_test.replace_all_multiple_repeat_mut(&reps);
+        Num::<Contracted>::add_consts_to_fn_map(&mut fn_map);
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = self.tensor.eval_tree(&fn_map, &params).unwrap();
+        let mut eval_tree = self.tensor.eval_tree(&fn_map, params).unwrap();
         debug!("Horner scheme");
 
         eval_tree.horner_scheme();
@@ -1058,8 +1038,17 @@ impl Contracted {
         }
     }
 
-    pub fn generate_params(graph: &BareGraph) -> Vec<Atom> {
+    pub fn generate_params(
+        graph: &BareGraph,
+        model: &Model,
+    ) -> (
+        Vec<Atom>,
+        Vec<Complex<F<f64>>>,
+        Vec<Complex<F<f128>>>,
+        usize,
+    ) {
         let mut params: Vec<Atom> = vec![];
+        let mut param_values: Vec<Complex<F<f64>>> = vec![];
         let mut pols = Vec::new();
 
         for (i, ext) in graph.edges.iter().enumerate() {
@@ -1076,6 +1065,7 @@ impl Contracted {
                     .data
                     .clone(),
             );
+            param_values.extend([Complex::new_zero(); 4]);
             match ext.edge_type {
                 EdgeType::Incoming => pols.extend(
                     ext.particle
@@ -1090,9 +1080,19 @@ impl Contracted {
             }
         }
 
+        param_values.extend(vec![Complex::new_zero(); pols.len()]);
         params.extend(pols);
+
+        param_values.push(Complex::new_i());
         params.push(Atom::new_var(State::I));
-        params
+
+        let model_params_start = params.len();
+        param_values.extend(model.generate_values());
+        params.extend(model.generate_params());
+
+        let quad_values = param_values.iter().map(|c| c.map(|f| f.higher())).collect();
+
+        (params, param_values, quad_values, model_params_start)
     }
 }
 
@@ -1102,6 +1102,10 @@ impl NumeratorState for Contracted {
     }
     fn forget_type(self) -> PythonState {
         PythonState::Contracted(Some(self))
+    }
+
+    fn update_model(&mut self, model: &Model) -> Result<()> {
+        Err(eyre!("Only applied feynman rule, simplified color, gamma, parsed into network and contracted, nothing to update"))
     }
 }
 
@@ -1133,17 +1137,28 @@ impl Num<Contracted> {
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
     ) -> Num<Evaluators> {
+        let (params, double_param_values, quad_param_values, model_params_start) =
+            Contracted::generate_params(graph, model);
+
         let single = self
             .state
-            .evaluator(model, graph, extra_info.path.clone(), export_settings);
+            .evaluator(extra_info.path.clone(), export_settings, &params);
 
         match export_settings.numerator_settings {
             NumeratorEvaluatorOptions::Combined(_) => Num {
                 state: Evaluators {
-                    orientated: Some(single.orientated(model, graph, extra_info, export_settings)),
+                    orientated: Some(single.orientated(
+                        graph,
+                        &params,
+                        extra_info,
+                        export_settings,
+                    )),
                     single,
                     choice: SingleOrCombined::Combined,
                     orientations: extra_info.orientations.clone(),
+                    quad_param_values,
+                    double_param_values,
+                    model_params_start,
                 },
             },
             _ => Num {
@@ -1152,6 +1167,9 @@ impl Num<Contracted> {
                     single,
                     choice: SingleOrCombined::Single,
                     orientations: extra_info.orientations.clone(),
+                    quad_param_values,
+                    double_param_values,
+                    model_params_start,
                 },
             },
         }
@@ -1255,16 +1273,15 @@ pub struct EvaluatorSingle {
 impl EvaluatorSingle {
     pub fn orientated(
         &self,
-        model: &Model,
         graph: &BareGraph,
+        params: &[Atom],
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
     ) -> EvaluatorOrientations {
         let mut fn_map: FunctionMap = FunctionMap::new();
 
-        let _ = Num::<Contracted>::build_const_fn_map_with_split_reps(&mut fn_map, model);
+        Num::<Contracted>::add_consts_to_fn_map(&mut fn_map);
 
-        let params = Contracted::generate_params(graph);
         let mut seen = 0;
 
         let mut index_map = IndexSet::new();
@@ -1484,9 +1501,14 @@ pub struct Evaluators {
     #[bincode(with_serde)]
     orientated: Option<EvaluatorOrientations>,
     #[bincode(with_serde)]
-    single: EvaluatorSingle,
+    pub single: EvaluatorSingle,
     choice: SingleOrCombined,
     orientations: Vec<Vec<bool>>,
+    #[bincode(with_serde)]
+    pub double_param_values: Vec<Complex<F<f64>>>,
+    #[bincode(with_serde)]
+    quad_param_values: Vec<Complex<F<f128>>>,
+    model_params_start: usize,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
@@ -1519,6 +1541,14 @@ impl NumeratorState for Evaluators {
 
     fn forget_type(self) -> PythonState {
         PythonState::Evaluators(Some(self))
+    }
+
+    fn update_model(&mut self, model: &Model) -> Result<()> {
+        for (i, &v) in model.generate_values().iter().enumerate() {
+            self.double_param_values[self.model_params_start + i] = v.map(|f| f.into());
+            self.quad_param_values[self.model_params_start + i] = v.map(|f| f.higher().into());
+        }
+        Ok(())
     }
 }
 
@@ -1570,10 +1600,11 @@ impl Num<Evaluators> {
         if self.state.orientated.is_some() {
             self.state.choice = SingleOrCombined::Combined;
         } else if let Some((model, graph, extra_info, export_settings)) = generate {
+            let (params, _, _, _) = Contracted::generate_params(graph, model);
             let orientated =
                 self.state
                     .single
-                    .orientated(model, graph, extra_info, export_settings);
+                    .orientated(graph, &params, extra_info, export_settings);
             self.state.orientated = Some(orientated);
             self.state.choice = SingleOrCombined::Combined;
         } else {
@@ -1683,6 +1714,54 @@ impl NumeratorState for PythonState {
 
     fn forget_type(self) -> PythonState {
         self
+    }
+
+    fn update_model(&mut self, model: &Model) -> Result<()> {
+        match self {
+            PythonState::AppliedFeynmanRule(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
+            PythonState::ColorSymplified(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
+            PythonState::GammaSymplified(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
+            PythonState::Network(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
+            PythonState::Contracted(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
+            PythonState::Evaluators(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
+            _ => Err(eyre!("No model to update")),
+        }
     }
 }
 

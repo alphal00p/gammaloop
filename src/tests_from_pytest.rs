@@ -1495,7 +1495,10 @@ fn pytest_physical_1L_6photons_generate() {
     let mut graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    graph.evaluate_cff_expression(&sample, &default_settings);
+    println!(
+        "Eval {}",
+        graph.evaluate_cff_expression(&sample, &default_settings)
+    );
 }
 
 #[test]

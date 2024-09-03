@@ -233,7 +233,7 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         self.amplitudes
-            .load_derived_data_mut(&path_to_amplitudes, &settings)
+            .load_derived_data_mut(&self.model, &path_to_amplitudes, &settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
