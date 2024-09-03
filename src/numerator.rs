@@ -11,8 +11,10 @@ use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
-    parametric::{ParamTensor, PatternReplacement},
-    structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
+    parametric::{ParamTensor, PatternReplacement, SerializableAtom},
+    structure::{
+        Lorentz, NamedStructure, PhysReps, RepName, SerializableSymbol, Shadowable, TensorStructure,
+    },
     symbolic::SymbolicTensor,
 };
 use symbolica::{
@@ -22,7 +24,7 @@ use symbolica::{
     id::{Pattern, Replacement},
 };
 use symbolica::{
-    atom::{Atom, FunctionBuilder, Symbol},
+    atom::{Atom, FunctionBuilder},
     printer::{AtomPrinter, PrintOptions},
     state::State,
 };
@@ -45,7 +47,12 @@ pub fn apply_replacements(
 #[allow(clippy::type_complexity)]
 pub struct Numerator {
     pub expression: Atom,
-    pub network: Option<TensorNetwork<ParamTensor<NamedStructure<Symbol, Vec<Atom>>>, Atom>>,
+    pub network: Option<
+        TensorNetwork<
+            ParamTensor<NamedStructure<SerializableSymbol, Vec<SerializableAtom>>>,
+            SerializableAtom,
+        >,
+    >,
     pub const_map: AHashMap<Atom, Complex<F<f64>>>,
 }
 
@@ -101,10 +108,7 @@ impl<'de> Deserialize<'de> for Numerator {
             .clone()
             .try_into()
             .map_err(serde::de::Error::custom)?;
-        let network: TensorNetwork<
-            ParamTensor<NamedStructure<symbolica::atom::Symbol, Vec<Atom>>>,
-            Atom,
-        > = sym_tensor
+        let network: TensorNetwork<ParamTensor<_>, _> = sym_tensor
             .to_network()
             .map_err(serde::de::Error::custom)?
             .to_fully_parametric();
@@ -167,9 +171,9 @@ impl Numerator {
             .iter()
             .enumerate()
             .map(|(i, _)| {
-                let named_structure: NamedStructure<&str> = NamedStructure::from_iter(
+                let named_structure: NamedStructure<String> = NamedStructure::from_iter(
                     [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                    "Q",
+                    "Q".into(),
                     Some(i),
                 );
                 debug!("Q{}", i);
@@ -263,7 +267,8 @@ impl Numerator {
             .network
             .as_ref()
             .unwrap()
-            .evaluate::<SymComplex<F<T>>, _>(|c| c.into(), &constmap);
+            .evaluate::<SymComplex<F<T>>, _>(|c| c.into(), &constmap)
+            .unwrap();
 
         evaluated.contract();
 
@@ -448,7 +453,7 @@ impl Numerator {
         // //T(a,x,b,i,j)T(c,x,d,k,l) = 1/2(T(a,d,i,l)T(c,b,k,j)
         // //-1/Nc T(a,b,i,j)T(c,d,k,l))
         // let contractadjlhs =
-        //     Pattern::parse("T(aind(a___,x__,b___,i_,j_))T(aind(c___,x__,d___,k_,l_))").unwrap();
+        //     Pattern::parse("T(aind(a___,x__,b___,i_,j_))T(aind(c___,x__,d___,k_,l_))").unwrap    #[allow(dead_code)]
 
         // let contractadjrhs =
         //     Pattern::parse("1/2(T(aind(a___,d___,i_,l_))T(aind(c___,b___,k_,j_))-1/Nc T(aind(a___,b___,i_,j_))T(aind(c___,d___,k_,l_)))").unwrap();
