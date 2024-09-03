@@ -496,8 +496,8 @@ impl Edge {
                 ));
 
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
-                    let id: NamedStructure<&str, ()> =
-                        NamedStructure::from_iter([cin, cout], "id", None);
+                    let id: NamedStructure<String, ()> =
+                        NamedStructure::from_iter([cin, cout], "id".into(), None);
                     atom = atom * &id.to_symbolic().unwrap();
                 }
 
