@@ -2158,6 +2158,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
+source = "git+https://github.com/alphal00p/spenso?branch=master#f42da248b6aa494dd79d501e7f6b7b71a9cecf83"
 dependencies = [
  "ahash",
  "ambassador",
