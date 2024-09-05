@@ -284,6 +284,8 @@ fn generate_cff_from_orientations(
     //    );
     //}
 
+    // let terms =vec![terms[0].clone(),terms[1].clone(),terms[2].clone(),terms[3].clone()];
+
     Ok(CFFExpression {
         orientations: terms.into(),
         esurfaces: generator_cache.esurface_cache,
@@ -628,7 +630,7 @@ mod tests_cff {
             let rhs = Atom::parse("- p0 - p1").unwrap();
 
             let p2_pattern = Pattern::Literal(p2_atom);
-            let rhs_pattern = Pattern::Literal(rhs);
+            let rhs_pattern = Pattern::Literal(rhs).into();
 
             let conditions = None;
             let settings = None;

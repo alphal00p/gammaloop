@@ -22,11 +22,9 @@ use spenso::{
 use std::fs;
 
 use eyre::Result;
-use std::ops::{Index, Neg};
+use std::ops::Index;
 use std::path::Path;
-use symbolica::domains::rational::Rational;
-use symbolica::evaluate::FunctionMap;
-use symbolica::id::Pattern;
+use symbolica::id::{Pattern, PatternOrMap};
 // use std::str::pattern::Pattern;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
@@ -51,7 +49,12 @@ fn normalise_complex(atom: &Atom) -> Atom {
     let i = Atom::new_var(State::I);
     let complexpanded = &re + i * &im;
 
-    complexfn.replace_all(atom.as_view(), &complexpanded.into_pattern(), None, None)
+    complexfn.replace_all(
+        atom.as_view(),
+        &complexpanded.into_pattern().into(),
+        None,
+        None,
+    )
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -480,7 +483,7 @@ where
             color: self.color.iter().map(|c| c.dual()).collect(),
         }
     }
-    pub fn replacements(&self, id: usize) -> Vec<(Pattern, Pattern)> {
+    pub fn replacements(&self, id: usize) -> Vec<(Pattern, PatternOrMap)> {
         let rhs_lor = LorRep::new_slot_selfless(4, id)
             .to_symbolic_wrapped()
             .into_pattern();
@@ -491,11 +494,11 @@ where
 
         let mut reps = vec![];
         for l in &self.lorentz {
-            reps.push((rhs_lor.clone(), l.to_symbolic().into_pattern()));
+            reps.push((rhs_lor.clone(), l.to_symbolic().into_pattern().into()));
         }
 
         for s in &self.spin {
-            reps.push((rhs_spin.clone(), s.to_symbolic().into_pattern()));
+            reps.push((rhs_spin.clone(), s.to_symbolic().into_pattern().into()));
         }
 
         for c in &self.color {
@@ -503,7 +506,7 @@ where
             rhs_color.aind = id.into();
             let rhs_color = rhs_color.to_symbolic_wrapped().into_pattern();
 
-            reps.push((rhs_color.clone(), c.to_symbolic().into_pattern()));
+            reps.push((rhs_color.clone(), c.to_symbolic().into_pattern().into()));
         }
 
         reps
@@ -922,8 +925,6 @@ fn test_polarization() {
 
     let pol_out_minus_in = Particle::outgoing_polarization_impl(3, 1, &(-mom), Helicity::Minus);
     assert_eq!(pol_out_minus_in.tensor.data, pol_in_minus.tensor.data);
-    let pol_out_plus_in = Particle::outgoing_polarization_impl(3, 1, &(-mom), Helicity::Plus);
-    assert_eq!(pol_out_minus_in.tensor.data, pol_in_minus.tensor.data);
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1167,14 +1168,22 @@ impl Model {
         for cpl in self.couplings.iter() {
             let [pattern, rhs] = cpl.rep_rule();
 
-            sub_atom =
-                sub_atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+            sub_atom = sub_atom.replace_all(
+                &pattern.into_pattern(),
+                &rhs.into_pattern().into(),
+                None,
+                None,
+            );
         }
 
         for para in self.parameters.iter() {
             if let Some([pattern, rhs]) = para.rep_rule() {
-                sub_atom =
-                    sub_atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+                sub_atom = sub_atom.replace_all(
+                    &pattern.into_pattern(),
+                    &rhs.into_pattern().into(),
+                    None,
+                    None,
+                );
             }
         }
         sub_atom
@@ -1235,7 +1244,7 @@ impl Model {
 
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
             if let Some(value) = cpl.value {
-                values.push(value.map(|f| F(f)));
+                values.push(value.map(F));
             }
         }
         for param in self.parameters.iter().filter(|p| p.value.is_some()) {

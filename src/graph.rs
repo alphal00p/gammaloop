@@ -42,7 +42,7 @@ use spenso::contraction::Contract;
 use spenso::{
     arithmetic::ScalarMul,
     complex::Complex,
-    contraction::{IsZero, RefOne, RefZero},
+    contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     structure::{
         AbstractIndex, BaseRepName, Euclidean, HasStructure, Lorentz, NamedStructure, PhysReps,
@@ -169,7 +169,9 @@ impl InteractionVertexInfo {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern =
-                        Pattern::parse(&format!("Q({},aind(lord(4,indexid(x_))))", e)).unwrap(); //TODO flip based on flow
+                        Pattern::parse(&format!("Q({},aind(lord(4,indexid(x_))))", e))
+                            .unwrap()
+                            .into(); //TODO flip based on flow
 
                     atom = momentum_in_pattern.replace_all(
                         atom.as_view(),
@@ -235,7 +237,8 @@ impl InteractionVertexInfo {
                     atom = id1.replace_all(
                         atom.as_view(),
                         &Pattern::parse(&format!("id(aind({}indexid({})),x_))", ind, i + 1))
-                            .unwrap(),
+                            .unwrap()
+                            .into(),
                         None,
                         None,
                     );
@@ -243,7 +246,8 @@ impl InteractionVertexInfo {
                     atom = id2.replace_all(
                         atom.as_view(),
                         &Pattern::parse(&format!("id(aind(x_,{}indexid({}))))", ind, i + 1))
-                            .unwrap(),
+                            .unwrap()
+                            .into(),
                         None,
                         None,
                     );
@@ -267,7 +271,7 @@ impl InteractionVertexInfo {
 
                     atom = pat.replace_all(
                         atom.as_view(),
-                        &Atom::new_num(i as i64).into_pattern(),
+                        &Atom::new_num(i as i64).into_pattern().into(),
                         None,
                         None,
                     );
@@ -430,7 +434,7 @@ impl Edge {
     pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = Pattern::parse(&format!("Q({num},x_)")).unwrap();
-        let mom_rep = lmb.pattern(num);
+        let mom_rep = lmb.pattern(num).into();
         atom.replace_all(&mom, &mom_rep, None, None)
     }
 
@@ -467,7 +471,9 @@ impl Edge {
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 atom = pfun.replace_all(
                     atom.as_view(),
-                    &Pattern::parse(&format!("Q({},aind(loru(4,x_)))", num)).unwrap(),
+                    &Pattern::parse(&format!("Q({},aind(loru(4,x_)))", num))
+                        .unwrap()
+                        .into(),
                     None,
                     None,
                 );
@@ -480,7 +486,8 @@ impl Edge {
                         "Q({},aind(lord(4,{})))*Gamma({},i_,j_)",
                         num, pindex_num, pindex_num
                     ))
-                    .unwrap(),
+                    .unwrap()
+                    .into(),
                     None,
                     None,
                 );
@@ -493,7 +500,7 @@ impl Edge {
 
                 replacements_out.push((
                     Atom::parse("indexid(x_)").unwrap().into_pattern(),
-                    Atom::parse("x_").unwrap().into_pattern(),
+                    Atom::parse("x_").unwrap().into_pattern().into(),
                 ));
 
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
@@ -1943,16 +1950,28 @@ impl DerivedGraphData<Evaluators> {
         let mut cff = self
             .evaluate_cff_orientations(graph, sample, lmb_specification, settings)
             .into_iter();
-        let num_iter = self.evaluate_numerator_orientations(graph, sample, lmb_specification);
+        let num_iter =
+            self.evaluate_numerator_orientations(graph, sample, lmb_specification, settings);
 
+        let max_orientations = 1;
+        let mut orient = 0;
         match num_iter {
             RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
                 if let Some(i) = s.next() {
                     let c = Complex::new_re(cff.next().unwrap());
                     let mut sum = i * &c;
+                    // println!("cff{} * \t num{} \t= {}", c, i, sum);
                     for j in cff.by_ref() {
+                        orient += 1;
+                        if orient >= max_orientations {
+                            // break;
+                        }
                         let c = Complex::new_re(j);
-                        sum += c * s.next().unwrap();
+                        let num = s.next().unwrap();
+                        let summand = &c * num;
+
+                        // println!("cff{} * \t num{} \t= {}", c, num, summand);
+                        sum += summand;
                     }
                     sum *= prefactor;
                     DataTensor::new_scalar(sum)
@@ -1981,13 +2000,13 @@ impl DerivedGraphData<Evaluators> {
         &mut self,
         graph: &BareGraph,
         sample: &DefaultSample<T>,
-        _settings: &Settings,
+        settings: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let emr = graph.emr_from_lmb(sample, &graph.loop_momentum_basis);
 
         let rep = self
             .numerator
-            .evaluate_all_orientations(&emr, &sample.polarizations)
+            .evaluate_all_orientations(&emr, &sample.polarizations, settings)
             .unwrap();
 
         match rep {
@@ -2025,12 +2044,13 @@ impl DerivedGraphData<Evaluators> {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
+        settings: &Settings,
     ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>> {
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.emr_from_lmb(sample, lmb);
 
         self.numerator
-            .evaluate_all_orientations(&emr, &sample.polarizations)
+            .evaluate_all_orientations(&emr, &sample.polarizations, settings)
             .unwrap()
     }
 

@@ -12,7 +12,7 @@ use crate::graph::{
     BareGraph, DerivedGraphData, Edge, EdgeType, Graph, HasVertexInfo, InteractionVertexInfo,
     SerializableGraph, VertexInfo,
 };
-use crate::model::Model;
+use crate::model::{LorentzStructure, Model};
 use crate::momentum::{FourMomentum, Helicity, ThreeMomentum};
 use crate::numerator::{
     ContractionSettings, EvaluatorOptions, Evaluators, Num, NumeratorCompileOptions,
@@ -34,6 +34,7 @@ use clarabel::solver::default;
 use colored::Colorize;
 use itertools::{FormatWith, Itertools};
 //use libc::__c_anonymous_ptrace_syscall_info_exit;
+use core::f64;
 use lorentz_vector::LorentzVector;
 use petgraph::algo::greedy_matching;
 use petgraph::graph;
@@ -41,34 +42,53 @@ use rayon::prelude::IndexedParallelIterator;
 use rayon::vec;
 use serde::{self, Deserialize, Serialize};
 use spenso::complex::{Complex, SymbolicaComplex};
+use spenso::network::TensorNetwork;
+use spenso::structure::{IsAbstractSlot, Lorentz, RepName};
 use statrs::function::evaluate;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 use std::{clone, env};
 use symbolica;
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomView, FunctionBuilder};
 use symbolica::domains::float::{Complex as SymComplex, NumericalFloatLike, Real};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, FunctionMap, OptimizationSettings};
-use symbolica::id::{Pattern, Replacement};
+use symbolica::id::{
+    AtomMatchIterator, Condition, Match, MatchSettings, MatchStack, Pattern, PatternOrMap,
+    Replacement,
+};
 use symbolica::state::State;
 use typed_index_collections::TiVec;
 
 #[allow(unused)]
 const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-8);
+
+#[allow(unused)]
 const PHASEONE: F<f64> = F(0.);
-const PHASEI: F<f64> = F(1.5707963267948966);
-const PHASEMINUSONE: F<f64> = F(3.141592653589793);
-const PHASEMINUSI: F<f64> = F(-1.5707963267948966);
+
+#[allow(unused)]
+const PHASEI: F<f64> = F(f64::consts::FRAC_PI_2);
+
+#[allow(unused)]
+const PHASEMINUSONE: F<f64> = F(f64::consts::PI);
+
+#[allow(unused)]
+const PHASEMINUSI: F<f64> = F(-f64::consts::FRAC_PI_2);
 
 pub fn test_export_settings() -> ExportSettings {
     ExportSettings {
         compile_cff: true,
-        numerator_settings: NumeratorEvaluatorOptions::Combined(EvaluatorOptions {
-            cpe_rounds: Some(1),
-            compile_options: NumeratorCompileOptions::Compiled,
-        }),
+        numerator_settings: NumeratorEvaluatorOptions::Iterative {
+            eval_options: EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::Compiled,
+            },
+            iterations: 1,
+            n_cores: 1,
+            verbose: true,
+        },
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: false,
         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
@@ -200,6 +220,7 @@ pub struct AmplitudeCheck {
     pub tolerance: F<f64>,
 }
 
+#[allow(unused)]
 fn check_load(amp_check: &AmplitudeCheck) -> (Model, Amplitude<UnInit>, PathBuf) {
     let (model, amplitude, path) = load_amplitude_output(
         &("TEST_AMPLITUDE_".to_string() + amp_check.name + "/GL_OUTPUT"),
@@ -254,6 +275,8 @@ fn check_load(amp_check: &AmplitudeCheck) -> (Model, Amplitude<UnInit>, PathBuf)
 
 use color_eyre::Result;
 use eyre::{eyre, Context};
+
+#[allow(unused)]
 fn check_cff_generation<N: NumeratorState>(
     mut graph: Graph<N>,
     amp_check: &AmplitudeCheck,
@@ -291,6 +314,7 @@ fn check_cff_generation<N: NumeratorState>(
     Ok(graph)
 }
 
+#[allow(unused)]
 fn check_lmb_generation<N: NumeratorState>(
     mut graph: Graph<N>,
     sample: &DefaultSample<f64>,
@@ -334,12 +358,14 @@ fn check_lmb_generation<N: NumeratorState>(
     Ok(graph)
 }
 
+#[allow(unused)]
 fn check_sample(bare_graph: &BareGraph, amp_check: &AmplitudeCheck) -> DefaultSample<f64> {
     let n_loops = amp_check.n_edges - amp_check.n_vertices + 1; //circuit rank=n_loops
 
     kinematics_builder(amp_check.n_external_connections - 1, n_loops, bare_graph)
 }
 
+#[allow(unused)]
 fn compare_cff_to_ltd<T: FloatLike>(
     sample: &DefaultSample<T>,
     graph: &mut Graph,
@@ -383,6 +409,7 @@ fn compare_cff_to_ltd<T: FloatLike>(
     Ok(())
 }
 
+#[allow(unused)]
 fn check_graph(graph: &BareGraph, n_prop_groups: usize) {
     let propagator_groups = graph.group_edges_by_signature();
     assert_eq!(
@@ -394,6 +421,7 @@ fn check_graph(graph: &BareGraph, n_prop_groups: usize) {
     );
 }
 
+#[allow(unused)]
 fn check_esurface_existance<N: NumeratorState>(
     graph: &mut Graph<N>,
     sample: &DefaultSample<f64>,
@@ -471,6 +499,7 @@ fn check_esurface_existance<N: NumeratorState>(
     Ok(())
 }
 
+#[allow(unused)]
 fn check_amplitude(amp_check: AmplitudeCheck) {
     let (model, amplitude, path) = check_load(&amp_check);
 
@@ -534,6 +563,7 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
     .unwrap();
 }
 
+#[allow(unused)]
 fn init() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
@@ -1466,9 +1496,149 @@ fn pytest_physical_2L_6photons() {
 
 #[test]
 #[allow(non_snake_case)]
-fn pytest_physical_1L_6photons_generate() {
+fn pytest_top_bubble() {
     init();
     let default_settings = load_default_settings();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_top_bubble/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    // println!("{:?}", graph.bare_graph.loop_momentum_basis);
+    let sample = kinematics_builder(5, 1, &graph.bare_graph);
+
+    graph.generate_cff();
+    let mut export_settings = test_export_settings();
+
+    export_settings.gammaloop_compile_options.inline_asm = true;
+
+    println!(
+        "{}",
+        graph
+            .clone()
+            .apply_feynman_rules()
+            .derived_data
+            .unwrap()
+            .numerator
+            .export()
+    );
+
+    export_settings.numerator_settings = NumeratorEvaluatorOptions::Iterative {
+        eval_options: EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        },
+        iterations: 1,
+        n_cores: 1,
+        verbose: false,
+    };
+
+    let mut graph_iterative_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+
+    export_settings.numerator_settings = NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
+        cpe_rounds: Some(1),
+        compile_options: NumeratorCompileOptions::Compiled,
+    });
+
+    let mut graph_joint_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+    export_settings.numerator_settings = NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+        cpe_rounds: Some(1),
+        compile_options: NumeratorCompileOptions::Compiled,
+    });
+
+    let mut graph_single_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+    export_settings.numerator_settings = NumeratorEvaluatorOptions::Iterative {
+        eval_options: EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::NotCompiled,
+        },
+        iterations: 1,
+        n_cores: 1,
+        verbose: false,
+    };
+    let mut graph_iterative = graph_iterative_compiled.clone();
+    graph_iterative
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    let mut graph_joint = graph_joint_compiled.clone();
+    graph_joint
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    let mut graph_single = graph_single_compiled.clone();
+    graph_single
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    println!(
+        "Eval single{}",
+        graph_single.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval joint{}",
+        graph_joint.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval iterative{}",
+        graph_iterative.evaluate_cff_expression(&sample, &default_settings)
+    );
+
+    println!(
+        "Eval single compiled{}",
+        graph_single_compiled.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval joint compiled{}",
+        graph_joint_compiled.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval iterative compiled{}",
+        graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings)
+    );
+
+    let a = &graph_iterative_compiled
+        .derived_data
+        .as_ref()
+        .unwrap()
+        .numerator
+        .state
+        .double_param_values;
+
+    for p in a {
+        println!("{:?}", p);
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_physical_1L_6photons_generate() {
+    init();
+    let mut default_settings = load_default_settings();
     let (model, amplitude, path) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
@@ -1492,23 +1662,115 @@ fn pytest_physical_1L_6photons_generate() {
             .numerator
             .export()
     );
-    let mut graph =
-        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
+    export_settings.numerator_settings = NumeratorEvaluatorOptions::Iterative {
+        eval_options: EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        },
+        iterations: 1,
+        n_cores: 1,
+        verbose: false,
+    };
+
+    let mut graph_iterative_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+
+    export_settings.numerator_settings = NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
+        cpe_rounds: Some(1),
+        compile_options: NumeratorCompileOptions::Compiled,
+    });
+
+    let mut graph_joint_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+    export_settings.numerator_settings = NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+        cpe_rounds: Some(1),
+        compile_options: NumeratorCompileOptions::Compiled,
+    });
+
+    let mut graph_single_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+    export_settings.numerator_settings = NumeratorEvaluatorOptions::Iterative {
+        eval_options: EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::NotCompiled,
+        },
+        iterations: 1,
+        n_cores: 1,
+        verbose: false,
+    };
+    let mut graph_iterative = graph_iterative_compiled.clone();
+    graph_iterative
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    let mut graph_joint = graph_joint_compiled.clone();
+    graph_joint
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    let mut graph_single = graph_single_compiled.clone();
+    graph_single
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    default_settings.general.force_orientations = Some(vec![0]);
     println!(
-        "Eval {}",
-        graph.evaluate_cff_expression(&sample, &default_settings)
+        "Eval single{}",
+        graph_single.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval joint{}",
+        graph_joint.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval iterative{}",
+        graph_iterative.evaluate_cff_expression(&sample, &default_settings)
+    );
+
+    default_settings.general.force_orientations = None;
+    println!(
+        "Eval single compiled{}",
+        graph_single_compiled.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval joint compiled{}",
+        graph_joint_compiled.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval iterative compiled{}",
+        graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings)
     );
 }
 
 #[test]
 fn gamma_symplify() {
-    init();
-    let default_settings = load_default_settings();
-    let (model, amplitude, path) =
+    // init();
+    let (_, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
 
     // graph.bare_graph.dot_internal_vertices()
 
@@ -1520,9 +1782,9 @@ fn gamma_symplify() {
 
     a.0 = a.0.expand();
 
-    let pats = vec![(
+    let pats = [(
         Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
-        Pattern::parse("t_(aind(d___,a_,c___))").unwrap(),
+        Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
     )];
     let reps: Vec<Replacement> = pats
         .iter()
@@ -1533,23 +1795,31 @@ fn gamma_symplify() {
     let pats = vec![
         (
             Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
+                .unwrap()
+                .into(),
         ),
         (
             Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))")
+                .unwrap()
+                .into(),
         ),
         (
             Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))")
+                .unwrap()
+                .into(),
         ),
         (
             Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))")
+                .unwrap()
+                .into(),
         ),
         (
             Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
-            Pattern::parse("gamma_trace(aind(a__))").unwrap(),
+            Pattern::parse("gamma_trace(aind(a__))").unwrap().into(),
         ),
     ];
     let reps: Vec<Replacement> = pats
@@ -1558,5 +1828,724 @@ fn gamma_symplify() {
         .collect();
     a.replace_repeat_multiple(&reps);
 
+    let pat = Pattern::parse("gamma_trace(a__)").unwrap();
+
+    let set = MatchSettings::default();
+    let cond = Condition::default();
+
+    let mut it = pat.pattern_match(a.0.as_view(), &cond, &set);
+
+    let mut max_nargs = 0;
+    while let Some(a) = it.next() {
+        for (_, v) in a.match_stack {
+            match v {
+                Match::Single(s) => {
+                    match s {
+                        AtomView::Fun(f) => {
+                            let a = f.get_nargs();
+                            if a > max_nargs {
+                                max_nargs = a;
+                            }
+                        }
+                        _ => {
+                            panic!("should be a function")
+                        }
+                    }
+                    print!("{}", s)
+                }
+                _ => panic!("should be a single match"),
+            }
+            println!();
+        }
+    }
+
+    let mut reps = vec![];
+    for n in 1..=max_nargs {
+        if n % 2 == 0 {
+            let mut sum = Atom::new_num(0);
+
+            // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
+            for j in 1..n {
+                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+
+                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+
+                let metric_builder = FunctionBuilder::new(State::get_symbol("g"));
+
+                let metric_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+
+                for k in 1..j {
+                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                }
+
+                for k in (j + 1)..n {
+                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                }
+
+                let metric = metric_builder
+                    .add_arg(
+                        &metric_builder_slots
+                            .add_args(&[
+                                &Atom::parse(&format!("a{}_", 0)).unwrap(),
+                                &Atom::parse(&format!("a{}_", j)).unwrap(),
+                            ])
+                            .finish(),
+                    )
+                    .finish();
+
+                let gamma = &gamma_chain_builder
+                    .add_arg(&gamma_chain_builder_slots.finish())
+                    .finish()
+                    * &metric;
+
+                if j % 2 == 0 {
+                    sum = &sum - &gamma;
+                } else {
+                    sum = &sum + &gamma;
+                }
+            }
+
+            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+            for k in 0..n {
+                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+            }
+            let a = gamma_chain_builder
+                .add_arg(&gamma_chain_builder_slots.finish())
+                .finish();
+
+            reps.push((a.into_pattern(), sum.into_pattern().into()));
+        } else {
+            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+            for k in 0..n {
+                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+            }
+            let a = gamma_chain_builder
+                .add_arg(&gamma_chain_builder_slots.finish())
+                .finish();
+            println!("{}", a);
+            reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
+        }
+    }
+
+    reps.push((
+        Pattern::parse("gamma_trace(aind())").unwrap(),
+        Pattern::parse("1").unwrap().into(),
+    ));
+
+    // Dd
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(a__),lord(b__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // Du
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(a__),loru(b__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // Uu
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(a__),loru(b__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // Ud
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(a__),lord(b__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+
+    // dD
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(b__),lord(a__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // uD
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(loru(b__),lord(a__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // uU
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(b__),loru(a__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // dU
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(lord(b__),loru(a__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+
+    let reps = reps
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect_vec();
+
+    a.replace_repeat_multiple(&reps);
+    a.0 = a.0.expand();
+
+    a.replace_repeat_multiple(&reps);
+    a.0 = a.0.factor();
     println!("After: {}", a);
+    let tn = TensorNetwork::try_from(a.0.as_view())
+        .unwrap()
+        .to_fully_parametric();
+    println!("After parse: {}", tn.dot());
+}
+
+#[test]
+fn parse() {
+    init();
+    let expr = Atom::parse("64/729*ee^6*MT^6*Nc*ϵ(0,aind(lord(4,7)))*ϵ(1,aind(loru(4,7)))*ϵbar(2,aind(lord(4,8)))*ϵbar(3,aind(lord(4,9)))*ϵbar(4,aind(loru(4,9)))*ϵbar(5,aind(loru(4,8)))").unwrap();
+
+    let mut net = TensorNetwork::try_from(expr.as_view()).unwrap();
+    println!("{}", net.dot());
+
+    net.contract();
+
+    println!("{}", net.dot());
+
+    println!("{}", &net.graph.involution.len());
+
+    for (ni, i) in &net.graph.involution {
+        if &ni != i {
+            println!("internal");
+        } else {
+            println!("external");
+        }
+    }
+
+    // println!("{}", net.to_fully_parametric().result_tensor().unwrap());
+}
+
+#[test]
+fn tsgstg() {
+    let _ = load_default_settings();
+    let (_, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
+
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    // graph.bare_graph.dot_internal_vertices()
+
+    let num = graph.apply_feynman_rules().derived_data.unwrap().numerator;
+
+    let mut a = num.color_symplify().state.expression;
+
+    println!("Before: {}", a);
+
+    a.0 = a.0.expand();
+
+    let number_terms = if let Atom::Add(a) = &a.0 {
+        a.get_nargs()
+    } else {
+        1
+    };
+    println!("Number of terms: {}", number_terms);
+
+    let pats = [(
+        Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
+        Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
+    )];
+    let reps: Vec<Replacement> = pats
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect();
+    a.replace_repeat_multiple(&reps);
+
+    let pats = vec![
+        (
+            Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
+                .unwrap()
+                .into(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))")
+                .unwrap()
+                .into(),
+        ),
+        (
+            Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))")
+                .unwrap()
+                .into(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))")
+                .unwrap()
+                .into(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
+            Pattern::parse("gamma_trace(aind(a__))").unwrap().into(),
+        ),
+    ];
+    let reps: Vec<Replacement> = pats
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect();
+    a.replace_repeat_multiple(&reps);
+
+    println!("After preprocessing: {}", a);
+
+    let pat = Pattern::parse("gamma_trace(a__)").unwrap();
+
+    let set = MatchSettings::default();
+    let cond = Condition::default();
+
+    let mut it = pat.pattern_match(a.0.as_view(), &cond, &set);
+
+    let mut max_nargs = 0;
+    while let Some(a) = it.next() {
+        for (_, v) in a.match_stack {
+            match v {
+                Match::Single(s) => {
+                    match s {
+                        AtomView::Fun(f) => {
+                            let a = f.get_nargs();
+                            if a > max_nargs {
+                                max_nargs = a;
+                            }
+                        }
+                        _ => {
+                            panic!("should be a function")
+                        }
+                    }
+                    // print!("{}", s)
+                }
+                _ => panic!("should be a single match"),
+            }
+            // println!();
+        }
+    }
+
+    let mut reps: Vec<(Pattern, PatternOrMap)> = vec![];
+    for n in 1..=max_nargs {
+        if n % 2 == 0 {
+            let mut sum = Atom::new_num(0);
+
+            // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
+            for j in 1..n {
+                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+
+                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+
+                let metric_builder = FunctionBuilder::new(State::get_symbol("g"));
+
+                let metric_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+
+                for k in 1..j {
+                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                }
+
+                for k in (j + 1)..n {
+                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                }
+
+                let metric = metric_builder
+                    .add_arg(
+                        &metric_builder_slots
+                            .add_args(&[
+                                &Atom::parse(&format!("a{}_", 0)).unwrap(),
+                                &Atom::parse(&format!("a{}_", j)).unwrap(),
+                            ])
+                            .finish(),
+                    )
+                    .finish();
+
+                let gamma = &gamma_chain_builder
+                    .add_arg(&gamma_chain_builder_slots.finish())
+                    .finish()
+                    * &metric;
+
+                if j % 2 == 0 {
+                    sum = &sum - &gamma;
+                } else {
+                    sum = &sum + &gamma;
+                }
+            }
+
+            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+            for k in 0..n {
+                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+            }
+            let a = gamma_chain_builder
+                .add_arg(&gamma_chain_builder_slots.finish())
+                .finish();
+
+            reps.push((a.into_pattern(), sum.into_pattern().into()));
+        } else {
+            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+            for k in 0..n {
+                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+            }
+            let a = gamma_chain_builder
+                .add_arg(&gamma_chain_builder_slots.finish())
+                .finish();
+            // println!("{}", a);
+            reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
+        }
+    }
+
+    reps.push((
+        Pattern::parse("gamma_trace(aind())").unwrap(),
+        Pattern::parse("1").unwrap().into(),
+    ));
+
+    // Dd
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(a__),lord(b__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // Du
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(a__),loru(b__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // Uu
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(a__),loru(b__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // Ud
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(a__),lord(b__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+
+    // dD
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(b__),lord(a__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // uD
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(loru(b__),lord(a__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // uU
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(b__),loru(a__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+    // dU
+    reps.push((
+        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(lord(b__),loru(a__)))").unwrap(),
+        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
+            .unwrap()
+            .into(),
+    ));
+
+    let reps = reps
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect_vec();
+
+    let time = Instant::now();
+    a.replace_repeat_multiple(&reps);
+    a.0 = a.0.expand();
+
+    a.replace_repeat_multiple(&reps);
+
+    println!("Time: {}", time.elapsed().as_secs_f64());
+
+    let number_terms = if let Atom::Add(a) = &a.0 {
+        a.get_nargs()
+    } else {
+        1
+    };
+    println!("Number of terms: {}", number_terms);
+
+    // println!("After: {}", a);
+}
+
+#[test]
+fn tsgstrstg() {
+    let _ = load_default_settings();
+    let (_, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
+
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    // graph.bare_graph.dot_internal_vertices()
+
+    let num = graph.apply_feynman_rules().derived_data.unwrap().numerator;
+
+    let mut a = num.color_symplify().state.expression;
+
+    println!("Before: {}", a);
+
+    a.0 = a.0.expand();
+
+    let number_terms = if let Atom::Add(a) = &a.0 {
+        a.get_nargs()
+    } else {
+        1
+    };
+    println!("Number of terms: {}", number_terms);
+
+    let pats = [(
+        Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
+        Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
+    )];
+    let reps: Vec<Replacement> = pats
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect();
+    a.replace_repeat_multiple(&reps);
+
+    let pats = vec![
+        (
+            Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
+                .unwrap()
+                .into(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))")
+                .unwrap()
+                .into(),
+        ),
+        (
+            Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))")
+                .unwrap()
+                .into(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
+            Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))")
+                .unwrap()
+                .into(),
+        ),
+        (
+            Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
+            Pattern::parse("gamma_trace(aind(a__))").unwrap().into(),
+        ),
+    ];
+    let reps: Vec<Replacement> = pats
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect();
+    a.replace_repeat_multiple(&reps);
+
+    println!("After preprocessing: {}", a);
+
+    let pat = Pattern::parse("gamma_trace(a__)").unwrap();
+
+    let set = MatchSettings::default();
+    let cond = Condition::default();
+
+    let mut it = pat.pattern_match(a.0.as_view(), &cond, &set);
+
+    let mut max_nargs = 0;
+    while let Some(a) = it.next() {
+        for (_, v) in a.match_stack {
+            match v {
+                Match::Single(s) => {
+                    match s {
+                        AtomView::Fun(f) => {
+                            let a = f.get_nargs();
+                            if a > max_nargs {
+                                max_nargs = a;
+                            }
+                        }
+                        _ => {
+                            panic!("should be a function")
+                        }
+                    }
+                    // print!("{}", s)
+                }
+                _ => panic!("should be a single match"),
+            }
+            // println!();
+        }
+    }
+
+    let mut reps = vec![];
+    for n in 1..=max_nargs {
+        if n % 2 == 0 {
+            let mut sum = Atom::new_num(0);
+
+            // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
+            for j in 1..n {
+                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+
+                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+
+                let metric_builder = FunctionBuilder::new(State::get_symbol("g"));
+
+                let metric_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+
+                for k in 1..j {
+                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                }
+
+                for k in (j + 1)..n {
+                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                }
+
+                let metric = metric_builder
+                    .add_arg(
+                        &metric_builder_slots
+                            .add_args(&[
+                                &Atom::parse(&format!("a{}_", 0)).unwrap(),
+                                &Atom::parse(&format!("a{}_", j)).unwrap(),
+                            ])
+                            .finish(),
+                    )
+                    .finish();
+
+                let gamma = &gamma_chain_builder
+                    .add_arg(&gamma_chain_builder_slots.finish())
+                    .finish()
+                    * &metric;
+
+                if j % 2 == 0 {
+                    sum = &sum - &gamma;
+                } else {
+                    sum = &sum + &gamma;
+                }
+            }
+
+            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+            for k in 0..n {
+                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+            }
+            let a = gamma_chain_builder
+                .add_arg(&gamma_chain_builder_slots.finish())
+                .finish();
+
+            reps.push((a.into_pattern(), sum.into_pattern().into()));
+        } else {
+            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+            for k in 0..n {
+                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+            }
+            let a = gamma_chain_builder
+                .add_arg(&gamma_chain_builder_slots.finish())
+                .finish();
+            // println!("{}", a);
+            reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
+        }
+    }
+
+    reps.push((
+        Pattern::parse("gamma_trace(aind())").unwrap(),
+        Pattern::parse("1").unwrap().into(),
+    ));
+
+    // Dd
+    reps.push((
+        Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),lord(b__)))").unwrap(),
+        Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+    ));
+    // Du
+    reps.push((
+        Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),loru(b__)))").unwrap(),
+        Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+    ));
+    // Uu
+    reps.push((
+        Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),loru(b__)))").unwrap(),
+        Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+    ));
+    // Ud
+    reps.push((
+        Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),lord(b__)))").unwrap(),
+        Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+    ));
+
+    // dD
+    reps.push((
+        Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(b__),lord(a__)))").unwrap(),
+        Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+    ));
+    // uD
+    reps.push((
+        Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(loru(b__),lord(a__)))").unwrap(),
+        Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+    ));
+    // uU
+    reps.push((
+        Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(b__),loru(a__)))").unwrap(),
+        Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+    ));
+    // dU
+    reps.push((
+        Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(lord(b__),loru(a__)))").unwrap(),
+        Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+    ));
+
+    let reps = reps
+        .iter()
+        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+        .collect_vec();
+
+    let time = Instant::now();
+    a.replace_repeat_multiple(&reps);
+    a.0 = a.0.expand();
+
+    a.replace_repeat_multiple(&reps);
+
+    println!("Time: {}", time.elapsed().as_secs_f64());
+
+    let number_terms = if let Atom::Add(a) = &a.0 {
+        a.get_nargs()
+    } else {
+        1
+    };
+    println!("Number of terms: {}", number_terms);
+
+    // println!("After: {}", a);
 }
