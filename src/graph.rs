@@ -760,6 +760,23 @@ impl BareGraph {
         dot
     }
 
+    pub fn dot_lmb(&self) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph G {\n");
+        for (i, edge) in self.edges.iter().enumerate() {
+            let from = self.vertices[edge.vertices[0]].name.clone();
+            let to = self.vertices[edge.vertices[1]].name.clone();
+            dot.push_str(&format!(
+                "\"{}\" -> \"{}\" [label=\"{}\"];\n",
+                from,
+                to,
+                self.loop_momentum_basis.edge_signatures[i].format_momentum()
+            ));
+        }
+        dot.push_str("}\n");
+        dot
+    }
+
     pub fn dot_internal(&self) -> String {
         let mut dot = String::new();
         dot.push_str("digraph G {\n");
@@ -1991,7 +2008,7 @@ impl DerivedGraphData<Evaluators> {
                 if let Some(i) = s.next() {
                     let c = Complex::new_re(cff.next().unwrap());
                     let mut sum = i * &c;
-                    // println!("cff{} * \t num{} \t= {}", c, i, sum);
+                    println!("cff{} * \t num{} \t= {}", c, i, sum);
                     for j in cff.by_ref() {
                         orient += 1;
                         if orient >= max_orientations {
@@ -2001,7 +2018,7 @@ impl DerivedGraphData<Evaluators> {
                         let num = s.next().unwrap();
                         let summand = &c * num;
 
-                        // println!("cff{} * \t num{} \t= {}", c, num, summand);
+                        println!("cff{} * \t num{} \t= {}", c, num, summand);
                         sum += summand;
                     }
                     sum *= prefactor;
@@ -2123,6 +2140,7 @@ impl DerivedGraphData<UnInit> {
 
         let color_simplified =
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
+                debug!("Using global numerator: {}", global);
                 let global = Atom::parse(global).unwrap();
                 self.map_numerator(|n| n.from_global(global, base_graph).color_symplify())
             } else {

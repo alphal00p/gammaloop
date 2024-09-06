@@ -10,10 +10,10 @@ use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::gammaloop_integrand::{DefaultSample, GammaLoopIntegrand};
 use crate::graph::{
     BareGraph, DerivedGraphData, Edge, EdgeType, Graph, HasVertexInfo, InteractionVertexInfo,
-    SerializableGraph, VertexInfo,
+    LoopMomentumBasisSpecification, SerializableGraph, VertexInfo,
 };
 use crate::model::{LorentzStructure, Model};
-use crate::momentum::{FourMomentum, Helicity, ThreeMomentum};
+use crate::momentum::{FourMomentum, Helicity, SignOrZero, ThreeMomentum};
 use crate::numerator::{
     ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, Numerator,
     NumeratorCompileOptions, NumeratorEvaluatorOptions, NumeratorSettings, NumeratorState,
@@ -83,15 +83,10 @@ pub fn test_export_settings() -> ExportSettings {
     ExportSettings {
         compile_cff: true,
         numerator_settings: NumeratorSettings {
-            eval_settings: NumeratorEvaluatorOptions::Iterative {
-                eval_options: EvaluatorOptions {
-                    cpe_rounds: Some(1),
-                    compile_options: NumeratorCompileOptions::Compiled,
-                },
-                iterations: 1,
-                n_cores: 1,
-                verbose: true,
-            },
+            eval_settings: NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::Compiled,
+            }),
             global_numerator: None,
             gamma_algebra: GammaAlgebraMode::Concrete,
         },
@@ -208,6 +203,7 @@ pub fn load_amplitude_output(
 
 pub struct AmplitudeCheck {
     pub name: &'static str,
+    pub sample: Option<DefaultSample<f64>>,
     pub model_name: &'static str,
     pub n_edges: usize,
     pub n_external_connections: usize,
@@ -378,7 +374,12 @@ fn compare_cff_to_ltd<T: FloatLike>(
     amp_check: &AmplitudeCheck,
 ) -> Result<()> {
     let default_settings = load_default_settings();
-
+    let lmb_specification =
+        LoopMomentumBasisSpecification::Literal(&graph.bare_graph.loop_momentum_basis);
+    let cff_res = graph.evaluate_cff_orientations(sample, &lmb_specification, &default_settings);
+    for o in cff_res.iter() {
+        println!("cff: {}", o);
+    }
     let cff_res: Complex<F<T>> = graph.evaluate_cff_expression(sample, &default_settings);
     graph.generate_ltd();
     let ltd_res = graph.evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms);
@@ -534,9 +535,15 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
     let mut graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    compare_cff_to_ltd(&sample, &mut graph, &amp_check)
-        .wrap_err("combined num f64 cff and ltd failed")
-        .unwrap();
+    if let Some(sample) = &amp_check.sample {
+        compare_cff_to_ltd(sample, &mut graph, &amp_check)
+            .wrap_err("combined num f64 cff and ltd failed")
+            .unwrap();
+    } else {
+        compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+            .wrap_err("combined num f64 cff and ltd failed")
+            .unwrap();
+    }
 
     graph
         .derived_data
@@ -545,9 +552,15 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
         .numerator
         .disable_combined();
 
-    compare_cff_to_ltd(&sample, &mut graph, &amp_check)
-        .wrap_err("separate num f64 cff and ltd failed")
-        .unwrap();
+    if let Some(sample) = &amp_check.sample {
+        compare_cff_to_ltd(sample, &mut graph, &amp_check)
+            .wrap_err("separate num f64 cff and ltd failed")
+            .unwrap();
+    } else {
+        compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+            .wrap_err("separate num f64 cff and ltd failed")
+            .unwrap();
+    }
 
     graph
         .derived_data
@@ -556,9 +569,16 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
         .numerator
         .enable_combined(None);
 
-    compare_cff_to_ltd(&sample_quad, &mut graph, &amp_check)
-        .wrap_err("f128 cff and ltd failed")
-        .unwrap();
+    if let Some(sample) = &amp_check.sample {
+        compare_cff_to_ltd(&sample.higher_precision(), &mut graph, &amp_check)
+            .wrap_err("f128 cff and ltd failed")
+            .unwrap();
+    } else {
+        compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+            .wrap_err("f128 cff and ltd failed")
+            .unwrap();
+    }
+
     check_esurface_existance(
         &mut graph,
         &sample,
@@ -576,8 +596,21 @@ fn init() {
 #[test]
 fn pytest_scalar_massless_triangle() {
     init();
+
+    let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.0), F(5.0));
+    let p2 = FourMomentum::from_args(F(1.), F(6.0), F(7.), F(8.));
+
+    let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
+
+    let sample = DefaultSample {
+        loop_moms: vec![k],
+        external_moms: vec![p1, p2],
+        jacobian: F(1.0),
+        polarizations: vec![],
+    };
     let amp_check = AmplitudeCheck {
         name: "massless_scalar_triangle",
+        sample: Some(sample),
         model_name: "scalars",
         n_edges: 6,
         n_external_connections: 3,
@@ -586,7 +619,7 @@ fn pytest_scalar_massless_triangle() {
         n_vertices: 6,
         n_lmb: 3,
         cff_phase: PHASEI, //(0.).PI(),
-        cff_norm: Some(F(4.052725000745997e-5)),
+        cff_norm: Some(F(4.531238289663331e-6)),
         n_prop_groups: 3,
         n_existing_esurfaces: 0,
         n_expanded_terms: 6,
@@ -604,6 +637,7 @@ fn pytest_scalar_fishnet_2x2() {
     let amp_check = AmplitudeCheck {
         name: "scalar_fishnet_2x2",
         model_name: "scalars",
+        sample: None,
         n_edges: 16,
         n_vertices: 13,
         n_external_connections: 4,
@@ -631,6 +665,7 @@ fn pytest_scalar_sunrise() {
     let amp_check = AmplitudeCheck {
         name: "scalar_sunrise",
         model_name: "scalars",
+        sample: None,
         n_edges: 5,
         n_vertices: 4,
         n_external_connections: 2,
@@ -660,6 +695,7 @@ fn pytest_scalar_fishnet_2x3() {
         model_name: "scalars",
         n_edges: 21,
         n_vertices: 16,
+        sample: None,
         n_external_connections: 4,
         n_prop_groups: 17,
         n_cff_trees: 58670,
@@ -692,6 +728,7 @@ fn pytest_scalar_cube() {
         n_prop_groups: 12,
         n_cff_trees: 1862,
         n_esurfaces: 126,
+        sample: None,
         n_existing_esurfaces: 0,
         n_expanded_terms: 10584,
         n_lmb: 384,
@@ -712,6 +749,7 @@ fn pytest_scalar_bubble() {
     let amp_check = AmplitudeCheck {
         name: "scalar_bubble",
         model_name: "scalars",
+        sample: None,
         n_edges: 4,
         n_vertices: 4,
         n_external_connections: 2,
@@ -742,6 +780,7 @@ fn pytest_scalar_massless_box() {
         n_vertices: 8,
         n_external_connections: 4,
         n_prop_groups: 4,
+        sample: None,
         n_cff_trees: 14,
         n_esurfaces: 12,
         n_existing_esurfaces: 0,
@@ -770,6 +809,7 @@ fn pytest_scalar_double_triangle() {
         n_prop_groups: 5,
         n_lmb: 8,
         n_cff_trees: 18,
+        sample: None,
         n_esurfaces: 10,
         n_existing_esurfaces: 0,
         n_expanded_terms: 20,
@@ -792,6 +832,7 @@ fn pytest_scalar_mercedes() {
         model_name: "scalars",
         n_edges: 9,
         n_vertices: 7,
+        sample: None,
         n_external_connections: 3,
         n_prop_groups: 6,
         n_lmb: 16,
@@ -821,6 +862,7 @@ fn pytest_scalar_triangle_box() {
         n_external_connections: 3,
         n_prop_groups: 6,
         n_lmb: 11,
+        sample: None,
         n_cff_trees: 42,
         n_esurfaces: 18,
         n_existing_esurfaces: 0,
@@ -838,11 +880,33 @@ fn pytest_scalar_triangle_box() {
 #[test]
 fn pytest_scalar_isopod() {
     init();
+
+    let p1: FourMomentum<F<f64>> =
+        FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.).cast();
+
+    let p2: FourMomentum<F<f64>> = FourMomentum::from_args(2., 15., 17., 19.).cast();
+
+    let k0: ThreeMomentum<F<f64>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.)).cast();
+    let k1: ThreeMomentum<F<f64>> =
+        ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.)).cast();
+
+    let k2: ThreeMomentum<F<f64>> = ThreeMomentum::new(8., 9., 10.).cast();
+
+    let loop_moms = [k0, k1, k2];
+    let externals = [p1, p2];
+
+    let sample = DefaultSample {
+        loop_moms: loop_moms.to_vec(),
+        external_moms: externals.to_vec(),
+        jacobian: F(1.0),
+        polarizations: vec![],
+    };
     let amp_check = AmplitudeCheck {
         name: "scalar_isopod",
         model_name: "scalars",
         n_edges: 12,
         n_vertices: 10,
+        sample: Some(sample),
         n_external_connections: 3,
         n_prop_groups: 9,
         n_lmb: 41,
@@ -1505,6 +1569,7 @@ fn pytest_physical_2L_6photons() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn physical_1L_6photons_gamma() {
     init();
     let (model, amplitude, path) =
@@ -1641,6 +1706,323 @@ fn top_bubble_gamma_play() {
     );
 }
 
+#[test]
+fn scalar_box_to_triangle() {
+    init();
+    let default_settings = load_default_settings();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_massless_box/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    // println!("{:?}", graph.bare_graph.loop_momentum_basis);
+    let sample = kinematics_builder(3, 1, &graph.bare_graph);
+
+    let mut export_settings = test_export_settings();
+
+    graph.generate_cff();
+
+    export_settings.numerator_settings.global_numerator= Some("Q(5,cind(0))*(Q(2,cind(0))+Q(6,cind(0)))-Q(5,cind(1))*Q(5,cind(1))-Q(5,cind(2))*Q(5,cind(2))-Q(5,cind(3))*Q(5,cind(3))".into());
+
+    // let atom = Atom::parse(
+    //     export_settings
+    //         .numerator_settings
+    //         .global_numerator
+    //         .as_ref()
+    //         .unwrap(),
+    // )
+    // .unwrap();
+
+    // let extra_info = graph
+    //     .derived_data
+    //     .as_ref()
+    //     .unwrap()
+    //     .generate_extra_info(path.clone());
+    // let graph = graph
+    //     .map_numerator_res(|n, g| {
+    //         Result::<_, Report>::Ok(
+    //             n.from_global(atom, g)
+    //                 .color_symplify()
+    //                 // .gamma_symplify()
+    //                 .parse()
+    //                 .contract::<Rational>(ContractionSettings::Normal)?
+    //                 .generate_evaluators(&model, g, &extra_info, &export_settings),
+    //         )
+    //     })
+    //     .unwrap();
+
+    // println!(
+    //     "Eval gamma{}",
+    //     graph.derived_data.as_ref().unwrap().numerator.export()
+    // );
+
+    let box_sample = DefaultSample {
+        loop_moms: vec![ThreeMomentum::from((
+            F(0.666666666666666),
+            F(0.6),
+            F(0.7142857142857143),
+        ))],
+        external_moms: vec![
+            // FourMomentum::from_args(
+            //     F(0.9148936170212766),
+            //     F(0.8947368421052632),
+            //     F(0.8260869565217391),
+            //     F(0.7931034482758621),
+            // ), //p2
+            FourMomentum::from_args(
+                F(0.9175257731958763),
+                F(0.9436619718309859),
+                F(0.9726027397260274),
+                F(0.9240506329113924),
+            ), //p3
+            FourMomentum::from_args(
+                F(-0.9175257731958763),
+                F(2.466584349436641),
+                F(2.510078640513423),
+                F(2.460248355019047),
+            ), //p4
+            FourMomentum::from_args(
+                F(-0.9534883720930233),
+                F(-0.6363636363636364),
+                F(-0.8461538461538462),
+                F(-0.7647058823529412),
+            ), //p1
+        ],
+        polarizations: vec![],
+        jacobian: F(1.0),
+    };
+
+    let mut box_graph =
+        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_cff();
+
+    let export_settings = test_export_settings();
+    let mut triangle_graph =
+        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+
+    println!("{}", box_graph.bare_graph.dot_lmb());
+    println!("{}", triangle_graph.bare_graph.dot_lmb());
+    println!("{}", box_graph.bare_graph.dot_internal());
+    println!("{}", triangle_graph.bare_graph.dot_internal());
+
+    let box_energy = box_graph
+        .bare_graph
+        .compute_energy_product(&box_sample.loop_moms, &box_sample.external_moms);
+
+    println!(
+        "box: {}",
+        box_graph.evaluate_cff_expression(&box_sample, &default_settings) / box_energy
+    );
+
+    let triangle_sample = DefaultSample {
+        loop_moms: box_sample.loop_moms,
+        external_moms: vec![
+            box_sample.external_moms[0],
+            box_sample.external_moms[2] + box_sample.external_moms[1],
+        ],
+        polarizations: vec![],
+        jacobian: F(1.0),
+    };
+
+    let triangle_energy = triangle_graph
+        .bare_graph
+        .compute_energy_product(&triangle_sample.loop_moms, &triangle_sample.external_moms);
+
+    println!(
+        "triangle: {}",
+        triangle_graph.evaluate_cff_expression(&triangle_sample, &default_settings)
+            / triangle_energy
+    );
+}
+
+#[test]
+fn scalar_box_to_triangle2() {
+    init();
+    let default_settings = load_default_settings();
+    let box_sample = DefaultSample {
+        loop_moms: vec![ThreeMomentum::from((
+            F(0.666666666666666),
+            F(0.6),
+            F(0.7142857142857143),
+        ))],
+        external_moms: vec![
+            // FourMomentum::from_args(
+            //     F(0.9148936170212766),
+            //     F(0.8947368421052632),
+            //     F(0.8260869565217391),
+            //     F(0.7931034482758621),
+            // ), //p2
+            FourMomentum::from_args(
+                F(0.9175257731958763),
+                F(0.9436619718309859),
+                F(0.9726027397260274),
+                F(0.9240506329113924),
+            ), //p3
+            FourMomentum::from_args(
+                F(-0.9175257731958763),
+                F(2.466584349436641),
+                F(2.510078640513423),
+                F(2.460248355019047),
+            ), //p4
+            FourMomentum::from_args(
+                F(-0.9534883720930233),
+                F(-0.6363636363636364),
+                F(-0.8461538461538462),
+                F(-0.7647058823529412),
+            ), //p1
+        ],
+        polarizations: vec![],
+        jacobian: F(1.0),
+    };
+
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_cff();
+
+    let export_settings = test_export_settings();
+    let mut triangle_graph =
+        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+
+    println!("{}", triangle_graph.bare_graph.dot_lmb());
+    println!("{}", triangle_graph.bare_graph.dot_internal());
+
+    let triangle_samplesum = DefaultSample {
+        loop_moms: box_sample.loop_moms,
+        external_moms: vec![
+            box_sample.external_moms[0],
+            box_sample.external_moms[2] + box_sample.external_moms[1],
+        ],
+        polarizations: vec![],
+        jacobian: F(1.0),
+    };
+
+    let k = SignOrZero::Plus;
+    let q1 = SignOrZero::Plus;
+    let q2 = SignOrZero::Plus;
+
+    let k1 = ThreeMomentum::from((F(0.666666666666666), F(0.6), F(0.7142857142857143)));
+    let p11 = FourMomentum::from_args(
+        F(-1.801686069851465),
+        F(-1.830220713073005),
+        F(-1.663924794359577),
+        F(-1.695542472666106),
+    );
+    let p21 = FourMomentum::from_args(
+        F(0.9148936170212766),
+        F(0.8947368421052632),
+        F(0.8260869565217391),
+        F(0.7931034482758621),
+    );
+    let p31 = FourMomentum::from_args(
+        F(0.8867924528301887),
+        F(0.9354838709677419),
+        F(0.8378378378378378),
+        F(0.9024390243902439),
+    );
+
+    let k2 = ThreeMomentum::from((
+        F(0.9354838709677419),
+        F(0.8378378378378378),
+        F(0.9024390243902439),
+    ));
+    let p32 = FourMomentum::from_args(
+        F(0.9175257731958763),
+        F(0.9436619718309859),
+        F(0.9726027397260274),
+        F(0.9240506329113924),
+    );
+    let p12 = FourMomentum::from_args(
+        F(-1.850110042858798),
+        F(-1.841967056576749),
+        F(-1.939815854480126),
+        F(-1.834498394105422),
+    );
+    let p22 = FourMomentum::from_args(
+        F(0.9325842696629213),
+        F(0.8983050847457627),
+        F(0.9672131147540984),
+        F(0.9104477611940299),
+    );
+
+    let triangle_sample1 = DefaultSample {
+        loop_moms: vec![k1],
+        external_moms: vec![
+            p31,  //p3
+            -p11, //-p1
+        ],
+        polarizations: vec![],
+        jacobian: F(1.0),
+    };
+
+    let triangle_sample2 = DefaultSample {
+        loop_moms: vec![k2],
+        external_moms: vec![
+            p32,  //-p1
+            -p12, //p3
+        ],
+        polarizations: vec![],
+        jacobian: F(1.0),
+    };
+
+    let energy_product1: f64 = triangle_graph
+        .bare_graph
+        .compute_energy_product(&triangle_sample1.loop_moms, &triangle_sample1.external_moms)
+        .0;
+
+    let energy_product2: f64 = triangle_graph
+        .bare_graph
+        .compute_energy_product(&triangle_sample2.loop_moms, &triangle_sample2.external_moms)
+        .0;
+
+    let tri1 = triangle_graph
+        .evaluate_cff_expression(&triangle_sample1, &default_settings)
+        .map(|f| f.0);
+    let tri2 = triangle_graph
+        .evaluate_cff_expression(&triangle_sample2, &default_settings)
+        .map(|f| f.0);
+
+    let lmb =
+        LoopMomentumBasisSpecification::Literal(&triangle_graph.bare_graph.loop_momentum_basis);
+    println!(
+        "triangle ratio: {}",
+        (tri1.norm() * energy_product2) / (tri2.norm() * energy_product1)
+    );
+    let tri1 = triangle_graph.evaluate_cff_orientations(&triangle_sample1, &lmb, &default_settings);
+
+    let tri2 = triangle_graph.evaluate_cff_orientations(&triangle_sample2, &lmb, &default_settings);
+
+    for (t1, t2) in tri1.iter().zip(tri2.iter()) {
+        println!("{} ", t1 / t2);
+    }
+
+    let target1 = [
+        -0.0004962347874508811,
+        -0.0004696509338127856,
+        -0.0010268972892201115,
+        -0.00030670598677475164,
+        -0.0003715822562444881,
+        -0.0001873279907247531,
+    ];
+
+    let target2 = [
+        -0.00017046598417070377,
+        -0.00016108164013724032,
+        -0.00031803014583603814,
+        -0.00011648230791729634,
+        -0.00013584377798650182,
+        -0.00007403476468519681,
+    ];
+
+    for (t1, t2) in target1.iter().zip(target2.iter()) {
+        println!(" target {} ", t1 / t2);
+    }
+}
 #[test]
 #[allow(non_snake_case)]
 fn pytest_top_bubble() {
@@ -2704,16 +3086,10 @@ fn tsgstrstg() {
 #[test]
 fn srtrst() {
     let gl_a = Complex::new(0.000013469, -0.000022098);
-    let target_a = Complex::new(
-        -1.748314585608997179603103485148740681e-7,
-        7.660134793988562033873433720909673639e-7,
-    );
+    let target_a = Complex::new(-1.748_314_585_608_997_2e-7, 7.660_134_793_988_562e-7);
 
     let gl_b = Complex::new(0.000016622, 3.5895e-6);
-    let target_b = Complex::new(
-        -6.836310962511977250670729307213679959e-7,
-        6.148816685390841929928756187662131083e-7,
-    );
+    let target_b = Complex::new(-6.836_310_962_511_977e-7, 6.148_816_685_390_842e-7);
 
     println!("{}", gl_a.norm() / target_a.norm());
     println!("{}", gl_b.norm() / target_b.norm());

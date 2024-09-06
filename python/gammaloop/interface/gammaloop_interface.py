@@ -96,12 +96,15 @@ class GammaLoopConfiguration(object):
             },
             'export_settings': {
                 'compile_cff': True,
-                'numerator_settings': {  
+                'numerator_settings': {
+                    'eval_settings': {  
                     'type': 'Joint',
                     'cpe_rounds': 1, 
                     'compile_options': {
                         'subtype': 'Compiled',
-                    } 
+                    }},
+                    'global_numerator':None,
+                    'gamma_algebra': 'Concrete',
                 },
                 'cpe_rounds_cff': 1,
                 'compile_separate_orientations': False,

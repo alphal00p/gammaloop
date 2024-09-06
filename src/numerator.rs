@@ -2,7 +2,6 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crate::cff::expression;
 use crate::graph::BareGraph;
 use crate::momentum::Polarization;
 use crate::utils::f128;
@@ -22,7 +21,7 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 
 use log::{debug, trace};
-use petgraph::graph;
+
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use spenso::data::DataTensor;
@@ -217,6 +216,10 @@ impl NumeratorEvaluateFloat for f64 {
             .flat_map(|p| p.into_iter().cloned().map(Complex::new_re))
             .enumerate()
             .for_each(|(i, c)| params[i] = c);
+
+        for p in params.iter() {
+            println!("{}", p);
+        }
 
         let mut i = 4 * emr.len();
 
@@ -1833,6 +1836,11 @@ impl EvaluatorSingle {
                     }
                 })
                 .collect_vec();
+
+            for p in params {
+                let a = p.replace_all_multiple(&reps);
+                debug!("{}:{}", p, a);
+            }
 
             let time = Instant::now();
             let orientation_replaced_net = self.tensor.replace_all_multiple(&reps);

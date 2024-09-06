@@ -2,7 +2,7 @@ use std::{env, path::PathBuf};
 
 use _gammaloop::{
     graph::Graph,
-    numerator::{ContractionSettings, NumeratorEvaluatorOptions, NumeratorSettings},
+    numerator::{ContractionSettings, NumeratorSettings},
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
     ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,

@@ -1993,10 +1993,10 @@ impl<T> IntoIterator for FourMomentum<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         let [e, px, py, pz] = [
+            self.temporal.value,
             self.spatial.px,
             self.spatial.py,
             self.spatial.pz,
-            self.temporal.value,
         ];
         [e, px, py, pz].into_iter()
     }
@@ -2008,10 +2008,10 @@ impl<'a, T> IntoIterator for &'a FourMomentum<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         let [e, px, py, pz] = [
+            &self.temporal.value,
             &self.spatial.px,
             &self.spatial.py,
             &self.spatial.pz,
-            &self.temporal.value,
         ];
         [e, px, py, pz].into_iter()
     }
