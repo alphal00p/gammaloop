@@ -97,7 +97,7 @@ class GammaLoopConfiguration(object):
             'export_settings': {
                 'compile_cff': True,
                 'numerator_settings': {  
-                    'type': 'Combined',
+                    'type': 'Joint',
                     'cpe_rounds': 1, 
                     'compile_options': {
                         'subtype': 'Compiled',

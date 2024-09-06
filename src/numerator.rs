@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use crate::cff::expression;
 use crate::graph::BareGraph;
 use crate::momentum::Polarization;
 use crate::utils::f128;
@@ -21,6 +22,7 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 
 use log::{debug, trace};
+use petgraph::graph;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use spenso::data::DataTensor;
@@ -37,7 +39,10 @@ use spenso::{
     parametric::{ParamTensor, PatternReplacement},
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
 };
+
+use symbolica::atom::AtomView;
 use symbolica::evaluate::ExpressionEvaluator;
+use symbolica::id::{Condition, Match, MatchSettings};
 use symbolica::{
     atom::{Atom, FunctionBuilder},
     state::State,
@@ -47,6 +52,29 @@ use symbolica::{
     evaluate::FunctionMap,
     id::{Pattern, Replacement},
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NumeratorSettings {
+    pub eval_settings: NumeratorEvaluatorOptions,
+    pub global_numerator: Option<String>,
+    pub gamma_algebra: GammaAlgebraMode,
+}
+
+impl Default for NumeratorSettings {
+    fn default() -> Self {
+        NumeratorSettings {
+            eval_settings: Default::default(),
+            global_numerator: None,
+            gamma_algebra: GammaAlgebraMode::Symbolic,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GammaAlgebraMode {
+    Symbolic,
+    Concrete,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtraInfo {
@@ -72,7 +100,7 @@ pub trait Evaluate<T: FloatLike> {
     ) -> DataTensor<Complex<F<T>>, AtomStructure>;
 }
 
-impl<T: FloatLike> Evaluate<T> for Num<Evaluators> {
+impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
     fn evaluate_all_orientations(
         &mut self,
         emr: &[FourMomentum<F<T>>],
@@ -96,13 +124,14 @@ impl<T: FloatLike> Evaluate<T> for Num<Evaluators> {
 
 pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
     fn evaluate_all_orientations(
-        num: &mut Num<Evaluators>,
+        num: &mut Numerator<Evaluators>,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
 
-    fn evaluate_single(num: &mut Num<Evaluators>) -> DataTensor<Complex<F<T>>, AtomStructure>;
+    fn evaluate_single(num: &mut Numerator<Evaluators>)
+        -> DataTensor<Complex<F<T>>, AtomStructure>;
 
     fn update_params(
-        num: &mut Num<Evaluators>,
+        num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
     );
@@ -179,7 +208,7 @@ impl<T> LendingIterator for RepeatingIterator<T> {
 
 impl NumeratorEvaluateFloat for f64 {
     fn update_params(
-        num: &mut Num<Evaluators>,
+        num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
     ) {
@@ -202,7 +231,7 @@ impl NumeratorEvaluateFloat for f64 {
     }
 
     fn evaluate_all_orientations(
-        num: &mut Num<Evaluators>,
+        num: &mut Numerator<Evaluators>,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
         let params = &mut num.state.double_param_values;
         if num.state.single.param_len != params.len() {
@@ -252,7 +281,9 @@ impl NumeratorEvaluateFloat for f64 {
         }
     }
 
-    fn evaluate_single(num: &mut Num<Evaluators>) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+    fn evaluate_single(
+        num: &mut Numerator<Evaluators>,
+    ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
         let params = &num.state.double_param_values;
         if num.state.single.param_len != params.len() {
             panic!("params length mismatch");
@@ -267,7 +298,7 @@ impl NumeratorEvaluateFloat for f64 {
 
 impl NumeratorEvaluateFloat for f128 {
     fn update_params(
-        num: &mut Num<Evaluators>,
+        num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
     ) {
@@ -290,7 +321,7 @@ impl NumeratorEvaluateFloat for f128 {
     }
 
     fn evaluate_all_orientations(
-        num: &mut Num<Evaluators>,
+        num: &mut Numerator<Evaluators>,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
         let params = &mut num.state.quad_param_values;
         if num.state.single.param_len != params.len() {
@@ -320,7 +351,9 @@ impl NumeratorEvaluateFloat for f128 {
         }
     }
 
-    fn evaluate_single(num: &mut Num<Evaluators>) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+    fn evaluate_single(
+        num: &mut Numerator<Evaluators>,
+    ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
         let params = &num.state.quad_param_values;
         if num.state.single.param_len != params.len() {
             panic!("params length mismatch");
@@ -330,17 +363,17 @@ impl NumeratorEvaluateFloat for f128 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub struct Num<State> {
+pub struct Numerator<State> {
     pub state: State,
 }
 
-impl<S: NumeratorState> Num<S> {
+impl<S: NumeratorState> Numerator<S> {
     pub fn export(&self) -> String {
         self.state.export()
     }
 
-    pub fn forget_type(self) -> Num<PythonState> {
-        Num {
+    pub fn forget_type(self) -> Numerator<PythonState> {
+        Numerator {
             state: self.state.forget_type(),
         }
     }
@@ -361,8 +394,8 @@ impl<S: NumeratorState> Num<S> {
     }
 }
 
-impl<S: UnexpandedNumerator> Num<S> {
-    pub fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
+impl<S: UnexpandedNumerator> Numerator<S> {
+    pub fn expr(&self) -> Result<&SerializableAtom, NumeratorStateError> {
         self.state.expr()
     }
 }
@@ -371,16 +404,16 @@ pub trait TypedNumeratorState:
     NumeratorState + TryFrom<PythonState, Error: std::error::Error + Send + Sync + 'static>
 {
     fn apply<F, S: TypedNumeratorState>(
-        state: &mut Num<PythonState>,
+        state: &mut Numerator<PythonState>,
         f: F,
     ) -> Result<(), NumeratorStateError>
     where
-        F: FnMut(Num<Self>) -> Num<S>;
+        F: FnMut(Numerator<Self>) -> Numerator<S>;
 }
 
-impl Num<PythonState> {
-    pub fn try_from<S: TypedNumeratorState>(self) -> Result<Num<S>, Report> {
-        Ok(Num {
+impl Numerator<PythonState> {
+    pub fn try_from<S: TypedNumeratorState>(self) -> Result<Numerator<S>, Report> {
+        Ok(Numerator {
             state: self.state.try_into()?,
         })
     }
@@ -390,7 +423,7 @@ impl Num<PythonState> {
         f: F,
     ) -> Result<(), NumeratorStateError>
     where
-        F: FnMut(Num<S>) -> Num<T>,
+        F: FnMut(Numerator<S>) -> Numerator<T>,
     {
         S::apply(self, f)
     }
@@ -404,9 +437,6 @@ pub trait NumeratorState: Serialize + Clone + DeserializeOwned + Debug + Encode 
     // fn try_from(state: PythonState) -> Result<Self>;
 }
 
-pub trait UnexpandedNumerator: NumeratorState {
-    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError>;
-}
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct UnInit;
 
@@ -449,15 +479,15 @@ impl NumeratorState for UnInit {
 
 impl TypedNumeratorState for UnInit {
     fn apply<F, S: TypedNumeratorState>(
-        num: &mut Num<PythonState>,
+        num: &mut Numerator<PythonState>,
         mut f: F,
     ) -> Result<(), NumeratorStateError>
     where
-        F: FnMut(Num<Self>) -> Num<S>,
+        F: FnMut(Numerator<Self>) -> Numerator<S>,
     {
         if let PythonState::UnInit(s) = &mut num.state {
             if let Some(s) = s.take() {
-                *num = f(Num { state: s }).forget_type();
+                *num = f(Numerator { state: s }).forget_type();
                 return Ok(());
             } else {
                 return Err(NumeratorStateError::NoneVariant);
@@ -467,40 +497,231 @@ impl TypedNumeratorState for UnInit {
     }
 }
 
-impl Num<UnInit> {
-    pub fn from_graph(self, graph: &mut BareGraph) -> Num<AppliedFeynmanRule> {
-        Num {
+impl Numerator<UnInit> {
+    pub fn from_graph(self, graph: &mut BareGraph) -> Numerator<AppliedFeynmanRule> {
+        Numerator {
             state: AppliedFeynmanRule::from_graph(graph),
+        }
+    }
+
+    pub fn from_global(self, global: Atom, _graph: &BareGraph) -> Numerator<Global> {
+        Numerator {
+            state: Global::new(global.into()),
         }
     }
 }
 
-impl Default for Num<UnInit> {
+impl Default for Numerator<UnInit> {
     fn default() -> Self {
-        Num { state: UnInit }
+        Numerator { state: UnInit }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub struct AppliedFeynmanRule {
+pub struct SingleExpression<State> {
     #[bincode(with_serde)]
-    expression: SerializableAtom,
+    pub expression: SerializableAtom,
+    pub state: State,
 }
 
-impl TryFrom<PythonState> for AppliedFeynmanRule {
+pub trait UnexpandedNumerator: NumeratorState {
+    fn expr(&self) -> Result<&SerializableAtom, NumeratorStateError>;
+}
+
+impl<E: ExpressionState> UnexpandedNumerator for SingleExpression<E> {
+    fn expr(&self) -> Result<&SerializableAtom, NumeratorStateError> {
+        Ok(&self.expression)
+    }
+}
+
+impl<E: ExpressionState> SingleExpression<E> {
+    pub fn new(expression: SerializableAtom) -> Self {
+        E::new(expression)
+    }
+}
+
+pub trait ExpressionState:
+    Serialize + Clone + DeserializeOwned + Debug + Encode + Decode + Default
+{
+    fn forget_type(self, expression: SerializableAtom) -> PythonState;
+
+    fn new(expression: SerializableAtom) -> SingleExpression<Self> {
+        SingleExpression {
+            expression,
+            state: Self::default(),
+        }
+    }
+
+    fn get_expression(num: &mut PythonState)
+        -> Result<SingleExpression<Self>, NumeratorStateError>;
+}
+
+impl<E: ExpressionState> TypedNumeratorState for SingleExpression<E> {
+    fn apply<F, S: TypedNumeratorState>(
+        num: &mut Numerator<PythonState>,
+        mut f: F,
+    ) -> Result<(), NumeratorStateError>
+    where
+        F: FnMut(Numerator<Self>) -> Numerator<S>,
+    {
+        let s = Self::try_from(&mut num.state)?;
+        *num = f(Numerator { state: s }).forget_type();
+        Ok(())
+    }
+}
+
+impl<E: ExpressionState> TryFrom<&mut PythonState> for SingleExpression<E> {
     type Error = NumeratorStateError;
 
-    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
-        match value {
-            PythonState::AppliedFeynmanRule(s) => {
-                if let Some(s) = s {
-                    Ok(s)
-                } else {
-                    Err(NumeratorStateError::NoneVariant)
-                }
-            }
-            _ => Err(NumeratorStateError::NotAppliedFeynmanRule),
+    fn try_from(value: &mut PythonState) -> std::result::Result<Self, Self::Error> {
+        let a = E::get_expression(value)?;
+        Ok(a)
+    }
+}
+
+impl<E: ExpressionState> TryFrom<PythonState> for SingleExpression<E> {
+    type Error = NumeratorStateError;
+
+    fn try_from(mut value: PythonState) -> std::result::Result<Self, Self::Error> {
+        let a = E::get_expression(&mut value)?;
+        Ok(a)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+pub struct Local {}
+pub type AppliedFeynmanRule = SingleExpression<Local>;
+
+impl ExpressionState for Local {
+    fn forget_type(self, expression: SerializableAtom) -> PythonState {
+        PythonState::AppliedFeynmanRule(Some(AppliedFeynmanRule {
+            expression,
+            state: self,
+        }))
+    }
+
+    fn new(expression: SerializableAtom) -> SingleExpression<Self> {
+        SingleExpression {
+            expression,
+            state: Local {},
         }
+    }
+
+    fn get_expression(
+        num: &mut PythonState,
+    ) -> Result<SingleExpression<Self>, NumeratorStateError> {
+        if let PythonState::AppliedFeynmanRule(s) = num {
+            if let Some(s) = s.take() {
+                Ok(s)
+            } else {
+                Err(NumeratorStateError::NoneVariant)
+            }
+        } else {
+            Err(NumeratorStateError::NotAppliedFeynmanRule)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+pub struct NonLocal {}
+pub type Global = SingleExpression<NonLocal>;
+
+impl ExpressionState for NonLocal {
+    fn forget_type(self, expression: SerializableAtom) -> PythonState {
+        PythonState::Global(Some(Global {
+            expression,
+            state: self,
+        }))
+    }
+
+    fn get_expression(
+        num: &mut PythonState,
+    ) -> Result<SingleExpression<Self>, NumeratorStateError> {
+        if let PythonState::Global(s) = num {
+            if let Some(s) = s.take() {
+                Ok(s)
+            } else {
+                Err(NumeratorStateError::NoneVariant)
+            }
+        } else {
+            Err(NumeratorStateError::NotGlobal)
+        }
+    }
+}
+
+impl Numerator<Global> {
+    pub fn color_symplify(self) -> Numerator<ColorSymplified> {
+        Numerator {
+            state: ColorSymplified::color_symplify(self.state),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+pub struct Color {}
+pub type ColorSymplified = SingleExpression<Color>;
+
+impl ExpressionState for Color {
+    fn forget_type(self, expression: SerializableAtom) -> PythonState {
+        PythonState::ColorSymplified(Some(ColorSymplified {
+            expression,
+            state: self,
+        }))
+    }
+
+    fn get_expression(
+        num: &mut PythonState,
+    ) -> Result<SingleExpression<Self>, NumeratorStateError> {
+        if let PythonState::ColorSymplified(s) = num {
+            if let Some(s) = s.take() {
+                Ok(s)
+            } else {
+                Err(NumeratorStateError::NoneVariant)
+            }
+        } else {
+            Err(NumeratorStateError::NotColorSymplified)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+pub struct Gamma {}
+pub type GammaSymplified = SingleExpression<Gamma>;
+
+impl ExpressionState for Gamma {
+    fn forget_type(self, expression: SerializableAtom) -> PythonState {
+        PythonState::GammaSymplified(Some(GammaSymplified {
+            expression,
+            state: self,
+        }))
+    }
+
+    fn get_expression(
+        num: &mut PythonState,
+    ) -> Result<SingleExpression<Self>, NumeratorStateError> {
+        if let PythonState::GammaSymplified(s) = num {
+            if let Some(s) = s.take() {
+                Ok(s)
+            } else {
+                Err(NumeratorStateError::NoneVariant)
+            }
+        } else {
+            Err(NumeratorStateError::NotGammaSymplified)
+        }
+    }
+}
+
+impl<State: ExpressionState> NumeratorState for SingleExpression<State> {
+    fn export(&self) -> String {
+        self.expression.to_string()
+    }
+
+    fn forget_type(self) -> PythonState {
+        self.state.forget_type(self.expression)
+    }
+
+    fn update_model(&mut self, _model: &Model) -> Result<()> {
+        Err(eyre!("Only an expression, nothing to update"))
     }
 }
 
@@ -554,16 +775,24 @@ impl AppliedFeynmanRule {
             None,
         );
 
-        AppliedFeynmanRule {
-            expression: builder.into(),
+        AppliedFeynmanRule::new(builder.into())
+    }
+}
+
+impl Numerator<AppliedFeynmanRule> {
+    pub fn color_symplify(self) -> Numerator<ColorSymplified> {
+        Numerator {
+            state: ColorSymplified::color_symplify(self.state),
         }
     }
+}
 
-    fn isolate_color(&mut self) {
+impl ColorSymplified {
+    fn isolate_color(expression: &mut SerializableAtom) {
         let color_fn = FunctionBuilder::new(State::get_symbol("color"))
             .add_arg(&Atom::new_num(1))
             .finish();
-        self.expression.0 = &self.expression.0 * color_fn;
+        expression.0 = &expression.0 * color_fn;
         let replacements = vec![
             (
                 Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*color(a___)").unwrap(),
@@ -589,15 +818,11 @@ impl AppliedFeynmanRule {
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect();
 
-        self.expression.replace_repeat_multiple(&reps);
+        expression.replace_repeat_multiple(&reps);
     }
 
-    pub fn color_symplify(mut self) -> ColorSymplified {
-        self.isolate_color();
-        let (mut coefs, rem) = self
-            .expression
-            .0
-            .coefficient_list(State::get_symbol("color"));
+    pub fn color_symplify_impl(mut expression: SerializableAtom) -> SerializableAtom {
+        let (mut coefs, rem) = expression.0.coefficient_list(State::get_symbol("color"));
 
         let replacements = vec![
             (Pattern::parse("color(a___)").unwrap(),Pattern::parse("a___").unwrap().into()),
@@ -645,98 +870,228 @@ impl AppliedFeynmanRule {
             // println!("coef {i}:{}\n", coef.factor());
         }
         atom = atom + rem;
-        self.expression.0 = atom;
-        ColorSymplified {
-            expression: self.expression,
-        }
-    }
-}
-
-impl UnexpandedNumerator for AppliedFeynmanRule {
-    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
-        Ok(self.expression.clone())
-    }
-}
-
-impl NumeratorState for AppliedFeynmanRule {
-    fn export(&self) -> String {
-        self.expression.to_string()
+        expression.0 = atom;
+        expression
     }
 
-    fn forget_type(self) -> PythonState {
-        PythonState::AppliedFeynmanRule(Some(self))
+    pub fn color_symplify<T: UnexpandedNumerator>(expr: T) -> ColorSymplified {
+        let mut expr = expr.expr().unwrap().clone();
+        Self::isolate_color(&mut expr);
+        Self::new(Self::color_symplify_impl(expr))
     }
 
-    fn update_model(&mut self, _model: &Model) -> Result<()> {
-        Err(eyre!("Only applied feynman rule, nothing to update"))
-    }
-}
-
-impl TypedNumeratorState for AppliedFeynmanRule {
-    fn apply<F, S: TypedNumeratorState>(
-        num: &mut Num<PythonState>,
-        mut f: F,
-    ) -> Result<(), NumeratorStateError>
-    where
-        F: FnMut(Num<Self>) -> Num<S>,
-    {
-        if let PythonState::AppliedFeynmanRule(s) = &mut num.state {
-            if let Some(s) = s.take() {
-                *num = f(Num { state: s }).forget_type();
-                return Ok(());
-            } else {
-                return Err(NumeratorStateError::NoneVariant);
-            }
-        }
-        Err(NumeratorStateError::NotAppliedFeynmanRule)
-    }
-}
-
-impl Num<AppliedFeynmanRule> {
-    pub fn color_symplify(self) -> Num<ColorSymplified> {
-        Num {
-            state: self.state.color_symplify(),
-        }
-    }
-}
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub struct ColorSymplified {
-    #[bincode(with_serde)]
-    pub expression: SerializableAtom,
-}
-
-impl TryFrom<PythonState> for ColorSymplified {
-    type Error = NumeratorStateError;
-
-    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
-        match value {
-            PythonState::ColorSymplified(s) => {
-                if let Some(s) = s {
-                    Ok(s)
-                } else {
-                    Err(NumeratorStateError::NoneVariant)
-                }
-            }
-            _ => Err(NumeratorStateError::NotColorSymplified),
-        }
-    }
-}
-
-impl ColorSymplified {
-    pub fn gamma_symplify(self) -> GammaSymplified {
-        let replacements = [(
-            Pattern::parse("color(a___)").unwrap(),
-            Pattern::parse("a___").unwrap().into(),
+    pub fn gamma_symplify(mut self) -> GammaSymplified {
+        self.expression.0 = self.expression.0.expand();
+        let pats = [(
+            Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
+            Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
         )];
 
-        let _reps: Vec<Replacement> = replacements
+        let reps: Vec<Replacement> = pats
             .iter()
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect();
+        self.expression.replace_repeat_multiple(&reps);
+        let pats = vec![
+            (
+                Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
+                Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
+                    .unwrap()
+                    .into(),
+            ),
+            (
+                Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))")
+                    .unwrap(),
+                Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))")
+                    .unwrap()
+                    .into(),
+            ),
+            (
+                Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
+                Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))")
+                    .unwrap()
+                    .into(),
+            ),
+            (
+                Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
+                Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))")
+                    .unwrap()
+                    .into(),
+            ),
+            (
+                Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
+                Pattern::parse("gamma_trace(aind(a__))").unwrap().into(),
+            ),
+        ];
+        let reps: Vec<Replacement> = pats
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect();
+        self.expression.replace_repeat_multiple(&reps);
 
-        GammaSymplified {
-            expression: self.expression,
+        let pat = Pattern::parse("gamma_trace(a__)").unwrap();
+
+        let set = MatchSettings::default();
+        let cond = Condition::default();
+
+        let mut it = pat.pattern_match(self.expression.0.as_view(), &cond, &set);
+
+        let mut max_nargs = 0;
+        while let Some(a) = it.next() {
+            for (_, v) in a.match_stack {
+                match v {
+                    Match::Single(s) => {
+                        match s {
+                            AtomView::Fun(f) => {
+                                let a = f.get_nargs();
+                                if a > max_nargs {
+                                    max_nargs = a;
+                                }
+                            }
+                            _ => {
+                                panic!("should be a function")
+                            }
+                        }
+                        // print!("{}", s)
+                    }
+                    _ => panic!("should be a single match"),
+                }
+                // println!();
+            }
         }
+
+        let mut reps = vec![];
+        for n in 1..=max_nargs {
+            if n % 2 == 0 {
+                let mut sum = Atom::new_num(0);
+
+                // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
+                for j in 1..n {
+                    let gamma_chain_builder =
+                        FunctionBuilder::new(State::get_symbol("gamma_trace"));
+
+                    let mut gamma_chain_builder_slots =
+                        FunctionBuilder::new(State::get_symbol("aind"));
+
+                    let metric_builder = FunctionBuilder::new(State::get_symbol("g"));
+
+                    let metric_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+
+                    for k in 1..j {
+                        let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                        gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                    }
+
+                    for k in (j + 1)..n {
+                        let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                        gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                    }
+
+                    let metric = metric_builder
+                        .add_arg(
+                            &metric_builder_slots
+                                .add_args(&[
+                                    &Atom::parse(&format!("a{}_", 0)).unwrap(),
+                                    &Atom::parse(&format!("a{}_", j)).unwrap(),
+                                ])
+                                .finish(),
+                        )
+                        .finish();
+
+                    let gamma = &gamma_chain_builder
+                        .add_arg(&gamma_chain_builder_slots.finish())
+                        .finish()
+                        * &metric;
+
+                    if j % 2 == 0 {
+                        sum = &sum - &gamma;
+                    } else {
+                        sum = &sum + &gamma;
+                    }
+                }
+
+                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+                for k in 0..n {
+                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                }
+                let a = gamma_chain_builder
+                    .add_arg(&gamma_chain_builder_slots.finish())
+                    .finish();
+
+                reps.push((a.into_pattern(), sum.into_pattern().into()));
+            } else {
+                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
+                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+                for k in 0..n {
+                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
+                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+                }
+                let a = gamma_chain_builder
+                    .add_arg(&gamma_chain_builder_slots.finish())
+                    .finish();
+                // println!("{}", a);
+                reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
+            }
+        }
+
+        reps.push((
+            Pattern::parse("gamma_trace(aind())").unwrap(),
+            Pattern::parse("1").unwrap().into(),
+        ));
+
+        // Dd
+        reps.push((
+            Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),lord(b__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+        ));
+        // Du
+        reps.push((
+            Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),loru(b__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+        ));
+        // Uu
+        reps.push((
+            Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),loru(b__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+        ));
+        // Ud
+        reps.push((
+            Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),lord(b__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+        ));
+
+        // dD
+        reps.push((
+            Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(b__),lord(a__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+        ));
+        // uD
+        reps.push((
+            Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(loru(b__),lord(a__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+        ));
+        // uU
+        reps.push((
+            Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(b__),loru(a__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+        ));
+        // dU
+        reps.push((
+            Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(lord(b__),loru(a__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+        ));
+
+        let reps = reps
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect_vec();
+        self.expression.replace_repeat_multiple(&reps);
+        self.expression.0 = self.expression.0.expand();
+        self.expression.replace_repeat_multiple(&reps);
+
+        GammaSymplified::new(self.expression)
     }
 
     pub fn parse(self) -> Network {
@@ -750,97 +1105,17 @@ impl ColorSymplified {
     }
 }
 
-impl NumeratorState for ColorSymplified {
-    fn export(&self) -> String {
-        self.expression.0.to_string()
-    }
-
-    fn forget_type(self) -> PythonState {
-        PythonState::ColorSymplified(Some(self))
-    }
-
-    fn update_model(&mut self, _model: &Model) -> Result<()> {
-        Err(eyre!(
-            "Only applied feynman rule,and simplified color, nothing to update"
-        ))
-    }
-}
-
-impl TypedNumeratorState for ColorSymplified {
-    fn apply<F, S: TypedNumeratorState>(
-        num: &mut Num<PythonState>,
-        mut f: F,
-    ) -> Result<(), NumeratorStateError>
-    where
-        F: FnMut(Num<Self>) -> Num<S>,
-    {
-        if let PythonState::ColorSymplified(s) = &mut num.state {
-            if let Some(s) = s.take() {
-                *num = f(Num { state: s }).forget_type();
-                return Ok(());
-            } else {
-                return Err(NumeratorStateError::NoneVariant);
-            }
-        }
-        Err(NumeratorStateError::NotColorSymplified)
-    }
-}
-
-impl UnexpandedNumerator for ColorSymplified {
-    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
-        Ok(self.expression.clone())
-    }
-}
-
-impl Num<ColorSymplified> {
-    pub fn gamma_symplify(self) -> Num<GammaSymplified> {
-        Num {
+impl Numerator<ColorSymplified> {
+    pub fn gamma_symplify(self) -> Numerator<GammaSymplified> {
+        Numerator {
             state: self.state.gamma_symplify(),
         }
     }
 
-    pub fn parse(self) -> Num<Network> {
-        Num {
+    pub fn parse(self) -> Numerator<Network> {
+        Numerator {
             state: self.state.parse(),
         }
-    }
-}
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub struct GammaSymplified {
-    #[bincode(with_serde)]
-    expression: SerializableAtom,
-}
-
-impl TryFrom<PythonState> for GammaSymplified {
-    type Error = NumeratorStateError;
-
-    fn try_from(value: PythonState) -> std::result::Result<Self, Self::Error> {
-        match value {
-            PythonState::GammaSymplified(s) => {
-                if let Some(s) = s {
-                    Ok(s)
-                } else {
-                    Err(NumeratorStateError::NoneVariant)
-                }
-            }
-            _ => Err(NumeratorStateError::NotGammaSymplified),
-        }
-    }
-}
-
-impl NumeratorState for GammaSymplified {
-    fn export(&self) -> String {
-        self.expression.0.to_string()
-    }
-
-    fn forget_type(self) -> PythonState {
-        PythonState::GammaSymplified(Some(self))
-    }
-
-    fn update_model(&mut self, _model: &Model) -> Result<()> {
-        Err(eyre!(
-            "Only applied feynman rule, simplified color and gamma, nothing to update"
-        ))
     }
 }
 
@@ -856,35 +1131,9 @@ impl GammaSymplified {
     }
 }
 
-impl UnexpandedNumerator for GammaSymplified {
-    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
-        Ok(self.expression.clone())
-    }
-}
-
-impl TypedNumeratorState for GammaSymplified {
-    fn apply<F, S: TypedNumeratorState>(
-        num: &mut Num<PythonState>,
-        mut f: F,
-    ) -> Result<(), NumeratorStateError>
-    where
-        F: FnMut(Num<Self>) -> Num<S>,
-    {
-        if let PythonState::GammaSymplified(s) = &mut num.state {
-            if let Some(s) = s.take() {
-                *num = f(Num { state: s }).forget_type();
-                return Ok(());
-            } else {
-                return Err(NumeratorStateError::NoneVariant);
-            }
-        }
-        Err(NumeratorStateError::NotGammaSymplified)
-    }
-}
-
-impl Num<GammaSymplified> {
-    pub fn parse(self) -> Num<Network> {
-        Num {
+impl Numerator<GammaSymplified> {
+    pub fn parse(self) -> Numerator<Network> {
+        Numerator {
             state: self.state.parse(),
         }
     }
@@ -953,15 +1202,15 @@ impl NumeratorState for Network {
 
 impl TypedNumeratorState for Network {
     fn apply<F, S: TypedNumeratorState>(
-        num: &mut Num<PythonState>,
+        num: &mut Numerator<PythonState>,
         mut f: F,
     ) -> Result<(), NumeratorStateError>
     where
-        F: FnMut(Num<Self>) -> Num<S>,
+        F: FnMut(Numerator<Self>) -> Numerator<S>,
     {
         if let PythonState::Network(s) = &mut num.state {
             if let Some(s) = s.take() {
-                *num = f(Num { state: s }).forget_type();
+                *num = f(Numerator { state: s }).forget_type();
                 return Ok(());
             } else {
                 return Err(NumeratorStateError::NoneVariant);
@@ -971,10 +1220,10 @@ impl TypedNumeratorState for Network {
     }
 }
 
-impl Num<Network> {
-    pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Num<Contracted>> {
+impl Numerator<Network> {
+    pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
         let contracted = self.state.contract(settings)?;
-        Ok(Num { state: contracted })
+        Ok(Numerator { state: contracted })
     }
 }
 
@@ -1010,7 +1259,7 @@ impl Contracted {
     ) -> EvaluatorSingle {
         let mut fn_map: FunctionMap = FunctionMap::new();
 
-        Num::<Contracted>::add_consts_to_fn_map(&mut fn_map);
+        Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -1021,7 +1270,10 @@ impl Contracted {
         debug!("Common subexpression elimination");
         eval_tree.common_subexpression_elimination();
         debug!("Linearize double");
-        let cpe_rounds = export_settings.numerator_settings.cpe_rounds();
+        let cpe_rounds = export_settings
+            .numerator_settings
+            .eval_settings
+            .cpe_rounds();
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
                 re: F(r.into()),
@@ -1042,6 +1294,7 @@ impl Contracted {
             .linearize(cpe_rounds);
         let compiled = if export_settings
             .numerator_settings
+            .eval_settings
             .compile_options()
             .compile()
         {
@@ -1153,15 +1406,15 @@ impl NumeratorState for Contracted {
 
 impl TypedNumeratorState for Contracted {
     fn apply<F, S: TypedNumeratorState>(
-        num: &mut Num<PythonState>,
+        num: &mut Numerator<PythonState>,
         mut f: F,
     ) -> Result<(), NumeratorStateError>
     where
-        F: FnMut(Num<Self>) -> Num<S>,
+        F: FnMut(Numerator<Self>) -> Numerator<S>,
     {
         if let PythonState::Contracted(s) = &mut num.state {
             if let Some(s) = s.take() {
-                *num = f(Num { state: s }).forget_type();
+                *num = f(Numerator { state: s }).forget_type();
                 return Ok(());
             } else {
                 return Err(NumeratorStateError::NoneVariant);
@@ -1171,14 +1424,14 @@ impl TypedNumeratorState for Contracted {
     }
 }
 
-impl Num<Contracted> {
+impl Numerator<Contracted> {
     pub fn generate_evaluators(
         self,
         model: &Model,
         graph: &BareGraph,
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
-    ) -> Num<Evaluators> {
+    ) -> Numerator<Evaluators> {
         let (params, double_param_values, quad_param_values, model_params_start) =
             Contracted::generate_params(graph, model);
 
@@ -1191,8 +1444,8 @@ impl Num<Contracted> {
             .state
             .evaluator(extra_info.path.clone(), export_settings, &params);
 
-        match export_settings.numerator_settings {
-            NumeratorEvaluatorOptions::Joint(_) => Num {
+        match export_settings.numerator_settings.eval_settings {
+            NumeratorEvaluatorOptions::Joint(_) => Numerator {
                 state: Evaluators {
                     orientated: Some(single.orientated_joint(
                         graph,
@@ -1213,7 +1466,7 @@ impl Num<Contracted> {
                 n_cores,
                 verbose,
                 ..
-            } => Num {
+            } => Numerator {
                 state: Evaluators {
                     orientated: Some(single.orientated_iterative(
                         graph,
@@ -1232,7 +1485,7 @@ impl Num<Contracted> {
                     model_params_start,
                 },
             },
-            _ => Num {
+            _ => Numerator {
                 state: Evaluators {
                     orientated: None,
                     single,
@@ -1366,7 +1619,7 @@ impl EvaluatorSingle {
     ) -> EvaluatorOrientations {
         let mut fn_map: FunctionMap = FunctionMap::new();
 
-        Num::<Contracted>::add_consts_to_fn_map(&mut fn_map);
+        Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
 
         let mut seen = 0;
 
@@ -1438,7 +1691,10 @@ impl EvaluatorSingle {
 
         debug!("{} tensors in set", set.tensors.len());
 
-        let cpe_rounds = export_settings.numerator_settings.cpe_rounds();
+        let cpe_rounds = export_settings
+            .numerator_settings
+            .eval_settings
+            .cpe_rounds();
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -1481,6 +1737,7 @@ impl EvaluatorSingle {
 
         let compiled = if export_settings
             .numerator_settings
+            .eval_settings
             .compile_options()
             .compile()
         {
@@ -1538,7 +1795,7 @@ impl EvaluatorSingle {
     ) -> EvaluatorOrientations {
         let mut fn_map: FunctionMap = FunctionMap::new();
 
-        Num::<Contracted>::add_consts_to_fn_map(&mut fn_map);
+        Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
 
         let mut seen = 0;
 
@@ -1604,7 +1861,10 @@ impl EvaluatorSingle {
 
         let set = ParamTensorSet::new(index_map.into_iter().collect_vec());
 
-        let cpe_rounds = export_settings.numerator_settings.cpe_rounds();
+        let cpe_rounds = export_settings
+            .numerator_settings
+            .eval_settings
+            .cpe_rounds();
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -1636,6 +1896,7 @@ impl EvaluatorSingle {
 
         let compiled = if export_settings
             .numerator_settings
+            .eval_settings
             .compile_options()
             .compile()
         {
@@ -1814,15 +2075,15 @@ impl NumeratorState for Evaluators {
 
 impl TypedNumeratorState for Evaluators {
     fn apply<F, S: TypedNumeratorState>(
-        num: &mut Num<PythonState>,
+        num: &mut Numerator<PythonState>,
         mut f: F,
     ) -> Result<(), NumeratorStateError>
     where
-        F: FnMut(Num<Self>) -> Num<S>,
+        F: FnMut(Numerator<Self>) -> Numerator<S>,
     {
         if let PythonState::Evaluators(s) = &mut num.state {
             if let Some(s) = s.take() {
-                *num = f(Num { state: s }).forget_type();
+                *num = f(Numerator { state: s }).forget_type();
                 return Ok(());
             } else {
                 return Err(NumeratorStateError::NoneVariant);
@@ -1832,7 +2093,7 @@ impl TypedNumeratorState for Evaluators {
     }
 }
 
-impl Num<Evaluators> {
+impl Numerator<Evaluators> {
     pub fn disable_compiled(&mut self) {
         if let Some(orientated) = &mut self.state.orientated {
             orientated.compiled.disable().unwrap();
@@ -1881,6 +2142,8 @@ pub enum NumeratorStateError {
     NotUnit,
     #[error("Not AppliedFeynmanRule")]
     NotAppliedFeynmanRule,
+    #[error("Not Global")]
+    NotGlobal,
     #[error("Not ColorSymplified")]
     NotColorSymplified,
     #[error("Not GammaSymplified")]
@@ -1903,6 +2166,7 @@ pub enum NumeratorStateError {
 #[allow(clippy::large_enum_variant)]
 pub enum PythonState {
     UnInit(Option<UnInit>),
+    Global(Option<Global>),
     AppliedFeynmanRule(Option<AppliedFeynmanRule>),
     ColorSymplified(Option<ColorSymplified>),
     GammaSymplified(Option<GammaSymplified>),
@@ -1921,6 +2185,13 @@ impl NumeratorState for PythonState {
     fn export(&self) -> String {
         match self {
             PythonState::UnInit(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
+            PythonState::Global(state) => {
                 if let Some(s) = state {
                     s.export()
                 } else {
@@ -1978,6 +2249,13 @@ impl NumeratorState for PythonState {
 
     fn update_model(&mut self, model: &Model) -> Result<()> {
         match self {
+            PythonState::Global(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
             PythonState::AppliedFeynmanRule(state) => {
                 if let Some(s) = state {
                     s.update_model(model)
@@ -2026,8 +2304,15 @@ impl NumeratorState for PythonState {
 }
 
 impl UnexpandedNumerator for PythonState {
-    fn expr(&self) -> Result<SerializableAtom, NumeratorStateError> {
+    fn expr(&self) -> Result<&SerializableAtom, NumeratorStateError> {
         match self {
+            PythonState::Global(state) => {
+                if let Some(s) = state {
+                    s.expr()
+                } else {
+                    Err(NumeratorStateError::NoneVariant)
+                }
+            }
             PythonState::AppliedFeynmanRule(state) => {
                 if let Some(s) = state {
                     s.expr()

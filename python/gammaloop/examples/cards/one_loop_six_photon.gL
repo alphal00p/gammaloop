@@ -1,27 +1,55 @@
 import_model sm-full
-import_graphs python/gammaloop/tests/test_data/qgraf_outputs/physical_1L_6photons.py -f qgraph --no_compile
-!rm -rf GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P
-output GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P 
-launch GL_OUTPUT_INTEGRATE_PHYSICAL_1L_6P
-#set_model_param mass_scalar_1 172.0
-set externals.data.momenta [\
-[5.,0.,0.,5.],\
-[5.,0.,0.,-5.],\
-[0.92074329118146975e-01,0.29388934644065036e-01,0.14366780197405105e-01,0.86067230871006678e-01],\
-[0.26758957773002473e+00,-0.13406586245100166e+00,-0.12770072258282308e+00,0.19319174953094392e+00],\
-[0.34227052393598861e+00,0.17054664659611959e+00,0.29245866108927043e+00,-0.50307896438886446e-01],\
-[0.29806556921583927e+00,-0.65869718789182907e-01,-0.17912471870385246e+0,-0.22895108396306396e+00],\
-]
-# BENCH : (2.39457274585180145E-013,5.15549488256538223E-013)
-# GL : (-4.5625(57)e-8, -1.49196(82)e-7)
+#import_graphs python/gammaloop/tests/test_data/qgraf_outputs/physical_1L_6photons.py -f qgraph --no_compile
+#set_model_param mt 173.3
+#set_model_param mt 0.55
+set compile_cff True
+set compile_separate_orientations False
+set load_compiled_cff True
+set load_compiled_separate_orientations False
+set inline_asm True
+#!rm -rf GL_OUTPUT_INTEGRATE_PHYSICAL
+#output GL_OUTPUT_INTEGRATE_PHYSICAL
+launch GL_OUTPUT_INTEGRATE_PHYSICAL
+#set_model_param mt 173.3
+set_model_param mt 0.55
+#1.325070e+02 # aEWM1
+#set_model_param aewm1 128.93 #1.325070e+02
+#set externals.data.momenta [\
+#[0.5,0.,0.,0.5],\
+#[0.5,0.,0.,-0.5],\
+#[0.88551333054502981e-01,-0.22100690287689986e-01,0.40080353191685326e-01,-0.75805430956936634e-01],\
+#[0.32832941922709857e+00,-0.10384961188345629e+00,-0.30193375538954009e+00,0.76494921387165890e-01],\
+#[0.15235810946743064e+00,-0.10588095966659219e+00,-0.97709638326975712e-01,0.49548385226792821e-01],\
+#[0.43076113825096768e+00,0.23183126183773847e+00,0.35956304052483051e+00,-0.50237875657022112e-01],\
+#]
 set externals.data.helicities [1,1,1,1,1,1]
-set integrated_phase 'imag'
+#above is PS A:
+set externals.data.momenta [\
+[0.5,0.,0.,0.5],\
+[0.5,0.,0.,-0.5],\
+[0.32337460877729124e+00,-0.16506893678214152e+00,-0.17095328176941524e+00,-0.21931338117804505e+00],\
+[0.19420310464703955e+00,0.39220613003873563e-01,-0.19019047546272283e+00,-0.20426486268597488e-02],\
+[0.37099688823550397e+00,0.43861154483075281e-01,0.28640073465234189e+00,0.23170996827594120e+00],\
+[0.11142539834016532e+00,0.81987169295192688e-01,0.74743022579796189e-01,-0.10353938471036389e-01],\
+]
+#
+#above is PS B:
+#set externals.data.momenta [\
+#[0.5,0.,0.,0.5],\
+#[0.5,0.,0.,-0.5],\
+#[0.92074329118146975e-01,0.29388934644065036e-01,0.14366780197405105e-01,0.86067230871006678e-01],\
+#[0.26758957773002473e+00,-0.13406586245100166e+00,-0.12770072258282308e+00,0.19319174953094392e+00],\
+#[0.34227052393598861e+00,0.17054664659611959e+00,0.29245866108927043e+00,-0.50307896438886446e-01],\
+#[0.29806556921583927e+00,-0.65869718789182907e-01,-0.17912471870385246e+0,-0.22895108396306396e+00],\
+#]
+#
+#above is PS C:
+set integrated_phase 'real'
 set e_cm 10.
-set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False}
-set debug 0
-set n_start 100000
-set n_max 200000000
-#set continuous_learning_rate 0.0
-set seed 1
 set rotation_axis []
-integrate physical_1L_6photons -r -c 10
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+set n_start 100000
+set n_max 100000000000
+set continuous_dim_learning_rate 0.0
+set seed 1
+integrate physical_1L_6photons -r -c 4

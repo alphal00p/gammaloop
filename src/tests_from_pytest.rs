@@ -15,8 +15,9 @@ use crate::graph::{
 use crate::model::{LorentzStructure, Model};
 use crate::momentum::{FourMomentum, Helicity, ThreeMomentum};
 use crate::numerator::{
-    ContractionSettings, EvaluatorOptions, Evaluators, Num, NumeratorCompileOptions,
-    NumeratorEvaluatorOptions, NumeratorState, PythonState, UnInit,
+    ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, Numerator,
+    NumeratorCompileOptions, NumeratorEvaluatorOptions, NumeratorSettings, NumeratorState,
+    PythonState, UnInit,
 };
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
@@ -33,6 +34,7 @@ use bincode::{Decode, Encode};
 use clarabel::solver::default;
 use colored::Colorize;
 use itertools::{FormatWith, Itertools};
+use symbolica::domains::rational::Rational;
 //use libc::__c_anonymous_ptrace_syscall_info_exit;
 use core::f64;
 use lorentz_vector::LorentzVector;
@@ -80,14 +82,18 @@ const PHASEMINUSI: F<f64> = F(-f64::consts::FRAC_PI_2);
 pub fn test_export_settings() -> ExportSettings {
     ExportSettings {
         compile_cff: true,
-        numerator_settings: NumeratorEvaluatorOptions::Iterative {
-            eval_options: EvaluatorOptions {
-                cpe_rounds: Some(1),
-                compile_options: NumeratorCompileOptions::Compiled,
+        numerator_settings: NumeratorSettings {
+            eval_settings: NumeratorEvaluatorOptions::Iterative {
+                eval_options: EvaluatorOptions {
+                    cpe_rounds: Some(1),
+                    compile_options: NumeratorCompileOptions::Compiled,
+                },
+                iterations: 1,
+                n_cores: 1,
+                verbose: true,
             },
-            iterations: 1,
-            n_cores: 1,
-            verbose: true,
+            global_numerator: None,
+            gamma_algebra: GammaAlgebraMode::Concrete,
         },
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: false,
@@ -273,7 +279,7 @@ fn check_load(amp_check: &AmplitudeCheck) -> (Model, Amplitude<UnInit>, PathBuf)
     (model, amplitude, path)
 }
 
-use color_eyre::Result;
+use color_eyre::{Report, Result};
 use eyre::{eyre, Context};
 
 #[allow(unused)]
@@ -1364,10 +1370,14 @@ fn pytest_physical_3L_6photons_topology_A_inspect() {
     graph.generate_cff();
     let export_settings = ExportSettings {
         compile_cff: true,
-        numerator_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {
-            cpe_rounds: Some(1),
-            compile_options: NumeratorCompileOptions::Compiled,
-        }),
+        numerator_settings: NumeratorSettings {
+            eval_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::Compiled,
+            }),
+            global_numerator: None,
+            gamma_algebra: GammaAlgebraMode::Concrete,
+        },
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: false,
         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
@@ -1495,6 +1505,143 @@ fn pytest_physical_2L_6photons() {
 }
 
 #[test]
+fn physical_1L_6photons_gamma() {
+    init();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+
+    let extra_info = graph
+        .derived_data
+        .as_ref()
+        .unwrap()
+        .generate_extra_info(path.clone());
+    let contraction_settings = ContractionSettings::Normal;
+    let export_settings = test_export_settings();
+
+    let mut graph_no_gamma = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path,
+        &export_settings,
+    );
+    let mut graph = graph
+        .map_numerator_res(|n, g| {
+            Result::<_, Report>::Ok(
+                n.from_graph(g)
+                    .color_symplify()
+                    .gamma_symplify()
+                    .parse()
+                    .contract::<Rational>(contraction_settings)?
+                    .generate_evaluators(&model, g, &extra_info, &export_settings),
+            )
+        })
+        .unwrap();
+
+    let sample = kinematics_builder(2, 1, &graph.bare_graph);
+
+    let default_settings = load_default_settings();
+    println!(
+        "Eval gamma{}",
+        graph.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval no gamma{}",
+        graph_no_gamma.evaluate_cff_expression(&sample, &default_settings)
+    );
+}
+
+#[test]
+fn top_bubble_gamma() {
+    init();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_top_bubble/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+
+    let extra_info = graph
+        .derived_data
+        .as_ref()
+        .unwrap()
+        .generate_extra_info(path.clone());
+    let contraction_settings = ContractionSettings::Normal;
+    let export_settings = test_export_settings();
+
+    let mut graph_no_gamma = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path,
+        &export_settings,
+    );
+    let mut graph = graph
+        .map_numerator_res(|n, g| {
+            Result::<_, Report>::Ok(
+                n.from_graph(g)
+                    .color_symplify()
+                    .gamma_symplify()
+                    .parse()
+                    .contract::<Rational>(contraction_settings)?
+                    .generate_evaluators(&model, g, &extra_info, &export_settings),
+            )
+        })
+        .unwrap();
+
+    let sample = kinematics_builder(2, 1, &graph.bare_graph);
+
+    let default_settings = load_default_settings();
+    println!(
+        "Eval gamma{}",
+        graph.evaluate_cff_expression(&sample, &default_settings)
+    );
+    println!(
+        "Eval no gamma{}",
+        graph_no_gamma.evaluate_cff_expression(&sample, &default_settings)
+    );
+}
+
+#[test]
+fn top_bubble_gamma_play() {
+    init();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_top_bubble/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+
+    let extra_info = graph
+        .derived_data
+        .as_ref()
+        .unwrap()
+        .generate_extra_info(path.clone());
+
+    let export_settings = test_export_settings();
+
+    let graph = graph
+        .map_numerator_res(|n, g| {
+            Result::<_, Report>::Ok(
+                n.from_graph(g)
+                    .color_symplify()
+                    .gamma_symplify()
+                    .parse()
+                    .contract::<Rational>(ContractionSettings::Normal)?
+                    .generate_evaluators(&model, g, &extra_info, &export_settings),
+            )
+        })
+        .unwrap();
+
+    println!(
+        "Eval gamma{}",
+        graph.derived_data.as_ref().unwrap().numerator.export()
+    );
+}
+
+#[test]
 #[allow(non_snake_case)]
 fn pytest_top_bubble() {
     init();
@@ -1523,7 +1670,7 @@ fn pytest_top_bubble() {
             .export()
     );
 
-    export_settings.numerator_settings = NumeratorEvaluatorOptions::Iterative {
+    export_settings.numerator_settings.eval_settings = NumeratorEvaluatorOptions::Iterative {
         eval_options: EvaluatorOptions {
             cpe_rounds: Some(1),
             compile_options: NumeratorCompileOptions::Compiled,
@@ -1540,10 +1687,11 @@ fn pytest_top_bubble() {
         &export_settings,
     );
 
-    export_settings.numerator_settings = NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
-        cpe_rounds: Some(1),
-        compile_options: NumeratorCompileOptions::Compiled,
-    });
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        });
 
     let mut graph_joint_compiled = graph.clone().process_numerator(
         &model,
@@ -1551,10 +1699,11 @@ fn pytest_top_bubble() {
         path.clone(),
         &export_settings,
     );
-    export_settings.numerator_settings = NumeratorEvaluatorOptions::Single(EvaluatorOptions {
-        cpe_rounds: Some(1),
-        compile_options: NumeratorCompileOptions::Compiled,
-    });
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        });
 
     let mut graph_single_compiled = graph.clone().process_numerator(
         &model,
@@ -1562,7 +1711,7 @@ fn pytest_top_bubble() {
         path.clone(),
         &export_settings,
     );
-    export_settings.numerator_settings = NumeratorEvaluatorOptions::Iterative {
+    export_settings.numerator_settings.eval_settings = NumeratorEvaluatorOptions::Iterative {
         eval_options: EvaluatorOptions {
             cpe_rounds: Some(1),
             compile_options: NumeratorCompileOptions::NotCompiled,
@@ -1663,7 +1812,7 @@ fn pytest_physical_1L_6photons_generate() {
             .export()
     );
 
-    export_settings.numerator_settings = NumeratorEvaluatorOptions::Iterative {
+    export_settings.numerator_settings.eval_settings = NumeratorEvaluatorOptions::Iterative {
         eval_options: EvaluatorOptions {
             cpe_rounds: Some(1),
             compile_options: NumeratorCompileOptions::Compiled,
@@ -1680,10 +1829,11 @@ fn pytest_physical_1L_6photons_generate() {
         &export_settings,
     );
 
-    export_settings.numerator_settings = NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
-        cpe_rounds: Some(1),
-        compile_options: NumeratorCompileOptions::Compiled,
-    });
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        });
 
     let mut graph_joint_compiled = graph.clone().process_numerator(
         &model,
@@ -1691,10 +1841,11 @@ fn pytest_physical_1L_6photons_generate() {
         path.clone(),
         &export_settings,
     );
-    export_settings.numerator_settings = NumeratorEvaluatorOptions::Single(EvaluatorOptions {
-        cpe_rounds: Some(1),
-        compile_options: NumeratorCompileOptions::Compiled,
-    });
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        });
 
     let mut graph_single_compiled = graph.clone().process_numerator(
         &model,
@@ -1702,7 +1853,7 @@ fn pytest_physical_1L_6photons_generate() {
         path.clone(),
         &export_settings,
     );
-    export_settings.numerator_settings = NumeratorEvaluatorOptions::Iterative {
+    export_settings.numerator_settings.eval_settings = NumeratorEvaluatorOptions::Iterative {
         eval_options: EvaluatorOptions {
             cpe_rounds: Some(1),
             compile_options: NumeratorCompileOptions::NotCompiled,
@@ -2548,4 +2699,22 @@ fn tsgstrstg() {
     println!("Number of terms: {}", number_terms);
 
     // println!("After: {}", a);
+}
+
+#[test]
+fn srtrst() {
+    let gl_a = Complex::new(0.000013469, -0.000022098);
+    let target_a = Complex::new(
+        -1.748314585608997179603103485148740681e-7,
+        7.660134793988562033873433720909673639e-7,
+    );
+
+    let gl_b = Complex::new(0.000016622, 3.5895e-6);
+    let target_b = Complex::new(
+        -6.836310962511977250670729307213679959e-7,
+        6.148816685390841929928756187662131083e-7,
+    );
+
+    println!("{}", gl_a.norm() / target_a.norm());
+    println!("{}", gl_b.norm() / target_b.norm());
 }

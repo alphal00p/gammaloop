@@ -13,8 +13,8 @@ use crate::{
     momentum::{FourMomentum, Signature, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
-        Num, NumeratorState, NumeratorStateError, PythonState, RepeatingIteratorTensorOrScalar,
-        TypedNumeratorState, UnInit,
+        GammaAlgebraMode, Numerator, NumeratorState, NumeratorStateError, PythonState,
+        RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
@@ -688,7 +688,7 @@ impl Graph<PythonState> {
         f: F,
     ) -> Result<()>
     where
-        F: FnMut(Num<S>) -> Num<T> + Copy,
+        F: FnMut(Numerator<S>) -> Numerator<T> + Copy,
     {
         self.statefull_apply::<_, S, T>(|d, _| d.map_numerator(f))
     }
@@ -1701,6 +1701,37 @@ impl<S: NumeratorState> Graph<S> {
             warn!("Tropical subgraph table generation failed 🥥");
         }
     }
+
+    pub fn map_numerator<F, T: NumeratorState>(mut self, f: F) -> Graph<T>
+    where
+        F: FnOnce(Numerator<S>, &mut BareGraph) -> Numerator<T>,
+    {
+        let mut_bare_graph = &mut self.bare_graph;
+        let derived_data = self
+            .derived_data
+            .map(|d| d.map_numerator(|n| f(n, mut_bare_graph)));
+
+        Graph {
+            bare_graph: self.bare_graph,
+            derived_data,
+        }
+    }
+
+    pub fn map_numerator_res<E, F, T: NumeratorState>(mut self, f: F) -> Result<Graph<T>, E>
+    where
+        F: FnOnce(Numerator<S>, &mut BareGraph) -> Result<Numerator<T>, E>,
+    {
+        let mut_bare_graph = &mut self.bare_graph;
+        let derived_data = self
+            .derived_data
+            .map(|d| d.map_numerator_res(|n| f(n, mut_bare_graph)))
+            .transpose()?;
+
+        Ok(Graph {
+            bare_graph: self.bare_graph,
+            derived_data,
+        })
+    }
 }
 impl Graph<Evaluators> {
     #[inline]
@@ -1839,7 +1870,7 @@ pub struct DerivedGraphData<NumState> {
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
     pub static_counterterm: Option<static_counterterm::CounterTerm>,
-    pub numerator: Num<NumState>,
+    pub numerator: Numerator<NumState>,
 }
 
 impl DerivedGraphData<PythonState> {
@@ -1865,7 +1896,7 @@ impl DerivedGraphData<PythonState> {
         f: F,
     ) -> Result<(), NumeratorStateError>
     where
-        F: FnMut(Num<S>) -> Num<T>,
+        F: FnMut(Numerator<S>) -> Numerator<T>,
     {
         self.numerator.apply(f)
     }
@@ -1892,7 +1923,7 @@ impl DerivedGraphData<PythonState> {
 impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn map_numerator<F, T: NumeratorState>(self, f: F) -> DerivedGraphData<T>
     where
-        F: FnOnce(Num<NumState>) -> Num<T>,
+        F: FnOnce(Numerator<NumState>) -> Numerator<T>,
     {
         DerivedGraphData {
             loop_momentum_bases: self.loop_momentum_bases,
@@ -1908,7 +1939,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 
     pub fn map_numerator_res<E, F, T: NumeratorState>(self, f: F) -> Result<DerivedGraphData<T>, E>
     where
-        F: FnOnce(Num<NumState>) -> Result<Num<T>, E>,
+        F: FnOnce(Numerator<NumState>) -> Result<Numerator<T>, E>,
     {
         Ok(DerivedGraphData {
             loop_momentum_bases: self.loop_momentum_bases,
@@ -2075,7 +2106,7 @@ impl DerivedGraphData<UnInit> {
             tropical_subgraph_table: None,
             edge_groups: None,
             esurface_derived_data: None,
-            numerator: Num::default(),
+            numerator: Numerator::default(),
             static_counterterm: None,
         }
     }
@@ -2090,58 +2121,46 @@ impl DerivedGraphData<UnInit> {
     ) -> DerivedGraphData<Evaluators> {
         let extra_info = self.generate_extra_info(export_path);
 
-        let numerator = self
-            .numerator
-            .from_graph(base_graph)
-            .color_symplify()
-            .parse()
-            .contract(contraction_settings)
+        let color_simplified =
+            if let Some(global) = &export_settings.numerator_settings.global_numerator {
+                let global = Atom::parse(global).unwrap();
+                self.map_numerator(|n| n.from_global(global, base_graph).color_symplify())
+            } else {
+                self.map_numerator(|n| n.from_graph(base_graph).color_symplify())
+            };
+
+        let parsed = match &export_settings.numerator_settings.gamma_algebra {
+            GammaAlgebraMode::Symbolic => {
+                color_simplified.map_numerator(|n| n.gamma_symplify().parse())
+            }
+            GammaAlgebraMode::Concrete => color_simplified.map_numerator(|n| n.parse()),
+        };
+
+        parsed
+            .map_numerator_res(|n| {
+                Result::<_, Report>::Ok(n.contract(contraction_settings)?.generate_evaluators(
+                    model,
+                    base_graph,
+                    &extra_info,
+                    export_settings,
+                ))
+            })
             .unwrap()
-            .generate_evaluators(model, base_graph, &extra_info, export_settings);
-        DerivedGraphData {
-            loop_momentum_bases: self.loop_momentum_bases,
-            cff_expression: self.cff_expression,
-            ltd_expression: self.ltd_expression,
-            tropical_subgraph_table: self.tropical_subgraph_table,
-            edge_groups: self.edge_groups,
-            esurface_derived_data: self.esurface_derived_data,
-            numerator,
-            static_counterterm: self.static_counterterm,
-        }
     }
 
     fn apply_feynman_rules(
         self,
         base_graph: &mut BareGraph,
     ) -> DerivedGraphData<AppliedFeynmanRule> {
-        let numerator = self.numerator.from_graph(base_graph);
-        DerivedGraphData {
-            loop_momentum_bases: self.loop_momentum_bases,
-            cff_expression: self.cff_expression,
-            ltd_expression: self.ltd_expression,
-            tropical_subgraph_table: self.tropical_subgraph_table,
-            edge_groups: self.edge_groups,
-            esurface_derived_data: self.esurface_derived_data,
-            numerator,
-            static_counterterm: self.static_counterterm,
-        }
+        self.map_numerator(|n| n.from_graph(base_graph))
     }
 }
 
 impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn forget_type(self) -> DerivedGraphData<PythonState> {
-        DerivedGraphData {
-            loop_momentum_bases: self.loop_momentum_bases,
-            cff_expression: self.cff_expression,
-            ltd_expression: self.ltd_expression,
-            tropical_subgraph_table: self.tropical_subgraph_table,
-            edge_groups: self.edge_groups,
-            esurface_derived_data: self.esurface_derived_data,
-            static_counterterm: self.static_counterterm,
-            numerator: self.numerator.forget_type(),
-        }
+        self.map_numerator(|n| n.forget_type())
     }
-    fn generate_extra_info(&self, export_path: PathBuf) -> ExtraInfo {
+    pub fn generate_extra_info(&self, export_path: PathBuf) -> ExtraInfo {
         ExtraInfo {
             orientations: self
                 .cff_expression

@@ -37,7 +37,7 @@ use integrands::*;
 use momentum::FourMomentum;
 use momentum::Helicity;
 use momentum::ThreeMomentum;
-use numerator::NumeratorEvaluatorOptions;
+use numerator::NumeratorSettings;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use std::fs::File;
@@ -248,6 +248,7 @@ impl Default for ParameterizationSettings {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Settings {
+    // Runtime settings
     #[serde(rename = "General")]
     pub general: GeneralSettings,
     #[serde(rename = "Integrand")]
@@ -506,8 +507,9 @@ impl Default for SubtractionSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {
+    // Generation Time settings
     pub compile_cff: bool,
-    pub numerator_settings: NumeratorEvaluatorOptions,
+    pub numerator_settings: NumeratorSettings,
     pub cpe_rounds_cff: Option<usize>,
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,

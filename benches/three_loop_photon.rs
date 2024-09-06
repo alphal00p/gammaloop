@@ -2,7 +2,7 @@ use std::{env, path::PathBuf};
 
 use _gammaloop::{
     graph::Graph,
-    numerator::{ContractionSettings, NumeratorEvaluatorOptions},
+    numerator::{ContractionSettings, NumeratorEvaluatorOptions, NumeratorSettings},
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
     ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,
@@ -17,7 +17,7 @@ fn load_helper(path: &str) -> Graph {
     amplitude.amplitude_graphs[0].graph.generate_cff();
     let export_settings = ExportSettings {
         compile_cff: true,
-        numerator_settings: NumeratorEvaluatorOptions::default(),
+        numerator_settings: NumeratorSettings::default(),
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: false,
         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
