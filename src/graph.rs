@@ -2001,24 +2001,15 @@ impl DerivedGraphData<Evaluators> {
         let num_iter =
             self.evaluate_numerator_orientations(graph, sample, lmb_specification, settings);
 
-        let max_orientations = 1;
-        let mut orient = 0;
         match num_iter {
             RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
                 if let Some(i) = s.next() {
                     let c = Complex::new_re(cff.next().unwrap());
                     let mut sum = i * &c;
-                    println!("cff{} * \t num{} \t= {}", c, i, sum);
                     for j in cff.by_ref() {
-                        orient += 1;
-                        if orient >= max_orientations {
-                            // break;
-                        }
                         let c = Complex::new_re(j);
                         let num = s.next().unwrap();
                         let summand = &c * num;
-
-                        println!("cff{} * \t num{} \t= {}", c, num, summand);
                         sum += summand;
                     }
                     sum *= prefactor;

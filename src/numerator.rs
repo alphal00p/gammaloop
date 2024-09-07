@@ -217,10 +217,6 @@ impl NumeratorEvaluateFloat for f64 {
             .enumerate()
             .for_each(|(i, c)| params[i] = c);
 
-        for p in params.iter() {
-            println!("{}", p);
-        }
-
         let mut i = 4 * emr.len();
 
         for p in polarizations {
@@ -1836,11 +1832,6 @@ impl EvaluatorSingle {
                     }
                 })
                 .collect_vec();
-
-            for p in params {
-                let a = p.replace_all_multiple(&reps);
-                debug!("{}:{}", p, a);
-            }
 
             let time = Instant::now();
             let orientation_replaced_net = self.tensor.replace_all_multiple(&reps);
