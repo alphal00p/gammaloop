@@ -261,8 +261,16 @@ class GammaLoopConfiguration(object):
                         setting_path, config_chunk[key], value)
             else:
                 if value is not None and config_chunk[key] is not None and type(value) is not type(config_chunk[key]):
-                    raise GammaLoopError(
-                        f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
+                    if isinstance(value, str) and isinstance(config_chunk[key], dict):
+                        try:
+                            value = eval(value)
+                        except:
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                        if not isinstance(value, dict):
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                    else:
+                        raise GammaLoopError(
+                            f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
                 config_chunk[key] = value
                 continue
 
