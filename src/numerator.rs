@@ -1460,12 +1460,12 @@ impl Numerator<Contracted> {
                     model_params_start,
                 },
             },
-            NumeratorEvaluatorOptions::Iterative {
+            NumeratorEvaluatorOptions::Iterative(IterativeOptions {
                 iterations,
                 n_cores,
                 verbose,
                 ..
-            } => Numerator {
+            }) => Numerator {
                 state: Evaluators {
                     orientated: Some(single.orientated_iterative(
                         graph,
@@ -1500,6 +1500,14 @@ impl Numerator<Contracted> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+pub struct IterativeOptions {
+    pub eval_options: EvaluatorOptions,
+    pub iterations: usize,
+    pub n_cores: usize,
+    pub verbose: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 #[serde(tag = "type")]
 pub enum NumeratorEvaluatorOptions {
     #[serde(rename = "Single")]
@@ -1507,12 +1515,7 @@ pub enum NumeratorEvaluatorOptions {
     #[serde(rename = "Joint")]
     Joint(EvaluatorOptions),
     #[serde(rename = "Iterative")]
-    Iterative {
-        eval_options: EvaluatorOptions,
-        iterations: usize,
-        n_cores: usize,
-        verbose: bool,
-    },
+    Iterative(IterativeOptions),
 }
 
 impl Default for NumeratorEvaluatorOptions {
@@ -1526,9 +1529,7 @@ impl NumeratorEvaluatorOptions {
         match self {
             NumeratorEvaluatorOptions::Single(options) => options.compile_options,
             NumeratorEvaluatorOptions::Joint(options) => options.compile_options,
-            NumeratorEvaluatorOptions::Iterative { eval_options, .. } => {
-                eval_options.compile_options
-            }
+            NumeratorEvaluatorOptions::Iterative(options) => options.eval_options.compile_options,
         }
     }
 
@@ -1536,7 +1537,7 @@ impl NumeratorEvaluatorOptions {
         match self {
             NumeratorEvaluatorOptions::Single(options) => options.cpe_rounds,
             NumeratorEvaluatorOptions::Joint(options) => options.cpe_rounds,
-            NumeratorEvaluatorOptions::Iterative { eval_options, .. } => eval_options.cpe_rounds,
+            NumeratorEvaluatorOptions::Iterative(options) => options.eval_options.cpe_rounds,
         }
     }
 }

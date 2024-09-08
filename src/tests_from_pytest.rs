@@ -15,9 +15,9 @@ use crate::graph::{
 use crate::model::{LorentzStructure, Model};
 use crate::momentum::{FourMomentum, Helicity, SignOrZero, ThreeMomentum};
 use crate::numerator::{
-    ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, Numerator,
-    NumeratorCompileOptions, NumeratorEvaluatorOptions, NumeratorSettings, NumeratorState,
-    PythonState, UnInit,
+    ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, IterativeOptions,
+    Numerator, NumeratorCompileOptions, NumeratorEvaluatorOptions, NumeratorSettings,
+    NumeratorState, PythonState, UnInit,
 };
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
@@ -33,6 +33,7 @@ use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use clarabel::solver::default;
 use colored::Colorize;
+use indexmap::set::Iter;
 use itertools::{FormatWith, Itertools};
 use symbolica::domains::rational::Rational;
 //use libc::__c_anonymous_ptrace_syscall_info_exit;
@@ -2052,15 +2053,16 @@ fn pytest_top_bubble() {
             .export()
     );
 
-    export_settings.numerator_settings.eval_settings = NumeratorEvaluatorOptions::Iterative {
-        eval_options: EvaluatorOptions {
-            cpe_rounds: Some(1),
-            compile_options: NumeratorCompileOptions::Compiled,
-        },
-        iterations: 1,
-        n_cores: 1,
-        verbose: false,
-    };
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+            eval_options: EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::Compiled,
+            },
+            iterations: 1,
+            n_cores: 1,
+            verbose: false,
+        });
 
     let mut graph_iterative_compiled = graph.clone().process_numerator(
         &model,
@@ -2093,15 +2095,16 @@ fn pytest_top_bubble() {
         path.clone(),
         &export_settings,
     );
-    export_settings.numerator_settings.eval_settings = NumeratorEvaluatorOptions::Iterative {
-        eval_options: EvaluatorOptions {
-            cpe_rounds: Some(1),
-            compile_options: NumeratorCompileOptions::NotCompiled,
-        },
-        iterations: 1,
-        n_cores: 1,
-        verbose: false,
-    };
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+            eval_options: EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::NotCompiled,
+            },
+            iterations: 1,
+            n_cores: 1,
+            verbose: false,
+        });
     let mut graph_iterative = graph_iterative_compiled.clone();
     graph_iterative
         .derived_data
@@ -2194,15 +2197,16 @@ fn pytest_physical_1L_6photons_generate() {
             .export()
     );
 
-    export_settings.numerator_settings.eval_settings = NumeratorEvaluatorOptions::Iterative {
-        eval_options: EvaluatorOptions {
-            cpe_rounds: Some(1),
-            compile_options: NumeratorCompileOptions::Compiled,
-        },
-        iterations: 1,
-        n_cores: 1,
-        verbose: false,
-    };
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+            eval_options: EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::Compiled,
+            },
+            iterations: 1,
+            n_cores: 1,
+            verbose: false,
+        });
 
     let mut graph_iterative_compiled = graph.clone().process_numerator(
         &model,
@@ -2235,15 +2239,16 @@ fn pytest_physical_1L_6photons_generate() {
         path.clone(),
         &export_settings,
     );
-    export_settings.numerator_settings.eval_settings = NumeratorEvaluatorOptions::Iterative {
-        eval_options: EvaluatorOptions {
-            cpe_rounds: Some(1),
-            compile_options: NumeratorCompileOptions::NotCompiled,
-        },
-        iterations: 1,
-        n_cores: 1,
-        verbose: false,
-    };
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+            eval_options: EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::NotCompiled,
+            },
+            iterations: 1,
+            n_cores: 1,
+            verbose: false,
+        });
     let mut graph_iterative = graph_iterative_compiled.clone();
     graph_iterative
         .derived_data
