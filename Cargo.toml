@@ -54,7 +54,7 @@ lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = 
     "f128_support",
 ] }
 hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
-rand = "0.8"
+rand = { version = "0.8", features = ["small_rng"] }
 rayon = "1.5"
 tabled = "0.7"
 enum_dispatch = "*"
@@ -117,11 +117,9 @@ higher_loops = []
 python_api = ["pyo3", "extension-module"]
 binary = []
 fail-on-warnings = []
-
-[profile.dev.package]
 # insta.opt-level = 3
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-# spenso = { path = "../../alphal00p/spenso" }
+# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+spenso = { path = "../../alphal00p/spenso" }

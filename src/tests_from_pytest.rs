@@ -13,7 +13,7 @@ use crate::graph::{
     LoopMomentumBasisSpecification, SerializableGraph, VertexInfo,
 };
 use crate::model::{LorentzStructure, Model};
-use crate::momentum::{FourMomentum, Helicity, SignOrZero, ThreeMomentum};
+use crate::momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, SignOrZero, ThreeMomentum};
 use crate::numerator::{
     ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, IterativeOptions,
     Numerator, NumeratorCompileOptions, NumeratorEvaluatorOptions, NumeratorSettings,
@@ -22,7 +22,10 @@ use crate::numerator::{
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
 use crate::tests::load_default_settings;
-use crate::utils::{approx_eq, approx_eq_res, assert_approx_eq, FloatLike, PrecisionUpgradable};
+use crate::utils::{
+    approx_eq, approx_eq_complex_res, approx_eq_res, assert_approx_eq, FloatLike,
+    PrecisionUpgradable,
+};
 use crate::utils::{f128, F};
 use crate::{cff, ltd, Externals, Integrand, RotationMethod};
 use crate::{
@@ -35,6 +38,8 @@ use clarabel::solver::default;
 use colored::Colorize;
 use indexmap::set::Iter;
 use itertools::{FormatWith, Itertools};
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
 use symbolica::domains::rational::Rational;
 //use libc::__c_anonymous_ptrace_syscall_info_exit;
 use core::f64;
@@ -49,7 +54,7 @@ use spenso::network::TensorNetwork;
 use spenso::structure::{IsAbstractSlot, Lorentz, RepName};
 use statrs::function::evaluate;
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -66,7 +71,7 @@ use symbolica::state::State;
 use typed_index_collections::TiVec;
 
 #[allow(unused)]
-const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-8);
+const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-11);
 
 #[allow(unused)]
 const PHASEONE: F<f64> = F(0.);
@@ -106,6 +111,54 @@ pub fn test_export_settings() -> ExportSettings {
             custom: vec![],
         },
     }
+}
+
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
+
+// Create small, cheap to initialize and fast RNG with a random seed.
+// The randomness is supplied by the operating system.
+
+pub fn sample_generator<T: FloatLike>(
+    seed: u64,
+    bare_graph: &BareGraph,
+    helicities: Option<Vec<Helicity>>,
+) -> DefaultSample<T>
+where
+    Standard: Distribution<T>,
+{
+    let mut rng = SmallRng::seed_from_u64(seed);
+
+    let n_loops = bare_graph.loop_momentum_basis.basis.len();
+    let n_indep_externals = bare_graph.external_edges.len() - 1;
+    let mut external_moms = vec![];
+    for _ in 0..n_indep_externals {
+        external_moms.push(FourMomentum::from_args(
+            F(rng.gen()),
+            F(rng.gen()),
+            F(rng.gen()),
+            F(rng.gen()),
+        ));
+    }
+
+    let mut loop_moms = vec![];
+
+    for _ in 0..n_loops {
+        loop_moms.push(ThreeMomentum::new(F(rng.gen()), F(rng.gen()), F(rng.gen())));
+    }
+
+    let jacobian = F(1.0);
+
+    let helicities = if let Some(hel) = helicities {
+        if hel.len() != n_indep_externals + 1 {
+            panic!("Helicities must have the same length as the number of external edges")
+        }
+        hel
+    } else {
+        vec![Helicity::Plus; n_indep_externals + 1]
+    };
+
+    DefaultSample::new(loop_moms, external_moms, jacobian, &helicities, bare_graph)
 }
 
 pub fn kinematics_builder(
@@ -202,9 +255,16 @@ pub fn load_amplitude_output(
     (model, amplitude, path)
 }
 
+pub enum SampleType<T: FloatLike> {
+    Random(u64),
+    Kinematic,
+    RandomWithHelicity(u64, Vec<Helicity>),
+    Custom(DefaultSample<T>),
+}
+
 pub struct AmplitudeCheck {
     pub name: &'static str,
-    pub sample: Option<DefaultSample<f64>>,
+    pub sample: SampleType<f64>,
     pub model_name: &'static str,
     pub n_edges: usize,
     pub n_external_connections: usize,
@@ -365,7 +425,16 @@ fn check_lmb_generation<N: NumeratorState>(
 fn check_sample(bare_graph: &BareGraph, amp_check: &AmplitudeCheck) -> DefaultSample<f64> {
     let n_loops = amp_check.n_edges - amp_check.n_vertices + 1; //circuit rank=n_loops
 
-    kinematics_builder(amp_check.n_external_connections - 1, n_loops, bare_graph)
+    match &amp_check.sample {
+        SampleType::Random(seed) => sample_generator(*seed, bare_graph, None),
+        SampleType::Kinematic => {
+            kinematics_builder(amp_check.n_external_connections - 1, n_loops, bare_graph)
+        }
+        SampleType::RandomWithHelicity(seed, helicities) => {
+            sample_generator(*seed, bare_graph, Some(helicities.clone()))
+        }
+        SampleType::Custom(sample) => sample.clone(),
+    }
 }
 
 #[allow(unused)]
@@ -383,7 +452,7 @@ fn compare_cff_to_ltd<T: FloatLike>(
     }
     let cff_res: Complex<F<T>> = graph.evaluate_cff_expression(sample, &default_settings);
     graph.generate_ltd();
-    let ltd_res = graph.evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms);
+    let ltd_res = graph.evaluate_ltd_expression(sample, &default_settings);
 
     let cff_norm = <Complex<F<T>> as Real>::norm(&cff_res).re;
     let cff_phase_actual = <Complex<F<T>> as SymbolicaComplex>::arg(&cff_res);
@@ -536,15 +605,9 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
     let mut graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    if let Some(sample) = &amp_check.sample {
-        compare_cff_to_ltd(sample, &mut graph, &amp_check)
-            .wrap_err("combined num f64 cff and ltd failed")
-            .unwrap();
-    } else {
-        compare_cff_to_ltd(&sample, &mut graph, &amp_check)
-            .wrap_err("combined num f64 cff and ltd failed")
-            .unwrap();
-    }
+    compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+        .wrap_err("combined num f64 cff and ltd failed")
+        .unwrap();
 
     graph
         .derived_data
@@ -553,15 +616,9 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
         .numerator
         .disable_combined();
 
-    if let Some(sample) = &amp_check.sample {
-        compare_cff_to_ltd(sample, &mut graph, &amp_check)
-            .wrap_err("separate num f64 cff and ltd failed")
-            .unwrap();
-    } else {
-        compare_cff_to_ltd(&sample, &mut graph, &amp_check)
-            .wrap_err("separate num f64 cff and ltd failed")
-            .unwrap();
-    }
+    compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+        .wrap_err("separate num f64 cff and ltd failed")
+        .unwrap();
 
     graph
         .derived_data
@@ -570,15 +627,9 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
         .numerator
         .enable_combined(None);
 
-    if let Some(sample) = &amp_check.sample {
-        compare_cff_to_ltd(&sample.higher_precision(), &mut graph, &amp_check)
-            .wrap_err("f128 cff and ltd failed")
-            .unwrap();
-    } else {
-        compare_cff_to_ltd(&sample, &mut graph, &amp_check)
-            .wrap_err("f128 cff and ltd failed")
-            .unwrap();
-    }
+    compare_cff_to_ltd(&sample.higher_precision(), &mut graph, &amp_check)
+        .wrap_err("f128 cff and ltd failed")
+        .unwrap();
 
     check_esurface_existance(
         &mut graph,
@@ -611,7 +662,7 @@ fn pytest_scalar_massless_triangle() {
     };
     let amp_check = AmplitudeCheck {
         name: "massless_scalar_triangle",
-        sample: Some(sample),
+        sample: SampleType::Custom(sample),
         model_name: "scalars",
         n_edges: 6,
         n_external_connections: 3,
@@ -638,7 +689,7 @@ fn pytest_scalar_fishnet_2x2() {
     let amp_check = AmplitudeCheck {
         name: "scalar_fishnet_2x2",
         model_name: "scalars",
-        sample: None,
+        sample: SampleType::Kinematic,
         n_edges: 16,
         n_vertices: 13,
         n_external_connections: 4,
@@ -666,7 +717,7 @@ fn pytest_scalar_sunrise() {
     let amp_check = AmplitudeCheck {
         name: "scalar_sunrise",
         model_name: "scalars",
-        sample: None,
+        sample: SampleType::Kinematic,
         n_edges: 5,
         n_vertices: 4,
         n_external_connections: 2,
@@ -696,7 +747,7 @@ fn pytest_scalar_fishnet_2x3() {
         model_name: "scalars",
         n_edges: 21,
         n_vertices: 16,
-        sample: None,
+        sample: SampleType::Kinematic,
         n_external_connections: 4,
         n_prop_groups: 17,
         n_cff_trees: 58670,
@@ -729,7 +780,7 @@ fn pytest_scalar_cube() {
         n_prop_groups: 12,
         n_cff_trees: 1862,
         n_esurfaces: 126,
-        sample: None,
+        sample: SampleType::Kinematic,
         n_existing_esurfaces: 0,
         n_expanded_terms: 10584,
         n_lmb: 384,
@@ -750,7 +801,7 @@ fn pytest_scalar_bubble() {
     let amp_check = AmplitudeCheck {
         name: "scalar_bubble",
         model_name: "scalars",
-        sample: None,
+        sample: SampleType::Kinematic,
         n_edges: 4,
         n_vertices: 4,
         n_external_connections: 2,
@@ -781,7 +832,7 @@ fn pytest_scalar_massless_box() {
         n_vertices: 8,
         n_external_connections: 4,
         n_prop_groups: 4,
-        sample: None,
+        sample: SampleType::Kinematic,
         n_cff_trees: 14,
         n_esurfaces: 12,
         n_existing_esurfaces: 0,
@@ -810,7 +861,7 @@ fn pytest_scalar_double_triangle() {
         n_prop_groups: 5,
         n_lmb: 8,
         n_cff_trees: 18,
-        sample: None,
+        sample: SampleType::Kinematic,
         n_esurfaces: 10,
         n_existing_esurfaces: 0,
         n_expanded_terms: 20,
@@ -833,7 +884,7 @@ fn pytest_scalar_mercedes() {
         model_name: "scalars",
         n_edges: 9,
         n_vertices: 7,
-        sample: None,
+        sample: SampleType::Kinematic,
         n_external_connections: 3,
         n_prop_groups: 6,
         n_lmb: 16,
@@ -863,7 +914,7 @@ fn pytest_scalar_triangle_box() {
         n_external_connections: 3,
         n_prop_groups: 6,
         n_lmb: 11,
-        sample: None,
+        sample: SampleType::Kinematic,
         n_cff_trees: 42,
         n_esurfaces: 18,
         n_existing_esurfaces: 0,
@@ -907,7 +958,7 @@ fn pytest_scalar_isopod() {
         model_name: "scalars",
         n_edges: 12,
         n_vertices: 10,
-        sample: Some(sample),
+        sample: SampleType::Custom(sample),
         n_external_connections: 3,
         n_prop_groups: 9,
         n_lmb: 41,
@@ -1420,139 +1471,88 @@ fn pytest_lbl_box() {
     );
 }
 
-#[test]
-#[allow(non_snake_case)]
-fn pytest_physical_3L_6photons_topology_A_inspect() {
-    init();
+// #[test]
+// #[allow(non_snake_case)]
+// fn pytest_physical_3L_6photons_topology_A_inspect() {//too slow
+//     init();
 
-    let (model, amplitude, path) = load_amplitude_output(
-        "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
-        true,
-    );
+//     let (model, amplitude, path) = load_amplitude_output(
+//         "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
+//         true,
+//     );
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+//     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_cff();
-    let export_settings = ExportSettings {
-        compile_cff: true,
-        numerator_settings: NumeratorSettings {
-            eval_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {
-                cpe_rounds: Some(1),
-                compile_options: NumeratorCompileOptions::Compiled,
-            }),
-            global_numerator: None,
-            gamma_algebra: GammaAlgebraMode::Concrete,
-        },
-        cpe_rounds_cff: Some(1),
-        compile_separate_orientations: false,
-        tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
-            target_omega: 1.0,
-            panic_on_fail: false,
-        },
-        gammaloop_compile_options: GammaloopCompileOptions {
-            inline_asm: env::var("NO_ASM").is_err(),
-            optimization_level: 3,
-            fast_math: true,
-            unsafe_math: true,
-            compiler: "g++".to_string(),
-            custom: vec![],
-        },
-    };
+//     graph.generate_cff();
+//     let export_settings = ExportSettings {
+//         compile_cff: true,
+//         numerator_settings: NumeratorSettings {
+//             eval_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+//                 cpe_rounds: Some(1),
+//                 compile_options: NumeratorCompileOptions::Compiled,
+//             }),
+//             global_numerator: None,
+//             gamma_algebra: GammaAlgebraMode::Concrete,
+//         },
+//         cpe_rounds_cff: Some(1),
+//         compile_separate_orientations: false,
+//         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
+//             target_omega: 1.0,
+//             panic_on_fail: false,
+//         },
+//         gammaloop_compile_options: GammaloopCompileOptions {
+//             inline_asm: env::var("NO_ASM").is_err(),
+//             optimization_level: 3,
+//             fast_math: true,
+//             unsafe_math: true,
+//             compiler: "g++".to_string(),
+//             custom: vec![],
+//         },
+//     };
 
-    let mut graph =
-        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+//     let mut graph =
+//         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    let sample = kinematics_builder(5, 3, &graph.bare_graph);
+//     let sample = kinematics_builder(5, 3, &graph.bare_graph);
 
-    let settings = load_default_settings();
+//     let settings = load_default_settings();
 
-    graph.evaluate_cff_expression(&sample, &settings);
-}
+//     graph.evaluate_cff_expression(&sample, &settings);
+// }
 
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_1L_6photons() {
     init();
-    let _ = load_default_settings();
-    let (model, amplitude, true_path) =
-        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
-    let export_settings = test_export_settings();
-    let amp = amplitude
-        .export(
-            true_path.to_str().as_ref().unwrap(),
-            &model,
-            &export_settings,
-        )
-        .unwrap();
-    // .map(|a| a.map(|ag| ag.forget_type()));
+    let amp_check = AmplitudeCheck {
+        name: "physical_1L_6photons",
+        model_name: "sm",
+        n_edges: 12,
+        n_vertices: 12,
+        sample: SampleType::Kinematic,
+        n_external_connections: 6,
+        n_prop_groups: 6,
+        n_lmb: 6,
+        n_cff_trees: 62,
+        n_esurfaces: 30,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 252,
+        n_terms_unfolded: 5,
+        cff_norm: None,
+        cff_phase: PHASEMINUSI,
 
-    let mut settings: Settings = Default::default();
-
-    match &mut settings.kinematics.externals {
-        Externals::Constant {
-            momenta,
-            helicities,
-        } => {
-            *momenta = vec![
-                [F(1.0), F(0.0), F(0.0), F(1.0)],
-                [F(1.0), F(0.0), F(0.0), F(-1.0)],
-                [F(-0.5), F(0.5), F(0.5), F(0.5)],
-                [F(-0.5), F(-0.5), F(-0.5), F(-0.5)],
-                [F(0.5), F(-0.5), F(-0.5), F(0.5)],
-                [F(0.5), F(0.5), F(0.5), F(-0.5)],
-            ];
-            *helicities = vec![
-                Helicity::Plus,
-                Helicity::Plus,
-                Helicity::Minus,
-                Helicity::Minus,
-                Helicity::Minus,
-                Helicity::Minus,
-            ];
-        }
-    }
-
-    settings.stability.rotation_axis = vec![
-        RotationMethod::Pi2Z,
-        RotationMethod::Pi2X,
-        RotationMethod::Pi2Y,
-    ];
-
-    let mut integrand = Integrand::GammaLoopIntegrand(
-        GammaLoopIntegrand::amplitude_integrand_constructor(amp, settings.clone()),
-    );
-    let point = vec![F(0.123), F(0.3242), F(0.4233)];
-
-    let _a = inspect(&settings, &mut integrand, point, &[], false, true, true);
-    // integrand.inspect();
-
-    // amp.generate_integrand(path_to_settings)
-
-    // let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    // graph.generate_cff();
-
-    // println!("{}", serde_yaml::to_string(&export_settings).unwrap());
-    // let mut graph = graph.process_numerator(
-    //     &model,
-    //     ContractionSettings::Normal,
-    //     true_path,
-    //     &export_settings,
-    // );
-
-    // let sample = kinematics_builder(5, 1);
-    // graph.evaluate_cff_expression(&sample, &default_settings);
-
-    // let eval: DerivedGraphData<PythonState> = graph.derived_data.unwrap().forget_type();
-
-    // let v = serde_json::to_string(&eval).unwrap();
-    // let u: DerivedGraphData<PythonState> = serde_json::from_str(&v).unwrap();
+        tolerance: LTD_COMPARISON_TOLERANCE,
+        n_existing_per_overlap: 1,
+        n_overlap_groups: 0,
+    };
+    check_amplitude(amp_check);
 }
 
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_2L_6photons() {
+    //slow
     init();
     let default_settings = load_default_settings();
     let (model, amplitude, path) =
@@ -1569,9 +1569,58 @@ fn pytest_physical_2L_6photons() {
     graph.evaluate_cff_expression(&sample, &default_settings);
 }
 
+// #[test] too slow for now
+// #[allow(non_snake_case)]
+// fn physical_1L_6photons_gamma() {
+//     init();
+//     let (model, amplitude, path) =
+//         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
+
+//     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+//     graph.generate_cff();
+
+//     let extra_info = graph
+//         .derived_data
+//         .as_ref()
+//         .unwrap()
+//         .generate_extra_info(path.clone());
+//     let contraction_settings = ContractionSettings::Normal;
+//     let export_settings = test_export_settings();
+
+//     let mut graph_no_gamma = graph.clone().process_numerator(
+//         &model,
+//         ContractionSettings::Normal,
+//         path,
+//         &export_settings,
+//     );
+//     let mut graph = graph
+//         .map_numerator_res(|n, g| {
+//             Result::<_, Report>::Ok(
+//                 n.from_graph(g)
+//                     .color_symplify()
+//                     .gamma_symplify()
+//                     .parse()
+//                     .contract::<Rational>(contraction_settings)?
+//                     .generate_evaluators(&model, g, &extra_info, &export_settings),
+//             )
+//         })
+//         .unwrap();
+
+//     let sample = kinematics_builder(2, 1, &graph.bare_graph);
+
+//     let default_settings = load_default_settings();
+//     let gamma_eval = graph.evaluate_cff_expression(&sample, &default_settings);
+//     let eval = graph_no_gamma.evaluate_cff_expression(&sample, &default_settings);
+
+//     approx_eq_complex_res(&gamma_eval, &eval, &LTD_COMPARISON_TOLERANCE)
+//         .wrap_err("Gamma algebra and spenso do not match")
+//         .unwrap();
+// }
+
 #[test]
 #[allow(non_snake_case)]
-fn physical_1L_6photons_gamma() {
+fn top_bubble_CP() {
     init();
     let (model, amplitude, path) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
@@ -1580,44 +1629,32 @@ fn physical_1L_6photons_gamma() {
 
     graph.generate_cff();
 
-    let extra_info = graph
-        .derived_data
-        .as_ref()
-        .unwrap()
-        .generate_extra_info(path.clone());
-    let contraction_settings = ContractionSettings::Normal;
-    let export_settings = test_export_settings();
+    let mut export_settings = test_export_settings();
+    export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Concrete;
 
-    let mut graph_no_gamma = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path,
-        &export_settings,
-    );
-    let mut graph = graph
-        .map_numerator_res(|n, g| {
-            Result::<_, Report>::Ok(
-                n.from_graph(g)
-                    .color_symplify()
-                    .gamma_symplify()
-                    .parse()
-                    .contract::<Rational>(contraction_settings)?
-                    .generate_evaluators(&model, g, &extra_info, &export_settings),
-            )
-        })
-        .unwrap();
+    let mut graph =
+        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    let sample = kinematics_builder(2, 1, &graph.bare_graph);
+    let sample: DefaultSample<f64> =
+        sample_generator(3, &graph.bare_graph, Some(vec![Helicity::Plus; 6]));
+
+    #[allow(non_snake_case)]
+    let sample_CP = sample_generator(3, &graph.bare_graph, Some(vec![Helicity::Minus; 6]));
 
     let default_settings = load_default_settings();
-    println!(
-        "Eval gamma{}",
-        graph.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval no gamma{}",
-        graph_no_gamma.evaluate_cff_expression(&sample, &default_settings)
-    );
+
+    let eval = graph.evaluate_cff_expression(&sample, &default_settings);
+
+    #[allow(non_snake_case)]
+    let eval_CP = graph.evaluate_cff_expression(&sample_CP, &default_settings);
+    // println!("{}", sample);
+    // println!("{}", sample_CP);
+    println!("{}", eval);
+    println!("{}", eval_CP);
+
+    approx_eq_complex_res(&eval, &eval_CP, &LTD_COMPARISON_TOLERANCE)
+        .wrap_err("CP conjugation does not match")
+        .unwrap();
 }
 
 #[test]
@@ -1630,81 +1667,56 @@ fn top_bubble_gamma() {
 
     graph.generate_cff();
 
-    let extra_info = graph
-        .derived_data
-        .as_ref()
-        .unwrap()
-        .generate_extra_info(path.clone());
-    let contraction_settings = ContractionSettings::Normal;
-    let export_settings = test_export_settings();
+    let mut export_settings = test_export_settings();
+    export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Concrete;
 
     let mut graph_no_gamma = graph.clone().process_numerator(
         &model,
         ContractionSettings::Normal,
-        path,
+        path.clone(),
         &export_settings,
     );
-    let mut graph = graph
-        .map_numerator_res(|n, g| {
-            Result::<_, Report>::Ok(
-                n.from_graph(g)
-                    .color_symplify()
-                    .gamma_symplify()
-                    .parse()
-                    .contract::<Rational>(contraction_settings)?
-                    .generate_evaluators(&model, g, &extra_info, &export_settings),
-            )
-        })
-        .unwrap();
 
-    let sample = kinematics_builder(2, 1, &graph.bare_graph);
+    export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Symbolic;
 
-    let default_settings = load_default_settings();
-    println!(
-        "Eval gamma{}",
-        graph.evaluate_cff_expression(&sample, &default_settings)
+    // fs::create_dir(path.join("sym")).unwrap();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.join("sym"),
+        &export_settings,
     );
-    println!(
-        "Eval no gamma{}",
-        graph_no_gamma.evaluate_cff_expression(&sample, &default_settings)
-    );
-}
 
-#[test]
-fn top_bubble_gamma_play() {
-    init();
-    let (model, amplitude, path) =
-        load_amplitude_output("TEST_AMPLITUDE_top_bubble/GL_OUTPUT", true);
+    for seed in 0..10 {
+        let sample = sample_generator(
+            seed,
+            &graph.bare_graph,
+            Some(vec![Helicity::Plus, Helicity::Plus]),
+        );
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+        let sample_cp = sample_generator(
+            seed,
+            &graph.bare_graph,
+            Some(vec![Helicity::Minus, Helicity::Minus]),
+        );
 
-    graph.generate_cff();
+        let default_settings = load_default_settings();
+        let gamma_eval = graph.evaluate_cff_expression(&sample, &default_settings);
+        let eval = graph_no_gamma.evaluate_cff_expression(&sample, &default_settings);
 
-    let extra_info = graph
-        .derived_data
-        .as_ref()
-        .unwrap()
-        .generate_extra_info(path.clone());
+        let gamma_eval_cp = graph.evaluate_cff_expression(&sample_cp, &default_settings);
+        let eval_cp = graph_no_gamma.evaluate_cff_expression(&sample_cp, &default_settings);
 
-    let export_settings = test_export_settings();
-
-    let graph = graph
-        .map_numerator_res(|n, g| {
-            Result::<_, Report>::Ok(
-                n.from_graph(g)
-                    .color_symplify()
-                    .gamma_symplify()
-                    .parse()
-                    .contract::<Rational>(ContractionSettings::Normal)?
-                    .generate_evaluators(&model, g, &extra_info, &export_settings),
-            )
-        })
-        .unwrap();
-
-    println!(
-        "Eval gamma{}",
-        graph.derived_data.as_ref().unwrap().numerator.export()
-    );
+        approx_eq_complex_res(&gamma_eval, &eval, &LTD_COMPARISON_TOLERANCE)
+            .wrap_err("Gamma algebra and spenso do not match")
+            .unwrap();
+        approx_eq_complex_res(&eval_cp, &eval, &LTD_COMPARISON_TOLERANCE)
+            .wrap_err("Gamma algebra and spenso do not match")
+            .unwrap();
+        approx_eq_complex_res(&gamma_eval, &gamma_eval_cp, &LTD_COMPARISON_TOLERANCE)
+            .wrap_err("Gamma algebra and spenso do not match")
+            .unwrap();
+    }
 }
 
 #[test]
@@ -1715,82 +1727,12 @@ fn scalar_box_to_triangle() {
         load_amplitude_output("TEST_AMPLITUDE_scalar_massless_box/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-    // println!("{:?}", graph.bare_graph.loop_momentum_basis);
-    let sample = kinematics_builder(3, 1, &graph.bare_graph);
-
     let mut export_settings = test_export_settings();
 
     graph.generate_cff();
-
     export_settings.numerator_settings.global_numerator= Some("Q(5,cind(0))*(Q(2,cind(0))+Q(6,cind(0)))-Q(5,cind(1))*Q(5,cind(1))-Q(5,cind(2))*Q(5,cind(2))-Q(5,cind(3))*Q(5,cind(3))".into());
 
-    // let atom = Atom::parse(
-    //     export_settings
-    //         .numerator_settings
-    //         .global_numerator
-    //         .as_ref()
-    //         .unwrap(),
-    // )
-    // .unwrap();
-
-    // let extra_info = graph
-    //     .derived_data
-    //     .as_ref()
-    //     .unwrap()
-    //     .generate_extra_info(path.clone());
-    // let graph = graph
-    //     .map_numerator_res(|n, g| {
-    //         Result::<_, Report>::Ok(
-    //             n.from_global(atom, g)
-    //                 .color_symplify()
-    //                 // .gamma_symplify()
-    //                 .parse()
-    //                 .contract::<Rational>(ContractionSettings::Normal)?
-    //                 .generate_evaluators(&model, g, &extra_info, &export_settings),
-    //         )
-    //     })
-    //     .unwrap();
-
-    // println!(
-    //     "Eval gamma{}",
-    //     graph.derived_data.as_ref().unwrap().numerator.export()
-    // );
-
-    let box_sample = DefaultSample {
-        loop_moms: vec![ThreeMomentum::from((
-            F(0.666666666666666),
-            F(0.6),
-            F(0.7142857142857143),
-        ))],
-        external_moms: vec![
-            // FourMomentum::from_args(
-            //     F(0.9148936170212766),
-            //     F(0.8947368421052632),
-            //     F(0.8260869565217391),
-            //     F(0.7931034482758621),
-            // ), //p2
-            FourMomentum::from_args(
-                F(0.9175257731958763),
-                F(0.9436619718309859),
-                F(0.9726027397260274),
-                F(0.9240506329113924),
-            ), //p3
-            FourMomentum::from_args(
-                F(-0.9175257731958763),
-                F(2.466584349436641),
-                F(2.510078640513423),
-                F(2.460248355019047),
-            ), //p4
-            FourMomentum::from_args(
-                F(-0.9534883720930233),
-                F(-0.6363636363636364),
-                F(-0.8461538461538462),
-                F(-0.7647058823529412),
-            ), //p1
-        ],
-        polarizations: vec![],
-        jacobian: F(1.0),
-    };
+    let box_sample = sample_generator(3, &graph.bare_graph, None);
 
     let mut box_graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
@@ -1805,19 +1747,12 @@ fn scalar_box_to_triangle() {
     let mut triangle_graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    println!("{}", box_graph.bare_graph.dot_lmb());
-    println!("{}", triangle_graph.bare_graph.dot_lmb());
-    println!("{}", box_graph.bare_graph.dot_internal());
-    println!("{}", triangle_graph.bare_graph.dot_internal());
-
     let box_energy = box_graph
         .bare_graph
         .compute_energy_product(&box_sample.loop_moms, &box_sample.external_moms);
 
-    println!(
-        "box: {}",
-        box_graph.evaluate_cff_expression(&box_sample, &default_settings) / box_energy
-    );
+    let normalized_box =
+        box_graph.evaluate_cff_expression(&box_sample, &default_settings) / box_energy;
 
     let triangle_sample = DefaultSample {
         loop_moms: box_sample.loop_moms,
@@ -1833,225 +1768,35 @@ fn scalar_box_to_triangle() {
         .bare_graph
         .compute_energy_product(&triangle_sample.loop_moms, &triangle_sample.external_moms);
 
-    println!(
-        "triangle: {}",
-        triangle_graph.evaluate_cff_expression(&triangle_sample, &default_settings)
-            / triangle_energy
-    );
+    let normalized_triangle = triangle_graph
+        .evaluate_cff_expression(&triangle_sample, &default_settings)
+        / triangle_energy;
+
+    approx_eq_complex_res(
+        &normalized_box,
+        &normalized_triangle,
+        &LTD_COMPARISON_TOLERANCE,
+    )
+    .wrap_err("Modified Box and triangle do not match")
+    .unwrap();
 }
 
-#[test]
-fn scalar_box_to_triangle2() {
-    init();
-    let default_settings = load_default_settings();
-    let box_sample = DefaultSample {
-        loop_moms: vec![ThreeMomentum::from((
-            F(0.666666666666666),
-            F(0.6),
-            F(0.7142857142857143),
-        ))],
-        external_moms: vec![
-            // FourMomentum::from_args(
-            //     F(0.9148936170212766),
-            //     F(0.8947368421052632),
-            //     F(0.8260869565217391),
-            //     F(0.7931034482758621),
-            // ), //p2
-            FourMomentum::from_args(
-                F(0.9175257731958763),
-                F(0.9436619718309859),
-                F(0.9726027397260274),
-                F(0.9240506329113924),
-            ), //p3
-            FourMomentum::from_args(
-                F(-0.9175257731958763),
-                F(2.466584349436641),
-                F(2.510078640513423),
-                F(2.460248355019047),
-            ), //p4
-            FourMomentum::from_args(
-                F(-0.9534883720930233),
-                F(-0.6363636363636364),
-                F(-0.8461538461538462),
-                F(-0.7647058823529412),
-            ), //p1
-        ],
-        polarizations: vec![],
-        jacobian: F(1.0),
-    };
-
-    let (model, amplitude, path) =
-        load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", true);
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-    graph.generate_cff();
-
-    let export_settings = test_export_settings();
-    let mut triangle_graph =
-        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
-
-    println!("{}", triangle_graph.bare_graph.dot_lmb());
-    println!("{}", triangle_graph.bare_graph.dot_internal());
-
-    let triangle_samplesum = DefaultSample {
-        loop_moms: box_sample.loop_moms,
-        external_moms: vec![
-            box_sample.external_moms[0],
-            box_sample.external_moms[2] + box_sample.external_moms[1],
-        ],
-        polarizations: vec![],
-        jacobian: F(1.0),
-    };
-
-    let k = SignOrZero::Plus;
-    let q1 = SignOrZero::Plus;
-    let q2 = SignOrZero::Plus;
-
-    let k1 = ThreeMomentum::from((F(0.666666666666666), F(0.6), F(0.7142857142857143)));
-    let p11 = FourMomentum::from_args(
-        F(-1.801686069851465),
-        F(-1.830220713073005),
-        F(-1.663924794359577),
-        F(-1.695542472666106),
-    );
-    let p21 = FourMomentum::from_args(
-        F(0.9148936170212766),
-        F(0.8947368421052632),
-        F(0.8260869565217391),
-        F(0.7931034482758621),
-    );
-    let p31 = FourMomentum::from_args(
-        F(0.8867924528301887),
-        F(0.9354838709677419),
-        F(0.8378378378378378),
-        F(0.9024390243902439),
-    );
-
-    let k2 = ThreeMomentum::from((
-        F(0.9354838709677419),
-        F(0.8378378378378378),
-        F(0.9024390243902439),
-    ));
-    let p32 = FourMomentum::from_args(
-        F(0.9175257731958763),
-        F(0.9436619718309859),
-        F(0.9726027397260274),
-        F(0.9240506329113924),
-    );
-    let p12 = FourMomentum::from_args(
-        F(-1.850110042858798),
-        F(-1.841967056576749),
-        F(-1.939815854480126),
-        F(-1.834498394105422),
-    );
-    let p22 = FourMomentum::from_args(
-        F(0.9325842696629213),
-        F(0.8983050847457627),
-        F(0.9672131147540984),
-        F(0.9104477611940299),
-    );
-
-    let triangle_sample1 = DefaultSample {
-        loop_moms: vec![k1],
-        external_moms: vec![
-            p31,  //p3
-            -p11, //-p1
-        ],
-        polarizations: vec![],
-        jacobian: F(1.0),
-    };
-
-    let triangle_sample2 = DefaultSample {
-        loop_moms: vec![k2],
-        external_moms: vec![
-            p32,  //-p1
-            -p12, //p3
-        ],
-        polarizations: vec![],
-        jacobian: F(1.0),
-    };
-
-    let energy_product1: f64 = triangle_graph
-        .bare_graph
-        .compute_energy_product(&triangle_sample1.loop_moms, &triangle_sample1.external_moms)
-        .0;
-
-    let energy_product2: f64 = triangle_graph
-        .bare_graph
-        .compute_energy_product(&triangle_sample2.loop_moms, &triangle_sample2.external_moms)
-        .0;
-
-    let tri1 = triangle_graph
-        .evaluate_cff_expression(&triangle_sample1, &default_settings)
-        .map(|f| f.0);
-    let tri2 = triangle_graph
-        .evaluate_cff_expression(&triangle_sample2, &default_settings)
-        .map(|f| f.0);
-
-    let lmb =
-        LoopMomentumBasisSpecification::Literal(&triangle_graph.bare_graph.loop_momentum_basis);
-    println!(
-        "triangle ratio: {}",
-        (tri1.norm() * energy_product2) / (tri2.norm() * energy_product1)
-    );
-    let tri1 = triangle_graph.evaluate_cff_orientations(&triangle_sample1, &lmb, &default_settings);
-
-    let tri2 = triangle_graph.evaluate_cff_orientations(&triangle_sample2, &lmb, &default_settings);
-
-    for (t1, t2) in tri1.iter().zip(tri2.iter()) {
-        println!("{} ", t1 / t2);
-    }
-
-    let target1 = [
-        -0.0004962347874508811,
-        -0.0004696509338127856,
-        -0.0010268972892201115,
-        -0.00030670598677475164,
-        -0.0003715822562444881,
-        -0.0001873279907247531,
-    ];
-
-    let target2 = [
-        -0.00017046598417070377,
-        -0.00016108164013724032,
-        -0.00031803014583603814,
-        -0.00011648230791729634,
-        -0.00013584377798650182,
-        -0.00007403476468519681,
-    ];
-
-    for (t1, t2) in target1.iter().zip(target2.iter()) {
-        println!(" target {} ", t1 / t2);
-    }
-}
-#[test]
-#[allow(non_snake_case)]
-fn pytest_top_bubble() {
-    init();
+pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
     let default_settings = load_default_settings();
     let (model, amplitude, path) =
-        load_amplitude_output("TEST_AMPLITUDE_top_bubble/GL_OUTPUT", true);
+        load_amplitude_output(&format!("TEST_AMPLITUDE_{amp_name}/GL_OUTPUT"), true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    // println!("{:?}", graph.bare_graph.loop_momentum_basis);
-    let sample = kinematics_builder(5, 1, &graph.bare_graph);
+    let externals = graph.bare_graph.external_edges.len() - 1;
+    let loops = graph.bare_graph.loop_momentum_basis.basis.len();
+
+    let sample = kinematics_builder(externals, loops, &graph.bare_graph);
 
     graph.generate_cff();
     let mut export_settings = test_export_settings();
 
     export_settings.gammaloop_compile_options.inline_asm = true;
-
-    println!(
-        "{}",
-        graph
-            .clone()
-            .apply_feynman_rules()
-            .derived_data
-            .unwrap()
-            .numerator
-            .export()
-    );
 
     export_settings.numerator_settings.eval_settings =
         NumeratorEvaluatorOptions::Iterative(IterativeOptions {
@@ -2129,973 +1874,98 @@ fn pytest_top_bubble() {
         .numerator
         .disable_compiled();
 
-    println!(
-        "Eval single{}",
-        graph_single.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval joint{}",
-        graph_joint.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval iterative{}",
-        graph_iterative.evaluate_cff_expression(&sample, &default_settings)
-    );
+    let eval_single = graph_single.evaluate_cff_expression(&sample, &default_settings);
+    let eval_joint = graph_joint.evaluate_cff_expression(&sample, &default_settings);
+    let eval_iter = graph_iterative.evaluate_cff_expression(&sample, &default_settings);
+    let eval_single_comp =
+        graph_single_compiled.evaluate_cff_expression(&sample, &default_settings);
+    let eval_joint_comp = graph_joint_compiled.evaluate_cff_expression(&sample, &default_settings);
+    let eval_iter_comp =
+        graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings);
 
-    println!(
-        "Eval single compiled{}",
-        graph_single_compiled.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval joint compiled{}",
-        graph_joint_compiled.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval iterative compiled{}",
-        graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings)
-    );
+    approx_eq_complex_res(&eval_single, &eval_joint, &LTD_COMPARISON_TOLERANCE)
+        .wrap_err("Single and joint evaluation differ in norm")?;
 
-    let a = &graph_iterative_compiled
-        .derived_data
-        .as_ref()
-        .unwrap()
-        .numerator
-        .state
-        .double_param_values;
+    approx_eq_complex_res(&eval_single, &eval_iter, &LTD_COMPARISON_TOLERANCE)
+        .wrap_err("Single and iterative evaluation differ in norm")?;
 
-    for p in a {
-        println!("{:?}", p);
-    }
+    approx_eq_complex_res(
+        &eval_single_comp,
+        &eval_joint_comp,
+        &LTD_COMPARISON_TOLERANCE,
+    )
+    .wrap_err("Single compiled and joint compiled evaluation differ in norm")?;
+
+    approx_eq_complex_res(
+        &eval_single_comp,
+        &eval_iter_comp,
+        &LTD_COMPARISON_TOLERANCE,
+    )
+    .wrap_err("Single compiled and iterative compiled evaluation differ in norm")?;
+
+    approx_eq_complex_res(&eval_single, &eval_single_comp, &LTD_COMPARISON_TOLERANCE)
+        .wrap_err("Single and Single compiled evaluation differ in norm")?;
+
+    Ok(())
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_top_bubble() {
+    init();
+    compare_numerator_evals("top_bubble")
+        .wrap_err("top bubble failure:")
+        .unwrap();
 }
 
 #[test]
 #[allow(non_snake_case)]
 fn pytest_physical_1L_6photons_generate() {
     init();
-    let mut default_settings = load_default_settings();
-    let (model, amplitude, path) =
-        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    // println!("{:?}", graph.bare_graph.loop_momentum_basis);
-    let sample = kinematics_builder(5, 1, &graph.bare_graph);
-
-    graph.generate_cff();
-    let mut export_settings = test_export_settings();
-
-    export_settings.gammaloop_compile_options.inline_asm = true;
-
-    println!(
-        "{}",
-        graph
-            .clone()
-            .apply_feynman_rules()
-            .derived_data
-            .unwrap()
-            .numerator
-            .export()
-    );
-
-    export_settings.numerator_settings.eval_settings =
-        NumeratorEvaluatorOptions::Iterative(IterativeOptions {
-            eval_options: EvaluatorOptions {
-                cpe_rounds: Some(1),
-                compile_options: NumeratorCompileOptions::Compiled,
-            },
-            iterations: 1,
-            n_cores: 1,
-            verbose: false,
-        });
-
-    let mut graph_iterative_compiled = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
-
-    export_settings.numerator_settings.eval_settings =
-        NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
-            cpe_rounds: Some(1),
-            compile_options: NumeratorCompileOptions::Compiled,
-        });
-
-    let mut graph_joint_compiled = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
-    export_settings.numerator_settings.eval_settings =
-        NumeratorEvaluatorOptions::Single(EvaluatorOptions {
-            cpe_rounds: Some(1),
-            compile_options: NumeratorCompileOptions::Compiled,
-        });
-
-    let mut graph_single_compiled = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
-    export_settings.numerator_settings.eval_settings =
-        NumeratorEvaluatorOptions::Iterative(IterativeOptions {
-            eval_options: EvaluatorOptions {
-                cpe_rounds: Some(1),
-                compile_options: NumeratorCompileOptions::NotCompiled,
-            },
-            iterations: 1,
-            n_cores: 1,
-            verbose: false,
-        });
-    let mut graph_iterative = graph_iterative_compiled.clone();
-    graph_iterative
-        .derived_data
-        .as_mut()
-        .unwrap()
-        .numerator
-        .disable_compiled();
-
-    let mut graph_joint = graph_joint_compiled.clone();
-    graph_joint
-        .derived_data
-        .as_mut()
-        .unwrap()
-        .numerator
-        .disable_compiled();
-
-    let mut graph_single = graph_single_compiled.clone();
-    graph_single
-        .derived_data
-        .as_mut()
-        .unwrap()
-        .numerator
-        .disable_compiled();
-
-    default_settings.general.force_orientations = Some(vec![0]);
-    println!(
-        "Eval single{}",
-        graph_single.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval joint{}",
-        graph_joint.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval iterative{}",
-        graph_iterative.evaluate_cff_expression(&sample, &default_settings)
-    );
-
-    default_settings.general.force_orientations = None;
-    println!(
-        "Eval single compiled{}",
-        graph_single_compiled.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval joint compiled{}",
-        graph_joint_compiled.evaluate_cff_expression(&sample, &default_settings)
-    );
-    println!(
-        "Eval iterative compiled{}",
-        graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings)
-    );
+    compare_numerator_evals("physical_1L_6photons")
+        .wrap_err("physical 1L photon failure:")
+        .unwrap();
 }
 
 #[test]
-fn gamma_symplify() {
-    // init();
-    let (_, amplitude, _) =
-        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
-
-    let graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    // graph.bare_graph.dot_internal_vertices()
-
-    let num = graph.apply_feynman_rules().derived_data.unwrap().numerator;
-
-    let mut a = num.color_symplify().state.expression;
-
-    println!("Before: {}", a);
-
-    a.0 = a.0.expand();
-
-    let pats = [(
-        Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
-        Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
-    )];
-    let reps: Vec<Replacement> = pats
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect();
-    a.replace_repeat_multiple(&reps);
-
-    let pats = vec![
-        (
-            Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
-            Pattern::parse("gamma_trace(aind(a__))").unwrap().into(),
-        ),
-    ];
-    let reps: Vec<Replacement> = pats
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect();
-    a.replace_repeat_multiple(&reps);
-
-    let pat = Pattern::parse("gamma_trace(a__)").unwrap();
-
-    let set = MatchSettings::default();
-    let cond = Condition::default();
-
-    let mut it = pat.pattern_match(a.0.as_view(), &cond, &set);
-
-    let mut max_nargs = 0;
-    while let Some(a) = it.next() {
-        for (_, v) in a.match_stack {
-            match v {
-                Match::Single(s) => {
-                    match s {
-                        AtomView::Fun(f) => {
-                            let a = f.get_nargs();
-                            if a > max_nargs {
-                                max_nargs = a;
-                            }
-                        }
-                        _ => {
-                            panic!("should be a function")
-                        }
-                    }
-                    print!("{}", s)
-                }
-                _ => panic!("should be a single match"),
-            }
-            println!();
-        }
-    }
-
-    let mut reps = vec![];
-    for n in 1..=max_nargs {
-        if n % 2 == 0 {
-            let mut sum = Atom::new_num(0);
-
-            // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
-            for j in 1..n {
-                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-
-                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-
-                let metric_builder = FunctionBuilder::new(State::get_symbol("g"));
-
-                let metric_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-
-                for k in 1..j {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-
-                for k in (j + 1)..n {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-
-                let metric = metric_builder
-                    .add_arg(
-                        &metric_builder_slots
-                            .add_args(&[
-                                &Atom::parse(&format!("a{}_", 0)).unwrap(),
-                                &Atom::parse(&format!("a{}_", j)).unwrap(),
-                            ])
-                            .finish(),
-                    )
-                    .finish();
-
-                let gamma = &gamma_chain_builder
-                    .add_arg(&gamma_chain_builder_slots.finish())
-                    .finish()
-                    * &metric;
-
-                if j % 2 == 0 {
-                    sum = &sum - &gamma;
-                } else {
-                    sum = &sum + &gamma;
-                }
-            }
-
-            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-            for k in 0..n {
-                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-            }
-            let a = gamma_chain_builder
-                .add_arg(&gamma_chain_builder_slots.finish())
-                .finish();
-
-            reps.push((a.into_pattern(), sum.into_pattern().into()));
-        } else {
-            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-            for k in 0..n {
-                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-            }
-            let a = gamma_chain_builder
-                .add_arg(&gamma_chain_builder_slots.finish())
-                .finish();
-            println!("{}", a);
-            reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
-        }
-    }
-
-    reps.push((
-        Pattern::parse("gamma_trace(aind())").unwrap(),
-        Pattern::parse("1").unwrap().into(),
-    ));
-
-    // Dd
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(a__),lord(b__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // Du
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(a__),loru(b__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // Uu
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(a__),loru(b__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // Ud
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(a__),lord(b__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-
-    // dD
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(b__),lord(a__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // uD
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(loru(b__),lord(a__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // uU
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(b__),loru(a__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // dU
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(lord(b__),loru(a__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-
-    let reps = reps
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect_vec();
-
-    a.replace_repeat_multiple(&reps);
-    a.0 = a.0.expand();
-
-    a.replace_repeat_multiple(&reps);
-    a.0 = a.0.factor();
-    println!("After: {}", a);
-    let tn = TensorNetwork::try_from(a.0.as_view())
-        .unwrap()
-        .to_fully_parametric();
-    println!("After parse: {}", tn.dot());
-}
-
-#[test]
-fn parse() {
-    init();
-    let expr = Atom::parse("64/729*ee^6*MT^6*Nc*ϵ(0,aind(lord(4,7)))*ϵ(1,aind(loru(4,7)))*ϵbar(2,aind(lord(4,8)))*ϵbar(3,aind(lord(4,9)))*ϵbar(4,aind(loru(4,9)))*ϵbar(5,aind(loru(4,8)))").unwrap();
-
-    let mut net = TensorNetwork::try_from(expr.as_view()).unwrap();
-    println!("{}", net.dot());
-
-    net.contract();
-
-    println!("{}", net.dot());
-
-    println!("{}", &net.graph.involution.len());
-
-    for (ni, i) in &net.graph.involution {
-        if &ni != i {
-            println!("internal");
-        } else {
-            println!("external");
-        }
-    }
-
-    // println!("{}", net.to_fully_parametric().result_tensor().unwrap());
-}
-
-#[test]
-fn tsgstg() {
-    let _ = load_default_settings();
-    let (_, amplitude, _) =
-        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
-
-    let graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    // graph.bare_graph.dot_internal_vertices()
-
-    let num = graph.apply_feynman_rules().derived_data.unwrap().numerator;
-
-    let mut a = num.color_symplify().state.expression;
-
-    println!("Before: {}", a);
-
-    a.0 = a.0.expand();
-
-    let number_terms = if let Atom::Add(a) = &a.0 {
-        a.get_nargs()
-    } else {
-        1
-    };
-    println!("Number of terms: {}", number_terms);
-
-    let pats = [(
-        Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
-        Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
-    )];
-    let reps: Vec<Replacement> = pats
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect();
-    a.replace_repeat_multiple(&reps);
-
-    let pats = vec![
-        (
-            Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
-            Pattern::parse("gamma_trace(aind(a__))").unwrap().into(),
-        ),
-    ];
-    let reps: Vec<Replacement> = pats
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect();
-    a.replace_repeat_multiple(&reps);
-
-    println!("After preprocessing: {}", a);
-
-    let pat = Pattern::parse("gamma_trace(a__)").unwrap();
-
-    let set = MatchSettings::default();
-    let cond = Condition::default();
-
-    let mut it = pat.pattern_match(a.0.as_view(), &cond, &set);
-
-    let mut max_nargs = 0;
-    while let Some(a) = it.next() {
-        for (_, v) in a.match_stack {
-            match v {
-                Match::Single(s) => {
-                    match s {
-                        AtomView::Fun(f) => {
-                            let a = f.get_nargs();
-                            if a > max_nargs {
-                                max_nargs = a;
-                            }
-                        }
-                        _ => {
-                            panic!("should be a function")
-                        }
-                    }
-                    // print!("{}", s)
-                }
-                _ => panic!("should be a single match"),
-            }
-            // println!();
-        }
-    }
-
-    let mut reps: Vec<(Pattern, PatternOrMap)> = vec![];
-    for n in 1..=max_nargs {
-        if n % 2 == 0 {
-            let mut sum = Atom::new_num(0);
-
-            // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
-            for j in 1..n {
-                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-
-                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-
-                let metric_builder = FunctionBuilder::new(State::get_symbol("g"));
-
-                let metric_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-
-                for k in 1..j {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-
-                for k in (j + 1)..n {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-
-                let metric = metric_builder
-                    .add_arg(
-                        &metric_builder_slots
-                            .add_args(&[
-                                &Atom::parse(&format!("a{}_", 0)).unwrap(),
-                                &Atom::parse(&format!("a{}_", j)).unwrap(),
-                            ])
-                            .finish(),
-                    )
-                    .finish();
-
-                let gamma = &gamma_chain_builder
-                    .add_arg(&gamma_chain_builder_slots.finish())
-                    .finish()
-                    * &metric;
-
-                if j % 2 == 0 {
-                    sum = &sum - &gamma;
-                } else {
-                    sum = &sum + &gamma;
-                }
-            }
-
-            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-            for k in 0..n {
-                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-            }
-            let a = gamma_chain_builder
-                .add_arg(&gamma_chain_builder_slots.finish())
-                .finish();
-
-            reps.push((a.into_pattern(), sum.into_pattern().into()));
-        } else {
-            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-            for k in 0..n {
-                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-            }
-            let a = gamma_chain_builder
-                .add_arg(&gamma_chain_builder_slots.finish())
-                .finish();
-            // println!("{}", a);
-            reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
-        }
-    }
-
-    reps.push((
-        Pattern::parse("gamma_trace(aind())").unwrap(),
-        Pattern::parse("1").unwrap().into(),
-    ));
-
-    // Dd
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(a__),lord(b__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // Du
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(a__),loru(b__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // Uu
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(a__),loru(b__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // Ud
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(a__),lord(b__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-
-    // dD
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(lord(b__),lord(a__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // uD
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,loru(a__),e___))*g(aind(loru(b__),lord(a__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // uU
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(loru(b__),loru(a__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,loru(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-    // dU
-    reps.push((
-        Pattern::parse("f_(i___,aind(o___,lord(a__),e___))*g(aind(lord(b__),loru(a__)))").unwrap(),
-        Pattern::parse("f_(i___,aind(o___,lord(b__),e___))")
-            .unwrap()
-            .into(),
-    ));
-
-    let reps = reps
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect_vec();
-
-    let time = Instant::now();
-    a.replace_repeat_multiple(&reps);
-    a.0 = a.0.expand();
-
-    a.replace_repeat_multiple(&reps);
-
-    println!("Time: {}", time.elapsed().as_secs_f64());
-
-    let number_terms = if let Atom::Add(a) = &a.0 {
-        a.get_nargs()
-    } else {
-        1
-    };
-    println!("Number of terms: {}", number_terms);
-
-    // println!("After: {}", a);
-}
-
-#[test]
-fn tsgstrstg() {
-    let _ = load_default_settings();
-    let (_, amplitude, _) =
-        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
-
-    let graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    // graph.bare_graph.dot_internal_vertices()
-
-    let num = graph.apply_feynman_rules().derived_data.unwrap().numerator;
-
-    let mut a = num.color_symplify().state.expression;
-
-    println!("Before: {}", a);
-
-    a.0 = a.0.expand();
-
-    let number_terms = if let Atom::Add(a) = &a.0 {
-        a.get_nargs()
-    } else {
-        1
-    };
-    println!("Number of terms: {}", number_terms);
-
-    let pats = [(
-        Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
-        Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
-    )];
-    let reps: Vec<Replacement> = pats
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect();
-    a.replace_repeat_multiple(&reps);
-
-    let pats = vec![
-        (
-            Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-            Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))")
-                .unwrap()
-                .into(),
-        ),
-        (
-            Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
-            Pattern::parse("gamma_trace(aind(a__))").unwrap().into(),
-        ),
-    ];
-    let reps: Vec<Replacement> = pats
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect();
-    a.replace_repeat_multiple(&reps);
-
-    println!("After preprocessing: {}", a);
-
-    let pat = Pattern::parse("gamma_trace(a__)").unwrap();
-
-    let set = MatchSettings::default();
-    let cond = Condition::default();
-
-    let mut it = pat.pattern_match(a.0.as_view(), &cond, &set);
-
-    let mut max_nargs = 0;
-    while let Some(a) = it.next() {
-        for (_, v) in a.match_stack {
-            match v {
-                Match::Single(s) => {
-                    match s {
-                        AtomView::Fun(f) => {
-                            let a = f.get_nargs();
-                            if a > max_nargs {
-                                max_nargs = a;
-                            }
-                        }
-                        _ => {
-                            panic!("should be a function")
-                        }
-                    }
-                    // print!("{}", s)
-                }
-                _ => panic!("should be a single match"),
-            }
-            // println!();
-        }
-    }
-
-    let mut reps = vec![];
-    for n in 1..=max_nargs {
-        if n % 2 == 0 {
-            let mut sum = Atom::new_num(0);
-
-            // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
-            for j in 1..n {
-                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-
-                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-
-                let metric_builder = FunctionBuilder::new(State::get_symbol("g"));
-
-                let metric_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-
-                for k in 1..j {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-
-                for k in (j + 1)..n {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-
-                let metric = metric_builder
-                    .add_arg(
-                        &metric_builder_slots
-                            .add_args(&[
-                                &Atom::parse(&format!("a{}_", 0)).unwrap(),
-                                &Atom::parse(&format!("a{}_", j)).unwrap(),
-                            ])
-                            .finish(),
-                    )
-                    .finish();
-
-                let gamma = &gamma_chain_builder
-                    .add_arg(&gamma_chain_builder_slots.finish())
-                    .finish()
-                    * &metric;
-
-                if j % 2 == 0 {
-                    sum = &sum - &gamma;
-                } else {
-                    sum = &sum + &gamma;
-                }
-            }
-
-            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-            for k in 0..n {
-                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-            }
-            let a = gamma_chain_builder
-                .add_arg(&gamma_chain_builder_slots.finish())
-                .finish();
-
-            reps.push((a.into_pattern(), sum.into_pattern().into()));
-        } else {
-            let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-            let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
-            for k in 0..n {
-                let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-            }
-            let a = gamma_chain_builder
-                .add_arg(&gamma_chain_builder_slots.finish())
-                .finish();
-            // println!("{}", a);
-            reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
-        }
-    }
-
-    reps.push((
-        Pattern::parse("gamma_trace(aind())").unwrap(),
-        Pattern::parse("1").unwrap().into(),
-    ));
-
-    // Dd
-    reps.push((
-        Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),lord(b__)))").unwrap(),
-        Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-    ));
-    // Du
-    reps.push((
-        Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),loru(b__)))").unwrap(),
-        Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-    ));
-    // Uu
-    reps.push((
-        Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),loru(b__)))").unwrap(),
-        Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-    ));
-    // Ud
-    reps.push((
-        Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),lord(b__)))").unwrap(),
-        Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-    ));
-
-    // dD
-    reps.push((
-        Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(b__),lord(a__)))").unwrap(),
-        Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-    ));
-    // uD
-    reps.push((
-        Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(loru(b__),lord(a__)))").unwrap(),
-        Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-    ));
-    // uU
-    reps.push((
-        Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(b__),loru(a__)))").unwrap(),
-        Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-    ));
-    // dU
-    reps.push((
-        Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(lord(b__),loru(a__)))").unwrap(),
-        Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-    ));
-
-    let reps = reps
-        .iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-        .collect_vec();
-
-    let time = Instant::now();
-    a.replace_repeat_multiple(&reps);
-    a.0 = a.0.expand();
-
-    a.replace_repeat_multiple(&reps);
-
-    println!("Time: {}", time.elapsed().as_secs_f64());
-
-    let number_terms = if let Atom::Add(a) = &a.0 {
-        a.get_nargs()
-    } else {
-        1
-    };
-    println!("Number of terms: {}", number_terms);
-
-    // println!("After: {}", a);
-}
-
-#[test]
-fn srtrst() {
-    let gl_a = Complex::new(0.000013469, -0.000022098);
+fn ratio_compare() {
+    let gl_a = Complex::new(-3.3669e-6, 1.707e-7);
     let target_a = Complex::new(-1.748_314_585_608_997_2e-7, 7.660_134_793_988_562e-7);
 
-    let gl_b = Complex::new(0.000016622, 3.5895e-6);
+    let gl_b = Complex::new(-3.457e-7, 8.7e-9);
     let target_b = Complex::new(-6.836_310_962_511_977e-7, 6.148_816_685_390_842e-7);
 
     println!("{}", gl_a.norm() / target_a.norm());
     println!("{}", gl_b.norm() / target_b.norm());
+
+    let a = 1.7501349798028542e2;
+    let b = 4.375337449507134e1;
+
+    println!("{}", a / b);
 }
+
+// #[test]
+// fn yaml_settings() {
+//     let numerator_settings = NumeratorSettings {
+//         eval_settings: NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+//             eval_options: EvaluatorOptions {
+//                 compile_options: NumeratorCompileOptions::Compiled,
+//                 cpe_rounds: Some(1),
+//             },
+//             iterations: 1,
+//             n_cores: 1,
+//             verbose: false,
+//         }),
+//         global_numerator: None,
+//         gamma_algebra: GammaAlgebraMode::Concrete,
+//     };
+
+//     let externals = vec![
+//         ExternalMomenta::Dependent(Dep::Dep),
+//         ExternalMomenta::Independent([0, 1, 2, 3]),
+//     ];
+
+//     let yaml = serde_yaml::to_string(&externals).unwrap();
+//     println!("{}", yaml);
+// }

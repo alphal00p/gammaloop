@@ -15,6 +15,7 @@ use rug::float::Constant;
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Serialize};
+use spenso::complex::SymbolicaComplex;
 use spenso::{contraction::{RefOne, RefZero},upgrading_arithmetic:: TrySmallestUpgrade,complex::{R,Complex}};
 use symbolica::domains::float::{
     ConstructibleFloat, RealNumberLike, NumericalFloatLike, SingleFloat,
@@ -810,6 +811,21 @@ impl<T:FloatLike> TrySmallestUpgrade<F<T>> for F<T> {
         Some(std::borrow::Cow::Borrowed(self))
     }
 }
+
+
+impl<T:FloatLike> TrySmallestUpgrade<F<T>> for Complex<F<T>> {
+    type LCM = Complex<F<T>>;
+    fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
+        Some(std::borrow::Cow::Borrowed(self))
+    }
+}
+
+// impl<T:FloatLike> TrySmallestUpgrade<Complex<F<T>>> for F<T> {
+//     type LCM = Complex<F<T>>;
+//     fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
+//         Some(std::borrow::Cow::Borrowed(self))
+//     }
+// }
 
 impl<'a,T:FloatLike> From<&'a Rational> for F<T>{
     fn from(x: &'a Rational) -> Self {
@@ -1965,6 +1981,25 @@ pub fn approx_eq_res<T: FloatLike>(res: &F<T>, target: &F<T>, tolerance: &F<T>)-
             res, target, tolerance
         ))
     }
+}
+
+
+
+pub fn approx_eq_complex_res<T: FloatLike>(res: &Complex<F<T>>, target: &Complex<F<T>>, tolerance: &F<T>)->Result<()>{
+    if !approx_eq(&res.norm().re,& target.norm().re, tolerance) {
+        return Err(eyre!(
+            "Norms are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
+            &res.norm().re, target.norm().re, tolerance
+        ))
+    }
+    if !approx_eq(&res.arg(),& target.arg(), tolerance)  {
+        return  Err(eyre!(
+            "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
+            res.arg(), target.arg(),target.arg()-res.arg(), tolerance
+        ))
+    } 
+        Ok(())
+    
 }
 #[allow(unused)]
 pub fn one_loop_eval_e_surf<T: FloatLike>(

@@ -2158,7 +2158,6 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=master#f0ba1498dfa37d975252d9d6ecb52b57e7f09f14"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2172,6 +2171,7 @@ dependencies = [
  "disjoint_impls",
  "duplicate",
  "enum-try-as-inner",
+ "env_logger",
  "flexi_logger",
  "gat-lending-iterator",
  "indexmap",

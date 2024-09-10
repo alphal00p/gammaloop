@@ -2,6 +2,7 @@
 //! amplitudes and Local Unitarity crosssections.
 
 use core::panic;
+use std::fmt::Display;
 use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
@@ -122,11 +123,8 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let channels_lmbs = channels.iter().map(|&i| &lmb_list[i]);
 
         let rep3d = if settings.general.use_ltd {
-            self.get_graph().evaluate_ltd_expression_in_lmb(
-                &sample.loop_moms,
-                &sample.external_moms,
-                lmb,
-            )
+            self.get_mut_graph()
+                .evaluate_ltd_expression_in_lmb(sample, lmb, settings)
         } else {
             self.get_mut_graph().evaluate_cff_expression_in_lmb(
                 sample,
@@ -220,8 +218,8 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let zero_builder = &sample.loop_moms[0].px;
 
         let rep3d = if settings.general.use_ltd {
-            self.get_graph()
-                .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
+            self.get_mut_graph()
+                .evaluate_ltd_expression(sample, settings)
         } else {
             self.get_mut_graph()
                 .evaluate_cff_expression(sample, settings)
@@ -264,8 +262,8 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let one = sample.one();
 
         let rep3d = if settings.general.use_ltd {
-            self.get_graph()
-                .evaluate_ltd_expression(&sample.loop_moms, &sample.external_moms)
+            self.get_mut_graph()
+                .evaluate_ltd_expression(sample, settings)
         } else {
             self.get_mut_graph()
                 .evaluate_cff_expression(sample, settings)
@@ -877,7 +875,7 @@ impl GammaLoopIntegrand {
                     DiscreteGraphSamplingSettings::TropicalSampling(tropical_sampling_settings) => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
                         let (external_moms, pdf) =
-                            self.settings.kinematics.externals.get_externals(xs);
+                            self.settings.kinematics.externals.get_indep_externals(xs);
 
                         let graph = match &self.graph_integrands {
                             GraphIntegrands::Amplitude(graphs) => &graphs[graph_id].graph,
@@ -972,7 +970,7 @@ impl GammaLoopIntegrand {
     /// Default parametrize is basically everything except tropical sampling.
     #[inline]
     fn default_parametrize(&self, xs: &[F<f64>], graph_id: usize) -> DefaultSample<f64> {
-        let (external_moms, pdf) = self.settings.kinematics.externals.get_externals(xs);
+        let (external_moms, pdf) = self.settings.kinematics.externals.get_indep_externals(xs);
 
         let helicities = self.settings.kinematics.externals.get_helicities();
         let (loop_moms_vec, param_jacobian) = global_parameterize(
@@ -1113,7 +1111,7 @@ impl GammaLoopIntegrand {
         // for amplitudes we can construct counterterms beforehand if external momenta are constant
         if let Externals::Constant { .. } = settings.kinematics.externals {
             let dummy = [];
-            let (external_moms, _) = settings.kinematics.externals.get_externals(&dummy);
+            let (external_moms, _) = settings.kinematics.externals.get_indep_externals(&dummy);
 
             for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
                 let graph = &mut amplitude_graph.graph;
@@ -1326,6 +1324,25 @@ pub struct DefaultSample<T: FloatLike> {
     pub external_moms: Vec<FourMomentum<F<T>>>,
     pub polarizations: Vec<Polarization<Complex<F<T>>>>,
     pub jacobian: F<f64>,
+}
+
+impl<T: FloatLike> Display for DefaultSample<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Sample")?;
+        write!(f, "\n\tloop momenta: ")?;
+        for (index, loop_mom) in self.loop_moms.iter().enumerate() {
+            write!(f, "\n\t\tloop momentum {}: {}", index, loop_mom)?;
+        }
+        write!(f, "\n\texternal momenta: ")?;
+        for (index, external_mom) in self.external_moms.iter().enumerate() {
+            write!(f, "\n\t\texternal momentum {}: {}", index, external_mom)?;
+        }
+        write!(f, "\n\tpolarizations: ")?;
+        for (index, polarization) in self.polarizations.iter().enumerate() {
+            write!(f, "\n\t\tpolarization {}: {}", index, polarization)?;
+        }
+        write!(f, "\n\tjacobian: {:+e}", self.jacobian)
+    }
 }
 
 impl<T: FloatLike> DefaultSample<T> {

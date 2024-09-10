@@ -34,6 +34,8 @@ use colored::Colorize;
 use eyre::WrapErr;
 
 use integrands::*;
+use momentum::Dep;
+use momentum::ExternalMomenta;
 use momentum::FourMomentum;
 use momentum::Helicity;
 use momentum::ThreeMomentum;
@@ -374,31 +376,97 @@ pub enum Precision {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "type", content = "data")]
+#[serde(try_from = "ExternalsShadow")]
 pub enum Externals {
-    #[serde(rename = "constant")]
     Constant {
-        momenta: Vec<[F<f64>; 4]>,
+        momenta: Vec<ExternalMomenta<F<f64>>>,
         helicities: Vec<Helicity>,
     },
     // add different type of pdfs here when needed
 }
 
+// The shadow type only has to implement Deserialize
+#[derive(Deserialize)]
+#[serde(tag = "type", content = "data")]
+enum ExternalsShadow {
+    #[serde(rename = "constant")]
+    Constant {
+        momenta: Vec<ExternalMomenta<F<f64>>>,
+        helicities: Vec<Helicity>,
+    },
+}
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ExternalsValidationError {
+    #[error("There should be exactly one dependent external momentum")]
+    WrongNumberOfDependentMomenta,
+}
+
+impl TryFrom<ExternalsShadow> for Externals {
+    type Error = ExternalsValidationError;
+    fn try_from(shadow: ExternalsShadow) -> Result<Self, Self::Error> {
+        let mut value = match shadow {
+            ExternalsShadow::Constant {
+                momenta,
+                helicities,
+            } => Externals::Constant {
+                momenta,
+                helicities,
+            },
+        };
+        value.set_dependent_at_end()?;
+        Ok(value)
+    }
+}
+
 impl Externals {
+    pub fn set_dependent_at_end(&mut self) -> Result<(), ExternalsValidationError> {
+        match self {
+            Externals::Constant { momenta, .. } => {
+                let mut sum = FourMomentum::from([F(0.0); 4]);
+                let mut pos_dep = 0;
+                let mut n_dep = 0;
+                for (i, m) in momenta.iter().enumerate() {
+                    if let Ok(a) = FourMomentum::try_from(*m) {
+                        sum += a;
+                    } else {
+                        pos_dep = i;
+                        n_dep += 1;
+                    }
+                }
+                if n_dep == 1 {
+                    momenta[pos_dep] = sum.into();
+                    let len = momenta.len();
+                    momenta[len - 1] = ExternalMomenta::Dependent(Dep::Dep);
+                    Ok(())
+                } else if n_dep == 0 {
+                    momenta.push(ExternalMomenta::Dependent(Dep::Dep));
+                    Ok(())
+                } else {
+                    Err(ExternalsValidationError::WrongNumberOfDependentMomenta)
+                }
+            }
+        }
+    }
+
     #[allow(unused_variables)]
     #[inline]
-    pub fn get_externals(&self, x_space_point: &[F<f64>]) -> (Vec<FourMomentum<F<f64>>>, F<f64>) {
+    pub fn get_indep_externals(
+        &self,
+        x_space_point: &[F<f64>],
+    ) -> (Vec<FourMomentum<F<f64>>>, F<f64>) {
         match self {
             Externals::Constant {
                 momenta,
                 helicities,
-            } => (
-                momenta
+            } => {
+                let momenta: Vec<FourMomentum<_>> = momenta
                     .iter()
-                    .map(|[e0, e1, e2, e3]| FourMomentum::from_args(*e0, *e1, *e2, *e3))
-                    .collect(),
-                F(1.0),
-            ),
+                    .flat_map(|e| FourMomentum::try_from(*e))
+                    .collect();
+                (momenta, F(1.0))
+            }
         }
     }
 
@@ -412,11 +480,8 @@ impl Externals {
 impl Default for Externals {
     fn default() -> Self {
         Externals::Constant {
-            momenta: vec![
-                [F(2.0), F(2.0), F(3.0), F(4.0)],
-                [F(1.0), F(2.0), F(9.0), F(3.0)],
-            ],
-            helicities: vec![Helicity::Plus, Helicity::Minus],
+            momenta: vec![],
+            helicities: vec![],
         }
     }
 }

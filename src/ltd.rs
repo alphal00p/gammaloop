@@ -1,16 +1,22 @@
 use core::panic;
 
 use crate::{
+    gammaloop_integrand::DefaultSample,
     graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
-    momentum::{Energy, FourMomentum, Signature, ThreeMomentum},
-    numerator::NumeratorState,
+    momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
+    numerator::{AtomStructure, Evaluate, Evaluators, Numerator, NumeratorState},
     utils::{FloatLike, F},
+    Settings,
 };
 use bincode::{Decode, Encode};
 use itertools::Itertools;
 use log::debug;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
+use spenso::{
+    arithmetic::ScalarMul, complex::Complex, data::DataTensor, structure::ScalarTensor,
+    upgrading_arithmetic::FallibleAdd,
+};
 use symbolica::domains::float::{NumericalFloatLike, Real};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -424,7 +430,10 @@ impl LTDTerm {
         external_moms: &[FourMomentum<F<T>>],
         emr: &[ThreeMomentum<F<T>>],
         graph: &BareGraph,
-    ) -> F<T> {
+        polarizations: &[Polarization<Complex<F<T>>>],
+        num: &mut Numerator<Evaluators>,
+        setting: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         // compute on shell energies of the momenta in associated_lmb
 
         let zero = external_moms[0].temporal.value.zero();
@@ -472,8 +481,9 @@ impl LTDTerm {
                 }
             }
         }
+        let num = num.evaluate_single(&edge_momenta_of_associated_lmb, polarizations, setting);
 
-        inv_res.inv() * energy_product
+        num.scalar_mul(&(inv_res.inv() * energy_product)).unwrap()
     }
 }
 
@@ -485,35 +495,55 @@ pub struct LTDExpression {
 impl LTDExpression {
     pub fn evaluate<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        sample: &DefaultSample<T>,
         graph: &BareGraph,
-    ) -> F<T> {
-        let zero = external_moms[0].temporal.value.zero();
-        let emr = graph.compute_emr(loop_moms, external_moms);
+        num: &mut Numerator<Evaluators>,
+        setting: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let zero = sample.external_moms[0].temporal.value.zero();
+        let emr = graph.compute_emr(&sample.loop_moms, &sample.external_moms);
 
         self.terms
             .iter()
-            .map(|term| term.evaluate(external_moms, &emr, graph))
-            .reduce(|acc, e| acc + &e)
-            .unwrap_or(zero.clone())
+            .map(|term| {
+                term.evaluate(
+                    &sample.external_moms,
+                    &emr,
+                    graph,
+                    &sample.polarizations,
+                    num,
+                    setting,
+                )
+            })
+            .reduce(|acc, e| acc.add_fallible(&e).unwrap())
+            .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
     }
 
     pub fn evaluate_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        sample: &DefaultSample<T>,
         graph: &BareGraph,
         lmb: &LoopMomentumBasis,
-    ) -> F<T> {
-        let zero = external_moms[0].temporal.value.zero();
-        let emr = graph.compute_emr_in_lmb(loop_moms, external_moms, lmb);
+        num: &mut Numerator<Evaluators>,
+        setting: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let zero = sample.external_moms[0].temporal.value.zero();
+        let emr = graph.compute_emr_in_lmb(&sample.loop_moms, &sample.external_moms, lmb);
 
         self.terms
             .iter()
-            .map(|term| term.evaluate(external_moms, &emr, graph))
-            .reduce(|acc, e| acc + &e)
-            .unwrap_or(zero.clone())
+            .map(|term| {
+                term.evaluate(
+                    &sample.external_moms,
+                    &emr,
+                    graph,
+                    &sample.polarizations,
+                    num,
+                    setting,
+                )
+            })
+            .reduce(|acc, e| acc.add_fallible(&e).unwrap())
+            .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
     }
 }
 

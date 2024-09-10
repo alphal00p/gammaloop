@@ -498,12 +498,14 @@ impl TypedNumeratorState for UnInit {
 
 impl Numerator<UnInit> {
     pub fn from_graph(self, graph: &mut BareGraph) -> Numerator<AppliedFeynmanRule> {
+        debug!("applying feynman rules ");
         Numerator {
             state: AppliedFeynmanRule::from_graph(graph),
         }
     }
 
     pub fn from_global(self, global: Atom, _graph: &BareGraph) -> Numerator<Global> {
+        debug!("setting global numerator");
         Numerator {
             state: Global::new(global.into()),
         }
@@ -650,6 +652,7 @@ impl ExpressionState for NonLocal {
 
 impl Numerator<Global> {
     pub fn color_symplify(self) -> Numerator<ColorSymplified> {
+        debug!("color symplifying global numerator");
         Numerator {
             state: ColorSymplified::color_symplify(self.state),
         }
@@ -780,6 +783,7 @@ impl AppliedFeynmanRule {
 
 impl Numerator<AppliedFeynmanRule> {
     pub fn color_symplify(self) -> Numerator<ColorSymplified> {
+        debug!("color symplifying local numerator");
         Numerator {
             state: ColorSymplified::color_symplify(self.state),
         }
@@ -1037,7 +1041,7 @@ impl ColorSymplified {
 
         reps.push((
             Pattern::parse("gamma_trace(aind())").unwrap(),
-            Pattern::parse("1").unwrap().into(),
+            Pattern::parse("4").unwrap().into(),
         ));
 
         // Dd
@@ -1106,6 +1110,7 @@ impl ColorSymplified {
 
 impl Numerator<ColorSymplified> {
     pub fn gamma_symplify(self) -> Numerator<GammaSymplified> {
+        debug!("gamma symplifying color symplified numerator");
         Numerator {
             state: self.state.gamma_symplify(),
         }
@@ -1132,6 +1137,7 @@ impl GammaSymplified {
 
 impl Numerator<GammaSymplified> {
     pub fn parse(self) -> Numerator<Network> {
+        debug!("parsing numerator into tensor network");
         Numerator {
             state: self.state.parse(),
         }
@@ -1221,6 +1227,7 @@ impl TypedNumeratorState for Network {
 
 impl Numerator<Network> {
     pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
+        debug!("contracting network");
         let contracted = self.state.contract(settings)?;
         Ok(Numerator { state: contracted })
     }
@@ -1256,6 +1263,7 @@ impl Contracted {
         export_settings: &ExportSettings,
         params: &[Atom],
     ) -> EvaluatorSingle {
+        debug!("generating single evaluator");
         let mut fn_map: FunctionMap = FunctionMap::new();
 
         Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
@@ -1297,6 +1305,7 @@ impl Contracted {
             .compile_options()
             .compile()
         {
+            debug!("Compiling  single evaluator");
             let mut filename = path.clone();
             filename.push("numerator_single.cpp");
             let filename = filename.to_string_lossy();
@@ -1431,6 +1440,7 @@ impl Numerator<Contracted> {
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
     ) -> Numerator<Evaluators> {
+        debug!("generating evaluators for contracted numerator");
         let (params, double_param_values, quad_param_values, model_params_start) =
             Contracted::generate_params(graph, model);
 
@@ -1617,6 +1627,7 @@ impl EvaluatorSingle {
         n_cores: usize,
         verbose: bool,
     ) -> EvaluatorOrientations {
+        debug!("generate iterative evaluator");
         let mut fn_map: FunctionMap = FunctionMap::new();
 
         Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
@@ -1741,6 +1752,7 @@ impl EvaluatorSingle {
             .compile_options()
             .compile()
         {
+            debug!("compiling iterative evaluator");
             let path = extra_info.path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
             match std::fs::create_dir(&path) {
@@ -1793,6 +1805,7 @@ impl EvaluatorSingle {
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
     ) -> EvaluatorOrientations {
+        debug!("generate joint evaluator");
         let mut fn_map: FunctionMap = FunctionMap::new();
 
         Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
@@ -1900,6 +1913,7 @@ impl EvaluatorSingle {
             .compile_options()
             .compile()
         {
+            debug!("compiling joint evaluator");
             let path = extra_info.path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
             match std::fs::create_dir(&path) {

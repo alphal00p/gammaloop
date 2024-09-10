@@ -223,7 +223,7 @@ class GammaLoopExporter(object):
         helicities = [1] * len(externals)
 
 
-        return (e_cm, externals, helicities)
+        return (e_cm, externals[::1], helicities)
 
 
 class AmplitudesExporter(GammaLoopExporter):

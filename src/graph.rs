@@ -1805,49 +1805,31 @@ impl Graph<Evaluators> {
 
     #[inline]
     pub fn evaluate_ltd_expression<T: FloatLike>(
-        &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        &mut self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
     ) -> Complex<F<T>> {
-        let one = loop_moms[0].px.one();
-        let zero = one.zero();
-        let i = Complex::new(zero, one);
-        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
-        let prefactor = i.pow(loop_number as u64);
-
-        prefactor
-            * self
-                .derived_data
-                .as_ref()
-                .unwrap()
-                .ltd_expression
-                .as_ref()
-                .unwrap()
-                .evaluate(loop_moms, external_moms, &self.bare_graph)
+        self.derived_data
+            .as_mut()
+            .unwrap()
+            .evaluate_ltd_expression(sample, settings, &self.bare_graph)
+            .scalar()
+            .unwrap()
     }
 
     #[inline]
     pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
-        &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        &mut self,
+        sample: &DefaultSample<T>,
         lmb: &LoopMomentumBasis,
+        settings: &Settings,
     ) -> Complex<F<T>> {
-        let one = loop_moms[0].px.one();
-        let zero = one.zero();
-        let i = Complex::new(zero, one);
-        let loop_number = self.bare_graph.loop_momentum_basis.basis.len();
-        let prefactor = i.pow(loop_number as u64);
-
-        prefactor
-            * self
-                .derived_data
-                .as_ref()
-                .unwrap()
-                .ltd_expression
-                .as_ref()
-                .unwrap()
-                .evaluate_in_lmb(loop_moms, external_moms, &self.bare_graph, lmb)
+        self.derived_data
+            .as_mut()
+            .unwrap()
+            .evaluate_ltd_expression_in_lmb(sample, settings, lmb, &self.bare_graph)
+            .scalar()
+            .unwrap()
     }
 
     #[inline]
@@ -1979,6 +1961,49 @@ impl<NumState: TypedNumeratorState> DerivedGraphData<NumState> {
 
 impl DerivedGraphData<Evaluators> {
     #[inline]
+    pub fn evaluate_ltd_expression<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+        bare_graph: &BareGraph,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let one = sample.loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero, one);
+        let loop_number = bare_graph.loop_momentum_basis.basis.len();
+        let prefactor = i.pow(loop_number as u64);
+
+        self.ltd_expression
+            .as_ref()
+            .unwrap()
+            .evaluate(sample, bare_graph, &mut self.numerator, settings)
+            .scalar_mul(&prefactor)
+            .unwrap()
+    }
+
+    #[inline]
+    pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        settings: &Settings,
+        lmb: &LoopMomentumBasis,
+        bare_graph: &BareGraph,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let one = sample.loop_moms[0].px.one();
+        let zero = one.zero();
+        let i = Complex::new(zero, one);
+        let loop_number = bare_graph.loop_momentum_basis.basis.len();
+        let prefactor = i.pow(loop_number as u64);
+
+        self.ltd_expression
+            .as_ref()
+            .unwrap()
+            .evaluate_in_lmb(sample, bare_graph, lmb, &mut self.numerator, settings)
+            .scalar_mul(&prefactor)
+            .unwrap()
+    }
+
+    #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &mut self,
@@ -2006,6 +2031,7 @@ impl DerivedGraphData<Evaluators> {
                 if let Some(i) = s.next() {
                     let c = Complex::new_re(cff.next().unwrap());
                     let mut sum = i * &c;
+
                     for j in cff.by_ref() {
                         let c = Complex::new_re(j);
                         let num = s.next().unwrap();

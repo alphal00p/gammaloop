@@ -931,6 +931,41 @@ pub struct FourMomentum<T, U = T> {
     pub spatial: ThreeMomentum<T>,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ExternalMomenta<T> {
+    Dependent(Dep),
+    Independent([T; 4]),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum Dep {
+    #[serde(rename = "dependent")]
+    Dep,
+}
+
+#[derive(Error, Debug)]
+pub enum ExternalMomentaError {
+    #[error("Dependent momenta cannot be converted to FourMomentum")]
+    Dependent,
+}
+
+impl<T> TryFrom<ExternalMomenta<T>> for FourMomentum<T> {
+    type Error = ExternalMomentaError;
+    fn try_from(value: ExternalMomenta<T>) -> Result<Self, Self::Error> {
+        match value {
+            ExternalMomenta::Dependent(_) => Err(ExternalMomentaError::Dependent),
+            ExternalMomenta::Independent(data) => Ok(FourMomentum::from(data)),
+        }
+    }
+}
+
+impl<T> From<FourMomentum<T>> for ExternalMomenta<T> {
+    fn from(value: FourMomentum<T>) -> Self {
+        ExternalMomenta::Independent(value.into())
+    }
+}
+
 impl<T: RefZero, U: RefZero> RefZero for FourMomentum<T, U> {
     fn ref_zero(&self) -> Self {
         FourMomentum {
