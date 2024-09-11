@@ -1,13 +1,3 @@
-use ahash::HashMap;
-use ahash::HashMapExt;
-use ahash::HashSet;
-use clarabel::algebra::*;
-use clarabel::solver::*;
-use core::panic;
-use itertools::Itertools;
-use serde::Serialize;
-use spenso::complex::Complex;
-
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
@@ -17,6 +7,16 @@ use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
+use ahash::HashMap;
+use ahash::HashMapExt;
+use ahash::HashSet;
+use clarabel::algebra::*;
+use clarabel::solver::*;
+use core::panic;
+use itertools::Itertools;
+use serde::Serialize;
+use serde_with::serde_as;
+use spenso::complex::Complex;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OverlapGroup {
@@ -442,8 +442,10 @@ fn is_subset_of_result(subset: &[ExistingEsurfaceId], result: &OverlapStructure)
     })
 }
 
+#[serde_as]
 #[derive(Debug, Serialize)]
 struct EsurfacePairs {
+    #[serde_as(as = "Vec<(_,_)>")]
     data: HashMap<(ExistingEsurfaceId, ExistingEsurfaceId), Vec<ThreeMomentum<F<f64>>>>,
     has_pair_with: Vec<Vec<ExistingEsurfaceId>>,
 }

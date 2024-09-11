@@ -79,7 +79,7 @@ impl DebugLogger {
             .lock()
             .unwrap()
             .write(msg, data)
-            .expect("failed to write log")
+            .unwrap_or_else(|_| panic!("failed to write log for log message: {}", msg))
     }
 
     #[cold]
