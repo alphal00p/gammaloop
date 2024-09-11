@@ -381,7 +381,7 @@ where
                 }
             }
             let mut f = BufWriter::new(
-                File::create(&format!("results_it_{}.txt", integration_state.iter))
+                File::create(format!("results_it_{}.txt", integration_state.iter))
                     .expect("Could not create results file"),
             );
             writeln!(f, "{}", Table::new(tabled_data).with(Style::psql())).unwrap();
