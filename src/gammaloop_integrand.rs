@@ -555,6 +555,7 @@ impl HasIntegrand for GammaLoopIntegrand {
         max_eval: F<f64>,
     ) -> EvaluationResult {
         if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write("new_evaluation", &());
             DEBUG_LOGGER.write("havana_sample", sample);
         }
 
