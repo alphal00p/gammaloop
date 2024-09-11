@@ -762,9 +762,11 @@ impl Particle {
         mom: &FourMomentum<F<T>>,
         helicity: Helicity,
     ) -> Polarization<Complex<F<T>>> {
-        let one: Complex<F<T>> = mom.temporal.value.one().into();
         match spin {
-            1 => Polarization::scalar(one),
+            1 => {
+                let one: Complex<F<T>> = mom.temporal.value.one().into();
+                Polarization::scalar(one)
+            }
             2 => {
                 if pdg_code > 0 {
                     mom.u(helicity.try_into().unwrap())

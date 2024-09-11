@@ -751,6 +751,8 @@ pub struct F<T: FloatLike>(pub T);
 
 impl<T:FloatLike> R for F<T> {}
 
+
+
 impl<T:FloatLike> RefZero<F<T>> for &F<T>{
     fn ref_zero(&self) -> F<T> {
         F(self.0.ref_zero())

@@ -28,6 +28,11 @@ harness = false
 name = "three_loop_photon"
 harness = false
 
+[[bench]]
+name = "polarization"
+
+harness = false
+
 [profile.release]
 lto = "fat"
 

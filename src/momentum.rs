@@ -1061,6 +1061,12 @@ impl<T: for<'a> std::ops::AddAssign<&'a T>> AddAssign<Polarization<T>> for Polar
     }
 }
 
+impl<T: for<'a> SubAssign<&'a T>> SubAssign<Polarization<T>> for Polarization<T> {
+    fn sub_assign(&mut self, rhs: Polarization<T>) {
+        self.tensor -= rhs.tensor;
+    }
+}
+
 impl<T: FloatLike> Display for Polarization<F<T>> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Pol {}: {}", self.pol_type, self.tensor)
@@ -1156,15 +1162,26 @@ where
     }
 }
 
-impl<T, U, Out> Mul<&U> for Polarization<T>
+impl<'a, T, U> Mul<&'a U> for Polarization<T>
 where
-    T: FallibleMul<U, Output = Out>,
+    T: Clone + MulAssign<&'a U>,
 {
-    type Output = Polarization<Out>;
-    fn mul(self, rhs: &U) -> Self::Output {
-        Polarization {
-            tensor: self.tensor.scalar_mul(rhs).unwrap(),
-            pol_type: self.pol_type,
+    type Output = Polarization<T>;
+    fn mul(mut self, rhs: &'a U) -> Self::Output {
+        for i in self.tensor.data.iter_mut() {
+            *i *= rhs;
+        }
+        self
+    }
+}
+
+impl<'a, T> MulAssign<&'a T> for Polarization<T>
+where
+    T: Clone + MulAssign<&'a T>,
+{
+    fn mul_assign(&mut self, rhs: &'a T) {
+        for i in self.tensor.data.iter_mut() {
+            *i *= rhs;
         }
     }
 }
@@ -1182,14 +1199,11 @@ where
     }
 }
 
-impl<T: Neg<Output = T>> Neg for Polarization<T> {
-    type Output = Polarization<T>;
-    fn neg(self) -> Self::Output {
-        Polarization {
-            tensor: -self.tensor,
-            pol_type: self.pol_type,
-        }
-    }
+impl<T> MulAssign<SignOrZero> for Polarization<T>
+where
+    T: Neg<Output = T>,
+{
+    fn mul_assign(&mut self, rhs: SignOrZero) {}
 }
 
 impl<T> Polarization<T> {
@@ -1480,7 +1494,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         }
     }
 
-    pub fn pol_one(&self) -> Polarization<F<T>>
+    pub fn pol_one(&self) -> [F<T>; 4]
     where
         T: FloatLike,
     {
@@ -1508,12 +1522,12 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         //     e2,
         //     e3
         // );
-        Polarization::lorentz([pt.zero(), e1, e2, e3])
+        [pt.zero(), e1, e2, e3]
 
         // debug!("pol :{pol}");
     }
 
-    pub fn pol_two(&self) -> Polarization<F<T>>
+    pub fn pol_two(&self) -> [F<T>; 4]
     where
         T: FloatLike,
     {
@@ -1528,7 +1542,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         } else {
             (-(&self.spatial.py / &pt), &self.spatial.px / &pt, pt.zero())
         };
-        Polarization::lorentz([pt.zero(), e1, e2, e3])
+        [pt.zero(), e1, e2, e3]
     }
 
     pub fn pol_three(&self) -> Polarization<F<T>>
@@ -1552,16 +1566,30 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
             self.pol_three().cast()
         } else {
             let one = self.temporal.value.one();
-            let sqrt_2_inv: Complex<F<T>> = (&one + &one).sqrt().inv().into();
-            let i = one.i();
+            let sqrt_2_inv: F<T> = (&one + &one).sqrt().inv();
 
-            let mut eone: Polarization<Complex<F<T>>> = -lambda * self.pol_one().cast();
+            let [eone0, eone1, eone2, eone3] = self.pol_one();
 
-            let etwo: Polarization<Complex<F<T>>> = self.pol_two().cast();
+            let [etwo0, etwo1, etwo2, etwo3] = self.pol_two();
 
-            eone += -(etwo * &i);
-
-            eone * &sqrt_2_inv
+            Polarization::lorentz([
+                Complex {
+                    re: -lambda * eone0 * &sqrt_2_inv,
+                    im: -etwo0 * &sqrt_2_inv,
+                },
+                Complex {
+                    re: -lambda * eone1 * &sqrt_2_inv,
+                    im: -etwo1 * &sqrt_2_inv,
+                },
+                Complex {
+                    re: -lambda * eone2 * &sqrt_2_inv,
+                    im: -etwo2 * &sqrt_2_inv,
+                },
+                Complex {
+                    re: -lambda * eone3 * &sqrt_2_inv,
+                    im: -etwo3 * &sqrt_2_inv,
+                },
+            ])
         }
     }
 
@@ -2276,7 +2304,7 @@ mod tests {
     fn polarization() {
         let mom = FourMomentum::from_args(F(1.), F(1.), F(0.), F(0.));
 
-        let pol = mom.pol_one();
+        let pol: Polarization<F<f64>> = Polarization::lorentz(mom.pol_one());
         let pol2 = pol.clone();
 
         print!("{}", pol.add_fallible(&pol2).unwrap());
