@@ -32,4 +32,4 @@ set n_start 100000
 set n_max 100000000000
 set continuous_dim_learning_rate 0.0
 set seed 1
-integrate physical_1L_6photons -r -c 1
+integrate physical_1L_6photons -r -c 4

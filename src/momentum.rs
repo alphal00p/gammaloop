@@ -1055,6 +1055,12 @@ pub struct Polarization<T> {
     pol_type: PolType,
 }
 
+impl<T: for<'a> std::ops::AddAssign<&'a T>> AddAssign<Polarization<T>> for Polarization<T> {
+    fn add_assign(&mut self, rhs: Polarization<T>) {
+        self.tensor += rhs.tensor;
+    }
+}
+
 impl<T: FloatLike> Display for Polarization<F<T>> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Pol {}: {}", self.pol_type, self.tensor)
@@ -1549,11 +1555,13 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
             let sqrt_2_inv: Complex<F<T>> = (&one + &one).sqrt().inv().into();
             let i = one.i();
 
-            let eone: Polarization<Complex<F<T>>> = -lambda * self.pol_one().cast();
+            let mut eone: Polarization<Complex<F<T>>> = -lambda * self.pol_one().cast();
 
             let etwo: Polarization<Complex<F<T>>> = self.pol_two().cast();
 
-            (eone.add_fallible(&(-(etwo * &i)))).unwrap() * &sqrt_2_inv
+            eone += -(etwo * &i);
+
+            eone * &sqrt_2_inv
         }
     }
 

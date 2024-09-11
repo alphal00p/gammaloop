@@ -7,7 +7,8 @@ set compile_separate_orientations True
 set load_compiled_cff True
 set load_compiled_separate_orientations False
 set inline_asm True
-set load_compiled_numerator True
+set joint_numerator_eval False
+set load_compiled_numerator False
 #!rm -rf ignore/GL_OUTPUT_INTEGRATE_PHYSICAL
 #output ignore/GL_OUTPUT_INTEGRATE_PHYSICAL
 launch ignore/GL_OUTPUT_INTEGRATE_PHYSICAL
@@ -28,8 +29,8 @@ set integrated_phase 'real'
 set e_cm 10.
 set rotation_axis []
 set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
-set n_start 10000
+set n_start 100000
 set n_max 100000000000
 set continuous_dim_learning_rate 0.0
 set seed 1
-integrate physical_1L_6photons -r -c 1
+integrate physical_1L_6photons -r -c 4
