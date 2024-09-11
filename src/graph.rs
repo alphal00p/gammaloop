@@ -731,6 +731,19 @@ pub struct BareGraph {
 }
 
 impl BareGraph {
+    pub fn external_in_or_out_signature(&self) -> Signature {
+        let a: Signature = self
+            .external_edges
+            .iter()
+            .map(|&i| match self.edges[i].edge_type {
+                EdgeType::Incoming => -1,
+                EdgeType::Outgoing => 1i8,
+                _ => panic!("External edge is not incoming or outgoing"),
+            })
+            .collect();
+        a
+    }
+
     pub fn get_dependent_externals<T: FloatLike>(
         &self,
         indep_externals: &[FourMomentum<F<T>>],

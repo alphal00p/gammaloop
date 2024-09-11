@@ -92,3 +92,6 @@ class Worker:
 
     def update_iter(self) -> None:
         """finish the iteration"""
+
+    def sync(self) -> None:
+        """sync the worker"""

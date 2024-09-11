@@ -1,6 +1,7 @@
 use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{BareGraph, Graph, SerializableGraph};
 use crate::model::Model;
+use crate::momentum::Signature;
 use crate::numerator::{
     AppliedFeynmanRule, ContractionSettings, Evaluators, NumeratorState, PythonState,
     TypedNumeratorState, UnInit, UnexpandedNumerator,
@@ -321,7 +322,11 @@ impl<S: TypedNumeratorState> AmplitudeGraph<S> {
     }
 }
 
-impl AmplitudeGraph<PythonState> {}
+impl AmplitudeGraph<PythonState> {
+    pub fn sync(&mut self, model: &Model) {
+        // self.graph.sync();
+    }
+}
 
 impl<S: NumeratorState> AmplitudeGraph<S> {
     pub fn load_derived_data_mut(
@@ -567,9 +572,36 @@ impl<S: TypedNumeratorState> Amplitude<S> {
     }
 }
 
-impl Amplitude<PythonState> {}
+impl Amplitude<PythonState> {
+    pub fn sync(&mut self, model: &Model) {
+        self.amplitude_graphs
+            .iter_mut()
+            .for_each(|ag| ag.sync(model));
+    }
+}
 
 impl<S: NumeratorState> Amplitude<S> {
+    pub fn external_signature(&self) -> Signature {
+        let external_signature = self
+            .amplitude_graphs
+            .first()
+            .unwrap()
+            .graph
+            .bare_graph
+            .external_in_or_out_signature();
+        for amplitude_graph in self.amplitude_graphs.iter() {
+            assert_eq!(
+                amplitude_graph
+                    .graph
+                    .bare_graph
+                    .external_in_or_out_signature(),
+                external_signature
+            );
+        }
+
+        external_signature
+    }
+
     pub fn load_derived_data_mut(
         &mut self,
         model: &Model,
@@ -936,12 +968,16 @@ impl Amplitude<PythonState> {
             })
             .suggestion("does the path exist?")?;
 
-        let settings: Settings = serde_yaml::from_str(&settings_string)
+        let mut settings: Settings = serde_yaml::from_str(&settings_string)
             .wrap_err("Could not parse settings yaml content")
             .suggestion("Is it a correct yaml file")?;
 
+        let amp = Amplitude::<Evaluators>::try_from_python(self.clone())?;
+
+        settings.sync_with_amplitude(&amp);
+
         Ok(GammaLoopIntegrand::amplitude_integrand_constructor(
-            Amplitude::<Evaluators>::try_from_python(self.clone())?,
+            amp,
             settings.clone(),
         ))
     }
@@ -952,6 +988,9 @@ pub struct CrossSectionList {
 }
 
 impl CrossSectionList {
+    pub fn sync(&mut self, model: &Model) {
+        // self.container.iter_mut().for_each(|cs| cs.sync(model));
+    }
     pub fn from_file(model: &Model, file_path: String) -> Result<CrossSectionList, Report> {
         let f = File::open(file_path.clone())
             .wrap_err_with(|| format!("Could not open cross-section yaml file {}", file_path))
@@ -1022,7 +1061,11 @@ impl<S: TypedNumeratorState> AmplitudeList<S> {
     }
 }
 
-impl AmplitudeList<PythonState> {}
+impl AmplitudeList<PythonState> {
+    pub fn sync(&mut self, model: &Model) {
+        self.container.iter_mut().for_each(|a| a.sync(model));
+    }
+}
 
 impl<S: NumeratorState> AmplitudeList<S> {
     pub fn load_derived_data_mut(

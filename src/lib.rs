@@ -31,6 +31,7 @@ pub mod utils;
 use color_eyre::{Help, Report};
 #[allow(unused)]
 use colored::Colorize;
+use cross_section::Amplitude;
 use eyre::WrapErr;
 
 use integrands::*;
@@ -38,10 +39,13 @@ use momentum::Dep;
 use momentum::ExternalMomenta;
 use momentum::FourMomentum;
 use momentum::Helicity;
+use momentum::SignOrZero;
+use momentum::Signature;
 use momentum::ThreeMomentum;
 use numerator::NumeratorSettings;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
+use rayon::vec;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
 use symbolica::evaluate::CompileOptions;
@@ -144,6 +148,7 @@ pub struct GeneralSettings {
     pub use_ltd: bool,
     pub load_compiled_cff: bool,
     pub load_compiled_numerator: bool,
+    pub joint_numerator_eval: bool,
     pub load_compiled_separate_orientations: bool,
     pub force_orientations: Option<Vec<usize>>,
 }
@@ -154,7 +159,8 @@ impl Default for GeneralSettings {
         Self {
             debug: 0,
             use_ltd: false,
-            load_compiled_numerator: false,
+            load_compiled_numerator: true,
+            joint_numerator_eval: true,
             load_compiled_cff: false,
             load_compiled_separate_orientations: false,
             force_orientations: None,
@@ -275,6 +281,14 @@ pub struct Settings {
 }
 
 impl Settings {
+    pub fn sync_with_amplitude(&mut self, amplitude: &Amplitude) {
+        let external_signature = amplitude.external_signature();
+        self.kinematics
+            .externals
+            .set_dependent_at_end(&external_signature)
+            .unwrap();
+    }
+
     pub fn from_file(filename: &str) -> Result<Settings, Report> {
         let f = File::open(filename)
             .wrap_err_with(|| format!("Could not open settings file {}", filename))
@@ -375,9 +389,10 @@ pub enum Precision {
     Arb(usize),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(try_from = "ExternalsShadow")]
-pub enum Externals {
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(tag = "type", content = "data")]
+enum Externals {
+    #[serde(rename = "constant")]
     Constant {
         momenta: Vec<ExternalMomenta<F<f64>>>,
         helicities: Vec<Helicity>,
@@ -385,16 +400,6 @@ pub enum Externals {
     // add different type of pdfs here when needed
 }
 
-// The shadow type only has to implement Deserialize
-#[derive(Deserialize)]
-#[serde(tag = "type", content = "data")]
-enum ExternalsShadow {
-    #[serde(rename = "constant")]
-    Constant {
-        momenta: Vec<ExternalMomenta<F<f64>>>,
-        helicities: Vec<Helicity>,
-    },
-}
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -403,33 +408,19 @@ pub enum ExternalsValidationError {
     WrongNumberOfDependentMomenta,
 }
 
-impl TryFrom<ExternalsShadow> for Externals {
-    type Error = ExternalsValidationError;
-    fn try_from(shadow: ExternalsShadow) -> Result<Self, Self::Error> {
-        let mut value = match shadow {
-            ExternalsShadow::Constant {
-                momenta,
-                helicities,
-            } => Externals::Constant {
-                momenta,
-                helicities,
-            },
-        };
-        value.set_dependent_at_end()?;
-        Ok(value)
-    }
-}
-
 impl Externals {
-    pub fn set_dependent_at_end(&mut self) -> Result<(), ExternalsValidationError> {
+    pub fn set_dependent_at_end(
+        &mut self,
+        signature: &Signature,
+    ) -> Result<(), ExternalsValidationError> {
         match self {
             Externals::Constant { momenta, .. } => {
                 let mut sum = FourMomentum::from([F(0.0); 4]);
                 let mut pos_dep = 0;
                 let mut n_dep = 0;
-                for (i, m) in momenta.iter().enumerate() {
+                for ((i, m), s) in momenta.iter().enumerate().zip(signature.iter()) {
                     if let Ok(a) = FourMomentum::try_from(*m) {
-                        sum += a;
+                        sum -= *s * a;
                     } else {
                         pos_dep = i;
                         n_dep += 1;
@@ -475,6 +466,33 @@ impl Externals {
             Externals::Constant { helicities, .. } => helicities,
         }
     }
+}
+
+#[test]
+fn external_inv() {
+    let mut ext = Externals::Constant {
+        momenta: vec![[F(1.), F(2.), F(3.), F(4.)].into(); 3],
+        helicities: vec![Helicity::Plus; 4],
+    };
+
+    let signs: Signature = [1i8, 1, 1, 1].into_iter().collect();
+    ext.set_dependent_at_end(&signs).unwrap();
+
+    let momenta = vec![
+        ExternalMomenta::Dependent(Dep::Dep),
+        [F(1.), F(2.), F(3.), F(4.)].into(),
+        [F(1.), F(2.), F(3.), F(4.)].into(),
+        [F(-3.), F(-6.), F(-9.), F(-12.)].into(),
+    ];
+    let mut ext2 = Externals::Constant {
+        momenta,
+        helicities: vec![Helicity::Plus; 4],
+    };
+
+    ext2.set_dependent_at_end(&signs).unwrap();
+
+    assert_eq!(ext, ext2);
+
 }
 
 impl Default for Externals {

@@ -104,9 +104,16 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-        _settings: &Settings,
+        settings: &Settings,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>> {
         <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations);
+
+        if !settings.general.load_compiled_numerator {
+            self.disable_compiled();
+        }
+        if !settings.general.joint_numerator_eval {
+            self.disable_combined();
+        }
         <T as NumeratorEvaluateFloat>::evaluate_all_orientations(self)
     }
 
@@ -114,8 +121,15 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-        _setting: &Settings,
+        setting: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        if !setting.general.load_compiled_numerator {
+            self.disable_compiled();
+        }
+
+        if !setting.general.joint_numerator_eval {
+            self.disable_combined();
+        }
         <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations);
         <T as NumeratorEvaluateFloat>::evaluate_single(self)
     }

@@ -589,6 +589,11 @@ impl PythonWorker {
             master_node.update_iter();
         }
     }
+
+    pub fn sync(&mut self) {
+        self.amplitudes.sync(&self.model);
+        self.cross_sections.sync(&self.model);
+    }
 }
 
 impl PythonWorker {

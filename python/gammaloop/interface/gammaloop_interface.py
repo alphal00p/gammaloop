@@ -129,6 +129,7 @@ class GammaLoopConfiguration(object):
                     'force_orientations': None,
                     'load_compiled_cff': True,
                     'load_compiled_numerator':True,
+                    'joint_numerator_eval': True,
                     'load_compiled_separate_orientations': False
                 },
                 'Integrand': {
@@ -1143,6 +1144,8 @@ class GammaLoop(object):
                         cross_section.CrossSection.from_yaml_str(self.model, cross_section_yaml))
                     self.rust_worker.add_cross_section_from_yaml_str(
                         cross_section_yaml)
+                    
+        self.rust_worker.sync()
 
     # inspect command
     inspect_parser = ArgumentParser(prog='inspect')

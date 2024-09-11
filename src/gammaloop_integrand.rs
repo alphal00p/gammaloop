@@ -23,6 +23,7 @@ use crate::{
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
+use log::debug;
 use momtrop::vector::Vector;
 use spenso::complex::Complex;
 use spenso::contraction::IsZero;

@@ -966,6 +966,12 @@ impl<T> From<FourMomentum<T>> for ExternalMomenta<T> {
     }
 }
 
+impl<T> From<[T; 4]> for ExternalMomenta<T> {
+    fn from(data: [T; 4]) -> Self {
+        ExternalMomenta::Independent(data)
+    }
+}
+
 impl<T: RefZero, U: RefZero> RefZero for FourMomentum<T, U> {
     fn ref_zero(&self) -> Self {
         FourMomentum {
@@ -1717,6 +1723,18 @@ pub enum SignOrZero {
     Zero = 0,
     Plus = 1,
     Minus = -1,
+}
+
+impl TryFrom<i8> for SignOrZero {
+    type Error = SignError;
+    fn try_from(value: i8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(SignOrZero::Zero),
+            1 => Ok(SignOrZero::Plus),
+            -1 => Ok(SignOrZero::Minus),
+            _ => Err(SignError::InvalidValue),
+        }
+    }
 }
 
 impl Display for SignOrZero {
