@@ -20,8 +20,8 @@ import gammaloop.cross_section.cross_section as cross_section
 import gammaloop.cross_section.supergraph as supergraph
 from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExporter, OutputMetaData, update_run_card_in_output
 # This is the pyo3 binding of the gammaloop rust engine
-import gammaloop._gammaloop as gl_rust  # pylint: disable=import-error, no-name-in-module # type: ignore
-
+import gammaloop._gammaloop as gl_rust
+import gammaloop.interface.debug_display as debug_display
 # pylint: disable=unused-variable
 
 AVAILABLE_COMMANDS = [
@@ -41,7 +41,8 @@ AVAILABLE_COMMANDS = [
     'set',
     'set_model_param',
     'reset',
-    'generate_graph'
+    'generate_graph',
+    'display_debug_log'
 ]
 
 
@@ -1128,6 +1129,8 @@ class GammaLoop(object):
     inspect_parser.add_argument(
         '--no_sync', '-ns', action='store_true', default=False,
         help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
+    inspect_parser.add_argument('--last_max_weight', '-lmw', action='store_true',
+                                default=False, help='Inspect the max weight point of the previous run')
 
     def do_inspect(self, str_args: str) -> complex:
         if str_args == 'help':
@@ -1139,14 +1142,15 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        if self.launched_output is None:
-            raise GammaLoopError(
-                "No output launched. Please launch an output first with 'launch' command.")
-
         self.sync_worker_with_output(args.no_sync)
 
-        res: tuple[float, float] = self.rust_worker.inspect_integrand(
-            args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
+        if args.last_max_weight:
+            workspace_path = self.launched_output.joinpath("workspace")
+            res: tuple[float, float] = self.rust_worker.inspect_lmw_integrand(
+                args.integrand, str(workspace_path), args.use_f128)
+        else:
+            res: tuple[float, float] = self.rust_worker.inspect_integrand(
+                args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
 
         return complex(res[0], res[1])
 
@@ -1335,3 +1339,40 @@ class GammaLoop(object):
                 self.rust_worker.display_master_node_status()
 
         shutil.rmtree(workspace_path)
+
+    log_parser = ArgumentParser(prog='display_debug_log')
+    log_parser.add_argument('--log_file', '-lf', type=str,
+                            help='Log file to display', default="log.glog")
+    log_parser.add_argument(
+        '-eval', '-e', type=str, default=None)
+    log_parser.add_argument('--subtraction', '-s',  action='store_true',
+                            default=False, help='Show subtraction debug info')
+
+    def do_display_debug_log(self, str_args: str) -> None:
+        args = self.log_parser.parse_args(split_str_args(str_args))
+
+        if args.log_file is None:
+            raise GammaLoopError(
+                "No log file to display, please provide a file using -lf")
+
+        general_debug_dict = debug_display.build_general_debug_dict(
+            args.log_file)
+        debug_display.display_general(general_debug_dict)
+
+        if args.eval is not None:
+            tmp = eval(args.eval)
+            for tmp_elem in tmp:
+                rotation, precision = tmp_elem[0], tmp_elem[1]
+                eval_dict = debug_display.build_eval_debug_dict(
+                    args.log_file, rotation, precision)
+
+                logger.info("Debug info for for rotation '%s%s%s' and precision '%s%s%s'",
+                            Colour.BLUE, rotation, Colour.END, Colour.BLUE, precision, Colour.END)
+
+                debug_display.display_eval_default(eval_dict)
+
+                if args.subtraction:
+                    logger.info("")
+                    logger.info("subtraction: ")
+                    logger.info("")
+                    debug_display.display_subtraction_data(eval_dict)
