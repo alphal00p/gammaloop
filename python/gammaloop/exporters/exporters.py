@@ -18,9 +18,6 @@ if TYPE_CHECKING:
     from gammaloop.interface.gammaloop_interface import GammaLoop
 
 
-
-
-
 class OutputMetaData(dict[str, Any]):
     def __init__(self, *args: Any, **opts: Any):
         super(OutputMetaData, self).__init__(*args, **opts)
@@ -86,7 +83,7 @@ class GammaLoopExporter(object):
             'model_name': self.gammaloop.model.name,
         })
 
-    def finalize_drawing(self, drawings_path: Path, drawing_file_paths: list[Path]):
+    def finalize_drawing(self, drawings_path: Path, drawing_file_paths: list[Path | None]):
 
         shutil.copy(
             pjoin(DATA_PATH, 'templates', 'drawing', 'combine_pages.py'),
@@ -96,6 +93,8 @@ class GammaLoopExporter(object):
             with open(pjoin(drawings_path, 'makefile'), 'w', encoding='utf-8') as makefile_out:
                 all_targets: list[str] = []
                 for drawing_file_path in drawing_file_paths:
+                    if drawing_file_path is None:
+                        continue
                     if drawing_file_path.suffix != '.tex':
                         raise GammaLoopError(
                             "Finalization of diagram drawings only supports latex format.")
@@ -219,9 +218,8 @@ class GammaLoopExporter(object):
             # note: this last leg will not be onshell!
             externals.insert(0,
                              [conf[0][0]*conf[0][2] * pi for pi in first_leg_momentum])
-            
-        helicities = [1] * len(externals)
 
+        helicities = [1] * len(externals)
 
         return (e_cm, externals[::1], helicities)
 
@@ -240,7 +238,7 @@ class AmplitudesExporter(GammaLoopExporter):
                 logger.warning(
                     "Could not identify external momenta structure.")
                 return
-            e_cm, external_momenta,helicities = self.build_external_momenta_from_connections(
+            e_cm, external_momenta, helicities = self.build_external_momenta_from_connections(
                 amplitudes[0].amplitude_graphs[0].graph.external_connections,
                 self.configuration_for_process.get_setting(
                     'run_settings.Kinematics.e_cm')

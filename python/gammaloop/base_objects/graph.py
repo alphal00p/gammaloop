@@ -4,6 +4,7 @@ import os
 import itertools
 from pathlib import Path
 from enum import StrEnum
+import re
 from typing import Any
 import yaml
 
@@ -243,7 +244,8 @@ class Edge(object):
              arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
              arrow_size_for_single_line: float = 2.5, arrow_size_for_double_line: float = 2.5, line_color: str = 'black', label_color: str = 'black', lmb_color: str = 'red', non_lmb_color: str = 'blue', **_opts: Any) -> list[str]:
         constant_definitions['arcMaxDistance'] = f'{arc_max_distance:.2f}'
-        constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'
+        constant_definitions['externalLegTension'] = f'{
+            external_legs_tension:.2f}'
         constant_definitions['defaultTension'] = f'{default_tension:.2f}'
         constant_definitions['lineWidth'] = f'{line_width:.2f}'
         constant_definitions['lineColor'] = line_color
@@ -252,7 +254,8 @@ class Edge(object):
         constant_definitions['labelSize'] = label_size
         constant_definitions['nonLmbColor'] = non_lmb_color
         constant_definitions['arrowSize'] = f'{arrow_size_for_single_line:.2f}'
-        constant_definitions['doubleArrowSize'] = f'{arrow_size_for_double_line:.2f}'
+        constant_definitions['doubleArrowSize'] = f'{
+            arrow_size_for_double_line:.2f}'
         constant_definitions['labelDistance'] = f'{label_distance:.2f}'
 
         template_line = r'\efmf{%(line_type)s%(comma)s%(options)s}{%(left_vertex)s,%(right_vertex)s}'
@@ -300,7 +303,10 @@ class Edge(object):
             edge_name_label = self.name  # pylint: disable=consider-using-f-string
         label_components: list[str] = []
         if show_particle_names:
-            label_components.append(self.particle.texname)
+            # \overline{x} sadly does not work with the \fmfX{} command.
+            # We must therefore change by appending an x
+            label_components.append(
+                re.sub(r"\\overline\{([^}]*)\}", r"\1x", self.particle.texname))
 
         if show_edge_momenta:
             if self.edge_type != EdgeType.VIRTUAL:
@@ -393,8 +399,10 @@ class Edge(object):
 
         replace_dict = {}
         replace_dict['line_type'] = line_type.replace('_arrow', '')
-        replace_dict['left_vertex'] = f'v{graph.get_vertex_position(self.vertices[0].name)}'
-        replace_dict['right_vertex'] = f'v{graph.get_vertex_position(self.vertices[1].name)}'
+        replace_dict['left_vertex'] = f'v{
+            graph.get_vertex_position(self.vertices[0].name)}'
+        replace_dict['right_vertex'] = f'v{
+            graph.get_vertex_position(self.vertices[1].name)}'
         replace_dict['options'] = ','.join(
             f'{k}={v}' for k, v in line_options.items())
         replace_dict['comma'] = ',' if len(replace_dict['options']) > 0 else ''
@@ -809,10 +817,12 @@ class Graph(object):
 
         return merged_signatures
 
-    def draw(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, **drawing_options: Any) -> Path:
+    def draw(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, **drawing_options: Any) -> Path | None:
         match drawing_options['mode']:
             case 'feynmp':
                 return self.draw_feynmp(model, file_path_without_extension, caption, diagram_id, **drawing_options['feynmp'])
+            case None:
+                return None
             case _:
                 raise GammaLoopError(
                     f"Feynman drawing mode '{drawing_options['mode']}' is not supported. Currently only 'feynmp' is supported.")
@@ -848,6 +858,10 @@ class Graph(object):
 
             edge_map = self.get_edge_map()
             longest_cycle_edges = utils.find_longest_cycle(edge_map)
+            if len(longest_cycle_edges) == 0:
+                # Tree-level graphs
+                longest_cycle_edges = [self.get_edge_position(
+                    self.get_sorted_incoming_edges()[0].name),]
             longest_cycle = utils.edges_cycle_to_vertex_cycle([
                 self.edges[i_e].get_vertex_positions(self) for i_e in longest_cycle_edges])
             incoming_edges_paths: list[tuple[Edge, list[int]]] = []
