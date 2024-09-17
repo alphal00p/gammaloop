@@ -602,6 +602,15 @@ impl<S: NumeratorState> Amplitude<S> {
         external_signature
     }
 
+    pub fn external_particle_spin_and_masslessness(&self) -> Vec<(isize, bool)> {
+        self.amplitude_graphs
+            .first()
+            .unwrap()
+            .graph
+            .bare_graph
+            .external_particle_spin_and_masslessness()
+    }
+
     pub fn load_derived_data_mut(
         &mut self,
         model: &Model,
@@ -779,7 +788,11 @@ impl Amplitude<PythonState> {
         self.map_mut(|a| {
             a.map_mut(|g| {
                 g.generate_cff();
-                g.generate_ltd();
+                if !g.bare_graph.is_tree() {
+                    g.generate_ltd();
+                } else {
+                    g.generate_loop_momentum_bases();
+                }
                 g.generate_tropical_subgraph_table(
                     &export_settings.tropical_subgraph_table_settings,
                 );
@@ -974,7 +987,7 @@ impl Amplitude<PythonState> {
 
         let amp = Amplitude::<Evaluators>::try_from_python(self.clone())?;
 
-        settings.sync_with_amplitude(&amp);
+        settings.sync_with_amplitude(&amp)?;
 
         Ok(GammaLoopIntegrand::amplitude_integrand_constructor(
             amp,

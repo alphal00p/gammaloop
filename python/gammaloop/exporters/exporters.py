@@ -112,6 +112,7 @@ class GammaLoopExporter(object):
 
         # (orientation_sign, mass, direction [in/out] )
         conf: list[tuple[int, float, int]] = []
+        helicities: list[int] = []
         for conn in external_connections:
             match conn:
                 case (None, v2) if v2 is not None:
@@ -129,6 +130,12 @@ class GammaLoopExporter(object):
                                 "Invalid external connection.")
                     mass = self.gammaloop.model.get_parameter(
                         v2.vertex_info.get_particles()[0].mass.name).value
+                    
+                    spin = v2.vertex_info.get_particles()[0].spin
+                    if spin == 1:
+                        helicities.append(0)
+                    else:
+                        helicities.append(1)
                     if mass is None:
                         raise GammaLoopError(
                             "Explicit default value of the mass of external particle not defined.")
@@ -148,6 +155,11 @@ class GammaLoopExporter(object):
                                 "Invalid external connection.")
                     mass = self.gammaloop.model.get_parameter(
                         v1.vertex_info.get_particles()[0].mass.name).value
+                    spin = v1.vertex_info.get_particles()[0].spin
+                    if spin == 1:
+                        helicities.append(0)
+                    else:
+                        helicities.append(1)
                     if mass is None:
                         raise GammaLoopError(
                             "Explicit default value of the mass of external particle not defined.")
@@ -219,9 +231,8 @@ class GammaLoopExporter(object):
             externals.insert(0,
                              [conf[0][0]*conf[0][2] * pi for pi in first_leg_momentum])
 
-        helicities = [1] * len(externals)
 
-        return (e_cm, externals[::1], helicities)
+        return (e_cm, externals[:-1], helicities)
 
 
 class AmplitudesExporter(GammaLoopExporter):
@@ -279,12 +290,15 @@ class AmplitudesExporter(GammaLoopExporter):
             # Already writing the file below is not necessary as it will be overwritten by the rust export, but it is useful for debugging
             with open(pjoin(export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'amplitude.yaml'), 'w', encoding='utf-8') as file:
                 file.write(amplitude_yaml)
-            drawings_path = pjoin(
-                export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
-            os.makedirs(drawings_path)
-            drawing_file_paths = amplitude.draw(
-                self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
-            self.finalize_drawing(Path(drawings_path), drawing_file_paths)
+
+            if self.configuration_for_process.get_setting('drawing.mode') != None:
+
+                drawings_path = pjoin(
+                    export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
+                os.makedirs(drawings_path)
+                drawing_file_paths = amplitude.draw(
+                    self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
+                self.finalize_drawing(Path(drawings_path), drawing_file_paths)
 
             self.gammaloop.rust_worker.add_amplitude_from_yaml_str(
                 amplitude_yaml)

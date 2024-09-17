@@ -28,13 +28,15 @@ pub mod tests;
 pub mod tests_from_pytest;
 pub mod utils;
 
-use color_eyre::{Help, Report};
+use crate::utils::f128;
+use bincode::de;
+use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
 use cross_section::Amplitude;
 use eyre::WrapErr;
-
 use integrands::*;
+use log::debug;
 use momentum::Dep;
 use momentum::ExternalMomenta;
 use momentum::FourMomentum;
@@ -281,12 +283,19 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn sync_with_amplitude(&mut self, amplitude: &Amplitude) {
+    pub fn sync_with_amplitude(&mut self, amplitude: &Amplitude) -> Result<()> {
         let external_signature = amplitude.external_signature();
+        let external_particle_spin = amplitude.external_particle_spin_and_masslessness();
+
         self.kinematics
             .externals
-            .set_dependent_at_end(&external_signature)
-            .unwrap();
+            .set_dependent_at_end(&external_signature)?;
+
+        self.kinematics
+            .externals
+            .validate_helicities(&external_particle_spin)?;
+
+        Ok(())
     }
 
     pub fn from_file(filename: &str) -> Result<Settings, Report> {
@@ -391,7 +400,7 @@ pub enum Precision {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "type", content = "data")]
-enum Externals {
+pub enum Externals {
     #[serde(rename = "constant")]
     Constant {
         momenta: Vec<ExternalMomenta<F<f64>>>,
@@ -406,36 +415,104 @@ use thiserror::Error;
 pub enum ExternalsValidationError {
     #[error("There should be exactly one dependent external momentum")]
     WrongNumberOfDependentMomenta,
+    #[error("Found {0} momenta, expected {1}")]
+    WrongNumberOfMomentaExpected(usize, usize),
+    #[error("Found {0} helicities, expected {1}")]
+    WrongNumberOfHelicities(usize, usize),
+    #[error("Massless vector cannot have zero helicity: pos {0}")]
+    MasslessVectorZeroHelicity(usize),
+    #[error("Spinors cannot have zero helicity at pos {0}")]
+    SpinorZeroHelicity(usize),
+    #[error("Scalars cannot have non-zero helicity at pos {0}")]
+    ScalarNonZeroHelicity(usize),
+    #[error("{0} is an Unsuported external spin for pos {0}")]
+    UnsupportedSpin(isize, usize),
 }
 
 impl Externals {
+    pub fn validate_helicities(
+        &self,
+        spins: &[(isize, bool)],
+    ) -> Result<(), ExternalsValidationError> {
+        match self {
+            Externals::Constant { helicities, .. } => {
+                if helicities.len() == spins.len() {
+                    for (i, (h, (s, is_massless))) in
+                        helicities.iter().zip(spins.iter()).enumerate()
+                    {
+                        match *s {
+                            1 => {
+                                if !h.is_zero() {
+                                    return Err(ExternalsValidationError::ScalarNonZeroHelicity(i));
+                                }
+                            }
+                            2 => {
+                                if h.is_zero() {
+                                    return Err(ExternalsValidationError::SpinorZeroHelicity(i));
+                                }
+                            }
+                            3 => {
+                                if h.is_zero() && *is_massless {
+                                    return Err(
+                                        ExternalsValidationError::MasslessVectorZeroHelicity(i),
+                                    );
+                                }
+                            }
+                            s => return Err(ExternalsValidationError::UnsupportedSpin(s, i)),
+                        }
+                    }
+                    Ok(())
+                } else {
+                    Err(ExternalsValidationError::WrongNumberOfHelicities(
+                        helicities.len(),
+                        spins.len(),
+                    ))
+                }
+            }
+        }
+    }
+
     pub fn set_dependent_at_end(
         &mut self,
         signature: &Signature,
     ) -> Result<(), ExternalsValidationError> {
         match self {
             Externals::Constant { momenta, .. } => {
-                let mut sum = FourMomentum::from([F(0.0); 4]);
+                let mut sum: FourMomentum<F<f128>> = FourMomentum::from([F(0.0); 4]).higher();
                 let mut pos_dep = 0;
                 let mut n_dep = 0;
+
+                let mut dependent_sign = SignOrZero::Plus;
+
                 for ((i, m), s) in momenta.iter().enumerate().zip(signature.iter()) {
                     if let Ok(a) = FourMomentum::try_from(*m) {
-                        sum -= *s * a;
+                        println!("external{i}: {}", a);
+                        sum -= *s * a.higher();
                     } else {
                         pos_dep = i;
                         n_dep += 1;
+                        dependent_sign = *s;
                     }
                 }
                 if n_dep == 1 {
-                    momenta[pos_dep] = sum.into();
+                    momenta[pos_dep] = (dependent_sign * sum.lower()).into();
                     let len = momenta.len();
                     momenta[len - 1] = ExternalMomenta::Dependent(Dep::Dep);
-                    Ok(())
                 } else if n_dep == 0 {
+                    debug!("No dependent momentum found, adding the sum at the end");
                     momenta.push(ExternalMomenta::Dependent(Dep::Dep));
+                } else {
+                    return Err(ExternalsValidationError::WrongNumberOfDependentMomenta);
+                }
+
+                let len = momenta.len();
+                if len == signature.len() {
                     Ok(())
                 } else {
-                    Err(ExternalsValidationError::WrongNumberOfDependentMomenta)
+                    Err(ExternalsValidationError::WrongNumberOfMomentaExpected(
+                        len - 1,
+                        signature.len() - 1,
+                    ))
                 }
             }
         }
@@ -492,7 +569,6 @@ fn external_inv() {
     ext2.set_dependent_at_end(&signs).unwrap();
 
     assert_eq!(ext, ext2);
-
 }
 
 impl Default for Externals {

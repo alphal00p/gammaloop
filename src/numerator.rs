@@ -11,7 +11,7 @@ use crate::{
     momentum::FourMomentum,
     utils::{FloatLike, F},
 };
-use crate::{ExportSettings, Settings};
+use crate::{model, ExportSettings, Settings};
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
@@ -22,6 +22,7 @@ use itertools::Itertools;
 
 use log::{debug, trace};
 
+use nalgebra::Quaternion;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use spenso::data::DataTensor;
@@ -241,6 +242,10 @@ impl NumeratorEvaluateFloat for f64 {
                 }
             }
         }
+
+        for p in 0..params.len() {
+            println!("{}:{}", p, params[p]);
+        }
     }
 
     fn evaluate_all_orientations(
@@ -254,7 +259,10 @@ impl NumeratorEvaluateFloat for f64 {
                 params.len()
             ));
         }
-        if let Some(orientation_evaluator) = &mut num.state.orientated {
+
+        if let (Some(orientation_evaluator), SingleOrCombined::Combined) =
+            (&mut num.state.orientated, &num.state.choice)
+        {
             let pos = orientation_evaluator.positions.clone();
             let res = match &mut orientation_evaluator.compiled {
                 CompiledEvaluator {
@@ -340,7 +348,9 @@ impl NumeratorEvaluateFloat for f128 {
         if num.state.single.param_len != params.len() {
             return Err(eyre!("params length mismatch"));
         }
-        if let Some(orientation_evaluator) = &mut num.state.orientated {
+        if let (Some(orientation_evaluator), SingleOrCombined::Combined) =
+            (&mut num.state.orientated, &num.state.choice)
+        {
             let pos = orientation_evaluator.positions.clone();
             let res = orientation_evaluator.eval_quad.evaluate(params);
             Ok((res, pos).into())
@@ -701,6 +711,33 @@ impl ExpressionState for Color {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+pub struct Projected {}
+pub type ColorProjected = SingleExpression<Projected>;
+
+impl ExpressionState for Projected {
+    fn forget_type(self, expression: SerializableAtom) -> PythonState {
+        PythonState::ColorProjected(Some(ColorProjected {
+            expression,
+            state: self,
+        }))
+    }
+
+    fn get_expression(
+        num: &mut PythonState,
+    ) -> Result<SingleExpression<Self>, NumeratorStateError> {
+        if let PythonState::ColorProjected(s) = num {
+            if let Some(s) = s.take() {
+                Ok(s)
+            } else {
+                Err(NumeratorStateError::NoneVariant)
+            }
+        } else {
+            Err(NumeratorStateError::NotColorProjected)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct Gamma {}
 pub type GammaSymplified = SingleExpression<Gamma>;
 
@@ -744,6 +781,7 @@ impl<State: ExpressionState> NumeratorState for SingleExpression<State> {
 impl AppliedFeynmanRule {
     pub fn from_graph(graph: &mut BareGraph) -> Self {
         debug!("generating numerator for graph: {}", graph.name);
+        debug!("momentum: {}", graph.dot_lmb());
 
         let vatoms: Vec<Atom> = graph
             .vertices
@@ -797,7 +835,9 @@ impl AppliedFeynmanRule {
 
 impl Numerator<AppliedFeynmanRule> {
     pub fn color_symplify(self) -> Numerator<ColorSymplified> {
+        debug!("Applied feynman rules: {}", self.export());
         debug!("color symplifying local numerator");
+
         Numerator {
             state: ColorSymplified::color_symplify(self.state),
         }
@@ -897,8 +937,89 @@ impl ColorSymplified {
         Self::new(Self::color_symplify_impl(expr))
     }
 
-    pub fn gamma_symplify(mut self) -> GammaSymplified {
-        self.expression.0 = self.expression.0.expand();
+    pub fn parse(self) -> Network {
+        let net = TensorNetwork::try_from(self.expression.0.as_view())
+            .unwrap()
+            .to_fully_parametric()
+            .cast();
+
+        // println!("net scalar{}", net.scalar.as_ref().unwrap());
+        Network { net }
+    }
+}
+
+impl Numerator<ColorSymplified> {
+    pub fn gamma_symplify(self) -> Numerator<GammaSymplified> {
+        debug!("ColorSymplified numerator: {}", self.export());
+        debug!("gamma symplifying color symplified numerator");
+        Numerator {
+            state: GammaSymplified::gamma_symplify_impl(self.state.expression),
+        }
+    }
+
+    pub fn color_project(self) -> Numerator<ColorProjected> {
+        debug!("ColorSymplified numerator: {}", self.export());
+        debug!("projecting color symplified numerator");
+        Numerator {
+            state: ColorProjected::color_project(self.state),
+        }
+    }
+
+    pub fn parse(self) -> Numerator<Network> {
+        debug!("ColorSymplified numerator: {}", self.export());
+        Numerator {
+            state: self.state.parse(),
+        }
+    }
+}
+
+impl ColorProjected {
+    pub fn color_project(mut color_simple: ColorSymplified) -> ColorProjected {
+        let reps = vec![
+            (
+                Pattern::parse("f_(a___,aind(b___,cof(c__),d___))").unwrap(),
+                Pattern::parse("1").unwrap().into(),
+            ),
+            (
+                Pattern::parse("f_(a___,aind(b___,cos(c__),d___))").unwrap(),
+                Pattern::parse("1").unwrap().into(),
+            ),
+            (
+                Pattern::parse("f_(a___,aind(b___,coaf(c__),d___))").unwrap(),
+                Pattern::parse("1").unwrap().into(),
+            ),
+        ];
+
+        let reps = reps
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect_vec();
+        color_simple.expression.replace_repeat_multiple(&reps);
+
+        ColorProjected::new(color_simple.expression)
+    }
+}
+
+impl Numerator<ColorProjected> {
+    pub fn parse(self) -> Numerator<Network> {
+        debug!("ColorProjected numerator: {}", self.export());
+        Numerator {
+            state: Network::parse_impl(self.state.expression.0.as_view()),
+        }
+    }
+
+    pub fn gamma_symplify(self) -> Numerator<GammaSymplified> {
+        debug!("ColorSymplified numerator: {}", self.export());
+        debug!("gamma symplifying color symplified numerator");
+        Numerator {
+            state: GammaSymplified::gamma_symplify(self.state),
+        }
+    }
+}
+
+impl GammaSymplified {
+    pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> Self {
+        expr.0 = expr.0.expand();
         let pats = [(
             Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
             Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
@@ -908,8 +1029,32 @@ impl ColorSymplified {
             .iter()
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect();
-        self.expression.replace_repeat_multiple(&reps);
+        expr.replace_repeat_multiple(&reps);
         let pats = vec![
+            (
+                Pattern::parse("ProjP(aind(a_,b_))").unwrap(),
+                Pattern::parse("1/2*id(aind(a_,b_))-1/2*gamma5(aind(a_,b_))")
+                    .unwrap()
+                    .into(),
+            ),
+            (
+                Pattern::parse("ProjM(aind(a_,b_))").unwrap(),
+                Pattern::parse("1/2*id(aind(a_,b_))+1/2*gamma5(aind(a_,b_))")
+                    .unwrap()
+                    .into(),
+            ),
+            (
+                Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,b_,e___))").unwrap(),
+                Pattern::parse("f_(c___,aind(d___,a_,e___))")
+                    .unwrap()
+                    .into(),
+            ),
+            (
+                Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap(),
+                Pattern::parse("f_(c___,aind(d___,b_,e___))")
+                    .unwrap()
+                    .into(),
+            ),
             (
                 Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
                 Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
@@ -944,14 +1089,17 @@ impl ColorSymplified {
             .iter()
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect();
-        self.expression.replace_repeat_multiple(&reps);
+        expr.0 = expr.0.expand();
+        expr.replace_repeat_multiple(&reps);
+        expr.0 = expr.0.expand();
+        expr.replace_repeat_multiple(&reps);
 
         let pat = Pattern::parse("gamma_trace(a__)").unwrap();
 
         let set = MatchSettings::default();
         let cond = Condition::default();
 
-        let mut it = pat.pattern_match(self.expression.0.as_view(), &cond, &set);
+        let mut it = pat.pattern_match(expr.0.as_view(), &cond, &set);
 
         let mut max_nargs = 0;
         while let Some(a) = it.next() {
@@ -1104,40 +1252,17 @@ impl ColorSymplified {
             .iter()
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect_vec();
-        self.expression.replace_repeat_multiple(&reps);
-        self.expression.0 = self.expression.0.expand();
-        self.expression.replace_repeat_multiple(&reps);
+        expr.replace_repeat_multiple(&reps);
+        expr.0 = expr.0.expand();
+        expr.replace_repeat_multiple(&reps);
 
-        GammaSymplified::new(self.expression)
+        GammaSymplified::new(expr)
     }
 
-    pub fn parse(self) -> Network {
-        let net = TensorNetwork::try_from(self.expression.0.as_view())
-            .unwrap()
-            .to_fully_parametric()
-            .cast();
-
-        // println!("net scalar{}", net.scalar.as_ref().unwrap());
-        Network { net }
-    }
-}
-
-impl Numerator<ColorSymplified> {
-    pub fn gamma_symplify(self) -> Numerator<GammaSymplified> {
-        debug!("gamma symplifying color symplified numerator");
-        Numerator {
-            state: self.state.gamma_symplify(),
-        }
+    pub fn gamma_symplify(color: ColorProjected) -> GammaSymplified {
+        Self::gamma_symplify_impl(color.expression)
     }
 
-    pub fn parse(self) -> Numerator<Network> {
-        Numerator {
-            state: self.state.parse(),
-        }
-    }
-}
-
-impl GammaSymplified {
     pub fn parse(self) -> Network {
         let net = TensorNetwork::try_from(self.expression.0.as_view())
             .unwrap()
@@ -1151,6 +1276,7 @@ impl GammaSymplified {
 
 impl Numerator<GammaSymplified> {
     pub fn parse(self) -> Numerator<Network> {
+        debug!("GammaSymplified numerator: {}", self.export());
         debug!("parsing numerator into tensor network");
         Numerator {
             state: self.state.parse(),
@@ -1186,6 +1312,16 @@ pub enum ContractionSettings<'a, 'b, R> {
 }
 
 impl Network {
+    pub fn parse_impl(expr: AtomView) -> Self {
+        let net = TensorNetwork::try_from(expr)
+            .unwrap()
+            .to_fully_parametric()
+            .cast();
+
+        // println!("net scalar{}", net.scalar.as_ref().unwrap());
+        Network { net }
+    }
+
     pub fn contract<R>(mut self, settings: ContractionSettings<R>) -> Result<Contracted> {
         match settings {
             ContractionSettings::Levelled((_depth, _fn_map)) => {
@@ -1196,7 +1332,7 @@ impl Network {
             ContractionSettings::Normal => {
                 self.net.contract();
                 let tensor = self.net.result_tensor_smart()?;
-                // println!("contracted tensor: {}", tensor);
+                debug!("contracted tensor: {}", tensor);
                 Ok(Contracted { tensor })
             }
         }
@@ -1250,7 +1386,7 @@ impl Numerator<Network> {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Contracted {
     #[bincode(with_serde)]
-    tensor: ParamTensor<AtomStructure>,
+    pub tensor: ParamTensor<AtomStructure>,
 }
 
 impl TryFrom<PythonState> for Contracted {
@@ -1354,6 +1490,52 @@ impl Contracted {
             param_len: params.len(),
         }
     }
+
+    pub fn generate_kinematic_params_impl(
+        n_edges: usize,
+        pol_data: Vec<(String, i64, usize)>,
+    ) -> Vec<Atom> {
+        fn atoms_for_pol(name: String, num: i64, size: usize) -> Vec<Atom> {
+            let mut data = vec![];
+            for index in 0..size {
+                let e = FunctionBuilder::new(State::get_symbol(&name));
+                data.push(
+                    e.add_arg(&Atom::new_num(num))
+                        .add_arg(&Atom::parse(&format!("cind({})", index)).unwrap())
+                        .finish(),
+                );
+            }
+            data
+        }
+        let mut params: Vec<Atom> = vec![];
+
+        let mut pols = Vec::new();
+
+        for i in 0..n_edges {
+            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
+                [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
+                "Q".into(),
+                Some(i),
+            );
+            params.extend(
+                named_structure
+                    .to_shell()
+                    .expanded_shadow()
+                    .unwrap()
+                    .data
+                    .clone(),
+            );
+        }
+
+        for (name, num, size) in pol_data {
+            pols.extend(atoms_for_pol(name, num, size));
+        }
+
+        params.extend(pols);
+        params.push(Atom::new_var(State::I));
+
+        params
+    }
     #[allow(clippy::type_complexity)]
     pub fn generate_params(
         graph: &BareGraph,
@@ -1447,6 +1629,75 @@ impl TypedNumeratorState for Contracted {
 }
 
 impl Numerator<Contracted> {
+    pub fn generate_evaluators_from_params(
+        self,
+        n_edges: usize,
+        model_params_start: usize,
+        params: &[Atom],
+        double_param_values: Vec<Complex<F<f64>>>,
+        quad_param_values: Vec<Complex<F<f128>>>,
+        extra_info: &ExtraInfo,
+        export_settings: &ExportSettings,
+    ) -> Numerator<Evaluators> {
+        let single = self
+            .state
+            .evaluator(extra_info.path.clone(), export_settings, &params);
+
+        match export_settings.numerator_settings.eval_settings {
+            NumeratorEvaluatorOptions::Joint(_) => Numerator {
+                state: Evaluators {
+                    orientated: Some(single.orientated_joint_impl(
+                        n_edges,
+                        params,
+                        extra_info,
+                        export_settings,
+                    )),
+                    single,
+                    choice: SingleOrCombined::Combined,
+                    orientations: extra_info.orientations.clone(),
+                    quad_param_values,
+                    double_param_values,
+                    model_params_start,
+                },
+            },
+            NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+                iterations,
+                n_cores,
+                verbose,
+                ..
+            }) => Numerator {
+                state: Evaluators {
+                    orientated: Some(single.orientated_iterative_impl(
+                        n_edges,
+                        params,
+                        extra_info,
+                        export_settings,
+                        iterations,
+                        n_cores,
+                        verbose,
+                    )),
+                    single,
+                    choice: SingleOrCombined::Combined,
+                    orientations: extra_info.orientations.clone(),
+                    quad_param_values,
+                    double_param_values,
+                    model_params_start,
+                },
+            },
+            _ => Numerator {
+                state: Evaluators {
+                    orientated: None,
+                    single,
+                    choice: SingleOrCombined::Single,
+                    orientations: extra_info.orientations.clone(),
+                    quad_param_values,
+                    double_param_values,
+                    model_params_start,
+                },
+            },
+        }
+    }
+
     pub fn generate_evaluators(
         self,
         model: &Model,
@@ -1459,8 +1710,8 @@ impl Numerator<Contracted> {
             Contracted::generate_params(graph, model);
 
         trace!("params length:{}", params.len());
-        for i in &params {
-            trace!("\t {}", i);
+        for (i, p) in params.iter().enumerate() {
+            println!("\t{i} {p}");
         }
 
         let single = self
@@ -1630,10 +1881,9 @@ pub struct EvaluatorSingle {
 }
 
 impl EvaluatorSingle {
-    #[allow(clippy::too_many_arguments)]
-    pub fn orientated_iterative(
+    pub fn orientated_iterative_impl(
         &self,
-        graph: &BareGraph,
+        n_edges: usize,
         params: &[Atom],
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
@@ -1641,7 +1891,6 @@ impl EvaluatorSingle {
         n_cores: usize,
         verbose: bool,
     ) -> EvaluatorOrientations {
-        debug!("generate iterative evaluator");
         let mut fn_map: FunctionMap = FunctionMap::new();
 
         Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
@@ -1653,11 +1902,8 @@ impl EvaluatorSingle {
 
         let len = extra_info.orientations.len();
 
-        let reps = graph
-            .edges
-            .iter()
-            .enumerate()
-            .map(|(i, _)| {
+        let reps = (0..n_edges)
+            .map(|i| {
                 (
                     Pattern::parse(&format!("Q({},cind(0))", i)).unwrap(),
                     Pattern::parse(&format!("-Q({},cind(0))", i))
@@ -1812,14 +2058,36 @@ impl EvaluatorSingle {
         }
     }
 
-    pub fn orientated_joint(
+    #[allow(clippy::too_many_arguments)]
+    pub fn orientated_iterative(
         &self,
         graph: &BareGraph,
         params: &[Atom],
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
+        iterations: usize,
+        n_cores: usize,
+        verbose: bool,
     ) -> EvaluatorOrientations {
-        debug!("generate joint evaluator");
+        debug!("generate iterative evaluator");
+        self.orientated_iterative_impl(
+            graph.edges.len(),
+            params,
+            extra_info,
+            export_settings,
+            iterations,
+            n_cores,
+            verbose,
+        )
+    }
+
+    pub fn orientated_joint_impl(
+        &self,
+        n_edges: usize,
+        params: &[Atom],
+        extra_info: &ExtraInfo,
+        export_settings: &ExportSettings,
+    ) -> EvaluatorOrientations {
         let mut fn_map: FunctionMap = FunctionMap::new();
 
         Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
@@ -1831,11 +2099,8 @@ impl EvaluatorSingle {
 
         let len = extra_info.orientations.len();
 
-        let reps = graph
-            .edges
-            .iter()
-            .enumerate()
-            .map(|(i, _)| {
+        let reps = (0..n_edges)
+            .map(|i| {
                 (
                     Pattern::parse(&format!("Q({},cind(0))", i)).unwrap(),
                     Pattern::parse(&format!("-Q({},cind(0))", i))
@@ -1971,6 +2236,17 @@ impl EvaluatorSingle {
             eval_quad,
             compiled,
         }
+    }
+
+    pub fn orientated_joint(
+        &self,
+        graph: &BareGraph,
+        params: &[Atom],
+        extra_info: &ExtraInfo,
+        export_settings: &ExportSettings,
+    ) -> EvaluatorOrientations {
+        debug!("generate joint evaluator");
+        self.orientated_joint_impl(graph.edges.len(), params, extra_info, export_settings)
     }
 }
 
@@ -2170,6 +2446,8 @@ pub enum NumeratorStateError {
     NotUnit,
     #[error("Not AppliedFeynmanRule")]
     NotAppliedFeynmanRule,
+    #[error("Not ColorProjected")]
+    NotColorProjected,
     #[error("Not Global")]
     NotGlobal,
     #[error("Not ColorSymplified")]
@@ -2197,6 +2475,7 @@ pub enum PythonState {
     Global(Option<Global>),
     AppliedFeynmanRule(Option<AppliedFeynmanRule>),
     ColorSymplified(Option<ColorSymplified>),
+    ColorProjected(Option<ColorProjected>),
     GammaSymplified(Option<GammaSymplified>),
     Network(Option<Network>),
     Contracted(Option<Contracted>),
@@ -2234,6 +2513,14 @@ impl NumeratorState for PythonState {
                 }
             }
             PythonState::ColorSymplified(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
+
+            PythonState::ColorProjected(state) => {
                 if let Some(s) = state {
                     s.export()
                 } else {

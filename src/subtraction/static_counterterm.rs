@@ -18,6 +18,7 @@ use crate::{
         },
         expression::CFFLimit,
     },
+    gammaloop_integrand::DefaultSample,
     graph::{Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
     numerator::NumeratorState,
@@ -157,8 +158,7 @@ impl CounterTerm {
 
     pub fn evaluate<T: FloatLike>(
         &self,
-        loop_momenta: &[ThreeMomentum<F<T>>],
-        external_momenta: &[FourMomentum<F<T>>],
+        sample: &DefaultSample<T>,
         graph: &Graph,
         rotate_overlap_centers: Option<usize>,
         settings: &Settings,
@@ -178,7 +178,7 @@ impl CounterTerm {
         let esurfaces = &graph.get_cff().esurfaces;
         let lmb = &graph.bare_graph.loop_momentum_basis;
 
-        let const_builder = &loop_momenta[0].px.zero();
+        let const_builder = sample.zero();
 
         let mut res = Complex::new(const_builder.zero(), const_builder.zero());
 
@@ -240,7 +240,8 @@ impl CounterTerm {
                     .collect_vec()
             };
 
-            let shifted_momenta = loop_momenta
+            let shifted_momenta = sample
+                .loop_moms
                 .iter()
                 .zip(center_t.iter())
                 .map(|(momentum, center)| momentum.clone() - center.clone())
@@ -267,7 +268,7 @@ impl CounterTerm {
                 // solve the radius
                 let radius_guess = esurface.get_radius_guess(
                     &hemispherical_unit_shifted_momenta,
-                    external_momenta,
+                    &sample.external_moms,
                     lmb,
                 );
 
@@ -280,7 +281,7 @@ impl CounterTerm {
                         r,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
-                        external_momenta,
+                        &sample.external_moms,
                         lmb,
                         &real_mass_vector,
                     )
@@ -316,7 +317,7 @@ impl CounterTerm {
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
-                        external_momenta,
+                        &sample.external_moms,
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
@@ -326,13 +327,13 @@ impl CounterTerm {
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
-                        external_momenta,
+                        &sample.external_moms,
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
                     ),
                 );
-                let loop_number = loop_momenta.len();
+                let loop_number = sample.loop_moms.len();
                 let (jacobian_ratio_plus, jacobian_ratio_minus) = (
                     (&positive_result.solution / &hemispherical_radius)
                         .pow(3 * loop_number as u64 - 1),

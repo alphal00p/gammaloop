@@ -10,7 +10,7 @@ use crate::{
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, EdgeSlots, Model, VertexSlots},
-    momentum::{FourMomentum, Signature, ThreeMomentum},
+    momentum::{FourMomentum, Polarization, Signature, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
         GammaAlgebraMode, Numerator, NumeratorState, NumeratorStateError, PythonState,
@@ -65,7 +65,10 @@ use std::{
 
 use symbolica::{
     atom::Atom,
-    domains::{float::NumericalFloatLike, rational::Rational},
+    domains::{
+        float::{ConstructibleFloat, NumericalFloatLike},
+        rational::Rational,
+    },
     id::{Pattern, Replacement},
 };
 //use symbolica::{atom::Symbol,state::State};
@@ -83,6 +86,16 @@ pub enum EdgeType {
     #[default]
     #[serde(rename = "virtual")]
     Virtual,
+}
+
+impl EdgeType {
+    pub fn to_string(&self) -> String {
+        match self {
+            EdgeType::Incoming => "in".to_string(),
+            EdgeType::Outgoing => "out".to_string(),
+            EdgeType::Virtual => "virtual".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -731,17 +744,37 @@ pub struct BareGraph {
 }
 
 impl BareGraph {
+    pub fn external_particle_spin(&self) -> Vec<isize> {
+        self.external_edges
+            .iter()
+            .map(|&i| self.edges[i].particle.spin)
+            .collect()
+    }
+
+    pub fn external_particle_spin_and_masslessness(&self) -> Vec<(isize, bool)> {
+        self.external_edges
+            .iter()
+            .map(|&i| {
+                (
+                    self.edges[i].particle.spin,
+                    self.edges[i].particle.mass.value.unwrap() == Complex::new_zero(),
+                )
+            })
+            .collect()
+    }
+    pub fn is_tree(&self) -> bool {
+        self.loop_momentum_basis.basis.is_empty()
+    }
+
     pub fn external_in_or_out_signature(&self) -> Signature {
-        let a: Signature = self
-            .external_edges
+        self.external_edges
             .iter()
             .map(|&i| match self.edges[i].edge_type {
                 EdgeType::Incoming => -1,
                 EdgeType::Outgoing => 1i8,
                 _ => panic!("External edge is not incoming or outgoing"),
             })
-            .collect();
-        a
+            .collect()
     }
 
     pub fn get_dependent_externals<T: FloatLike>(
@@ -761,12 +794,17 @@ impl BareGraph {
     pub fn dot(&self) -> String {
         let mut dot = String::new();
         dot.push_str("digraph G {\n");
-        for edge in &self.edges {
+        for (i, edge) in self.edges.iter().enumerate() {
             let from = self.vertices[edge.vertices[0]].name.clone();
             let to = self.vertices[edge.vertices[1]].name.clone();
             dot.push_str(&format!(
-                "\"{}\" -> \"{}\" [label=\"{}\"];\n",
-                from, to, edge.name
+                "\"{}\" -> \"{}\" [label=\"name: {} particle:{}  Q({}) {} \"];\n",
+                from,
+                to,
+                edge.name,
+                edge.particle.name,
+                i,
+                edge.edge_type.to_string()
             ));
         }
         dot.push_str("}\n");
@@ -1105,7 +1143,7 @@ impl BareGraph {
         self.edges.iter().map(|e| e.denominator(&self)).collect()
     }
 
-    fn emr_from_lmb<T: FloatLike>(
+    pub fn cff_emr_from_lmb<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
         lmb: &LoopMomentumBasis,
@@ -1484,6 +1522,7 @@ impl BareGraph {
         let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
         debug!("Loading derived data from {:?}", derived_data_path);
         let mut derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
+        debug!("updating model in numerator");
 
         derived_data.numerator.update_model(model)?;
 
@@ -1764,6 +1803,22 @@ impl<S: NumeratorState> Graph<S> {
     }
 }
 impl Graph<Evaluators> {
+    pub fn evaluate_fourd_expr<T: FloatLike>(
+        &mut self,
+        loop_mom: &[FourMomentum<F<T>>],
+        external_mom: &[FourMomentum<F<T>>],
+        polarizations: &[Polarization<Complex<F<T>>>],
+        settings: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        self.derived_data.as_mut().unwrap().evaluate_fourd_expr(
+            loop_mom,
+            external_mom,
+            polarizations,
+            settings,
+            &self.bare_graph,
+        )
+    }
+
     #[inline]
     pub fn evaluate_cff_expression<T: FloatLike>(
         &mut self,
@@ -1973,6 +2028,43 @@ impl<NumState: TypedNumeratorState> DerivedGraphData<NumState> {
 }
 
 impl DerivedGraphData<Evaluators> {
+    pub fn evaluate_fourd_expr<T: FloatLike>(
+        &mut self,
+        loop_moms: &[FourMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+        polarizations: &[Polarization<Complex<F<T>>>],
+        settings: &Settings,
+        bare_graph: &BareGraph,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let emr = bare_graph
+            .loop_momentum_basis
+            .edge_signatures
+            .iter()
+            .map(|sig| sig.compute_momentum(loop_moms, external_moms))
+            .collect_vec();
+
+        let mut den = Complex::new_re(F::from_f64(1.));
+        for (e, q) in bare_graph.edges.iter().zip(emr.iter()) {
+            if e.edge_type == EdgeType::Virtual {
+                println!("q: {}", q);
+                if let Some(mass) = e.particle.mass.value {
+                    let m2 = mass.norm_squared();
+                    let m2: F<T> = F::from_ff64(m2);
+                    den *= &q.square() - &m2;
+                } else {
+                    den *= q.square();
+                }
+            }
+        }
+        println!("den: {}", den);
+        let den = den.inv();
+
+        let num = self
+            .numerator
+            .evaluate_single(&emr, polarizations, settings);
+        num.scalar_mul(&den).unwrap()
+    }
+
     #[inline]
     pub fn evaluate_ltd_expression<T: FloatLike>(
         &mut self,
@@ -2042,12 +2134,16 @@ impl DerivedGraphData<Evaluators> {
         match num_iter {
             RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
                 if let Some(i) = s.next() {
+                    println!("num: {}", i);
                     let c = Complex::new_re(cff.next().unwrap());
+                    println!("cff: {}", c);
                     let mut sum = i * &c;
 
                     for j in cff.by_ref() {
                         let c = Complex::new_re(j);
+                        println!("cff: {}", c);
                         let num = s.next().unwrap();
+                        println!("num: {}", num);
                         let summand = &c * num;
                         sum += summand;
                     }
@@ -2080,7 +2176,7 @@ impl DerivedGraphData<Evaluators> {
         sample: &DefaultSample<T>,
         settings: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
-        let emr = graph.emr_from_lmb(sample, &graph.loop_momentum_basis);
+        let emr = graph.cff_emr_from_lmb(sample, &graph.loop_momentum_basis);
 
         let rep = self
             .numerator
@@ -2125,7 +2221,7 @@ impl DerivedGraphData<Evaluators> {
         settings: &Settings,
     ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>> {
         let lmb = lmb_specification.basis_from_derived(self);
-        let emr = graph.emr_from_lmb(sample, lmb);
+        let emr = graph.cff_emr_from_lmb(sample, lmb);
 
         self.numerator
             .evaluate_all_orientations(&emr, &sample.polarizations, settings)
@@ -2172,9 +2268,13 @@ impl DerivedGraphData<UnInit> {
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
                 debug!("Using global numerator: {}", global);
                 let global = Atom::parse(global).unwrap();
-                self.map_numerator(|n| n.from_global(global, base_graph).color_symplify())
+                self.map_numerator(|n| {
+                    n.from_global(global, base_graph)
+                        .color_symplify()
+                        .color_project()
+                })
             } else {
-                self.map_numerator(|n| n.from_graph(base_graph).color_symplify())
+                self.map_numerator(|n| n.from_graph(base_graph).color_symplify().color_project())
             };
 
         let parsed = match &export_settings.numerator_settings.gamma_algebra {
@@ -2264,7 +2364,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     ) -> Vec<Complex<F<T>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         let lmb = lmb_specification.basis_from_derived(self);
-        let emr = graph.emr_from_lmb(sample, lmb);
+        let emr = graph.cff_emr_from_lmb(sample, lmb);
 
         let mut params: Vec<Complex<F<T>>> = emr
             .into_iter()
@@ -2353,6 +2453,12 @@ impl LoopExtSignature {
     where
         T: RefZero + Clone + Neg<Output = T> + AddAssign<T>,
     {
+        if loop_moms.is_empty() {
+            return self.external.apply(external_moms);
+        }
+        if external_moms.is_empty() {
+            return self.internal.apply(loop_moms);
+        }
         let mut res = self.internal.apply(loop_moms);
         res += self.external.apply(external_moms);
         res
@@ -2422,6 +2528,18 @@ impl LoopExtSignature {
 }
 
 impl LoopMomentumBasis {
+    pub fn spatial_emr<T: FloatLike>(&self, sample: &DefaultSample<T>) -> Vec<ThreeMomentum<F<T>>> {
+        let three_externals = sample
+            .external_moms
+            .iter()
+            .map(|m| m.spatial.clone())
+            .collect_vec();
+        self.edge_signatures
+            .iter()
+            .map(|sig| sig.compute_momentum(&sample.loop_moms, &three_externals))
+            .collect()
+    }
+
     pub fn to_massless_emr<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,

@@ -216,7 +216,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         rotate_overlap_centers: Option<usize>,
         settings: &Settings,
     ) -> Complex<F<T>> {
-        let zero_builder = &sample.loop_moms[0].px;
+        let zero_builder = &sample.zero();
 
         let rep3d = if settings.general.use_ltd {
             self.get_mut_graph()
@@ -241,14 +241,14 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
 
         let counter_term_eval = match counter_terms {
             None => Complex::new(zero_builder.zero(), zero_builder.zero()),
-            Some(counter_term) => counter_term.evaluate(
-                &sample.loop_moms,
-                &sample.external_moms,
-                self.get_graph(),
-                rotate_overlap_centers,
-                settings,
-            ),
+            Some(counter_term) => {
+                counter_term.evaluate(sample, self.get_graph(), rotate_overlap_centers, settings)
+            }
         };
+
+        println!("rep3d: {}", rep3d);
+        println!("energy_product: {}", energy_product);
+        println!("counter_term_eval: {}", counter_term_eval);
 
         rep3d / energy_product - counter_term_eval
     }
@@ -307,16 +307,11 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             .static_counterterm
         {
             Some(counterterm) => {
-                counterterm.evaluate(
-                    &sample.loop_moms,
-                    &sample.external_moms,
-                    self.get_graph(),
-                    rotate_overlap_centers,
-                    settings,
-                ) * self
-                    .graph
-                    .bare_graph
-                    .compute_energy_product(&sample.loop_moms, &sample.external_moms)
+                counterterm.evaluate(sample, self.get_graph(), rotate_overlap_centers, settings)
+                    * self
+                        .graph
+                        .bare_graph
+                        .compute_energy_product(&sample.loop_moms, &sample.external_moms)
             }
             None => Complex::new(one.zero(), one.zero()),
         };
@@ -1375,6 +1370,10 @@ impl<T: FloatLike> DefaultSample<T> {
             }
         }
 
+        for (i, p) in polarizations.iter().enumerate() {
+            println!("pol{i}:{}", p);
+        }
+
         Self {
             polarizations,
             loop_moms,
@@ -1384,11 +1383,23 @@ impl<T: FloatLike> DefaultSample<T> {
     }
 
     pub fn one(&self) -> F<T> {
-        self.loop_moms[0].px.one()
+        if let Some(f) = self.loop_moms.first() {
+            f.px.one()
+        } else if let Some(f) = self.external_moms.first() {
+            return f.spatial.px.one();
+        } else {
+            panic!("No momenta in sample")
+        }
     }
 
     pub fn zero(&self) -> F<T> {
-        self.loop_moms[0].px.zero()
+        if let Some(f) = self.loop_moms.first() {
+            f.px.zero()
+        } else if let Some(f) = self.external_moms.first() {
+            return f.spatial.px.zero();
+        } else {
+            panic!("No momenta in sample")
+        }
     }
 
     #[inline]

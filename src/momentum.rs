@@ -842,10 +842,15 @@ impl<T> ThreeMomentum<T> {
 
     pub fn on_shell_energy_squared(&self, mass: Option<T>) -> Energy<T>
     where
-        T: for<'a> Mul<&'a T, Output = T> + Add<T, Output = T> + Clone + std::ops::Add<Output = T>,
+        T: for<'a> Mul<&'a T, Output = T>
+            + Add<T, Output = T>
+            + Clone
+            + std::ops::Add<Output = T>
+            + Display,
     {
         let p2 = self.norm_squared();
         if let Some(mass) = mass {
+            println!("mass: {}", mass);
             Energy {
                 value: p2 + mass.clone() * &mass,
             }
@@ -1079,7 +1084,7 @@ impl<T: FloatLike> Display for Polarization<Complex<F<T>>> {
     }
 }
 
-impl<T> Polarization<T> {
+impl<T: Clone> Polarization<T> {
     pub fn is_scalar(&self) -> bool {
         self.pol_type == PolType::Scalar
     }
@@ -1096,10 +1101,9 @@ impl<T> Polarization<T> {
 
     pub fn lorentz(value: [T; 4]) -> Self {
         let structure = IndexLess::new(vec![Lorentz::new_dimed_rep_selfless(4).cast()]);
-        let [v1, v2, v3, v4] = value;
         Polarization {
             tensor: DenseTensor {
-                data: vec![v1, v2, v3, v4],
+                data: value.to_vec(),
                 structure,
             },
             pol_type: PolType::Epsilon,
@@ -1108,10 +1112,10 @@ impl<T> Polarization<T> {
 
     pub fn bispinor_u(value: [T; 4]) -> Self {
         let structure = IndexLess::new(vec![Bispinor::new_dimed_rep_selfless(4).cast()]);
-        let [v1, v2, v3, v4] = value;
+
         Polarization {
             tensor: DenseTensor {
-                data: vec![v1, v2, v3, v4],
+                data: value.to_vec(),
                 structure,
             },
             pol_type: PolType::U,
@@ -1120,10 +1124,10 @@ impl<T> Polarization<T> {
 
     pub fn bispinor_v(value: [T; 4]) -> Self {
         let structure = IndexLess::new(vec![Bispinor::new_dimed_rep_selfless(4).cast()]);
-        let [v1, v2, v3, v4] = value;
+
         Polarization {
             tensor: DenseTensor {
-                data: vec![v1, v2, v3, v4],
+                data: value.to_vec(),
                 structure,
             },
             pol_type: PolType::V,
@@ -1379,6 +1383,7 @@ impl<T> FourMomentum<T, T> {
         T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Real,
     {
         let energy = three_momentum.on_shell_energy(mass);
+        println!("{}", energy);
         FourMomentum {
             temporal: energy,
             spatial: three_momentum,
@@ -1601,46 +1606,66 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
     }
 
     pub fn u(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
-        let zero: Complex<F<T>> = self.temporal.value.zero().into();
-        Polarization::bispinor_u(match lambda {
-            Sign::Positive => [
-                zero.clone(),
-                self.omega(Sign::Negative),
-                zero.clone(),
-                self.omega(Sign::Positive),
-            ],
-            Sign::Negative => [
-                -self.omega(Sign::Positive),
-                zero.clone(),
-                self.omega(Sign::Negative),
-                zero.clone(),
-            ],
-        })
+        let xi = self.xi(lambda);
+        Polarization::bispinor_u([
+            self.omega(-lambda) * &xi[0],
+            self.omega(-lambda) * &xi[1],
+            self.omega(lambda) * &xi[0],
+            self.omega(lambda) * &xi[1],
+        ])
     }
 
     pub fn v(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
-        let zero: Complex<F<T>> = self.temporal.value.zero().into();
-        Polarization::bispinor_v(match lambda {
-            Sign::Negative => [
-                zero.clone(),
-                self.omega(Sign::Negative),
-                zero.clone(),
-                -self.omega(Sign::Positive),
-            ],
-            Sign::Positive => [
-                self.omega(Sign::Positive),
-                zero.clone(),
-                -self.omega(Sign::Negative),
-                zero.clone(),
-            ],
-        })
+        let xi = self.xi(-lambda);
+        Polarization::bispinor_v([
+            (-lambda) * self.omega(lambda) * &xi[0],
+            (-lambda) * self.omega(lambda) * &xi[1],
+            lambda * self.omega(-lambda) * &xi[0],
+            lambda * self.omega(-lambda) * &xi[1],
+        ])
+    }
+
+    pub fn xi(&self, lambda: Sign) -> [Complex<F<T>>; 2] {
+        if self.spatial.pz == -self.spatial.norm() {
+            let zero: Complex<F<T>> = self.temporal.value.zero().into();
+            let one = zero.one();
+            match lambda {
+                Sign::Positive => [zero, one],
+                Sign::Negative => [-one, zero],
+            }
+        } else {
+            let prefactor: F<T> = ((F::from_f64(2.)
+                * self.spatial.norm()
+                * (self.spatial.norm() + &self.spatial.pz))
+                .sqrt())
+            .inv();
+            let mut xi: [Complex<F<T>>; 2] = [
+                Complex::new_re(&prefactor * (self.spatial.norm() + &self.spatial.pz)),
+                Complex::new(self.spatial.px.clone(), self.spatial.py.clone()) * &prefactor,
+            ]; //plus
+
+            if matches!(lambda, Sign::Negative) {
+                xi.swap(0, 1);
+                xi[0].re = -xi[0].re.clone();
+            }
+            xi
+        }
     }
 }
 
 impl<T: FloatLike> Polarization<Complex<F<T>>> {
     pub fn bar(&self) -> Self {
+        let mut tensor = self.tensor.map_data_ref(Complex::conj);
+
+        if matches!(
+            self.pol_type,
+            PolType::U | PolType::V | PolType::UBar | PolType::VBar
+        ) {
+            tensor.data.swap(0, 2);
+            tensor.data.swap(1, 3);
+        }
         Polarization {
-            tensor: self.tensor.map_data_ref(Complex::conj),
+            tensor,
             pol_type: self.pol_type.bar(),
         }
     }
@@ -2330,5 +2355,121 @@ mod tests {
         let deserialized: Vec<Helicity> = serde_json::from_str("[1,-1,0,1]").unwrap();
 
         println!("{:?}", deserialized);
+    }
+
+    #[test]
+    fn eps() {
+        let mom = FourMomentum::from_args(
+            F(156.2565490076973),
+            F(-108.59017233120495),
+            F(-100.2097685717689),
+            F(50.81619686346704),
+        );
+
+        let pol = mom.pol(SignOrZero::Plus);
+        println!("{}", pol);
+
+        let mom = FourMomentum::from_args(
+            F(441.7831721921727),
+            F(237.7632083614734),
+            F(368.76330416225863),
+            F(-51.523329523343534),
+        );
+
+        let pol = mom.pol(SignOrZero::Plus);
+        println!("{}", pol);
+
+        let mom = FourMomentum::from_args(F(485.0355), F(0.), F(0.), F(485.0355));
+
+        let pol = mom.pol(SignOrZero::Plus);
+
+        println!("{}", pol);
+
+        println!("pt{}", mom.pt());
+
+        let mom = FourMomentum::from_args(F(485.0355), F(-107.6044), F(-431.5174), F(193.5805));
+
+        let pol = mom.pol(SignOrZero::Plus).bar();
+
+        // Helicity=           1           1           1           1
+        //  W(*,1)=               (5.4707403520912967,0.0000000000000000)               (0.0000000000000000,0.0000000000000000)               (31.622776601683793,0.0000000000000000)               (0.0000000000000000,0.0000000000000000)
+        //  W(*,2)=               (0.0000000000000000,0.0000000000000000)             (-0.70710678118654757,0.0000000000000000)              (0.0000000000000000,0.70710678118654757)               (0.0000000000000000,0.0000000000000000)
+        //  W(*,3)=               (17.333409072341226,0.0000000000000000)              (6.3994499859138338,-25.663202641304650)               (2.9986797695150327,0.0000000000000000)              (1.1071048475630934,-4.4397340569457056)
+        //  W(*,4)=               (0.0000000000000000,0.0000000000000000)        (6.82818793416064135E-002,0.68609707126238750)            (0.27382536157480858,-0.17108713804717862)              (0.64834964048112464,0.0000000000000000)
+
+        println!("{}", pol);
+        println!("pt{}", mom.pt());
+    }
+
+    #[test]
+    fn spinors() {
+        let mom = FourMomentum::from_args(F(2.), F(0.), F(0.), F(2.));
+
+        let u = mom.u(Sign::Positive);
+
+        println!("+{}", u);
+        println!("+{}", u.bar());
+        let v = mom.v(Sign::Positive);
+        println!("+{}", v);
+        println!("+{}", v.bar());
+        let u = mom.u(Sign::Negative);
+        println!("-{}", u);
+        println!("-{}", u.bar());
+
+        let v = mom.v(Sign::Negative);
+        println!("-{}", v);
+        println!("-{}", v.bar());
+        let mom = FourMomentum::from_args(F(5.), F(3.), F(0.), F(4.));
+
+        let u = mom.u(Sign::Positive);
+        println!("+{}", u);
+        println!("+{}", u.bar());
+
+        let u_target = Polarization::bispinor_u([F(0.), F(0.), F(3.), F(1.)]).cast();
+        assert_eq!(u, u_target);
+        assert_eq!(
+            u.bar().tensor.data,
+            vec![
+                Complex::new_re(F(3.)),
+                Complex::new_re(F(1.)),
+                Complex::new_re(F(0.)),
+                Complex::new_re(F(0.))
+            ]
+        );
+        let v = mom.v(Sign::Positive);
+        println!("+{}", v);
+        println!("+{}", v.bar());
+
+        let v_target = Polarization::bispinor_v([F(1.), F(-3.), F(0.), F(0.)]).cast();
+        assert_eq!(v, v_target);
+        assert_eq!(
+            v.bar().tensor.data,
+            vec![
+                Complex::new_re(F(0.)),
+                Complex::new_re(F(0.)),
+                Complex::new_re(F(1.)),
+                Complex::new_re(F(-3.))
+            ]
+        );
+
+        let u = mom.u(Sign::Negative);
+        println!("-{}", u);
+        println!("-{}", u.bar());
+
+        let v = mom.v(Sign::Negative);
+        println!("-{}", v);
+        println!("-{}", v.bar());
+
+        let v_target = Polarization::bispinor_v([F(1.), F(-3.), F(0.), F(0.)]).cast();
+        assert_eq!(v, v_target);
+        assert_eq!(
+            v.bar().tensor.data,
+            vec![
+                Complex::new_re(F(0.)),
+                Complex::new_re(F(0.)),
+                Complex::new_re(F(1.)),
+                Complex::new_re(F(-3.))
+            ]
+        );
     }
 }

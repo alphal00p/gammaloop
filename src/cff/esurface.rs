@@ -313,6 +313,9 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     debug: usize,
     e_cm: F<f64>,
 ) -> ExistingEsurfaces {
+    if lmb.basis.is_empty() {
+        return ExistingEsurfaces::new();
+    }
     if debug > 1 {
         println!(
             "{}",

@@ -493,6 +493,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "compensated-summation"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed1a3144e513c51ca811317ee1255c50200e4d87d4719d31beecef44cca71469"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "const_format"
 version = "0.2.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -892,6 +901,7 @@ dependencies = [
  "clarabel",
  "color-eyre",
  "colored",
+ "compensated-summation",
  "constcat",
  "criterion",
  "ctrlc",
@@ -2158,7 +2168,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=master#711ee2156000c1741a5e637734a51f596892ea5e"
+source = "git+https://github.com/alphal00p/spenso?branch=master#ef79c4efdc6f02123df5182fcd3172e1a4edd3d9"
 dependencies = [
  "ahash",
  "ambassador",

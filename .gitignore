@@ -69,6 +69,10 @@ ignore/
 
 src/test_resources/gammaloop_models/*.dat
 
+src/test_resources/Trees
+
+GL_OUTPUT*
+
 src/test_resources/TEST_AMPLITUDE_*
 # Sadly this does not work because the exclusion above is for an entire directory
 !src/test_resources/TEST_AMPLITUDE_*/GL_OUTPUT/output_metadata.yaml

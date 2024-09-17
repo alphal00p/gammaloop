@@ -96,6 +96,7 @@ gat-lending-iterator = "0.1.5"
 # gxhash = "3.4.1"
 thiserror = "1.0.63"
 serde_repr = "0.1.19"
+compensated-summation = "0.3.0"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

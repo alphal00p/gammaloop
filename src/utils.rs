@@ -1873,8 +1873,9 @@ pub fn compute_t_part_of_shift_part<T: FloatLike>(
     external_signature: &Signature,
     external_moms: &[FourMomentum<F<T>>],
 ) -> F<T> {
+    
     // external_signature.panic_validate_basis(external_moms);
-    external_signature.apply_iter(external_moms.iter().map(|m| m.temporal.value.clone())).unwrap()
+    external_signature.apply_iter(external_moms.iter().map(|m| m.temporal.value.clone())).unwrap_or(external_moms[0].temporal.value.zero())
 }
 
 

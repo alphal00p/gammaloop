@@ -20,6 +20,7 @@ use spenso::{
     },
 };
 use std::fs;
+use symbolica::evaluate::FunctionMap;
 
 use eyre::Result;
 use std::ops::Index;
@@ -28,7 +29,7 @@ use symbolica::id::{Pattern, PatternOrMap};
 // use std::str::pattern::Pattern;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
-use symbolica::atom::{Atom, AtomView, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomView, Fun, FunctionBuilder, Symbol};
 
 use spenso::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
@@ -617,25 +618,27 @@ impl Particle {
     }
 
     pub fn incoming_polarization_atom(&self, edge_slots: &EdgeSlots<Lorentz>, num: usize) -> Atom {
+        let mut colorless = edge_slots.clone();
+        colorless.color = vec![];
         match self.spin {
             1 => Atom::parse("1").unwrap(),
             2 => {
                 if self.pdg_code > 0 {
                     let mut u = FunctionBuilder::new(State::get_symbol("u"));
                     u = u.add_arg(&Atom::new_num(num as i64));
-                    u = u.add_arg(&edge_slots.to_aind_atom());
+                    u = u.add_arg(&colorless.to_aind_atom());
                     u.finish()
                 } else {
                     let mut vbar = FunctionBuilder::new(State::get_symbol("vbar"));
                     vbar = vbar.add_arg(&Atom::new_num(num as i64));
-                    vbar = vbar.add_arg(&edge_slots.to_aind_atom());
+                    vbar = vbar.add_arg(&colorless.to_aind_atom());
                     vbar.finish()
                 }
             }
             3 => {
                 let mut e = FunctionBuilder::new(State::get_symbol("ϵ"));
                 e = e.add_arg(&Atom::new_num(num as i64));
-                e = e.add_arg(&edge_slots.to_aind_atom());
+                e = e.add_arg(&colorless.to_aind_atom());
                 e.finish()
             }
             _ => panic!("higher spin not supported"), //Atom::parse("1").unwrap(),
@@ -675,7 +678,9 @@ impl Particle {
         edge_slots: &EdgeSlots<Lorentz>,
         num: usize,
     ) -> Vec<Atom> {
-        edge_slots.to_dense_labels(|v, i| ExpandedCoefficent::<usize> {
+        let mut colorless = edge_slots.clone();
+        colorless.color = vec![];
+        colorless.to_dense_labels(|v, i| ExpandedCoefficent::<usize> {
             index: v.expanded_index(i).unwrap(),
             name: self.in_pol_symbol(),
             args: Some(num),
@@ -687,7 +692,9 @@ impl Particle {
         edge_slots: &EdgeSlots<Lorentz>,
         num: usize,
     ) -> Vec<Atom> {
-        edge_slots.to_dense_labels(|v, i| ExpandedCoefficent::<usize> {
+        let mut colorless = edge_slots.clone();
+        colorless.color = vec![];
+        colorless.to_dense_labels(|v, i| ExpandedCoefficent::<usize> {
             index: v.expanded_index(i).unwrap(),
             name: self.out_pol_symbol(),
             args: Some(num),
@@ -774,31 +781,38 @@ impl Particle {
                     mom.v(helicity.try_into().unwrap()).bar()
                 }
             }
-            3 => mom.pol(helicity),
+            3 => {
+                // let mut mom = mom.clone();
+                // mom.temporal = -mom.temporal;
+                // mom.spatial = -mom.spatial;
+                mom.pol(helicity) //.bar()
+            }
             i => panic!("Spin {}/2 not implemented", i - 1),
         }
     }
 
     pub fn outgoing_polarization_atom(&self, edge_slots: &EdgeSlots<Lorentz>, num: usize) -> Atom {
+        let mut colorless = edge_slots.clone();
+        colorless.color = vec![];
         match self.spin {
             1 => Atom::parse("1").unwrap(),
             2 => {
                 if self.pdg_code > 0 {
                     let mut ubar = FunctionBuilder::new(State::get_symbol("ubar"));
                     ubar = ubar.add_arg(&Atom::new_num(num as i64));
-                    ubar = ubar.add_arg(&edge_slots.to_aind_atom());
+                    ubar = ubar.add_arg(&colorless.to_aind_atom());
                     ubar.finish()
                 } else {
                     let mut v = FunctionBuilder::new(State::get_symbol("v"));
                     v = v.add_arg(&Atom::new_num(num as i64));
-                    v = v.add_arg(&edge_slots.to_aind_atom());
+                    v = v.add_arg(&colorless.to_aind_atom());
                     v.finish()
                 }
             }
             3 => {
                 let mut ebar = FunctionBuilder::new(State::get_symbol("ϵbar"));
                 ebar = ebar.add_arg(&Atom::new_num(num as i64));
-                ebar = ebar.add_arg(&edge_slots.to_aind_atom());
+                ebar = ebar.add_arg(&colorless.to_aind_atom());
                 ebar.finish()
             }
             _ => Atom::parse("1").unwrap(),
@@ -831,10 +845,10 @@ impl Particle {
                 }
             }
             3 => {
-                let mut mom = mom.clone();
-                mom.temporal = -mom.temporal;
-                mom.spatial = -mom.spatial;
-                mom.pol(helicity)
+                // let mut mom = mom.clone();
+                // mom.temporal = -mom.temporal;
+                // mom.spatial = -mom.spatial;
+                mom.pol(helicity).bar()
             }
             i => panic!("Spin {}/2 not implemented", i - 1),
         }
@@ -1165,6 +1179,59 @@ impl Default for Model {
     }
 }
 impl Model {
+    pub fn recompute_dependents(&mut self) {
+        let mut fn_map = FunctionMap::new();
+
+        let mut expr = vec![];
+        let mut new_values_len = 0;
+
+        for c in &self.couplings {
+            let key = State::get_symbol(&c.name);
+            expr.push(c.expression.as_view());
+            fn_map.add_function(key, c.name.clone().into(), vec![], c.expression.as_view());
+            new_values_len += 1;
+        }
+
+        let mut params = vec![];
+        let mut param_values = vec![];
+
+        for p in &self.parameters {
+            let key = Atom::parse(&p.name).unwrap();
+            match p.nature {
+                ParameterNature::External => {
+                    params.push(key);
+                    if let Some(value) = p.value {
+                        param_values.push(value);
+                    } else {
+                        panic!("External parameter {} has no value", p.name);
+                    }
+                }
+                ParameterNature::Internal => {
+                    new_values_len += 1;
+                    let key = State::get_symbol(&p.name);
+                    expr.push(p.expression.as_ref().unwrap().as_view());
+                    fn_map.add_function(
+                        key,
+                        p.name.clone().into(),
+                        vec![],
+                        p.expression.as_ref().unwrap().as_view(),
+                    );
+                }
+            }
+        }
+
+        let evaluator = AtomView::to_eval_tree_multiple(&expr, &fn_map, &params).unwrap();
+
+        let mut evaluator = evaluator.map_coeff(&|f| Complex::new(F(f.into()), F(0.0)));
+
+        let mut new_values = vec![Complex::new(F(0.0), F(0.0)); new_values_len];
+        evaluator.evaluate(&param_values, &mut new_values);
+
+        // for (i, c) in self.couplings.iter_mut().enumerate() {
+        //     c.value = Some(new_values[i].map(|f| f.0));
+        // }
+    }
+
     pub fn substitute_model_params(&self, atom: &Atom) -> Atom {
         let mut sub_atom = atom.clone();
         for cpl in self.couplings.iter() {

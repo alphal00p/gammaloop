@@ -1154,7 +1154,7 @@ class GammaLoop(object):
     inspect_parser.add_argument('--use-f128', '-f128', action='store_true',
                                 default=False, help='Use f128 precision for the inspection.')
     inspect_parser.add_argument('--point', '-p', nargs="+", type=float,
-                                default=None, help='Point to inspect.')
+                                default=[], help='Point to inspect.')
     inspect_parser.add_argument(
         '--term', '-t', nargs="+", type=int, default=tuple([0,]), help="term to inspect.")
     inspect_parser.add_argument('--is-momentum-space', '-ms', action='store_true',
