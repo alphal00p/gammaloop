@@ -167,7 +167,7 @@ pub struct InteractionVertexInfo {
 impl InteractionVertexInfo {
     pub fn apply_vertex_rule(
         &self,
-        edges: &[usize],
+        edges: &[isize],
         vertex_pos: usize,
         vertex_slots: &VertexSlots,
     ) -> Option<[DataTensor<Atom>; 3]> {
@@ -181,10 +181,15 @@ impl InteractionVertexInfo {
                 for (i, e) in edges.iter().enumerate() {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
-                    let momentum_out_pattern =
-                        Pattern::parse(&format!("Q({},aind(lord(4,indexid(x_))))", e))
+                    let momentum_out_pattern = if e < &0 {
+                        Pattern::parse(&format!("-Q({},aind(lord(4,indexid(x_))))", -e))
                             .unwrap()
-                            .into(); //TODO flip based on flow
+                            .into() //TODO flip based on flow
+                    } else {
+                        Pattern::parse(&format!("Q({},aind(loru(4,indexid(x_))))", e))
+                            .unwrap()
+                            .into() //TODO flip based on flow
+                    };
 
                     atom = momentum_in_pattern.replace_all(
                         atom.as_view(),
@@ -484,28 +489,53 @@ impl Edge {
                 let mut atom = self.propagator.numerator.clone();
 
                 let pfun = Pattern::parse("P(x_)").unwrap();
-                atom = pfun.replace_all(
-                    atom.as_view(),
-                    &Pattern::parse(&format!("Q({},aind(loru(4,x_)))", num))
-                        .unwrap()
-                        .into(),
-                    None,
-                    None,
-                );
+                if self.particle.is_antiparticle() {
+                    atom = pfun.replace_all(
+                        atom.as_view(),
+                        &Pattern::parse(&format!("-Q({},aind(loru(4,x_)))", num))
+                            .unwrap()
+                            .into(),
+                        None,
+                        None,
+                    );
+                } else {
+                    atom = pfun.replace_all(
+                        atom.as_view(),
+                        &Pattern::parse(&format!("Q({},aind(loru(4,x_)))", num))
+                            .unwrap()
+                            .into(),
+                        None,
+                        None,
+                    );
+                }
 
                 let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
                 let pindex_num = graph.shifts.0 + 1;
-                atom = pslashfun.replace_all(
-                    atom.as_view(),
-                    &Pattern::parse(&format!(
-                        "Q({},aind(lord(4,{})))*Gamma({},i_,j_)",
-                        num, pindex_num, pindex_num
-                    ))
-                    .unwrap()
-                    .into(),
-                    None,
-                    None,
-                );
+                if self.particle.is_antiparticle() {
+                    atom = pslashfun.replace_all(
+                        atom.as_view(),
+                        &Pattern::parse(&format!(
+                            "-Q({},aind(lord(4,{})))*Gamma({},i_,j_)",
+                            num, pindex_num, pindex_num
+                        ))
+                        .unwrap()
+                        .into(),
+                        None,
+                        None,
+                    );
+                } else {
+                    atom = pslashfun.replace_all(
+                        atom.as_view(),
+                        &Pattern::parse(&format!(
+                            "Q({},aind(lord(4,{})))*Gamma({},i_,j_)",
+                            num, pindex_num, pindex_num
+                        ))
+                        .unwrap()
+                        .into(),
+                        None,
+                        None,
+                    );
+                }
 
                 atom = preprocess_ufo_spin_wrapped(atom, false);
 
@@ -597,12 +627,29 @@ impl Vertex {
         graph.is_edge_incoming(edge, graph.get_vertex_position(&self.name).unwrap())
     }
 
+    fn add_signs_to_edges(&self, graph: &BareGraph) -> Vec<isize> {
+        self.edges
+            .iter()
+            .map(|&e| {
+                if !self.is_edge_incoming(e, graph) {
+                    -(e as isize)
+                } else {
+                    e as isize
+                }
+            })
+            .collect()
+    }
+
     pub fn apply_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 3]> {
         let pos = graph.get_vertex_position(&self.name).unwrap();
         match &self.vertex_info {
             VertexInfo::ExternalVertexInfo(_) => None,
             VertexInfo::InteractonVertexInfo(interaction_vertex_info) => interaction_vertex_info
-                .apply_vertex_rule(&self.edges, pos, &graph.vertex_slots[pos]),
+                .apply_vertex_rule(
+                    &self.add_signs_to_edges(graph),
+                    pos,
+                    &graph.vertex_slots[pos],
+                ),
         }
     }
 
@@ -2050,7 +2097,7 @@ impl DerivedGraphData<Evaluators> {
         let mut den = Complex::new_re(F::from_f64(1.));
         for (e, q) in bare_graph.edges.iter().zip(emr.iter()) {
             if e.edge_type == EdgeType::Virtual {
-                // println!("q: {}", q);
+                println!("q: {}", q);
                 if let Some(mass) = e.particle.mass.value {
                     let m2 = mass.norm_squared();
                     let m2: F<T> = F::from_ff64(m2);
@@ -2060,7 +2107,7 @@ impl DerivedGraphData<Evaluators> {
                 }
             }
         }
-        // println!("den: {}", den);
+        println!("den: {}", den);
         let den = den.inv();
 
         let num = self

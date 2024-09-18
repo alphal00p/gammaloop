@@ -407,7 +407,6 @@ fn tree_h_ttxaah_1() {
     println!("CFF: {}", cff_val);
 }
 
-
 #[test]
 fn tree_hh_ttxaa_1() {
     let (model, amplitude, path) = load_tree("hh_ttxaa", 1);
@@ -423,6 +422,85 @@ fn tree_hh_ttxaa_1() {
         &test_export_settings(),
     );
     let sample: DefaultSample<f64> = sample_generator(3, &graph.bare_graph, None);
+
+    let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
+        / graph
+            .bare_graph
+            .compute_energy_product(&sample.loop_moms, &sample.external_moms);
+
+    let val = graph
+        .evaluate_fourd_expr(
+            &[],
+            &sample.external_moms,
+            &sample.polarizations,
+            &Settings::default(),
+        )
+        .scalar()
+        .unwrap();
+
+    println!("4d: {}", val);
+    println!("CFF: {}", cff_val);
+
+    let externals = Externals::Constant {
+        momenta: vec![
+            ExternalMomenta::Independent(
+                [0.586E+03, 0.000E+00, 0.000E+00, 5.735_817_291_371_824E2].map(F),
+            ),
+            ExternalMomenta::Independent(
+                [
+                    5.86E2,
+                    0.00000000000000000E+00,
+                    0.00000000000000000E+00,
+                    -5.735_817_291_371_824E2,
+                ]
+                .map(F),
+            ),
+            ExternalMomenta::Independent(
+                [
+                    1.953_887_163_589_759_6E2,
+                    -2.266_618_827_913_845_3E1,
+                    4.110_590_302_435_584E1,
+                    -7.774_509_068_652_03E1,
+                ]
+                .map(F),
+            ),
+            ExternalMomenta::Independent(
+                [
+                    3.785_715_624_411_541E2,
+                    -1.065_068_477_511_299_8E2,
+                    -3.096_594_386_148_455_6E2,
+                    7.845_222_334_639_679E1,
+                ]
+                .map(F),
+            ),
+            ExternalMomenta::Independent(
+                [
+                    1.562_565_490_076_973E2,
+                    -1.085_901_723_312_049_5E2,
+                    -1.002_097_685_717_689E2,
+                    5.081_619_686_346_704E1,
+                ]
+                .map(F),
+            ),
+            ExternalMomenta::Dependent(crate::momentum::Dep::Dep),
+        ],
+        helicities: vec![
+            Helicity::Zero,
+            Helicity::Zero,
+            Helicity::Plus,
+            Helicity::Plus,
+            Helicity::Plus,
+            Helicity::Plus,
+        ],
+    };
+
+    let sample = DefaultSample::new(
+        vec![],
+        externals.get_indep_externals(&[]).0,
+        F(1.),
+        externals.get_helicities(),
+        &graph.bare_graph,
+    );
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph

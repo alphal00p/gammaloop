@@ -107,7 +107,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         polarizations: &[Polarization<Complex<F<T>>>],
         settings: &Settings,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>> {
-        <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations);
+        <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations, settings);
 
         if !settings.general.load_compiled_numerator {
             self.disable_compiled();
@@ -131,7 +131,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         if !setting.general.joint_numerator_eval {
             self.disable_combined();
         }
-        <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations);
+        <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations, setting);
         <T as NumeratorEvaluateFloat>::evaluate_single(self)
     }
 }
@@ -148,6 +148,7 @@ pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
         num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
+        settings: &Settings,
     );
 }
 
@@ -225,6 +226,7 @@ impl NumeratorEvaluateFloat for f64 {
         num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
+        settings: &Settings,
     ) {
         let params = &mut num.state.double_param_values;
         emr.iter()
@@ -243,9 +245,11 @@ impl NumeratorEvaluateFloat for f64 {
             }
         }
 
-        // for p in 0..params.len() {
-        //     println!("{}:{}", p, params[p]);
-        // }
+        if settings.general.debug > 0 {
+            for p in 0..params.len() {
+                println!("{}:{}", p, params[p]);
+            }
+        }
     }
 
     fn evaluate_all_orientations(
@@ -322,6 +326,7 @@ impl NumeratorEvaluateFloat for f128 {
         num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
+        settings: &Settings,
     ) {
         let params = &mut num.state.quad_param_values;
         emr.iter()
@@ -337,6 +342,12 @@ impl NumeratorEvaluateFloat for f128 {
                     params[i] = pi.clone();
                     i += 1;
                 }
+            }
+        }
+
+        if settings.general.debug > 0 {
+            for p in 0..params.len() {
+                println!("{}:{}", p, params[p]);
             }
         }
     }
