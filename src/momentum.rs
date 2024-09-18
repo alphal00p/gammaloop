@@ -850,7 +850,7 @@ impl<T> ThreeMomentum<T> {
     {
         let p2 = self.norm_squared();
         if let Some(mass) = mass {
-            println!("mass: {}", mass);
+            // println!("mass: {}", mass);
             Energy {
                 value: p2 + mass.clone() * &mass,
             }
@@ -1383,7 +1383,7 @@ impl<T> FourMomentum<T, T> {
         T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Real,
     {
         let energy = three_momentum.on_shell_energy(mass);
-        println!("{}", energy);
+        // println!("{}", energy);
         FourMomentum {
             temporal: energy,
             spatial: three_momentum,

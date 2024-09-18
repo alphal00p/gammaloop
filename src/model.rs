@@ -550,6 +550,10 @@ where
 }
 
 impl Particle {
+    pub fn is_antiparticle(&self) -> bool {
+        self.pdg_code < 0
+    }
+
     fn lorentz_slots<LR: BaseRepName>(&self, shift: usize) -> (Vec<Slot<LR>>, usize) {
         let fourd_lor = LR::new_dimed_rep_selfless(4);
 

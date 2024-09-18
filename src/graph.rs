@@ -196,6 +196,8 @@ impl InteractionVertexInfo {
 
                 atom = preprocess_ufo_spin_wrapped(atom, true);
 
+                let len = edges.len();
+
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
 
@@ -507,9 +509,11 @@ impl Edge {
 
                 atom = preprocess_ufo_spin_wrapped(atom, false);
 
-                let replacements_in = in_slots.replacements(1);
-
-                let mut replacements_out = out_slots.replacements(2);
+                let (replacements_in, mut replacements_out) = if self.particle.is_antiparticle() {
+                    (in_slots.replacements(2), out_slots.replacements(1))
+                } else {
+                    (in_slots.replacements(1), out_slots.replacements(2))
+                };
 
                 replacements_out.push((
                     Atom::parse("indexid(x_)").unwrap().into_pattern(),
@@ -2046,7 +2050,7 @@ impl DerivedGraphData<Evaluators> {
         let mut den = Complex::new_re(F::from_f64(1.));
         for (e, q) in bare_graph.edges.iter().zip(emr.iter()) {
             if e.edge_type == EdgeType::Virtual {
-                println!("q: {}", q);
+                // println!("q: {}", q);
                 if let Some(mass) = e.particle.mass.value {
                     let m2 = mass.norm_squared();
                     let m2: F<T> = F::from_ff64(m2);
@@ -2056,7 +2060,7 @@ impl DerivedGraphData<Evaluators> {
                 }
             }
         }
-        println!("den: {}", den);
+        // println!("den: {}", den);
         let den = den.inv();
 
         let num = self
@@ -2134,16 +2138,16 @@ impl DerivedGraphData<Evaluators> {
         match num_iter {
             RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
                 if let Some(i) = s.next() {
-                    println!("num: {}", i);
+                    // println!("num: {}", i);
                     let c = Complex::new_re(cff.next().unwrap());
-                    println!("cff: {}", c);
+                    // println!("cff: {}", c);
                     let mut sum = i * &c;
 
                     for j in cff.by_ref() {
                         let c = Complex::new_re(j);
-                        println!("cff: {}", c);
+                        // println!("cff: {}", c);
                         let num = s.next().unwrap();
-                        println!("num: {}", num);
+                        // println!("num: {}", num);
                         let summand = &c * num;
                         sum += summand;
                     }

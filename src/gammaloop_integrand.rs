@@ -246,9 +246,9 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             }
         };
 
-        println!("rep3d: {}", rep3d);
-        println!("energy_product: {}", energy_product);
-        println!("counter_term_eval: {}", counter_term_eval);
+        // println!("rep3d: {}", rep3d);
+        // println!("energy_product: {}", energy_product);
+        // println!("counter_term_eval: {}", counter_term_eval);
 
         rep3d / energy_product - counter_term_eval
     }
@@ -1370,9 +1370,9 @@ impl<T: FloatLike> DefaultSample<T> {
             }
         }
 
-        for (i, p) in polarizations.iter().enumerate() {
-            println!("pol{i}:{}", p);
-        }
+        // for (i, p) in polarizations.iter().enumerate() {
+        //     println!("pol{i}:{}", p);
+        // }
 
         Self {
             polarizations,

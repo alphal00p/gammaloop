@@ -283,6 +283,8 @@ fn tree_ta_ta_1() {
 
     graph.generate_cff();
 
+    let export_settings = test_export_settings();
+
     let mut graph = graph.process_numerator(
         &model,
         ContractionSettings::<Rational>::Normal,
@@ -334,7 +336,7 @@ fn tree_ta_ta_1() {
         helicities: vec![
             Helicity::Plus,
             Helicity::Plus,
-            Helicity::Minus,
+            Helicity::Plus,
             Helicity::Plus,
         ],
     };
@@ -373,6 +375,42 @@ fn tree_ta_ta_1() {
 #[test]
 fn tree_h_ttxaah_1() {
     let (model, amplitude, path) = load_tree("h_ttxaah", 1);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::<Rational>::Normal,
+        path,
+        &test_export_settings(),
+    );
+    let sample: DefaultSample<f64> = sample_generator(3, &graph.bare_graph, None);
+
+    let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
+        / graph
+            .bare_graph
+            .compute_energy_product(&sample.loop_moms, &sample.external_moms);
+
+    let val = graph
+        .evaluate_fourd_expr(
+            &[],
+            &sample.external_moms,
+            &sample.polarizations,
+            &Settings::default(),
+        )
+        .scalar()
+        .unwrap();
+
+    println!("4d: {}", val);
+    println!("CFF: {}", cff_val);
+}
+
+
+#[test]
+fn tree_hh_ttxaa_1() {
+    let (model, amplitude, path) = load_tree("hh_ttxaa", 1);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 

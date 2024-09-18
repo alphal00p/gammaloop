@@ -243,9 +243,9 @@ impl NumeratorEvaluateFloat for f64 {
             }
         }
 
-        for p in 0..params.len() {
-            println!("{}:{}", p, params[p]);
-        }
+        // for p in 0..params.len() {
+        //     println!("{}:{}", p, params[p]);
+        // }
     }
 
     fn evaluate_all_orientations(
@@ -1002,14 +1002,14 @@ impl ColorProjected {
 
 impl Numerator<ColorProjected> {
     pub fn parse(self) -> Numerator<Network> {
-        debug!("ColorProjected numerator: {}", self.export());
+        // debug!("ColorProjected numerator: {}", self.export());
         Numerator {
             state: Network::parse_impl(self.state.expression.0.as_view()),
         }
     }
 
     pub fn gamma_symplify(self) -> Numerator<GammaSymplified> {
-        debug!("ColorSymplified numerator: {}", self.export());
+        // debug!("ColorSymplified numerator: {}", self.export());
         debug!("gamma symplifying color symplified numerator");
         Numerator {
             state: GammaSymplified::gamma_symplify(self.state),
@@ -1276,7 +1276,7 @@ impl GammaSymplified {
 
 impl Numerator<GammaSymplified> {
     pub fn parse(self) -> Numerator<Network> {
-        debug!("GammaSymplified numerator: {}", self.export());
+        // debug!("GammaSymplified numerator: {}", self.export());
         debug!("parsing numerator into tensor network");
         Numerator {
             state: self.state.parse(),
@@ -1377,7 +1377,10 @@ impl TypedNumeratorState for Network {
 
 impl Numerator<Network> {
     pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
-        debug!("contracting network");
+        debug!(
+            "contracting network {}",
+            self.state.net.rich_graph().dot_nodes()
+        );
         let contracted = self.state.contract(settings)?;
         Ok(Numerator { state: contracted })
     }
