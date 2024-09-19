@@ -21,7 +21,7 @@ use crate::{
     gammaloop_integrand::DefaultSample,
     graph::{BareGraph, Graph, SerializableGraph},
     model::Model,
-    momentum::{ExternalMomenta, FourMomentum, Helicity, Polarization},
+    momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, Polarization},
     numerator::{Contracted, ContractionSettings, ExtraInfo},
     tests_from_pytest::{sample_generator, test_export_settings},
     utils::{approx_eq_res, f128, F},
@@ -241,23 +241,30 @@ fn trees() {
     let mut graph =
         graph.process_numerator(&model, contraction_settings, export_path, &export_settings);
 
-    let external_mom = vec![
-        FourMomentum::from_args(F(592.625), F(0.), F(0.), F(566.8116)), // 1
-        FourMomentum::from_args(F(579.375), F(0.), F(0.), F(-566.8116)), // 2
-        FourMomentum::from_args(F(592.625), F(125.7463), F(504.2705), F(-226.2178)), // 3
-    ];
-
-    let sample = DefaultSample::new(
-        vec![],
-        external_mom,
-        F(1.),
-        &[
+    let external_mom = Externals::Constant {
+        momenta: vec![
+            ExternalMomenta::Independent([F(592.625), F(0.), F(0.), F(566.8116)]), // 1
+            ExternalMomenta::Independent([F(579.375), F(0.), F(0.), F(-566.8116)]), // 2
+            ExternalMomenta::Independent([F(592.625), F(125.7463), F(504.2705), F(-226.2178)]), // 3
+            ExternalMomenta::Dependent(Dep::Dep),                                  // 4
+        ],
+        helicities: vec![
             Helicity::Minus,
             Helicity::Zero,
             Helicity::Plus,
             Helicity::Zero,
         ],
-        &graph.bare_graph,
+    };
+
+    let external_signature = graph.bare_graph.external_in_or_out_signature();
+
+    let sample: DefaultSample<f64> = DefaultSample::new(
+        vec![],
+        &external_mom,
+        F(1.),
+        &external_mom
+            .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature),
+        &external_signature,
     );
     let settings = Settings::default();
 
@@ -345,12 +352,15 @@ fn tree_ta_ta_1() {
         .set_dependent_at_end(&graph.bare_graph.external_in_or_out_signature())
         .unwrap();
 
-    let sample = DefaultSample::new(
+    let external_signature = graph.bare_graph.external_in_or_out_signature();
+
+    let sample: DefaultSample<f64> = DefaultSample::new(
         vec![],
-        externals.get_indep_externals(&[]).0,
+        &externals,
         F(1.),
-        &externals.get_helicities(),
-        &graph.bare_graph,
+        &&externals
+            .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature),
+        &external_signature,
     );
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
@@ -494,12 +504,15 @@ fn tree_hh_ttxaa_1() {
         ],
     };
 
-    let sample = DefaultSample::new(
+    let external_signature = graph.bare_graph.external_in_or_out_signature();
+
+    let sample: DefaultSample<f64> = DefaultSample::new(
         vec![],
-        externals.get_indep_externals(&[]).0,
+        &externals,
         F(1.),
-        externals.get_helicities(),
-        &graph.bare_graph,
+        &&externals
+            .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature),
+        &external_signature,
     );
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())

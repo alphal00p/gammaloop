@@ -19,12 +19,13 @@ use spenso::{
         IsAbstractSlot, Lorentz, PhysReps, RepName, Representation, Slot, ABSTRACTIND,
     },
 };
+use std::fmt::Formatter;
 use std::fs;
 use symbolica::evaluate::FunctionMap;
 
 use eyre::Result;
 use std::ops::Index;
-use std::path::Path;
+use std::path::{Display, Path};
 use symbolica::id::{Pattern, PatternOrMap};
 // use std::str::pattern::Pattern;
 use std::sync::Arc;
@@ -58,7 +59,7 @@ fn normalise_complex(atom: &Atom) -> Atom {
     )
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ParameterNature {
     #[default]
     #[serde(rename = "external")]
@@ -67,7 +68,7 @@ pub enum ParameterNature {
     Internal,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ParameterType {
     #[default]
     #[serde(rename = "real")]
@@ -366,6 +367,82 @@ pub struct Particle {
     pub ghost_number: isize,
     pub lepton_number: isize,
     pub y_charge: isize,
+}
+
+impl PartialEq for Particle {
+    fn eq(&self, other: &Self) -> bool {
+        if self.pdg_code == other.pdg_code {
+            if self.name != other.name {
+                panic!(
+                    "Particle with same pdg code but different names: {} and {}",
+                    self.name, other.name
+                );
+            }
+            if self.spin != other.spin {
+                panic!(
+                    "Particle with same pdg code but different spins: {} and {}",
+                    self.spin, other.spin
+                );
+            }
+            if self.color != other.color {
+                panic!(
+                    "Particle with same pdg code but different colors: {} and {}",
+                    self.color, other.color
+                );
+            }
+            if self.mass != other.mass {
+                panic!(
+                    "Particle with same pdg code but different masses: {} and {}",
+                    self.mass, other.mass
+                );
+            }
+            if self.width != other.width {
+                panic!(
+                    "Particle with same pdg code but different widths: {} and {}",
+                    self.width, other.width
+                );
+            }
+            if self.texname != other.texname {
+                panic!(
+                    "Particle with same pdg code but different texnames: {} and {}",
+                    self.texname, other.texname
+                );
+            }
+            if self.antitexname != other.antitexname {
+                panic!(
+                    "Particle with same pdg code but different antitexnames: {} and {}",
+                    self.antitexname, other.antitexname
+                );
+            }
+            if self.charge != other.charge {
+                panic!(
+                    "Particle with same pdg code but different charges: {} and {}",
+                    self.charge, other.charge
+                );
+            }
+            if self.ghost_number != other.ghost_number {
+                panic!(
+                    "Particle with same pdg code but different ghost_numbers: {} and {}",
+                    self.ghost_number, other.ghost_number
+                );
+            }
+            if self.lepton_number != other.lepton_number {
+                panic!(
+                    "Particle with same pdg code but different lepton_numbers: {} and {}",
+                    self.lepton_number, other.lepton_number
+                );
+            }
+            if self.y_charge != other.y_charge {
+                panic!(
+                    "Particle with same pdg code but different y_charges: {} and {}",
+                    self.y_charge, other.y_charge
+                );
+            }
+            return true;
+        } else {
+            return false;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1022,6 +1099,26 @@ pub struct Parameter {
     pub value: Option<Complex<F<f64>>>,
     pub expression: Option<Atom>,
 }
+
+impl std::fmt::Display for Parameter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl PartialEq for Parameter {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.nature == other.nature
+            && self.parameter_type == other.parameter_type
+            // && self.value == other.value
+            && self.expression == other.expression
+            && self.lhablock == other.lhablock
+            && self.lhacode == other.lhacode
+    }
+}
+
+impl Eq for Parameter {}
 
 impl Parameter {
     pub fn from_serializable_parameter(param: &SerializableParameter) -> Parameter {

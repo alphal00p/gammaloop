@@ -37,10 +37,12 @@ use cross_section::Amplitude;
 use eyre::WrapErr;
 use integrands::*;
 use log::debug;
+use model::Particle;
 use momentum::Dep;
 use momentum::ExternalMomenta;
 use momentum::FourMomentum;
 use momentum::Helicity;
+use momentum::Polarization;
 use momentum::SignOrZero;
 use momentum::Signature;
 use momentum::ThreeMomentum;
@@ -48,11 +50,14 @@ use numerator::NumeratorSettings;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use rayon::vec;
+use spenso::complex::Complex;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use utils::FloatLike;
+use utils::PrecisionUpgradable;
 use utils::F;
 
 use serde::{Deserialize, Serialize};
@@ -151,6 +156,7 @@ pub struct GeneralSettings {
     pub load_compiled_cff: bool,
     pub load_compiled_numerator: bool,
     pub joint_numerator_eval: bool,
+    pub amplidude_prefactor: Option<Complex<F<f64>>>,
     pub load_compiled_separate_orientations: bool,
     pub force_orientations: Option<Vec<usize>>,
 }
@@ -165,6 +171,7 @@ impl Default for GeneralSettings {
             joint_numerator_eval: true,
             load_compiled_cff: false,
             load_compiled_separate_orientations: false,
+            amplidude_prefactor: None,
             force_orientations: None,
         }
     }
@@ -409,6 +416,14 @@ pub enum Externals {
     // add different type of pdfs here when needed
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Polarizations {
+    Constant {
+        polarizations: Vec<Polarization<Complex<F<f64>>>>,
+    },
+    None,
+}
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -472,6 +487,37 @@ impl Externals {
         }
     }
 
+    pub fn generate_polarizations(
+        &self,
+        external_particles: &[Arc<Particle>],
+        external_signature: &Signature,
+    ) -> Polarizations {
+        let mut polarizations = vec![];
+
+        let dep_ext = self.get_dependent_externals(external_signature);
+        let helicities = self.get_helicities();
+        for (((ext_mom, hel), p), s) in dep_ext
+            .iter()
+            .zip(helicities.iter())
+            .zip(external_particles.iter())
+            .zip(external_signature.iter())
+        {
+            match s {
+                SignOrZero::Minus => {
+                    polarizations.push(p.incoming_polarization(ext_mom, *hel));
+                }
+                SignOrZero::Plus => {
+                    polarizations.push(p.outgoing_polarization(ext_mom, *hel));
+                }
+                _ => {
+                    panic!("Edge type should not be virtual")
+                }
+            }
+        }
+
+        Polarizations::Constant { polarizations }
+    }
+
     pub fn set_dependent_at_end(
         &mut self,
         signature: &Signature,
@@ -518,12 +564,50 @@ impl Externals {
         }
     }
 
+    pub fn get_dependent_externals<T: FloatLike>(
+        &self,
+        external_signature: &Signature,
+    ) -> Vec<FourMomentum<F<T>>>
+// where
+    //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
+    {
+        match self {
+            Externals::Constant { momenta, .. } => {
+                let mut sum: FourMomentum<F<T>> = FourMomentum::from([
+                    F::<T>::from_f64(0.0),
+                    F::from_f64(0.0),
+                    F::from_f64(0.0),
+                    F::from_f64(0.0),
+                ]);
+                // .higher();
+                let mut pos_dep = 0;
+
+                let mut dependent_sign = SignOrZero::Plus;
+
+                let mut dependent_momenta = vec![];
+
+                for ((i, m), s) in momenta.iter().enumerate().zip(external_signature.iter()) {
+                    if let Ok(a) = FourMomentum::try_from(*m) {
+                        // println!("external{i}: {}", a);
+                        let a = FourMomentum::<F<T>>::from_ff64(&a);
+                        sum -= *s * a.clone(); //.higher();
+                        dependent_momenta.push(a);
+                    } else {
+                        pos_dep = i;
+                        dependent_sign = *s;
+                        dependent_momenta.push(sum.clone()); //.lower());
+                    }
+                }
+
+                dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
+                dependent_momenta
+            }
+        }
+    }
+
     #[allow(unused_variables)]
     #[inline]
-    pub fn get_indep_externals(
-        &self,
-        x_space_point: &[F<f64>],
-    ) -> (Vec<FourMomentum<F<f64>>>, F<f64>) {
+    pub fn get_indep_externals(&self) -> Vec<FourMomentum<F<f64>>> {
         match self {
             Externals::Constant {
                 momenta,
@@ -533,7 +617,7 @@ impl Externals {
                     .iter()
                     .flat_map(|e| FourMomentum::try_from(*e))
                     .collect();
-                (momenta, F(1.0))
+                momenta
             }
         }
     }
@@ -541,6 +625,12 @@ impl Externals {
     pub fn get_helicities(&self) -> &[Helicity] {
         match self {
             Externals::Constant { helicities, .. } => helicities,
+        }
+    }
+
+    pub fn pdf(&self, x_space_point: &[F<f64>]) -> F<f64> {
+        match self {
+            Externals::Constant { .. } => F(1.0),
         }
     }
 }

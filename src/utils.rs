@@ -680,8 +680,7 @@ pub trait FloatLike:
     + Serialize
     + Display
     + CFFFloat<Self>
-    + NumeratorEvaluateFloat
-{
+    + NumeratorEvaluateFloat{
     
 
     
@@ -746,7 +745,7 @@ pub trait FloatLike:
 
 
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize,Encode,Decode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize,Encode,Decode,Hash)]
 pub struct F<T: FloatLike>(pub T);
 
 impl<T:FloatLike> R for F<T> {}
@@ -814,6 +813,7 @@ impl<T:FloatLike> TrySmallestUpgrade<F<T>> for F<T> {
     }
 }
 
+ 
 
 impl<T:FloatLike> TrySmallestUpgrade<F<T>> for Complex<F<T>> {
     type LCM = Complex<F<T>>;

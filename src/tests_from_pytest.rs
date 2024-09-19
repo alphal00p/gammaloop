@@ -125,21 +125,23 @@ pub fn sample_generator<T: FloatLike>(
     helicities: Option<Vec<Helicity>>,
 ) -> DefaultSample<T>
 where
-    Standard: Distribution<T>,
+    Standard: Distribution<T> + Distribution<f64>,
 {
     let mut rng = SmallRng::seed_from_u64(seed);
 
     let n_loops = bare_graph.loop_momentum_basis.basis.len();
     let n_indep_externals = bare_graph.external_edges.len() - 1;
-    let mut external_moms = vec![];
+    let mut external_moms: Vec<ExternalMomenta<F<f64>>> = vec![];
     for _ in 0..n_indep_externals {
-        external_moms.push(FourMomentum::from_args(
-            F(rng.gen()),
-            F(rng.gen()),
-            F(rng.gen()),
-            F(rng.gen()),
-        ));
+        external_moms.push(ExternalMomenta::Independent([
+            F(rng.gen::<f64>()),
+            F(rng.gen::<f64>()),
+            F(rng.gen::<f64>()),
+            F(rng.gen::<f64>()),
+        ]));
     }
+
+    external_moms.push(ExternalMomenta::Dependent(Dep::Dep));
 
     let mut loop_moms = vec![];
 
@@ -158,7 +160,20 @@ where
         vec![Helicity::Plus; n_indep_externals + 1]
     };
 
-    DefaultSample::new(loop_moms, external_moms, jacobian, &helicities, bare_graph)
+    let externals = Externals::Constant {
+        momenta: external_moms,
+        helicities,
+    };
+
+    let external_signature = bare_graph.external_in_or_out_signature();
+
+    DefaultSample::new(
+        loop_moms,
+        &externals,
+        jacobian,
+        &externals.generate_polarizations(&bare_graph.external_particles(), &external_signature),
+        &external_signature,
+    )
 }
 
 pub fn kinematics_builder(
@@ -169,13 +184,15 @@ pub fn kinematics_builder(
     let mut external_moms = vec![];
 
     for i in 0..n_indep_externals {
-        external_moms.push(FourMomentum::from_args(
+        external_moms.push(ExternalMomenta::Independent([
             F(i as f64),
             F(i as f64 + 0.25),
             F(i as f64 + 0.5),
             F(i as f64 + 0.75),
-        ));
+        ]));
     }
+
+    external_moms.push(ExternalMomenta::Dependent(Dep::Dep));
 
     let mut loop_moms = vec![];
 
@@ -191,7 +208,20 @@ pub fn kinematics_builder(
 
     let helicities = vec![Helicity::Plus; n_indep_externals + 1];
 
-    DefaultSample::new(loop_moms, external_moms, jacobian, &helicities, bare_graph)
+    let externals = Externals::Constant {
+        momenta: external_moms,
+        helicities,
+    };
+
+    let external_signature = bare_graph.external_in_or_out_signature();
+
+    DefaultSample::new(
+        loop_moms,
+        &externals,
+        jacobian,
+        &externals.generate_polarizations(&bare_graph.external_particles(), &external_signature),
+        &external_signature,
+    )
 }
 
 pub fn load_amplitude_output(

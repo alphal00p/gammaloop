@@ -1,12 +1,12 @@
 use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{BareGraph, Graph, SerializableGraph};
-use crate::model::Model;
-use crate::momentum::Signature;
+use crate::model::{Model, Particle};
+use crate::momentum::{Polarization, Signature};
 use crate::numerator::{
     AppliedFeynmanRule, ContractionSettings, Evaluators, NumeratorState, PythonState,
     TypedNumeratorState, UnInit, UnexpandedNumerator,
 };
-use crate::{utils::*, ExportSettings, Settings};
+use crate::{utils::*, ExportSettings, Externals, Polarizations, Settings};
 use bincode;
 use color_eyre::Result;
 use color_eyre::{Help, Report};
@@ -16,9 +16,11 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
+use spenso::complex::Complex;
 use std::fs;
 use std::fs::File;
 use std::path::Path;
+use std::sync::Arc;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -568,9 +570,15 @@ impl SerializableAmplitude {
     }
 }
 
+pub trait IsPolarizable {
+    fn polarizations(&self, externals: &Externals) -> Polarizations;
+}
+
 #[derive(Debug, Clone)]
 pub struct Amplitude<NumState: NumeratorState = Evaluators> {
     pub name: SmartString<LazyCompact>,
+    pub external_signature: Signature,
+    pub external_particles: Vec<Arc<Particle>>,
     pub amplitude_graphs: Vec<AmplitudeGraph<NumState>>,
 }
 
@@ -637,6 +645,8 @@ impl<S: NumeratorState> Amplitude<S> {
     {
         Amplitude {
             name: self.name,
+            external_particles: self.external_particles,
+            external_signature: self.external_signature,
             amplitude_graphs: self.amplitude_graphs.into_iter().map(f).collect(),
         }
     }
@@ -654,9 +664,17 @@ impl<S: NumeratorState> Amplitude<S> {
     {
         let new_amp_graphs: Result<_, E> = self.amplitude_graphs.into_iter().map(f).collect();
         Ok(Amplitude {
+            external_particles: self.external_particles,
+            external_signature: self.external_signature,
             name: self.name,
             amplitude_graphs: new_amp_graphs?,
         })
+    }
+}
+
+impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
+    fn polarizations(&self, externals: &Externals) -> Polarizations {
+        externals.generate_polarizations(&self.external_particles, &self.external_signature)
     }
 }
 
@@ -677,13 +695,51 @@ impl Amplitude<UnInit> {
         model: &Model,
         serializable_amplitude: &SerializableAmplitude,
     ) -> Self {
+        let amplitude_graphs: Vec<_> = serializable_amplitude
+            .amplitude_graphs
+            .iter()
+            .map(|sg| AmplitudeGraph::from_amplitude_graph(model, sg))
+            .collect();
+
+        let external_signature = amplitude_graphs
+            .first()
+            .unwrap()
+            .graph
+            .bare_graph
+            .external_in_or_out_signature();
+
+        let external_particles = amplitude_graphs
+            .first()
+            .unwrap()
+            .graph
+            .bare_graph
+            .external_particles();
+
+        for ag in &amplitude_graphs {
+            let other_signature = ag.graph.bare_graph.external_in_or_out_signature();
+
+            if external_signature != other_signature {
+                panic!(
+                    "External signature mismatch: {:?} != {:?}",
+                    external_signature, other_signature
+                );
+            }
+
+            let other_particles = ag.graph.bare_graph.external_particles();
+
+            if other_particles != external_particles {
+                panic!(
+                    "External particles mismatch: {:?} != {:?}",
+                    external_particles, other_particles
+                );
+            }
+        }
+
         Self {
             name: serializable_amplitude.name.clone(),
-            amplitude_graphs: serializable_amplitude
-                .amplitude_graphs
-                .iter()
-                .map(|sg| AmplitudeGraph::from_amplitude_graph(model, sg))
-                .collect(),
+            amplitude_graphs,
+            external_particles,
+            external_signature,
         }
     }
 
@@ -760,6 +816,8 @@ impl Amplitude<UnInit> {
             .collect();
 
         Amplitude {
+            external_particles: self.external_particles,
+            external_signature: self.external_signature,
             name: self.name,
             amplitude_graphs: graphs,
         }
@@ -998,8 +1056,7 @@ impl Amplitude<PythonState> {
         settings.sync_with_amplitude(&amp)?;
 
         Ok(GammaLoopIntegrand::amplitude_integrand_constructor(
-            amp,
-            settings.clone(),
+            amp, settings,
         ))
     }
 }

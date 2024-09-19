@@ -58,6 +58,12 @@ impl<T: FloatLike> Energy<F<T>> {
             value: self.value.lower(),
         }
     }
+
+    pub fn from_ff64(energy: Energy<F<f64>>) -> Self {
+        Energy {
+            value: F::from_ff64(energy.value),
+        }
+    }
 }
 
 impl<T: FloatLike> From<Energy<T>> for Energy<F<T>> {
@@ -348,6 +354,14 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
             px: self.px.lower(),
             py: self.py.lower(),
             pz: self.pz.lower(),
+        }
+    }
+
+    pub fn from_ff64(three_mom: ThreeMomentum<F<f64>>) -> Self {
+        ThreeMomentum {
+            px: F::from_ff64(three_mom.px),
+            py: F::from_ff64(three_mom.py),
+            pz: F::from_ff64(three_mom.pz),
         }
     }
 }
@@ -936,6 +950,14 @@ pub struct FourMomentum<T, U = T> {
     pub spatial: ThreeMomentum<T>,
 }
 
+impl<T: FloatLike> FourMomentum<F<T>> {
+    pub fn from_ff64(four_momentum: &FourMomentum<F<f64>>) -> Self {
+        let temporal = Energy::from_ff64(four_momentum.temporal);
+        let spatial = ThreeMomentum::from_ff64(four_momentum.spatial);
+        FourMomentum { temporal, spatial }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ExternalMomenta<T> {
@@ -1081,6 +1103,15 @@ impl<T: FloatLike> Display for Polarization<F<T>> {
 impl<T: FloatLike> Display for Polarization<Complex<F<T>>> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Pol {}: {}", self.pol_type, self.tensor)
+    }
+}
+
+impl<T> Polarization<T> {
+    pub fn map<U>(&self, f: impl Fn(&T) -> U) -> Polarization<U> {
+        Polarization {
+            tensor: self.tensor.map_data_ref(f),
+            pol_type: self.pol_type,
+        }
     }
 }
 

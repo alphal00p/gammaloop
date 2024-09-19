@@ -372,7 +372,9 @@ impl PythonWorker {
         match self.integrands.get_mut(integrand) {
             Some(integrand) => {
                 let settings = match integrand {
-                    Integrand::GammaLoopIntegrand(integrand) => integrand.settings.clone(),
+                    Integrand::GammaLoopIntegrand(integrand) => {
+                        integrand.global_data.settings.clone()
+                    }
                     _ => todo!(),
                 };
 
@@ -444,7 +446,7 @@ impl PythonWorker {
                                     .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
                             // force the settings to be the same as the ones used in the previous integration
-                            gloop_integrand.settings = workspace_settings.clone();
+                            gloop_integrand.global_data.settings = workspace_settings.clone();
 
                             let state =
                                 serializable_state.into_integration_state(&workspace_settings);
@@ -477,7 +479,7 @@ impl PythonWorker {
                         }
                     };
 
-                    let settings = gloop_integrand.settings.clone();
+                    let settings = gloop_integrand.global_data.settings.clone();
                     let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),

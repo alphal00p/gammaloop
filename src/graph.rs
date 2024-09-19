@@ -9,7 +9,7 @@ use crate::{
     },
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression},
-    model::{self, EdgeSlots, Model, VertexSlots},
+    model::{self, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Signature, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
@@ -799,6 +799,13 @@ impl BareGraph {
         self.external_edges
             .iter()
             .map(|&i| self.edges[i].particle.spin)
+            .collect()
+    }
+
+    pub fn external_particles(&self) -> Vec<Arc<Particle>> {
+        self.external_edges
+            .iter()
+            .map(|&i| self.edges[i].particle.clone())
             .collect()
     }
 

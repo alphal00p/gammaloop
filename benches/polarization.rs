@@ -3,12 +3,12 @@ use std::{env, path::PathBuf, time::Duration};
 use _gammaloop::{
     gammaloop_integrand::DefaultSample,
     graph::{self, Graph},
-    momentum::{FourMomentum, Helicity, ThreeMomentum},
+    momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, ThreeMomentum},
     numerator::ContractionSettings,
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
     utils::F,
-    ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,
+    ExportSettings, Externals, GammaloopCompileOptions, TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
@@ -70,13 +70,15 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut external_moms = vec![];
 
     for i in 0..n_indep_externals {
-        external_moms.push(FourMomentum::from_args(
+        external_moms.push(ExternalMomenta::Independent([
             F(i as f64),
             F(i as f64 + 0.25),
             F(i as f64 + 0.5),
             F(i as f64 + 0.75),
-        ));
+        ]));
     }
+
+    external_moms.push(ExternalMomenta::Dependent(Dep::Dep));
 
     let mut loop_moms = vec![];
 
@@ -91,16 +93,35 @@ fn criterion_benchmark(c: &mut Criterion) {
     let jacobian = F(1.0);
 
     let helicities = vec![Helicity::Plus; n_indep_externals + 1];
+
+    let externals = Externals::Constant {
+        momenta: external_moms,
+        helicities,
+    };
+
+    let external_signature = graph.bare_graph.external_in_or_out_signature();
+
+    let polarizations = externals
+        .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature);
+
     println!("starting benchmark");
+    group.bench_function("polarization generation", |b| {
+        b.iter(|| {
+            let polarizations = externals.generate_polarizations(
+                &graph.bare_graph.external_particles(),
+                &external_signature,
+            );
+        })
+    });
     group.bench_function("sample generation", |b| {
         b.iter(|| {
-            DefaultSample::new(
+            DefaultSample::<f64>::new(
                 loop_moms.clone(),
-                external_moms.clone(),
+                &externals,
                 jacobian,
-                &helicities,
-                &graph.bare_graph,
-            );
+                &polarizations,
+                &external_signature,
+            )
         })
     });
 }

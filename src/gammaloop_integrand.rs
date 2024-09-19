@@ -5,12 +5,12 @@ use core::panic;
 use std::fmt::Display;
 use std::time::{Duration, Instant};
 
-use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, SuperGraph};
+use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, IsPolarizable, SuperGraph};
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{BareGraph, EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
-use crate::momentum::{FourMomentum, Helicity, Polarization, ThreeMomentum};
+use crate::momentum::{FourMomentum, Helicity, Polarization, Signature, ThreeMomentum};
 use crate::numerator::Evaluators;
 use crate::subtraction::static_counterterm::CounterTerm;
 use crate::utils::{
@@ -18,7 +18,8 @@ use crate::utils::{
     PrecisionUpgradable, F,
 };
 use crate::{
-    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, SamplingSettings, Settings,
+    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, Polarizations, SamplingSettings,
+    Settings,
 };
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
@@ -174,7 +175,12 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             sample.zero(),
         );
 
-        multichanneling_numerator * rep3d / denominator
+        let prefactor = if let Some(p) = settings.general.amplidude_prefactor {
+            p.map(|x| F::from_ff64(x))
+        } else {
+            Complex::new(one, zero)
+        };
+        prefactor * (multichanneling_numerator * rep3d / denominator)
     }
 
     #[inline]
@@ -246,11 +252,17 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             }
         };
 
+        let prefactor = if let Some(p) = settings.general.amplidude_prefactor {
+            p.map(|x| F::from_ff64(x))
+        } else {
+            Complex::new(zero_builder.one(), zero_builder.zero())
+        };
+
         // println!("rep3d: {}", rep3d);
         // println!("energy_product: {}", energy_product);
         // println!("counter_term_eval: {}", counter_term_eval);
 
-        rep3d / energy_product - counter_term_eval
+        prefactor * (rep3d / energy_product - counter_term_eval)
     }
 
     #[inline]
@@ -501,8 +513,14 @@ enum GraphIntegrands {
 /// GammaloopIntegrand contains a list of graphs and the settings.
 #[derive(Clone)]
 pub struct GammaLoopIntegrand {
-    pub settings: Settings,
+    pub global_data: GlobalData,
     graph_integrands: GraphIntegrands,
+}
+
+#[derive(Clone)]
+pub struct GlobalData {
+    pub polarizations: Polarizations,
+    pub settings: Settings,
 }
 
 impl GraphIntegrands {
@@ -545,7 +563,8 @@ impl GraphIntegrands {
 
 impl HasIntegrand for GammaLoopIntegrand {
     fn create_grid(&self) -> Grid<F<f64>> {
-        self.graph_integrands.create_grid(&self.settings)
+        self.graph_integrands
+            .create_grid(&self.global_data.settings)
     }
 
     #[allow(unused_variables)]
@@ -561,7 +580,7 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         // setup the evaluation of the integrand in the different stability levels
         let mut results_of_stability_levels =
-            Vec::with_capacity(self.settings.stability.levels.len());
+            Vec::with_capacity(self.global_data.settings.stability.levels.len());
 
         // create an iterator containing the information for evaluation at each stability level
         let stability_iterator = self.create_stability_vec(use_f128);
@@ -591,6 +610,7 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         // rotate the momenta for the stability tests.
         let rotated_sample_points = self
+            .global_data
             .settings
             .stability
             .rotation_axis
@@ -625,7 +645,7 @@ impl HasIntegrand for GammaLoopIntegrand {
             let (avg_result, stable) = self.stability_check(
                 &results_scaled,
                 stability_level,
-                self.settings.integrator.integrated_phase,
+                self.global_data.settings.integrator.integrated_phase,
                 max_eval,
                 wgt,
             );
@@ -646,7 +666,7 @@ impl HasIntegrand for GammaLoopIntegrand {
             || panic!("No evaluation was done, perhaps the final stability level has a non-negative escalation threshold?")
         );
 
-        if self.settings.general.debug > 0 {
+        if self.global_data.settings.general.debug > 0 {
             println!("{}", "
             |  DEBUG -------------------------------------------------------------------------------------  |".green());
             println!();
@@ -660,7 +680,10 @@ impl HasIntegrand for GammaLoopIntegrand {
             for (sample, rotation) in samples.iter() {
                 let rotation_string = match rotation {
                     None => String::from("None"),
-                    Some(index) => format!("{:?}", self.settings.stability.rotation_axis[*index]),
+                    Some(index) => format!(
+                        "{:?}",
+                        self.global_data.settings.stability.rotation_axis[*index]
+                    ),
                 };
 
                 println!("\trotation: {}", rotation_string);
@@ -714,7 +737,7 @@ impl HasIntegrand for GammaLoopIntegrand {
     }
 
     fn get_integrator_settings(&self) -> crate::IntegratorSettings {
-        self.settings.integrator.clone()
+        self.global_data.settings.integrator.clone()
     }
 
     fn get_event_manager_mut(&mut self) -> &mut crate::observables::EventManager {
@@ -757,7 +780,7 @@ impl GammaLoopIntegrand {
                             graph_integrands,
                             sample,
                             *rotate_overlap_centers,
-                            &self.settings,
+                            &self.global_data.settings,
                         )
                     })
                     .collect(),
@@ -768,7 +791,7 @@ impl GammaLoopIntegrand {
                             graph_integrands,
                             sample,
                             *rotate_overlap_centers,
-                            &self.settings,
+                            &self.global_data.settings,
                         )
                     })
                     .collect(),
@@ -781,7 +804,7 @@ impl GammaLoopIntegrand {
                             graph_integrands,
                             &sample.higher_precision(),
                             *rotate_overlap_centers,
-                            &self.settings,
+                            &self.global_data.settings,
                         )
                         .lower()
                     })
@@ -793,7 +816,7 @@ impl GammaLoopIntegrand {
                             graph_integrands,
                             &sample.higher_precision(),
                             *rotate_overlap_centers,
-                            &self.settings,
+                            &self.global_data.settings,
                         )
                         .lower()
                     })
@@ -828,14 +851,14 @@ impl GammaLoopIntegrand {
                 escalate_for_large_weight_threshold: F(-1.),
             }]
         } else {
-            self.settings.stability.levels.clone()
+            self.global_data.settings.stability.levels.clone()
         }
     }
 
     /// Perform map from unit hypercube to 3-momenta
     #[inline]
     fn parameterize(&self, sample_point: &Sample<F<f64>>) -> Result<GammaLoopSample<f64>, String> {
-        match &self.settings.sampling {
+        match &self.global_data.settings.sampling {
             SamplingSettings::Default => {
                 let xs = unwrap_cont_sample(sample_point);
                 Ok(GammaLoopSample::Default(self.default_parametrize(xs, 0)))
@@ -870,8 +893,7 @@ impl GammaLoopIntegrand {
                     }
                     DiscreteGraphSamplingSettings::TropicalSampling(tropical_sampling_settings) => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
-                        let (external_moms, pdf) =
-                            self.settings.kinematics.externals.get_indep_externals(xs);
+                        let externals = &self.global_data.settings.kinematics.externals;
 
                         let graph = match &self.graph_integrands {
                             GraphIntegrands::Amplitude(graphs) => &graphs[graph_id].graph,
@@ -897,7 +919,7 @@ impl GammaLoopIntegrand {
                                 let shift = utils::compute_shift_part(
                                     &graph.bare_graph.loop_momentum_basis.edge_signatures[edge_id]
                                         .external,
-                                    &external_moms,
+                                    &externals.get_indep_externals(),
                                 );
 
                                 let shift_momtrop = Vector::from_array([
@@ -913,8 +935,9 @@ impl GammaLoopIntegrand {
                         let sampling_result_result = sampler.generate_sample_from_x_space_point(
                             &xs_f64,
                             edge_data,
-                            &tropical_sampling_settings
-                                .into_tropical_sampling_settings(self.settings.general.debug),
+                            &tropical_sampling_settings.into_tropical_sampling_settings(
+                                self.global_data.settings.general.debug,
+                            ),
                         );
 
                         let sampling_result = match sampling_result_result {
@@ -930,14 +953,12 @@ impl GammaLoopIntegrand {
                             .map(Into::<ThreeMomentum<F<f64>>>::into)
                             .collect_vec();
 
-                        let helicities = self.settings.kinematics.externals.get_helicities();
-
                         let default_sample = DefaultSample::new(
                             loop_moms,
-                            external_moms,
-                            F(sampling_result.jacobian) * pdf,
-                            helicities,
-                            &graph.bare_graph,
+                            externals,
+                            F(sampling_result.jacobian) * externals.pdf(xs),
+                            &self.global_data.polarizations,
+                            &graph.bare_graph.external_in_or_out_signature(),
                         );
                         Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
@@ -966,13 +987,12 @@ impl GammaLoopIntegrand {
     /// Default parametrize is basically everything except tropical sampling.
     #[inline]
     fn default_parametrize(&self, xs: &[F<f64>], graph_id: usize) -> DefaultSample<f64> {
-        let (external_moms, pdf) = self.settings.kinematics.externals.get_indep_externals(xs);
+        let externals = &self.global_data.settings.kinematics.externals;
 
-        let helicities = self.settings.kinematics.externals.get_helicities();
         let (loop_moms_vec, param_jacobian) = global_parameterize(
             xs,
-            self.settings.kinematics.e_cm * self.settings.kinematics.e_cm,
-            &self.settings,
+            self.global_data.settings.kinematics.e_cm.square(),
+            &self.global_data.settings,
             false,
         );
 
@@ -981,7 +1001,7 @@ impl GammaLoopIntegrand {
             .map(ThreeMomentum::from)
             .collect_vec();
 
-        let jacobian = param_jacobian * pdf;
+        let jacobian = param_jacobian * externals.pdf(xs);
 
         let graph = match &self.graph_integrands {
             GraphIntegrands::Amplitude(graphs) => &graphs[graph_id].graph,
@@ -990,10 +1010,10 @@ impl GammaLoopIntegrand {
 
         DefaultSample::new(
             loop_moms,
-            external_moms,
+            externals,
             jacobian,
-            helicities,
-            &graph.bare_graph,
+            &self.global_data.polarizations,
+            &graph.bare_graph.external_in_or_out_signature(),
         )
     }
 
@@ -1049,12 +1069,12 @@ impl GammaLoopIntegrand {
             IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
         };
 
-        if self.settings.general.debug > 0 {
+        if self.global_data.settings.general.debug > 0 {
             if let Some(unstable_index) = unstable_sample {
                 let unstable_point = results[unstable_index];
                 let rotation_axis = format!(
                     "{:?}",
-                    self.settings.stability.rotation_axis[unstable_index]
+                    self.global_data.settings.stability.rotation_axis[unstable_index]
                 );
 
                 let (
@@ -1103,74 +1123,78 @@ impl GammaLoopIntegrand {
         mut amplitude: Amplitude<Evaluators>,
         settings: Settings,
     ) -> Self {
-        #[allow(irrefutable_let_patterns)]
+        // let pols = None;
+
         // for amplitudes we can construct counterterms beforehand if external momenta are constant
-        if let Externals::Constant { .. } = settings.kinematics.externals {
-            let dummy = [];
-            let (external_moms, _) = settings.kinematics.externals.get_indep_externals(&dummy);
+        let global_data = match settings.kinematics.externals {
+            Externals::Constant { .. } => {
+                let external_moms = settings.kinematics.externals.get_indep_externals();
 
-            for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
-                let graph = &mut amplitude_graph.graph;
+                for amplitude_graph in amplitude.amplitude_graphs.iter_mut() {
+                    let graph = &mut amplitude_graph.graph;
 
-                // temporary fix, rederive esurface data
-                graph
-                    .generate_esurface_data()
-                    .unwrap_or_else(|_| panic!("failed to generate esurface derived data"));
+                    // temporary fix, rederive esurface data
+                    graph
+                        .generate_esurface_data()
+                        .unwrap_or_else(|_| panic!("failed to generate esurface derived data"));
 
-                let existing_esurfaces = graph.get_existing_esurfaces(
-                    &external_moms,
-                    settings.kinematics.e_cm,
-                    &settings,
-                );
-
-                if settings.general.debug > 0 {
-                    println!(
-                        "#{} existing esurfaces for graph {}",
-                        existing_esurfaces.len(),
-                        graph.bare_graph.name
-                    );
-                }
-
-                if !existing_esurfaces.is_empty() {
-                    let maximal_overlap = graph.get_maximal_overlap(
+                    let existing_esurfaces = graph.get_existing_esurfaces(
                         &external_moms,
                         settings.kinematics.e_cm,
                         &settings,
                     );
 
-                    let maximal_overlap_structure = maximal_overlap
-                        .overlap_groups
-                        .iter()
-                        .map(|overlap_group| overlap_group.existing_esurfaces.len())
-                        .collect_vec();
-
                     if settings.general.debug > 0 {
-                        println!("maximal overlap structure: {:?}", maximal_overlap_structure);
-                    }
-
-                    let counter_term =
-                        CounterTerm::construct(maximal_overlap, &existing_esurfaces, graph);
-
-                    if settings.general.debug > 1 {
-                        counter_term.print_debug_data(
-                            &graph.get_cff().esurfaces,
-                            &external_moms,
-                            &graph.bare_graph.loop_momentum_basis,
-                            &graph.bare_graph.get_real_mass_vector(),
+                        println!(
+                            "#{} existing esurfaces for graph {}",
+                            existing_esurfaces.len(),
+                            graph.bare_graph.name
                         );
                     }
 
-                    if let Some(derived_data) = &mut graph.derived_data {
-                        derived_data.static_counterterm = Some(counter_term);
+                    if !existing_esurfaces.is_empty() {
+                        let maximal_overlap = graph.get_maximal_overlap(
+                            &external_moms,
+                            settings.kinematics.e_cm,
+                            &settings,
+                        );
+
+                        let maximal_overlap_structure = maximal_overlap
+                            .overlap_groups
+                            .iter()
+                            .map(|overlap_group| overlap_group.existing_esurfaces.len())
+                            .collect_vec();
+
+                        if settings.general.debug > 0 {
+                            println!("maximal overlap structure: {:?}", maximal_overlap_structure);
+                        }
+
+                        let counter_term =
+                            CounterTerm::construct(maximal_overlap, &existing_esurfaces, graph);
+
+                        if settings.general.debug > 1 {
+                            counter_term.print_debug_data(
+                                &graph.get_cff().esurfaces,
+                                &external_moms,
+                                &graph.bare_graph.loop_momentum_basis,
+                                &graph.bare_graph.get_real_mass_vector(),
+                            );
+                        }
+
+                        if let Some(derived_data) = &mut graph.derived_data {
+                            derived_data.static_counterterm = Some(counter_term);
+                        }
                     }
                 }
+                GlobalData {
+                    polarizations: amplitude.polarizations(&settings.kinematics.externals),
+                    settings,
+                }
             }
-        } else {
-            panic!("Only constant external momenta are supported at the moment.")
-        }
+        };
 
         Self {
-            settings,
+            global_data,
             graph_integrands: GraphIntegrands::Amplitude(amplitude.amplitude_graphs),
         }
     }
@@ -1179,8 +1203,13 @@ impl GammaLoopIntegrand {
         cross_section: CrossSection,
         settings: Settings,
     ) -> Self {
-        Self {
+        let global_data = GlobalData {
+            polarizations: Polarizations::None,
             settings,
+        };
+
+        Self {
+            global_data,
             graph_integrands: GraphIntegrands::CrossSection(cross_section.supergraphs),
         }
     }
@@ -1344,36 +1373,20 @@ impl<T: FloatLike> Display for DefaultSample<T> {
 impl<T: FloatLike> DefaultSample<T> {
     pub fn new(
         loop_moms: Vec<ThreeMomentum<F<T>>>,
-        external_moms: Vec<FourMomentum<F<T>>>,
+        external_moms: &Externals,
         jacobian: F<f64>,
-        helicities: &[Helicity],
-        graph: &BareGraph,
+        polarizations: &Polarizations,
+        external_signature: &Signature,
     ) -> Self {
-        let mut polarizations = vec![];
-        let dep_ext_mom = graph.get_dependent_externals(&external_moms);
-        for ((ext_mom, hel), ext) in dep_ext_mom
-            .iter()
-            .zip(helicities.iter())
-            .zip(graph.external_edges.iter())
-        {
-            let particle = &graph.edges[*ext].particle;
-            match graph.edges[*ext].edge_type {
-                EdgeType::Incoming => {
-                    polarizations.push(particle.incoming_polarization(ext_mom, *hel));
-                }
-                EdgeType::Outgoing => {
-                    polarizations.push(particle.outgoing_polarization(ext_mom, *hel));
-                }
-                _ => {
-                    panic!("Edge type should not be virtual")
-                }
-            }
-        }
+        let polarizations = match polarizations {
+            Polarizations::None => vec![],
+            Polarizations::Constant { polarizations } => polarizations
+                .iter()
+                .map(|p| p.map(|c| c.map(|f| F::from_ff64(f))))
+                .collect(),
+        };
 
-        // for (i, p) in polarizations.iter().enumerate() {
-        //     println!("pol{i}:{}", p);
-        // }
-
+        let external_moms = external_moms.get_dependent_externals(external_signature);
         Self {
             polarizations,
             loop_moms,
