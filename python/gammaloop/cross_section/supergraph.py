@@ -30,10 +30,10 @@ class SuperGraphCut(object):
 
 
 class SuperGraph(object):
-    def __init__(self, sg_id: int, graph: Graph, multiplicity: float, topology_class: list[int], cuts: list[SuperGraphCut]):
+    def __init__(self, sg_id: int, graph: Graph, multiplicity: str, topology_class: list[int], cuts: list[SuperGraphCut]):
         self.sg_id: int = sg_id
         self.graph: Graph = graph
-        self.multiplicity: float = multiplicity
+        self.multiplicity: str = multiplicity
         self.topology_class: list[int] = topology_class
         self.cuts: list[SuperGraphCut] = cuts
 
@@ -92,11 +92,11 @@ class ForwardScatteringGraphCut(object):
 
 
 class ForwardScatteringGraph(object):
-    def __init__(self, sg_id: int, sg_cut_id: int, graph: Graph, multiplicity: float, cuts: list[ForwardScatteringGraphCut]):
+    def __init__(self, sg_id: int, sg_cut_id: int, graph: Graph, multiplicity: str, cuts: list[ForwardScatteringGraphCut]):
         self.sg_id: int = sg_id
         self.sg_cut_id: int = sg_cut_id
         self.graph: Graph = graph
-        self.multiplicity: float = multiplicity
+        self.multiplicity: str = multiplicity
         self.cuts: list[ForwardScatteringGraphCut] = cuts
 
     def draw(self, model: Model, drawings_path: str, file_name: str | None, specify_cut: bool = True, **drawing_options: dict[str, Any]) -> Path | None:
@@ -135,12 +135,13 @@ class ForwardScatteringGraph(object):
 
 
 class AmplitudeGraph(object):
-    def __init__(self, sg_id: int, sg_cut_id: int, fs_cut_id: int, amplitude_side: Side, graph: Graph, multi_channeling_structure: list[int] = []):
+    def __init__(self, sg_id: int, sg_cut_id: int, fs_cut_id: int, amplitude_side: Side, graph: Graph, multiplicity: str, multi_channeling_structure: list[int] = []):
         self.sg_id: int = sg_id
         self.sg_cut_id: int = sg_cut_id
         self.fs_cut_id: int = fs_cut_id
         self.amplitude_side: Side = amplitude_side
         self.graph: Graph = graph
+        self.multiplicity: str = multiplicity
         self.multi_channeling_channels: list[int] = []
 
     def draw(self, model: Model, drawings_path: str, file_name: str | None, **drawing_options: dict[str, Any]) -> Path | None:
@@ -164,6 +165,7 @@ class AmplitudeGraph(object):
             amplitude_graph_dict['fs_cut_id'],
             Side[amplitude_graph_dict['amplitude_side']],
             Graph.from_serializable_dict(model, amplitude_graph_dict['graph']),
+            amplitude_graph_dict['multiplicity'],
             amplitude_graph_dict['multi_channeling_channels']
         )
 
@@ -174,5 +176,6 @@ class AmplitudeGraph(object):
             'fs_cut_id': self.fs_cut_id,
             'amplitude_side': str(self.amplitude_side),
             'graph': self.graph.to_serializable_dict(),
+            'multiplicity': self.multiplicity,
             'multi_channeling_channels': self.multi_channeling_channels,
         }

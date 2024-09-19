@@ -42,7 +42,7 @@ authors = [
   { name = "Lucien Huber", email = "mail@lcnbr.ch" },
 ]
 
-dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4"]
+dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4", "pydot>=3.0.1"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -79,6 +79,14 @@ exclude = [
   'python/gammaloop/data/templates/drawing/combine_pages.py',
   'python/gammaloop/data/models/*',
 ]
+
+[[tool.mypy.overrides]]
+module = "yaml.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pydot.*"
+ignore_missing_imports = true
 
 [tool.pyright]
 include = ["python/gammaloop"]

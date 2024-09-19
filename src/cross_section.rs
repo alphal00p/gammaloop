@@ -96,7 +96,7 @@ impl SuperGraphCut {
 pub struct SerializableSuperGraph {
     pub sg_id: usize,
     pub graph: SerializableGraph,
-    pub multiplicity: f64,
+    pub multiplicity: String,
     // This identifier of the topology class is mostly a stub for now
     pub topology_class: Vec<usize>,
     pub cuts: Vec<SerializableSuperGraphCut>,
@@ -107,7 +107,7 @@ impl SerializableSuperGraph {
         SerializableSuperGraph {
             sg_id: supergraph.sg_id,
             graph: SerializableGraph::from_graph(&supergraph.graph.bare_graph),
-            multiplicity: supergraph.multiplicity,
+            multiplicity: supergraph.multiplicity.clone(),
             topology_class: supergraph.topology_class.clone(),
             cuts: supergraph
                 .cuts
@@ -127,7 +127,7 @@ impl SerializableSuperGraph {
 pub struct SuperGraph {
     pub sg_id: usize,
     pub graph: Graph<Evaluators>,
-    pub multiplicity: f64,
+    pub multiplicity: String,
     // This identifier of the topology class is mostly a stub for now
     pub topology_class: Vec<usize>,
     pub cuts: Vec<SuperGraphCut>,
@@ -220,7 +220,7 @@ pub struct SerializableForwardScatteringGraph {
     pub sg_id: usize,
     pub sg_cut_id: usize,
     pub graph: SerializableGraph,
-    pub multiplicity: f64,
+    pub multiplicity: String,
     pub cuts: Vec<SerializableForwardScatteringGraphCut>,
 }
 
@@ -232,7 +232,7 @@ impl SerializableForwardScatteringGraph {
             sg_id: forward_scattering_graph.sg_id,
             sg_cut_id: forward_scattering_graph.sg_cut_id,
             graph: SerializableGraph::from_graph(&forward_scattering_graph.graph),
-            multiplicity: forward_scattering_graph.multiplicity,
+            multiplicity: forward_scattering_graph.multiplicity.clone(),
             cuts: forward_scattering_graph
                 .cuts
                 .iter()
@@ -252,7 +252,7 @@ pub struct ForwardScatteringGraph {
     pub sg_id: usize,
     pub sg_cut_id: usize,
     pub graph: BareGraph,
-    pub multiplicity: f64,
+    pub multiplicity: String,
     pub cuts: Vec<ForwardScatteringGraphCut>,
 }
 
@@ -275,7 +275,7 @@ impl ForwardScatteringGraph {
             sg_id: forward_scattering_graph.sg_id,
             sg_cut_id: forward_scattering_graph.sg_cut_id,
             graph: g,
-            multiplicity: forward_scattering_graph.multiplicity,
+            multiplicity: forward_scattering_graph.multiplicity.clone(),
             cuts,
         }
     }
@@ -288,6 +288,7 @@ pub struct SerializableAmplitudeGraph {
     pub fs_cut_id: usize,
     pub amplitude_side: Side,
     pub graph: SerializableGraph,
+    pub multiplicity: String,
     pub multi_channeling_channels: Vec<usize>, // empty list defaults to all channels if multi_channeling is enabled
 }
 
@@ -301,6 +302,7 @@ impl SerializableAmplitudeGraph {
             fs_cut_id: amplitude_graph.fs_cut_id,
             amplitude_side: amplitude_graph.amplitude_side.clone(),
             graph: SerializableGraph::from_graph(&amplitude_graph.graph.bare_graph),
+            multiplicity: amplitude_graph.multiplicity.clone(),
             multi_channeling_channels: amplitude_graph.multi_channeling_channels.clone(),
         }
     }
@@ -313,6 +315,7 @@ pub struct AmplitudeGraph<NumState: NumeratorState> {
     pub fs_cut_id: usize,
     pub amplitude_side: Side,
     pub graph: Graph<NumState>,
+    pub multiplicity: String,
     pub multi_channeling_channels: Vec<usize>,
 }
 
@@ -363,6 +366,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             fs_cut_id: self.fs_cut_id,
             amplitude_side: self.amplitude_side,
             graph: g,
+            multiplicity: self.multiplicity,
             multi_channeling_channels: self.multi_channeling_channels,
         })
         //  load_derived_data::<S>(path)
@@ -378,6 +382,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             fs_cut_id: self.fs_cut_id,
             amplitude_side: self.amplitude_side,
             graph: f(self.graph),
+            multiplicity: self.multiplicity,
             multi_channeling_channels: self.multi_channeling_channels,
         }
     }
@@ -399,6 +404,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             fs_cut_id: self.fs_cut_id,
             amplitude_side: self.amplitude_side,
             graph: f(self.graph)?,
+            multiplicity: self.multiplicity,
             multi_channeling_channels: self.multi_channeling_channels,
         })
     }
@@ -415,6 +421,7 @@ impl AmplitudeGraph<UnInit> {
             fs_cut_id: amplitude_graph.fs_cut_id,
             amplitude_side: amplitude_graph.amplitude_side.clone(),
             graph: Graph::from_serializable_graph(model, &amplitude_graph.graph),
+            multiplicity: amplitude_graph.multiplicity.clone(),
             multi_channeling_channels: amplitude_graph.multi_channeling_channels.clone(),
         }
     }
@@ -427,6 +434,7 @@ impl AmplitudeGraph<UnInit> {
             fs_cut_id: self.fs_cut_id,
             amplitude_side: self.amplitude_side,
             graph,
+            multiplicity: self.multiplicity.clone(),
             multi_channeling_channels: self.multi_channeling_channels,
         }
     }

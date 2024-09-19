@@ -10,6 +10,7 @@ from pprint import pformat
 import yaml  # type: ignore
 import shutil
 import copy
+import pydot
 from gammaloop import __version__
 from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GIT_REVISION, GammaLoopWarning
 from gammaloop.misc.utils import Colour, verbose_yaml_dump
@@ -25,19 +26,22 @@ import gammaloop._gammaloop as gl_rust  # pylint: disable=import-error, no-name-
 # pylint: disable=unused-variable
 
 
-
 class TaggedScalar(yaml.ScalarNode):
     def __init__(self, tag, value):
         super().__init__(tag, value)
 
+
 def tagged_scalar_representer(dumper, data):
     return data
+
+
 yaml.add_representer(TaggedScalar, tagged_scalar_representer)
 
 AVAILABLE_COMMANDS = [
     'import_model',
     'export_model',
     'import_graphs',
+    'export_graphs',
     'show_settings',
     'output',
     'help',
@@ -97,14 +101,14 @@ class GammaLoopConfiguration(object):
             'export_settings': {
                 'compile_cff': True,
                 'numerator_settings': {
-                    'eval_settings': {  
+                    'eval_settings': {
                         'type': 'Joint',
-                        'cpe_rounds': 1, 
+                        'cpe_rounds': 1,
                         'compile_options': {
                             'subtype': 'Compiled',
                         }
                     },
-                    'global_numerator':None,
+                    'global_numerator': None,
                     'gamma_algebra': 'Concrete',
                 },
                 'cpe_rounds_cff': 1,
@@ -118,8 +122,8 @@ class GammaLoopConfiguration(object):
                     'custom': []
                 },
                 'tropical_subgraph_table_settings': {
-                  'panic_on_fail': False,
-                  'target_omega': 1.0
+                    'panic_on_fail': False,
+                    'target_omega': 1.0
                 }
             },
             'run_settings': {
@@ -128,7 +132,7 @@ class GammaLoopConfiguration(object):
                     'use_ltd': False,
                     'force_orientations': None,
                     'load_compiled_cff': True,
-                    'load_compiled_numerator':True,
+                    'load_compiled_numerator': True,
                     'joint_numerator_eval': True,
                     'load_compiled_separate_orientations': False
                 },
@@ -139,10 +143,10 @@ class GammaLoopConfiguration(object):
                     'e_cm': 3.0,
                     'externals': {
                         'type': 'constant',
-                        'data':{
-                            'momenta':None,  # Will be set automatically
-                            'helicities':None,
-                        } 
+                        'data': {
+                            'momenta': None,  # Will be set automatically
+                            'helicities': None,
+                        }
                     }
                 },
                 'Parameterization': {
@@ -266,9 +270,11 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -686,14 +692,62 @@ class GammaLoop(object):
         logger.info("Successfully exported model '%s' to '%s'.",
                     self.model.get_full_name(), args.model_file_path)
 
+    # export_graph command
+    export_graphs_parser = ArgumentParser(prog='export_graph')
+    export_graphs_parser.add_argument(
+        'output_path', metavar='output_path', type=str, help='Filename to write exported graphs to.')
+    export_graphs_parser.add_argument('--graph_names', '-gn', type=str, nargs='*',
+                                      help='Graph names to export [default: all].')
+    export_graphs_parser.add_argument('--graph_container_name', '-gct', type=str, default=None,
+                                      help='Graph container name to export [default: automatic].')
+
+    def do_export_graphs(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.export_graphs_parser.print_help()
+            return
+        args = self.export_graphs_parser.parse_args(split_str_args(str_args))
+
+        graphs: list[tuple[Graph, dict[str, Any]]] = []
+        if len(self.amplitudes) == 0 and len(self.cross_sections) == 0:
+            raise GammaLoopError(
+                "No graphs loaded. Please load graphs first with 'import_graphs' command.")
+
+        for a in self.amplitudes:
+            if args.graph_container_name is None or a.name == args.graph_container_name:
+                graphs.extend((g.graph, {"multiplicity_factor": g.multiplicity})
+                              for g in a.amplitude_graphs)
+                break
+
+        if len(graphs) == 0:
+            for xs in self.cross_sections:
+                if args.graph_container_name is None or xs.name == args.graph_container_name:
+                    graphs.extend(
+                        [(g.graph, {"multiplicity_factor": g.multiplicity}) for g in xs.supergraphs])
+                    break
+
+        with open(args.output_path, 'w', encoding='utf-8') as f:
+            f.write("\n".join(g.to_pydot(attr).to_string()
+                    for g, attr in graphs))
+
+        if not args.graph_names is None:
+            graphs = [(g, attr)
+                      for g, attr in graphs if g.name in args.graph_names]
+
+        if len(graphs) == 0:
+            raise GammaLoopError(
+                "No graphs found with the specified container name or graph name(s).")
+
+        logger.info("A total of %s Graphs successfully exported to file '%s'.",
+                    len(graphs), args.output_path)
+
     # import_graphs command
     import_graphs_parser = ArgumentParser(prog='import_graphs')
     import_graphs_parser.add_argument('file_path', metavar='file_path', type=str,
                                       help='Path to the qgraph python output to load')
     import_graphs_parser.add_argument('--no_compile', '-nc', action='store_true',
                                       default=False, help='Prevent compilation of qgraph python output.')
-    import_graphs_parser.add_argument('--format', '-f', type=str, default='yaml',
-                                      choices=['yaml', 'qgraph'], help='Format to import the graphs in.')
+    import_graphs_parser.add_argument('--format', '-f', type=str, default='dot',
+                                      choices=['qgraph', 'dot'], help='Format to import the graphs in.')
 
     def do_import_graphs(self, str_args: str) -> None:
         if str_args == 'help':
@@ -710,14 +764,8 @@ class GammaLoop(object):
 
         file_path = Path(os.path.abspath(args.file_path))
 
+        graphs: list[tuple[Graph, dict[str, Any]]] = []
         match args.format:
-            case 'yaml':
-                try:
-                    all_raw_graphs: list[Any] = yaml.safe_load(
-                        open(file_path, 'r', encoding='utf-8'))['graphs']
-                except Exception as exc:
-                    raise GammaLoopError(
-                        f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
 
             case 'qgraph':
                 sys.path.insert(0, str(file_path.parent))
@@ -737,21 +785,34 @@ class GammaLoop(object):
                 del sys.path[0]
                 all_raw_graphs: list[Any] = qgraph_loaded_module.graphs
 
+                for i_qg, qgraph_object in enumerate(all_raw_graphs):
+                    new_graph = Graph.from_qgraph(
+                        self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
+                    attributes = qgraph_object
+                    graphs.append((new_graph, attributes))
+
+            case 'dot':
+                pydot_graphs = pydot.graph_from_dot_file(
+                    file_path, encoding='utf-8')
+                if pydot_graphs is None:
+                    raise GammaLoopError(
+                        "Failed to load graphs from dot file '%s'.", args.file_path)
+                graphs = [
+                    (
+                        Graph.from_pydot(self.model, pydot_g),
+                        pydot_g.get_attributes()
+                    ) for pydot_g in pydot_graphs
+                ]
+
             case _:
                 raise GammaLoopError(
                     "Invalid graph format: '%s' for importing graphs.", args.format)
 
-        graphs: list[Graph] = []
-        for i_qg, qgraph_object in enumerate(all_raw_graphs):
-            new_graph = Graph.from_qgraph(
-                self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
-            graphs.append(new_graph)
-        logger.info("Successfully loaded %s graphs.",
-                    len(all_raw_graphs))
+        logger.info("Successfully loaded %s graphs.", len(graphs))
 
         # Now determine if it is a supergraph or an amplitude graph
         graph_type = None
-        for a_graph in graphs:
+        for a_graph, _attributes in graphs:
             if len(a_graph.get_incoming_edges()) == 0 and len(a_graph.get_outgoing_edges()) == 0:
                 if graph_type is None:
                     graph_type = 'supergraph'
@@ -782,7 +843,7 @@ class GammaLoop(object):
                 f'{file_path.stem}',
                 # Wrap the forward scattering graphs within a dummy supergraph
                 [cross_section.supergraph.SuperGraph(
-                    sg_id=i, graph=Graph.empty_graph('DUMMY'), multiplicity=1.0,
+                    sg_id=i, graph=Graph.empty_graph('DUMMY'), multiplicity="1",
                     topology_class=[],
                     cuts=[
                         cross_section.supergraph.SuperGraphCut(
@@ -790,12 +851,13 @@ class GammaLoop(object):
                             forward_scattering_graph=cross_section.supergraph.ForwardScatteringGraph(
                                 sg_id=i,
                                 sg_cut_id=0,
-                                multiplicity=1.0,
+                                multiplicity=attributes.get(
+                                    "multiplicity_factor", "1"),
                                 graph=g,
                                 cuts=[]  # Will be filled in later
                             )
                         )]
-                ) for i, g in enumerate(graphs)]
+                ) for i, (g, attributes) in enumerate(graphs)]
             )])
 
         if graph_type == 'amplitude':
@@ -804,18 +866,24 @@ class GammaLoop(object):
                 [
                     supergraph.AmplitudeGraph(
                         sg_id=0, sg_cut_id=0, fs_cut_id=i, amplitude_side=Side.LEFT,
+                        multiplicity=attributes.get(
+                            "multiplicity_factor", "1"),
                         graph=g
                     )
-                    for i, g in enumerate(graphs)]
+                    for i, (g, attributes) in enumerate(graphs)]
             )])
 
     generate_graph_parser = ArgumentParser(prog='generate_graph')
     generate_graph_parser.add_argument(
-        '--name', '-n', type=str, default='graph',)
+        '--name', '-n', type=str, default='graph', help='Name of the graph')
     generate_graph_parser.add_argument(
-        '--virtual-edges', '-ve', type=str)
+        '--virtual-edges', '-ve', type=str, help='List of virtual edges to generate the graph from')
     generate_graph_parser.add_argument(
-        '--external-edges', '-ee', type=str)
+        '--external-edges', '-ee', type=str, help='List of external edges to generate the graph from')
+    generate_graph_parser.add_argument(
+        '--multiplicity_factor', '-mf', type=str, default="1", help="Multiplicity factor of the graph (default: '%(default)s')")
+    generate_graph_parser.add_argument(
+        '--overall_factor', '-of', type=str, default="1", help="Overall factor of the graph (default: '%(default)s')")
 
     def do_generate_graph(self, str_args: str) -> None:
         if str_args == 'help':
@@ -841,7 +909,8 @@ class GammaLoop(object):
 
         graph["edges"] = {}
         graph["nodes"] = {}
-        graph["overall_factor"] = str("1")
+        graph["overall_factor"] = args.overall_factor
+        graph["multiplicity_factor"] = args.multiplicity_factor
 
         for external_edge in external_edges:
             type = external_edge[0]
@@ -922,6 +991,7 @@ class GammaLoop(object):
             [
                 supergraph.AmplitudeGraph(
                     sg_id=0, sg_cut_id=0, fs_cut_id=0, amplitude_side=Side.LEFT,
+                    multiplicity=args.multiplicity_factor,
                     graph=gammaloop_graph
                 )
             ]
@@ -1144,7 +1214,7 @@ class GammaLoop(object):
                         cross_section.CrossSection.from_yaml_str(self.model, cross_section_yaml))
                     self.rust_worker.add_cross_section_from_yaml_str(
                         cross_section_yaml)
-                    
+
         self.rust_worker.sync()
 
     # inspect command

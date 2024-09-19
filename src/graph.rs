@@ -672,7 +672,7 @@ pub struct SerializableGraph {
     name: SmartString<LazyCompact>,
     vertices: Vec<SerializableVertex>,
     edges: Vec<SerializableEdge>,
-    overall_factor: f64,
+    overall_factor: String,
     #[allow(clippy::type_complexity)]
     external_connections: Vec<(
         Option<SmartString<LazyCompact>>,
@@ -698,7 +698,7 @@ impl SerializableGraph {
                 .map(|e| SerializableEdge::from_edge(graph, e))
                 .collect(),
 
-            overall_factor: graph.overall_factor,
+            overall_factor: graph.overall_factor.clone(),
             external_connections: graph
                 .external_connections
                 .iter()
@@ -785,7 +785,7 @@ pub struct BareGraph {
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
     pub external_edges: Vec<usize>,
-    pub overall_factor: f64,
+    pub overall_factor: String,
     pub external_connections: Vec<(Option<usize>, Option<usize>)>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -928,7 +928,7 @@ impl BareGraph {
             vertices,
             edges: vec![],
             external_edges: vec![],
-            overall_factor: graph.overall_factor,
+            overall_factor: graph.overall_factor.clone(),
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
                 basis: vec![],

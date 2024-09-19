@@ -11,7 +11,7 @@ use crate::{
     momentum::FourMomentum,
     utils::{FloatLike, F},
 };
-use crate::{model, ExportSettings, Settings};
+use crate::{ExportSettings, Settings};
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
@@ -22,7 +22,6 @@ use itertools::Itertools;
 
 use log::{debug, trace};
 
-use nalgebra::Quaternion;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use spenso::data::DataTensor;
@@ -1388,10 +1387,10 @@ impl TypedNumeratorState for Network {
 
 impl Numerator<Network> {
     pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
-        debug!(
-            "contracting network {}",
-            self.state.net.rich_graph().dot_nodes()
-        );
+        // debug!(
+        //     "contracting network {}",
+        //     self.state.net.rich_graph().dot_nodes()
+        // );
         let contracted = self.state.contract(settings)?;
         Ok(Numerator { state: contracted })
     }

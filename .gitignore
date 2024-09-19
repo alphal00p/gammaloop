@@ -50,6 +50,12 @@ logos/
 *.a
 *.dylib
 
+# ignore gammaLoop cards
+*.gL
+
+# ignore dot files as they are usually for testing only
+*.dot
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
