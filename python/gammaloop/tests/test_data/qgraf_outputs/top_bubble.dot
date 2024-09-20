@@ -1,0 +1,12 @@
+digraph top_bubble_0 {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3 [int_id="V_134"];
+v4 [int_id="V_134"];
+v1 -> v3 [pdg=22, name=p1, mom=p1];
+v4 -> v2 [pdg=22, name=p2, mom=p2];
+v3 -> v4 [pdg=6, name=q1];
+v4 -> v3 [pdg=6, name=q2, lmb_index=0];
+}
