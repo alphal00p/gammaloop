@@ -27,7 +27,7 @@ use crate::utils::{
     PrecisionUpgradable,
 };
 use crate::utils::{f128, F};
-use crate::{cff, ltd, Externals, Integrand, RotationMethod};
+use crate::{cff, ltd, Externals, Integrand, RotationSetting};
 use crate::{
     inspect::inspect, ExportSettings, GammaloopCompileOptions, Settings,
     TropicalSubgraphTableSettings,

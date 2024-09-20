@@ -1,6 +1,7 @@
 use std::{
     borrow::Borrow,
     fmt::{Display, LowerExp},
+    marker::PhantomData,
     ops::{Add, AddAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
@@ -10,23 +11,26 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
     arithmetic::ScalarMul,
-    contraction::RefZero,
-    data::DenseTensor,
-    parametric::FlatCoefficent,
+    complex::RealOrComplexTensor,
+    contraction::{Contract, RefZero},
+    data::{DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor},
+    parametric::{EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete},
     structure::{
-        AbstractIndex, BaseRepName, Bispinor, Euclidean, IndexLess, Lorentz, NamedStructure,
-        NoArgs, PhysReps, RepName, ToSymbolic, VecStructure,
+        AbstractIndex, BaseRepName, Bispinor, CastStructure, Dual, DualSlotTo, Euclidean,
+        IndexLess, Lorentz, NamedStructure, NoArgs, PhysReps, RepName, Shadowable, Slot,
+        TensorStructure, ToSymbolic, VecStructure,
     },
     upgrading_arithmetic::{FallibleAdd, FallibleMul},
 };
 use symbolica::{
-    atom::{Atom, Symbol},
+    atom::{Atom, Fun, Symbol},
     coefficient::Coefficient,
     domains::{
-        float::{NumericalFloatLike, Real, RealNumberLike, SingleFloat},
+        float::{ConstructibleFloat, NumericalFloatLike, Real, RealNumberLike, SingleFloat},
         integer::IntegerRing,
-        rational::RationalField,
+        rational::{Rational, RationalField},
     },
+    evaluate::{ExpressionEvaluator, FunctionMap},
     poly::{polynomial::MultivariatePolynomial, Exponent},
     state::State,
 };
@@ -495,7 +499,7 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
         (delta_eta.square() + delta_phi.square()).sqrt()
     }
 
-    pub fn rotate_mut(&mut self, alpha: F<T>, beta: F<T>, gamma: F<T>) {
+    pub fn rotate_mut(&mut self, alpha: &F<T>, beta: &F<T>, gamma: &F<T>) {
         let sin_alpha = alpha.sin();
         let cos_alpha = alpha.cos();
         let sin_beta = beta.sin();
@@ -507,7 +511,7 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
         let py = self.py.clone();
         let pz = self.pz.clone();
 
-        self.px = cos_alpha.clone() * &cos_beta * &px
+        self.px = cos_gamma.clone() * &cos_beta * &px
             + (-(cos_alpha.clone()) * &sin_gamma + sin_alpha.clone() * &sin_beta * &cos_gamma)
                 * &py
             + (sin_alpha.clone() * &sin_gamma + cos_alpha.clone() * &sin_beta * &cos_gamma) * &pz;
@@ -518,12 +522,6 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
 
         self.pz =
             -sin_beta * &px + cos_beta.clone() * &sin_alpha * &py + cos_alpha * &cos_beta * &pz;
-    }
-
-    pub fn rotate(&self, alpha: F<T>, beta: F<T>, gamma: F<T>) -> Self {
-        let mut result = self.clone();
-        result.rotate_mut(alpha, beta, gamma);
-        result
     }
 
     /// Compute transverse momentum.
@@ -963,6 +961,18 @@ impl<T: FloatLike> FourMomentum<F<T>> {
 pub enum ExternalMomenta<T> {
     Dependent(Dep),
     Independent([T; 4]),
+}
+
+impl<T: FloatLike> Rotatable for ExternalMomenta<F<T>> {
+    fn rotate(&self, rotation: &Rotation) -> Self {
+        match self {
+            ExternalMomenta::Dependent(_) => ExternalMomenta::Dependent(Dep::Dep),
+            ExternalMomenta::Independent(data) => {
+                let fm = FourMomentum::from(data.clone());
+                fm.rotate(rotation).into()
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
@@ -2346,11 +2356,512 @@ impl From<Vector<f64, 3>> for ThreeMomentum<F<f64>> {
         ThreeMomentum::new(F(value[0]), F(value[1]), F(value[2]))
     }
 }
+
+pub enum LorentzTransformation<T> {
+    Boost(ThreeMomentum<T>),
+    Rotation(Rotation),
+    General {
+        boost: ThreeMomentum<T>,
+        rotation: Rotation,
+    },
+}
+
+pub trait LorentzTransformable<T>: Rotatable {
+    fn lorentz_transform(&self, transformation: &LorentzTransformation<T>) -> Self;
+}
+
+// pub struct IrriducibleLorentzRep {
+//     m: usize,
+//     n: usize,
+// }
+
+// impl IrriducibleLorentzRep {
+//     pub fn scalar() -> Self {
+//         Self { m: 0, n: 0 }
+//     }
+
+//     pub fn vector() -> Self {
+//         Self { m: 1, n: 1 }
+//     }
+
+//     pub fn tensor() -> Self {
+//         Self { m: 2, n: 2 }
+//     }
+
+//     pub fn left_weyl() -> Self {
+//         Self { m: 1, n: 0 }
+//     }
+
+//     pub fn right_weyl() -> Self {
+//         Self { m: 0, n: 1 }
+//     }
+// }
+
+pub enum LorentzRep {
+    // Irriducible(IrriducibleLorentzRep),
+    // DirectSum(Vec<LorentzRep>),
+    Scalar,
+    Vector,
+    Bispinor,
+}
+
+#[derive(Clone, Copy)]
+pub enum RotationMethod {
+    EulerAngles(f64, f64, f64),
+    Pi2X,
+    Pi2Y,
+    Pi2Z,
+    Identity,
+}
+
+impl From<RotationMethod> for Rotation {
+    fn from(method: RotationMethod) -> Self {
+        Rotation::new(method)
+    }
+}
+
+#[derive(Clone)]
+pub struct Rotation {
+    pub method: RotationMethod,
+    pub lorentz_rotation: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, VecStructure>,
+    pub bispinor_rotation: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, VecStructure>,
+    // phantom: PhantomData<T>,
+}
+
+impl Rotation {
+    pub fn new(method: RotationMethod) -> Self {
+        let mu = Lorentz::new_slot_selfless(4, 1);
+
+        let al = Lorentz::new_slot_selfless(4, 3);
+        let mud = mu.dual();
+
+        let shadow: NamedStructure<String, ()> =
+            VecStructure::from_iter([mu]).to_named("eps".to_string(), None);
+        let shadow_t: MixedTensor<_, VecStructure> =
+            ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
+                .cast_structure();
+
+        let rotation: MixedTensor<f64, _> = method
+            .lorentz_tensor(mud, al)
+            .try_into_dense()
+            .unwrap()
+            .into();
+
+        let fn_map = FunctionMap::new();
+
+        let lorentz_eval: EvalTensor<ExpressionEvaluator<Rational>, VecStructure> = shadow_t
+            .contract(&rotation)
+            .unwrap()
+            .try_into_parametric()
+            .unwrap()
+            .eval_tree(
+                &fn_map,
+                &shadow_t.try_into_parametric().unwrap().tensor.data(),
+            )
+            .unwrap()
+            .linearize(Some(1));
+
+        let i = Bispinor::new_slot_selfless(4, 1);
+
+        let j = Bispinor::new_slot_selfless(4, 3);
+
+        let shadow: NamedStructure<String, ()> =
+            VecStructure::from_iter([i.cast::<PhysReps>()]).to_named("u".to_string(), None);
+        let shadow_t: MixedTensor<_, VecStructure> =
+            ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
+                .cast_structure();
+
+        let rotation: MixedTensor<f64, _> =
+            ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(method.bispinor_tensor(i, j)));
+
+        let res = shadow_t
+            .contract(&rotation)
+            .unwrap()
+            .try_into_parametric()
+            .unwrap();
+
+        let fn_map = FunctionMap::new();
+        let mut params = shadow_t.try_into_parametric().unwrap().tensor.data();
+        params.push(Atom::new_var(State::I));
+
+        let spinor_eval: EvalTensor<ExpressionEvaluator<Rational>, VecStructure> =
+            res.eval_tree(&fn_map, &params).unwrap().linearize(Some(1));
+
+        Self {
+            method,
+            lorentz_rotation: lorentz_eval.map_coeff(&|f| Complex::new_re(F::from_f64(f.into()))),
+            bispinor_rotation: spinor_eval.map_coeff(&|f| Complex::new_re(F::from_f64(f.into()))),
+        }
+    }
+}
+
+impl RotationMethod {
+    pub fn generator(&self, i: AbstractIndex, j: AbstractIndex) -> DataTensor<f64, VecStructure> {
+        let structure = VecStructure::from_iter([
+            PhysReps::new_slot(Lorentz {}.into(), 4, i),
+            PhysReps::new_slot(Lorentz {}.into(), 4, j),
+        ]);
+        let zero = 0.;
+        match self {
+            RotationMethod::Identity => {
+                let mut omega = SparseTensor::empty(structure);
+                omega.into()
+            }
+            RotationMethod::Pi2X => {
+                let mut omega = SparseTensor::empty(structure);
+                omega.set(&[2, 3], -zero.PIHALF());
+                omega.set(&[3, 2], zero.PIHALF());
+                omega.into()
+            }
+            RotationMethod::Pi2Y => {
+                let mut omega = SparseTensor::empty(structure);
+                omega.set(&[1, 3], zero.PIHALF());
+                omega.set(&[3, 1], -zero.PIHALF());
+                omega.into()
+            }
+            RotationMethod::Pi2Z => {
+                let mut omega = SparseTensor::empty(structure);
+                omega.set(&[1, 2], -zero.PIHALF());
+                omega.set(&[2, 1], zero.PIHALF());
+                omega.into()
+            }
+            RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_data(
+                vec![
+                    // row 0
+                    zero.clone(),
+                    zero.clone(),
+                    zero.clone(),
+                    zero.clone(),
+                    // row 1
+                    zero.clone(),
+                    zero.clone(),
+                    -gamma.clone(),
+                    beta.clone(),
+                    // row 2
+                    zero.clone(),
+                    gamma.clone(),
+                    zero.clone(),
+                    -alpha.clone(),
+                    // row 3
+                    zero.clone(),
+                    -beta.clone(),
+                    alpha.clone(),
+                    zero.clone(),
+                ],
+                structure,
+            )
+            .unwrap()
+            .into(),
+        }
+    }
+
+    pub fn lorentz_tensor(
+        &self,
+        i: Slot<Dual<Lorentz>>,
+        j: Slot<Lorentz>,
+    ) -> DataTensor<f64, VecStructure> {
+        let structure = VecStructure::from_iter([i.cast::<PhysReps>(), j.cast()]);
+        let zero = 0.; //F::new_zero();
+
+        match self {
+            RotationMethod::Identity => {
+                let mut rot = SparseTensor::empty(structure);
+                rot.set(&[0, 0], zero.one());
+                rot.set(&[1, 1], zero.one());
+                rot.set(&[2, 2], zero.one());
+                rot.set(&[3, 3], zero.one());
+                rot.into()
+            }
+            RotationMethod::Pi2X => {
+                let rot = DenseTensor::from_data(
+                    vec![
+                        zero.one(),
+                        zero.clone(),
+                        zero.clone(),
+                        zero.clone(),
+                        // row 1
+                        zero.clone(),
+                        zero.one(),
+                        zero.clone(),
+                        zero.clone(),
+                        // row 2
+                        zero.clone(),
+                        zero.clone(),
+                        zero.clone(),
+                        -zero.one(),
+                        // row 3
+                        zero.clone(),
+                        zero.clone(),
+                        zero.one(),
+                        zero.clone(),
+                    ],
+                    structure,
+                )
+                .unwrap();
+
+                // rot.set(&[0, 0], zero.one());
+                // rot.set(&[1, 1], zero.one());
+                // rot.set(&[2, 3], -zero.one());
+                // rot.set(&[3, 2], zero.one());
+                rot.into()
+            }
+            RotationMethod::Pi2Y => {
+                let mut rot = SparseTensor::empty(structure);
+                rot.set(&[0, 0], zero.one());
+                rot.set(&[2, 2], zero.one());
+                rot.set(&[1, 3], zero.one());
+                rot.set(&[3, 1], -zero.one());
+                rot.into()
+            }
+            RotationMethod::Pi2Z => {
+                let mut rot = SparseTensor::empty(structure);
+                rot.set(&[0, 0], zero.one());
+                rot.set(&[1, 2], -zero.one());
+                rot.set(&[2, 1], zero.one());
+                rot.set(&[3, 3], zero.one());
+                rot.into()
+            }
+            RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_data(
+                vec![
+                    // row 0
+                    zero.one(),
+                    zero.clone(),
+                    zero.clone(),
+                    zero.clone(),
+                    // row 1
+                    zero.clone(),
+                    gamma.cos() * beta.cos(),
+                    alpha.sin() * beta.sin() * gamma.cos() - alpha.cos() * gamma.sin(),
+                    alpha.sin() * gamma.sin() + alpha.cos() * beta.sin() * gamma.cos(),
+                    // row 2
+                    zero.clone(),
+                    gamma.sin() * beta.cos(),
+                    alpha.cos() * gamma.cos() + alpha.sin() * beta.sin() * gamma.sin(),
+                    -alpha.sin() * gamma.cos() + alpha.cos() * beta.sin() * gamma.sin(),
+                    // row 3
+                    zero.clone(),
+                    -beta.sin(),
+                    alpha.sin() * beta.cos(),
+                    alpha.cos() * beta.cos(),
+                ],
+                structure,
+            )
+            .unwrap()
+            .into(),
+            // Rotation::EulerAngles(alpha, beta, gamma) => DenseTensor::from_data(
+            //     vec![
+            //         // row 0
+            //         zero.one(),
+            //         zero.clone(),
+            //         zero.clone(),
+            //         zero.clone(),
+            //         // row 1
+            //         zero.clone(),
+            //         alpha.cos() * beta.cos(),
+            //         alpha.sin() * beta.sin() * gamma.cos() - alpha.cos() * gamma.sin(),
+            //         alpha.sin() * gamma.sin() + alpha.cos() * beta.sin() * gamma.cos(),
+            //         // row 2
+            //         zero.clone(),
+            //         gamma.sin() * beta.cos(),
+            //         alpha.cos() * gamma.cos() + alpha.sin() * beta.sin() * gamma.sin(),
+            //         -alpha.sin() * gamma.cos() + alpha.cos() * beta.sin() * gamma.sin(),
+            //         // row 3
+            //         zero.clone(),
+            //         -beta.sin(),
+            //         alpha.sin() * beta.cos(),
+            //         alpha.cos() * beta.cos(),
+            //     ],
+            //     structure,
+            // )
+            // .unwrap()
+            // .into(),
+        }
+    }
+
+    pub fn bispinor_tensor(
+        &self,
+        i: Slot<Bispinor>,
+        j: Slot<Bispinor>,
+    ) -> DataTensor<Complex<f64>, VecStructure> {
+        let structure = VecStructure::from_iter([i.cast::<PhysReps>(), j.cast()]);
+        let zero = 0.; // F::new_zero();
+        let zeroc = Complex::new_re(zero.clone());
+
+        match self {
+            RotationMethod::Identity => {
+                let mut rot = SparseTensor::empty(structure);
+                rot.set(&[0, 0], zeroc.one());
+                rot.set(&[1, 1], zeroc.one());
+                rot.set(&[2, 2], zeroc.one());
+                rot.set(&[3, 3], zeroc.one());
+                rot.into()
+            }
+            RotationMethod::Pi2X => {
+                let mut rot = SparseTensor::empty(structure);
+                let sqrt2_half = zero.SQRT_2_HALF();
+                let sqrt2_halfim = Complex::new_im(sqrt2_half.clone());
+                let sqrt2_halfre = Complex::new_re(sqrt2_half);
+
+                rot.set(&[0, 0], sqrt2_halfim.clone());
+                rot.set(&[0, 1], sqrt2_halfim.clone());
+                rot.set(&[1, 0], sqrt2_halfim.clone());
+                rot.set(&[1, 1], sqrt2_halfre.clone());
+                rot.set(&[2, 2], sqrt2_halfim.clone());
+                rot.set(&[2, 3], sqrt2_halfim.clone());
+                rot.set(&[3, 2], sqrt2_halfim.clone());
+                rot.set(&[3, 3], sqrt2_halfre.clone());
+                rot.into()
+            }
+            RotationMethod::Pi2Y => {
+                let mut rot = SparseTensor::empty(structure);
+                let sqrt2_half = zero.SQRT_2_HALF();
+                let sqrt2_halfim = Complex::new_im(sqrt2_half.clone());
+                let sqrt2_halfre = Complex::new_re(sqrt2_half);
+                let nsqrt2_half = -sqrt2_halfre.clone();
+
+                rot.set(&[0, 0], sqrt2_halfim.clone());
+                rot.set(&[0, 1], nsqrt2_half.clone());
+                rot.set(&[1, 0], nsqrt2_half.clone());
+                rot.set(&[1, 1], sqrt2_halfre.clone());
+                rot.set(&[2, 2], sqrt2_halfim.clone());
+                rot.set(&[2, 3], nsqrt2_half.clone());
+                rot.set(&[3, 2], nsqrt2_half.clone());
+                rot.set(&[3, 3], sqrt2_halfre.clone());
+                rot.into()
+            }
+            RotationMethod::Pi2Z => {
+                let mut rot = SparseTensor::empty(structure);
+                let sqrt2_half = zero.SQRT_2_HALF();
+                let sqrt2_halfc = Complex::new(sqrt2_half.clone(), sqrt2_half);
+                let sqrt2_halfcc = sqrt2_halfc.conj();
+
+                rot.set(&[0, 0], sqrt2_halfc.clone());
+                rot.set(&[1, 1], sqrt2_halfcc.clone());
+                rot.set(&[2, 2], sqrt2_halfc.clone());
+                rot.set(&[3, 3], sqrt2_halfcc.clone());
+                rot.into()
+            }
+            RotationMethod::EulerAngles(alpha, beta, gamma) => {
+                let norm = alpha.square() + beta.square() + gamma.square();
+
+                let complex_phi = Complex::new(alpha.clone(), beta.clone());
+
+                let normhalf = &norm / 2.; //F::from_f64(2.);
+                let cos_phihalf = normhalf.cos();
+                let sin_phihalf = normhalf.sin();
+
+                let a_00 = Complex::new(gamma / &norm * &cos_phihalf, sin_phihalf.clone());
+                let a_01 =
+                    Complex::new_im((&norm - gamma.square() / &norm) * &sin_phihalf) / &complex_phi;
+                let a_10 = &complex_phi * Complex::new_im(&sin_phihalf / &norm);
+                let a_11 = Complex::new(cos_phihalf, -gamma / &norm * &sin_phihalf);
+
+                DenseTensor::from_data(
+                    vec![
+                        // row 0
+                        a_00.clone(),
+                        a_01.clone(),
+                        zeroc.clone(),
+                        zeroc.clone(),
+                        // row 1
+                        a_10.clone(),
+                        a_11.clone(),
+                        zeroc.clone(),
+                        zeroc.clone(),
+                        // row 2
+                        zeroc.clone(),
+                        zeroc.clone(),
+                        a_00.clone(),
+                        a_01.clone(),
+                        // row 3
+                        zeroc.clone(),
+                        zeroc.clone(),
+                        a_10.clone(),
+                        a_11.clone(),
+                    ],
+                    structure,
+                )
+                .unwrap()
+                .into()
+            }
+        }
+    }
+}
+
+pub trait Rotatable {
+    fn rotate(&self, rotation: &Rotation) -> Self;
+}
+
+impl<T: FloatLike> Rotatable for ThreeMomentum<F<T>> {
+    fn rotate(&self, rotation: &Rotation) -> Self {
+        match rotation.method {
+            RotationMethod::Identity => self.clone(),
+            RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x(&self),
+            RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y(&self),
+            RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z(&self),
+            RotationMethod::EulerAngles(alpha, beta, gamma) => {
+                let mut result = self.clone();
+                result.rotate_mut(&F::from_f64(alpha), &F::from_f64(beta), &F::from_f64(gamma));
+                result
+            }
+        }
+    }
+}
+
+impl<T: FloatLike> Rotatable for FourMomentum<F<T>> {
+    fn rotate(&self, rotation: &Rotation) -> Self {
+        Self {
+            temporal: self.temporal.clone(),
+            spatial: self.spatial.rotate(rotation),
+        }
+    }
+}
+
+impl<T: FloatLike> Rotatable for Polarization<Complex<F<T>>> {
+    fn rotate(&self, rotation: &Rotation) -> Self {
+        let rotated = match self.pol_type {
+            PolType::Epsilon | PolType::EpsilonBar => rotation
+                .lorentz_rotation
+                .clone()
+                .map_coeff(&|t| t.map(|f| F::from_ff64(f)))
+                .evaluate(&self.tensor.data)
+                .try_into_dense()
+                .unwrap()
+                .cast_structure(),
+            PolType::U | PolType::UBar | PolType::V | PolType::VBar => {
+                let mut params = self.tensor.data.clone();
+                params.push(Complex::new_im(F::from_f64(1.)));
+                rotation
+                    .bispinor_rotation
+                    .clone()
+                    .map_coeff(&|t| t.map(|f| F::from_ff64(f)))
+                    .evaluate(&params)
+                    .try_into_dense()
+                    .unwrap()
+                    .cast_structure()
+            }
+            PolType::Scalar => self.tensor.clone(),
+        };
+
+        Polarization {
+            tensor: rotated,
+            pol_type: self.pol_type,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::PI;
+
     use spenso::{
-        iterators::IteratableTensor, structure::TensorStructure, upgrading_arithmetic::FallibleAdd,
+        contraction::Contract,
+        iterators::IteratableTensor,
+        structure::{DualSlotTo, TensorStructure},
+        ufo,
+        upgrading_arithmetic::{FallibleAdd, FallibleSub},
     };
+    use statrs::function::gamma::gamma;
 
     use crate::utils::F;
 
@@ -2502,5 +3013,115 @@ mod tests {
                 Complex::new_re(F(-3.))
             ]
         );
+    }
+
+    #[test]
+    fn rotations() {
+        let mom = FourMomentum::from_args(F(2.), F(3.), F(1.), F(2.));
+        let e = mom.pol(SignOrZero::Minus);
+        let u = mom.u(Sign::Negative);
+
+        let rot: Rotation = RotationMethod::EulerAngles(std::f64::consts::PI / 2., 0., 0.).into();
+        let rotx = RotationMethod::Pi2X.into();
+
+        // println!(
+        //     "{}",
+        //     rot.bispinor_tensor(
+        //         Bispinor::new_slot_selfless(4, 2),
+        //         Bispinor::new_slot_selfless(4, 1),
+        //     )
+        // );
+
+        let mom_rot = mom.rotate(&rot);
+        let other_mom_rot = mom.rotate(&rotx);
+
+        println!("{}", mom_rot);
+        println!("Pi2X {}", other_mom_rot);
+
+        let e_rot = e.rotate(&rot);
+        let u_rot = u.rotate(&rot);
+
+        let other_e_rot = e.rotate(&rotx);
+        let other_u_rot = u.rotate(&rotx);
+
+        println!("{}", e_rot);
+        println!("Pi2X{}", other_e_rot);
+
+        println!("{}", u_rot);
+        println!("Pi2X {}", other_u_rot);
+    }
+
+    #[test]
+    fn omega() {
+        let mu = PhysReps::new_slot(Lorentz {}.into(), 4, 0);
+
+        let nu = PhysReps::new_slot(Lorentz {}.into(), 4, 1);
+
+        let mud = mu.dual();
+
+        let nud = nu.dual();
+
+        let i = PhysReps::new_slot(Bispinor {}.into(), 4, 2);
+
+        let j = PhysReps::new_slot(Bispinor {}.into(), 4, 3);
+
+        let k = PhysReps::new_slot(Bispinor {}.into(), 4, 4);
+
+        let zero = Atom::new_num(0);
+        let theta_x = Atom::parse("theta_x").unwrap();
+        let theta_y = Atom::parse("theta_y").unwrap();
+        let theta_z = Atom::parse("theta_z").unwrap();
+
+        let omega = DenseTensor::from_data(
+            vec![
+                zero.clone(),
+                zero.clone(),
+                zero.clone(),
+                zero.clone(),
+                //
+                zero.clone(),
+                zero.clone(),
+                theta_z.clone(),
+                -theta_y.clone(),
+                //
+                zero.clone(),
+                -theta_z.clone(),
+                zero.clone(),
+                theta_x.clone(),
+                //
+                zero.clone(),
+                theta_y.clone(),
+                -theta_x.clone(),
+                zero.clone(),
+            ],
+            VecStructure::from_iter([mu, nu]),
+        )
+        .unwrap();
+
+        println!("{}", omega);
+
+        let gammamujk: SparseTensor<Complex<f64>> =
+            ufo::gamma_data_weyl(VecStructure::from_iter([mud, j, k]));
+
+        let gammamukj: SparseTensor<Complex<f64>> =
+            ufo::gamma_data_weyl(VecStructure::from_iter([mud, k, i]));
+
+        let gammanuki: SparseTensor<Complex<f64>> =
+            ufo::gamma_data_weyl(VecStructure::from_iter([nud, k, i]));
+
+        let gammanujk: SparseTensor<Complex<f64>> =
+            ufo::gamma_data_weyl(VecStructure::from_iter([nud, j, k]));
+
+        let sigma = (gammamujk
+            .contract(&gammanuki)
+            .unwrap()
+            .sub_fallible(&gammanujk.contract(&gammamukj).unwrap())
+            .unwrap())
+        .scalar_mul(&Complex::new_im(0.25))
+        .unwrap();
+
+        println!("{}", sigma);
+
+        println!("{}", omega.contract(&sigma).unwrap());
     }
 }

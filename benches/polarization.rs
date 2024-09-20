@@ -3,15 +3,20 @@ use std::{env, path::PathBuf, time::Duration};
 use _gammaloop::{
     gammaloop_integrand::DefaultSample,
     graph::{self, Graph},
-    momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, ThreeMomentum},
+    momentum::{
+        Dep, ExternalMomenta, FourMomentum, Helicity, Polarization, Rotatable, Rotation,
+        ThreeMomentum,
+    },
     numerator::ContractionSettings,
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
     utils::F,
-    ExportSettings, Externals, GammaloopCompileOptions, TropicalSubgraphTableSettings,
+    ExportSettings, Externals, GammaloopCompileOptions, Polarizations, RotationSetting,
+    TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
+use rug::float::Constant;
 const COMPILED_DUMP: &str = "TMP_COMPILED";
 
 fn load_helper(path: &str, use_orientations: bool) -> Graph {
@@ -56,7 +61,7 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
 
 fn criterion_benchmark(c: &mut Criterion) {
     // let _ = symbolica::LicenseManager::set_license_key("GAMMALOOP_USER");
-    env_logger::init();
+    // env_logger::init();
 
     let mut group = c.benchmark_group("polarization benchmarks");
     group.measurement_time(Duration::from_secs(10));
@@ -121,6 +126,39 @@ fn criterion_benchmark(c: &mut Criterion) {
                 jacobian,
                 &polarizations,
                 &external_signature,
+            )
+        })
+    });
+
+    let sample = DefaultSample::<f64>::new(
+        loop_moms.clone(),
+        &externals,
+        jacobian,
+        &polarizations,
+        &external_signature,
+    );
+    let rotation_method: Rotation = RotationSetting::Pi2X.rotation_method().into();
+
+    group.bench_function("polarization rotation", |b| {
+        b.iter(|| polarizations.rotate(&rotation_method))
+    });
+
+    group.bench_function("external rotation", |b| {
+        b.iter(|| externals.rotate(&rotation_method))
+    });
+
+    let rotating_pol = match polarizations.rotate(&rotation_method) {
+        Polarizations::Constant { polarizations } => polarizations,
+        Polarizations::None => vec![],
+    };
+
+    let rotated_externals = externals.rotate(&rotation_method).get_indep_externals();
+    group.bench_function("sample rotation", |b| {
+        b.iter(|| {
+            sample.get_rotated_sample(
+                &rotation_method,
+                rotated_externals.clone(),
+                rotating_pol.clone(),
             )
         })
     });

@@ -10,7 +10,10 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{BareGraph, EdgeType, Graph, LoopMomentumBasisSpecification};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
-use crate::momentum::{FourMomentum, Helicity, Polarization, Signature, ThreeMomentum};
+use crate::momentum::{
+    FourMomentum, Helicity, Polarization, Rotatable, Rotation, RotationMethod, Signature,
+    ThreeMomentum,
+};
 use crate::numerator::Evaluators;
 use crate::subtraction::static_counterterm::CounterTerm;
 use crate::utils::{
@@ -520,6 +523,9 @@ pub struct GammaLoopIntegrand {
 #[derive(Clone)]
 pub struct GlobalData {
     pub polarizations: Polarizations,
+    pub rotated_polarizations: Vec<Polarizations>,
+    pub rotated_externals: Vec<Externals>,
+    pub rotations: Vec<Rotation>,
     pub settings: Settings,
 }
 
@@ -611,16 +617,13 @@ impl HasIntegrand for GammaLoopIntegrand {
         // rotate the momenta for the stability tests.
         let rotated_sample_points = self
             .global_data
-            .settings
-            .stability
-            .rotation_axis
+            .rotations
             .iter()
             .enumerate()
-            .map(|(func_index, f)| {
-                (
-                    sample_point.get_rotated_sample(f.rotation_function()),
-                    Some(func_index),
-                )
+            .zip(self.global_data.rotated_externals.iter().cloned())
+            .zip(self.global_data.rotated_polarizations.iter().cloned())
+            .map(|(((func_index, r), e), p)| {
+                (sample_point.get_rotated_sample(r, e, p), Some(func_index))
             });
 
         let samples = [(sample_point.clone(), None)]
@@ -1186,8 +1189,27 @@ impl GammaLoopIntegrand {
                         }
                     }
                 }
+
+                let rotations: Vec<Rotation> = settings
+                    .stability
+                    .rotation_axis
+                    .iter()
+                    .map(|axis| Rotation::new(axis.rotation_method()))
+                    .collect();
+
+                let polarizations = amplitude.polarizations(&settings.kinematics.externals);
+                let rotated_polarizations =
+                    rotations.iter().map(|r| polarizations.rotate(r)).collect();
+
+                let rotated_externals = rotations
+                    .iter()
+                    .map(|r| settings.kinematics.externals.rotate(r))
+                    .collect();
                 GlobalData {
-                    polarizations: amplitude.polarizations(&settings.kinematics.externals),
+                    rotations,
+                    polarizations,
+                    rotated_polarizations,
+                    rotated_externals,
                     settings,
                 }
             }
@@ -1203,7 +1225,21 @@ impl GammaLoopIntegrand {
         cross_section: CrossSection,
         settings: Settings,
     ) -> Self {
+        let rotations: Vec<Rotation> = settings
+            .stability
+            .rotation_axis
+            .iter()
+            .map(|axis| Rotation::new(axis.rotation_method()))
+            .collect();
+
+        let rotated_externals = rotations
+            .iter()
+            .map(|r| settings.kinematics.externals.rotate(r))
+            .collect();
         let global_data = GlobalData {
+            rotations,
+            rotated_polarizations: vec![],
+            rotated_externals,
             polarizations: Polarizations::None,
             settings,
         };
@@ -1229,6 +1265,46 @@ enum GammaLoopSample<T: FloatLike> {
     },
 }
 
+impl GammaLoopSample<f64> {
+    /// Rotation for stability checks
+    #[inline]
+    fn get_rotated_sample(
+        &self,
+        rotation: &Rotation,
+        rotated_externals: Externals,
+        rotated_polarizations: Polarizations,
+    ) -> Self {
+        let rotated_externals = rotated_externals.get_indep_externals();
+        let rotated_polarizations = match rotated_polarizations {
+            Polarizations::None => vec![],
+            Polarizations::Constant { polarizations } => polarizations,
+        };
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(
+                sample.get_rotated_sample(rotation, rotated_externals, rotated_polarizations),
+            ),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.get_rotated_sample(
+                        rotation,
+                        rotated_externals,
+                        rotated_polarizations,
+                    ),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
+                graph_id: *graph_id,
+                sample: sample.get_rotated_sample(
+                    rotation,
+                    rotated_externals,
+                    rotated_polarizations,
+                ),
+            },
+        }
+    }
+}
+
 impl<T: FloatLike> GammaLoopSample<T> {
     pub fn zero(&self) -> F<T> {
         match self {
@@ -1244,28 +1320,6 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::Default(sample) => sample.one(),
             GammaLoopSample::MultiChanneling { sample, .. } => sample.one(),
             GammaLoopSample::DiscreteGraph { sample, .. } => sample.one(),
-        }
-    }
-    /// Rotation for stability checks
-    #[inline]
-    fn get_rotated_sample(
-        &self,
-        rotation_function: impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>>,
-    ) -> Self {
-        match self {
-            GammaLoopSample::Default(sample) => {
-                GammaLoopSample::Default(sample.get_rotated_sample(rotation_function))
-            }
-            GammaLoopSample::MultiChanneling { alpha, sample } => {
-                GammaLoopSample::MultiChanneling {
-                    alpha: *alpha,
-                    sample: sample.get_rotated_sample(rotation_function),
-                }
-            }
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
-                graph_id: *graph_id,
-                sample: sample.get_rotated_sample(rotation_function),
-            },
         }
     }
 
@@ -1370,6 +1424,8 @@ impl<T: FloatLike> Display for DefaultSample<T> {
     }
 }
 
+impl DefaultSample<f64> {}
+
 impl<T: FloatLike> DefaultSample<T> {
     pub fn new(
         loop_moms: Vec<ThreeMomentum<F<T>>>,
@@ -1412,28 +1468,6 @@ impl<T: FloatLike> DefaultSample<T> {
             return f.spatial.px.zero();
         } else {
             panic!("No momenta in sample")
-        }
-    }
-
-    #[inline]
-    /// Rotation for stability checks
-    fn get_rotated_sample(
-        &self,
-        rotation_function: impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>>,
-    ) -> Self {
-        Self {
-            loop_moms: self.loop_moms.iter().map(&rotation_function).collect_vec(),
-            external_moms: self
-                .external_moms
-                .iter()
-                .cloned()
-                .map(|mut p| {
-                    p.spatial = rotation_function(&p.spatial);
-                    p
-                })
-                .collect_vec(),
-            polarizations: self.polarizations.clone(), // should rotate..
-            jacobian: self.jacobian,
         }
     }
 
@@ -1506,6 +1540,26 @@ impl<T: FloatLike> DefaultSample<T> {
             jacobian: self.jacobian,
         }
     }
+
+    #[inline]
+    /// Rotation for stability checks
+    pub fn get_rotated_sample(
+        &self,
+        rotation: &Rotation,
+        rotated_externals: Vec<FourMomentum<F<T>>>,
+        rotated_polarizations: Vec<Polarization<Complex<F<T>>>>,
+    ) -> Self {
+        Self {
+            loop_moms: self
+                .loop_moms
+                .iter()
+                .map(|l| l.rotate(rotation))
+                .collect_vec(),
+            external_moms: rotated_externals,
+            polarizations: rotated_polarizations,
+            jacobian: self.jacobian,
+        }
+    }
 }
 
 /// This sample is used when importance sampling over graphs is used.
@@ -1547,21 +1601,27 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
     #[inline]
     fn get_rotated_sample(
         &self,
-        rotation_function: impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>>,
+        rotation: &Rotation,
+        rotated_externals: Vec<FourMomentum<F<T>>>,
+        rotated_polarizations: Vec<Polarization<Complex<F<T>>>>,
     ) -> Self {
         match self {
-            DiscreteGraphSample::Default(sample) => {
-                DiscreteGraphSample::Default(sample.get_rotated_sample(rotation_function))
-            }
+            DiscreteGraphSample::Default(sample) => DiscreteGraphSample::Default(
+                sample.get_rotated_sample(rotation, rotated_externals, rotated_polarizations),
+            ),
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
                     alpha: *alpha,
-                    sample: sample.get_rotated_sample(rotation_function),
+                    sample: sample.get_rotated_sample(
+                        rotation,
+                        rotated_externals,
+                        rotated_polarizations,
+                    ),
                 }
             }
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.get_rotated_sample(rotation_function))
-            }
+            DiscreteGraphSample::Tropical(sample) => DiscreteGraphSample::Tropical(
+                sample.get_rotated_sample(rotation, rotated_externals, rotated_polarizations),
+            ),
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -1569,7 +1629,11 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             } => DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha: *alpha,
                 channel_id: *channel_id,
-                sample: sample.get_rotated_sample(rotation_function),
+                sample: sample.get_rotated_sample(
+                    rotation,
+                    rotated_externals,
+                    rotated_polarizations,
+                ),
             },
         }
     }

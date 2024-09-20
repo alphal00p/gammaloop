@@ -43,6 +43,8 @@ use momentum::ExternalMomenta;
 use momentum::FourMomentum;
 use momentum::Helicity;
 use momentum::Polarization;
+use momentum::Rotatable;
+use momentum::RotationMethod;
 use momentum::SignOrZero;
 use momentum::Signature;
 use momentum::ThreeMomentum;
@@ -326,14 +328,14 @@ pub struct IntegrationResult {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StabilitySettings {
-    rotation_axis: Vec<RotationMethod>,
+    rotation_axis: Vec<RotationSetting>,
     levels: Vec<StabilityLevelSetting>,
 }
 
 impl Default for StabilitySettings {
     fn default() -> Self {
         Self {
-            rotation_axis: vec![RotationMethod::default()],
+            rotation_axis: vec![RotationSetting::default()],
             levels: vec![
                 StabilityLevelSetting::default_double(),
                 StabilityLevelSetting::default_quad(),
@@ -371,7 +373,7 @@ impl StabilityLevelSetting {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, Copy)]
-pub enum RotationMethod {
+pub enum RotationSetting {
     #[serde(rename = "x")]
     #[default]
     Pi2X,
@@ -383,15 +385,23 @@ pub enum RotationMethod {
     None,
 }
 
-impl RotationMethod {
-    fn rotation_function<T: FloatLike>(
+impl RotationSetting {
+    pub fn rotation_method(&self) -> RotationMethod {
+        match self {
+            RotationSetting::Pi2X => RotationMethod::Pi2X,
+            RotationSetting::Pi2Y => RotationMethod::Pi2Y,
+            RotationSetting::Pi2Z => RotationMethod::Pi2Z,
+            RotationSetting::None => RotationMethod::Identity,
+        }
+    }
+    pub fn rotation_function<T: FloatLike>(
         &self,
     ) -> impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> {
         match self {
-            RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x,
-            RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y,
-            RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z,
-            RotationMethod::None => |vector: &ThreeMomentum<F<T>>| vector.clone(),
+            RotationSetting::Pi2X => ThreeMomentum::perform_pi2_rotation_x,
+            RotationSetting::Pi2Y => ThreeMomentum::perform_pi2_rotation_y,
+            RotationSetting::Pi2Z => ThreeMomentum::perform_pi2_rotation_z,
+            RotationSetting::None => |vector: &ThreeMomentum<F<T>>| vector.clone(),
         }
     }
 }
@@ -416,12 +426,41 @@ pub enum Externals {
     // add different type of pdfs here when needed
 }
 
+impl Rotatable for Externals {
+    fn rotate(&self, rotation: &momentum::Rotation) -> Self {
+        match self {
+            Externals::Constant {
+                momenta,
+                helicities,
+            } => {
+                let momenta = momenta.iter().map(|m| m.rotate(rotation)).collect();
+                Externals::Constant {
+                    momenta,
+                    helicities: helicities.clone(),
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Polarizations {
     Constant {
         polarizations: Vec<Polarization<Complex<F<f64>>>>,
     },
     None,
+}
+
+impl Rotatable for Polarizations {
+    fn rotate(&self, rotation: &momentum::Rotation) -> Self {
+        match self {
+            Polarizations::Constant { polarizations } => {
+                let polarizations = polarizations.iter().map(|p| p.rotate(rotation)).collect();
+                Polarizations::Constant { polarizations }
+            }
+            Polarizations::None => Polarizations::None,
+        }
+    }
 }
 
 use thiserror::Error;

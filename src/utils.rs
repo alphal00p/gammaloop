@@ -522,6 +522,18 @@ impl FloatLike for VarFloat<113>{
         Self::E()
     }
 
+    fn PIHALF(&self) -> Self {
+        Self::PIHALF()
+    }
+
+    fn SQRT_2(&self) -> Self {
+        Self::from_f64(2.0).sqrt()
+    }
+
+    fn SQRT_2_HALF(&self) -> Self {
+        Self::from_f64(2.0).sqrt() / Self::from_f64(2.0)
+    }
+
     
 
     fn FRAC_1_PI(&self) -> Self {
@@ -567,6 +579,12 @@ impl<const N: u32> VarFloat<N> {
     #[allow(non_snake_case)]
     fn E() -> Self {
         Self::one().exp()
+    }
+
+    
+    #[allow(non_snake_case)]
+    fn PIHALF() -> Self {
+        Self::PI() / Self::from_f64(2.0)
     }
 
     #[allow(non_snake_case)]
@@ -690,6 +708,12 @@ pub trait FloatLike:
     fn E(&self) -> Self;
     #[allow(non_snake_case)]
     fn TAU(&self) -> Self;
+    #[allow(non_snake_case)]
+    fn SQRT_2(&self) -> Self;
+    #[allow(non_snake_case)]
+    fn SQRT_2_HALF(&self) -> Self;
+    #[allow(non_snake_case)]
+    fn PIHALF(&self) -> Self;
     #[allow(non_snake_case)]
     fn FRAC_1_PI(&self) -> Self;
 
@@ -1009,6 +1033,11 @@ impl<T: FloatLike> F<T> {
             #[allow(non_snake_case)]
             pub fn TAU(&self) -> Self;
             #[allow(non_snake_case)]
+            pub fn PIHALF(&self) -> Self;
+            #[allow(non_snake_case)]
+            pub fn SQRT_2(&self) -> Self;
+            #[allow(non_snake_case)]
+            pub fn SQRT_2_HALF(&self) -> Self;
             pub fn FRAC_1_PI(&self) -> Self;
             pub fn into_f64(&self) -> f64;
             pub fn square(&self) -> Self;
@@ -1250,6 +1279,19 @@ impl FloatLike for f64 {
 
     fn PI(&self) -> Self {
         std::f64::consts::PI
+    }
+
+    fn SQRT_2(&self) -> Self {
+        std::f64::consts::SQRT_2
+    }
+
+    fn SQRT_2_HALF(&self) -> Self {
+        std::f64::consts::SQRT_2 / 2.0
+    }
+
+
+    fn PIHALF(&self) -> Self {
+        std::f64::consts::PI/2.0
     }
 
     fn E(&self) -> Self {
