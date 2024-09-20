@@ -694,10 +694,26 @@ fn pytest_scalar_massless_triangle() {
 #[test]
 fn pytest_scalar_fishnet_2x2() {
     init();
+
+    let k1 = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.));
+    let k2 = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.));
+    let k3 = ThreeMomentum::new(F(17. / 19.), F(19. / 23.), F(23. / 29.));
+    let k4: ThreeMomentum<F<f64>> = ThreeMomentum::new(29. / 31., 31. / 37., 37. / 41.).into();
+    let p1 = FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.).into();
+    let p2 = FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.).into();
+    let p3 = FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.).into();
+
+    let sample = DefaultSample {
+        loop_moms: vec![k1, k2, k3, k4],
+        external_moms: vec![p1, p2, p3],
+        jacobian: F(1.0),
+        polarizations: vec![],
+    };
+
     let amp_check = AmplitudeCheck {
         name: "scalar_fishnet_2x2",
         model_name: "scalars",
-        sample: SampleType::Kinematic,
+        sample: SampleType::Custom(sample),
         n_edges: 16,
         n_vertices: 13,
         n_external_connections: 4,
@@ -706,15 +722,15 @@ fn pytest_scalar_fishnet_2x2() {
         n_prop_groups: 12,
         n_esurfaces: 97,
         cff_norm: Some(F(0.000019991301832169422)),
-        cff_phase: F(0.),
+        cff_phase: PHASEI,
         n_existing_esurfaces: 0,
         n_expanded_terms: 22852,
         n_terms_unfolded: 8,
 
         tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1,
-        n_overlap_groups: 2,
-        fail_lower_prec: false,
+        n_existing_per_overlap: 0,
+        n_overlap_groups: 0,
+        fail_lower_prec: true,
     };
 
     check_amplitude(amp_check);
