@@ -547,6 +547,9 @@ class Graph(object):
     def empty_graph(name: str) -> Graph:
         return Graph(name, [], [], [], loop_momentum_basis=[], overall_factor="1", edge_signatures={})
 
+    def is_empty(self) -> bool:
+        return len(self.vertices) == 0 and len(self.edges) == 0
+
     def get_edge(self, edge_name: str) -> Edge:
         return self.edges[self.name_to_position['edges'][edge_name]]
 

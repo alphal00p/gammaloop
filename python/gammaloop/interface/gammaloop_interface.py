@@ -721,8 +721,15 @@ class GammaLoop(object):
         if len(graphs) == 0:
             for xs in self.cross_sections:
                 if args.graph_container_name is None or xs.name == args.graph_container_name:
-                    graphs.extend(
-                        [(g.graph, {"multiplicity_factor": g.multiplicity}) for g in xs.supergraphs])
+                    for xs_g in xs.supergraphs:
+                        if xs_g.graph.is_empty():
+                            for fwd_scattering_cut in xs_g.cuts:
+                                fwd_scattering_cut.forward_scattering_graph
+                                graphs.extend([(isr_cut.forward_scattering_graph.graph, {
+                                              "multiplicity_factor": isr_cut.forward_scattering_graph.multiplicity}) for isr_cut in xs_g.cuts])
+                        else:
+                            graphs.append(
+                                (xs_g.graph, {"multiplicity_factor": xs_g.multiplicity}))
                     break
 
         with open(args.output_path, 'w', encoding='utf-8') as f:
