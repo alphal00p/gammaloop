@@ -2871,19 +2871,9 @@ impl<T: FloatLike> Rotatable for Polarization<Complex<F<T>>> {
                 .try_into_dense()
                 .unwrap()
                 .cast_structure(),
-            PolType::U | PolType::UBar | PolType::V | PolType::VBar => {
-                let mut params = self.tensor.data.clone();
-                params.push(Complex::new_im(F::from_f64(1.)));
-                rotation
-                    .bispinor_rotation
-                    .clone()
-                    .map_coeff(&|t| t.map(|f| F::from_ff64(f)))
-                    .evaluate(&params)
-                    .try_into_dense()
-                    .unwrap()
-                    .cast_structure()
+            PolType::U | PolType::UBar | PolType::V | PolType::VBar | PolType::Scalar => {
+                self.tensor.clone()
             }
-            PolType::Scalar => self.tensor.clone(),
         };
 
         Polarization {

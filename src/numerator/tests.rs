@@ -380,6 +380,9 @@ fn tree_ta_ta_1() {
 
     let rotated_sample = sample.get_rotated_sample(&RotationSetting::Pi2X.rotation_method().into());
 
+    println!("rotated sample: {}", rotated_sample);
+    println!("sample: {}", sample);
+
     let cff_val_rot = graph.evaluate_cff_expression(&rotated_sample, &Settings::default())
         / graph
             .bare_graph
