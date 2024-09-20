@@ -25,7 +25,6 @@ use symbolica::evaluate::CompiledEvaluatorFloat;
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
-
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::time::Duration;
@@ -1994,58 +1993,135 @@ pub fn one_loop_e_surface_exists<T: FloatLike>(
     }
 }
 
-pub fn approx_eq<T: FloatLike>(res: &F<T>, target: &F<T>, tolerance: &F<T>) -> bool {
-    if target.is_zero() {
-        res.norm() < tolerance.clone()
-    } else {
-        ((res - target) / target).norm() < tolerance.clone()
-    }
-}
 
-// panics with useful error message
-#[allow(unused)]
-pub fn assert_approx_eq<T: FloatLike>(res: &F<T>, target: &F<T>, tolerance: &F<T>) {
-    if approx_eq(res, target, tolerance) {
-    } else {
-        panic!(
-            "assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",
-            res, target, tolerance
-        )
-    }
-}
+
+
 
 use color_eyre::Result;
 use eyre::eyre;
 #[allow(unused)]
-pub fn approx_eq_res<T: FloatLike>(res: &F<T>, target: &F<T>, tolerance: &F<T>)->Result<()>{
-    if approx_eq(res, target, tolerance) {
-        Ok(())
-    } else {
-        Err(eyre!(
-            "assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",
-            res, target, tolerance
-        ))
+
+use std::fmt::LowerExp;
+
+pub trait ApproxEq<U:LowerExp,T:LowerExp>:LowerExp{
+    fn approx_eq(&self, other: &U, tolerance: &T)->bool;
+
+    fn approx_eq_slice(lhs: &[Self], rhs: &[U], tolerance: &T)->bool where Self: Sized{
+        lhs.iter().zip_eq(rhs).all(|(l,r)| l.approx_eq(r,tolerance))
+    }
+
+    fn approx_eq_iterator<'a,I,J>(lhs: I, rhs: J, tolerance: &'a T)->bool where Self: Sized+'a ,U:'a , I: IntoIterator<Item = &'a Self>, J: IntoIterator<Item = &'a U>{
+        lhs.into_iter().zip_eq(rhs.into_iter()).all(|(l,r)| l.approx_eq(r,tolerance))
+    }
+
+    fn assert_approx_eq(&self, other: &U, tolerance: &T){
+        assert!(self.approx_eq(other, tolerance),"assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",self, other, tolerance)
+    }
+    fn approx_eq_res(&self, other: &U, tolerance: &T)->Result<()>{
+        if self.approx_eq(other, tolerance) {
+            Ok(())
+        } else {
+            Err(eyre!(
+                "assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",
+                self, other, tolerance
+            ))
+        }
+    }
+}
+
+// pub trait ApproxEqable: Real+PartialOrd+ for<'a> RefSub<&'a Self,Output = Self>+IsZero{}
+
+// impl<T: Real+PartialOrd+ for<'a> RefSub<&'a T,Output = T>+IsZero> ApproxEqable for T{}
+
+impl<T:FloatLike> ApproxEq<F<T>,F<T>> for F<T>{
+    fn approx_eq(&self, other: &F<T>, tolerance: &F<T>)->bool{
+        if other.is_zero() {
+            self.norm() < tolerance.clone()
+        } else {
+            ((self.ref_sub(other)) / other).norm() < tolerance.clone()
+        }
+    }
+}
+
+
+impl<T:FloatLike> ApproxEq<Complex<F<T>>,F<T>> for Complex<F<T>>{
+
+    fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>)->bool {
+        if !self.norm().re.approx_eq(& other.norm().re, tolerance) {
+            return false
+        }
+        if !&self.arg().approx_eq(&other.arg(), tolerance)  {
+            return  false
+        }
+        true
+    }
+    fn approx_eq_res(&self, other: &Complex<F<T>>, tolerance: &F<T>)->Result<()>{
+        if !self.norm().re.approx_eq(& other.norm().re, tolerance) {
+            return Err(eyre!(
+                "Norms are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
+                &self.norm().re, other.norm().re, tolerance
+            ))
+        }
+        if !&self.arg().approx_eq(&other.arg(), tolerance)  {
+            return  Err(eyre!(
+                "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
+                self.arg(), other.arg(),other.arg()-self.arg(), tolerance
+            ))
+        } 
+            Ok(())
+        
+    }
+}
+
+
+impl<T:FloatLike> ApproxEq<F<T>,F<T>> for Complex<F<T>>{
+
+    fn approx_eq(&self, other: &F<T>, tolerance: &F<T>)->bool {
+        self.re.approx_eq(other, tolerance)&& self.im.approx_eq(tolerance,tolerance) 
+    }
+    fn approx_eq_res(&self, other: &F<T>, tolerance: &F<T>)->Result<()>{
+        if self.im.approx_eq(tolerance,tolerance) {
+            return Err(eyre!(
+                "Non-zero imaginary part: \n{:+e} with tolerance {:+e}",
+                &self.im,tolerance
+            ))
+        }
+        if !self.re.approx_eq(other, tolerance) {
+            return Err(eyre!(
+                "Real parts are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
+                &self.re, other, tolerance
+            ))
+        }
+            Ok(())
+        
+    }
+}
+
+
+impl<T:FloatLike> ApproxEq<Complex<F<T>>,F<T>> for F<T>{
+    fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>)->bool{
+        other.re.approx_eq(self, tolerance) && other.im.approx_eq(tolerance,tolerance)
+    }
+
+    fn approx_eq_res(&self, other: &Complex<F<T>>, tolerance: &F<T>)->Result<()> {
+        if other.im.approx_eq(tolerance,tolerance) {
+            return Err(eyre!(
+                "Non-zero imaginary part: \n{:+e} with tolerance {:+e}",
+                &other.im,tolerance
+            ))
+        }
+        if !other.re.approx_eq(self, tolerance) {
+            return Err(eyre!(
+                "Real parts are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
+                &other.re, self, tolerance
+            ))
+        }
+            Ok(())
     }
 }
 
 
 
-pub fn approx_eq_complex_res<T: FloatLike>(res: &Complex<F<T>>, target: &Complex<F<T>>, tolerance: &F<T>)->Result<()>{
-    if !approx_eq(&res.norm().re,& target.norm().re, tolerance) {
-        return Err(eyre!(
-            "Norms are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
-            &res.norm().re, target.norm().re, tolerance
-        ))
-    }
-    if !approx_eq(&res.arg(),& target.arg(), tolerance)  {
-        return  Err(eyre!(
-            "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
-            res.arg(), target.arg(),target.arg()-res.arg(), tolerance
-        ))
-    } 
-        Ok(())
-    
-}
 #[allow(unused)]
 pub fn one_loop_eval_e_surf<T: FloatLike>(
     k: &[F<T>; 3],
@@ -2943,32 +3019,9 @@ pub fn format_sample(sample: &Sample<F<f64>>) -> String {
     }
 }
 
-pub fn approx_eq_vec<T>(vec_a: &[&F<T>], vec_b: &[&F<T>], threshold: &F<T>) -> bool 
-where
-T: FloatLike, {
-    for (&vi, &ovi) in vec_a
-    .iter()
-    .zip(vec_b) {
-        if !approx_eq(ovi, vi, threshold) {
-            return false
-        }
-    }
-    true
-}
 
-pub fn approx_eq_cmplx_vec<T>(vec_a: &[&Complex<F<T>>], vec_b: &[&Complex<F<T>>], threshold: &F<T>) -> bool 
-where
-T: FloatLike, {
-    approx_eq_vec(
-        &vec_a.iter().map(|c| &c.re).collect_vec(),
-        &vec_b.iter().map(|c| &c.re).collect_vec(),
-        threshold,
-    ) && approx_eq_vec(
-        &vec_a.iter().map(|c| &c.im).collect_vec(),
-        &vec_b.iter().map(|c| &c.im).collect_vec(),
-        threshold,
-    )
-}
+
+
 
 pub fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
     vec1: &TiSlice<K, T>,

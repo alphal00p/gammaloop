@@ -1280,13 +1280,17 @@ impl GammaLoopSample<f64> {
             Polarizations::Constant { polarizations } => polarizations,
         };
         match self {
-            GammaLoopSample::Default(sample) => GammaLoopSample::Default(
-                sample.get_rotated_sample(rotation, rotated_externals, rotated_polarizations),
-            ),
+            GammaLoopSample::Default(sample) => {
+                GammaLoopSample::Default(sample.get_rotated_sample_cached(
+                    rotation,
+                    rotated_externals,
+                    rotated_polarizations,
+                ))
+            }
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
                     alpha: *alpha,
-                    sample: sample.get_rotated_sample(
+                    sample: sample.get_rotated_sample_cached(
                         rotation,
                         rotated_externals,
                         rotated_polarizations,
@@ -1543,7 +1547,7 @@ impl<T: FloatLike> DefaultSample<T> {
 
     #[inline]
     /// Rotation for stability checks
-    pub fn get_rotated_sample(
+    pub fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: Vec<FourMomentum<F<T>>>,
@@ -1557,6 +1561,28 @@ impl<T: FloatLike> DefaultSample<T> {
                 .collect_vec(),
             external_moms: rotated_externals,
             polarizations: rotated_polarizations,
+            jacobian: self.jacobian,
+        }
+    }
+
+    #[inline]
+    pub fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+        Self {
+            loop_moms: self
+                .loop_moms
+                .iter()
+                .map(|l| l.rotate(rotation))
+                .collect_vec(),
+            external_moms: self
+                .external_moms
+                .iter()
+                .map(|l| l.rotate(rotation))
+                .collect_vec(),
+            polarizations: self
+                .polarizations
+                .iter()
+                .map(|l| l.rotate(rotation))
+                .collect_vec(),
             jacobian: self.jacobian,
         }
     }
@@ -1606,22 +1632,30 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         rotated_polarizations: Vec<Polarization<Complex<F<T>>>>,
     ) -> Self {
         match self {
-            DiscreteGraphSample::Default(sample) => DiscreteGraphSample::Default(
-                sample.get_rotated_sample(rotation, rotated_externals, rotated_polarizations),
-            ),
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.get_rotated_sample_cached(
+                    rotation,
+                    rotated_externals,
+                    rotated_polarizations,
+                ))
+            }
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
                     alpha: *alpha,
-                    sample: sample.get_rotated_sample(
+                    sample: sample.get_rotated_sample_cached(
                         rotation,
                         rotated_externals,
                         rotated_polarizations,
                     ),
                 }
             }
-            DiscreteGraphSample::Tropical(sample) => DiscreteGraphSample::Tropical(
-                sample.get_rotated_sample(rotation, rotated_externals, rotated_polarizations),
-            ),
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.get_rotated_sample_cached(
+                    rotation,
+                    rotated_externals,
+                    rotated_polarizations,
+                ))
+            }
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -1629,7 +1663,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             } => DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha: *alpha,
                 channel_id: *channel_id,
-                sample: sample.get_rotated_sample(
+                sample: sample.get_rotated_sample_cached(
                     rotation,
                     rotated_externals,
                     rotated_polarizations,

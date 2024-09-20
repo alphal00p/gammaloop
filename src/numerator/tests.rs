@@ -24,8 +24,8 @@ use crate::{
     momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, Polarization},
     numerator::{Contracted, ContractionSettings, ExtraInfo},
     tests_from_pytest::{sample_generator, test_export_settings},
-    utils::{approx_eq_res, f128, F},
-    Externals, Settings,
+    utils::{f128, ApproxEq, F},
+    Externals, RotationSetting, Settings,
 };
 
 use super::{Evaluate, Global, Numerator, UnInit};
@@ -222,10 +222,10 @@ fn trees() {
         .compute_onshell_energies(&sample.loop_moms, &sample.external_moms);
 
     for ((e, q), p) in onshell_energies.iter().zip(emr).zip(three_emr) {
-        approx_eq_res(e, &q.temporal.value, &F(1e-10)).unwrap();
+        F::approx_eq_res(e, &q.temporal.value, &F(1e-10)).unwrap();
 
         for (a, b) in q.spatial.into_iter().zip(p) {
-            approx_eq_res(&a, &b, &F(1e-10)).unwrap();
+            F::approx_eq_res(&a, &b, &F(1e-10)).unwrap();
         }
     }
 
@@ -358,7 +358,7 @@ fn tree_ta_ta_1() {
         vec![],
         &externals,
         F(1.),
-        &&externals
+        &externals
             .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature),
         &external_signature,
     );
@@ -378,8 +378,15 @@ fn tree_ta_ta_1() {
         .scalar()
         .unwrap();
 
+    let rotated_sample = sample.get_rotated_sample(&RotationSetting::Pi2X.rotation_method().into());
+
+    let cff_val_rot = graph.evaluate_cff_expression(&rotated_sample, &Settings::default())
+        / graph
+            .bare_graph
+            .compute_energy_product(&rotated_sample.loop_moms, &rotated_sample.external_moms);
     println!("4d: {}", val);
     println!("CFF: {}", cff_val);
+    println!("CFF rot: {}", cff_val_rot);
 }
 
 #[test]

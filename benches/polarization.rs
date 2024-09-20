@@ -155,7 +155,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let rotated_externals = externals.rotate(&rotation_method).get_indep_externals();
     group.bench_function("sample rotation", |b| {
         b.iter(|| {
-            sample.get_rotated_sample(
+            sample.get_rotated_sample_cached(
                 &rotation_method,
                 rotated_externals.clone(),
                 rotating_pol.clone(),

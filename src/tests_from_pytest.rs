@@ -13,7 +13,9 @@ use crate::graph::{
     LoopMomentumBasisSpecification, SerializableGraph, VertexInfo,
 };
 use crate::model::{LorentzStructure, Model};
-use crate::momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, SignOrZero, ThreeMomentum};
+use crate::momentum::{
+    Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, ThreeMomentum,
+};
 use crate::numerator::{
     ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, IterativeOptions,
     Numerator, NumeratorCompileOptions, NumeratorEvaluateFloat, NumeratorEvaluatorOptions,
@@ -22,11 +24,8 @@ use crate::numerator::{
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
 use crate::tests::load_default_settings;
-use crate::utils::{
-    approx_eq, approx_eq_complex_res, approx_eq_res, assert_approx_eq, FloatLike,
-    PrecisionUpgradable,
-};
 use crate::utils::{f128, F};
+use crate::utils::{ApproxEq, FloatLike, PrecisionUpgradable};
 use crate::{cff, ltd, Externals, Integrand, RotationSetting};
 use crate::{
     inspect::inspect, ExportSettings, GammaloopCompileOptions, Settings,
@@ -437,9 +436,9 @@ fn check_lmb_generation<N: NumeratorState>(
         assert_eq!(emr.len(), new_emr.len());
 
         for (e1, e2) in emr.iter().zip(new_emr.iter()) {
-            assert_approx_eq(&e1.px, &e2.px, &LTD_COMPARISON_TOLERANCE);
-            assert_approx_eq(&e1.py, &e2.py, &LTD_COMPARISON_TOLERANCE);
-            assert_approx_eq(&e1.pz, &e2.pz, &LTD_COMPARISON_TOLERANCE);
+            F::assert_approx_eq(&e1.px, &e2.px, &LTD_COMPARISON_TOLERANCE);
+            F::assert_approx_eq(&e1.py, &e2.py, &LTD_COMPARISON_TOLERANCE);
+            F::assert_approx_eq(&e1.pz, &e2.pz, &LTD_COMPARISON_TOLERANCE);
         }
     }
 
@@ -468,6 +467,28 @@ fn check_sample(bare_graph: &BareGraph, amp_check: &AmplitudeCheck) -> DefaultSa
     }
 }
 
+fn check_rotations<T: FloatLike>(
+    sample: &DefaultSample<T>,
+    graph: &mut Graph,
+    amp_check: &AmplitudeCheck,
+) -> Result<()> {
+    let default_settings = load_default_settings();
+    let cff_res: Complex<F<T>> = graph.evaluate_cff_expression(sample, &default_settings);
+
+    let rotation: Rotation = RotationSetting::Pi2X.rotation_method().into();
+    let rotated_sample = sample.get_rotated_sample(&rotation);
+    let rotated_cff_res: Complex<F<T>> =
+        graph.evaluate_cff_expression(&rotated_sample, &default_settings);
+
+    let cff_norm = <Complex<F<T>> as Real>::norm(&cff_res).re;
+
+    let rot_cff_norm = <Complex<F<T>> as Real>::norm(&rotated_cff_res).re;
+    let tol = F::<T>::from_ff64(amp_check.tolerance);
+    F::approx_eq_res(&cff_norm, &rot_cff_norm, &tol).wrap_err("rotated value does not match")?;
+
+    Ok(())
+}
+
 #[allow(unused)]
 fn compare_cff_to_ltd<T: FloatLike>(
     sample: &DefaultSample<T>,
@@ -477,10 +498,10 @@ fn compare_cff_to_ltd<T: FloatLike>(
     let default_settings = load_default_settings();
     let lmb_specification =
         LoopMomentumBasisSpecification::Literal(&graph.bare_graph.loop_momentum_basis);
-    let cff_res = graph.evaluate_cff_orientations(sample, &lmb_specification, &default_settings);
-    for o in cff_res.iter() {
-        println!("cff: {}", o);
-    }
+    // let cff_res = graph.evaluate_cff_orientations(sample, &lmb_specification, &default_settings);
+    // // for o in cff_res.iter() {
+    // //     println!("cff: {}", o);
+    // // }
     let cff_res: Complex<F<T>> = graph.evaluate_cff_expression(sample, &default_settings);
     graph.generate_ltd();
     let ltd_res = graph.evaluate_ltd_expression(sample, &default_settings);
@@ -493,14 +514,14 @@ fn compare_cff_to_ltd<T: FloatLike>(
 
     let ltd_comparison_tolerance = F::<T>::from_ff64(amp_check.tolerance);
 
-    approx_eq_res(&cff_norm, &ltd_norm, &ltd_comparison_tolerance)
+    F::approx_eq_res(&cff_norm, &ltd_norm, &ltd_comparison_tolerance)
         .wrap_err("cff and ltd norms do not match")?;
 
     if let Some(truth) = amp_check.cff_norm {
         let energy_product = graph
             .bare_graph
             .compute_energy_product(&sample.loop_moms, &sample.external_moms);
-        approx_eq_res(
+        F::approx_eq_res(
             &(cff_norm / &energy_product),
             &F::<T>::from_ff64(truth),
             &ltd_comparison_tolerance,
@@ -508,7 +529,7 @@ fn compare_cff_to_ltd<T: FloatLike>(
         .wrap_err("Normalised cff is not what was expected")?;
     }
 
-    approx_eq_res(
+    F::approx_eq_res(
         &F::<T>::from_ff64(amp_check.cff_phase),
         &cff_phase_actual,
         &ltd_comparison_tolerance,
@@ -638,6 +659,10 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
 
     let f64_check_1 = compare_cff_to_ltd(&sample, &mut graph, &amp_check)
         .wrap_err("combined num f64 cff and ltd failed");
+
+    check_rotations(&sample, &mut graph, &amp_check)
+        .wrap_err("rotation does not match")
+        .unwrap();
 
     graph
         .derived_data
@@ -1678,7 +1703,7 @@ fn pytest_physical_2L_6photons() {
 //     let gamma_eval = graph.evaluate_cff_expression(&sample, &default_settings);
 //     let eval = graph_no_gamma.evaluate_cff_expression(&sample, &default_settings);
 
-//     approx_eq_complex_res(&gamma_eval, &eval, &LTD_COMPARISON_TOLERANCE)
+//     Complex::approx_eq_res(&gamma_eval, &eval, &LTD_COMPARISON_TOLERANCE)
 //         .wrap_err("Gamma algebra and spenso do not match")
 //         .unwrap();
 // }
@@ -1736,7 +1761,7 @@ fn top_bubble_CP() {
     println!("{}", eval);
     println!("{}", eval_CP);
 
-    approx_eq_complex_res(&eval, &eval_CP, &LTD_COMPARISON_TOLERANCE)
+    Complex::approx_eq_res(&eval, &eval_CP, &LTD_COMPARISON_TOLERANCE)
         .wrap_err("CP conjugation does not match")
         .unwrap();
 }
@@ -1791,13 +1816,13 @@ fn top_bubble_gamma() {
         let gamma_eval_cp = graph.evaluate_cff_expression(&sample_cp, &default_settings);
         let eval_cp = graph_no_gamma.evaluate_cff_expression(&sample_cp, &default_settings);
 
-        approx_eq_complex_res(&gamma_eval, &eval, &LTD_COMPARISON_TOLERANCE)
+        Complex::approx_eq_res(&gamma_eval, &eval, &LTD_COMPARISON_TOLERANCE)
             .wrap_err("Gamma algebra and spenso do not match")
             .unwrap();
-        approx_eq_complex_res(&eval_cp, &eval, &LTD_COMPARISON_TOLERANCE)
+        Complex::approx_eq_res(&eval_cp, &eval, &LTD_COMPARISON_TOLERANCE)
             .wrap_err("Gamma algebra and spenso do not match")
             .unwrap();
-        approx_eq_complex_res(&gamma_eval, &gamma_eval_cp, &LTD_COMPARISON_TOLERANCE)
+        Complex::approx_eq_res(&gamma_eval, &gamma_eval_cp, &LTD_COMPARISON_TOLERANCE)
             .wrap_err("Gamma algebra and spenso do not match")
             .unwrap();
     }
@@ -1856,7 +1881,7 @@ fn scalar_box_to_triangle() {
         .evaluate_cff_expression(&triangle_sample, &default_settings)
         / triangle_energy;
 
-    approx_eq_complex_res(
+    Complex::approx_eq_res(
         &normalized_box,
         &normalized_triangle,
         &LTD_COMPARISON_TOLERANCE,
@@ -1967,27 +1992,27 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
     let eval_iter_comp =
         graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings);
 
-    approx_eq_complex_res(&eval_single, &eval_joint, &LTD_COMPARISON_TOLERANCE)
+    Complex::approx_eq_res(&eval_single, &eval_joint, &LTD_COMPARISON_TOLERANCE)
         .wrap_err("Single and joint evaluation differ in norm")?;
 
-    approx_eq_complex_res(&eval_single, &eval_iter, &LTD_COMPARISON_TOLERANCE)
+    Complex::approx_eq_res(&eval_single, &eval_iter, &LTD_COMPARISON_TOLERANCE)
         .wrap_err("Single and iterative evaluation differ in norm")?;
 
-    approx_eq_complex_res(
+    Complex::approx_eq_res(
         &eval_single_comp,
         &eval_joint_comp,
         &LTD_COMPARISON_TOLERANCE,
     )
     .wrap_err("Single compiled and joint compiled evaluation differ in norm")?;
 
-    approx_eq_complex_res(
+    Complex::approx_eq_res(
         &eval_single_comp,
         &eval_iter_comp,
         &LTD_COMPARISON_TOLERANCE,
     )
     .wrap_err("Single compiled and iterative compiled evaluation differ in norm")?;
 
-    approx_eq_complex_res(&eval_single, &eval_single_comp, &LTD_COMPARISON_TOLERANCE)
+    Complex::approx_eq_res(&eval_single, &eval_single_comp, &LTD_COMPARISON_TOLERANCE)
         .wrap_err("Single and Single compiled evaluation differ in norm")?;
 
     Ok(())
