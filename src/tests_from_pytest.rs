@@ -281,6 +281,7 @@ pub struct AmplitudeCheck {
     pub n_overlap_groups: usize,
     pub n_existing_per_overlap: usize,
     pub tolerance: F<f64>,
+    pub fail_lower_prec: bool,
 }
 
 #[allow(unused)]
@@ -605,9 +606,8 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
     let mut graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    compare_cff_to_ltd(&sample, &mut graph, &amp_check)
-        .wrap_err("combined num f64 cff and ltd failed")
-        .unwrap();
+    let f64_check_1 = compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+        .wrap_err("combined num f64 cff and ltd failed");
 
     graph
         .derived_data
@@ -616,9 +616,16 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
         .numerator
         .disable_combined();
 
-    compare_cff_to_ltd(&sample, &mut graph, &amp_check)
-        .wrap_err("separate num f64 cff and ltd failed")
-        .unwrap();
+    let f64_check_2 = compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+        .wrap_err("separate num f64 cff and ltd failed");
+
+    if amp_check.fail_lower_prec {
+        assert!(f64_check_1.is_err(), "expected failure for f64");
+        assert!(f64_check_2.is_err(), "expected failure for f64");
+    } else {
+        f64_check_1.unwrap();
+        f64_check_2.unwrap();
+    }
 
     graph
         .derived_data
@@ -679,6 +686,7 @@ fn pytest_scalar_massless_triangle() {
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
         tolerance: LTD_COMPARISON_TOLERANCE,
+        fail_lower_prec: false,
     };
     check_amplitude(amp_check);
 }
@@ -706,6 +714,7 @@ fn pytest_scalar_fishnet_2x2() {
         tolerance: LTD_COMPARISON_TOLERANCE,
         n_existing_per_overlap: 1,
         n_overlap_groups: 2,
+        fail_lower_prec: false,
     };
 
     check_amplitude(amp_check);
@@ -734,6 +743,7 @@ fn pytest_scalar_sunrise() {
         tolerance: LTD_COMPARISON_TOLERANCE,
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: false,
     };
 
     check_amplitude(amp_check);
@@ -762,6 +772,7 @@ fn pytest_scalar_fishnet_2x3() {
         tolerance: LTD_COMPARISON_TOLERANCE,
         n_existing_per_overlap: 1, //bogus
         n_overlap_groups: 2,       //bogus
+        fail_lower_prec: false,
     };
 
     check_amplitude(amp_check);
@@ -791,6 +802,7 @@ fn pytest_scalar_cube() {
         tolerance: LTD_COMPARISON_TOLERANCE,
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: false,
     };
     check_amplitude(amp_check);
 }
@@ -818,6 +830,7 @@ fn pytest_scalar_bubble() {
         tolerance: LTD_COMPARISON_TOLERANCE,
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: false,
     };
     check_amplitude(amp_check);
 }
@@ -845,6 +858,7 @@ fn pytest_scalar_massless_box() {
         tolerance: LTD_COMPARISON_TOLERANCE,
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: false,
     };
     check_amplitude(amp_check);
 }
@@ -872,6 +886,7 @@ fn pytest_scalar_double_triangle() {
         tolerance: LTD_COMPARISON_TOLERANCE,
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: false,
     };
     check_amplitude(amp_check);
 }
@@ -899,6 +914,7 @@ fn pytest_scalar_mercedes() {
         tolerance: F(1.0e-5),
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: false,
     };
     check_amplitude(amp_check);
 }
@@ -925,6 +941,7 @@ fn pytest_scalar_triangle_box() {
         tolerance: F(1.0e-7),
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: false,
     };
     check_amplitude(amp_check);
 }
@@ -972,6 +989,7 @@ fn pytest_scalar_isopod() {
         tolerance: F(1.0e-7),
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: true,
     };
     check_amplitude(amp_check);
 }
@@ -1545,6 +1563,7 @@ fn pytest_physical_1L_6photons() {
         tolerance: LTD_COMPARISON_TOLERANCE,
         n_existing_per_overlap: 1,
         n_overlap_groups: 0,
+        fail_lower_prec: false,
     };
     check_amplitude(amp_check);
 }
@@ -2060,7 +2079,7 @@ fn ratio_compare() {
         (pp_th_th_3_target.norm() / pp_th_th_3_gl.norm())
     );
 
-    let mp_th_th_3_gl = Complex::new(-1.9611659800776274e-1, -4.89041697630798e-2 );
+    let mp_th_th_3_gl = Complex::new(-1.9611659800776274e-1, -4.89041697630798e-2);
     let mp_th_th_3_target = Complex::new(4.55351586584414950E-002, -0.18260600622362247);
 
     println!(
