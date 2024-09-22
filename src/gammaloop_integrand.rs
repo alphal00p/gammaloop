@@ -3,6 +3,7 @@
 
 use core::panic;
 use std::fmt::Display;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, IsPolarizable, SuperGraph};
@@ -139,8 +140,8 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         };
 
         let onshell_energies = self.get_graph().bare_graph.compute_onshell_energies_in_lmb(
-            &sample.loop_moms,
-            &sample.external_moms,
+            &sample.loop_moms(),
+            &sample.external_moms(),
             lmb,
         );
 
@@ -238,7 +239,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let energy_product = self
             .get_graph()
             .bare_graph
-            .compute_energy_product(&sample.loop_moms, &sample.external_moms);
+            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
 
         let counter_terms = self
             .get_graph()
@@ -288,7 +289,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let onshell_energies = self
             .get_graph()
             .bare_graph
-            .compute_onshell_energies(&sample.loop_moms, &sample.external_moms);
+            .compute_onshell_energies(&sample.loop_moms(), &sample.external_moms());
 
         let tropical_subgraph_table = self.get_graph().get_tropical_subgraph_table();
 
@@ -326,7 +327,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
                     * self
                         .graph
                         .bare_graph
-                        .compute_energy_product(&sample.loop_moms, &sample.external_moms)
+                        .compute_energy_product(&sample.loop_moms(), &sample.external_moms())
             }
             None => Complex::new(one.zero(), one.zero()),
         };
@@ -641,7 +642,9 @@ impl HasIntegrand for GammaLoopIntegrand {
             let results_scaled = results
                 .iter()
                 .zip(samples.iter())
-                .map(|(result, sample)| result * sample.0.get_default_sample().jacobian * prefactor)
+                .map(|(result, sample)| {
+                    result * sample.0.get_default_sample().jacobian() * prefactor
+                })
                 .collect_vec();
 
             // check for the stability
@@ -692,20 +695,20 @@ impl HasIntegrand for GammaLoopIntegrand {
                 println!("\trotation: {}", rotation_string);
                 println!("{}", "\tloop momenta: ".yellow());
 
-                let loop_moms = &sample.get_default_sample().loop_moms;
+                let loop_moms = &sample.get_default_sample().loop_moms();
                 for (index, loop_mom) in loop_moms.iter().enumerate() {
                     println!("\t\tloop momentum {}: {:?}", index, loop_mom);
                 }
 
                 println!("{}", "\texternal momenta: ".yellow());
 
-                let external_moms = &sample.get_default_sample().external_moms;
+                let external_moms = &sample.get_default_sample().external_moms();
                 for (index, external_mom) in external_moms.iter().enumerate() {
                     println!("\t\texternal momentum {}: {:?}", index, external_mom);
                 }
             }
 
-            let jacobian = sample_point.get_default_sample().jacobian;
+            let jacobian = sample_point.get_default_sample().jacobian();
             println!("\t{}: {:+e}", "jacobian".yellow(), jacobian);
             println!("\t{}: {:+e}", "2pi prefactor".yellow(), prefactor);
             println!();
@@ -1403,34 +1406,45 @@ impl<T: FloatLike> GammaLoopSample<T> {
 /// External momenta are part of the sample in order to facilitate the use of non-constant externals.
 #[derive(Debug, Clone)]
 pub struct DefaultSample<T: FloatLike> {
+    pub sample: BareSample<T>,
+    pub rotated_sample: Option<BareSample<T>>,
+    pub uuid: Uuid,
+}
+
+#[derive(Debug, Clone)]
+pub struct BareSample<T: FloatLike> {
     pub loop_moms: Vec<ThreeMomentum<F<T>>>,
     pub external_moms: Vec<FourMomentum<F<T>>>,
     pub polarizations: Vec<Polarization<Complex<F<T>>>>,
     pub jacobian: F<f64>,
 }
 
+use uuid::Uuid;
+
+// static SAMPLECOUNT: LazyLock<Mutex<u64>> = LazyLock::new(|| Mutex::new(0));
+
 impl<T: FloatLike> Display for DefaultSample<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Sample")?;
         write!(f, "\n\tloop momenta: ")?;
-        for (index, loop_mom) in self.loop_moms.iter().enumerate() {
+        for (index, loop_mom) in self.sample.loop_moms.iter().enumerate() {
             write!(f, "\n\t\tloop momentum {}: {}", index, loop_mom)?;
         }
         write!(f, "\n\texternal momenta: ")?;
-        for (index, external_mom) in self.external_moms.iter().enumerate() {
+        for (index, external_mom) in self.sample.external_moms.iter().enumerate() {
             write!(f, "\n\t\texternal momentum {}: {}", index, external_mom)?;
         }
         write!(f, "\n\tpolarizations: ")?;
-        for (index, polarization) in self.polarizations.iter().enumerate() {
+        for (index, polarization) in self.sample.polarizations.iter().enumerate() {
             write!(f, "\n\t\tpolarization {}: {}", index, polarization)?;
         }
-        write!(f, "\n\tjacobian: {:+e}", self.jacobian)
+        write!(f, "\n\tjacobian: {:+e}", self.sample.jacobian)
     }
 }
 
 impl DefaultSample<f64> {}
 
-impl<T: FloatLike> DefaultSample<T> {
+impl<T: FloatLike> BareSample<T> {
     pub fn new(
         loop_moms: Vec<ThreeMomentum<F<T>>>,
         external_moms: &Externals,
@@ -1477,11 +1491,11 @@ impl<T: FloatLike> DefaultSample<T> {
 
     /// Cast the sample to a different precision
     #[inline]
-    fn cast_sample<T2: FloatLike>(&self) -> DefaultSample<T2>
+    fn cast_sample<T2: FloatLike>(&self) -> BareSample<T2>
     where
         F<T2>: From<F<T>>,
     {
-        DefaultSample {
+        BareSample {
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect_vec(),
             external_moms: self
                 .external_moms
@@ -1497,11 +1511,11 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn higher_precision(&self) -> DefaultSample<T::Higher>
+    pub fn higher_precision(&self) -> BareSample<T::Higher>
     where
         T::Higher: FloatLike,
     {
-        DefaultSample {
+        BareSample {
             loop_moms: self
                 .loop_moms
                 .iter()
@@ -1521,11 +1535,11 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn lower_precision(&self) -> DefaultSample<T::Lower>
+    pub fn lower_precision(&self) -> BareSample<T::Lower>
     where
         T::Lower: FloatLike,
     {
-        DefaultSample {
+        BareSample {
             loop_moms: self
                 .loop_moms
                 .iter()
@@ -1584,6 +1598,139 @@ impl<T: FloatLike> DefaultSample<T> {
                 .map(|l| l.rotate(rotation))
                 .collect_vec(),
             jacobian: self.jacobian,
+        }
+    }
+}
+
+impl<T: FloatLike> DefaultSample<T> {
+    pub fn possibly_rotated_sample(&self) -> &BareSample<T> {
+        if let Some(rot) = self.rotated_sample.as_ref() {
+            rot
+        } else {
+            &self.sample
+        }
+    }
+
+    pub fn loop_moms(&self) -> &[ThreeMomentum<F<T>>] {
+        if let Some(rotated_sample) = &self.rotated_sample {
+            &rotated_sample.loop_moms
+        } else {
+            &self.sample.loop_moms
+        }
+    }
+
+    pub fn external_moms(&self) -> &[FourMomentum<F<T>>] {
+        if let Some(rotated_sample) = &self.rotated_sample {
+            &rotated_sample.external_moms
+        } else {
+            &self.sample.external_moms
+        }
+    }
+
+    pub fn polarizations(&self) -> &[Polarization<Complex<F<T>>>] {
+        if let Some(rotated_sample) = &self.rotated_sample {
+            &rotated_sample.polarizations
+        } else {
+            &self.sample.polarizations
+        }
+    }
+
+    pub fn jacobian(&self) -> F<f64> {
+        if let Some(rotated_sample) = &self.rotated_sample {
+            rotated_sample.jacobian
+        } else {
+            self.sample.jacobian
+        }
+    }
+
+    pub fn new(
+        loop_moms: Vec<ThreeMomentum<F<T>>>,
+        external_moms: &Externals,
+        jacobian: F<f64>,
+        polarizations: &Polarizations,
+        external_signature: &Signature,
+    ) -> Self {
+        Self {
+            sample: BareSample::new(
+                loop_moms,
+                external_moms,
+                jacobian,
+                polarizations,
+                external_signature,
+            ),
+            rotated_sample: None,
+            uuid: Uuid::new_v4(),
+        }
+    }
+
+    pub fn one(&self) -> F<T> {
+        self.sample.one()
+    }
+
+    pub fn zero(&self) -> F<T> {
+        self.sample.zero()
+    }
+
+    /// Cast the sample to a different precision
+    #[inline]
+    fn cast_sample<T2: FloatLike>(&self) -> DefaultSample<T2>
+    where
+        F<T2>: From<F<T>>,
+    {
+        DefaultSample {
+            sample: self.sample.cast_sample(),
+            rotated_sample: self.rotated_sample.as_ref().map(|s| s.cast_sample()),
+            uuid: self.uuid,
+        }
+    }
+
+    pub fn higher_precision(&self) -> DefaultSample<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
+        DefaultSample {
+            sample: self.sample.higher_precision(),
+            rotated_sample: self.rotated_sample.as_ref().map(|s| s.higher_precision()),
+            uuid: self.uuid,
+        }
+    }
+
+    pub fn lower_precision(&self) -> DefaultSample<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
+        DefaultSample {
+            sample: self.sample.lower_precision(),
+            rotated_sample: self.rotated_sample.as_ref().map(|s| s.lower_precision()),
+            uuid: self.uuid,
+        }
+    }
+
+    #[inline]
+    /// Rotation for stability checks
+    pub fn get_rotated_sample_cached(
+        &self,
+        rotation: &Rotation,
+        rotated_externals: Vec<FourMomentum<F<T>>>,
+        rotated_polarizations: Vec<Polarization<Complex<F<T>>>>,
+    ) -> Self {
+        Self {
+            sample: self.sample.clone(),
+            rotated_sample: Some(self.sample.get_rotated_sample_cached(
+                rotation,
+                rotated_externals,
+                rotated_polarizations,
+            )),
+            uuid: self.uuid,
+        }
+    }
+
+    #[inline]
+    pub fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+        Self {
+            sample: self.sample.clone(),
+            rotated_sample: Some(self.sample.get_rotated_sample(rotation)),
+            uuid: self.uuid,
         }
     }
 }

@@ -14,7 +14,7 @@ use crate::graph::{
 };
 use crate::model::{LorentzStructure, Model};
 use crate::momentum::{
-    Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, ThreeMomentum,
+    Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, Signature, ThreeMomentum,
 };
 use crate::numerator::{
     ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, IterativeOptions,
@@ -53,6 +53,7 @@ use spenso::network::TensorNetwork;
 use spenso::structure::{IsAbstractSlot, Lorentz, RepName};
 use statrs::function::evaluate;
 use std::collections::HashMap;
+use std::f32::consts::E;
 use std::fs::{self, File};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -424,14 +425,14 @@ fn check_lmb_generation<N: NumeratorState>(
 
     let emr = graph
         .bare_graph
-        .compute_emr(&sample.loop_moms, &sample.external_moms);
+        .compute_emr(&sample.loop_moms(), &sample.external_moms());
 
     for basis in lmb {
         let momenta_in_basis = basis.basis.iter().map(|index| emr[*index]).collect_vec();
         let new_emr = basis
             .edge_signatures
             .iter()
-            .map(|s| s.compute_three_momentum_from_four(&momenta_in_basis, &sample.external_moms))
+            .map(|s| s.compute_three_momentum_from_four(&momenta_in_basis, &sample.external_moms()))
             .collect_vec();
         assert_eq!(emr.len(), new_emr.len());
 
@@ -520,7 +521,7 @@ fn compare_cff_to_ltd<T: FloatLike>(
     if let Some(truth) = amp_check.cff_norm {
         let energy_product = graph
             .bare_graph
-            .compute_energy_product(&sample.loop_moms, &sample.external_moms);
+            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
         F::approx_eq_res(
             &(cff_norm / &energy_product),
             &F::<T>::from_ff64(truth),
@@ -576,7 +577,7 @@ fn check_esurface_existance<N: NumeratorState>(
             .esurface_derived_data
             .as_ref()
             .ok_or(eyre!("no esurface derived data"))?,
-        &sample.external_moms,
+        &sample.external_moms(),
         &graph.bare_graph.loop_momentum_basis,
         0,
         F(2.),
@@ -594,7 +595,7 @@ fn check_esurface_existance<N: NumeratorState>(
         &existing,
         &cff.esurfaces,
         &edge_masses,
-        &sample.external_moms,
+        &sample.external_moms(),
         0,
     );
 
@@ -603,7 +604,7 @@ fn check_esurface_existance<N: NumeratorState>(
         &existing,
         &cff.esurfaces,
         &edge_masses,
-        &sample.external_moms,
+        &sample.external_moms(),
         0,
     );
 
@@ -716,12 +717,22 @@ fn pytest_scalar_massless_triangle() {
 
     let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
 
-    let sample = DefaultSample {
-        loop_moms: vec![k],
-        external_moms: vec![p1, p2],
-        jacobian: F(1.0),
-        polarizations: vec![],
+    let externals = Externals::Constant {
+        momenta: vec![
+            ExternalMomenta::Independent(p1.into()),
+            ExternalMomenta::Independent(p2.into()),
+            ExternalMomenta::Dependent(Dep::Dep),
+        ],
+        helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
     };
+
+    let sample = DefaultSample::new(
+        vec![k],
+        &externals,
+        F(1.),
+        &crate::Polarizations::None,
+        &Signature::from_iter([1i8, 1, -1]),
+    );
     let amp_check = AmplitudeCheck {
         name: "massless_scalar_triangle",
         sample: SampleType::Custom(sample),
@@ -1032,15 +1043,23 @@ fn pytest_scalar_isopod() {
 
     let k2: ThreeMomentum<F<f64>> = ThreeMomentum::new(8., 9., 10.).cast();
 
-    let loop_moms = [k0, k1, k2];
-    let externals = [p1, p2];
-
-    let sample = DefaultSample {
-        loop_moms: loop_moms.to_vec(),
-        external_moms: externals.to_vec(),
-        jacobian: F(1.0),
-        polarizations: vec![],
+    let loop_moms = vec![k0, k1, k2];
+    let externals = Externals::Constant {
+        momenta: vec![
+            ExternalMomenta::Independent(p1.into()),
+            ExternalMomenta::Independent(p2.into()),
+            ExternalMomenta::Dependent(Dep::Dep),
+        ],
+        helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
     };
+
+    let sample = DefaultSample::new(
+        loop_moms,
+        &externals,
+        F(1.),
+        &crate::Polarizations::None,
+        &Signature::from_iter([1i8, 1, -1i8]),
+    );
     let amp_check = AmplitudeCheck {
         name: "scalar_isopod",
         model_name: "scalars",
@@ -1748,7 +1767,7 @@ fn top_bubble_CP() {
 
     println!("================");
 
-    for i in sample.polarizations {
+    for i in sample.polarizations() {
         for p in i {
             println!("{}", p);
         }
@@ -1858,24 +1877,31 @@ fn scalar_box_to_triangle() {
 
     let box_energy = box_graph
         .bare_graph
-        .compute_energy_product(&box_sample.loop_moms, &box_sample.external_moms);
+        .compute_energy_product(&box_sample.loop_moms(), &box_sample.external_moms());
 
     let normalized_box =
         box_graph.evaluate_cff_expression(&box_sample, &default_settings) / box_energy;
 
-    let triangle_sample = DefaultSample {
-        loop_moms: box_sample.loop_moms,
-        external_moms: vec![
-            box_sample.external_moms[0],
-            box_sample.external_moms[2] + box_sample.external_moms[1],
-        ],
-        polarizations: vec![],
-        jacobian: F(1.0),
-    };
+    let box_externals = box_sample.external_moms();
 
-    let triangle_energy = triangle_graph
-        .bare_graph
-        .compute_energy_product(&triangle_sample.loop_moms, &triangle_sample.external_moms);
+    let triangle_sample = DefaultSample::new(
+        box_sample.loop_moms().to_vec(),
+        &Externals::Constant {
+            momenta: vec![
+                ExternalMomenta::Independent(box_externals[0].into()),
+                (box_externals[2] + box_externals[1]).into(),
+            ],
+            helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
+        },
+        F(1.),
+        &crate::Polarizations::None,
+        &triangle_graph.bare_graph.external_in_or_out_signature(),
+    );
+
+    let triangle_energy = triangle_graph.bare_graph.compute_energy_product(
+        &triangle_sample.loop_moms(),
+        &triangle_sample.external_moms(),
+    );
 
     let normalized_triangle = triangle_graph
         .evaluate_cff_expression(&triangle_sample, &default_settings)

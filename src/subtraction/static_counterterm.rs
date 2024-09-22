@@ -241,7 +241,7 @@ impl CounterTerm {
             };
 
             let shifted_momenta = sample
-                .loop_moms
+                .loop_moms()
                 .iter()
                 .zip(center_t.iter())
                 .map(|(momentum, center)| momentum.clone() - center.clone())
@@ -268,7 +268,7 @@ impl CounterTerm {
                 // solve the radius
                 let radius_guess = esurface.get_radius_guess(
                     &hemispherical_unit_shifted_momenta,
-                    &sample.external_moms,
+                    &sample.external_moms(),
                     lmb,
                 );
 
@@ -281,7 +281,7 @@ impl CounterTerm {
                         r,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
-                        &sample.external_moms,
+                        &sample.external_moms(),
                         lmb,
                         &real_mass_vector,
                     )
@@ -317,7 +317,7 @@ impl CounterTerm {
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
-                        &sample.external_moms,
+                        &sample.external_moms(),
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
@@ -327,13 +327,13 @@ impl CounterTerm {
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
-                        &sample.external_moms,
+                        &sample.external_moms(),
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
                     ),
                 );
-                let loop_number = sample.loop_moms.len();
+                let loop_number = sample.loop_moms().len();
                 let (jacobian_ratio_plus, jacobian_ratio_minus) = (
                     (&positive_result.solution / &hemispherical_radius)
                         .pow(3 * loop_number as u64 - 1),

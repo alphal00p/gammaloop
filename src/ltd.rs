@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    gammaloop_integrand::DefaultSample,
+    gammaloop_integrand::{BareSample, DefaultSample},
     graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
     numerator::{AtomStructure, Evaluate, Evaluators, Numerator, NumeratorState},
@@ -427,16 +427,17 @@ struct LTDTerm {
 impl LTDTerm {
     fn evaluate<T: FloatLike>(
         &self,
-        external_moms: &[FourMomentum<F<T>>],
+        rot_emr: Option<&[ThreeMomentum<F<T>>]>,
         emr: &[ThreeMomentum<F<T>>],
-        graph: &BareGraph,
+        external_moms: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
+        graph: &BareGraph,
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         // compute on shell energies of the momenta in associated_lmb
 
-        let zero = external_moms[0].temporal.value.zero();
+        let zero = emr.iter().next().unwrap().px.zero();
         let one = zero.one();
         let two = zero.from_i64(2);
 
@@ -457,6 +458,26 @@ impl LTDTerm {
             })
             .collect_vec();
 
+        let edge_momenta_of_associated_lmb_rot = if let Some(rot_emr) = rot_emr {
+            self.associated_lmb
+                .iter()
+                .map(|(i, s)| {
+                    let mut momentum = rot_emr[*i].clone().into_on_shell_four_momentum(
+                        graph.edges[*i]
+                            .particle
+                            .mass
+                            .value
+                            .map(|m| F::<T>::from_ff64(m.re)),
+                    );
+
+                    momentum.temporal *= Energy::new(F::<T>::from_f64(*s));
+                    momentum
+                })
+                .collect_vec()
+        } else {
+            edge_momenta_of_associated_lmb.clone()
+        };
+
         // iterate over remaining propagators
         let mut inv_res = one.clone();
         let mut energy_product = one.clone();
@@ -465,7 +486,7 @@ impl LTDTerm {
             e.edge_type == EdgeType::Virtual && self.associated_lmb.iter().all(|(i, _)| i != index)
         }) {
             let momentum = self.signature_of_lmb[index]
-                .compute_momentum(&edge_momenta_of_associated_lmb, external_moms);
+                .compute_momentum(&edge_momenta_of_associated_lmb_rot, external_moms);
 
             match edge.particle.mass.value {
                 Some(mass) => {
@@ -500,17 +521,25 @@ impl LTDExpression {
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
-        let zero = sample.external_moms[0].temporal.value.zero();
-        let emr = graph.compute_emr(&sample.loop_moms, &sample.external_moms);
+        let zero = sample.zero();
+        let possibly_rotated_emr = sample
+            .rotated_sample
+            .as_ref()
+            .map(|s| graph.compute_emr(&s.loop_moms, &s.external_moms));
+        let unrotated_emr =
+            graph.compute_emr(&sample.sample.loop_moms, &sample.sample.external_moms);
+
+        let external_moms = sample.external_moms();
 
         self.terms
             .iter()
             .map(|term| {
                 term.evaluate(
-                    &sample.external_moms,
-                    &emr,
+                    possibly_rotated_emr.as_deref(),
+                    &unrotated_emr,
+                    external_moms,
+                    &sample.sample.polarizations,
                     graph,
-                    &sample.polarizations,
                     num,
                     setting,
                 )
@@ -527,17 +556,23 @@ impl LTDExpression {
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
-        let zero = sample.external_moms[0].temporal.value.zero();
-        let emr = graph.compute_emr_in_lmb(&sample.loop_moms, &sample.external_moms, lmb);
-
+        let zero = sample.zero();
+        let possibly_rotated_emr = sample
+            .rotated_sample
+            .as_ref()
+            .map(|s| graph.compute_emr_in_lmb(&s.loop_moms, &s.external_moms, lmb));
+        let unrotated_emr =
+            graph.compute_emr_in_lmb(&sample.sample.loop_moms, &sample.sample.external_moms, lmb);
+        let external_moms = sample.external_moms();
         self.terms
             .iter()
             .map(|term| {
                 term.evaluate(
-                    &sample.external_moms,
-                    &emr,
+                    possibly_rotated_emr.as_deref(),
+                    &unrotated_emr,
+                    external_moms,
+                    &sample.sample.polarizations,
                     graph,
-                    &sample.polarizations,
                     num,
                     setting,
                 )

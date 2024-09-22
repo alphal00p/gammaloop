@@ -942,6 +942,7 @@ dependencies = [
  "tabled",
  "thiserror",
  "typed-index-collections",
+ "uuid",
  "vectorize",
 ]
 
@@ -2501,6 +2502,9 @@ name = "uuid"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "vec_map"

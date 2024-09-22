@@ -7,7 +7,7 @@ use crate::{
         expression::CFFExpression,
         generation::generate_cff_expression,
     },
-    gammaloop_integrand::DefaultSample,
+    gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Signature, ThreeMomentum},
@@ -1203,7 +1203,7 @@ impl BareGraph {
 
     pub fn cff_emr_from_lmb<T: FloatLike>(
         &self,
-        sample: &DefaultSample<T>,
+        sample: &BareSample<T>,
         lmb: &LoopMomentumBasis,
     ) -> Vec<FourMomentum<F<T>>> {
         let massless = lmb.to_massless_emr(sample);
@@ -1811,7 +1811,7 @@ impl<S: NumeratorState> Graph<S> {
         self.derived_data
             .as_mut()
             .unwrap()
-            .generate_params(&self.bare_graph, sample)
+            .generate_params(&self.bare_graph, sample.possibly_rotated_sample())
     }
 
     pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
@@ -1914,7 +1914,11 @@ impl Graph<Evaluators> {
         self.derived_data
             .as_mut()
             .unwrap()
-            .evaluate_cff_all_orientations(&self.bare_graph, sample, settings)
+            .evaluate_cff_all_orientations(
+                &self.bare_graph,
+                sample.possibly_rotated_sample(),
+                settings,
+            )
     }
 
     #[inline]
@@ -1926,7 +1930,11 @@ impl Graph<Evaluators> {
         self.derived_data
             .as_mut()
             .unwrap()
-            .evaluate_numerator_all_orientations(&self.bare_graph, sample, settings)
+            .evaluate_numerator_all_orientations(
+                &self.bare_graph,
+                sample.possibly_rotated_sample(),
+                settings,
+            )
     }
 
     #[inline]
@@ -1968,8 +1976,8 @@ impl Graph<Evaluators> {
     ) -> Vec<F<T>> {
         let lmb = lmb_specification.basis(self);
         let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
-            &sample.loop_moms,
-            &sample.external_moms,
+            &sample.loop_moms(),
+            &sample.external_moms(),
             lmb,
         );
 
@@ -2130,7 +2138,7 @@ impl DerivedGraphData<Evaluators> {
         settings: &Settings,
         bare_graph: &BareGraph,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
-        let one = sample.loop_moms[0].px.one();
+        let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
         let loop_number = bare_graph.loop_momentum_basis.basis.len();
@@ -2152,7 +2160,7 @@ impl DerivedGraphData<Evaluators> {
         lmb: &LoopMomentumBasis,
         bare_graph: &BareGraph,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
-        let one = sample.loop_moms[0].px.one();
+        let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
         let loop_number = bare_graph.loop_momentum_basis.basis.len();
@@ -2184,10 +2192,19 @@ impl DerivedGraphData<Evaluators> {
         let prefactor = ni.pow((loop_number) as u64); // (ni).pow(loop_number as u64) * (-(ni.ref_one())).pow(internal_vertex_number as u64 - 1);
 
         let mut cff = self
-            .evaluate_cff_orientations(graph, sample, lmb_specification, settings)
+            .evaluate_cff_orientations(
+                graph,
+                sample.possibly_rotated_sample(),
+                lmb_specification,
+                settings,
+            )
             .into_iter();
-        let num_iter =
-            self.evaluate_numerator_orientations(graph, sample, lmb_specification, settings);
+        let num_iter = self.evaluate_numerator_orientations(
+            graph,
+            &sample.sample,
+            lmb_specification,
+            settings,
+        );
 
         match num_iter {
             RepeatingIteratorTensorOrScalar::Scalars(mut s) => {
@@ -2231,7 +2248,7 @@ impl DerivedGraphData<Evaluators> {
     pub fn evaluate_numerator_all_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &DefaultSample<T>,
+        sample: &BareSample<T>,
         settings: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let emr = graph.cff_emr_from_lmb(sample, &graph.loop_momentum_basis);
@@ -2274,7 +2291,7 @@ impl DerivedGraphData<Evaluators> {
     pub fn evaluate_numerator_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &DefaultSample<T>,
+        sample: &BareSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
     ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>> {
@@ -2382,7 +2399,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn evaluate_cff_all_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &DefaultSample<T>,
+        sample: &BareSample<T>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
@@ -2401,7 +2418,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn evaluate_cff_orientations<T: FloatLike>(
         &self,
         graph: &BareGraph,
-        sample: &DefaultSample<T>,
+        sample: &BareSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
     ) -> Vec<F<T>> {
@@ -2418,7 +2435,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn generate_params<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &DefaultSample<T>,
+        sample: &BareSample<T>,
     ) -> Vec<Complex<F<T>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         let lmb = lmb_specification.basis_from_derived(self);
@@ -2586,7 +2603,7 @@ impl LoopExtSignature {
 }
 
 impl LoopMomentumBasis {
-    pub fn spatial_emr<T: FloatLike>(&self, sample: &DefaultSample<T>) -> Vec<ThreeMomentum<F<T>>> {
+    pub fn spatial_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<ThreeMomentum<F<T>>> {
         let three_externals = sample
             .external_moms
             .iter()
@@ -2598,10 +2615,7 @@ impl LoopMomentumBasis {
             .collect()
     }
 
-    pub fn to_massless_emr<T: FloatLike>(
-        &self,
-        sample: &DefaultSample<T>,
-    ) -> Vec<FourMomentum<F<T>>> {
+    pub fn to_massless_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<FourMomentum<F<T>>> {
         self.edge_signatures
             .iter()
             .map(|sig| {
