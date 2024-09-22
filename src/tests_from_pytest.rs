@@ -26,7 +26,7 @@ use crate::subtraction::static_counterterm;
 use crate::tests::load_default_settings;
 use crate::utils::{f128, F};
 use crate::utils::{ApproxEq, FloatLike, PrecisionUpgradable};
-use crate::{cff, ltd, Externals, Integrand, RotationSetting};
+use crate::{cff, ltd, Externals, Integrand, Polarizations, RotationSetting};
 use crate::{
     inspect::inspect, ExportSettings, GammaloopCompileOptions, Settings,
     TropicalSubgraphTableSettings,
@@ -37,6 +37,7 @@ use clarabel::solver::default;
 use colored::Colorize;
 use indexmap::set::Iter;
 use itertools::{FormatWith, Itertools};
+use nalgebra::Point;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use symbolica::domains::rational::Rational;
@@ -765,16 +766,33 @@ fn pytest_scalar_fishnet_2x2() {
     let k2 = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.));
     let k3 = ThreeMomentum::new(F(17. / 19.), F(19. / 23.), F(23. / 29.));
     let k4: ThreeMomentum<F<f64>> = ThreeMomentum::new(29. / 31., 31. / 37., 37. / 41.).into();
-    let p1 = FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.).into();
-    let p2 = FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.).into();
-    let p3 = FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.).into();
+    let p1: FourMomentum<F<f64>> =
+        FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.).into();
+    let p2: FourMomentum<F<f64>> =
+        FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.).into();
+    let p3: FourMomentum<F<f64>> =
+        FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.).into();
 
-    let sample = DefaultSample {
-        loop_moms: vec![k1, k2, k3, k4],
-        external_moms: vec![p1, p2, p3],
-        jacobian: F(1.0),
-        polarizations: vec![],
-    };
+    let sample = DefaultSample::new(
+        vec![k1, k2, k3, k4],
+        &Externals::Constant {
+            momenta: vec![
+                ExternalMomenta::Independent(p1.into()),
+                ExternalMomenta::Independent(p2.into()),
+                ExternalMomenta::Independent(p3.into()),
+                ExternalMomenta::Dependent(Dep::Dep),
+            ],
+            helicities: vec![
+                Helicity::Zero,
+                Helicity::Zero,
+                Helicity::Zero,
+                Helicity::Zero,
+            ],
+        },
+        F(1.),
+        &Polarizations::None,
+        &Signature::from_iter([1i8, 1, -1, -1]),
+    );
 
     let amp_check = AmplitudeCheck {
         name: "scalar_fishnet_2x2",
