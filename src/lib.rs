@@ -415,15 +415,6 @@ impl RotationSetting {
             Self::None => "none",
         }
     }
-
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Pi2X => "x",
-            Self::Pi2Y => "y",
-            Self::Pi2Z => "z",
-            Self::None => "none",
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Hash, Eq)]
@@ -433,23 +424,6 @@ pub enum Precision {
     Double,
     Quad,
     Arb(usize),
-}
-
-impl Precision {
-    fn as_string(self) -> String {
-        match self {
-            Self::Single => "f32".to_owned(),
-            Self::Double => "f64".to_owned(),
-            Self::Quad => "f128".to_owned(),
-            Self::Arb(prec) => format!("arb_prec_{}", prec),
-        }
-    }
-}
-
-impl Display for Precision {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_string())
-    }
 }
 
 impl Precision {

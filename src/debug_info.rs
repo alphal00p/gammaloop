@@ -12,7 +12,7 @@ use ahash::HashMap;
 use color_eyre::Report;
 use serde::Serialize;
 
-use crate::{Precision, RotationMethod};
+use crate::{Precision, RotationMethod, RotationSetting};
 
 pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 
@@ -21,7 +21,7 @@ pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 #[derive(Hash, Copy, Clone, Debug, Eq, PartialEq)]
 pub enum EvalState {
     General,
-    PrecRot((RotationMethod, Precision)),
+    PrecRot((RotationSetting, Precision)),
 }
 
 impl EvalState {

@@ -407,7 +407,7 @@ impl PythonWorker {
             Some(integrand_struct) => {
                 let new_settings = match integrand_struct {
                     Integrand::GammaLoopIntegrand(integrand_struct) => {
-                        integrand_struct.settings.clone()
+                        integrand_struct.global_data.settings.clone()
                     }
                     _ => todo!(),
                 };
@@ -418,8 +418,12 @@ impl PythonWorker {
                 match fs::read(path_to_state) {
                     Ok(state_bytes) => {
                         let serializable_state: SerializableIntegrationState =
-                            bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
-                                .unwrap();
+                            bincode::decode_from_slice::<SerializableIntegrationState, _>(
+                                &state_bytes,
+                                bincode::config::standard(),
+                            )
+                            .unwrap()
+                            .0;
                         let path_to_workspace_settings = workspace_path.join("settings.yaml");
                         let workspace_settings_string =
                             fs::read_to_string(path_to_workspace_settings)

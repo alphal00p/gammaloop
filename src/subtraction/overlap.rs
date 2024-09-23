@@ -16,19 +16,10 @@ use core::panic;
 use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
-use serde::Serialize;
 use serde_with::serde_as;
 use spenso::complex::Complex;
 
-use crate::cff::esurface::EsurfaceCollection;
-use crate::cff::esurface::ExistingEsurfaceId;
-use crate::cff::esurface::ExistingEsurfaces;
 use crate::graph::LoopExtSignature;
-use crate::graph::LoopMomentumBasis;
-use crate::momentum::FourMomentum;
-use crate::momentum::ThreeMomentum;
-use crate::utils::compute_shift_part;
-use crate::utils::F;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlapGroup {
@@ -36,7 +27,7 @@ pub struct OverlapGroup {
     pub center: Vec<ThreeMomentum<F<f64>>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
 }

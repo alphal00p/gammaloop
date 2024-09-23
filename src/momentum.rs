@@ -39,11 +39,28 @@ use symbolica::{
 
 use spenso::complex::Complex;
 
-use crate::utils::{ApproxEq, FloatLike, RefDefault, F};
+use crate::{
+    utils::{ApproxEq, FloatLike, RefDefault, F},
+    RotationSetting,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct Energy<T> {
     pub value: T,
+}
+
+impl<T> Energy<T> {
+    pub fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> Energy<U> {
+        Energy {
+            value: f(&self.value),
+        }
+    }
+
+    pub fn map<U>(self, f: &impl Fn(T) -> U) -> Energy<U> {
+        Energy {
+            value: f(self.value),
+        }
+    }
 }
 
 impl<T: FloatLike> ApproxEq<Energy<F<T>>, F<T>> for Energy<F<T>> {
@@ -289,6 +306,24 @@ pub struct ThreeMomentum<T> {
     pub px: T,
     pub py: T,
     pub pz: T,
+}
+
+impl<T> ThreeMomentum<T> {
+    pub fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> ThreeMomentum<U> {
+        ThreeMomentum {
+            px: f(&self.px),
+            py: f(&self.py),
+            pz: f(&self.pz),
+        }
+    }
+
+    pub fn map<U>(self, f: &impl Fn(T) -> U) -> ThreeMomentum<U> {
+        ThreeMomentum {
+            px: f(self.px),
+            py: f(self.py),
+            pz: f(self.pz),
+        }
+    }
 }
 
 impl<T: FloatLike> ApproxEq<ThreeMomentum<F<T>>, F<T>> for ThreeMomentum<F<T>> {
@@ -966,6 +1001,22 @@ pub struct FourMomentum<T, U = T> {
     pub spatial: ThreeMomentum<T>,
 }
 
+impl<T> FourMomentum<T> {
+    pub fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> FourMomentum<U> {
+        FourMomentum {
+            temporal: self.temporal.map_ref(f),
+            spatial: self.spatial.map_ref(f),
+        }
+    }
+
+    pub fn map<U>(self, f: &impl Fn(T) -> U) -> FourMomentum<U> {
+        FourMomentum {
+            temporal: self.temporal.map(f),
+            spatial: self.spatial.map(f),
+        }
+    }
+}
+
 impl<T: FloatLike> ApproxEq<FourMomentum<F<T>>, F<T>> for FourMomentum<F<T>> {
     fn approx_eq(&self, other: &FourMomentum<F<T>>, threshold: &F<T>) -> bool {
         self.temporal.approx_eq(&other.temporal, threshold)
@@ -1083,7 +1134,7 @@ impl<T: RefZero, U: RefZero> RefZero<FourMomentum<T, U>> for &FourMomentum<T, U>
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum PolType {
     U,
     V,
@@ -1122,7 +1173,7 @@ impl Display for PolType {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Polarization<T> {
     pub tensor: DenseTensor<T, IndexLess<PhysReps>>,
     pol_type: PolType,
@@ -2471,6 +2522,18 @@ pub struct Rotation {
 }
 
 impl Rotation {
+    pub fn is_identity(&self) -> bool {
+        matches!(self.method, RotationMethod::Identity)
+    }
+    pub fn setting(&self) -> RotationSetting {
+        match self.method {
+            RotationMethod::EulerAngles(alpha, beta, gamma) => panic!("Euler angles not supported"),
+            RotationMethod::Pi2X => RotationSetting::Pi2X,
+            RotationMethod::Pi2Y => RotationSetting::Pi2Y,
+            RotationMethod::Pi2Z => RotationSetting::Pi2Z,
+            RotationMethod::Identity => RotationSetting::None,
+        }
+    }
     pub fn new(method: RotationMethod) -> Self {
         let mu = Lorentz::new_slot_selfless(4, 1);
 

@@ -97,7 +97,8 @@ gat-lending-iterator = "0.1.5"
 thiserror = "1.0.63"
 serde_repr = "0.1.19"
 compensated-summation = "0.3.0"
-uuid = { version = "1.10.0", features = ["v4"] }
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
+serde_with = "3.9.0"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -128,5 +129,5 @@ fail-on-warnings = []
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "symbolica_nightly" }
-# spenso = { path = "../../alphal00p/spenso" }
+# spenso = { git = "https://github.com/alphal00p/spenso", branch = "symbolica_nightly" }
+spenso = { path = "../../alphal00p/spenso" }

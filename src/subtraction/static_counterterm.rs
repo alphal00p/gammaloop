@@ -3,7 +3,6 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use itertools::Itertools;
 use ref_ops::RefNeg;
-use serde::Serialize;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -11,6 +10,8 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 const MAX_ITERATIONS: usize = 20;
 const TOLERANCE: f64 = 10.0;
 
+use crate::momentum::{Rotatable, Rotation};
+use crate::RotationSetting;
 use crate::{
     cff::{
         esurface::{
@@ -162,7 +163,7 @@ impl CounterTerm {
         &self,
         sample: &DefaultSample<T>,
         graph: &Graph,
-        rotation_for_overlap: RotationMethod,
+        rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
         let real_mass_vector = graph
@@ -203,17 +204,9 @@ impl CounterTerm {
             }
 
             let center_t = {
-                let rotation_function = rotation_for_overlap.rotation_function();
                 let rotated_center = center
                     .iter()
-                    .map(rotation_function)
-                    .map(|c_vec| {
-                        ThreeMomentum::new(
-                            F::from_ff64(c_vec.px),
-                            F::from_ff64(c_vec.py),
-                            F::from_ff64(c_vec.pz), // manual cast is needed for some reason?
-                        )
-                    })
+                    .map(|c_vec| c_vec.rotate(rotation_for_overlap).map(&|x| F::from_ff64(x)))
                     .collect_vec();
 
                 if settings.general.debug > 0 {

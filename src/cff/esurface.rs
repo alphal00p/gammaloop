@@ -2,6 +2,7 @@ use std::ops::Index;
 
 use bincode::{Decode, Encode};
 use color_eyre::Report;
+use colored::Colorize;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
@@ -388,16 +389,6 @@ pub fn get_existing_esurfaces<T: FloatLike>(
         }
     }
     existing_esurfaces
-}
-
-#[derive(Serialize)]
-struct ExistenceCheckDebug {
-    esurface_id: EsurfaceID,
-    shift_zero_sq: F<f64>,
-    shift_spatial_sq: F<f64>,
-    mass_sum_sq: F<f64>,
-    existence_condition: F<f64>,
-    threshold: F<f64>,
 }
 
 #[derive(Serialize)]
