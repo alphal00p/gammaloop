@@ -2,24 +2,20 @@ use std::{env, path::PathBuf, time::Duration};
 
 use _gammaloop::{
     gammaloop_integrand::DefaultSample,
-    graph::{self, Graph},
-    momentum::{
-        Dep, ExternalMomenta, FourMomentum, Helicity, Polarization, Rotatable, Rotation,
-        ThreeMomentum,
-    },
+    graph::Graph,
+    momentum::{Dep, ExternalMomenta, Helicity, Rotatable, Rotation, ThreeMomentum},
     numerator::ContractionSettings,
-    tests::load_default_settings,
-    tests_from_pytest::{kinematics_builder, load_amplitude_output},
+    tests_from_pytest::load_amplitude_output,
     utils::F,
     ExportSettings, Externals, GammaloopCompileOptions, Polarizations, RotationSetting,
     TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
-use rug::float::Constant;
+
 const COMPILED_DUMP: &str = "TMP_COMPILED";
 
-fn load_helper(path: &str, use_orientations: bool) -> Graph {
+pub fn load_helper(path: &str, use_orientations: bool) -> Graph {
     let (model, mut amplitude, _) = load_amplitude_output(path, true);
     amplitude.amplitude_graphs[0].graph.generate_cff();
 
@@ -66,7 +62,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("polarization benchmarks");
     group.measurement_time(Duration::from_secs(10));
 
-    let (model, mut amplitude, _) =
+    let (_, amplitude, _) =
         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
     let graph = amplitude.amplitude_graphs[0].graph.clone();
 
@@ -112,7 +108,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     println!("starting benchmark");
     group.bench_function("polarization generation", |b| {
         b.iter(|| {
-            let polarizations = externals.generate_polarizations(
+            let _polarizations = externals.generate_polarizations(
                 &graph.bare_graph.external_particles(),
                 &external_signature,
             );

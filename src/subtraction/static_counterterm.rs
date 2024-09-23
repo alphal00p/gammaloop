@@ -11,7 +11,7 @@ const MAX_ITERATIONS: usize = 20;
 const TOLERANCE: f64 = 10.0;
 
 use crate::momentum::{Rotatable, Rotation};
-use crate::RotationSetting;
+
 use crate::{
     cff::{
         esurface::{
@@ -26,7 +26,7 @@ use crate::{
     momentum::{FourMomentum, ThreeMomentum},
     numerator::NumeratorState,
     utils::{self, into_complex_ff64, FloatLike, F},
-    RotationMethod, Settings,
+    Settings,
 };
 
 use super::overlap::OverlapStructure;
@@ -238,7 +238,7 @@ impl CounterTerm {
                 // solve the radius
                 let radius_guess = esurface.get_radius_guess(
                     &hemispherical_unit_shifted_momenta,
-                    &sample.external_moms(),
+                    sample.external_moms(),
                     lmb,
                 );
 
@@ -247,7 +247,7 @@ impl CounterTerm {
                         r,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
-                        &sample.external_moms(),
+                        sample.external_moms(),
                         lmb,
                         &real_mass_vector,
                     )
@@ -283,7 +283,7 @@ impl CounterTerm {
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
-                        &sample.external_moms(),
+                        sample.external_moms(),
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,
@@ -293,7 +293,7 @@ impl CounterTerm {
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
-                        &sample.external_moms(),
+                        sample.external_moms(),
                         esurfaces,
                         overlap_complement,
                         *existing_esurface_id,

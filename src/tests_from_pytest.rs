@@ -426,14 +426,14 @@ fn check_lmb_generation<N: NumeratorState>(
 
     let emr = graph
         .bare_graph
-        .compute_emr(&sample.loop_moms(), &sample.external_moms());
+        .compute_emr(sample.loop_moms(), sample.external_moms());
 
     for basis in lmb {
         let momenta_in_basis = basis.basis.iter().map(|index| emr[*index]).collect_vec();
         let new_emr = basis
             .edge_signatures
             .iter()
-            .map(|s| s.compute_three_momentum_from_four(&momenta_in_basis, &sample.external_moms()))
+            .map(|s| s.compute_three_momentum_from_four(&momenta_in_basis, sample.external_moms()))
             .collect_vec();
         assert_eq!(emr.len(), new_emr.len());
 
@@ -522,7 +522,7 @@ fn compare_cff_to_ltd<T: FloatLike>(
     if let Some(truth) = amp_check.cff_norm {
         let energy_product = graph
             .bare_graph
-            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
         F::approx_eq_res(
             &(cff_norm / &energy_product),
             &F::<T>::from_ff64(truth),
@@ -578,7 +578,7 @@ fn check_esurface_existance<N: NumeratorState>(
             .esurface_derived_data
             .as_ref()
             .ok_or(eyre!("no esurface derived data"))?,
-        &sample.external_moms(),
+        sample.external_moms(),
         &graph.bare_graph.loop_momentum_basis,
         0,
         F(2.),
@@ -596,7 +596,7 @@ fn check_esurface_existance<N: NumeratorState>(
         &existing,
         &cff.esurfaces,
         &edge_masses,
-        &sample.external_moms(),
+        sample.external_moms(),
         0,
     );
 
@@ -605,7 +605,7 @@ fn check_esurface_existance<N: NumeratorState>(
         &existing,
         &cff.esurfaces,
         &edge_masses,
-        &sample.external_moms(),
+        sample.external_moms(),
         0,
     );
 
@@ -1895,7 +1895,7 @@ fn scalar_box_to_triangle() {
 
     let box_energy = box_graph
         .bare_graph
-        .compute_energy_product(&box_sample.loop_moms(), &box_sample.external_moms());
+        .compute_energy_product(box_sample.loop_moms(), box_sample.external_moms());
 
     let normalized_box =
         box_graph.evaluate_cff_expression(&box_sample, &default_settings) / box_energy;
@@ -1916,10 +1916,9 @@ fn scalar_box_to_triangle() {
         &triangle_graph.bare_graph.external_in_or_out_signature(),
     );
 
-    let triangle_energy = triangle_graph.bare_graph.compute_energy_product(
-        &triangle_sample.loop_moms(),
-        &triangle_sample.external_moms(),
-    );
+    let triangle_energy = triangle_graph
+        .bare_graph
+        .compute_energy_product(triangle_sample.loop_moms(), triangle_sample.external_moms());
 
     let normalized_triangle = triangle_graph
         .evaluate_cff_expression(&triangle_sample, &default_settings)

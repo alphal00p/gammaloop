@@ -1,14 +1,7 @@
-use std::{
-    fs::File,
-    path::{Path, PathBuf},
-};
-
-use color_eyre::Help;
-use eyre::Context;
-use petgraph::graph;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use rayon::vec;
-use spenso::{complex::Complex, parametric::PatternReplacement, structure::HasStructure};
+
+use spenso::{complex::Complex, structure::HasStructure};
+use std::path::{Path, PathBuf};
 use symbolica::{
     atom::Atom,
     domains::rational::Rational,
@@ -19,7 +12,6 @@ use symbolica::{
 use crate::{
     cross_section::Amplitude,
     gammaloop_integrand::DefaultSample,
-    graph::{BareGraph, Graph, SerializableGraph},
     model::Model,
     momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, Polarization},
     numerator::{Contracted, ContractionSettings, ExtraInfo},
@@ -219,7 +211,7 @@ fn trees() {
 
     let onshell_energies = graph
         .bare_graph
-        .compute_onshell_energies(&sample.loop_moms(), &sample.external_moms());
+        .compute_onshell_energies(sample.loop_moms(), sample.external_moms());
 
     for ((e, q), p) in onshell_energies.iter().zip(emr).zip(three_emr) {
         F::approx_eq_res(e, &q.temporal.value, &F(1e-10)).unwrap();
@@ -271,8 +263,8 @@ fn trees() {
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            &sample.external_moms(),
-            &sample.polarizations(),
+            sample.external_moms(),
+            sample.polarizations(),
             &settings,
         )
         .scalar()
@@ -280,7 +272,7 @@ fn trees() {
 
     let energy_product = graph
         .bare_graph
-        .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
+        .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
     let valcff = graph.evaluate_cff_expression(&sample, &settings) / energy_product;
     println!("4d: {}", val);
@@ -295,8 +287,6 @@ fn tree_ta_ta_1() {
 
     graph.generate_cff();
 
-    let export_settings = test_export_settings();
-
     let mut graph = graph.process_numerator(
         &model,
         ContractionSettings::<Rational>::Normal,
@@ -308,13 +298,13 @@ fn tree_ta_ta_1() {
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph
             .bare_graph
-            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            &sample.external_moms(),
-            &sample.polarizations(),
+            sample.external_moms(),
+            sample.polarizations(),
             &Settings::default(),
         )
         .scalar()
@@ -371,13 +361,13 @@ fn tree_ta_ta_1() {
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph
             .bare_graph
-            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            &sample.external_moms(),
-            &sample.polarizations(),
+            sample.external_moms(),
+            sample.polarizations(),
             &Settings::default(),
         )
         .scalar()
@@ -416,13 +406,13 @@ fn tree_h_ttxaah_1() {
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph
             .bare_graph
-            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            &sample.external_moms(),
-            &sample.polarizations(),
+            sample.external_moms(),
+            sample.polarizations(),
             &Settings::default(),
         )
         .scalar()
@@ -451,13 +441,13 @@ fn tree_hh_ttxaa_1() {
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph
             .bare_graph
-            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            &sample.external_moms(),
-            &sample.polarizations(),
+            sample.external_moms(),
+            sample.polarizations(),
             &Settings::default(),
         )
         .scalar()
@@ -533,13 +523,13 @@ fn tree_hh_ttxaa_1() {
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph
             .bare_graph
-            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            &sample.external_moms(),
-            &sample.polarizations(),
+            sample.external_moms(),
+            sample.polarizations(),
             &Settings::default(),
         )
         .scalar()

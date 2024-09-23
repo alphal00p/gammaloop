@@ -245,8 +245,8 @@ impl NumeratorEvaluateFloat for f64 {
         }
 
         if settings.general.debug > 0 {
-            for p in 0..params.len() {
-                println!("{}:{}", p, params[p]);
+            for (i, p) in params.iter().enumerate() {
+                println!("{}:{}", i, p);
             }
         }
     }
@@ -345,8 +345,8 @@ impl NumeratorEvaluateFloat for f128 {
         }
 
         if settings.general.debug > 0 {
-            for p in 0..params.len() {
-                println!("{}:{}", p, params[p]);
+            for (i, p) in params.iter().enumerate() {
+                println!("{}:{}", i, p);
             }
         }
     }
@@ -1654,7 +1654,7 @@ impl Numerator<Contracted> {
     ) -> Numerator<Evaluators> {
         let single = self
             .state
-            .evaluator(extra_info.path.clone(), export_settings, &params);
+            .evaluator(extra_info.path.clone(), export_settings, params);
 
         match export_settings.numerator_settings.eval_settings {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {

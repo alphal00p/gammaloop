@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    gammaloop_integrand::{BareSample, DefaultSample},
+    gammaloop_integrand::DefaultSample,
     graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
     numerator::{AtomStructure, Evaluate, Evaluators, Numerator, NumeratorState},

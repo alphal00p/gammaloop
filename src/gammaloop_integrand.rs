@@ -3,18 +3,16 @@
 
 use core::panic;
 use std::fmt::Display;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, IsPolarizable, SuperGraph};
 use crate::debug_info::{EvalState, DEBUG_LOGGER};
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
-use crate::graph::{BareGraph, EdgeType, Graph, LoopMomentumBasisSpecification, SerializableGraph};
+use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification, SerializableGraph};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::{
-    FourMomentum, Helicity, Polarization, Rotatable, Rotation, RotationMethod, Signature,
-    ThreeMomentum,
+    FourMomentum, Polarization, Rotatable, Rotation, RotationMethod, Signature, ThreeMomentum,
 };
 use crate::numerator::Evaluators;
 use crate::subtraction::static_counterterm::CounterTerm;
@@ -23,13 +21,12 @@ use crate::utils::{
     PrecisionUpgradable, F,
 };
 use crate::{
-    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, Polarizations, RotationSetting,
-    SamplingSettings, Settings,
+    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, Polarizations, SamplingSettings,
+    Settings,
 };
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
-use log::debug;
 use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
@@ -150,8 +147,8 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         };
 
         let onshell_energies = self.get_graph().bare_graph.compute_onshell_energies_in_lmb(
-            &sample.loop_moms(),
-            &sample.external_moms(),
+            sample.loop_moms(),
+            sample.external_moms(),
             lmb,
         );
 
@@ -261,7 +258,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let energy_product = self
             .get_graph()
             .bare_graph
-            .compute_energy_product(&sample.loop_moms(), &sample.external_moms());
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
         let counter_terms = self
             .get_graph()
@@ -317,7 +314,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let onshell_energies = self
             .get_graph()
             .bare_graph
-            .compute_onshell_energies(&sample.loop_moms(), &sample.external_moms());
+            .compute_onshell_energies(sample.loop_moms(), sample.external_moms());
 
         let tropical_subgraph_table = self.get_graph().get_tropical_subgraph_table();
 
@@ -355,7 +352,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
                     * self
                         .graph
                         .bare_graph
-                        .compute_energy_product(&sample.loop_moms(), &sample.external_moms())
+                        .compute_energy_product(sample.loop_moms(), sample.external_moms())
             }
             None => Complex::new(one.zero(), one.zero()),
         };

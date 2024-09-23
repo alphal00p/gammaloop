@@ -12,7 +12,7 @@ use ahash::HashMap;
 use color_eyre::Report;
 use serde::Serialize;
 
-use crate::{Precision, RotationMethod, RotationSetting};
+use crate::{Precision, RotationSetting};
 
 pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 

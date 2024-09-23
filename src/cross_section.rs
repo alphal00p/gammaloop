@@ -1,7 +1,7 @@
 use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{BareGraph, Graph, SerializableGraph};
 use crate::model::{Model, Particle};
-use crate::momentum::{Polarization, Signature};
+use crate::momentum::Signature;
 use crate::numerator::{
     AppliedFeynmanRule, ContractionSettings, Evaluators, NumeratorState, PythonState,
     TypedNumeratorState, UnInit, UnexpandedNumerator,
@@ -16,7 +16,6 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
-use spenso::complex::Complex;
 use std::fs;
 use std::fs::File;
 use std::path::Path;
@@ -328,7 +327,7 @@ impl<S: TypedNumeratorState> AmplitudeGraph<S> {
 }
 
 impl AmplitudeGraph<PythonState> {
-    pub fn sync(&mut self, model: &Model) {
+    pub fn sync(&mut self, _model: &Model) {
         // self.graph.sync();
     }
 }
@@ -1066,7 +1065,7 @@ pub struct CrossSectionList {
 }
 
 impl CrossSectionList {
-    pub fn sync(&mut self, model: &Model) {
+    pub fn sync(&mut self, _model: &Model) {
         // self.container.iter_mut().for_each(|cs| cs.sync(model));
     }
     pub fn from_file(model: &Model, file_path: String) -> Result<CrossSectionList, Report> {

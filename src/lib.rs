@@ -30,7 +30,6 @@ pub mod tests_from_pytest;
 pub mod utils;
 
 use crate::utils::f128;
-use bincode::de;
 use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
@@ -52,7 +51,7 @@ use momentum::ThreeMomentum;
 use numerator::NumeratorSettings;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
-use rayon::vec;
+
 use spenso::complex::Complex;
 use std::fmt::Display;
 use std::fs::File;
@@ -61,7 +60,6 @@ use std::sync::Arc;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use utils::FloatLike;
-use utils::PrecisionUpgradable;
 use utils::F;
 
 use serde::{Deserialize, Serialize};
@@ -331,6 +329,7 @@ pub struct IntegrationResult {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StabilitySettings {
     rotation_axis: Vec<RotationSetting>,
+    rotate_numerator: bool,
     levels: Vec<StabilityLevelSetting>,
 }
 
@@ -342,6 +341,7 @@ impl Default for StabilitySettings {
                 StabilityLevelSetting::default_double(),
                 StabilityLevelSetting::default_quad(),
             ],
+            rotate_numerator: false,
         }
     }
 }
@@ -695,7 +695,7 @@ impl Externals {
         }
     }
 
-    pub fn pdf(&self, x_space_point: &[F<f64>]) -> F<f64> {
+    pub fn pdf(&self, _x_space_point: &[F<f64>]) -> F<f64> {
         match self {
             Externals::Constant { .. } => F(1.0),
         }

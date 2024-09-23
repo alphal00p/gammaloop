@@ -58,6 +58,7 @@ use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{
     collections::HashMap,
+    fmt::{Display, Formatter},
     ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
     sync::Arc,
@@ -65,10 +66,7 @@ use std::{
 
 use symbolica::{
     atom::Atom,
-    domains::{
-        float::{ConstructibleFloat, NumericalFloatLike},
-        rational::Rational,
-    },
+    domains::{float::NumericalFloatLike, rational::Rational},
     id::{Pattern, Replacement},
 };
 //use symbolica::{atom::Symbol,state::State};
@@ -88,12 +86,12 @@ pub enum EdgeType {
     Virtual,
 }
 
-impl EdgeType {
-    pub fn to_string(&self) -> String {
+impl Display for EdgeType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            EdgeType::Incoming => "in".to_string(),
-            EdgeType::Outgoing => "out".to_string(),
-            EdgeType::Virtual => "virtual".to_string(),
+            EdgeType::Incoming => write!(f, "Incoming"),
+            EdgeType::Outgoing => write!(f, "Outgoing"),
+            EdgeType::Virtual => write!(f, "Virtual"),
         }
     }
 }
@@ -200,8 +198,6 @@ impl InteractionVertexInfo {
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom, true);
-
-                let len = edges.len();
 
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
@@ -857,12 +853,7 @@ impl BareGraph {
             let to = self.vertices[edge.vertices[1]].name.clone();
             dot.push_str(&format!(
                 "\"{}\" -> \"{}\" [label=\"name: {} particle:{}  Q({}) {} \"];\n",
-                from,
-                to,
-                edge.name,
-                edge.particle.name,
-                i,
-                edge.edge_type.to_string()
+                from, to, edge.name, edge.particle.name, i, edge.edge_type
             ));
         }
         dot.push_str("}\n");
@@ -1976,8 +1967,8 @@ impl Graph<Evaluators> {
     ) -> Vec<F<T>> {
         let lmb = lmb_specification.basis(self);
         let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
-            &sample.loop_moms(),
-            &sample.external_moms(),
+            sample.loop_moms(),
+            sample.external_moms(),
             lmb,
         );
 

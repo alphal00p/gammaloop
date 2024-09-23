@@ -1,7 +1,6 @@
 use std::{
     borrow::Borrow,
     fmt::{Display, LowerExp},
-    marker::PhantomData,
     ops::{Add, AddAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
@@ -11,7 +10,6 @@ use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
-    arithmetic::ScalarMul,
     complex::RealOrComplexTensor,
     contraction::{Contract, RefZero},
     data::{DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor},
@@ -22,13 +20,13 @@ use spenso::{
         IndexLess, Lorentz, NamedStructure, NoArgs, PhysReps, RepName, Shadowable, Slot,
         TensorStructure, ToSymbolic, VecStructure,
     },
-    upgrading_arithmetic::{FallibleAdd, FallibleMul},
+    upgrading_arithmetic::FallibleAdd,
 };
 use symbolica::{
-    atom::{Atom, Fun, Symbol},
+    atom::{Atom, Symbol},
     coefficient::Coefficient,
     domains::{
-        float::{ConstructibleFloat, NumericalFloatLike, Real, RealNumberLike, SingleFloat},
+        float::{NumericalFloatLike, Real, RealNumberLike, SingleFloat},
         integer::IntegerRing,
         rational::{Rational, RationalField},
     },
@@ -1337,13 +1335,6 @@ where
     }
 }
 
-impl<T> MulAssign<SignOrZero> for Polarization<T>
-where
-    T: Neg<Output = T>,
-{
-    fn mul_assign(&mut self, rhs: SignOrZero) {}
-}
-
 impl<T> Polarization<T> {
     pub fn cast<U>(&self) -> Polarization<U>
     where
@@ -2527,7 +2518,7 @@ impl Rotation {
     }
     pub fn setting(&self) -> RotationSetting {
         match self.method {
-            RotationMethod::EulerAngles(alpha, beta, gamma) => panic!("Euler angles not supported"),
+            RotationMethod::EulerAngles(_, _, _) => panic!("Euler angles not supported"),
             RotationMethod::Pi2X => RotationSetting::Pi2X,
             RotationMethod::Pi2Y => RotationSetting::Pi2Y,
             RotationMethod::Pi2Z => RotationSetting::Pi2Z,
@@ -2609,49 +2600,34 @@ impl RotationMethod {
         let zero = 0.;
         match self {
             RotationMethod::Identity => {
-                let mut omega = SparseTensor::empty(structure);
+                let omega = SparseTensor::empty(structure);
                 omega.into()
             }
             RotationMethod::Pi2X => {
                 let mut omega = SparseTensor::empty(structure);
-                omega.set(&[2, 3], -zero.PIHALF());
-                omega.set(&[3, 2], zero.PIHALF());
+                omega.set(&[2, 3], -zero.PIHALF()).unwrap();
+                omega.set(&[3, 2], zero.PIHALF()).unwrap();
                 omega.into()
             }
             RotationMethod::Pi2Y => {
                 let mut omega = SparseTensor::empty(structure);
-                omega.set(&[1, 3], zero.PIHALF());
-                omega.set(&[3, 1], -zero.PIHALF());
+                omega.set(&[1, 3], zero.PIHALF()).unwrap();
+                omega.set(&[3, 1], -zero.PIHALF()).unwrap();
                 omega.into()
             }
             RotationMethod::Pi2Z => {
                 let mut omega = SparseTensor::empty(structure);
-                omega.set(&[1, 2], -zero.PIHALF());
-                omega.set(&[2, 1], zero.PIHALF());
+                omega.set(&[1, 2], -zero.PIHALF()).unwrap();
+                omega.set(&[2, 1], zero.PIHALF()).unwrap();
                 omega.into()
             }
             RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_data(
                 vec![
                     // row 0
-                    zero.clone(),
-                    zero.clone(),
-                    zero.clone(),
-                    zero.clone(),
-                    // row 1
-                    zero.clone(),
-                    zero.clone(),
-                    -gamma.clone(),
-                    beta.clone(),
-                    // row 2
-                    zero.clone(),
-                    gamma.clone(),
-                    zero.clone(),
-                    -alpha.clone(),
-                    // row 3
-                    zero.clone(),
-                    -beta.clone(),
-                    alpha.clone(),
-                    zero.clone(),
+                    zero, zero, zero, zero, // row 1
+                    zero, zero, -gamma, *beta, // row 2
+                    zero, *gamma, zero, -alpha, // row 3
+                    zero, -beta, *alpha, zero,
                 ],
                 structure,
             )
@@ -2666,7 +2642,6 @@ impl RotationMethod {
         j: Slot<Lorentz>,
     ) -> DataTensor<f64, VecStructure> {
         let structure = VecStructure::from_iter([i.cast::<PhysReps>(), j.cast()]);
-        let zero = 0.; //F::new_zero();
 
         match self {
             RotationMethod::Identity => {
@@ -2790,55 +2765,55 @@ impl RotationMethod {
         match self {
             RotationMethod::Identity => {
                 let mut rot = SparseTensor::empty(structure);
-                rot.set(&[0, 0], zeroc.one());
-                rot.set(&[1, 1], zeroc.one());
-                rot.set(&[2, 2], zeroc.one());
-                rot.set(&[3, 3], zeroc.one());
+                rot.set(&[0, 0], zeroc.one()).unwrap();
+                rot.set(&[1, 1], zeroc.one()).unwrap();
+                rot.set(&[2, 2], zeroc.one()).unwrap();
+                rot.set(&[3, 3], zeroc.one()).unwrap();
                 rot.into()
             }
             RotationMethod::Pi2X => {
                 let mut rot = SparseTensor::empty(structure);
                 let sqrt2_half = zero.SQRT_2_HALF();
-                let sqrt2_halfim = Complex::new_im(sqrt2_half.clone());
+                let sqrt2_halfim = Complex::new_im(sqrt2_half);
                 let sqrt2_halfre = Complex::new_re(sqrt2_half);
 
-                rot.set(&[0, 0], sqrt2_halfim.clone());
-                rot.set(&[0, 1], sqrt2_halfim.clone());
-                rot.set(&[1, 0], sqrt2_halfim.clone());
-                rot.set(&[1, 1], sqrt2_halfre.clone());
-                rot.set(&[2, 2], sqrt2_halfim.clone());
-                rot.set(&[2, 3], sqrt2_halfim.clone());
-                rot.set(&[3, 2], sqrt2_halfim.clone());
-                rot.set(&[3, 3], sqrt2_halfre.clone());
+                rot.set(&[0, 0], sqrt2_halfim).unwrap();
+                rot.set(&[0, 1], sqrt2_halfim).unwrap();
+                rot.set(&[1, 0], sqrt2_halfim).unwrap();
+                rot.set(&[1, 1], sqrt2_halfre).unwrap();
+                rot.set(&[2, 2], sqrt2_halfim).unwrap();
+                rot.set(&[2, 3], sqrt2_halfim).unwrap();
+                rot.set(&[3, 2], sqrt2_halfim).unwrap();
+                rot.set(&[3, 3], sqrt2_halfre).unwrap();
                 rot.into()
             }
             RotationMethod::Pi2Y => {
                 let mut rot = SparseTensor::empty(structure);
                 let sqrt2_half = zero.SQRT_2_HALF();
-                let sqrt2_halfim = Complex::new_im(sqrt2_half.clone());
+                let sqrt2_halfim = Complex::new_im(sqrt2_half);
                 let sqrt2_halfre = Complex::new_re(sqrt2_half);
-                let nsqrt2_half = -sqrt2_halfre.clone();
+                let nsqrt2_half = -sqrt2_halfre;
 
-                rot.set(&[0, 0], sqrt2_halfim.clone());
-                rot.set(&[0, 1], nsqrt2_half.clone());
-                rot.set(&[1, 0], nsqrt2_half.clone());
-                rot.set(&[1, 1], sqrt2_halfre.clone());
-                rot.set(&[2, 2], sqrt2_halfim.clone());
-                rot.set(&[2, 3], nsqrt2_half.clone());
-                rot.set(&[3, 2], nsqrt2_half.clone());
-                rot.set(&[3, 3], sqrt2_halfre.clone());
+                rot.set(&[0, 0], sqrt2_halfim).unwrap();
+                rot.set(&[0, 1], nsqrt2_half).unwrap();
+                rot.set(&[1, 0], nsqrt2_half).unwrap();
+                rot.set(&[1, 1], sqrt2_halfre).unwrap();
+                rot.set(&[2, 2], sqrt2_halfim).unwrap();
+                rot.set(&[2, 3], nsqrt2_half).unwrap();
+                rot.set(&[3, 2], nsqrt2_half).unwrap();
+                rot.set(&[3, 3], sqrt2_halfre).unwrap();
                 rot.into()
             }
             RotationMethod::Pi2Z => {
                 let mut rot = SparseTensor::empty(structure);
                 let sqrt2_half = zero.SQRT_2_HALF();
-                let sqrt2_halfc = Complex::new(sqrt2_half.clone(), sqrt2_half);
+                let sqrt2_halfc = Complex::new(sqrt2_half, sqrt2_half);
                 let sqrt2_halfcc = sqrt2_halfc.conj();
 
-                rot.set(&[0, 0], sqrt2_halfc.clone());
-                rot.set(&[1, 1], sqrt2_halfcc.clone());
-                rot.set(&[2, 2], sqrt2_halfc.clone());
-                rot.set(&[3, 3], sqrt2_halfcc.clone());
+                rot.set(&[0, 0], sqrt2_halfc).unwrap();
+                rot.set(&[1, 1], sqrt2_halfcc).unwrap();
+                rot.set(&[2, 2], sqrt2_halfc).unwrap();
+                rot.set(&[3, 3], sqrt2_halfcc).unwrap();
                 rot.into()
             }
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
@@ -2948,17 +2923,16 @@ impl<T: FloatLike> Rotatable for Polarization<Complex<F<T>>> {
 
 #[cfg(test)]
 mod tests {
-    use std::f64::consts::PI;
 
     use eyre::Context;
     use spenso::{
+        arithmetic::ScalarMul,
         contraction::Contract,
         iterators::IteratableTensor,
         structure::{DualSlotTo, TensorStructure},
         ufo,
         upgrading_arithmetic::{FallibleAdd, FallibleSub},
     };
-    use statrs::function::gamma::gamma;
 
     use crate::utils::F;
 

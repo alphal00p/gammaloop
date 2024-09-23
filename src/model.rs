@@ -25,12 +25,12 @@ use symbolica::evaluate::FunctionMap;
 
 use eyre::Result;
 use std::ops::Index;
-use std::path::{Display, Path};
+use std::path::Path;
 use symbolica::id::{Pattern, PatternOrMap};
 // use std::str::pattern::Pattern;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
-use symbolica::atom::{Atom, AtomView, Fun, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomView, FunctionBuilder, Symbol};
 
 use spenso::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
@@ -438,9 +438,9 @@ impl PartialEq for Particle {
                     self.y_charge, other.y_charge
                 );
             }
-            return true;
+            true
         } else {
-            return false;
+            false
         }
     }
 }
@@ -1289,7 +1289,9 @@ impl Model {
         for c in &self.couplings {
             let key = State::get_symbol(&c.name);
             expr.push(c.expression.as_view());
-            fn_map.add_function(key, c.name.clone().into(), vec![], c.expression.as_view());
+            fn_map
+                .add_function(key, c.name.clone().into(), vec![], c.expression.as_view())
+                .unwrap();
             new_values_len += 1;
         }
 
@@ -1311,12 +1313,14 @@ impl Model {
                     new_values_len += 1;
                     let key = State::get_symbol(&p.name);
                     expr.push(p.expression.as_ref().unwrap().as_view());
-                    fn_map.add_function(
-                        key,
-                        p.name.clone().into(),
-                        vec![],
-                        p.expression.as_ref().unwrap().as_view(),
-                    );
+                    fn_map
+                        .add_function(
+                            key,
+                            p.name.clone().into(),
+                            vec![],
+                            p.expression.as_ref().unwrap().as_view(),
+                        )
+                        .unwrap();
                 }
             }
         }

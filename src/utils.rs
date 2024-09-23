@@ -1037,6 +1037,7 @@ impl<T: FloatLike> F<T> {
             pub fn SQRT_2(&self) -> Self;
             #[allow(non_snake_case)]
             pub fn SQRT_2_HALF(&self) -> Self;
+            #[allow(non_snake_case)]
             pub fn FRAC_1_PI(&self) -> Self;
             pub fn into_f64(&self) -> f64;
             pub fn square(&self) -> Self;
@@ -2011,7 +2012,7 @@ pub trait ApproxEq<U:LowerExp,T:LowerExp>:LowerExp{
     }
 
     fn approx_eq_iterator<'a,I,J>(lhs: I, rhs: J, tolerance: &'a T)->bool where Self: Sized+'a ,U:'a , I: IntoIterator<Item = &'a Self>, J: IntoIterator<Item = &'a U>{
-        lhs.into_iter().zip_eq(rhs.into_iter()).all(|(l,r)| l.approx_eq(r,tolerance))
+        lhs.into_iter().zip_eq(rhs).all(|(l,r)| l.approx_eq(r,tolerance))
     }
 
     fn assert_approx_eq(&self, other: &U, tolerance: &T){
