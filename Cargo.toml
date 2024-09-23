@@ -43,7 +43,6 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [dependencies]
 # These will be patched
 symbolica = { version = "0.10.0" }
-symbolica = { version = "0.10.0" }
 spenso = { version = "0.2.0", features = ["shadowing"] }
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
