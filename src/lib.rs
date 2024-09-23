@@ -10,6 +10,7 @@ pub mod api;
 pub mod cff;
 pub mod cli_functions;
 pub mod cross_section;
+pub mod debug_info;
 pub mod evaluation_result;
 pub mod gammaloop_integrand;
 pub mod graph;
@@ -53,6 +54,7 @@ use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 use rayon::vec;
 use spenso::complex::Complex;
+use std::fmt::Display;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -372,7 +374,7 @@ impl StabilityLevelSetting {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Hash, Eq, PartialEq)]
 pub enum RotationSetting {
     #[serde(rename = "x")]
     #[default]
@@ -404,15 +406,67 @@ impl RotationSetting {
             RotationSetting::None => |vector: &ThreeMomentum<F<T>>| vector.clone(),
         }
     }
+
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Pi2X => "x",
+            Self::Pi2Y => "y",
+            Self::Pi2Z => "z",
+            Self::None => "none",
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Pi2X => "x",
+            Self::Pi2Y => "y",
+            Self::Pi2Z => "z",
+            Self::None => "none",
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Hash, Eq)]
 pub enum Precision {
     Single, // this might be useful for eventual deployment on gpu
     #[default]
     Double,
     Quad,
     Arb(usize),
+}
+
+impl Precision {
+    fn as_string(self) -> String {
+        match self {
+            Self::Single => "f32".to_owned(),
+            Self::Double => "f64".to_owned(),
+            Self::Quad => "f128".to_owned(),
+            Self::Arb(prec) => format!("arb_prec_{}", prec),
+        }
+    }
+}
+
+impl Display for Precision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_string())
+    }
+}
+
+impl Precision {
+    fn as_string(self) -> String {
+        match self {
+            Self::Single => "f32".to_owned(),
+            Self::Double => "f64".to_owned(),
+            Self::Quad => "f128".to_owned(),
+            Self::Arb(prec) => format!("arb_prec_{}", prec),
+        }
+    }
+}
+
+impl Display for Precision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_string())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -755,7 +809,7 @@ impl GammaloopTropicalSamplingSettings {
         momtrop::TropicalSamplingSettings {
             upcast_on_failure: self.upcast_on_failure,
             matrix_stability_test: self.matrix_stability_test,
-            print_debug_info: debug > 3,
+            print_debug_info: debug > 0,
         }
     }
 }

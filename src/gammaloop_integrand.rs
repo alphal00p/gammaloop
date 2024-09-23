@@ -7,8 +7,9 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, IsPolarizable, SuperGraph};
+use crate::debug_info::{EvalState, DEBUG_LOGGER};
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
-use crate::graph::{BareGraph, EdgeType, Graph, LoopMomentumBasisSpecification};
+use crate::graph::{BareGraph, EdgeType, Graph, LoopMomentumBasisSpecification, SerializableGraph};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::{
@@ -22,14 +23,15 @@ use crate::utils::{
     PrecisionUpgradable, F,
 };
 use crate::{
-    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, Polarizations, SamplingSettings,
-    Settings,
+    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, Polarizations, RotationMethod,
+    SamplingSettings, Settings,
 };
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
 use log::debug;
 use momtrop::vector::Vector;
+use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use spenso::contraction::IsZero;
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -50,7 +52,7 @@ trait GraphIntegrand {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>>;
 
@@ -75,7 +77,7 @@ trait GraphIntegrand {
     fn evaluate_tropical<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>>;
 }
@@ -102,6 +104,11 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         alpha: f64,
         settings: &Settings,
     ) -> Complex<F<T>> {
+        if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("channel_id", &channel_id);
+            DEBUG_LOGGER.write("graph", &SerializableGraph::from_graph(self.get_graph()));
+        }
+
         let one = sample.one();
         let zero = sample.zero();
         // reference to the list of all lmbs
@@ -184,7 +191,19 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         } else {
             Complex::new(one, zero)
         };
-        prefactor * (multichanneling_numerator * rep3d / denominator)
+
+        let multichanneling_prefactor = &multichanneling_numerator / &denominator;
+
+        if settings.general.debug > 0 {
+            let multichanneling_prefactor_str =
+                serde_json::to_string(&multichanneling_prefactor).unwrap();
+            let rep3d_str = serde_json::to_string(&rep3d).unwrap();
+
+            DEBUG_LOGGER.write("multichanneling_prefactor", &multichanneling_prefactor);
+            DEBUG_LOGGER.write("rep3d", &rep3d);
+        }
+
+        multichanneling_prefactor * rep3d * prefactor
     }
 
     #[inline]
@@ -223,7 +242,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
         let zero_builder = &sample.zero();
@@ -262,9 +281,12 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             Complex::new(zero_builder.one(), zero_builder.zero())
         };
 
-        // println!("rep3d: {}", rep3d);
-        // println!("energy_product: {}", energy_product);
-        // println!("counter_term_eval: {}", counter_term_eval);
+        if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("graph", &SerializableGraph::from_graph(self.get_graph()));
+            DEBUG_LOGGER.write("rep3d", &rep3d);
+            DEBUG_LOGGER.write("ose_product", &energy_product);
+            DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
+        }
 
         prefactor * (rep3d / energy_product - counter_term_eval)
     }
@@ -273,7 +295,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
     fn evaluate_tropical<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> where {
         let one = sample.one();
@@ -304,7 +326,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let energy_product = virtual_loop_energies
             .zip(weight_iterator)
             .map(|(energy, weight)| energy.powf(&F::<T>::from_f64(2. * weight - 1.)))
-            .fold(one.clone(), |acc, x| acc * x); // should we put Product and Sum in FloatLike?
+            .fold(one.clone(), |acc, x| acc * x);
 
         let tree_like_energies = self
             .get_graph()
@@ -323,7 +345,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             .static_counterterm
         {
             Some(counterterm) => {
-                counterterm.evaluate(sample, self.get_graph(), rotate_overlap_centers, settings)
+                counterterm.evaluate(sample, self.get_graph(), rotation_for_overlap, settings)
                     * self
                         .graph
                         .bare_graph
@@ -332,7 +354,16 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             None => Complex::new(one.zero(), one.zero()),
         };
 
-        (rep3d - counterterm) * energy_product / tree_product
+        let final_energy_product = &energy_product / &tree_product;
+
+        if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("rep3d", &rep3d);
+            DEBUG_LOGGER.write("ose_product", &energy_product);
+            DEBUG_LOGGER.write("counter_terms", &counterterm);
+            DEBUG_LOGGER.write("graph", &SerializableGraph::from_graph(self.get_graph()));
+        }
+
+        (rep3d - counterterm) * final_energy_product
     }
 }
 
@@ -377,7 +408,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotate_overlap_centers: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
         // sum over channels
@@ -389,7 +420,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate_tropical<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
-        rotate_overlap_centers: Option<usize>,
+        rotate_overlap_centers: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
         // sum over channels
@@ -424,14 +455,18 @@ fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
 fn evaluate<I: GraphIntegrand, T: FloatLike>(
     graph_integrands: &mut [I],
     sample: &GammaLoopSample<T>,
-    rotate_overlap_centers: Option<usize>,
+    rotation_for_overlap: RotationMethod,
     settings: &Settings,
 ) -> Complex<F<T>> {
+    if settings.general.debug > 0 {
+        DEBUG_LOGGER.write("momenta_sample", sample.get_default_sample());
+    }
+
     let zero = sample.zero();
     match sample {
         GammaLoopSample::Default(sample) => graph_integrands
             .iter_mut()
-            .map(|g| g.evaluate(sample, rotate_overlap_centers, settings))
+            .map(|g| g.evaluate(sample, rotation_for_overlap, settings))
             .reduce(|acc, e| acc + &e)
             .unwrap_or(zero.clone().into()),
         GammaLoopSample::MultiChanneling { alpha, sample } => graph_integrands
@@ -443,13 +478,13 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
             let graph = &mut graph_integrands[*graph_id];
             match sample {
                 DiscreteGraphSample::Default(sample) => {
-                    graph.evaluate(sample, rotate_overlap_centers, settings)
+                    graph.evaluate(sample, rotation_for_overlap, settings)
                 }
                 DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                     graph.evaluate_channel_sum(sample, *alpha, settings)
                 }
                 DiscreteGraphSample::Tropical(sample) => {
-                    graph.evaluate_tropical(sample, rotate_overlap_centers, settings)
+                    graph.evaluate_tropical(sample, rotation_for_overlap, settings)
                 }
                 DiscreteGraphSample::DiscreteMultiChanneling {
                     alpha,
@@ -583,6 +618,11 @@ impl HasIntegrand for GammaLoopIntegrand {
         use_f128: bool,
         max_eval: F<f64>,
     ) -> EvaluationResult {
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write("new_evaluation", &());
+            DEBUG_LOGGER.write("havana_sample", sample);
+        }
+
         let start_evaluate_sample = Instant::now();
 
         // setup the evaluation of the integrand in the different stability levels
@@ -613,6 +653,10 @@ impl HasIntegrand for GammaLoopIntegrand {
             }
         };
 
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write("jacobian", &sample_point.get_default_sample().jacobian);
+        }
+
         let parameterization_time = before_parameterization.elapsed();
 
         // rotate the momenta for the stability tests.
@@ -624,16 +668,20 @@ impl HasIntegrand for GammaLoopIntegrand {
             .zip(self.global_data.rotated_externals.iter().cloned())
             .zip(self.global_data.rotated_polarizations.iter().cloned())
             .map(|(((func_index, r), e), p)| {
-                (sample_point.get_rotated_sample(r, e, p), Some(func_index))
+                (sample_point.get_rotated_sample(r, e, p), *func_index)
             });
 
-        let samples = [(sample_point.clone(), None)]
+        let samples = [(sample_point.clone(), RotationMethod::None)]
             .into_iter()
             .chain(rotated_sample_points)
             .collect_vec();
 
         // 1 / (2 pi )^L
         let prefactor = F(self.compute_2pi_factor().inv());
+
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write("pi_prefactor", &prefactor.0);
+        };
 
         // iterate over the stability levels, break if the point is stable
         for stability_level in &stability_iterator {
@@ -668,53 +716,16 @@ impl HasIntegrand for GammaLoopIntegrand {
             }
         }
 
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.set_state(EvalState::General);
+        }
+
         let (res, stable, precision, duration) = results_of_stability_levels.last().unwrap_or_else(
             || panic!("No evaluation was done, perhaps the final stability level has a non-negative escalation threshold?")
         );
 
-        if self.global_data.settings.general.debug > 0 {
-            println!("{}", "
-            |  DEBUG -------------------------------------------------------------------------------------  |".green());
-            println!();
-
-            println!("{}", "sample from havana: ".blue());
-            println!("\tsampled x: {:?}", sample);
-            println!();
-
-            println!("{}", "parametrisation result".blue());
-
-            for (sample, rotation) in samples.iter() {
-                let rotation_string = match rotation {
-                    None => String::from("None"),
-                    Some(index) => format!(
-                        "{:?}",
-                        self.global_data.settings.stability.rotation_axis[*index]
-                    ),
-                };
-
-                println!("\trotation: {}", rotation_string);
-                println!("{}", "\tloop momenta: ".yellow());
-
-                let loop_moms = &sample.get_default_sample().loop_moms();
-                for (index, loop_mom) in loop_moms.iter().enumerate() {
-                    println!("\t\tloop momentum {}: {:?}", index, loop_mom);
-                }
-
-                println!("{}", "\texternal momenta: ".yellow());
-
-                let external_moms = &sample.get_default_sample().external_moms();
-                for (index, external_mom) in external_moms.iter().enumerate() {
-                    println!("\t\texternal momentum {}: {:?}", index, external_mom);
-                }
-            }
-
-            let jacobian = sample_point.get_default_sample().jacobian();
-            println!("\t{}: {:+e}", "jacobian".yellow(), jacobian);
-            println!("\t{}: {:+e}", "2pi prefactor".yellow(), prefactor);
-            println!();
-
-            println!("{}", "evaluation result: ".blue());
-            println!("{}: {:+e}", "\tresult: ".yellow(), res);
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write("final_result", res);
         }
 
         let mut integrand_result = *res;
@@ -768,7 +779,7 @@ impl GammaLoopIntegrand {
     /// This function performs the evaluation twice, once for the original sample and once for the rotated sample.
     fn evaluate_at_prec(
         &mut self,
-        samples: &[(GammaLoopSample<f64>, Option<usize>)],
+        samples: &[(GammaLoopSample<f64>, RotationMethod)],
         precision: Precision,
     ) -> (Vec<Complex<F<f64>>>, Duration) {
         // measure timing if we are below the max number if we are below the max number
@@ -782,6 +793,13 @@ impl GammaLoopIntegrand {
                 GraphIntegrands::Amplitude(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
+                        if self.settings.general.debug > 0 {
+                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                *rotate_overlap_centers,
+                                precision,
+                            )));
+                        }
+
                         evaluate(
                             graph_integrands,
                             sample,
@@ -793,6 +811,12 @@ impl GammaLoopIntegrand {
                 GraphIntegrands::CrossSection(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
+                        if self.settings.general.debug > 0 {
+                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                *rotate_overlap_centers,
+                                precision,
+                            )));
+                        }
                         evaluate(
                             graph_integrands,
                             sample,
@@ -806,6 +830,13 @@ impl GammaLoopIntegrand {
                 GraphIntegrands::Amplitude(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
+                        if self.settings.general.debug > 0 {
+                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                *rotate_overlap_centers,
+                                precision,
+                            )));
+                        }
+
                         evaluate(
                             graph_integrands,
                             &sample.higher_precision(),
@@ -818,6 +849,13 @@ impl GammaLoopIntegrand {
                 GraphIntegrands::CrossSection(graph_integrands) => samples
                     .iter()
                     .map(|(sample, rotate_overlap_centers)| {
+                        if self.settings.general.debug > 0 {
+                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                *rotate_overlap_centers,
+                                precision,
+                            )));
+                        }
+
                         evaluate(
                             graph_integrands,
                             &sample.higher_precision(),
@@ -944,6 +982,7 @@ impl GammaLoopIntegrand {
                             &tropical_sampling_settings.into_tropical_sampling_settings(
                                 self.global_data.settings.general.debug,
                             ),
+                            &DEBUG_LOGGER,
                         );
 
                         let sampling_result = match sampling_result_result {
@@ -1255,8 +1294,8 @@ impl GammaLoopIntegrand {
 }
 
 /// Sample whose structure depends on the sampling settings, and enforces these settings.
-#[derive(Debug, Clone)]
-enum GammaLoopSample<T: FloatLike> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GammaLoopSample<T: FloatLike> {
     Default(DefaultSample<T>),
     MultiChanneling {
         alpha: f64,
@@ -1404,7 +1443,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
 
 /// Sample which contains loop momenta, external momenta and the jacobian of the parameterization.
 /// External momenta are part of the sample in order to facilitate the use of non-constant externals.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DefaultSample<T: FloatLike> {
     pub sample: BareSample<T>,
     pub rotated_sample: Option<BareSample<T>>,
@@ -1736,8 +1775,8 @@ impl<T: FloatLike> DefaultSample<T> {
 }
 
 /// This sample is used when importance sampling over graphs is used.
-#[derive(Debug, Clone)]
-enum DiscreteGraphSample<T: FloatLike> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DiscreteGraphSample<T: FloatLike> {
     Default(DefaultSample<T>),
     MultiChanneling {
         alpha: f64,

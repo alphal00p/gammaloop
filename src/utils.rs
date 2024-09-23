@@ -3043,3 +3043,7 @@ pub fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
 
     result
 }
+
+pub fn into_complex_ff64<T: FloatLike>(c: &Complex<F<T>>) -> Complex<F<f64>> {
+    Complex::new(c.re.into_ff64(), c.im.into_ff64())
+}

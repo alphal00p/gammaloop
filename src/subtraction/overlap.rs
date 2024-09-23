@@ -1,3 +1,12 @@
+use crate::cff::esurface::EsurfaceCollection;
+use crate::cff::esurface::ExistingEsurfaceId;
+use crate::cff::esurface::ExistingEsurfaces;
+use crate::debug_info::DEBUG_LOGGER;
+use crate::graph::LoopMomentumBasis;
+use crate::momentum::FourMomentum;
+use crate::momentum::ThreeMomentum;
+use crate::utils::compute_shift_part;
+use crate::utils::F;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -7,6 +16,8 @@ use core::panic;
 use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::Serialize;
+use serde_with::serde_as;
 use spenso::complex::Complex;
 
 use crate::cff::esurface::EsurfaceCollection;
@@ -25,7 +36,7 @@ pub struct OverlapGroup {
     pub center: Vec<ThreeMomentum<F<f64>>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Serialize)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
 }
@@ -207,10 +218,8 @@ fn construct_solver(
     }
 
     if verbose {
-        println!("problem");
-        for (row_a, row_b) in a_matrix.iter().zip(b_vector.iter()) {
-            println!("{:?} - {:?}", row_a, row_b);
-        }
+        DEBUG_LOGGER.write("overlap_a_matrix", &a_matrix);
+        DEBUG_LOGGER.write("overlap_b_vector", &b_vector);
     }
 
     let a_matrix_sparse = CscMatrix::from(&a_matrix);
@@ -286,6 +295,8 @@ pub fn find_center(
     }
 }
 
+/// TODO: When this function will be called at runtime, panics should be removed and this function should return result.
+/// When the overlap finding fails, treat the point as unstable
 pub fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
     existing_esurfaces: &ExistingEsurfaces,
@@ -325,7 +336,6 @@ pub fn find_maximal_overlap(
     }
 
     // if the center is not valid, create a table of all pairs
-    let pair_benchmark_start = std::time::Instant::now();
     let esurface_pairs = EsurfacePairs::new(
         lmb,
         existing_esurfaces,
@@ -333,14 +343,9 @@ pub fn find_maximal_overlap(
         edge_masses,
         external_momenta,
     );
-    let pair_benchmark = pair_benchmark_start.elapsed();
 
     if debug > 3 {
-        println!(
-            "Time to generate {} pairs: {}",
-            esurface_pairs.data.len(),
-            pair_benchmark.as_millis(),
-        );
+        DEBUG_LOGGER.write("overlap_pairs", &esurface_pairs);
     }
 
     let mut num_disconnected_surfaces = 0;
@@ -389,7 +394,7 @@ pub fn find_maximal_overlap(
     }
 
     if debug > 3 {
-        println!("num disconnected surfaces: {}", num_disconnected_surfaces);
+        DEBUG_LOGGER.write("num_disconnected_surfaces", &num_disconnected_surfaces);
     }
 
     if num_disconnected_surfaces == existing_esurfaces.len() {
@@ -404,16 +409,8 @@ pub fn find_maximal_overlap(
         };
 
     while subset_size > 1 {
-        if debug > 3 {
-            println!("current subset_size: {}", subset_size);
-        }
-
         let possible_subsets =
             esurface_pairs.construct_possible_subsets_of_len(existing_esurfaces, subset_size, &res);
-
-        if debug > 3 {
-            println!("possible subsets at this size: {}", possible_subsets.len());
-        }
 
         for subset in possible_subsets.iter() {
             let option_center = find_center(
@@ -434,11 +431,14 @@ pub fn find_maximal_overlap(
             }
         }
 
-        subset_size -= 1;
-
         if debug > 3 {
-            println!("current result: {:?}", res);
+            DEBUG_LOGGER.write(
+                "subset_size_and_num_possible_subsets_and_res",
+                &(subset_size, possible_subsets.len(), &res),
+            );
         }
+
+        subset_size -= 1;
     }
 
     res
@@ -452,8 +452,10 @@ fn is_subset_of_result(subset: &[ExistingEsurfaceId], result: &OverlapStructure)
     })
 }
 
-#[derive(Debug)]
+#[serde_as]
+#[derive(Debug, Serialize)]
 struct EsurfacePairs {
+    #[serde_as(as = "Vec<(_,_)>")]
     data: HashMap<(ExistingEsurfaceId, ExistingEsurfaceId), Vec<ThreeMomentum<F<f64>>>>,
     has_pair_with: Vec<Vec<ExistingEsurfaceId>>,
 }

@@ -1,4 +1,5 @@
 use crate::{
+    debug_info::DEBUG_LOGGER,
     utils::{FloatLike, VarFloat, F},
     ExportSettings, Settings,
 };
@@ -13,10 +14,7 @@ use spenso::parametric::SerializableCompiledEvaluator;
 use std::{cell::RefCell, fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
-    domains::{
-        float::{NumericalFloatLike, RealNumberLike},
-        rational::Rational,
-    },
+    domains::{float::NumericalFloatLike, rational::Rational},
     evaluate::{EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap},
 };
 use typed_index_collections::TiVec;
@@ -92,6 +90,11 @@ impl CFFExpression {
         energy_cache: &[F<T>],
         settings: &Settings,
     ) -> Vec<F<T>> {
+        if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("esurface_equation", &self.esurfaces);
+            DEBUG_LOGGER.write("onshell_energies", &energy_cache);
+        }
+
         T::get_evaluator(self)(energy_cache, settings)
     }
 
@@ -101,54 +104,33 @@ impl CFFExpression {
         energy_cache: &[F<T>],
         settings: &Settings,
     ) -> Vec<F<T>> {
-        if settings.general.debug > 3 {
-            println!("evaluating cff orientations in eager mode");
-        }
-
         let esurface_cache = self.compute_esurface_cache(energy_cache);
         let hsurface_cache = self.compute_hsurface_cache(energy_cache);
 
-        if settings.general.debug > 3 {
-            let cloned_esurfaces = esurface_cache.clone();
-            let sorted = cloned_esurfaces
-                .into_iter_enumerated()
-                .map(|(id, f)| (id, f.to_f64()))
-                .sorted_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap());
-
-            for (esurface_id, value) in sorted {
-                println!("esuface_{:?} = {}", Into::<usize>::into(esurface_id), value);
-                if settings.general.debug > 5 && value.abs() < 0.1 * settings.kinematics.e_cm.0 {
-                    println!("tiny esurface: {:#?}", self.esurfaces[esurface_id]);
-
-                    for energy_id in self.esurfaces[esurface_id].energies.iter() {
-                        println!("E_{}: {}", energy_id, energy_cache[*energy_id]);
-                    }
-                }
-            }
+        if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("esurface_values", &esurface_cache);
         }
 
         let mut term_cache = self.build_term_cache();
 
-        self.iter_term_ids()
+        let res = self
+            .iter_term_ids()
             .map(|t| {
-                let orientation_result = evaluate_tree(
+                evaluate_tree(
                     &self.orientations[t].expression,
                     t,
                     &esurface_cache,
                     &hsurface_cache,
                     &mut term_cache,
-                );
-
-                if settings.general.debug > 12 {
-                    println!(
-                        "result of orientation {:?}, {}",
-                        self.orientations[t].orientation, orientation_result,
-                    )
-                }
-
-                orientation_result
+                )
             })
-            .collect()
+            .collect();
+
+        if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("orientations", &res);
+        }
+
+        res
     }
 
     #[inline]
@@ -157,11 +139,13 @@ impl CFFExpression {
         energy_cache: &[F<f64>],
         settings: &Settings,
     ) -> Vec<F<f64>> {
-        if settings.general.debug > 3 {
-            println!("evaluating cff orientations in compiled mode");
+        let res = self.compiled.evaluate_orientations(energy_cache, settings);
+
+        if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("orientations", &res);
         }
 
-        self.compiled.evaluate_orientations(energy_cache, settings)
+        res
     }
 
     #[inline]
@@ -490,8 +474,6 @@ impl CFFExpression {
             .unzip();
 
         let ref_to_esurface = &self.esurfaces[esurface_id];
-
-        // let (dep_mom, dep_mom_expr) = todo!("construct these objects from somewhere");
 
         generate_cff_limit(
             dag_left,

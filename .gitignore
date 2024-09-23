@@ -214,5 +214,6 @@ src/test_resources/qqddg/
 TMP_COMPILED/
 # My own process outputs
 process_outputs
-
 ignore/
+# the default log file
+log.glog/

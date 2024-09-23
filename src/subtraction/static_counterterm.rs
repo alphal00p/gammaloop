@@ -3,6 +3,7 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use itertools::Itertools;
 use ref_ops::RefNeg;
+use serde::Serialize;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -18,12 +19,13 @@ use crate::{
         },
         expression::CFFLimit,
     },
+    debug_info::DEBUG_LOGGER,
     gammaloop_integrand::DefaultSample,
     graph::{Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
     numerator::NumeratorState,
-    utils::{self, FloatLike, F},
-    Settings,
+    utils::{self, into_complex_ff64, FloatLike, F},
+    RotationMethod, Settings,
 };
 
 use super::overlap::OverlapStructure;
@@ -160,13 +162,9 @@ impl CounterTerm {
         &self,
         sample: &DefaultSample<T>,
         graph: &Graph,
-        rotate_overlap_centers: Option<usize>,
+        rotation_for_overlap: RotationMethod,
         settings: &Settings,
     ) -> Complex<F<T>> {
-        if settings.general.debug > 1 {
-            println!("{}", "Start evaluation of threshold counterterms".green());
-        }
-
         let real_mass_vector = graph
             .bare_graph
             .get_real_mass_vector()
@@ -191,25 +189,21 @@ impl CounterTerm {
             let overlap = &overlap_group.existing_esurfaces;
             let center = &overlap_group.center;
 
-            if settings.general.debug > 1 {
-                println!("evaluating overlap structure: {:?}", overlap);
-                println!(
-                    "contains esurfaces: {:?}",
-                    overlap
-                        .iter()
-                        .map(|id| self.existing_esurfaces[*id])
-                        .collect_vec()
+            if settings.general.debug > 0 {
+                DEBUG_LOGGER.write(
+                    "overlap_structure",
+                    &(
+                        overlap
+                            .iter()
+                            .map(|id| self.existing_esurfaces[*id])
+                            .collect_vec(),
+                        center,
+                    ),
                 );
-                println!("with center: {:?}", center);
             }
 
-            let center_t = if let Some(func_index) = rotate_overlap_centers {
-                if settings.general.debug > 1 {
-                    println!("{}", "Rotating centers for stability check".yellow());
-                }
-
-                let rotation_function =
-                    settings.stability.rotation_axis[func_index].rotation_function();
+            let center_t = {
+                let rotation_function = rotation_for_overlap.rotation_function();
                 let rotated_center = center
                     .iter()
                     .map(rotation_function)
@@ -222,22 +216,11 @@ impl CounterTerm {
                     })
                     .collect_vec();
 
-                if settings.general.debug > 1 {
-                    println!("Rotated centers: {:?}", rotated_center);
+                if settings.general.debug > 0 {
+                    DEBUG_LOGGER.write("center", &rotated_center);
                 }
 
                 rotated_center
-            } else {
-                center
-                    .iter()
-                    .map(|c_vec| {
-                        ThreeMomentum::new(
-                            F::from_ff64(c_vec.px),
-                            F::from_ff64(c_vec.py),
-                            F::from_ff64(c_vec.pz),
-                        )
-                    })
-                    .collect_vec()
             };
 
             let shifted_momenta = sample
@@ -250,20 +233,14 @@ impl CounterTerm {
             let (hemispherical_unit_shifted_momenta, hemispherical_radius) =
                 normalize_momenta(&shifted_momenta);
 
-            if settings.general.debug > 1 {
-                println!("Momenta shifted by center: {:?}", shifted_momenta);
-                println!("Hemispherical radius: {:?}", hemispherical_radius);
+            if settings.general.debug > 0 {
+                DEBUG_LOGGER.write("shifted_momenta", &shifted_momenta);
+                DEBUG_LOGGER.write("hemispherical_radius", &hemispherical_radius);
             }
 
             for existing_esurface_id in overlap.iter() {
                 let esurface_id = &self.existing_esurfaces[*existing_esurface_id];
                 let esurface = &esurfaces[*esurface_id];
-
-                if settings.general.debug > 1 {
-                    println!("subtracting esurface: {:?}", esurface_id);
-                    println!("energies: {:?}", &esurface.energies);
-                    println!("external shift: {:?}", &esurface.external_shift);
-                }
 
                 // solve the radius
                 let radius_guess = esurface.get_radius_guess(
@@ -271,10 +248,6 @@ impl CounterTerm {
                     &sample.external_moms(),
                     lmb,
                 );
-
-                if settings.general.debug > 1 {
-                    println!("Initial condition for newton iterations: ±{}", radius_guess);
-                }
 
                 let function = |r: &_| {
                     esurface.compute_self_and_r_derivative(
@@ -418,7 +391,28 @@ impl CounterTerm {
                     * &jacobian_ratio_minus
                     * &radius_sign_minus;
 
-                res += ct_plus + integrated_ct_plus + ct_minus + integrated_ct_minus;
+                res += &ct_plus + &integrated_ct_plus + &ct_minus + &integrated_ct_minus;
+
+                if settings.general.debug > 0 {
+                    let debug_helper = DebugHelper {
+                        esurface_id: *esurface_id,
+                        initial_radius: radius_guess.into_ff64(),
+                        plus_solution: positive_result.as_f64(),
+                        minus_solution: negative_result.as_f64(),
+                        jacobian_ratio_plus: jacobian_ratio_plus.into_ff64(),
+                        jacobian_ratio_minus: jacobian_ratio_minus.into_ff64(),
+                        uv_damper_plus: uv_damper_plus.into_ff64(),
+                        uv_damper_minus: uv_damper_minus.into_ff64(),
+                        singularity_dampener_plus: singularity_dampener_plus.into_ff64(),
+                        singularity_dampener_minus: singularity_damper_minus.into_ff64(),
+                        ct_plus: into_complex_ff64(&ct_plus),
+                        ct_minus: into_complex_ff64(&ct_minus),
+                        integrated_ct_plus: into_complex_ff64(&integrated_ct_plus),
+                        integrated_ct_minus: into_complex_ff64(&integrated_ct_minus),
+                    };
+
+                    DEBUG_LOGGER.write("esurface_subtraction", &debug_helper);
+                }
             }
         }
 
@@ -536,6 +530,7 @@ fn newton_iteration_and_derivative<T: FloatLike>(
     }
 }
 
+#[derive(Serialize)]
 struct NewtonIterationResult<T: FloatLike> {
     solution: F<T>,
     derivative_at_solution: F<T>,
@@ -566,6 +561,15 @@ impl<T: FloatLike> NewtonIterationResult<T> {
             }
         )
     }
+
+    fn as_f64(&self) -> NewtonIterationResult<f64> {
+        NewtonIterationResult {
+            solution: self.solution.into_ff64(),
+            derivative_at_solution: self.derivative_at_solution.into_ff64(),
+            error_of_function: self.error_of_function.into_ff64(),
+            num_iterations_used: self.num_iterations_used,
+        }
+    }
 }
 
 fn unnormalized_gaussian<T: FloatLike>(radius: &F<T>, radius_star: &F<T>, e_cm: &F<T>) -> F<T> {
@@ -580,4 +584,23 @@ fn singularity_dampener<T: FloatLike>(radius: &F<T>, radius_star: &F<T>) -> F<T>
     let delta_r_sq = &delta_r * &delta_r;
 
     (radius.one() - radius_star_4 / (radius_star_sq - delta_r_sq).pow(2)).exp()
+}
+
+/// Helper struct to group together all debug data related to the subtraction of a single esurface
+#[derive(Serialize)]
+struct DebugHelper {
+    esurface_id: EsurfaceID,
+    initial_radius: F<f64>,
+    plus_solution: NewtonIterationResult<f64>,
+    minus_solution: NewtonIterationResult<f64>,
+    jacobian_ratio_plus: F<f64>,
+    jacobian_ratio_minus: F<f64>,
+    uv_damper_plus: F<f64>,
+    uv_damper_minus: F<f64>,
+    singularity_dampener_plus: F<f64>,
+    singularity_dampener_minus: F<f64>,
+    ct_plus: Complex<F<f64>>,
+    ct_minus: Complex<F<f64>>,
+    integrated_ct_plus: Complex<F<f64>>,
+    integrated_ct_minus: Complex<F<f64>>,
 }

@@ -7,11 +7,28 @@ import pytest
 
 class TestScalarTopologies:
 
-    def test_box(self):
-        assert True
-        # TODO
-        # gl = get_gamma_loop_interpreter()
-        # gl.run(CommandList.from_string("import_model sm"))
+    def test_box(self, scalar_massless_box_export: Path):
+        target_re = 6.57830e-8
+        target_im = 7.43707e-8
+
+        gl = get_gamma_loop_interpreter()
+        command_list = gl_interface.CommandList.from_string(
+            "launch {}".format(scalar_massless_box_export))
+        command_list.add_command(
+            "set externals.momenta [[14.0,-6.6,-40.,0.],[43.,-15.2,-33.,0.],[17.9,50.0,-11.8,0.0],]")
+        command_list.add_command(
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+        command_list.add_command("set continuous_dim_learning_rate 0.0")
+        command_list.add_command("set rotation_axis ['x']")
+        command_list.add_command("set n_start 1_000_000")
+        command_list.add_command("set n_max 1_000_000")
+        command_list.add_command("set dampen_integrable_singularity True")
+        command_list.add_command("integrate massless_box -r")
+        gl.run(command_list)
+
+        check_integration_result(target_re, scalar_massless_box_export)
+        check_integration_result(
+            target_im, scalar_massless_box_export, imag_phase=True)
 
     def test_scalar_triangle(self, massless_scalar_triangle_export: Path):
         target = 0.00009765455799148221

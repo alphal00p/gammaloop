@@ -35,8 +35,10 @@ use spenso::structure::{HasStructure, SerializableSymbol, SmartShadowStructure};
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
-    parametric::{ParamTensor, PatternReplacement},
-    structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
+    parametric::{ParamTensor, PatternReplacement, SerializableAtom},
+    structure::{
+        Lorentz, NamedStructure, PhysReps, RepName, SerializableSymbol, Shadowable, TensorStructure,
+    },
 };
 
 use symbolica::atom::AtomView;
