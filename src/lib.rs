@@ -173,7 +173,7 @@ impl Default for GeneralSettings {
             joint_numerator_eval: true,
             load_compiled_cff: false,
             load_compiled_separate_orientations: false,
-            amplidude_prefactor: None,
+            amplidude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
             force_orientations: None,
         }
     }

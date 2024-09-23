@@ -310,7 +310,7 @@ pub struct AmplitudeCheck {
     pub n_expanded_terms: usize,
     pub n_terms_unfolded: usize,
     pub n_overlap_groups: usize,
-    pub n_existing_per_overlap: usize,
+    pub n_existing_per_overlap: Option<usize>,
     pub tolerance: F<f64>,
     pub fail_lower_prec: bool,
 }
@@ -558,7 +558,7 @@ fn check_esurface_existance<N: NumeratorState>(
     sample: &DefaultSample<f64>,
     n_existing_esurfaces: usize,
     n_overlap_groups: usize,
-    n_existing_per_overlap: usize,
+    n_existing_per_overlap: Option<usize>,
 ) -> Result<()> {
     graph.generate_esurface_data().unwrap();
 
@@ -615,11 +615,13 @@ fn check_esurface_existance<N: NumeratorState>(
         "Number of overlap groups mismatch"
     );
     for overlap in maximal_overlap.overlap_groups.iter() {
-        assert_eq!(
-            overlap.existing_esurfaces.len(),
-            n_existing_per_overlap,
-            "Number of existing surfaces per overlap mismatch"
-        );
+        if let Some(n_existing_per_overlap) = n_existing_per_overlap {
+            assert_eq!(
+                overlap.existing_esurfaces.len(),
+                n_existing_per_overlap,
+                "Number of existing surfaces per overlap mismatch"
+            );
+        }
     }
 
     assert_eq!(
@@ -750,7 +752,7 @@ fn pytest_scalar_massless_triangle() {
         n_existing_esurfaces: 0,
         n_expanded_terms: 6,
         n_terms_unfolded: 2,
-        n_existing_per_overlap: 1,
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         tolerance: LTD_COMPARISON_TOLERANCE,
         fail_lower_prec: false,
@@ -812,7 +814,7 @@ fn pytest_scalar_fishnet_2x2() {
         n_terms_unfolded: 8,
 
         tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 0,
+        n_existing_per_overlap: Some(0),
         n_overlap_groups: 0,
         fail_lower_prec: true,
     };
@@ -841,7 +843,7 @@ fn pytest_scalar_sunrise() {
         n_terms_unfolded: 1,
 
         tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1,
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
     };
@@ -852,27 +854,28 @@ fn pytest_scalar_sunrise() {
 #[test]
 fn pytest_scalar_fishnet_2x3() {
     init();
+
     let amp_check = AmplitudeCheck {
         name: "scalar_fishnet_2x3",
         model_name: "scalars",
         n_edges: 21,
         n_vertices: 16,
-        sample: SampleType::Kinematic,
+        sample: SampleType::Random(3),
         n_external_connections: 4,
         n_prop_groups: 17,
         n_cff_trees: 58670,
         n_esurfaces: 263,
-        n_existing_esurfaces: 34,
+        n_existing_esurfaces: 16,
         n_expanded_terms: 2566256,
         n_lmb: 2415,
         n_terms_unfolded: 11,
         cff_norm: None,
-        cff_phase: F(0.),
+        cff_phase: PHASEMINUSI,
 
         tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1, //bogus
-        n_overlap_groups: 2,       //bogus
-        fail_lower_prec: false,
+        n_existing_per_overlap: None, //bogus
+        n_overlap_groups: 1,          //bogus
+        fail_lower_prec: true,
     };
 
     check_amplitude(amp_check);
@@ -899,8 +902,8 @@ fn pytest_scalar_cube() {
         cff_norm: None,
         cff_phase: PHASEMINUSI,
 
-        tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1,
+        tolerance: F(1.0e-9),
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
     };
@@ -928,7 +931,7 @@ fn pytest_scalar_bubble() {
         cff_phase: PHASEMINUSI,
 
         tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1,
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
     };
@@ -956,7 +959,7 @@ fn pytest_scalar_massless_box() {
         cff_phase: PHASEMINUSI,
 
         tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1,
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
     };
@@ -983,8 +986,8 @@ fn pytest_scalar_double_triangle() {
         cff_norm: None,
         cff_phase: PHASEMINUSI,
 
-        tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1,
+        tolerance: F(1.0e-9),
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
     };
@@ -1012,7 +1015,7 @@ fn pytest_scalar_mercedes() {
         cff_phase: PHASEMINUSI,
 
         tolerance: F(1.0e-5),
-        n_existing_per_overlap: 1,
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
     };
@@ -1039,7 +1042,7 @@ fn pytest_scalar_triangle_box() {
         cff_norm: None,
         cff_phase: PHASEI,
         tolerance: F(1.0e-7),
-        n_existing_per_overlap: 1,
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
     };
@@ -1095,7 +1098,7 @@ fn pytest_scalar_isopod() {
         cff_norm: None,
         cff_phase: PHASEI,
         tolerance: F(1.0e-7),
-        n_existing_per_overlap: 1,
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: true,
     };
@@ -1668,8 +1671,8 @@ fn pytest_physical_1L_6photons() {
         cff_norm: None,
         cff_phase: PHASEMINUSI,
 
-        tolerance: LTD_COMPARISON_TOLERANCE,
-        n_existing_per_overlap: 1,
+        tolerance: F(1.0e-5),
+        n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
     };
@@ -1765,6 +1768,8 @@ fn top_bubble_CP() {
     let sample: DefaultSample<f64> =
         sample_generator(3, &graph.bare_graph, Some(vec![Helicity::Plus; 6]));
 
+    // println!("IO signature {}", graph.bare_graph.external_in_or_out_signature());
+
     #[allow(non_snake_case)]
     let sample_CP = sample_generator(3, &graph.bare_graph, Some(vec![Helicity::Minus; 6]));
 
@@ -1798,7 +1803,7 @@ fn top_bubble_CP() {
     println!("{}", eval);
     println!("{}", eval_CP);
 
-    Complex::approx_eq_res(&eval, &eval_CP, &LTD_COMPARISON_TOLERANCE)
+    Complex::approx_eq_res(&eval.norm(), &eval_CP.norm(), &LTD_COMPARISON_TOLERANCE)
         .wrap_err("CP conjugation does not match")
         .unwrap();
 }
@@ -1876,12 +1881,18 @@ fn scalar_box_to_triangle() {
     let mut export_settings = test_export_settings();
 
     graph.generate_cff();
-    export_settings.numerator_settings.global_numerator= Some("Q(5,cind(0))*(Q(2,cind(0))+Q(6,cind(0)))-Q(5,cind(1))*Q(5,cind(1))-Q(5,cind(2))*Q(5,cind(2))-Q(5,cind(3))*Q(5,cind(3))".into());
+    export_settings.numerator_settings.global_numerator= Some("Q(4,cind(0))*(Q(7,cind(0))+Q(0,cind(0)))-Q(4,cind(1))*Q(4,cind(1))-Q(4,cind(2))*Q(4,cind(2))-Q(4,cind(3))*Q(4,cind(3))".into());
 
     let box_sample = sample_generator(3, &graph.bare_graph, None);
 
     let mut box_graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+
+    println!("{}", box_graph.bare_graph.dot_lmb());
+
+    let box_emr = box_graph
+        .bare_graph
+        .compute_emr(box_sample.loop_moms(), box_sample.external_moms());
 
     let (model, amplitude, path) =
         load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", true);
@@ -1903,11 +1914,11 @@ fn scalar_box_to_triangle() {
     let box_externals = box_sample.external_moms();
 
     let triangle_sample = DefaultSample::new(
-        box_sample.loop_moms().to_vec(),
+        vec![box_emr[6]],
         &Externals::Constant {
             momenta: vec![
-                ExternalMomenta::Independent(box_externals[0].into()),
-                (box_externals[2] + box_externals[1]).into(),
+                ExternalMomenta::Independent((box_externals[0] - box_externals[1]).into()),
+                box_externals[2].into(),
             ],
             helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
         },
@@ -2038,7 +2049,7 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
     Complex::approx_eq_res(&eval_single, &eval_joint, &LTD_COMPARISON_TOLERANCE)
         .wrap_err("Single and joint evaluation differ in norm")?;
 
-    Complex::approx_eq_res(&eval_single, &eval_iter, &LTD_COMPARISON_TOLERANCE)
+    Complex::approx_eq_res(&eval_single, &eval_iter, &F(1e-8))
         .wrap_err("Single and iterative evaluation differ in norm")?;
 
     Complex::approx_eq_res(

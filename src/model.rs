@@ -1004,7 +1004,7 @@ fn test_polarization() {
     let pol_in_minus = Particle::incoming_polarization_impl(3, 1, &mom, Helicity::Minus);
     let pol_out_minus = Particle::outgoing_polarization_impl(3, 1, &mom, Helicity::Minus);
     assert_eq!(
-        vec![zero, -sqrt_inv, isqrt_inv, zero],
+        vec![zero, sqrt_inv, isqrt_inv, zero],
         pol_out_minus.tensor.data
     );
     assert_eq!(
@@ -1012,7 +1012,7 @@ fn test_polarization() {
         pol_in_minus.tensor.data
     );
     assert_eq!(
-        vec![zero, sqrt_inv, isqrt_inv, zero],
+        vec![zero, -sqrt_inv, isqrt_inv, zero],
         pol_out_plus.tensor.data
     );
     assert_eq!(

@@ -233,11 +233,17 @@ impl NumeratorEvaluateFloat for f64 {
             .enumerate()
             .for_each(|(i, c)| params[i] = c);
 
+        assert_eq!(emr.len(), num.state.emr_len);
+
         let mut i = 4 * emr.len();
 
         for p in polarizations {
             if !p.is_scalar() {
                 for &pi in p {
+                    assert!(
+                        i < num.state.model_params_start - 1,
+                        "polarization index out of bounds"
+                    );
                     params[i] = pi;
                     i += 1;
                 }
@@ -1342,7 +1348,7 @@ impl Network {
             ContractionSettings::Normal => {
                 self.net.contract();
                 let tensor = self.net.result_tensor_smart()?;
-                debug!("contracted tensor: {}", tensor);
+                // debug!("contracted tensor: {}", tensor);
                 Ok(Contracted { tensor })
             }
         }
@@ -1468,9 +1474,9 @@ impl Contracted {
             .compile_options()
             .compile()
         {
-            debug!("Compiling  single evaluator");
             let mut filename = path.clone();
             filename.push("numerator_single.cpp");
+            debug!("Compiling  single evaluator to {}", filename.display());
             let filename = filename.to_string_lossy();
 
             let function_name = "numerator_single";
@@ -1671,6 +1677,7 @@ impl Numerator<Contracted> {
                     quad_param_values,
                     double_param_values,
                     model_params_start,
+                    emr_len: n_edges,
                 },
             },
             NumeratorEvaluatorOptions::Iterative(IterativeOptions {
@@ -1695,6 +1702,7 @@ impl Numerator<Contracted> {
                     quad_param_values,
                     double_param_values,
                     model_params_start,
+                    emr_len: n_edges,
                 },
             },
             _ => Numerator {
@@ -1706,6 +1714,7 @@ impl Numerator<Contracted> {
                     quad_param_values,
                     double_param_values,
                     model_params_start,
+                    emr_len: n_edges,
                 },
             },
         }
@@ -1727,6 +1736,8 @@ impl Numerator<Contracted> {
             println!("\t{i} {p}");
         }
 
+        let emr_len = graph.edges.len();
+
         let single = self
             .state
             .evaluator(extra_info.path.clone(), export_settings, &params);
@@ -1746,6 +1757,7 @@ impl Numerator<Contracted> {
                     quad_param_values,
                     double_param_values,
                     model_params_start,
+                    emr_len,
                 },
             },
             NumeratorEvaluatorOptions::Iterative(IterativeOptions {
@@ -1770,6 +1782,7 @@ impl Numerator<Contracted> {
                     quad_param_values,
                     double_param_values,
                     model_params_start,
+                    emr_len,
                 },
             },
             _ => Numerator {
@@ -1781,6 +1794,7 @@ impl Numerator<Contracted> {
                     quad_param_values,
                     double_param_values,
                     model_params_start,
+                    emr_len,
                 },
             },
         }
@@ -2347,6 +2361,7 @@ pub struct Evaluators {
     #[bincode(with_serde)]
     quad_param_values: Vec<Complex<F<f128>>>,
     model_params_start: usize,
+    emr_len: usize,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]

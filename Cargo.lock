@@ -2287,6 +2287,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
+source = "git+https://github.com/alphal00p/spenso?branch=master#0d1e8431c7443793f3bbd860ed98095de3a4aa80"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2392,7 +2393,7 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -2403,7 +2404,7 @@ dependencies = [
  "dyn-clone",
  "libloading",
  "once_cell",
- "pyo3-build-config 0.22.3",
+ "pyo3-build-config 0.21.2",
  "rand",
  "rand_xoshiro",
  "rayon",

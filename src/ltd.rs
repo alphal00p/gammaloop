@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    gammaloop_integrand::DefaultSample,
+    gammaloop_integrand::{BareSample, DefaultSample},
     graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
     numerator::{AtomStructure, Evaluate, Evaluators, Numerator, NumeratorState},
@@ -427,17 +427,19 @@ struct LTDTerm {
 impl LTDTerm {
     fn evaluate<T: FloatLike>(
         &self,
-        rot_emr: Option<&[ThreeMomentum<F<T>>]>,
-        emr: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
-        polarizations: &[Polarization<Complex<F<T>>>],
+        emr: (&[ThreeMomentum<F<T>>], Option<&[ThreeMomentum<F<T>>]>),
+        external_moms: (&[FourMomentum<F<T>>], Option<&[FourMomentum<F<T>>]>),
+        polarizations: (
+            &[Polarization<Complex<F<T>>>],
+            Option<&[Polarization<Complex<F<T>>>]>,
+        ),
         graph: &BareGraph,
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         // compute on shell energies of the momenta in associated_lmb
 
-        let zero = emr.iter().next().unwrap().px.zero();
+        let zero = emr.0.iter().next().unwrap().px.zero();
         let one = zero.one();
         let two = zero.from_i64(2);
 
@@ -445,7 +447,7 @@ impl LTDTerm {
             .associated_lmb
             .iter()
             .map(|(i, s)| {
-                let mut momentum = emr[*i].clone().into_on_shell_four_momentum(
+                let mut momentum = emr.0[*i].clone().into_on_shell_four_momentum(
                     graph.edges[*i]
                         .particle
                         .mass
@@ -458,7 +460,7 @@ impl LTDTerm {
             })
             .collect_vec();
 
-        let edge_momenta_of_associated_lmb_rot = if let Some(rot_emr) = rot_emr {
+        let edge_momenta_of_associated_lmb_rot = if let Some(rot_emr) = emr.1 {
             self.associated_lmb
                 .iter()
                 .map(|(i, s)| {
@@ -482,27 +484,75 @@ impl LTDTerm {
         let mut inv_res = one.clone();
         let mut energy_product = one.clone();
 
-        for (index, edge) in graph.edges.iter().enumerate().filter(|(index, e)| {
-            e.edge_type == EdgeType::Virtual && self.associated_lmb.iter().all(|(i, _)| i != index)
-        }) {
-            let momentum = self.signature_of_lmb[index]
-                .compute_momentum(&edge_momenta_of_associated_lmb_rot, external_moms);
+        let mut ltd_emr = vec![];
 
-            match edge.particle.mass.value {
-                Some(mass) => {
-                    inv_res *= momentum.clone().square() - F::<T>::from_ff64(mass.re).square();
-                    energy_product *= (momentum.spatial.norm_squared()
-                        + F::<T>::from_ff64(mass.re).square())
-                    .sqrt()
-                        * &two;
+        for (index, edge) in graph.edges.iter().enumerate()
+        // .filter(|(index, e)| {
+        // e.edge_type == EdgeType::Virtual && self.associated_lmb.iter().all(|(i, _)| i != index)
+        // })
+        {
+            if let Some(i) = self.associated_lmb.iter().position(|(i, _)| i == &index) {
+                if setting.stability.rotate_numerator {
+                    ltd_emr.push(edge_momenta_of_associated_lmb_rot[i].clone());
+                } else {
+                    ltd_emr.push(edge_momenta_of_associated_lmb[i].clone());
                 }
-                None => {
-                    inv_res *= momentum.clone().square();
-                    energy_product *= momentum.spatial.norm() * &two;
+            } else {
+                match edge.edge_type {
+                    EdgeType::Virtual => {
+                        let momentum = self.signature_of_lmb[index].compute_momentum(
+                            &edge_momenta_of_associated_lmb_rot,
+                            external_moms.1.unwrap_or(external_moms.0),
+                        );
+
+                        if setting.stability.rotate_numerator {
+                            ltd_emr.push(momentum.clone());
+                        } else {
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                                &edge_momenta_of_associated_lmb,
+                                external_moms.0,
+                            ));
+                        }
+
+                        match edge.particle.mass.value {
+                            Some(mass) => {
+                                inv_res *=
+                                    momentum.clone().square() - F::<T>::from_ff64(mass.re).square();
+                                energy_product *= (momentum.spatial.norm_squared()
+                                    + F::<T>::from_ff64(mass.re).square())
+                                .sqrt()
+                                    * &two;
+                            }
+                            None => {
+                                inv_res *= momentum.clone().square();
+                                energy_product *= momentum.spatial.norm() * &two;
+                            }
+                        }
+                    }
+                    _ => {
+                        if setting.stability.rotate_numerator {
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                                &edge_momenta_of_associated_lmb_rot,
+                                external_moms.1.unwrap_or(external_moms.0),
+                            ));
+                        } else {
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                                &edge_momenta_of_associated_lmb,
+                                external_moms.0,
+                            ));
+                        }
+                    }
                 }
             }
         }
-        let num = num.evaluate_single(&edge_momenta_of_associated_lmb, polarizations, setting);
+
+        let polarizations = if setting.stability.rotate_numerator {
+            polarizations.1.unwrap_or(polarizations.0)
+        } else {
+            polarizations.0
+        };
+
+        let num = num.evaluate_single(&ltd_emr, polarizations, setting);
 
         num.scalar_mul(&(inv_res.inv() * energy_product)).unwrap()
     }
@@ -529,16 +579,15 @@ impl LTDExpression {
         let unrotated_emr =
             graph.compute_emr(&sample.sample.loop_moms, &sample.sample.external_moms);
 
-        let external_moms = sample.external_moms();
+        let external_moms = sample.external_mom_pair();
 
         self.terms
             .iter()
             .map(|term| {
                 term.evaluate(
-                    possibly_rotated_emr.as_deref(),
-                    &unrotated_emr,
+                    (&unrotated_emr, possibly_rotated_emr.as_deref()),
                     external_moms,
-                    &sample.sample.polarizations,
+                    sample.polarizations_pair(),
                     graph,
                     num,
                     setting,
@@ -563,15 +612,14 @@ impl LTDExpression {
             .map(|s| graph.compute_emr_in_lmb(&s.loop_moms, &s.external_moms, lmb));
         let unrotated_emr =
             graph.compute_emr_in_lmb(&sample.sample.loop_moms, &sample.sample.external_moms, lmb);
-        let external_moms = sample.external_moms();
+        let external_moms = sample.external_mom_pair();
         self.terms
             .iter()
             .map(|term| {
                 term.evaluate(
-                    possibly_rotated_emr.as_deref(),
-                    &unrotated_emr,
+                    (&unrotated_emr, possibly_rotated_emr.as_deref()),
                     external_moms,
-                    &sample.sample.polarizations,
+                    sample.polarizations_pair(),
                     graph,
                     num,
                     setting,

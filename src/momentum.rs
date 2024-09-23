@@ -12,7 +12,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
     complex::RealOrComplexTensor,
     contraction::{Contract, RefZero},
-    data::{DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor},
+    data::{DataIterator, DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor},
     iterators::IteratableTensor,
     parametric::{EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete},
     structure::{
@@ -1175,6 +1175,41 @@ impl Display for PolType {
 pub struct Polarization<T> {
     pub tensor: DenseTensor<T, IndexLess<PhysReps>>,
     pol_type: PolType,
+}
+
+impl<T: FloatLike> ApproxEq<Polarization<Complex<F<T>>>, F<T>> for Polarization<Complex<F<T>>> {
+    fn approx_eq(&self, other: &Polarization<Complex<F<T>>>, tolerance: &F<T>) -> bool {
+        self.pol_type == other.pol_type
+            && self
+                .tensor
+                .flat_iter()
+                .zip(other.tensor.flat_iter())
+                .all(|((_, a), (_, b))| a.approx_eq(b, tolerance))
+    }
+
+    fn approx_eq_res(
+        &self,
+        other: &Polarization<Complex<F<T>>>,
+        tolerance: &F<T>,
+    ) -> color_eyre::Result<()> {
+        if self.pol_type != other.pol_type {
+            Err(eyre::eyre!(
+                "Polarization types do not match. self: {}, other: {}",
+                self,
+                other
+            ))
+        } else {
+            self.tensor
+                .flat_iter()
+                .zip(other.tensor.flat_iter())
+                .try_for_each(|((i, a), (_, b))| {
+                    a.approx_eq_res(b, tolerance).wrap_err(format!(
+                        "Polarization tensor element {} does not match. self: {}, other: {}",
+                        i, self, other
+                    ))
+                })
+        }
+    }
 }
 
 impl<T: for<'a> std::ops::AddAssign<&'a T>> AddAssign<Polarization<T>> for Polarization<T> {
@@ -2924,6 +2959,8 @@ impl<T: FloatLike> Rotatable for Polarization<Complex<F<T>>> {
 #[cfg(test)]
 mod tests {
 
+    use core::f64;
+
     use eyre::Context;
     use spenso::{
         arithmetic::ScalarMul,
@@ -2937,6 +2974,7 @@ mod tests {
     use crate::utils::F;
 
     use super::*;
+    use crate::utils::ApproxEq;
 
     #[test]
     fn polarization() {
@@ -3015,77 +3053,348 @@ mod tests {
     }
 
     #[test]
+    fn spinors_degenerate() {
+        let mom = FourMomentum::from_args(F(2.), F(0.), F(0.), F(-2.));
+
+        assert_eq!(
+            [Complex::new_zero(), Complex::new_re(F(1.))],
+            mom.xi(Sign::Positive)
+        );
+
+        assert_eq!(
+            [Complex::new_re(F(-1.)), Complex::new_re(F(0.))],
+            mom.xi(Sign::Negative)
+        );
+
+        let u_p = mom.u(Sign::Positive);
+        let u_p_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_u([F(0.), F(0.), F(0.), F(2.)]).cast();
+
+        u_p.approx_eq_res(&u_p_target, &F(0.001))
+            .wrap_err("u+((2,0,0,-2)) does not match target: (0,0,0,2)")
+            .unwrap();
+
+        let mut u_p_bar_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_u([F(0.), F(2.), F(0.), F(0.)]).cast();
+
+        u_p_bar_target.pol_type = PolType::UBar;
+
+        u_p.bar()
+            .approx_eq_res(&u_p_bar_target, &F(0.001))
+            .wrap_err("u+bar((2,0,0,-2)) does not match target: (0,2,0,0)")
+            .unwrap();
+
+        let u_m = mom.u(Sign::Negative);
+        let u_m_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_u([F(-2.), F(0.), F(0.), F(0.)]).cast();
+
+        u_m.approx_eq_res(&u_m_target, &F(0.001))
+            .wrap_err("u-((2,0,0,-2)) does not match target: (-2,0,0,0)")
+            .unwrap();
+
+        let mut u_m_bar_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_u([F(0.), F(0.), F(-2.), F(0.)]).cast();
+
+        u_m_bar_target.pol_type = PolType::UBar;
+
+        u_m.bar()
+            .approx_eq_res(&u_m_bar_target, &F(0.001))
+            .wrap_err("u-bar((2,0,0,-2)) does not match target: (0,0,-2,0)")
+            .unwrap();
+
+        let v_p = mom.v(Sign::Positive);
+        let v_p_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_v([F(2.), F(0.), F(0.), F(0.)]).cast();
+
+        v_p.approx_eq_res(&v_p_target, &F(0.001))
+            .wrap_err("v+((2,0,0,-2)) does not match target: (2,0,0,0)")
+            .unwrap();
+
+        let mut v_p_bar_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_v([F(0.), F(0.), F(2.), F(0.)]).cast();
+
+        v_p_bar_target.pol_type = PolType::VBar;
+
+        v_p.bar()
+            .approx_eq_res(&v_p_bar_target, &F(0.001))
+            .wrap_err("v+bar((2,0,0,-2)) does not match target: (0,0,2,0)")
+            .unwrap();
+
+        let v_m = mom.v(Sign::Negative);
+        let v_m_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_v([F(0.), F(0.), F(0.), F(-2.)]).cast();
+
+        v_m.approx_eq_res(&v_m_target, &F(0.001))
+            .wrap_err("v-((2,0,0,-2)) does not match target: (0,0,0,-2)")
+            .unwrap();
+
+        let mut v_m_bar_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_v([F(0.), F(-2.), F(0.), F(0.)]).cast();
+
+        v_m_bar_target.pol_type = PolType::VBar;
+
+        v_m.bar()
+            .approx_eq_res(&v_m_bar_target, &F(0.001))
+            .wrap_err("v-bar((2,0,0,-2)) does not match target: (0,-2,0,0)")
+            .unwrap();
+    }
+
+    #[test]
     fn spinors() {
-        let mom = FourMomentum::from_args(F(2.), F(0.), F(0.), F(2.));
+        let mom = FourMomentum::from_args(F(4.), F(0.), F(4.), F(0.));
 
-        let u = mom.u(Sign::Positive);
-
-        // let a = F(Complex::new(1., 2.));
-
-        println!("+{}", u);
-        println!("+{}", u.bar());
-        let v = mom.v(Sign::Positive);
-        println!("+{}", v);
-        println!("+{}", v.bar());
-        let u = mom.u(Sign::Negative);
-        println!("-{}", u);
-        println!("-{}", u.bar());
-
-        let v = mom.v(Sign::Negative);
-        println!("-{}", v);
-        println!("-{}", v.bar());
-        let mom = FourMomentum::from_args(F(5.), F(3.), F(0.), F(4.));
-
-        let u = mom.u(Sign::Positive);
-        println!("+{}", u);
-        println!("+{}", u.bar());
-
-        let u_target = Polarization::bispinor_u([F(0.), F(0.), F(3.), F(1.)]).cast();
-        assert_eq!(u, u_target);
-        assert_eq!(
-            u.bar().tensor.data,
-            vec![
-                Complex::new_re(F(3.)),
-                Complex::new_re(F(1.)),
-                Complex::new_re(F(0.)),
-                Complex::new_re(F(0.))
-            ]
-        );
-        let v = mom.v(Sign::Positive);
-        println!("+{}", v);
-        println!("+{}", v.bar());
-
-        let v_target = Polarization::bispinor_v([F(1.), F(-3.), F(0.), F(0.)]).cast();
-        assert_eq!(v, v_target);
-        assert_eq!(
-            v.bar().tensor.data,
-            vec![
-                Complex::new_re(F(0.)),
-                Complex::new_re(F(0.)),
-                Complex::new_re(F(1.)),
-                Complex::new_re(F(-3.))
-            ]
+        assert!(
+            Complex::approx_eq_slice(
+                &[
+                    Complex::new_re(F(f64::consts::FRAC_1_SQRT_2)),
+                    Complex::new_im(F(f64::consts::FRAC_1_SQRT_2)),
+                ],
+                &mom.xi(Sign::Positive),
+                &F(0.001),
+            ),
+            "xi+((4,0,4,0)) does not match target: (1/sqrt(2),i/sqrt(2))"
         );
 
-        let u = mom.u(Sign::Negative);
-        println!("-{}", u);
-        println!("-{}", u.bar());
-
-        let v = mom.v(Sign::Negative);
-        println!("-{}", v);
-        println!("-{}", v.bar());
-
-        let v_target = Polarization::bispinor_v([F(1.), F(-3.), F(0.), F(0.)]).cast();
-        assert_eq!(v, v_target);
-        assert_eq!(
-            v.bar().tensor.data,
-            vec![
-                Complex::new_re(F(0.)),
-                Complex::new_re(F(0.)),
-                Complex::new_re(F(1.)),
-                Complex::new_re(F(-3.))
-            ]
+        assert!(
+            Complex::approx_eq_slice(
+                &[
+                    Complex::new_im(F(f64::consts::FRAC_1_SQRT_2)),
+                    Complex::new_re(F(f64::consts::FRAC_1_SQRT_2)),
+                ],
+                &mom.xi(Sign::Negative),
+                &F(0.001),
+            ),
+            "xi-((4,0,4,0)) does not match target: (i/sqrt(2),1/sqrt(2))"
         );
+
+        let zero: Complex<_> = F(0.).into();
+        let u_p = mom.u(Sign::Positive);
+        let u_p_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_u([zero, zero, Complex::new_re(F(2.)), Complex::new_im(F(2.))])
+                .cast();
+
+        u_p.approx_eq_res(&u_p_target, &F(0.001))
+            .wrap_err("u+((4,0,4,0)) does not match target: (0,0,2,i2)")
+            .unwrap();
+
+        let mut u_p_bar_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_u([Complex::new_re(F(2.)), Complex::new_im(-F(2.)), zero, zero])
+                .cast();
+
+        u_p_bar_target.pol_type = PolType::UBar;
+
+        u_p.bar()
+            .approx_eq_res(&u_p_bar_target, &F(0.001))
+            .wrap_err("u+bar((4,0,4,0)) does not match target: (2,-2i,0,0)")
+            .unwrap();
+
+        let u_m = mom.u(Sign::Negative);
+        let u_m_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_u([Complex::new_im(F(2.)), Complex::new_re(F(2.)), zero, zero])
+                .cast();
+
+        u_m.approx_eq_res(&u_m_target, &F(0.001))
+            .wrap_err("u-((4,0,4,0)) does not match target: (2i,2,0,0)")
+            .unwrap();
+
+        let mut u_m_bar_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_u([zero, zero, Complex::new_im(-F(2.)), Complex::new_re(F(2.))])
+                .cast();
+
+        u_m_bar_target.pol_type = PolType::UBar;
+
+        u_m.bar()
+            .approx_eq_res(&u_m_bar_target, &F(0.001))
+            .wrap_err("u-bar((4,0,4,0)) does not match target: (0,0,-2i,2)")
+            .unwrap();
+
+        let v_p = mom.v(Sign::Positive);
+        let v_p_target: Polarization<Complex<F<_>>> = Polarization::bispinor_v([
+            Complex::new_im(-F(2.)),
+            Complex::new_re(-F(2.)),
+            zero,
+            zero,
+        ])
+        .cast();
+
+        v_p.approx_eq_res(&v_p_target, &F(0.001))
+            .wrap_err("v+((4,0,4,0)) does not match target: (-2i,-2,0,0)")
+            .unwrap();
+
+        let mut v_p_bar_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_v([zero, zero, Complex::new_im(F(2.)), Complex::new_re(F(-2.))])
+                .cast();
+
+        v_p_bar_target.pol_type = PolType::VBar;
+
+        v_p.bar()
+            .approx_eq_res(&v_p_bar_target, &F(0.001))
+            .wrap_err("v+bar((4,0,4,0)) does not match target: (0,0,2i,-2)")
+            .unwrap();
+
+        let v_m = mom.v(Sign::Negative);
+        let v_m_target: Polarization<Complex<F<_>>> = Polarization::bispinor_v([
+            zero,
+            zero,
+            Complex::new_re(-F(2.)),
+            Complex::new_im(-F(2.)),
+        ])
+        .cast();
+
+        v_m.approx_eq_res(&v_m_target, &F(0.001))
+            .wrap_err("v-((4,0,4,0)) does not match target: (0,0,-2,-2i)")
+            .unwrap();
+
+        let mut v_m_bar_target: Polarization<Complex<F<_>>> =
+            Polarization::bispinor_v([Complex::new_re(-F(2.)), Complex::new_im(F(2.)), zero, zero])
+                .cast();
+
+        v_m_bar_target.pol_type = PolType::VBar;
+
+        v_m.bar()
+            .approx_eq_res(&v_m_bar_target, &F(0.001))
+            .wrap_err("v-bar((4,0,4,0)) does not match target: (-2,2i,0,0)")
+            .unwrap();
+    }
+
+    #[test]
+    fn vectors_degenerate() {
+        let mom = FourMomentum::from_args(F(2.), F(0.), F(0.), F(-2.));
+
+        assert!(
+            F::approx_eq_slice(&mom.pol_one(), &[0., 1., 0., 0.].map(F), &F(0.001)),
+            "pol_one((2,0,0,-2)) does not match target: (0,1,0,0)"
+        );
+
+        assert!(
+            F::approx_eq_slice(&mom.pol_two(), &[0., 0., -1., 0.].map(F), &F(0.001)),
+            "pol_two((2,0,0,-2)) does not match target: (0,0,-1,0)"
+        );
+
+        let e_p = mom.pol(SignOrZero::Plus);
+
+        let zero = F(0.).into();
+        let e_p_target = Polarization::lorentz([
+            zero,
+            Complex::new_re(F(-f64::consts::FRAC_1_SQRT_2)),
+            Complex::new_im(F(f64::consts::FRAC_1_SQRT_2)),
+            zero,
+        ]);
+
+        let mut e_p_bar_target = Polarization::lorentz([
+            zero,
+            Complex::new_re(F(-f64::consts::FRAC_1_SQRT_2)),
+            Complex::new_im(F(-f64::consts::FRAC_1_SQRT_2)),
+            zero,
+        ]);
+
+        e_p_bar_target.pol_type = PolType::EpsilonBar;
+
+        e_p.approx_eq_res(&e_p_target, &F(0.0001))
+            .wrap_err("e+((2,0,0,-2)) does not match target: (0,-1/sqrt(2),i/sqrt(2),0)")
+            .unwrap();
+
+        e_p.bar()
+            .approx_eq_res(&e_p_bar_target, &F(0.0001))
+            .wrap_err("e+bar((2,0,0,-2)) does not match target: (0,-1/sqrt(2),-i/sqrt(2),0)")
+            .unwrap();
+
+        let e_m = mom.pol(SignOrZero::Minus);
+
+        let e_m_target = Polarization::lorentz([
+            zero,
+            Complex::new_re(F(f64::consts::FRAC_1_SQRT_2)),
+            Complex::new_im(F(f64::consts::FRAC_1_SQRT_2)),
+            zero,
+        ]);
+
+        let mut e_m_bar_target = Polarization::lorentz([
+            zero,
+            Complex::new_re(F(f64::consts::FRAC_1_SQRT_2)),
+            Complex::new_im(F(-f64::consts::FRAC_1_SQRT_2)),
+            zero,
+        ]);
+
+        e_m_bar_target.pol_type = PolType::EpsilonBar;
+
+        e_m.approx_eq_res(&e_m_target, &F(0.0001))
+            .wrap_err("e-((2,0,0,-2)) does not match target: (0,1/sqrt(2),i/sqrt(2),0)")
+            .unwrap();
+
+        e_m.bar()
+            .approx_eq_res(&e_m_bar_target, &F(0.0001))
+            .wrap_err("e-bar((2,0,0,-2)) does not match target: (0,1/sqrt(2),-i/sqrt(2),0)")
+            .unwrap();
+    }
+
+    #[test]
+    fn vectors() {
+        let mom = FourMomentum::from_args(F(2.), F(0.), F(0.), F(-2.));
+
+        assert!(
+            F::approx_eq_slice(&mom.pol_one(), &[0., 1., 0., 0.].map(F), &F(0.001)),
+            "pol_one((2,0,0,-2)) does not match target: (0,1,0,0)"
+        );
+
+        assert!(
+            F::approx_eq_slice(&mom.pol_two(), &[0., 0., -1., 0.].map(F), &F(0.001)),
+            "pol_two((2,0,0,-2)) does not match target: (0,0,-1,0)"
+        );
+
+        let e_p = mom.pol(SignOrZero::Plus);
+
+        let zero = F(0.).into();
+        let e_p_target = Polarization::lorentz([
+            zero,
+            Complex::new_re(F(-f64::consts::FRAC_1_SQRT_2)),
+            Complex::new_im(F(f64::consts::FRAC_1_SQRT_2)),
+            zero,
+        ]);
+
+        let mut e_p_bar_target = Polarization::lorentz([
+            zero,
+            Complex::new_re(F(-f64::consts::FRAC_1_SQRT_2)),
+            Complex::new_im(F(-f64::consts::FRAC_1_SQRT_2)),
+            zero,
+        ]);
+
+        e_p_bar_target.pol_type = PolType::EpsilonBar;
+
+        e_p.approx_eq_res(&e_p_target, &F(0.0001))
+            .wrap_err("e+((2,0,0,-2)) does not match target: (0,-1/sqrt(2),i/sqrt(2),0)")
+            .unwrap();
+
+        e_p.bar()
+            .approx_eq_res(&e_p_bar_target, &F(0.0001))
+            .wrap_err("e+bar((2,0,0,-2)) does not match target: (0,-1/sqrt(2),-i/sqrt(2),0)")
+            .unwrap();
+
+        let e_m = mom.pol(SignOrZero::Minus);
+
+        let e_m_target = Polarization::lorentz([
+            zero,
+            Complex::new_re(F(f64::consts::FRAC_1_SQRT_2)),
+            Complex::new_im(F(f64::consts::FRAC_1_SQRT_2)),
+            zero,
+        ]);
+
+        let mut e_m_bar_target = Polarization::lorentz([
+            zero,
+            Complex::new_re(F(f64::consts::FRAC_1_SQRT_2)),
+            Complex::new_im(F(-f64::consts::FRAC_1_SQRT_2)),
+            zero,
+        ]);
+
+        e_m_bar_target.pol_type = PolType::EpsilonBar;
+
+        e_m.approx_eq_res(&e_m_target, &F(0.0001))
+            .wrap_err("e-((2,0,0,-2)) does not match target: (0,1/sqrt(2),i/sqrt(2),0)")
+            .unwrap();
+
+        e_m.bar()
+            .approx_eq_res(&e_m_bar_target, &F(0.0001))
+            .wrap_err("e-bar((2,0,0,-2)) does not match target: (0,1/sqrt(2),-i/sqrt(2),0)")
+            .unwrap();
     }
 
     #[test]

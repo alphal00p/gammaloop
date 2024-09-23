@@ -1666,6 +1666,13 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
+    pub fn loop_mom_pair(&self) -> (&[ThreeMomentum<F<T>>], Option<&[ThreeMomentum<F<T>>]>) {
+        (
+            self.sample.loop_moms.as_slice(),
+            self.rotated_sample.as_ref().map(|s| s.loop_moms.as_slice()),
+        )
+    }
+
     pub fn external_moms(&self) -> &[FourMomentum<F<T>>] {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.external_moms
@@ -1674,12 +1681,35 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
+    pub fn external_mom_pair(&self) -> (&[FourMomentum<F<T>>], Option<&[FourMomentum<F<T>>]>) {
+        (
+            self.sample.external_moms.as_slice(),
+            self.rotated_sample
+                .as_ref()
+                .map(|s| s.external_moms.as_slice()),
+        )
+    }
+
     pub fn polarizations(&self) -> &[Polarization<Complex<F<T>>>] {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.polarizations
         } else {
             &self.sample.polarizations
         }
+    }
+
+    pub fn polarizations_pair(
+        &self,
+    ) -> (
+        &[Polarization<Complex<F<T>>>],
+        Option<&[Polarization<Complex<F<T>>>]>,
+    ) {
+        (
+            self.sample.polarizations.as_slice(),
+            self.rotated_sample
+                .as_ref()
+                .map(|s| s.polarizations.as_slice()),
+        )
     }
 
     pub fn jacobian(&self) -> F<f64> {

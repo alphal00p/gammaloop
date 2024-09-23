@@ -123,21 +123,21 @@ class TestLoadQGraph:
     def test_epem_a_ddx_nlo(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
-            f"import_model sm; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'epem_a_ddx_NLO.py')} -f qgraph --no_compile"))
+            f"import_model sm; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'epem_a_ddx_NLO.dot')} --no_compile"))
         assert len(gloop.cross_sections) == 1
         assert len(gloop.cross_sections[0].supergraphs) == 4
 
     def test_massless_scalar_triangle(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
-            f"import_model scalars; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'massless_triangle.py')} -f qgraph --no_compile"))
+            f"import_model scalars; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'massless_triangle.dot')} --no_compile"))
         assert len(gloop.amplitudes) == 1
         assert len(gloop.amplitudes[0].amplitude_graphs) == 1
 
     def test_fishnet_2x2(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
-            f"import_model scalars; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'fishnet_2x2.py')} -f qgraph --no_compile"))
+            f"import_model scalars; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'fishnet_2x2.dot')} --no_compile"))
         assert len(gloop.amplitudes) == 1
         assert len(gloop.amplitudes[0].amplitude_graphs) == 1
         assert len(gloop.amplitudes[0].amplitude_graphs[0].graph.edges) == 16
@@ -149,7 +149,7 @@ class TestLoadQGraph:
     def test_fishnet_2x3(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
-            f"import_model scalars; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'fishnet_2x3.py')} -f qgraph --no_compile"))
+            f"import_model scalars; import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'fishnet_2x3.dot')} --no_compile"))
         assert len(gloop.amplitudes) == 1
         assert len(gloop.amplitudes[0].amplitude_graphs) == 1
         assert len(gloop.amplitudes[0].amplitude_graphs[0].graph.edges) == 21

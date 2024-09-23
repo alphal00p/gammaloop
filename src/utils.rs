@@ -9,7 +9,7 @@ use colored::Colorize;
 use itertools::{izip, Itertools};
 use rand::Rng;
 use ref_ops::{
-    RefAdd, RefDiv, RefMul, RefNeg, RefSub,
+    RefAdd, RefDiv, RefMul, RefNeg, RefSub,RefRem
 };
 use rug::float::Constant;
 use rug::ops::{CompleteRound, Pow};
@@ -26,7 +26,7 @@ use symbolica::evaluate::CompiledEvaluatorFloat;
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
@@ -118,6 +118,14 @@ pub struct VarFloat<const N: u32> {
     float: rug::Float,
 }
 
+
+impl<'a,const N:u32> Rem<&VarFloat<N>> for &'a VarFloat<N>{
+    type Output = VarFloat<N>;
+
+    fn rem(self, rhs: &VarFloat<N>) -> Self::Output {
+        (&self.float%&rhs.float).complete(N as i64).into()
+    }
+}
 
 
 impl<const N:u32> From<Float> for VarFloat<N> {
@@ -533,6 +541,15 @@ impl FloatLike for VarFloat<113>{
         Self::from_f64(2.0).sqrt() / Self::from_f64(2.0)
     }
 
+    fn rem_euclid(&self, rhs: &Self) -> Self {
+        let r = self.ref_rem(rhs);
+        if r<r.zero() {
+            r + rhs
+        } else {
+            r
+        }
+    }
+
     
 
     fn FRAC_1_PI(&self) -> Self {
@@ -688,6 +705,7 @@ pub trait FloatLike:
     + for<'a> RefDiv<&'a Self, Output = Self>
     // + for<'a> RefMutDiv<&'a Self, Output = Self> f64 doesn't have RefMutDiv
     + RefDiv<Self, Output = Self>
+    + for<'a> RefRem<&'a Self, Output = Self>
     // + RefMutDiv<Self, Output = Self>
     + RefNeg<Output = Self>
     + RefZero
@@ -761,8 +779,11 @@ pub trait FloatLike:
     }
 
     fn ln(&self) -> Self {
+        panic!("ln not implemented for {:?}", self);
         self.log() //FIXME
     }
+
+    fn rem_euclid(&self, rhs: &Self) -> Self;
 }
 
 
@@ -773,6 +794,14 @@ pub struct F<T: FloatLike>(pub T);
 
 impl<T:FloatLike> R for F<T> {}
 
+
+impl<'a,T:FloatLike> Rem<&F<T>> for &'a F<T>{
+    type Output = F<T>;
+
+    fn rem(self, rhs: &F<T>) -> Self::Output {
+        F(self.0.ref_rem(&rhs.0))
+    }
+}
 
 
 impl<T:FloatLike> RefZero<F<T>> for &F<T>{
@@ -1022,6 +1051,11 @@ impl<T: FloatLike> F<T> {
         }
         
     }
+
+    pub fn rem_euclid(&self, rhs: &Self) -> Self {
+        F(self.0.rem_euclid(&rhs.0))
+    }
+
     delegate! {
         #[into]
         to self.0 {
@@ -1324,6 +1358,10 @@ impl FloatLike for f64 {
 
     fn floor(&self) -> Self {
         f64::floor(*self)
+    }
+
+    fn rem_euclid(&self, rhs: &Self) -> Self {
+        f64::rem_euclid(*self, *rhs)
     }
 }
 impl From<F<f64>> for f64{
@@ -2050,8 +2088,13 @@ impl<T:FloatLike> ApproxEq<Complex<F<T>>,F<T>> for Complex<F<T>>{
     fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>)->bool {
         if !self.norm().re.approx_eq(& other.norm().re, tolerance) {
             return false
+        } else if self.norm().is_zero() || other.norm().is_zero() {
+            return true;
         }
-        if !&self.arg().approx_eq(&other.arg(), tolerance)  {
+        let two_pi = self.re.PI()+self.re.PI();
+        let arg_self = self.arg().rem_euclid(&two_pi);
+        let arg_other = other.arg().rem_euclid(&two_pi);
+        if !arg_self.approx_eq(&arg_other, tolerance)  {
             return  false
         }
         true
@@ -2062,11 +2105,19 @@ impl<T:FloatLike> ApproxEq<Complex<F<T>>,F<T>> for Complex<F<T>>{
                 "Norms are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
                 &self.norm().re, other.norm().re, tolerance
             ))
+        }else if self.norm().is_zero() || other.norm().is_zero() {
+            return Ok(());
         }
-        if !&self.arg().approx_eq(&other.arg(), tolerance)  {
+
+        let two_pi = self.re.PI()+self.re.PI();
+        let arg_self = self.arg().rem_euclid(&two_pi);
+        let arg_other = other.arg().rem_euclid(&two_pi);
+        let arg_diff = (&self.arg() - &other.arg()).rem_euclid(&two_pi);  
+        let arg_zero = self.re.zero();
+        if !arg_diff.approx_eq(&arg_zero, tolerance)  {
             return  Err(eyre!(
                 "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
-                self.arg(), other.arg(),other.arg()-self.arg(), tolerance
+                arg_self, arg_other,&arg_self-&arg_other, tolerance
             ))
         } 
             Ok(())

@@ -1017,6 +1017,9 @@ class GammaLoop(object):
                                choices=['file', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
     output_parser.add_argument('-ow', '--overwrite_output', default=False, action='store_true',
                                help='Overwrite output if already existing.')
+    
+    output_parser.add_argument('-yo', '--yaml_only', default=False, action='store_true',
+                               help='Only output yaml.')
 
     def do_output(self, str_args: str) -> None:
         if str_args == 'help':

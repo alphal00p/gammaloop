@@ -52,9 +52,10 @@ def split_str_args(str_args: str) -> list[str]:
 
 class GammaLoopExporter(object):
 
-    def __init__(self, gammaloop_interface: GammaLoop, _args: argparse.Namespace):
+    def __init__(self, gammaloop_interface: GammaLoop, args: argparse.Namespace):
         self.gammaloop: GammaLoop = gammaloop_interface
         self.configuration_for_process = copy.deepcopy(self.gammaloop.config)
+        self.output_options= args
         # Process args argument further here if needed
 
     def generic_export(self, export_root: Path):
@@ -290,22 +291,22 @@ class AmplitudesExporter(GammaLoopExporter):
             # Already writing the file below is not necessary as it will be overwritten by the rust export, but it is useful for debugging
             with open(pjoin(export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'amplitude.yaml'), 'w', encoding='utf-8') as file:
                 file.write(amplitude_yaml)
+            if not self.output_options.yaml_only:
+                if self.configuration_for_process.get_setting('drawing.mode') != None:
 
-            if self.configuration_for_process.get_setting('drawing.mode') != None:
+                    drawings_path = pjoin(
+                         export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
+                    os.makedirs(drawings_path)
+                    drawing_file_paths = amplitude.draw(
+                         self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
+                    self.finalize_drawing(Path(drawings_path), drawing_file_paths)
 
-                drawings_path = pjoin(
-                    export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
-                os.makedirs(drawings_path)
-                drawing_file_paths = amplitude.draw(
-                    self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
-                self.finalize_drawing(Path(drawings_path), drawing_file_paths)
-
-            self.gammaloop.rust_worker.add_amplitude_from_yaml_str(
-                amplitude_yaml)
-
+                self.gammaloop.rust_worker.add_amplitude_from_yaml_str(
+                     amplitude_yaml)
+        if not self.output_options.yaml_only :
         # Now address the rust export aspect
-        self.gammaloop.rust_worker.export_amplitudes(
-            str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']))
+            self.gammaloop.rust_worker.export_amplitudes(
+                str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']))
 
 
 class CrossSectionsExporter(GammaLoopExporter):
@@ -334,15 +335,16 @@ class CrossSectionsExporter(GammaLoopExporter):
             # Already writing the file below is not necessary as it will be overwritten by the rust export, but it is useful for debugging
             with open(pjoin(export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'cross_section.yaml'), 'w', encoding='utf-8') as file:
                 file.write(yaml_xs)
-            drawings_path = pjoin(
-                export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'drawings')
-            os.makedirs(drawings_path)
-            drawing_file_paths = one_cross_section.draw(
-                self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
-            self.finalize_drawing(Path(drawings_path), drawing_file_paths)
+            if not self.output_options.yaml_only:
+                drawings_path = pjoin(
+                    export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'drawings')
+                os.makedirs(drawings_path)
+                drawing_file_paths = one_cross_section.draw(
+                    self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
+                self.finalize_drawing(Path(drawings_path), drawing_file_paths)
+                self.gammaloop.rust_worker.add_cross_section_from_yaml_str(yaml_xs)
 
-            self.gammaloop.rust_worker.add_cross_section_from_yaml_str(yaml_xs)
-
+        if not self.output_options.yaml_only:
         # Now address the rust export aspect
-        self.gammaloop.rust_worker.export_cross_sections(
-            str(export_root), [cs.name for cs in cross_sections])
+            self.gammaloop.rust_worker.export_cross_sections(
+                str(export_root), [cs.name for cs in cross_sections])

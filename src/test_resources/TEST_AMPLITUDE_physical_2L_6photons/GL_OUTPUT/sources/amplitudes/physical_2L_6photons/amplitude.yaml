@@ -10,43 +10,43 @@ amplitude_graphs:
     - name: v1
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: a
+        direction: in
       edges:
-      - p2
+      - p1
     - name: v2
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: a
+        direction: in
       edges:
-      - p1
+      - p2
     - name: v3
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: a
+        direction: out
       edges:
       - p3
     - name: v4
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: a
+        direction: out
       edges:
       - p4
     - name: v5
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: a
+        direction: out
       edges:
       - p5
     - name: v6
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: a
+        direction: out
       edges:
       - p6
     - name: v7
@@ -55,8 +55,8 @@ amplitude_graphs:
         vertex_rule: V_134
       edges:
       - q1
-      - q10
-      - p2
+      - q8
+      - p1
     - name: v8
       vertex_info:
         type: interacton_vertex_info
@@ -64,64 +64,64 @@ amplitude_graphs:
       edges:
       - q2
       - q1
-      - p1
+      - p2
     - name: v9
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_134
       edges:
-      - q4
+      - q3
       - q2
-      - p6
+      - p3
     - name: v10
       vertex_info:
         type: interacton_vertex_info
-        vertex_rule: V_137
+        vertex_rule: V_134
       edges:
-      - q5
       - q4
-      - g2
+      - q7
+      - p4
     - name: v11
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_134
       edges:
-      - q6
       - q5
+      - q4
       - p5
     - name: v12
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_134
       edges:
-      - q7
       - q6
-      - p4
+      - q5
+      - p6
     - name: v13
       vertex_info:
         type: interacton_vertex_info
-        vertex_rule: V_134
+        vertex_rule: V_137
       edges:
-      - q9
       - q7
-      - p3
+      - q3
+      - q9
     - name: v14
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_137
       edges:
-      - q10
+      - q8
+      - q6
       - q9
-      - g2
     edges:
-    - name: p2
+    - name: p1
       edge_type: in
       particle: a
       propagator: a_propFeynman
       vertices:
       - v1
       - v7
-    - name: p1
+    - name: p2
       edge_type: in
       particle: a
       propagator: a_propFeynman
@@ -133,14 +133,14 @@ amplitude_graphs:
       particle: a
       propagator: a_propFeynman
       vertices:
-      - v13
+      - v9
       - v3
     - name: p4
       edge_type: out
       particle: a
       propagator: a_propFeynman
       vertices:
-      - v12
+      - v10
       - v4
     - name: p5
       edge_type: out
@@ -154,7 +154,7 @@ amplitude_graphs:
       particle: a
       propagator: a_propFeynman
       vertices:
-      - v9
+      - v12
       - v6
     - name: q1
       edge_type: virtual
@@ -170,56 +170,55 @@ amplitude_graphs:
       vertices:
       - v8
       - v9
-    - name: q4
+    - name: q3
       edge_type: virtual
       particle: t
       propagator: t_propFeynman
       vertices:
       - v9
+      - v13
+    - name: q4
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
       - v10
+      - v11
     - name: q5
       edge_type: virtual
       particle: t
       propagator: t_propFeynman
       vertices:
-      - v10
       - v11
+      - v12
     - name: q6
       edge_type: virtual
       particle: t
       propagator: t_propFeynman
       vertices:
-      - v11
       - v12
+      - v14
     - name: q7
       edge_type: virtual
       particle: t
       propagator: t_propFeynman
       vertices:
-      - v12
       - v13
-    - name: q9
-      edge_type: virtual
-      particle: t
-      propagator: t_propFeynman
-      vertices:
-      - v13
-      - v14
-    - name: q10
+      - v10
+    - name: q8
       edge_type: virtual
       particle: t
       propagator: t_propFeynman
       vertices:
       - v14
       - v7
-    - name: g2
+    - name: q9
       edge_type: virtual
       particle: g
       propagator: g_propFeynman
       vertices:
-      - v10
+      - v13
       - v14
-    overall_factor: 1.0
     external_connections:
     - - v1
       - null
@@ -233,24 +232,16 @@ amplitude_graphs:
       - v5
     - - null
       - v6
+    overall_factor: '1'
     loop_momentum_basis:
     - q7
-    - g2
+    - q9
     edge_signatures:
-    - - g2
-      - - - 0
-          - 1
-        - - 0
-          - 0
-          - 0
-          - 0
-          - 0
-          - 0
     - - p1
       - - - 0
           - 0
-        - - 0
-          - 1
+        - - 1
+          - 0
           - 0
           - 0
           - 0
@@ -258,8 +249,8 @@ amplitude_graphs:
     - - p2
       - - - 0
           - 0
-        - - 1
-          - 0
+        - - 0
+          - 1
           - 0
           - 0
           - 0
@@ -303,38 +294,38 @@ amplitude_graphs:
     - - q1
       - - - 1
           - 1
-        - - 1
-          - 0
-          - -1
-          - 0
-          - 0
-          - 0
-    - - q10
-      - - - 1
-          - 1
         - - 0
-          - 0
           - -1
+          - 1
           - 0
           - 0
           - 0
     - - q2
       - - - 1
           - 1
-        - - 1
+        - - 0
+          - 0
           - 1
-          - -1
           - 0
           - 0
           - 0
-    - - q4
+    - - q3
       - - - 1
           - 1
         - - 0
           - 0
           - 0
-          - 1
-          - 1
+          - 0
+          - 0
+          - 0
+    - - q4
+      - - - 1
+          - 0
+        - - 0
+          - 0
+          - 0
+          - -1
+          - 0
           - 0
     - - q5
       - - - 1
@@ -342,16 +333,16 @@ amplitude_graphs:
         - - 0
           - 0
           - 0
-          - 1
-          - 1
+          - -1
+          - -1
           - 0
     - - q6
       - - - 1
           - 0
-        - - 0
-          - 0
-          - 0
+        - - -1
+          - -1
           - 1
+          - 0
           - 0
           - 0
     - - q7
@@ -363,13 +354,23 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - q9
+    - - q8
       - - - 1
+          - 1
+        - - -1
+          - -1
+          - 1
           - 0
+          - 0
+          - 0
+    - - q9
+      - - - 0
+          - 1
         - - 0
           - 0
-          - -1
           - 0
           - 0
           - 0
+          - 0
+  multiplicity: '1'
   multi_channeling_channels: []
