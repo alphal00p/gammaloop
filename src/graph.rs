@@ -2135,7 +2135,8 @@ impl DerivedGraphData<Evaluators> {
         let zero = one.zero();
         let i = Complex::new(zero, one);
         let loop_number = bare_graph.loop_momentum_basis.basis.len();
-        let prefactor = i.pow(loop_number as u64);
+        // Unexplained minus overall sign to match with cFF
+        let prefactor = -i.pow(loop_number as u64);
 
         self.ltd_expression
             .as_ref()
@@ -2157,7 +2158,8 @@ impl DerivedGraphData<Evaluators> {
         let zero = one.zero();
         let i = Complex::new(zero, one);
         let loop_number = bare_graph.loop_momentum_basis.basis.len();
-        let prefactor = i.pow(loop_number as u64);
+        // Unexplained minus overall sign to match with cFF
+        let prefactor = -i.pow(loop_number as u64);
 
         self.ltd_expression
             .as_ref()

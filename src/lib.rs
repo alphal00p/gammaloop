@@ -599,7 +599,6 @@ impl Externals {
 
                 for ((i, m), s) in momenta.iter().enumerate().zip(signature.iter()) {
                     if let Ok(a) = FourMomentum::try_from(*m) {
-                        println!("external{i}: {}", a);
                         sum -= *s * a.higher();
                     } else {
                         pos_dep = i;
