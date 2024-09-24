@@ -123,6 +123,9 @@ class TestRust:
     def test_rust_physical_1L_6photons(self, compile_rust_tests: Path,      scalars_model_yaml_file: Path, physical_1L_6photons_export: Path):
         assert run_rust_test(compile_rust_tests, physical_1L_6photons_export, 'physical_1L_6photons')
 
+    def test_generate_physical_1L_2A_final_4H_top_internal(self, physical_1L_2A_final_4H_top_internal_export: Path):
+        assert True
+
     def test_generate_top_bubble(self, top_bubble_export: Path):
         assert True
 
