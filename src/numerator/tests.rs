@@ -91,7 +91,7 @@ fn hhgghh() {
         &test_export_settings(),
     );
 
-    for _ in 0..100 {
+    for i in 0..100 {
         let emr: Vec<FourMomentum<F<f64>>> = (0..n_edges)
             .map(|_| {
                 FourMomentum::from_args(F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen()))
@@ -107,7 +107,7 @@ fn hhgghh() {
 
         let valg = newg.evaluate_single(&emr, &polarizations, None, &Settings::default());
 
-        assert_eq!(val, valg);
+        assert_eq!(val, valg, "{}", i);
     }
 }
 
@@ -117,7 +117,7 @@ fn trees() {
     let tree_name = "th_th";
     let amp_name = "tree_amplitude_1_th_th";
     let file_path = PathBuf::new()
-        .join("./src/test_resources/Trees")
+        .join("./src/test_resources/trees")
         .join(tree_name)
         .join("GL_OUTPUT");
 
@@ -170,7 +170,7 @@ fn trees() {
     }
 
     let export_path = PathBuf::new()
-        .join("./src/test_resources/Trees")
+        .join("./src/test_resources/trees")
         .join(tree_name);
 
     let contraction_settings = ContractionSettings::<Rational>::Normal;
