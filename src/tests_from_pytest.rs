@@ -26,7 +26,7 @@ use crate::subtraction::static_counterterm;
 use crate::tests::load_default_settings;
 use crate::utils::{f128, F};
 use crate::utils::{ApproxEq, FloatLike, PrecisionUpgradable};
-use crate::{cff, ltd, Externals, Integrand, Polarizations, RotationSetting};
+use crate::{cff, ltd, Externals, GeneralSettings, Integrand, Polarizations, RotationSetting};
 use crate::{
     inspect::inspect, ExportSettings, GammaloopCompileOptions, Settings,
     TropicalSubgraphTableSettings,
@@ -1109,7 +1109,7 @@ fn pytest_scalar_isopod() {
 fn pytest_scalar_raised_triangle() {
     init();
     let (model, amplitude, _) =
-        load_amplitude_output("TEST_AMPLITUDE_raised_triangle/GL_OUTPUT", true);
+        load_amplitude_output("TEST_AMPLITUDE_scalar_raised_triangle/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
@@ -1919,6 +1919,7 @@ fn scalar_box_to_triangle() {
             momenta: vec![
                 ExternalMomenta::Independent((box_externals[0] - box_externals[1]).into()),
                 box_externals[2].into(),
+                ExternalMomenta::Dependent(Dep::Dep),
             ],
             helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
         },
@@ -2213,27 +2214,10 @@ fn ratio_compare() {
     );
 }
 
-// #[test]
-// fn yaml_settings() {
-//     let numerator_settings = NumeratorSettings {
-//         eval_settings: NumeratorEvaluatorOptions::Iterative(IterativeOptions {
-//             eval_options: EvaluatorOptions {
-//                 compile_options: NumeratorCompileOptions::Compiled,
-//                 cpe_rounds: Some(1),
-//             },
-//             iterations: 1,
-//             n_cores: 1,
-//             verbose: false,
-//         }),
-//         global_numerator: None,
-//         gamma_algebra: GammaAlgebraMode::Concrete,
-//     };
+#[test]
+fn yaml_settings() {
+    let numerator_settings = GeneralSettings::default();
 
-//     let externals = vec![
-//         ExternalMomenta::Dependent(Dep::Dep),
-//         ExternalMomenta::Independent([0, 1, 2, 3]),
-//     ];
-
-//     let yaml = serde_yaml::to_string(&externals).unwrap();
-//     println!("{}", yaml);
-// }
+    let yaml = serde_yaml::to_string(&numerator_settings).unwrap();
+    println!("{}", yaml);
+}

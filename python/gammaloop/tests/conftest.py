@@ -418,6 +418,21 @@ output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
 
 
 @pytest.fixture(scope="session")
+def ta_ta_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     pjoin('Trees','ta_ta'), True)
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(output_path, 'tree_amplitude_1_ta_ta.yaml')} --format yaml --no_compile
+output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+
+
+@pytest.fixture(scope="session")
 def compile_rust_tests() -> Path | None:
 
     # If you want to bypass the "manual" compilation of the rust tests, then uncomment the line below

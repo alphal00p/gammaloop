@@ -135,6 +135,10 @@ class GammaLoopConfiguration(object):
                     'load_compiled_cff': True,
                     'load_compiled_numerator': True,
                     'joint_numerator_eval': True,
+                    'amplitude_prefactor': {
+                        're': 0.0,
+                        'im': 1.0
+                    },
                     'load_compiled_separate_orientations': False
                 },
                 'Integrand': {
@@ -187,7 +191,8 @@ class GammaLoopConfiguration(object):
                             'required_precision_for_im': 1.e-5,
                             'escalate_for_large_weight_threshold': -1.0
                         }
-                    ]
+                    ],
+                    'rotate_numerator': False,
                 },
                 'sampling': {
                     'type': 'default'
@@ -271,11 +276,9 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")

@@ -128,3 +128,9 @@ class TestRust:
 
     def test_rust_top_bubble(self, compile_rust_tests: Path, scalars_model_yaml_file: Path, top_bubble_export: Path):
         assert run_rust_test(compile_rust_tests, top_bubble_export, 'top_bubble')
+
+    def test_generate_ta_ta_tree(self, ta_ta_tree_export: Path):
+        assert True
+
+    def test_generate_scalar_raised_triangle(self, scalar_raised_triangle_export: Path):
+        assert True

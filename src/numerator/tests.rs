@@ -26,52 +26,6 @@ use super::{Evaluate, Global, Numerator, UnInit};
 fn hhgghh() {
     let expr = Atom::parse("4/9*ee^2*yt^4*Nc*(MT*id(aind(bis(4,0),bis(4,3)))+Q(6,aind(lord(4,5)))*γ(aind(loru(4,5),bis(4,0),bis(4,3))))*(MT*id(aind(bis(4,2),bis(4,5)))+Q(7,aind(lord(4,11)))*γ(aind(loru(4,11),bis(4,2),bis(4,5))))*(MT*id(aind(bis(4,4),bis(4,7)))+Q(8,aind(lord(4,29)))*γ(aind(loru(4,29),bis(4,4),bis(4,7))))*(MT*id(aind(bis(4,6),bis(4,9)))+Q(9,aind(lord(4,77)))*γ(aind(loru(4,77),bis(4,6),bis(4,9))))*(MT*id(aind(bis(4,8),bis(4,11)))+Q(10,aind(lord(4,203)))*γ(aind(loru(4,203),bis(4,8),bis(4,11))))*(MT*id(aind(bis(4,10),bis(4,1)))+Q(11,aind(lord(4,533)))*γ(aind(loru(4,533),bis(4,10),bis(4,1))))*(ProjM(aind(bis(4,1),bis(4,0)))+ProjP(aind(bis(4,1),bis(4,0))))*(ProjM(aind(bis(4,3),bis(4,2)))+ProjP(aind(bis(4,3),bis(4,2))))*(ProjM(aind(bis(4,5),bis(4,4)))+ProjP(aind(bis(4,5),bis(4,4))))*(ProjM(aind(bis(4,7),bis(4,6)))+ProjP(aind(bis(4,7),bis(4,6))))*sqrt(2)^-4*γ(aind(lord(4,2),bis(4,9),bis(4,8)))*γ(aind(lord(4,3),bis(4,11),bis(4,10)))*ϵbar(2,aind(loru(4,3)))*ϵbar(3,aind(loru(4,2)))").unwrap();
 
-    let replacements = vec![
-        (
-            Pattern::parse("ϵbar(a_,cind(0))").unwrap(),
-            Pattern::parse("0").unwrap().into(),
-        ),
-        (
-            Pattern::parse("ϵbar(a_,cind(2))").unwrap(),
-            Pattern::parse("0").unwrap().into(),
-        ),
-        (
-            Pattern::parse("ϵbar(a_,cind(3))").unwrap(),
-            Pattern::parse("0").unwrap().into(),
-        ),
-        (
-            Pattern::parse("Q(a__)").unwrap(),
-            Pattern::parse("1").unwrap().into(),
-        ),
-    ];
-
-    let reps: Vec<_> = replacements
-        .iter()
-        .map(|(a, b)| Replacement::new(a, b))
-        .collect();
-    let mut new = Numerator {
-        state: Global::new(expr.clone().into()),
-    }
-    .color_symplify()
-    .gamma_symplify()
-    // .parse()
-    // .contract(ContractionSettings::<Rational>::Normal)
-    // .unwrap()
-    // .state
-    // .tensor;
-    ;
-
-    // new.replace_all_multiple_repeat_mut(&reps);
-
-    // let new = new
-    //     .tensor
-    //     .try_as_dense()
-    //     .unwrap()
-    //     .map_data_ref(|a| a.expand().factor());
-
-    println!("{}", new.export());
-    // println!("{}", State::I);
-
     let n_edges = 12;
     let pol_data = vec![("ϵbar".into(), 2, 4), ("ϵbar".into(), 3, 4)];
     let mut params = Contracted::generate_kinematic_params_impl(n_edges, pol_data);
@@ -157,9 +111,6 @@ fn hhgghh() {
         let valg = newg.evaluate_single(&emr, &polarizations, &Settings::default());
 
         assert_eq!(val, valg);
-
-        print!("{}", val);
-        println!("{}", valg);
     }
 }
 
