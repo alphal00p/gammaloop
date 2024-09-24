@@ -51,6 +51,7 @@ use spenso::{
     },
     ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
 };
+use uuid::Uuid;
 
 use core::panic;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -1924,6 +1925,7 @@ impl Graph<Evaluators> {
             .evaluate_numerator_all_orientations(
                 &self.bare_graph,
                 sample.possibly_rotated_sample(),
+                sample.uuid(),
                 settings,
             )
     }
@@ -2118,7 +2120,7 @@ impl DerivedGraphData<Evaluators> {
 
         let num = self
             .numerator
-            .evaluate_single(&emr, polarizations, settings);
+            .evaluate_single(&emr, polarizations, None, settings);
         num.scalar_mul(&den).unwrap()
     }
 
@@ -2190,9 +2192,12 @@ impl DerivedGraphData<Evaluators> {
                 settings,
             )
             .into_iter();
+
+        let (num_sample, uuid) = sample.numerator_sample(settings);
         let num_iter = self.evaluate_numerator_orientations(
             graph,
-            &sample.sample,
+            num_sample,
+            uuid,
             lmb_specification,
             settings,
         );
@@ -2240,13 +2245,14 @@ impl DerivedGraphData<Evaluators> {
         &mut self,
         graph: &BareGraph,
         sample: &BareSample<T>,
+        tag: Option<Uuid>,
         settings: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         let emr = graph.cff_emr_from_lmb(sample, &graph.loop_momentum_basis);
 
         let rep = self
             .numerator
-            .evaluate_all_orientations(&emr, &sample.polarizations, settings)
+            .evaluate_all_orientations(&emr, &sample.polarizations, tag, settings)
             .unwrap();
 
         match rep {
@@ -2283,6 +2289,7 @@ impl DerivedGraphData<Evaluators> {
         &mut self,
         graph: &BareGraph,
         sample: &BareSample<T>,
+        tag: Option<Uuid>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
     ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>> {
@@ -2290,7 +2297,7 @@ impl DerivedGraphData<Evaluators> {
         let emr = graph.cff_emr_from_lmb(sample, lmb);
 
         self.numerator
-            .evaluate_all_orientations(&emr, &sample.polarizations, settings)
+            .evaluate_all_orientations(&emr, &sample.polarizations, tag, settings)
             .unwrap()
     }
 

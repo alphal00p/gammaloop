@@ -780,7 +780,7 @@ pub trait FloatLike:
 
     fn ln(&self) -> Self {
         panic!("ln not implemented for {:?}", self);
-        self.log() //FIXME
+        // self.log() //FIXME
     }
 
     fn rem_euclid(&self, rhs: &Self) -> Self;

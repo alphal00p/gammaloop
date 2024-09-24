@@ -2,12 +2,7 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 use spenso::{complex::Complex, structure::HasStructure};
 use std::path::{Path, PathBuf};
-use symbolica::{
-    atom::Atom,
-    domains::rational::Rational,
-    id::{Pattern, Replacement},
-    state::State,
-};
+use symbolica::{atom::Atom, domains::rational::Rational, state::State};
 
 use crate::{
     cross_section::Amplitude,
@@ -94,7 +89,7 @@ fn hhgghh() {
         &test_export_settings(),
     );
 
-    for i in 0..100 {
+    for _ in 0..100 {
         let emr: Vec<FourMomentum<F<f64>>> = (0..n_edges)
             .map(|_| {
                 FourMomentum::from_args(F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen()))
@@ -106,9 +101,9 @@ fn hhgghh() {
             Polarization::lorentz([F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen())]).cast(),
         ];
 
-        let val = new.evaluate_single(&emr, &polarizations, &Settings::default());
+        let val = new.evaluate_single(&emr, &polarizations, None, &Settings::default());
 
-        let valg = newg.evaluate_single(&emr, &polarizations, &Settings::default());
+        let valg = newg.evaluate_single(&emr, &polarizations, None, &Settings::default());
 
         assert_eq!(val, valg);
     }
@@ -332,7 +327,7 @@ fn tree_ta_ta_1() {
     let cff_val_rot = graph.evaluate_cff_expression(&rotated_sample, &Settings::default())
         / graph
             .bare_graph
-            .compute_energy_product(&rotated_sample.loop_moms(), &rotated_sample.external_moms());
+            .compute_energy_product(rotated_sample.loop_moms(), rotated_sample.external_moms());
     println!("4d: {}", val);
     println!("CFF: {}", cff_val);
     println!("CFF rot: {}", cff_val_rot);
@@ -466,7 +461,7 @@ fn tree_hh_ttxaa_1() {
         vec![],
         &externals,
         F(1.),
-        &&externals
+        &externals
             .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature),
         &external_signature,
     );

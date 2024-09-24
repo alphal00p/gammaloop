@@ -88,6 +88,7 @@ pub trait Evaluate<T: FloatLike> {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
+        tag: Option<Uuid>,
         setting: &Settings,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
 
@@ -95,6 +96,7 @@ pub trait Evaluate<T: FloatLike> {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
+        tag: Option<Uuid>,
         setting: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure>;
 }
@@ -104,6 +106,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
+        _tag: Option<Uuid>,
         settings: &Settings,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>> {
         <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations, settings);
@@ -121,6 +124,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         &mut self,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
+        _tag: Option<Uuid>,
         setting: &Settings,
     ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         if !setting.general.load_compiled_numerator {
@@ -1648,6 +1652,7 @@ impl TypedNumeratorState for Contracted {
 }
 
 impl Numerator<Contracted> {
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_evaluators_from_params(
         self,
         n_edges: usize,
@@ -1908,6 +1913,7 @@ pub struct EvaluatorSingle {
 }
 
 impl EvaluatorSingle {
+    #[allow(clippy::too_many_arguments)]
     pub fn orientated_iterative_impl(
         &self,
         n_edges: usize,
@@ -2467,6 +2473,7 @@ impl Numerator<Evaluators> {
 }
 
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum NumeratorStateError {

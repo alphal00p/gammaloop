@@ -1658,6 +1658,22 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
+    pub fn numerator_sample(&self, settings: &Settings) -> (&BareSample<T>, Option<Uuid>) {
+        if settings.stability.rotate_numerator {
+            (self.possibly_rotated_sample(), self.uuid())
+        } else {
+            (&self.sample, self.uuid())
+        }
+    }
+
+    pub fn uuid(&self) -> Option<Uuid> {
+        if self.rotated_sample.is_some() {
+            None
+        } else {
+            Some(self.uuid)
+        }
+    }
+
     pub fn loop_moms(&self) -> &[ThreeMomentum<F<T>>] {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.loop_moms
@@ -1666,6 +1682,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn loop_mom_pair(&self) -> (&[ThreeMomentum<F<T>>], Option<&[ThreeMomentum<F<T>>]>) {
         (
             self.sample.loop_moms.as_slice(),
@@ -1681,6 +1698,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn external_mom_pair(&self) -> (&[FourMomentum<F<T>>], Option<&[FourMomentum<F<T>>]>) {
         (
             self.sample.external_moms.as_slice(),
@@ -1698,6 +1716,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn polarizations_pair(
         &self,
     ) -> (

@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    gammaloop_integrand::{BareSample, DefaultSample},
+    gammaloop_integrand::DefaultSample,
     graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
     numerator::{AtomStructure, Evaluate, Evaluators, Numerator, NumeratorState},
@@ -425,6 +425,7 @@ struct LTDTerm {
 }
 
 impl LTDTerm {
+    #[allow(clippy::type_complexity)]
     fn evaluate<T: FloatLike>(
         &self,
         emr: (&[ThreeMomentum<F<T>>], Option<&[ThreeMomentum<F<T>>]>),
@@ -552,7 +553,7 @@ impl LTDTerm {
             polarizations.0
         };
 
-        let num = num.evaluate_single(&ltd_emr, polarizations, setting);
+        let num = num.evaluate_single(&ltd_emr, polarizations, None, setting);
 
         num.scalar_mul(&(inv_res.inv() * energy_product)).unwrap()
     }
