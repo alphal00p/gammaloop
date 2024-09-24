@@ -1,5 +1,6 @@
 use crate::{
     debug_info::DEBUG_LOGGER,
+    numerator::{self, Evaluators, Numerator},
     utils::{FloatLike, VarFloat, F},
     ExportSettings, Settings,
 };
@@ -466,10 +467,13 @@ impl CFFExpression {
             .iter_term_ids()
             .filter(|&term_id| self.term_has_esurface(term_id, esurface_id));
 
-        let (dag_left, dag_right) = terms_with_esurface
+        let ((dag_left, dag_right), orientations_in_limit) = terms_with_esurface
             .map(|term_id| {
                 let term_dag = &self[term_id].dag;
-                term_dag.generate_cut(circling)
+                (
+                    term_dag.generate_cut(circling),
+                    self[term_id].orientation.clone(),
+                )
             })
             .unzip();
 
@@ -482,6 +486,7 @@ impl CFFExpression {
             ref_to_esurface,
             temp_dep_mom,
             temp_dep_mom_expr,
+            orientations_in_limit,
         )
     }
 
@@ -728,11 +733,13 @@ impl Index<TermId> for CFFExpression {
 pub struct CFFLimit {
     pub left: CFFExpression,
     pub right: CFFExpression,
+    pub orientations_in_limit: Vec<Vec<bool>>,
 }
 
 impl CFFLimit {
     pub fn evaluate_from_esurface_cache<T: FloatLike>(
         &self,
+        numerator: &mut Numerator<Evaluators>,
         esurface_cache: &EsurfaceCache<F<T>>,
         energy_cache: &[F<T>],
     ) -> F<T> {

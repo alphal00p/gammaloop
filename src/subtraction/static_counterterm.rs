@@ -1,7 +1,10 @@
+use std::num;
+
 use bincode::{Decode, Encode};
 /// Counterterm for amplitudes with constant externals.
 use colored::Colorize;
 use itertools::Itertools;
+use petgraph::visit::GraphProp;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
@@ -10,8 +13,10 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 const MAX_ITERATIONS: usize = 20;
 const TOLERANCE: f64 = 10.0;
 
+use crate::graph::{BareGraph, DerivedGraphData};
 use crate::momentum::{Rotatable, Rotation};
 
+use crate::numerator::{self, Evaluate, Evaluators, Numerator};
 use crate::{
     cff::{
         esurface::{
@@ -160,32 +165,31 @@ impl CounterTerm {
     }
 
     pub fn evaluate<T: FloatLike>(
-        &self,
         sample: &DefaultSample<T>,
-        graph: &Graph,
+        graph: &BareGraph,
+        esurfaces: &EsurfaceCollection,
+        counterterm: &CounterTerm,
+        numerator: &mut Numerator<Evaluators>,
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
         let real_mass_vector = graph
-            .bare_graph
             .get_real_mass_vector()
             .into_iter()
             .map(F::from_ff64)
             .collect_vec();
 
         let e_cm = F::from_ff64(settings.kinematics.e_cm);
-        let esurfaces = &graph.get_cff().esurfaces;
-        let lmb = &graph.bare_graph.loop_momentum_basis;
 
         let const_builder = sample.zero();
 
         let mut res = Complex::new(const_builder.zero(), const_builder.zero());
 
-        for (overlap_group, overlap_complement) in self
+        for (overlap_group, overlap_complement) in counterterm
             .maximal_overlap
             .overlap_groups
             .iter()
-            .zip(self.complements_of_overlap.iter())
+            .zip(counterterm.complements_of_overlap.iter())
         {
             let overlap = &overlap_group.existing_esurfaces;
             let center = &overlap_group.center;
@@ -196,7 +200,7 @@ impl CounterTerm {
                     &(
                         overlap
                             .iter()
-                            .map(|id| self.existing_esurfaces[*id])
+                            .map(|id| counterterm.existing_esurfaces[*id])
                             .collect_vec(),
                         center,
                     ),
@@ -232,14 +236,14 @@ impl CounterTerm {
             }
 
             for existing_esurface_id in overlap.iter() {
-                let esurface_id = &self.existing_esurfaces[*existing_esurface_id];
-                let esurface = &esurfaces[*esurface_id];
+                let esurface_id = counterterm.existing_esurfaces[*existing_esurface_id];
+                let esurface = &esurfaces[esurface_id];
 
                 // solve the radius
                 let radius_guess = esurface.get_radius_guess(
                     &hemispherical_unit_shifted_momenta,
                     sample.external_moms(),
-                    lmb,
+                    &graph.loop_momentum_basis,
                 );
 
                 let function = |r: &_| {
@@ -248,7 +252,7 @@ impl CounterTerm {
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         sample.external_moms(),
-                        lmb,
+                        &graph.loop_momentum_basis,
                         &real_mass_vector,
                     )
                 };
@@ -278,23 +282,27 @@ impl CounterTerm {
                 }
 
                 let (r_plus_eval, r_minus_eval) = (
-                    self.radius_star_eval(
+                    CounterTerm::radius_star_eval(
                         &positive_result.solution,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
-                        sample.external_moms(),
                         esurfaces,
+                        counterterm,
+                        numerator,
+                        sample.external_moms(),
                         overlap_complement,
                         *existing_esurface_id,
                     ),
-                    self.radius_star_eval(
+                    CounterTerm::radius_star_eval(
                         &negative_result.solution,
                         &hemispherical_unit_shifted_momenta,
                         &center_t,
                         graph,
-                        sample.external_moms(),
                         esurfaces,
+                        counterterm,
+                        numerator,
+                        sample.external_moms(),
                         overlap_complement,
                         *existing_esurface_id,
                     ),
@@ -388,7 +396,7 @@ impl CounterTerm {
 
                 if settings.general.debug > 0 {
                     let debug_helper = DebugHelper {
-                        esurface_id: *esurface_id,
+                        esurface_id,
                         initial_radius: radius_guess.into_ff64(),
                         plus_solution: positive_result.as_f64(),
                         minus_solution: negative_result.as_f64(),
@@ -410,7 +418,7 @@ impl CounterTerm {
         }
 
         // match the complex prefactor off cff
-        let loop_number = graph.bare_graph.loop_momentum_basis.basis.len();
+        let loop_number = graph.loop_momentum_basis.basis.len();
 
         let prefactor =
             Complex::new(const_builder.zero(), -const_builder.one()).pow(loop_number as u64);
@@ -421,13 +429,14 @@ impl CounterTerm {
     // evaluate radius independent part
     #[allow(clippy::too_many_arguments)]
     fn radius_star_eval<T: FloatLike>(
-        &self,
         rstar: &F<T>,
         unit_loop_momenta: &[ThreeMomentum<F<T>>],
         center: &[ThreeMomentum<F<T>>],
-        graph: &Graph,
-        external_momenta: &[FourMomentum<F<T>>],
+        graph: &BareGraph,
         esurfaces: &EsurfaceCollection,
+        counterterm: &CounterTerm,
+        numerator: &mut Numerator<Evaluators>,
+        external_momenta: &[FourMomentum<F<T>>],
         overlap_complement: &[ExistingEsurfaceId],
         existing_esurface_id: ExistingEsurfaceId,
     ) -> F<T> {
@@ -437,31 +446,30 @@ impl CounterTerm {
             .map(|(k, center)| k * rstar + center)
             .collect_vec();
 
-        let energy_cache = graph
-            .bare_graph
-            .compute_onshell_energies(&loop_momenta_at_star, external_momenta);
+        let energy_cache = graph.compute_onshell_energies(&loop_momenta_at_star, external_momenta);
+
         let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
         let rstar_energy_product = graph
-            .bare_graph
             .get_virtual_edges_iterator()
             .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
             .fold(rstar.one(), |acc, e| acc * e);
 
         let multichanneling_denominator =
-            self.evaluate_multichanneling_denominator(&esurface_cache);
+            counterterm.evaluate_multichanneling_denominator(&esurface_cache);
 
         let multichanneling_numerator_root =
             overlap_complement.iter().fold(rstar.one(), |acc, id| {
-                acc * &esurface_cache[self.existing_esurfaces[*id]]
+                acc * &esurface_cache[counterterm.existing_esurfaces[*id]]
             });
 
         let multichanneling_factor = &multichanneling_numerator_root
             * &multichanneling_numerator_root
             / multichanneling_denominator;
 
-        let terms = &self.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
+        let terms = &counterterm.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
 
-        let eval_terms = terms.evaluate_from_esurface_cache(&esurface_cache, &energy_cache);
+        let eval_terms =
+            terms.evaluate_from_esurface_cache(numerator, &esurface_cache, &energy_cache);
 
         multichanneling_factor * eval_terms / rstar_energy_product
     }

@@ -2,6 +2,7 @@
 //! amplitudes and Local Unitarity crosssections.
 
 use core::panic;
+use std::borrow::Borrow;
 use std::fmt::Display;
 use std::time::{Duration, Instant};
 
@@ -260,20 +261,11 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             .bare_graph
             .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
-        let counter_terms = self
-            .get_graph()
-            .derived_data
-            .as_ref()
-            .unwrap()
-            .static_counterterm
-            .as_ref();
-
-        let counter_term_eval = match counter_terms {
-            None => Complex::new(zero_builder.zero(), zero_builder.zero()),
-            Some(counter_term) => {
-                counter_term.evaluate(sample, self.get_graph(), rotation_for_overlap, settings)
-            }
-        };
+        let counter_term_eval = self.get_mut_graph().evaluate_threshold_counterterm(
+            sample,
+            rotation_for_overlap,
+            settings,
+        );
 
         let prefactor = if let Some(p) = settings.general.amplidude_prefactor {
             p.map(|x| F::from_ff64(x))
@@ -340,22 +332,11 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let tree_product =
             tree_like_energies.fold(one.clone(), |acc, x| acc * F::<T>::from_f64(2.) * x);
 
-        let counterterm = match &self
-            .get_graph()
-            .derived_data
-            .as_ref()
-            .unwrap()
-            .static_counterterm
-        {
-            Some(counterterm) => {
-                counterterm.evaluate(sample, self.get_graph(), rotation_for_overlap, settings)
-                    * self
-                        .graph
-                        .bare_graph
-                        .compute_energy_product(sample.loop_moms(), sample.external_moms())
-            }
-            None => Complex::new(one.zero(), one.zero()),
-        };
+        let counterterm = self.get_mut_graph().evaluate_threshold_counterterm(
+            sample,
+            rotation_for_overlap,
+            settings,
+        );
 
         let final_energy_product = &energy_product / &tree_product;
 
