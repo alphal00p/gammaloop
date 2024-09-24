@@ -1,4 +1,4 @@
-digraph 2L4P_boxes_0 {
+digraph boxes_2L4P_0 {
 v1 -> v5 [pdg=1000, name=p1, mom=p1];
 v2 -> v6 [pdg=1000, name=p2, mom=p2];
 v10 -> v3 [pdg=1000, name=p3, mom=p3];
