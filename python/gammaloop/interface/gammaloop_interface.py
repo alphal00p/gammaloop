@@ -758,7 +758,7 @@ class GammaLoop(object):
     import_graphs_parser.add_argument('--no_compile', '-nc', action='store_true',
                                       default=False, help='Prevent compilation of qgraph python output.')
     import_graphs_parser.add_argument('--format', '-f', type=str, default='dot',
-                                      choices=['qgraph', 'dot'], help='Format to import the graphs in.')
+                                      choices=['dot','yaml','qgraph'], help='Format to import the graphs in.')
 
     def do_import_graphs(self, str_args: str) -> None:
         if str_args == 'help':
@@ -777,6 +777,33 @@ class GammaLoop(object):
 
         graphs: list[tuple[Graph, dict[str, Any]]] = []
         match args.format:
+
+            case 'dot':
+                pydot_graphs = pydot.graph_from_dot_file(
+                    file_path, encoding='utf-8')
+                if pydot_graphs is None:
+                    raise GammaLoopError(
+                        "Failed to load graphs from dot file '%s'.", args.file_path)
+                graphs = [
+                    (
+                        Graph.from_pydot(self.model, pydot_g),
+                        pydot_g.get_attributes()
+                    ) for pydot_g in pydot_graphs
+                ]
+
+            case 'yaml':
+                try:
+                    all_raw_graphs: list[Any] = yaml.safe_load(
+                        open(file_path, 'r', encoding='utf-8'))['graphs']
+                except Exception as exc:
+                    raise GammaLoopError(
+                        f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
+                
+                for i_qg, qgraph_object in enumerate(all_raw_graphs):
+                    new_graph = Graph.from_qgraph(
+                        self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
+                    attributes = qgraph_object
+                    graphs.append((new_graph, attributes))
 
             case 'qgraph':
                 sys.path.insert(0, str(file_path.parent))
@@ -801,19 +828,6 @@ class GammaLoop(object):
                         self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
                     attributes = qgraph_object
                     graphs.append((new_graph, attributes))
-
-            case 'dot':
-                pydot_graphs = pydot.graph_from_dot_file(
-                    file_path, encoding='utf-8')
-                if pydot_graphs is None:
-                    raise GammaLoopError(
-                        "Failed to load graphs from dot file '%s'.", args.file_path)
-                graphs = [
-                    (
-                        Graph.from_pydot(self.model, pydot_g),
-                        pydot_g.get_attributes()
-                    ) for pydot_g in pydot_graphs
-                ]
 
             case _:
                 raise GammaLoopError(

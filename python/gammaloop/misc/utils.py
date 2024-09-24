@@ -95,7 +95,8 @@ def replace_pseudo_floats(expression: str) -> str:
     def rationalize_float(fl: re.Match[str]) -> sb.Expression:
         fl_eval: float = eval(fl.group())
         # Work around a bug for 0.0 in symbolica
-        rationalized_fl = SBE.num(fl_eval, 1e-13) if fl_eval != 0. else SBE.num(0) # type: ignore
+        rationalized_fl = SBE.num(
+            fl_eval, 1e-13) if fl_eval != 0. else SBE.num(0)  # type: ignore
         rationalized_fl_eval: float = eval(str(rationalized_fl)+'.')
         if common.GammaLoopWarning.FloatInExpression not in common.GL_WARNINGS_ISSUED:
             common.GL_WARNINGS_ISSUED.add(
@@ -189,6 +190,7 @@ def expression_to_string_safe(expr: sb.Expression) -> str:
             square_brackets_for_function=False,
             num_exp_as_superscript=False,
             latex=False)
+        # return expr.to_canonical_string()
     except Exception as exception:  # pylint: disable=broad-except
         raise common.GammaLoopError(
             "Symbolica (@%s)failed to cast expression to string:\n%s\nwith exception:\n%s", sb.__file__, expr, exception)
@@ -212,15 +214,19 @@ class GammaLoopCustomFormatter(logging.Formatter):
             record.name = f"{record.name:20}"
         match record.levelno:
             case logging.DEBUG:
-                record.levelname = f"{Colour.GRAY}{record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.GRAY}{
+                    record.levelname:8}{Colour.END}"
             case logging.INFO:
                 record.levelname = f"{record.levelname:8}"
             case logging.WARNING:
-                record.levelname = f"{Colour.YELLOW}{record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.YELLOW}{
+                    record.levelname:8}{Colour.END}"
             case logging.ERROR:
-                record.levelname = f"{Colour.RED}{record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.RED}{
+                    record.levelname:8}{Colour.END}"
             case logging.CRITICAL:
-                record.levelname = f"{Colour.RED}{Colour.BOLD}{record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.RED}{Colour.BOLD}{
+                    record.levelname:8}{Colour.END}"
             case _:
                 record.levelname = f"{record.levelname:8}"
         record.asctime = self.formatTime(record, self.datefmt)
@@ -242,10 +248,12 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
             console_format = f'%(levelname)s: %(message)s'
             time_format = "%H:%M:%S"
         case 'short':
-            console_format = f'[{Colour.GREEN}%(asctime)s{Colour.END}] %(levelname)s: %(message)s'
+            console_format = f'[{Colour.GREEN}%(asctime)s{
+                Colour.END}] %(levelname)s: %(message)s'
             time_format = "%H:%M:%S"
         case 'long':
-            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
+            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{
+                Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
             time_format = '%Y-%m-%d %H:%M:%S'
         case _:
             raise common.GammaLoopError(
