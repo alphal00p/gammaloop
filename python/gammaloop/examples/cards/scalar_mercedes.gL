@@ -1,5 +1,5 @@
 import_model scalars-full
-import_graphs ./python/gammaloop/tests/test_data/graph_inputs/ltd_topology_f.py --format=qgraph
+import_graphs ./python/gammaloop/tests/test_data/graph_inputs/ltd_topology_f.dot
 set drawing.feynmp.show_edge_composite_momenta True
 show_settings drawing.feynmp.show_edge_composite_momenta
 #set drawing.feynmp.show_edge_labels False
