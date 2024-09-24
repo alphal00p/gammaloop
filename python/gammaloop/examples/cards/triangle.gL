@@ -23,7 +23,6 @@ set externals.data.momenta [\
 # [0.5,0.,-2.,1],\
 # [1,2.,0.,-1],\
 # ]
-set externals.data.helicities [1,1,1]
 set e_cm 1.
 set n_start 1000000
 set n_max 50000000000

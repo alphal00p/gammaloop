@@ -276,9 +276,11 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -758,7 +760,7 @@ class GammaLoop(object):
     import_graphs_parser.add_argument('--no_compile', '-nc', action='store_true',
                                       default=False, help='Prevent compilation of qgraph python output.')
     import_graphs_parser.add_argument('--format', '-f', type=str, default='dot',
-                                      choices=['dot','yaml','qgraph'], help='Format to import the graphs in.')
+                                      choices=['dot', 'yaml', 'qgraph'], help='Format to import the graphs in.')
 
     def do_import_graphs(self, str_args: str) -> None:
         if str_args == 'help':
@@ -798,7 +800,7 @@ class GammaLoop(object):
                 except Exception as exc:
                     raise GammaLoopError(
                         f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
-                
+
                 for i_qg, qgraph_object in enumerate(all_raw_graphs):
                     new_graph = Graph.from_qgraph(
                         self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
@@ -1034,7 +1036,7 @@ class GammaLoop(object):
                                choices=['file', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
     output_parser.add_argument('-ow', '--overwrite_output', default=False, action='store_true',
                                help='Overwrite output if already existing.')
-    
+
     output_parser.add_argument('-yo', '--yaml_only', default=False, action='store_true',
                                help='Only output yaml.')
 

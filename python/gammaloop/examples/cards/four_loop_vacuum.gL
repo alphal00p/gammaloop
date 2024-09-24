@@ -11,16 +11,16 @@ show_settings drawing.feynmp.show_edge_composite_momenta
 output examples/cards/four_loop_vacuum
 launch examples/cards/four_loop_vacuum
 info
-set integrated_phase 'real'
+set integrated_phase 'imag'
 # Tropical sampling
-set sampling {'type':'discrete_graph_sampling', 'subtype':'tropical'}
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
 # Regular sampling with cartesian product of spherical parameterisation
 #set sampling {'type':'default'}
 set e_cm 1.
-set externals.momenta [[0.,0.,0.,0.],]
-set n_start 1000000
+set externals.data.momenta [[0.,0.,0.,0.],]
+set n_start 100000
 set n_max 50000000000
 set use_ltd True
 #set Stability.levels []
 #inspect four_loop_vacuum -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327 0.72337 0.424237 0.12327
-integrate four_loop_vacuum -c 8 -r -t (-2.1692834522734336e-09,0.)
+integrate four_loop_vacuum -c 8 -r -t (0.,2.1692834522734336e-09)

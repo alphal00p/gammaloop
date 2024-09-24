@@ -26,7 +26,6 @@ set externals.data.momenta [\
 # [1.5,0.,3.,-0.5],\
 # [1,2.,0.,-1],\
 # ]
-set externals.data.helicities [1,1,1]
 set e_cm 1.
 
 set rotation_axis []
