@@ -15,7 +15,7 @@ class TestScalarTopologies:
         command_list = gl_interface.CommandList.from_string(
             "launch {}".format(scalar_massless_box_export))
         command_list.add_command(
-            "set externals.momenta [[14.0,-6.6,-40.,0.],[43.,-15.2,-33.,0.],[17.9,50.0,-11.8,0.0],]")
+            "set externals.data.momenta [[14.0,-6.6,-40.,0.],[43.,-15.2,-33.,0.],[17.9,50.0,-11.8,0.0],]")
         command_list.add_command(
             "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set continuous_dim_learning_rate 0.0")
@@ -37,7 +37,7 @@ class TestScalarTopologies:
         command_list = gl_interface.CommandList.from_string(
             "launch {}".format(massless_scalar_triangle_export))
         command_list.add_command(
-            "set externals.momenta [[1,3,4,5],[-1,-6,-7,-8],]")
+            "set externals.data.momenta [[1,3,4,5],[-1,-6,-7,-8],]")
         command_list.add_command(
             "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 10000")
@@ -57,7 +57,7 @@ class TestScalarTopologies:
         command_list = gl_interface.CommandList.from_string(
             "launch {}".format(scalar_tree_triangle_export))
         command_list.add_command(
-            "set externals.momenta [[0.5,1.5,2,2.5],[0.5,1.5,2,2.5],[-1,-6,-7,-8],]")
+            "set externals.data.momenta [[0.5,1.5,2,2.5],[0.5,1.5,2,2.5],[-1,-6,-7,-8],]")
         command_list.add_command(
             "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 10000")
@@ -76,7 +76,7 @@ class TestScalarTopologies:
         command_list = gl_interface.CommandList.from_string(
             "launch {}".format(scalar_ltd_topology_f_export))
         command_list.add_command(
-            "set externals.momenta [[0,0,0,1],]")
+            "set externals.data.momenta [[0,0,0,1],]")
         command_list.add_command(
             "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 100000")
@@ -96,7 +96,7 @@ class TestScalarTopologies:
         command_list = gl_interface.CommandList.from_string(
             "launch {}".format(scalar_ltd_topology_h_export))
         command_list.add_command(
-            "set externals.momenta [[0,0,0,1],]")
+            "set externals.data.momenta [[0,0,0,1],]")
         command_list.add_command(
             "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 100000")
@@ -119,7 +119,7 @@ class TestScalarTopologies:
 
         command_list.add_command("set_model_param mass_scalar_1 172.0")
         command_list.add_command(
-            "set externals.momenta [\
+            "set externals.data.momenta [\
 [5.,0.,0.,5.],\
 [5.,0.,0.,-5.],\
 [8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\
@@ -159,7 +159,7 @@ class TestPhysicalTopologies:
         command_list = gl_interface.CommandList.from_string(
             "launch {}".format(physical_3L_6photons_topology_A_export))
         command_list.add_command(
-            "set externals.momenta [\
+            "set externals.data.momenta [\
 [5.,0.,0.,5.],\
 [5.,0.,0.,-5.],\
 [8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\

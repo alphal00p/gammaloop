@@ -134,3 +134,19 @@ class TestRust:
 
     def test_generate_scalar_raised_triangle(self, scalar_raised_triangle_export: Path):
         assert True
+
+    def test_generate_t_ta_tree(self, t_ta_tree_export: Path):
+        assert True
+
+    def test_generate_th_th_tree(self, th_th_tree_export: Path):
+        assert True
+
+    def test_generate_hh_ttxaa_tree(self, hh_ttxaa_tree_export: Path):
+        assert True
+
+    def test_generate_h_ttxaah_tree(self, h_ttxaah_tree_export: Path):
+        assert True
+
+    def test_generate_aa_aahhttx_tree(self, aa_aahhttx_tree_export: Path):
+        assert True
+

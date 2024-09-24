@@ -490,7 +490,7 @@ fn tree_hh_ttxaa_1() {
 fn load_tree(tree_name: &str, amp_num: usize) -> (Model, Amplitude<UnInit>, PathBuf) {
     let _ = env_logger::builder().is_test(true).try_init();
     let file_path = PathBuf::new()
-        .join("./src/test_resources/Trees")
+        .join("./src/test_resources/trees")
         .join(tree_name)
         .join("GL_OUTPUT");
 
