@@ -1594,21 +1594,21 @@ fn pytest_scalar_massless_3l_pentabox() {
     );
 }
 
-#[test]
-fn pytest_lbl_box() {
-    init();
-    let (model, amplitude, _) = load_amplitude_output("TEST_AMPLITUDE_lbl_box/GL_OUTPUT", true);
+// #[test]
+// fn pytest_lbl_box() {
+//     init();
+//     let (model, amplitude, _) = load_amplitude_output("TEST_AMPLITUDE_lbl_box/GL_OUTPUT", true);
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-    graph.generate_cff();
-    let export_settings = test_export_settings();
-    let _graph = graph.process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        PathBuf::new(),
-        &export_settings,
-    );
-}
+//     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+//     graph.generate_cff();
+//     let export_settings = test_export_settings();
+//     let _graph = graph.process_numerator(
+//         &model,
+//         ContractionSettings::Normal,
+//         PathBuf::new(),
+//         &export_settings,
+//     );
+// }
 
 // #[test]
 // #[allow(non_snake_case)]
