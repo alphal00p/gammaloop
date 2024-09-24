@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use itertools::Itertools;
-use symbolica::{printer::PrintOptions, representations::Atom};
+use symbolica::printer::PrintOptions;
 
 use crate::{
     tests_from_pytest::load_amplitude_output,
@@ -13,30 +13,28 @@ use super::{BitFilter, Involution, NestingGraph, NestingGraphBuilder};
 #[test]
 #[allow(unused)]
 fn lbl() {
-    let (model, amplitude) = load_amplitude_output("./src/test_resources/lbl/");
+    let (model, amplitude, _) = load_amplitude_output("TEST_AMPLITUDE_lbl_box/GL_OUTPUT", true);
 
-    model
-        .export_coupling_replacement_rules("./ignore/", PrintOptions::mathematica())
-        .unwrap();
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_uv();
+    // graph.generate_uv();
+
     graph.generate_loop_momentum_bases();
 
-    let uv_graph = graph.derived_data.uv.clone().unwrap();
+    let uv_graph = UVGraph::from_graph(&graph.bare_graph);
 
     insta::assert_snapshot!("lbl_dot", uv_graph.0.base_dot());
 
-    let lmb = &graph.derived_data.loop_momentum_bases.clone().unwrap()[0];
+    let lmb = graph.bare_graph.loop_momentum_basis.clone();
 
-    let cycles = uv_graph.cycle_basis_from_lmb(lmb);
+    let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
 
     let all_cycles = uv_graph.0.read_tarjan();
     assert_eq!(all_cycles.len(), 1);
 
-    // for cycle in all_cycles {
-    //     println!("{}", uv_graph.0.dot(&cycle));
-    // }
+    for cycle in all_cycles {
+        println!("{}", uv_graph.0.dot(&cycle));
+    }
 
     insta::assert_ron_snapshot!("lbl_cycles", cycles);
 

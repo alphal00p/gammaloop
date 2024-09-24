@@ -1,20 +1,16 @@
 use std::{clone, cmp::Ordering, collections::VecDeque, hash::Hash, iter::Map, ops::Sub};
 
 use ahash::{AHashMap, AHashSet};
-use bitvec::{
-    slice::IterOnes,
-    vec::{self, BitVec},
-};
+use bitvec::{slice::IterOnes, vec::BitVec};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::{algo::Cycle, graph};
-use rand::{Rng, SeedableRng};
-use rand_xoshiro::Xoroshiro64Star;
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     cross_section::SuperGraph,
-    graph::{Edge, EdgeType, Graph, LoopMomentumBasis, Vertex},
+    graph::{BareGraph, Edge, EdgeType, Graph, LoopMomentumBasis, Vertex},
 };
 
 use bitvec::prelude::*;
@@ -147,7 +143,7 @@ impl<N, E> Involution<N, E> {
     }
 
     fn random(len: usize, seed: u64) -> Involution<Option<N>, ()> {
-        let mut rng = Xoroshiro64Star::seed_from_u64(seed);
+        let mut rng = SmallRng::seed_from_u64(seed);
 
         let mut inv = Involution::new();
 
@@ -771,7 +767,7 @@ impl<E, V> NestingGraph<E, V> {
         let mut inv: Involution<Option<NestingNode>, ()> =
             Involution::<NestingNode, ()>::random(edges, seed);
 
-        let mut rng = Xoroshiro64Star::seed_from_u64(seed);
+        let mut rng = SmallRng::seed_from_u64(seed);
 
         let mut externals = Vec::new();
         let mut sources = Vec::new();
@@ -1750,11 +1746,15 @@ impl PartialOrd for BitFilter {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 struct UVEdge {
     og_edge: usize,
+    dod: isize,
 }
 
 impl UVEdge {
     pub fn from_edge(edge: &Edge, id: usize) -> Self {
-        UVEdge { og_edge: id }
+        UVEdge {
+            og_edge: id,
+            dod: edge.dod(),
+        }
     }
 
     pub fn numerator_rank(&self) -> isize {
@@ -1763,11 +1763,13 @@ impl UVEdge {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct UVNode {}
+struct UVNode {
+    dod: isize,
+}
 
 impl UVNode {
     pub fn from_vertex(vertex: &Vertex) -> Self {
-        UVNode {}
+        UVNode { dod: vertex.dod() }
     }
 
     pub fn numerator_rank(&self) -> isize {
@@ -1780,7 +1782,7 @@ pub struct UVGraph(NestingGraph<UVEdge, UVNode>);
 
 #[allow(dead_code)]
 impl UVGraph {
-    pub fn from_graph(graph: &Graph) -> Self {
+    pub fn from_graph(graph: &BareGraph) -> Self {
         let mut uv_graph = NestingGraphBuilder::new();
 
         for n in &graph.vertices {
@@ -1809,14 +1811,14 @@ impl UVGraph {
         UVGraph(uv_graph.into())
     }
 
-    pub fn half_edge_id(&self, g: &Graph, id: usize) -> usize {
+    pub fn half_edge_id(&self, g: &BareGraph, id: usize) -> usize {
         self.0
             .involution
             .find_from_data(&UVEdge::from_edge(&g.edges[id], id))
             .unwrap()
     }
 
-    pub fn node_id(&self, g: &Graph, id: usize) -> NestingNode {
+    pub fn node_id(&self, g: &BareGraph, id: usize) -> NestingNode {
         let e_id = g.vertices[id].edges.first().unwrap();
         self.0
             .involution
@@ -1894,18 +1896,28 @@ impl UVGraph {
         spinneys.into_iter().collect()
     }
 
-    fn dod(&self, subgraph: &SubGraph) -> isize {
-        let loop_count = if let Some(loop_count) = subgraph.loopcount {
+    fn n_loops(&self, subgraph: &SubGraph) -> usize {
+        if let Some(loop_count) = subgraph.loopcount {
             loop_count
         } else {
             self.0
                 .paton_count_loops(subgraph, subgraph.filter.first_one().unwrap())
                 .unwrap()
-        };
+        }
+    }
 
-        isize::try_from(4 * loop_count).unwrap() + isize::try_from(self.0.n_externals()).unwrap()
-            - isize::try_from(subgraph.filter.count_ones()).unwrap()
-            + self.numerator_rank(subgraph)
+    fn dod(&self, subgraph: &SubGraph) -> isize {
+        let mut dod: isize = self.n_loops(subgraph) as isize;
+
+        for e in self.0.iter_egde_data(subgraph) {
+            dod += e.dod;
+        }
+
+        for (_, n) in self.0.iter_node_data(subgraph) {
+            dod += n.dod;
+        }
+
+        dod
     }
 }
 

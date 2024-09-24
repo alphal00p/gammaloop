@@ -31,7 +31,6 @@ pub mod utils;
 
 pub mod uv;
 
-pub mod uv;
 
 use crate::utils::f128;
 use color_eyre::{Help, Report, Result};

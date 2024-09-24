@@ -172,6 +172,25 @@ impl From<EdgeSlots<Dual<Lorentz>>> for VertexSlots {
 }
 
 impl VertexRule {
+    pub fn dod(&self) -> isize {
+        let mut dod = 0;
+        let mut spins = vec![];
+        for p in &self.particles {
+            spins.push(p.spin);
+        }
+
+        if spins.iter().all(|&s| s == 3) {
+            if spins.len() == 3 {
+                dod = 1;
+            } else {
+                dod = 0;
+            }
+        } else {
+            dod = 0;
+        }
+        dod
+    }
+
     pub fn generate_vertex_slots(
         &self,
         mut shifts: (usize, usize, usize),

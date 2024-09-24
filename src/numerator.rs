@@ -1753,9 +1753,6 @@ impl Numerator<Contracted> {
             Contracted::generate_params(graph, model);
 
         trace!("params length:{}", params.len());
-        for (i, p) in params.iter().enumerate() {
-            println!("\t{i} {p}");
-        }
 
         let emr_len = graph.edges.len();
 

@@ -120,6 +120,12 @@ pub enum VertexInfo {
 }
 
 impl VertexInfo {
+    pub fn dod(&self) -> isize {
+        match self {
+            VertexInfo::ExternalVertexInfo(e) => 0,
+            VertexInfo::InteractonVertexInfo(i) => i.dod(),
+        }
+    }
     pub fn generate_vertex_slots(
         &self,
         shifts: (usize, usize, usize),
@@ -164,6 +170,10 @@ pub struct InteractionVertexInfo {
 }
 
 impl InteractionVertexInfo {
+    pub fn dod(&self) -> isize {
+        self.vertex_rule.dod()
+    }
+
     pub fn apply_vertex_rule(
         &self,
         edges: &[isize],
@@ -410,6 +420,14 @@ pub struct Edge {
 }
 
 impl Edge {
+    pub fn dod(&self) -> isize {
+        match self.particle.spin {
+            2 => -1,
+            3 => -2,
+            _ => -2,
+        }
+    }
+
     pub fn from_serializable_edge(
         model: &model::Model,
         graph: &BareGraph,
@@ -594,6 +612,9 @@ pub struct Vertex {
 }
 
 impl Vertex {
+    pub fn dod(&self) -> isize {
+        self.vertex_info.dod()
+    }
     pub fn get_local_edge_position(&self, edge: &Edge, graph: &BareGraph) -> usize {
         let global_id: usize = graph.edge_name_to_position[&edge.name];
         self.edges
