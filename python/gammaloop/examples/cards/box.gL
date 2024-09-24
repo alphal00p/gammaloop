@@ -1,5 +1,5 @@
 import_model scalars-full
-import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/massless_box.py -f qgraph --no_compile
+import_graphs ./python/gammaloop/tests/test_data/graph_inputs/massless_box.dot
 set compile_cff True
 set compile_separate_orientations False
 set load_compiled_cff True
@@ -26,7 +26,6 @@ set externals.data.momenta [\
 # [1.5,0.,3.,-0.5],\
 # [1,2.,0.,-1],\
 # ]
-set externals.data.helicities [1,1,1]
 set e_cm 1.
 
 set rotation_axis []

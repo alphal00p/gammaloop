@@ -1487,7 +1487,7 @@ impl Contracted {
                 Err(e) => match e.kind() {
                     std::io::ErrorKind::AlreadyExists => {}
                     _ => {
-                        panic!("Error creating directory: {}", e)
+                        panic!("Error creating directory: {} at path {}", e, path.display())
                     }
                 },
             }

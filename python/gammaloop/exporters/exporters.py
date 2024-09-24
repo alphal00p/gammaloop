@@ -37,8 +37,11 @@ def update_run_card_in_output(process_dir: Path, settings: gammaloop_interface.G
 
     run_config = copy.deepcopy(settings.get_setting('run_settings'))
     # Do not update settings meant to be automatically adjusted if not explicitly set
-    if run_config['Kinematics']['externals']['type'] == 'constant' and run_config['Kinematics']['externals']['data']['momenta'] is None:
-        del run_config['Kinematics']
+    if run_config['Kinematics']['externals']['type'] == 'constant':
+        if run_config['Kinematics']['externals']['data']['momenta'] is None:
+            del run_config['Kinematics']['externals']['data']['momenta']
+        if run_config['Kinematics']['externals']['data']['helicities'] is None:
+            del run_config['Kinematics']['externals']['data']['helicities']
     process_config.update({'run_settings': run_config})
 
     with open(pjoin(process_dir, 'cards', 'run_card.yaml'), 'w', encoding='utf-8') as file:
@@ -55,7 +58,7 @@ class GammaLoopExporter(object):
     def __init__(self, gammaloop_interface: GammaLoop, args: argparse.Namespace):
         self.gammaloop: GammaLoop = gammaloop_interface
         self.configuration_for_process = copy.deepcopy(self.gammaloop.config)
-        self.output_options= args
+        self.output_options = args
         # Process args argument further here if needed
 
     def generic_export(self, export_root: Path):
@@ -131,7 +134,7 @@ class GammaLoopExporter(object):
                                 "Invalid external connection.")
                     mass = self.gammaloop.model.get_parameter(
                         v2.vertex_info.get_particles()[0].mass.name).value
-                    
+
                     spin = v2.vertex_info.get_particles()[0].spin
                     if spin == 1:
                         helicities.append(0)
@@ -232,7 +235,6 @@ class GammaLoopExporter(object):
             externals.insert(0,
                              [conf[0][0]*conf[0][2] * pi for pi in first_leg_momentum])
 
-
         return (e_cm, externals[:-1], helicities)
 
 
@@ -245,7 +247,8 @@ class AmplitudesExporter(GammaLoopExporter):
     def adjust_run_settings(self, amplitudes: AmplitudeList):
 
         if self.configuration_for_process.get_setting('run_settings.Kinematics.externals.type') == 'constant' and \
-                self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.momenta') is None:
+                (self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.momenta') is None or
+                 self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.helicities') is None):
             if len(amplitudes) == 0 or len(amplitudes[0].amplitude_graphs) == 0:
                 logger.warning(
                     "Could not identify external momenta structure.")
@@ -255,12 +258,14 @@ class AmplitudesExporter(GammaLoopExporter):
                 self.configuration_for_process.get_setting(
                     'run_settings.Kinematics.e_cm')
             )
-            self.configuration_for_process.set_setting(
-                'run_settings.Kinematics.externals.data.momenta', external_momenta)
-            self.configuration_for_process.set_setting(
-                'run_settings.Kinematics.externals.data.helicities', helicities)
-            self.configuration_for_process.set_setting(
-                'run_settings.Kinematics.e_cm', e_cm)
+            if self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.momenta') is None:
+                self.configuration_for_process.set_setting(
+                    'run_settings.Kinematics.externals.data.momenta', external_momenta)
+                self.configuration_for_process.set_setting(
+                    'run_settings.Kinematics.e_cm', e_cm)
+            if self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.helicities') is None:
+                self.configuration_for_process.set_setting(
+                    'run_settings.Kinematics.externals.data.helicities', helicities)
 
     def export_expression(self, export_root: Path, amplitudes: AmplitudeList, format: str):
         for amplitude in amplitudes:
@@ -295,16 +300,17 @@ class AmplitudesExporter(GammaLoopExporter):
                 if self.configuration_for_process.get_setting('drawing.mode') != None:
 
                     drawings_path = pjoin(
-                         export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
+                        export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
                     os.makedirs(drawings_path)
                     drawing_file_paths = amplitude.draw(
-                         self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
-                    self.finalize_drawing(Path(drawings_path), drawing_file_paths)
+                        self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
+                    self.finalize_drawing(
+                        Path(drawings_path), drawing_file_paths)
 
                 self.gammaloop.rust_worker.add_amplitude_from_yaml_str(
-                     amplitude_yaml)
-        if not self.output_options.yaml_only :
-        # Now address the rust export aspect
+                    amplitude_yaml)
+        if not self.output_options.yaml_only:
+            # Now address the rust export aspect
             self.gammaloop.rust_worker.export_amplitudes(
                 str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']))
 
@@ -342,9 +348,10 @@ class CrossSectionsExporter(GammaLoopExporter):
                 drawing_file_paths = one_cross_section.draw(
                     self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
                 self.finalize_drawing(Path(drawings_path), drawing_file_paths)
-                self.gammaloop.rust_worker.add_cross_section_from_yaml_str(yaml_xs)
+                self.gammaloop.rust_worker.add_cross_section_from_yaml_str(
+                    yaml_xs)
 
         if not self.output_options.yaml_only:
-        # Now address the rust export aspect
+            # Now address the rust export aspect
             self.gammaloop.rust_worker.export_cross_sections(
                 str(export_root), [cs.name for cs in cross_sections])

@@ -123,6 +123,9 @@ class TestRust:
     def test_rust_physical_1L_6photons(self, compile_rust_tests: Path,      scalars_model_yaml_file: Path, physical_1L_6photons_export: Path):
         assert run_rust_test(compile_rust_tests, physical_1L_6photons_export, 'physical_1L_6photons')
 
+    def test_generate_physical_1L_2A_final_4H_top_internal(self, physical_1L_2A_final_4H_top_internal_export: Path):
+        assert True
+
     def test_generate_top_bubble(self, top_bubble_export: Path):
         assert True
 
@@ -134,3 +137,19 @@ class TestRust:
 
     def test_generate_scalar_raised_triangle(self, scalar_raised_triangle_export: Path):
         assert True
+
+    def test_generate_t_ta_tree(self, t_ta_tree_export: Path):
+        assert True
+
+    def test_generate_th_th_tree(self, th_th_tree_export: Path):
+        assert True
+
+    def test_generate_hh_ttxaa_tree(self, hh_ttxaa_tree_export: Path):
+        assert True
+
+    def test_generate_h_ttxaah_tree(self, h_ttxaah_tree_export: Path):
+        assert True
+
+    def test_generate_aa_aahhttx_tree(self, aa_aahhttx_tree_export: Path):
+        assert True
+

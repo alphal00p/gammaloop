@@ -75,7 +75,7 @@ ignore/
 
 src/test_resources/gammaloop_models/*.dat
 
-src/test_resources/Trees
+src/test_resources/trees
 
 GL_OUTPUT*
 

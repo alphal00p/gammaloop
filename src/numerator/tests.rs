@@ -1,114 +1,126 @@
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 
-use spenso::{complex::Complex, structure::HasStructure};
+use spenso::{complex::Complex, iterators::IteratableTensor, structure::HasStructure};
 use std::path::{Path, PathBuf};
 use symbolica::{atom::Atom, domains::rational::Rational, state::State};
 
 use crate::{
     cross_section::Amplitude,
     gammaloop_integrand::DefaultSample,
-    model::Model,
+    graph::Graph,
+    model::{self, Model},
     momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, Polarization},
     numerator::{Contracted, ContractionSettings, ExtraInfo},
-    tests_from_pytest::{sample_generator, test_export_settings},
+    tests_from_pytest::{load_amplitude_output, sample_generator, test_export_settings},
     utils::{f128, ApproxEq, F},
     Externals, RotationSetting, Settings,
 };
 
-use super::{Evaluate, Global, Numerator, UnInit};
+use super::{
+    Evaluate, EvaluatorOptions, Global, Numerator, NumeratorCompileOptions,
+    NumeratorEvaluatorOptions, UnInit,
+};
 
 #[test]
 fn hhgghh() {
-    let expr = Atom::parse("4/9*ee^2*yt^4*Nc*(MT*id(aind(bis(4,0),bis(4,3)))+Q(6,aind(lord(4,5)))*γ(aind(loru(4,5),bis(4,0),bis(4,3))))*(MT*id(aind(bis(4,2),bis(4,5)))+Q(7,aind(lord(4,11)))*γ(aind(loru(4,11),bis(4,2),bis(4,5))))*(MT*id(aind(bis(4,4),bis(4,7)))+Q(8,aind(lord(4,29)))*γ(aind(loru(4,29),bis(4,4),bis(4,7))))*(MT*id(aind(bis(4,6),bis(4,9)))+Q(9,aind(lord(4,77)))*γ(aind(loru(4,77),bis(4,6),bis(4,9))))*(MT*id(aind(bis(4,8),bis(4,11)))+Q(10,aind(lord(4,203)))*γ(aind(loru(4,203),bis(4,8),bis(4,11))))*(MT*id(aind(bis(4,10),bis(4,1)))+Q(11,aind(lord(4,533)))*γ(aind(loru(4,533),bis(4,10),bis(4,1))))*(ProjM(aind(bis(4,1),bis(4,0)))+ProjP(aind(bis(4,1),bis(4,0))))*(ProjM(aind(bis(4,3),bis(4,2)))+ProjP(aind(bis(4,3),bis(4,2))))*(ProjM(aind(bis(4,5),bis(4,4)))+ProjP(aind(bis(4,5),bis(4,4))))*(ProjM(aind(bis(4,7),bis(4,6)))+ProjP(aind(bis(4,7),bis(4,6))))*sqrt(2)^-4*γ(aind(lord(4,2),bis(4,9),bis(4,8)))*γ(aind(lord(4,3),bis(4,11),bis(4,10)))*ϵbar(2,aind(loru(4,3)))*ϵbar(3,aind(loru(4,2)))").unwrap();
-
-    let n_edges = 12;
-    let pol_data = vec![("ϵbar".into(), 2, 4), ("ϵbar".into(), 3, 4)];
-    let mut params = Contracted::generate_kinematic_params_impl(n_edges, pol_data);
-
-    let seed = 9;
-    let mut rng = SmallRng::seed_from_u64(seed);
-    let mut param_values: Vec<Complex<F<f64>>> = (0..params.len())
-        .map(|_| Complex::new_re(F(rng.gen())))
-        .collect::<Vec<_>>();
-
-    // params.push(Atom::new_var(State::I));
-    // param_values.push(Complex::new_i());
-
-    let model_params_start = params.len();
-    let model_params = vec![
-        ("MT", 173.0),
-        ("ee", 0.3079537672443688),
-        ("yt", 0.9936661458150063),
-    ];
-
-    for (name, value) in model_params {
-        params.push(Atom::new_var(State::get_symbol(name)));
-        param_values.push(Complex::new(F(value), F(0.)));
-    }
-
-    let quad_values: Vec<Complex<F<f128>>> =
-        param_values.iter().map(|c| c.map(|f| f.higher())).collect();
-
-    let extra_info = ExtraInfo {
-        path: PathBuf::new().join("ignore"),
-        orientations: vec![vec![true; n_edges]],
-    };
-
-    let mut new = Numerator {
-        state: Global::new(expr.clone().into()),
-    }
-    .color_symplify()
-    .parse()
-    .contract(ContractionSettings::<Rational>::Normal)
-    .unwrap()
-    .generate_evaluators_from_params(
-        n_edges,
-        "test",
-        model_params_start,
-        &params,
-        param_values.clone(),
-        quad_values.clone(),
-        &extra_info,
-        &test_export_settings(),
+    let _ = env_logger::builder().is_test(true).try_init();
+    let (model, amplitude, path) = load_amplitude_output(
+        &("TEST_AMPLITUDE_".to_string() + "physical_1L_2A_final_4H_top_internal" + "/GL_OUTPUT"),
+        true,
     );
 
-    let mut newg = Numerator {
-        state: Global::new(expr.into()),
-    }
-    .color_symplify()
-    .gamma_symplify()
-    .parse()
-    .contract(ContractionSettings::<Rational>::Normal)
-    .unwrap()
-    .generate_evaluators_from_params(
-        n_edges,
-        "test_other",
-        model_params_start,
-        &params,
-        param_values,
-        quad_values,
-        &extra_info,
-        &test_export_settings(),
-    );
+    validate_gamma(amplitude.amplitude_graphs[0].graph.clone(), &model, path);
 
-    for _ in 0..100 {
-        let emr: Vec<FourMomentum<F<f64>>> = (0..n_edges)
-            .map(|_| {
-                FourMomentum::from_args(F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen()))
-            })
-            .collect::<Vec<_>>();
+    // let expr = Atom::parse("4/9*ee^2*yt^4*Nc*(MT*id(aind(bis(4,0),bis(4,3)))+Q(6,aind(lord(4,5)))*γ(aind(loru(4,5),bis(4,0),bis(4,3))))*(MT*id(aind(bis(4,2),bis(4,5)))+Q(7,aind(lord(4,11)))*γ(aind(loru(4,11),bis(4,2),bis(4,5))))*(MT*id(aind(bis(4,4),bis(4,7)))+Q(8,aind(lord(4,29)))*γ(aind(loru(4,29),bis(4,4),bis(4,7))))*(MT*id(aind(bis(4,6),bis(4,9)))+Q(9,aind(lord(4,77)))*γ(aind(loru(4,77),bis(4,6),bis(4,9))))*(MT*id(aind(bis(4,8),bis(4,11)))+Q(10,aind(lord(4,203)))*γ(aind(loru(4,203),bis(4,8),bis(4,11))))*(MT*id(aind(bis(4,10),bis(4,1)))+Q(11,aind(lord(4,533)))*γ(aind(loru(4,533),bis(4,10),bis(4,1))))*(ProjM(aind(bis(4,1),bis(4,0)))+ProjP(aind(bis(4,1),bis(4,0))))*(ProjM(aind(bis(4,3),bis(4,2)))+ProjP(aind(bis(4,3),bis(4,2))))*(ProjM(aind(bis(4,5),bis(4,4)))+ProjP(aind(bis(4,5),bis(4,4))))*(ProjM(aind(bis(4,7),bis(4,6)))+ProjP(aind(bis(4,7),bis(4,6))))*sqrt(2)^-4*γ(aind(lord(4,2),bis(4,9),bis(4,8)))*γ(aind(lord(4,3),bis(4,11),bis(4,10)))*ϵbar(2,aind(loru(4,3)))*ϵbar(3,aind(loru(4,2)))").unwrap();
 
-        let polarizations: Vec<Polarization<Complex<F<f64>>>> = vec![
-            Polarization::lorentz([F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen())]).cast(),
-            Polarization::lorentz([F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen())]).cast(),
-        ];
+    // let n_edges = 12;
+    // let pol_data = vec![("ϵbar".into(), 2, 4), ("ϵbar".into(), 3, 4)];
+    // let mut params = Contracted::generate_kinematic_params_impl(n_edges, pol_data);
 
-        let val = new.evaluate_single(&emr, &polarizations, None, &Settings::default());
+    // let seed = 9;
+    // let mut rng = SmallRng::seed_from_u64(seed);
+    // let mut param_values: Vec<Complex<F<f64>>> = (0..params.len())
+    //     .map(|_| Complex::new_re(F(rng.gen())))
+    //     .collect::<Vec<_>>();
 
-        let valg = newg.evaluate_single(&emr, &polarizations, None, &Settings::default());
+    // // params.push(Atom::new_var(State::I));
+    // // param_values.push(Complex::new_i());
 
-        assert_eq!(val, valg);
-    }
+    // let model_params_start = params.len();
+    // let model_params = vec![
+    //     ("MT", 173.0),
+    //     ("ee", 0.3079537672443688),
+    //     ("yt", 0.9936661458150063),
+    // ];
+
+    // for (name, value) in model_params {
+    //     params.push(Atom::new_var(State::get_symbol(name)));
+    //     param_values.push(Complex::new(F(value), F(0.)));
+    // }
+
+    // let quad_values: Vec<Complex<F<f128>>> =
+    //     param_values.iter().map(|c| c.map(|f| f.higher())).collect();
+
+    // let extra_info = ExtraInfo {
+    //     path: PathBuf::new().join("ignore"),
+    //     orientations: vec![vec![true; n_edges]],
+    // };
+
+    // let mut new = Numerator {
+    //     state: Global::new(expr.clone().into()),
+    // }
+    // .color_symplify()
+    // .parse()
+    // .contract(ContractionSettings::<Rational>::Normal)
+    // .unwrap()
+    // .generate_evaluators_from_params(
+    //     n_edges,
+    //     "test",
+    //     model_params_start,
+    //     &params,
+    //     param_values.clone(),
+    //     quad_values.clone(),
+    //     &extra_info,
+    //     &test_export_settings(),
+    // );
+
+    // let mut newg = Numerator {
+    //     state: Global::new(expr.into()),
+    // }
+    // .color_symplify()
+    // .gamma_symplify()
+    // .parse()
+    // .contract(ContractionSettings::<Rational>::Normal)
+    // .unwrap()
+    // .generate_evaluators_from_params(
+    //     n_edges,
+    //     "test_other",
+    //     model_params_start,
+    //     &params,
+    //     param_values,
+    //     quad_values,
+    //     &extra_info,
+    //     &test_export_settings(),
+    // );
+
+    // for i in 0..100 {
+    //     let emr: Vec<FourMomentum<F<f64>>> = (0..n_edges)
+    //         .map(|_| {
+    //             FourMomentum::from_args(F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen()))
+    //         })
+    //         .collect::<Vec<_>>();
+
+    //     let polarizations: Vec<Polarization<Complex<F<f64>>>> = vec![
+    //         Polarization::lorentz([F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen())]).cast(),
+    //         Polarization::lorentz([F(rng.gen()), F(rng.gen()), F(rng.gen()), F(rng.gen())]).cast(),
+    //     ];
+
+    //     let val = new.evaluate_single(&emr, &polarizations, None, &Settings::default());
+
+    //     let valg = newg.evaluate_single(&emr, &polarizations, None, &Settings::default());
+
+    //     assert_eq!(val, valg, "{}", i);
+    // }
 }
 
 #[test]
@@ -117,7 +129,7 @@ fn trees() {
     let tree_name = "th_th";
     let amp_name = "tree_amplitude_1_th_th";
     let file_path = PathBuf::new()
-        .join("./src/test_resources/Trees")
+        .join("./src/test_resources/trees")
         .join(tree_name)
         .join("GL_OUTPUT");
 
@@ -170,7 +182,7 @@ fn trees() {
     }
 
     let export_path = PathBuf::new()
-        .join("./src/test_resources/Trees")
+        .join("./src/test_resources/trees")
         .join(tree_name);
 
     let contraction_settings = ContractionSettings::<Rational>::Normal;
@@ -232,6 +244,7 @@ fn tree_ta_ta_1() {
     let (model, amplitude, path) = load_tree("ta_ta", 1);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
 
     graph.generate_cff();
 
@@ -333,6 +346,80 @@ fn tree_ta_ta_1() {
     println!("4d: {}", val);
     println!("CFF: {}", cff_val);
     println!("CFF rot: {}", cff_val_rot);
+}
+
+pub fn validate_gamma(mut g: Graph<UnInit>, model: &Model, path: PathBuf) {
+    let num = g.derived_data.as_ref().unwrap().numerator.clone();
+
+    let num = num.from_graph(&mut g.bare_graph);
+
+    let path_gamma = path.join("gamma");
+
+    let mut export_settings = test_export_settings();
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
+            cpe_rounds: Some(2),
+            compile_options: NumeratorCompileOptions::NotCompiled,
+        });
+
+    let mut num_gamma = num
+        .clone()
+        .color_symplify()
+        .gamma_symplify()
+        .parse()
+        .contract(ContractionSettings::<Rational>::Normal)
+        .unwrap()
+        .generate_evaluators(
+            model,
+            &g.bare_graph,
+            &ExtraInfo {
+                path: path_gamma,
+                orientations: vec![vec![true; g.bare_graph.edges.len()]],
+            },
+            &export_settings,
+        );
+
+    let mut num = num
+        .color_symplify()
+        // .gamma_symplify()
+        .parse()
+        .contract(ContractionSettings::<Rational>::Normal)
+        .unwrap()
+        .generate_evaluators(
+            model,
+            &g.bare_graph,
+            &ExtraInfo {
+                path,
+                orientations: vec![vec![true; g.bare_graph.edges.len()]],
+            },
+            &export_settings,
+        );
+
+    for i in 0..10 {
+        let s: DefaultSample<f64> = sample_generator(i, &g.bare_graph, None);
+
+        let emr = g
+            .bare_graph
+            .cff_emr_from_lmb(&s.sample, &g.bare_graph.loop_momentum_basis);
+
+        let polarizations = s.polarizations();
+
+        let val = num.evaluate_single(&emr, polarizations, None, &Settings::default());
+
+        let valg = num_gamma.evaluate_single(&emr, polarizations, None, &Settings::default());
+
+        assert!(
+            Complex::approx_eq_iterator(
+                valg.iter_flat().map(|(i, o)| o),
+                val.iter_flat().map(|(i, o)| o),
+                &F(0.0001),
+            ),
+            "{}: {}!={}",
+            i,
+            val,
+            valg,
+        );
+    }
 }
 
 #[test]
@@ -490,7 +577,7 @@ fn tree_hh_ttxaa_1() {
 fn load_tree(tree_name: &str, amp_num: usize) -> (Model, Amplitude<UnInit>, PathBuf) {
     let _ = env_logger::builder().is_test(true).try_init();
     let file_path = PathBuf::new()
-        .join("./src/test_resources/Trees")
+        .join("./src/test_resources/trees")
         .join(tree_name)
         .join("GL_OUTPUT");
 
@@ -516,9 +603,10 @@ fn load_tree(tree_name: &str, amp_num: usize) -> (Model, Amplitude<UnInit>, Path
     )
     .unwrap();
 
-    let export_path = PathBuf::new()
-        .join("./src/test_resources/Trees")
-        .join(tree_name);
+    let export_path = file_path.join(format!(
+        "sources/amplitudes/tree_amplitude_{}_{}",
+        amp_num, tree_name
+    ));
 
     (model, amplitude, export_path)
 }
