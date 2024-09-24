@@ -1433,6 +1433,7 @@ impl Contracted {
     pub fn evaluator(
         self,
         path: PathBuf,
+        name: &str,
         export_settings: &ExportSettings,
         params: &[Atom],
     ) -> EvaluatorSingle {
@@ -1478,14 +1479,26 @@ impl Contracted {
             .compile_options()
             .compile()
         {
+            debug!("compiling iterative evaluator");
+            let path = path.join("compiled");
+            // let res = std::fs::create_dir_all(&path);
+            match std::fs::create_dir(&path) {
+                Ok(_) => {}
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::AlreadyExists => {}
+                    _ => {
+                        panic!("Error creating directory: {}", e)
+                    }
+                },
+            }
             let mut filename = path.clone();
-            filename.push("numerator_single.cpp");
+            filename.push(format!("{}_numerator_single.cpp", name));
             debug!("Compiling  single evaluator to {}", filename.display());
             let filename = filename.to_string_lossy();
 
-            let function_name = "numerator_single";
+            let function_name = format!("{}_numerator_single", name);
 
-            let library_name = path.join("numerator_single.so");
+            let library_name = path.join(format!("{}_numerator_single.so", name));
             let library_name = library_name.to_string_lossy();
             let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
 
@@ -1494,7 +1507,7 @@ impl Contracted {
                 .to_symbolica_compile_options();
 
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, inline_asm)
                     .unwrap()
                     .compile(&library_name, compile_options)
                     .unwrap()
@@ -1656,6 +1669,7 @@ impl Numerator<Contracted> {
     pub fn generate_evaluators_from_params(
         self,
         n_edges: usize,
+        name: &str,
         model_params_start: usize,
         params: &[Atom],
         double_param_values: Vec<Complex<F<f64>>>,
@@ -1665,13 +1679,14 @@ impl Numerator<Contracted> {
     ) -> Numerator<Evaluators> {
         let single = self
             .state
-            .evaluator(extra_info.path.clone(), export_settings, params);
+            .evaluator(extra_info.path.clone(), name, export_settings, params);
 
         match export_settings.numerator_settings.eval_settings {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
                 state: Evaluators {
                     orientated: Some(single.orientated_joint_impl(
                         n_edges,
+                        name,
                         params,
                         extra_info,
                         export_settings,
@@ -1694,6 +1709,7 @@ impl Numerator<Contracted> {
                 state: Evaluators {
                     orientated: Some(single.orientated_iterative_impl(
                         n_edges,
+                        name,
                         params,
                         extra_info,
                         export_settings,
@@ -1743,9 +1759,12 @@ impl Numerator<Contracted> {
 
         let emr_len = graph.edges.len();
 
-        let single = self
-            .state
-            .evaluator(extra_info.path.clone(), export_settings, &params);
+        let single = self.state.evaluator(
+            extra_info.path.clone(),
+            &graph.name,
+            export_settings,
+            &params,
+        );
 
         match export_settings.numerator_settings.eval_settings {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
@@ -1917,6 +1936,7 @@ impl EvaluatorSingle {
     pub fn orientated_iterative_impl(
         &self,
         n_edges: usize,
+        name: &str,
         params: &[Atom],
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
@@ -2058,13 +2078,14 @@ impl EvaluatorSingle {
                 },
             }
 
-            let mut filename = extra_info.path.clone();
-            filename.push("numerator_iterative.cpp");
+            let mut filename = path.clone();
+
+            filename.push(format!("{}_numerator_iterative.cpp", name));
             let filename = filename.to_string_lossy();
 
-            let function_name = "numerator";
+            let function_name = format!("{}_numerator_iterative", name);
 
-            let library_name = extra_info.path.join("numerator_iterative.so");
+            let library_name = path.join(format!("{}_numerator_iterative.so", name));
             let library_name = library_name.to_string_lossy();
             let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
 
@@ -2072,7 +2093,7 @@ impl EvaluatorSingle {
                 .gammaloop_compile_options
                 .to_symbolica_compile_options();
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, inline_asm)
                     .unwrap()
                     .compile(&library_name, compile_options)
                     .unwrap()
@@ -2105,6 +2126,7 @@ impl EvaluatorSingle {
         debug!("generate iterative evaluator");
         self.orientated_iterative_impl(
             graph.edges.len(),
+            &graph.name,
             params,
             extra_info,
             export_settings,
@@ -2117,6 +2139,7 @@ impl EvaluatorSingle {
     pub fn orientated_joint_impl(
         &self,
         n_edges: usize,
+        name: &str,
         params: &[Atom],
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
@@ -2238,13 +2261,14 @@ impl EvaluatorSingle {
                 },
             }
 
-            let mut filename = extra_info.path.clone();
-            filename.push("numerator.cpp");
+            let mut filename = path.clone();
+
+            filename.push(format!("{}_numerator_joint.cpp", name));
             let filename = filename.to_string_lossy();
 
-            let function_name = "numerator";
+            let function_name = format!("{}_numerator_joint", name);
 
-            let library_name = extra_info.path.join("numerator.so");
+            let library_name = path.join(format!("{}_numerator_joint.so", name));
             let library_name = library_name.to_string_lossy();
             let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
 
@@ -2252,7 +2276,7 @@ impl EvaluatorSingle {
                 .gammaloop_compile_options
                 .to_symbolica_compile_options();
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, inline_asm)
                     .unwrap()
                     .compile(&library_name, compile_options)
                     .unwrap()
@@ -2279,7 +2303,13 @@ impl EvaluatorSingle {
         export_settings: &ExportSettings,
     ) -> EvaluatorOrientations {
         debug!("generate joint evaluator");
-        self.orientated_joint_impl(graph.edges.len(), params, extra_info, export_settings)
+        self.orientated_joint_impl(
+            graph.edges.len(),
+            &graph.name,
+            params,
+            extra_info,
+            export_settings,
+        )
     }
 }
 

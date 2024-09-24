@@ -2112,9 +2112,9 @@ impl<T:FloatLike> ApproxEq<Complex<F<T>>,F<T>> for Complex<F<T>>{
         let two_pi = self.re.PI()+self.re.PI();
         let arg_self = self.arg().rem_euclid(&two_pi);
         let arg_other = other.arg().rem_euclid(&two_pi);
-        let arg_diff = (&self.arg() - &other.arg()).rem_euclid(&two_pi);  
-        let arg_zero = self.re.zero();
-        if !arg_diff.approx_eq(&arg_zero, tolerance)  {
+        // let arg_diff = (&self.arg() - &other.arg()).rem_euclid(&two_pi);  
+        // let arg_zero = self.re.zero();
+        if !arg_self.approx_eq(&arg_other, tolerance)  {
             return  Err(eyre!(
                 "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
                 arg_self, arg_other,&arg_self-&arg_other, tolerance
@@ -3098,4 +3098,15 @@ pub fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
 
 pub fn into_complex_ff64<T: FloatLike>(c: &Complex<F<T>>) -> Complex<F<f64>> {
     Complex::new(c.re.into_ff64(), c.im.into_ff64())
+}
+
+#[test]
+fn complex_compare(){
+    let ltd= Complex::new(0.11773583919739394,-0.22157450463964778).map(F);
+
+    let cff = Complex::new(0.11773583589023458,-0.22157450446824836).map(F);
+
+    ltd.approx_eq_res(&cff, &F(0.00000001)).unwrap();
+
+    let ltd_arg = ltd.arg();
 }

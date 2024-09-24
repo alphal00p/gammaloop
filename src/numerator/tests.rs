@@ -63,6 +63,7 @@ fn hhgghh() {
     .unwrap()
     .generate_evaluators_from_params(
         n_edges,
+        "test",
         model_params_start,
         &params,
         param_values.clone(),
@@ -81,6 +82,7 @@ fn hhgghh() {
     .unwrap()
     .generate_evaluators_from_params(
         n_edges,
+        "test_other",
         model_params_start,
         &params,
         param_values,
