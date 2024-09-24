@@ -72,6 +72,7 @@ class GammaLoopConfiguration(object):
                 'mode': 'feynmp',
                 'combined_graphs_pdf_grid_shape': [3, 2],
                 'feynmp': {
+                    'reverse_outgoing_edges_order': True,
                     'show_edge_labels': True,
                     'show_particle_names': True,
                     'show_edge_names': True,

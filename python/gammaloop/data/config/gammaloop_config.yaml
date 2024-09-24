@@ -4,6 +4,7 @@ drawing:
   mode: "feynmp"
   combined_graphs_pdf_grid_shape: [3, 2]
   feynmp:
+    reverse_outgoing_edges_order: true
     show_edge_labels: true
     show_particle_names: true
     show_edge_names: true
