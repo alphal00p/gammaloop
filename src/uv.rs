@@ -7,10 +7,13 @@ use itertools::Itertools;
 use petgraph::{algo::Cycle, graph};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
+use spenso::parametric::SerializableAtom;
+use symbolica::atom::Atom;
 
 use crate::{
     cross_section::SuperGraph,
     graph::{BareGraph, Edge, EdgeType, Graph, LoopMomentumBasis, Vertex},
+    numerator::{AppliedFeynmanRule, Numerator},
 };
 
 use bitvec::prelude::*;
@@ -1747,13 +1750,17 @@ impl PartialOrd for BitFilter {
 struct UVEdge {
     og_edge: usize,
     dod: isize,
+    num: SerializableAtom,
+    den: SerializableAtom,
 }
 
 impl UVEdge {
-    pub fn from_edge(edge: &Edge, id: usize) -> Self {
+    pub fn from_edge(edge: &Edge, id: usize, bare_graph: &BareGraph) -> Self {
         UVEdge {
             og_edge: id,
             dod: edge.dod(),
+            num: edge.numerator(bare_graph).into(),
+            den: edge.full_den(bare_graph).into(),
         }
     }
 
@@ -1765,11 +1772,18 @@ impl UVEdge {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct UVNode {
     dod: isize,
+    num: SerializableAtom,
 }
 
 impl UVNode {
-    pub fn from_vertex(vertex: &Vertex) -> Self {
-        UVNode { dod: vertex.dod() }
+    pub fn from_vertex(vertex: &Vertex, graph: &BareGraph) -> Self {
+        UVNode {
+            dod: vertex.dod(),
+            num: vertex
+                .contracted_vertex_rule(graph)
+                .unwrap_or(Atom::new_num(1))
+                .into(),
+        }
     }
 
     pub fn numerator_rank(&self) -> isize {
@@ -1786,7 +1800,7 @@ impl UVGraph {
         let mut uv_graph = NestingGraphBuilder::new();
 
         for n in &graph.vertices {
-            uv_graph.add_node(UVNode::from_vertex(n));
+            uv_graph.add_node(UVNode::from_vertex(n, graph));
         }
 
         for (i, edge) in graph.edges.iter().enumerate() {
@@ -1797,13 +1811,13 @@ impl UVGraph {
 
             match edge.edge_type {
                 EdgeType::Virtual => {
-                    uv_graph.add_edge(source, sink, UVEdge::from_edge(edge, i));
+                    uv_graph.add_edge(source, sink, UVEdge::from_edge(edge, i, graph));
                 }
                 EdgeType::Outgoing => {
-                    uv_graph.add_external_edge(source, UVEdge::from_edge(edge, i));
+                    uv_graph.add_external_edge(source, UVEdge::from_edge(edge, i, graph));
                 }
                 EdgeType::Incoming => {
-                    uv_graph.add_external_edge(sink, UVEdge::from_edge(edge, i));
+                    uv_graph.add_external_edge(sink, UVEdge::from_edge(edge, i, graph));
                 }
             }
         }
@@ -1814,7 +1828,7 @@ impl UVGraph {
     pub fn half_edge_id(&self, g: &BareGraph, id: usize) -> usize {
         self.0
             .involution
-            .find_from_data(&UVEdge::from_edge(&g.edges[id], id))
+            .find_from_data(&UVEdge::from_edge(&g.edges[id], id, g))
             .unwrap()
     }
 
@@ -1885,6 +1899,9 @@ impl UVGraph {
             let union = ci.internal_graph.union(&cj.internal_graph);
             if self.dod(&union) >= 0 {
                 spinneys.insert(union);
+                println!("found spinney");
+            } else {
+                println!("not dod >=0 spinney");
             }
         }
 

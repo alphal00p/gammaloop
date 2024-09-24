@@ -417,6 +417,7 @@ pub struct Edge {
     pub propagator: Arc<model::Propagator>,
     pub particle: Arc<model::Particle>,
     pub vertices: [usize; 2],
+    pub internal_index: Option<usize>,
 }
 
 impl Edge {
@@ -446,6 +447,7 @@ impl Edge {
                     .get_vertex_position(&serializable_edge.vertices[1])
                     .unwrap(),
             ],
+            internal_index: None,
         }
     }
 
@@ -464,6 +466,11 @@ impl Edge {
             .unwrap_or(Atom::new_num(0));
 
         (mom, mass)
+    }
+
+    pub fn full_den(&self, graph: &BareGraph) -> Atom {
+        let (mom, mass) = self.denominator(graph);
+        &mom * &mom - &mass * &mass
     }
 
     pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
@@ -492,14 +499,14 @@ impl Edge {
         graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn numerator(&self, graph: &BareGraph) -> (Atom, usize) {
+    pub fn numerator(&self, graph: &BareGraph) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let in_slots = self.in_slot(graph);
         let out_slots = self.out_slot(graph);
 
         match self.edge_type {
-            EdgeType::Incoming => (self.particle.incoming_polarization_atom(&out_slots, num), 0),
-            EdgeType::Outgoing => (self.particle.outgoing_polarization_atom(&in_slots, num), 0),
+            EdgeType::Incoming => self.particle.incoming_polarization_atom(&out_slots, num),
+            EdgeType::Outgoing => self.particle.outgoing_polarization_atom(&in_slots, num),
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
@@ -525,7 +532,7 @@ impl Edge {
                 }
 
                 let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
-                let pindex_num = graph.shifts.0 + 1;
+                let pindex_num = self.internal_index.unwrap(); //graph.shifts.0 + 1;
                 if self.particle.is_antiparticle() {
                     atom = pslashfun.replace_all(
                         atom.as_view(),
@@ -577,7 +584,7 @@ impl Edge {
                     .map(|(pat, rhs)| Replacement::new(pat, rhs))
                     .collect();
 
-                (atom.replace_all_multiple(&reps), pindex_num + 1)
+                atom.replace_all_multiple(&reps)
             }
         }
     }
@@ -1031,6 +1038,7 @@ impl BareGraph {
 
         // panic!("{:?}", g.edge_name_to_position);
 
+        g.generate_internal_indices_for_edges();
         g
     }
 
@@ -1045,6 +1053,13 @@ impl BareGraph {
             });
         self.shifts = s;
         self.vertex_slots = v;
+    }
+
+    fn generate_internal_indices_for_edges(&mut self) {
+        self.shifts.0 = self.shifts.1 + self.shifts.2;
+        for (i, edge) in self.edges.iter_mut().enumerate() {
+            edge.internal_index = Some(self.shifts.0 + i + 1);
+        }
     }
 
     #[inline]

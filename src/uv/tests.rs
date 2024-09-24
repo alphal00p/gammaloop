@@ -51,6 +51,8 @@ fn lbl() {
     //         // println!("{}", t.structure());
     //     }
     // }
+
+    println!("{}", uv_graph.wood().dot());
 }
 
 #[test]

@@ -799,7 +799,7 @@ impl<State: ExpressionState> NumeratorState for SingleExpression<State> {
 }
 
 impl AppliedFeynmanRule {
-    pub fn from_graph(graph: &mut BareGraph) -> Self {
+    pub fn from_graph(graph: &BareGraph) -> Self {
         debug!("generating numerator for graph: {}", graph.name);
         debug!("momentum: {}", graph.dot_lmb());
 
@@ -810,18 +810,18 @@ impl AppliedFeynmanRule {
             .collect();
 
         let mut eatoms: Vec<Atom> = vec![];
-        let mut shift = 0;
+        // let mut shift = 0;
         let i = Atom::new_var(State::I);
         for e in &graph.edges {
-            let (n, s) = e.numerator(graph);
+            let n = e.numerator(graph);
             let n = if matches!(e.edge_type, EdgeType::Virtual) {
                 &n * &i
             } else {
                 n
             };
             eatoms.push(n);
-            shift += s;
-            graph.shifts.0 += shift;
+            // shift += s;
+            // graph.shifts.0 += shift;
         }
         let mut builder = Atom::new_num(1);
 
