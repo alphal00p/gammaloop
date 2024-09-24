@@ -168,7 +168,7 @@ class GammaLoopConfiguration(object):
                     'n_max': 1000000000,
                     'integrated_phase': 'real',
                     'discrete_dim_learning_rate': 1.5,
-                    'continuous_dim_learning_rate': 1.5,
+                    'continuous_dim_learning_rate': 0.0,
                     'train_on_avg': False,
                     'show_max_wgt_info': False,
                     'max_prob_ratio': 0.01,
@@ -195,7 +195,9 @@ class GammaLoopConfiguration(object):
                     'rotate_numerator': False,
                 },
                 'sampling': {
-                    'type': 'default'
+                    'type': 'discrete_graph_sampling',
+                    'subtype': 'tropical',
+                    'upcast_on_failure': True
                 },
                 'subtraction': {
                     'sliver_width': 1.0,
@@ -521,7 +523,9 @@ class GammaLoop(object):
                                           help='Model external parameter name to modify')
     set_model_param_settings.add_argument('value', metavar='value', type=float,
                                           help='Value to assign to that model parameter')
-    set_model_param_settings.add_argument('--no_overwrite', '-n',
+    set_model_param_settings.add_argument('--no_update', '-nu',
+                                          default=False, action='store_true', help='Do not update dependent model parameters yet')
+    set_model_param_settings.add_argument('--no_overwrite', '-no',
                                           default=False, action='store_true', help='Do not overwrite the param card and YAML model on disk with the new value')
 
     def do_set_model_param(self, str_args: str) -> None:
@@ -541,31 +545,39 @@ class GammaLoop(object):
 
         input_card = InputParamCard.from_model(self.model)
 
-        if args.param not in input_card:
-            raise GammaLoopError(
-                f"Model parameter '{args.param}' not found in model '{self.model.get_full_name()}'. Available external parameters are:\n\
-                    {', '.join(p for p in input_card.keys())}")
+        if args.param != 'update_only':
+            if args.param not in input_card:
+                raise GammaLoopError(
+                    f"Model parameter '{args.param}' not found in model '{self.model.get_full_name()}'. Available external parameters are:\n\
+                        {', '.join(p for p in input_card.keys())}")
 
-        input_card[args.param] = complex(args.value)
-        self.model.apply_input_param_card(input_card, simplify=False)
-        processed_yaml_model = self.model.to_yaml()
-        self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+            input_card[args.param] = complex(args.value)
 
-        logger.info("Setting model parameter '%s%s%s' to %s%s%s", Colour.GREEN,
-                    args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+        self.model.apply_input_param_card(
+            input_card, simplify=False, update=not args.no_update)
 
-        if not args.no_overwrite:
-            ParamCardWriter.write(
-                self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
-            logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
-                         self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
-            with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
-                output_metadata = OutputMetaData.from_yaml_str(file.read())
-            self.launched_output.joinpath('cards', 'param_card.dat')
-            with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
-                file.write(processed_yaml_model)
-            logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
-                'sources', 'model', f"{output_metadata['model_name']}.yaml"))
+        if args.param != 'update_only':
+            logger.info("Setting model parameter '%s%s%s' to %s%s%s", Colour.GREEN,
+                        args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+        else:
+            logger.info("Updating all dependent model parameters")
+
+        if not args.no_update:
+            processed_yaml_model = self.model.to_yaml()
+            self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+
+            if not args.no_overwrite:
+                ParamCardWriter.write(
+                    self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
+                logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
+                             self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+                with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
+                    output_metadata = OutputMetaData.from_yaml_str(file.read())
+                self.launched_output.joinpath('cards', 'param_card.dat')
+                with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
+                    file.write(processed_yaml_model)
+                logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
+                    'sources', 'model', f"{output_metadata['model_name']}.yaml"))
 
     # show_settings command
     show_settings = ArgumentParser(prog='show_settings')

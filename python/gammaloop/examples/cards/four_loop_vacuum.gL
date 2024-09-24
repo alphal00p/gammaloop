@@ -20,7 +20,6 @@ set e_cm 1.
 set externals.data.momenta [[0.,0.,0.,0.],]
 set n_start 100000
 set n_max 50000000000
-set use_ltd False
 #set Stability.levels []
 #inspect four_loop_vacuum -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327 0.72337 0.424237 0.12327
-integrate four_loop_vacuum -c 8 -r -t (0.,-2.1692834522734336e-09)
+integrate four_loop_vacuum -c 8 -r -t (2.1692834522734336e-09,0.)

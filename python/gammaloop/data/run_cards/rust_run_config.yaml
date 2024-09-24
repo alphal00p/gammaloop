@@ -2,15 +2,22 @@ General:
   debug: 0
   use_ltd: false
   force_orientations: null
-  load_compiled_cff: True
-  load_compiled_separate_orientations: False
+  load_compiled_cff: true
+  load_compiled_numerator: true
+  joint_numerator_eval: true
+  load_compiled_separate_orientations: false
+  amplitude_prefactor:
+    re: 0.
+    im: 1.
 Integrand:
   type: gamma_loop
 Kinematics:
   e_cm: 3.0
   externals:
     type: constant
-    momenta: null # Will be set automatically
+    data:
+      momenta: null # Will be set automatically
+      helicities: null
 Parameterization:
   mode: spherical
   mapping: linear
@@ -24,7 +31,7 @@ Integrator:
   n_max: 1000000000
   integrated_phase: real
   discrete_dim_learning_rate: 1.5
-  continuous_dim_learning_rate: 1.5
+  continuous_dim_learning_rate: 0.0
   train_on_avg: false
   show_max_wgt_info: false
   max_prob_ratio: 0.01
@@ -33,6 +40,7 @@ Observables: []
 Selectors: []
 Stability:
   rotation_axis: [x]
+  rotate_numerator: false
   levels:
     - precision: Double
       required_precision_for_re: 1.0e-5
@@ -43,14 +51,15 @@ Stability:
       required_precision_for_im: 1.0e-5
       escalate_for_large_weight_threshold: -1.0
 sampling:
-  type: default
+  type: discrete_graph_sampling
+  subtype: tropical
+  upcast_on_failure: true
 subtraction:
   sliver_width: 1.0
   dampen_integrable_singularity: true
   dynamic_sliver: false
-  integrated_ct_hfunction: 
+  integrated_ct_hfunction:
     enabled_dampening: true
     function: poly_exponential
     power: null
     sigma: 1.0
-
