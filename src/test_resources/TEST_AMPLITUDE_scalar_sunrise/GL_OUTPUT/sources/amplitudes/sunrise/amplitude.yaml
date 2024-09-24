@@ -1,0 +1,114 @@
+name: sunrise
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: sunrise_0
+    vertices:
+    - name: v1
+      vertex_info:
+        type: external_vertex_info
+        particle: scalar_0
+        direction: in
+      edges:
+      - p1
+    - name: v2
+      vertex_info:
+        type: external_vertex_info
+        particle: scalar_0
+        direction: out
+      edges:
+      - p2
+    - name: v3
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - p1
+      - q1
+      - q3
+      - q2
+    - name: v4
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_4_SCALAR_0000
+      edges:
+      - p2
+      - q1
+      - q3
+      - q2
+    edges:
+    - name: p1
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v1
+      - v3
+    - name: p2
+      edge_type: out
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v4
+      - v2
+    - name: q1
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v3
+      - v4
+    - name: q2
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v4
+      - v3
+    - name: q3
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v3
+      - v4
+    external_connections:
+    - - v1
+      - null
+    - - null
+      - v2
+    overall_factor: '1'
+    loop_momentum_basis:
+    - q2
+    - q3
+    edge_signatures:
+    - - p1
+      - - - 0
+          - 0
+        - - 1
+          - 0
+    - - p2
+      - - - 0
+          - 0
+        - - 1
+          - 0
+    - - q1
+      - - - 1
+          - -1
+        - - 1
+          - 0
+    - - q2
+      - - - 1
+          - 0
+        - - 0
+          - 0
+    - - q3
+      - - - 0
+          - 1
+        - - 0
+          - 0
+  multiplicity: '1'
+  multi_channeling_channels: []

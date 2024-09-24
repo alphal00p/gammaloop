@@ -4,23 +4,26 @@ use crate::{
     inspect,
     integrands::Integrand,
     integrate::{
-        havana_integrate, print_integral_result, MasterNode, SerializableBatchResult,
+        havana_integrate, print_integral_result, BatchResult, MasterNode,
         SerializableIntegrationState,
     },
     model::Model,
+    numerator::{AppliedFeynmanRule, PythonState, UnInit},
+    utils::F,
     HasIntegrand, Settings,
 };
 use ahash::HashMap;
+
 use colored::Colorize;
 use git_version::git_version;
 use itertools::{self, Itertools};
 use log::{info, warn};
+use spenso::complex::Complex;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 use symbolica::printer::PrintOptions;
-
 const GIT_VERSION: &str = git_version!();
 
 #[allow(unused)]
@@ -77,7 +80,7 @@ pub struct OutputOptions {}
 pub struct PythonWorker {
     pub model: Model,
     pub cross_sections: CrossSectionList,
-    pub amplitudes: AmplitudeList,
+    pub amplitudes: AmplitudeList<PythonState>,
     pub integrands: HashMap<String, Integrand>,
     pub master_node: Option<MasterNode>,
 }
@@ -189,7 +192,8 @@ impl PythonWorker {
         }
         match Amplitude::from_yaml_str(&self.model, String::from(yaml_str)) {
             Ok(amp) => {
-                self.amplitudes.add_amplitude(amp);
+                self.amplitudes
+                    .add_amplitude(amp.map(|a| a.map(|ag| ag.forget_type())));
                 Ok(())
             }
             Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
@@ -204,7 +208,7 @@ impl PythonWorker {
         }
         AmplitudeList::from_file(&self.model, String::from(file_path))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| self.amplitudes = a)
+            .map(|a| self.amplitudes = a.map(|a| a.map(|ag| ag.map(|g| g.forget_type()))))
     }
 
     pub fn load_amplitudes_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
@@ -215,17 +219,31 @@ impl PythonWorker {
         }
         AmplitudeList::from_yaml_str(&self.model, String::from(yaml_str))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| self.amplitudes = a)
+            .map(|a| self.amplitudes = a.map(|a| a.map(|ag| ag.map(|g| g.forget_type()))))
     }
 
     pub fn load_amplitudes_derived_data(&mut self, path: &str) -> PyResult<()> {
+        let path = PathBuf::from(path);
+
+        let path_to_amplitudes = path.join("sources").join("amplitudes");
+        let path_to_settings = path.join("cards").join("run_card.yaml");
+        let settings_str = std::fs::read_to_string(path_to_settings)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        let settings: Settings = serde_yaml::from_str(&settings_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
         self.amplitudes
-            .load_derived_data(path)
+            .load_derived_data_mut(&self.model, &path_to_amplitudes, &settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
-    pub fn generate_numerators(&mut self) {
-        self.amplitudes.generate_numerator(&self.model);
+    pub fn apply_feynman_rules(&mut self) {
+        self.amplitudes.map_mut_graphs(|g| {
+            g.statefull_apply::<_, UnInit, AppliedFeynmanRule>(|d, b| {
+                d.map_numerator(|n| n.from_graph(b))
+            })
+            .unwrap()
+        });
     }
 
     // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,
@@ -270,12 +288,16 @@ impl PythonWorker {
         &mut self,
         export_root: &str,
         amplitude_names: Vec<String>,
+        export_yaml_str: &str,
     ) -> PyResult<String> {
+        let export_settings = serde_yaml::from_str(export_yaml_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
         let mut n_exported: usize = 0;
         for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.to_string()) {
                 n_exported += 1;
-                let res = amplitude.export(export_root, &self.model);
+                let res = amplitude.export(export_root, &self.model, &export_settings);
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));
                 }
@@ -316,7 +338,7 @@ impl PythonWorker {
     }
 
     pub fn export_expressions(&mut self, export_root: &str, format: &str) -> PyResult<String> {
-        self.generate_numerators();
+        self.apply_feynman_rules();
 
         for amplitude in self.amplitudes.container.iter_mut() {
             amplitude
@@ -346,10 +368,13 @@ impl PythonWorker {
         is_momentum_space: bool,
         use_f128: bool,
     ) -> PyResult<(f64, f64)> {
+        let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
         match self.integrands.get_mut(integrand) {
             Some(integrand) => {
                 let settings = match integrand {
-                    Integrand::GammaLoopIntegrand(integrand) => integrand.settings.clone(),
+                    Integrand::GammaLoopIntegrand(integrand) => {
+                        integrand.global_data.settings.clone()
+                    }
                     _ => todo!(),
                 };
 
@@ -363,7 +388,92 @@ impl PythonWorker {
                     use_f128,
                 );
 
-                Ok((res.re, res.im))
+                Ok((res.re.0, res.im.0))
+            }
+            None => Err(exceptions::PyException::new_err(format!(
+                "Could not find integrand {}",
+                integrand
+            ))),
+        }
+    }
+
+    pub fn inspect_lmw_integrand(
+        &mut self,
+        integrand: &str,
+        workspace_path: &str,
+        use_f128: bool,
+    ) -> PyResult<(f64, f64)> {
+        match self.integrands.get_mut(integrand) {
+            Some(integrand_struct) => {
+                let new_settings = match integrand_struct {
+                    Integrand::GammaLoopIntegrand(integrand_struct) => {
+                        integrand_struct.global_data.settings.clone()
+                    }
+                    _ => todo!(),
+                };
+
+                let workspace_path = PathBuf::from(workspace_path);
+                let path_to_state = workspace_path.join("integration_state");
+
+                match fs::read(path_to_state) {
+                    Ok(state_bytes) => {
+                        let serializable_state: SerializableIntegrationState =
+                            bincode::decode_from_slice::<SerializableIntegrationState, _>(
+                                &state_bytes,
+                                bincode::config::standard(),
+                            )
+                            .unwrap()
+                            .0;
+                        let path_to_workspace_settings = workspace_path.join("settings.yaml");
+                        let workspace_settings_string =
+                            fs::read_to_string(path_to_workspace_settings)
+                                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                        let mut workspace_settings: Settings =
+                            serde_yaml::from_str(&workspace_settings_string)
+                                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                        workspace_settings.general.debug = new_settings.general.debug;
+
+                        let integration_state =
+                            serializable_state.into_integration_state(&workspace_settings);
+
+                        let max_weight_sample = if integration_state.integral.max_eval_positive
+                            > integration_state.integral.max_eval_negative.abs()
+                        {
+                            integration_state.integral.max_eval_positive_xs.unwrap()
+                        } else {
+                            integration_state.integral.max_eval_negative_xs.unwrap()
+                        };
+
+                        // bypass inspect function as it does not take a symbolica sample as input
+                        let eval_result = integrand_struct.evaluate_sample(
+                            &max_weight_sample,
+                            F(0.0),
+                            1,
+                            use_f128,
+                            F(0.0),
+                        );
+
+                        let eval = eval_result.integrand_result;
+
+                        info!(
+                            "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
+                            format!(
+                                "( {:?} )",
+                                max_weight_sample,
+                            )
+                            .blue(),
+                            integrand,
+                            format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
+                        );
+
+                        Ok((eval.re.0, eval.im.0))
+                    }
+                    Err(_) => Err(exceptions::PyException::new_err(
+                        "No previous run to extract max weight from".to_string(),
+                    )),
+                }
             }
             None => Err(exceptions::PyException::new_err(format!(
                 "Could not find integrand {}",
@@ -380,11 +490,12 @@ impl PythonWorker {
         workspace_path: &str,
         target: Option<(f64, f64)>,
     ) -> PyResult<Vec<(f64, f64)>> {
+        let target = target.map(|(re, im)| (F(re), F(im)));
         match self.integrands.get_mut(integrand) {
             Some(integrand_enum) => match integrand_enum {
                 Integrand::GammaLoopIntegrand(gloop_integrand) => {
                     let target = match target {
-                        Some((re, im)) => Some(num::Complex::new(re, im)),
+                        Some((re, im)) => Some(Complex::new(re, im)),
                         _ => None,
                     };
 
@@ -403,8 +514,12 @@ impl PythonWorker {
                             info!("");
 
                             let serializable_state: SerializableIntegrationState =
-                                bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
-                                    .unwrap();
+                                bincode::decode_from_slice::<SerializableIntegrationState, _>(
+                                    &state_bytes,
+                                    bincode::config::standard(),
+                                )
+                                .unwrap()
+                                .0;
 
                             let path_to_workspace_settings = workspace_path.join("settings.yaml");
                             let workspace_settings_string =
@@ -416,7 +531,7 @@ impl PythonWorker {
                                     .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
                             // force the settings to be the same as the ones used in the previous integration
-                            gloop_integrand.settings = workspace_settings.clone();
+                            gloop_integrand.global_data.settings = workspace_settings.clone();
 
                             let state =
                                 serializable_state.into_integration_state(&workspace_settings);
@@ -449,7 +564,7 @@ impl PythonWorker {
                         }
                     };
 
-                    let settings = gloop_integrand.settings.clone();
+                    let settings = gloop_integrand.global_data.settings.clone();
                     let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),
@@ -468,7 +583,7 @@ impl PythonWorker {
                         .result
                         .iter()
                         .tuple_windows()
-                        .map(|(re, im)| (*re, *im))
+                        .map(|(re, im)| (re.0, im.0))
                         .collect())
                 }
                 _ => unimplemented!("unsupported integrand type"),
@@ -538,26 +653,16 @@ impl PythonWorker {
         let job_out_path = Path::new(workspace_path).join(job_out_name);
 
         let output_file = std::fs::read(job_out_path)?;
-        let batch_result: SerializableBatchResult = bincode::deserialize(&output_file).unwrap();
+        let batch_result: BatchResult =
+            bincode::decode_from_slice(&output_file, bincode::config::standard())
+                .unwrap()
+                .0;
 
         master_node
-            .process_batch_output(batch_result.into_batch_result())
+            .process_batch_output(batch_result)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         Ok(format!("Processed job {}", job_id))
-    }
-
-    pub fn write_default_settings(&self, path: &str) -> PyResult<String> {
-        let default = Settings::default();
-        let default_string = serde_yaml::to_string(&default)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        let path = Path::new(path).join("cards").join("run_card.yaml");
-
-        fs::write(path, default_string)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        Ok("Wrote default settings file".to_string())
     }
 
     pub fn display_master_node_status(&self) {
@@ -571,51 +676,20 @@ impl PythonWorker {
             master_node.update_iter();
         }
     }
+
+    pub fn sync(&mut self) {
+        self.amplitudes.sync(&self.model);
+        self.cross_sections.sync(&self.model);
+    }
 }
 
 impl PythonWorker {
     fn printer_options(format: &str) -> PrintOptions {
         match format {
             "file" => PrintOptions::file(),
-            "mathematica" => PrintOptions {
-                terms_on_new_line: false,
-                color_top_level_sum: false,
-                color_builtin_symbols: false,
-                print_finite_field: true,
-                symmetric_representation_for_finite_field: false,
-                explicit_rational_polynomial: false,
-                number_thousands_separator: None,
-                multiplication_operator: ' ',
-                square_brackets_for_function: true,
-                num_exp_as_superscript: false,
-                latex: false,
-            },
-            "latex" => PrintOptions {
-                terms_on_new_line: false,
-                color_top_level_sum: false,
-                color_builtin_symbols: false,
-                print_finite_field: true,
-                symmetric_representation_for_finite_field: false,
-                explicit_rational_polynomial: false,
-                number_thousands_separator: None,
-                multiplication_operator: ' ',
-                square_brackets_for_function: false,
-                num_exp_as_superscript: false,
-                latex: true,
-            },
-            _ => PrintOptions {
-                terms_on_new_line: false,
-                color_top_level_sum: true,
-                color_builtin_symbols: true,
-                print_finite_field: true,
-                symmetric_representation_for_finite_field: false,
-                explicit_rational_polynomial: false,
-                number_thousands_separator: None,
-                multiplication_operator: '*',
-                square_brackets_for_function: false,
-                num_exp_as_superscript: false,
-                latex: false,
-            },
+            "mathematica" => PrintOptions::mathematica(),
+            "latex" => PrintOptions::latex(),
+            _ => PrintOptions::default(),
         }
     }
 }

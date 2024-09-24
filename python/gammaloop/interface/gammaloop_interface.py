@@ -7,10 +7,12 @@ import subprocess
 import os
 from typing import Any
 from pprint import pformat
-import yaml
+import yaml  # type: ignore
 import shutil
 import copy
-from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GammaLoopWarning
+import pydot
+from gammaloop import __version__
+from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GIT_REVISION, GammaLoopWarning
 from gammaloop.misc.utils import Colour, verbose_yaml_dump
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
@@ -19,14 +21,27 @@ import gammaloop.cross_section.cross_section as cross_section
 import gammaloop.cross_section.supergraph as supergraph
 from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExporter, OutputMetaData, update_run_card_in_output
 # This is the pyo3 binding of the gammaloop rust engine
-import gammaloop._gammaloop as gl_rust  # pylint: disable=import-error, no-name-in-module # type: ignore
-
+import gammaloop._gammaloop as gl_rust
+import gammaloop.interface.debug_display as debug_display
 # pylint: disable=unused-variable
+
+
+class TaggedScalar(yaml.ScalarNode):
+    def __init__(self, tag, value):
+        super().__init__(tag, value)
+
+
+def tagged_scalar_representer(dumper, data):
+    return data
+
+
+yaml.add_representer(TaggedScalar, tagged_scalar_representer)
 
 AVAILABLE_COMMANDS = [
     'import_model',
     'export_model',
     'import_graphs',
+    'export_graphs',
     'show_settings',
     'output',
     'help',
@@ -39,7 +54,9 @@ AVAILABLE_COMMANDS = [
     'test_uv_limits',
     'set',
     'set_model_param',
-    'reset'
+    'reset',
+    'generate_graph',
+    'display_debug_log'
 ]
 
 
@@ -83,12 +100,46 @@ class GammaLoopConfiguration(object):
                 }
             },
             'export_settings': {
-                'write_default_settings': False,
+                'compile_cff': True,
+                'numerator_settings': {
+                    'eval_settings': {
+                        'type': 'Joint',
+                        'cpe_rounds': 1,
+                        'compile_options': {
+                            'subtype': 'Compiled',
+                        }
+                    },
+                    'global_numerator': None,
+                    'gamma_algebra': 'Concrete',
+                },
+                'cpe_rounds_cff': 1,
+                'compile_separate_orientations': False,
+                'gammaloop_compile_options': {
+                    'inline_asm': True,
+                    'optimization_level': 3,
+                    'fast_math': True,
+                    'unsafe_math': True,
+                    'compiler': 'g++',
+                    'custom': []
+                },
+                'tropical_subgraph_table_settings': {
+                    'panic_on_fail': False,
+                    'target_omega': 1.0
+                }
             },
             'run_settings': {
                 'General': {
                     'debug': 0,
-                    'use_ltd': False
+                    'use_ltd': False,
+                    'force_orientations': None,
+                    'load_compiled_cff': True,
+                    'load_compiled_numerator': True,
+                    'joint_numerator_eval': True,
+                    'amplitude_prefactor': {
+                        're': 0.0,
+                        'im': 1.0
+                    },
+                    'load_compiled_separate_orientations': False
                 },
                 'Integrand': {
                     'type': 'gamma_loop'
@@ -97,7 +148,10 @@ class GammaLoopConfiguration(object):
                     'e_cm': 3.0,
                     'externals': {
                         'type': 'constant',
-                        'momenta': None  # Will be set automatically
+                        'data': {
+                            'momenta': None,  # Will be set automatically
+                            'helicities': None,
+                        }
                     }
                 },
                 'Parameterization': {
@@ -113,7 +167,8 @@ class GammaLoopConfiguration(object):
                     'n_increase': 0,
                     'n_max': 1000000000,
                     'integrated_phase': 'real',
-                    'learning_rate': 1.5,
+                    'discrete_dim_learning_rate': 1.5,
+                    'continuous_dim_learning_rate': 1.5,
                     'train_on_avg': False,
                     'show_max_wgt_info': False,
                     'max_prob_ratio': 0.01,
@@ -122,7 +177,7 @@ class GammaLoopConfiguration(object):
                 'Observables': [],
                 'Selectors': [],
                 'Stability': {
-                    'rotation_axis': 'x',
+                    'rotation_axis': ['x'],
                     'levels': [
                         {
                             'precision': 'Double',
@@ -136,10 +191,22 @@ class GammaLoopConfiguration(object):
                             'required_precision_for_im': 1.e-5,
                             'escalate_for_large_weight_threshold': -1.0
                         }
-                    ]
+                    ],
+                    'rotate_numerator': False,
                 },
                 'sampling': {
                     'type': 'default'
+                },
+                'subtraction': {
+                    'sliver_width': 1.0,
+                    'dampen_integrable_singularity': True,
+                    'dynamic_sliver': False,
+                    'integrated_ct_hfunction': {
+                        'function': 'poly_exponential',
+                        'sigma': 1.0,
+                        'enabled_dampening': True,
+                        'power': None,
+                    },
                 }
             }
         }
@@ -205,8 +272,16 @@ class GammaLoopConfiguration(object):
                         setting_path, config_chunk[key], value)
             else:
                 if value is not None and config_chunk[key] is not None and type(value) is not type(config_chunk[key]):
-                    raise GammaLoopError(
-                        f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
+                    if isinstance(value, str) and isinstance(config_chunk[key], dict):
+                        try:
+                            value = eval(value)
+                        except:
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                        if not isinstance(value, dict):
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                    else:
+                        raise GammaLoopError(
+                            f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
                 config_chunk[key] = value
                 continue
 
@@ -326,6 +401,9 @@ class GammaLoop(object):
 
         # Initialize a gammaloop rust engine worker which will be used throughout the session
         self.rust_worker: gl_rust.Worker = gl_rust.Worker.new()
+        logger.debug('Starting interface of GammaLoop v%s%s',
+                     __version__,
+                     (f' (git rev.: {GIT_REVISION})' if GIT_REVISION is not None else ''))
         logger.debug(
             "Successfully initialized GammaLoop rust worker from library %s.", gl_rust.__file__)  # type: ignore
 
@@ -560,7 +638,7 @@ class GammaLoop(object):
         if model_restriction not in [None, 'full']:
             if not os.path.isfile(pjoin(model_restriction_dir, f'restrict_{model_restriction}.dat')):
                 raise GammaLoopError(
-                    f"Restriction file 'restrict_{model_restriction}.dat' not found for model '{model_name}' in directory '{pjoin(model_directory,model_name)}'.")
+                    f"Restriction file 'restrict_{model_restriction}.dat' not found for model '{model_name}' in directory '{pjoin(model_directory, model_name)}'.")
             else:
                 param_card = ParamCard(
                     pjoin(model_restriction_dir, f'restrict_{model_restriction}.dat'))
@@ -618,14 +696,69 @@ class GammaLoop(object):
         logger.info("Successfully exported model '%s' to '%s'.",
                     self.model.get_full_name(), args.model_file_path)
 
+    # export_graph command
+    export_graphs_parser = ArgumentParser(prog='export_graph')
+    export_graphs_parser.add_argument(
+        'output_path', metavar='output_path', type=str, help='Filename to write exported graphs to.')
+    export_graphs_parser.add_argument('--graph_names', '-gn', type=str, nargs='*',
+                                      help='Graph names to export [default: all].')
+    export_graphs_parser.add_argument('--graph_container_name', '-gct', type=str, default=None,
+                                      help='Graph container name to export [default: automatic].')
+
+    def do_export_graphs(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.export_graphs_parser.print_help()
+            return
+        args = self.export_graphs_parser.parse_args(split_str_args(str_args))
+
+        graphs: list[tuple[Graph, dict[str, Any]]] = []
+        if len(self.amplitudes) == 0 and len(self.cross_sections) == 0:
+            raise GammaLoopError(
+                "No graphs loaded. Please load graphs first with 'import_graphs' command.")
+
+        for a in self.amplitudes:
+            if args.graph_container_name is None or a.name == args.graph_container_name:
+                graphs.extend((g.graph, {"multiplicity_factor": g.multiplicity})
+                              for g in a.amplitude_graphs)
+                break
+
+        if len(graphs) == 0:
+            for xs in self.cross_sections:
+                if args.graph_container_name is None or xs.name == args.graph_container_name:
+                    for xs_g in xs.supergraphs:
+                        if xs_g.graph.is_empty():
+                            for fwd_scattering_cut in xs_g.cuts:
+                                fwd_scattering_cut.forward_scattering_graph
+                                graphs.extend([(isr_cut.forward_scattering_graph.graph, {
+                                              "multiplicity_factor": isr_cut.forward_scattering_graph.multiplicity}) for isr_cut in xs_g.cuts])
+                        else:
+                            graphs.append(
+                                (xs_g.graph, {"multiplicity_factor": xs_g.multiplicity}))
+                    break
+
+        with open(args.output_path, 'w', encoding='utf-8') as f:
+            f.write("\n".join(g.to_pydot(attr).to_string()
+                    for g, attr in graphs))
+
+        if not args.graph_names is None:
+            graphs = [(g, attr)
+                      for g, attr in graphs if g.name in args.graph_names]
+
+        if len(graphs) == 0:
+            raise GammaLoopError(
+                "No graphs found with the specified container name or graph name(s).")
+
+        logger.info("A total of %s Graphs successfully exported to file '%s'.",
+                    len(graphs), args.output_path)
+
     # import_graphs command
     import_graphs_parser = ArgumentParser(prog='import_graphs')
     import_graphs_parser.add_argument('file_path', metavar='file_path', type=str,
                                       help='Path to the qgraph python output to load')
     import_graphs_parser.add_argument('--no_compile', '-nc', action='store_true',
                                       default=False, help='Prevent compilation of qgraph python output.')
-    import_graphs_parser.add_argument('--format', '-f', type=str, default='yaml',
-                                      choices=['yaml', 'qgraph'], help='Format to import the graphs in.')
+    import_graphs_parser.add_argument('--format', '-f', type=str, default='dot',
+                                      choices=['qgraph', 'dot'], help='Format to import the graphs in.')
 
     def do_import_graphs(self, str_args: str) -> None:
         if str_args == 'help':
@@ -642,14 +775,8 @@ class GammaLoop(object):
 
         file_path = Path(os.path.abspath(args.file_path))
 
+        graphs: list[tuple[Graph, dict[str, Any]]] = []
         match args.format:
-            case 'yaml':
-                try:
-                    all_raw_graphs: list[Any] = yaml.safe_load(
-                        open(file_path, 'r', encoding='utf-8'))['graphs']
-                except Exception as exc:
-                    raise GammaLoopError(
-                        f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
 
             case 'qgraph':
                 sys.path.insert(0, str(file_path.parent))
@@ -669,20 +796,34 @@ class GammaLoop(object):
                 del sys.path[0]
                 all_raw_graphs: list[Any] = qgraph_loaded_module.graphs
 
+                for i_qg, qgraph_object in enumerate(all_raw_graphs):
+                    new_graph = Graph.from_qgraph(
+                        self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
+                    attributes = qgraph_object
+                    graphs.append((new_graph, attributes))
+
+            case 'dot':
+                pydot_graphs = pydot.graph_from_dot_file(
+                    file_path, encoding='utf-8')
+                if pydot_graphs is None:
+                    raise GammaLoopError(
+                        "Failed to load graphs from dot file '%s'.", args.file_path)
+                graphs = [
+                    (
+                        Graph.from_pydot(self.model, pydot_g),
+                        pydot_g.get_attributes()
+                    ) for pydot_g in pydot_graphs
+                ]
+
             case _:
                 raise GammaLoopError(
                     "Invalid graph format: '%s' for importing graphs.", args.format)
 
-        graphs: list[Graph] = []
-        for i_qg, qgraph_object in enumerate(all_raw_graphs):
-            graphs.append(Graph.from_qgraph(
-                self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}"))
-        logger.info("Successfully loaded %s graphs.",
-                    len(all_raw_graphs))
+        logger.info("Successfully loaded %s graphs.", len(graphs))
 
         # Now determine if it is a supergraph or an amplitude graph
         graph_type = None
-        for a_graph in graphs:
+        for a_graph, _attributes in graphs:
             if len(a_graph.get_incoming_edges()) == 0 and len(a_graph.get_outgoing_edges()) == 0:
                 if graph_type is None:
                     graph_type = 'supergraph'
@@ -713,7 +854,7 @@ class GammaLoop(object):
                 f'{file_path.stem}',
                 # Wrap the forward scattering graphs within a dummy supergraph
                 [cross_section.supergraph.SuperGraph(
-                    sg_id=i, graph=Graph.empty_graph('DUMMY'), multiplicity=1.0,
+                    sg_id=i, graph=Graph.empty_graph('DUMMY'), multiplicity="1",
                     topology_class=[],
                     cuts=[
                         cross_section.supergraph.SuperGraphCut(
@@ -721,12 +862,13 @@ class GammaLoop(object):
                             forward_scattering_graph=cross_section.supergraph.ForwardScatteringGraph(
                                 sg_id=i,
                                 sg_cut_id=0,
-                                multiplicity=1.0,
+                                multiplicity=attributes.get(
+                                    "multiplicity_factor", "1"),
                                 graph=g,
                                 cuts=[]  # Will be filled in later
                             )
                         )]
-                ) for i, g in enumerate(graphs)]
+                ) for i, (g, attributes) in enumerate(graphs)]
             )])
 
         if graph_type == 'amplitude':
@@ -735,10 +877,136 @@ class GammaLoop(object):
                 [
                     supergraph.AmplitudeGraph(
                         sg_id=0, sg_cut_id=0, fs_cut_id=i, amplitude_side=Side.LEFT,
+                        multiplicity=attributes.get(
+                            "multiplicity_factor", "1"),
                         graph=g
                     )
-                    for i, g in enumerate(graphs)]
+                    for i, (g, attributes) in enumerate(graphs)]
             )])
+
+    generate_graph_parser = ArgumentParser(prog='generate_graph')
+    generate_graph_parser.add_argument(
+        '--name', '-n', type=str, default='graph', help='Name of the graph')
+    generate_graph_parser.add_argument(
+        '--virtual-edges', '-ve', type=str, help='List of virtual edges to generate the graph from')
+    generate_graph_parser.add_argument(
+        '--external-edges', '-ee', type=str, help='List of external edges to generate the graph from')
+    generate_graph_parser.add_argument(
+        '--multiplicity_factor', '-mf', type=str, default="1", help="Multiplicity factor of the graph (default: '%(default)s')")
+    generate_graph_parser.add_argument(
+        '--overall_factor', '-of', type=str, default="1", help="Overall factor of the graph (default: '%(default)s')")
+
+    def do_generate_graph(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.generate_graph_parser.print_help()
+            return
+
+        args = self.generate_graph_parser.parse_args(split_str_args(str_args))
+
+        try:
+            virtual_edges = eval(args.virtual_edges)
+        except Exception as exc:
+            raise GammaLoopError(
+                f"Invalid value '{args.virtual_edges}' for virtual edges. Error:\n{exc}") from exc
+
+        try:
+            external_edges = eval(args.external_edges)
+        except Exception as exc:
+            raise GammaLoopError(
+                f"Invalid value '{args.external_edges}' for external edges. Error:\n{exc}") from exc
+
+        graph: dict[str, Any] = {
+        }
+
+        graph["edges"] = {}
+        graph["nodes"] = {}
+        graph["overall_factor"] = args.overall_factor
+        graph["multiplicity_factor"] = args.multiplicity_factor
+
+        for external_edge in external_edges:
+            type = external_edge[0]
+            internal_node = external_edge[1]
+
+            external_node = int("10" + str(internal_node))
+            momentum_name = "p" + str(internal_node)
+
+            graph["nodes"][external_node] = {
+                "PDGs": (1000,),
+                "momenta": (momentum_name,),
+                "indices": (),
+                "vertex_id": -1,
+                "edge_ids": (external_node,)
+            }
+
+            graph["edges"][external_node] = {}
+            if type == "in":
+                graph["edges"][external_node]["type"] = "in"
+                graph["edges"][external_node]["vertices"] = (
+                    external_node, internal_node)
+            elif type == "out":
+                graph["edges"][external_node]["type"] = "out"
+                graph["edges"][external_node]["vertices"] = (
+                    internal_node, external_node)
+            else:
+                raise ValueError("Unknown external edge type")
+
+            graph["edges"][external_node]["name"] = momentum_name
+            graph["edges"][external_node]["PDG"] = 1000
+            graph["edges"][external_node]["momentum"] = ""
+            graph["edges"][external_node]["indices"] = ()
+
+            if internal_node not in graph["nodes"]:
+                graph["nodes"][internal_node] = {
+                    "PDGs": (1000,),
+                    "momenta": (),
+                    "indices": (),
+                    "vertex_id": 0,
+                    "edge_ids": (external_node,)
+                }
+            else:
+                graph["nodes"][internal_node]["edge_ids"] += (
+                    int(1000),)
+                graph["nodes"][internal_node]["PDGs"] += (1000,)
+
+        for virtual_edge_id, virtual_edge in enumerate(virtual_edges):
+            pdg = virtual_edge[0]
+            internal_node1 = virtual_edge[1]
+            internal_node2 = virtual_edge[2]
+
+            edge_id = virtual_edge_id + 1
+            graph["edges"][edge_id] = {
+                "name": "q" + str(edge_id),
+                "PDG": pdg,
+                "type": "virtual",
+                "momentum": "",
+                "indices": (),
+                "vertices": (internal_node1, internal_node2)
+            }
+
+            for node in [internal_node1, internal_node2]:
+                if node not in graph["nodes"]:
+                    graph["nodes"][node] = {
+                        "PDGs": (pdg,),
+                        "momenta": (),
+                        "indices": (),
+                        "vertex_id": 0,
+                        "edge_ids": (edge_id,)
+                    }
+                else:
+                    graph["nodes"][node]["edge_ids"] += (edge_id,)
+                    graph["nodes"][node]["PDGs"] += (pdg,)
+
+        gammaloop_graph = Graph.from_qgraph(self.model, graph, args.name)
+        self.amplitudes = cross_section.AmplitudeList([cross_section.Amplitude(
+            args.name,
+            [
+                supergraph.AmplitudeGraph(
+                    sg_id=0, sg_cut_id=0, fs_cut_id=0, amplitude_side=Side.LEFT,
+                    multiplicity=args.multiplicity_factor,
+                    graph=gammaloop_graph
+                )
+            ]
+        )])
 
     # output command
     output_parser = ArgumentParser(prog='output')
@@ -750,6 +1018,11 @@ class GammaLoop(object):
                                help='Generate coupling replacements and output it to a text file')
     output_parser.add_argument('-ef', '--expression_format', type=str, default='file',
                                choices=['file', 'mathematica', 'latex'], help='Format to export symbolica objects in the numerator output.')
+    output_parser.add_argument('-ow', '--overwrite_output', default=False, action='store_true',
+                               help='Overwrite output if already existing.')
+    
+    output_parser.add_argument('-yo', '--yaml_only', default=False, action='store_true',
+                               help='Only output yaml.')
 
     def do_output(self, str_args: str) -> None:
         if str_args == 'help':
@@ -758,8 +1031,11 @@ class GammaLoop(object):
         args = self.output_parser.parse_args(split_str_args(str_args))
 
         if Path(args.output_path).exists():
-            raise GammaLoopError(
-                f"Output path '{args.output_path}' already exists, clean it up first.")
+            if args.overwrite_output:
+                shutil.rmtree(args.output_path)
+            else:
+                raise GammaLoopError(
+                    f"Output path '{args.output_path}' already exists, clean it up first.")
 
         if self.model.is_empty():
             raise GammaLoopError(
@@ -782,7 +1058,8 @@ class GammaLoop(object):
 
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
-            amplitude_exporter.export(args.output_path, self.amplitudes)
+            amplitude_exporter.export(
+                args.output_path, self.amplitudes)
             if args.expression:
                 amplitude_exporter.export_expression(
                     args.output_path, self.amplitudes, args.expression_format)
@@ -848,7 +1125,7 @@ class GammaLoop(object):
                     self.rust_worker.add_amplitude_from_yaml_str(
                         amplitude_yaml)
             self.rust_worker.load_amplitudes_derived_data(
-                pjoin(args.path_to_launch, 'sources', 'amplitudes'))
+                args.path_to_launch)
 
             self.rust_worker.load_amplitude_integrands(
                 pjoin(args.path_to_launch, 'cards', 'run_card.yaml'))
@@ -936,7 +1213,7 @@ class GammaLoop(object):
                     self.rust_worker.add_amplitude_from_yaml_str(
                         amplitude_yaml)
             self.rust_worker.load_amplitudes_derived_data(
-                pjoin(self.launched_output, 'sources', 'amplitudes'))
+                pjoin(self.launched_output))
 
             self.rust_worker.load_amplitude_integrands(
                 pjoin(self.launched_output, 'cards', 'run_card.yaml'))
@@ -952,6 +1229,8 @@ class GammaLoop(object):
                     self.rust_worker.add_cross_section_from_yaml_str(
                         cross_section_yaml)
 
+        self.rust_worker.sync()
+
     # inspect command
     inspect_parser = ArgumentParser(prog='inspect')
     inspect_parser.add_argument(
@@ -959,7 +1238,7 @@ class GammaLoop(object):
     inspect_parser.add_argument('--use-f128', '-f128', action='store_true',
                                 default=False, help='Use f128 precision for the inspection.')
     inspect_parser.add_argument('--point', '-p', nargs="+", type=float,
-                                default=None, help='Point to inspect.')
+                                default=[], help='Point to inspect.')
     inspect_parser.add_argument(
         '--term', '-t', nargs="+", type=int, default=tuple([0,]), help="term to inspect.")
     inspect_parser.add_argument('--is-momentum-space', '-ms', action='store_true',
@@ -969,6 +1248,8 @@ class GammaLoop(object):
     inspect_parser.add_argument(
         '--no_sync', '-ns', action='store_true', default=False,
         help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
+    inspect_parser.add_argument('--last_max_weight', '-lmw', action='store_true',
+                                default=False, help='Inspect the max weight point of the previous run')
 
     def do_inspect(self, str_args: str) -> complex:
         if str_args == 'help':
@@ -980,14 +1261,15 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No output launched. Please launch an output first with 'launch' command.")
 
-        if self.launched_output is None:
-            raise GammaLoopError(
-                "No output launched. Please launch an output first with 'launch' command.")
-
         self.sync_worker_with_output(args.no_sync)
 
-        res = self.rust_worker.inspect_integrand(
-            args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
+        if args.last_max_weight:
+            workspace_path = self.launched_output.joinpath("workspace")
+            res: tuple[float, float] = self.rust_worker.inspect_lmw_integrand(
+                args.integrand, str(workspace_path), args.use_f128)
+        else:
+            res: tuple[float, float] = self.rust_worker.inspect_integrand(
+                args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
 
         return complex(res[0], res[1])
 
@@ -1176,3 +1458,40 @@ class GammaLoop(object):
                 self.rust_worker.display_master_node_status()
 
         shutil.rmtree(workspace_path)
+
+    log_parser = ArgumentParser(prog='display_debug_log')
+    log_parser.add_argument('--log_file', '-lf', type=str,
+                            help='Log file to display', default="log.glog")
+    log_parser.add_argument(
+        '-eval', '-e', type=str, default=None)
+    log_parser.add_argument('--subtraction', '-s',  action='store_true',
+                            default=False, help='Show subtraction debug info')
+
+    def do_display_debug_log(self, str_args: str) -> None:
+        args = self.log_parser.parse_args(split_str_args(str_args))
+
+        if args.log_file is None:
+            raise GammaLoopError(
+                "No log file to display, please provide a file using -lf")
+
+        general_debug_dict = debug_display.build_general_debug_dict(
+            args.log_file)
+        debug_display.display_general(general_debug_dict)
+
+        if args.eval is not None:
+            tmp = eval(args.eval)
+            for tmp_elem in tmp:
+                rotation, precision = tmp_elem[0], tmp_elem[1]
+                eval_dict = debug_display.build_eval_debug_dict(
+                    args.log_file, rotation, precision)
+
+                logger.info("Debug info for for rotation '%s%s%s' and precision '%s%s%s'",
+                            Colour.BLUE, rotation, Colour.END, Colour.BLUE, precision, Colour.END)
+
+                debug_display.display_eval_default(eval_dict)
+
+                if args.subtraction:
+                    logger.info("")
+                    logger.info("subtraction: ")
+                    logger.info("")
+                    debug_display.display_subtraction_data(eval_dict)

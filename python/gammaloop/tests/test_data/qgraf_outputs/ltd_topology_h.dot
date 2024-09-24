@@ -1,0 +1,23 @@
+digraph ltd_topology_h_0 {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3 [int_id="V_4_SCALAR_0000"];
+v4 [int_id="V_3_SCALAR_000"];
+v5 [int_id="V_4_SCALAR_0000"];
+v6 [int_id="V_3_SCALAR_000"];
+v7 [int_id="V_3_SCALAR_000"];
+v8 [int_id="V_3_SCALAR_000"];
+v1 -> v3 [pdg=1000, name=p1, mom=p1];
+v5 -> v2 [pdg=1000, name=p2, mom=p2];
+v3 -> v4 [pdg=1000, name=q1];
+v4 -> v5 [pdg=1000, name=q2];
+v5 -> v6 [pdg=1000, name=q3, lmb_index=0];
+v6 -> v3 [pdg=1000, name=q4];
+v7 -> v3 [pdg=1000, name=q5];
+v6 -> v8 [pdg=1000, name=q6];
+v7 -> v8 [pdg=1000, name=q7, lmb_index=1];
+v8 -> v4 [pdg=1000, name=q8, lmb_index=2];
+v7 -> v5 [pdg=1000, name=q9, lmb_index=3];
+}

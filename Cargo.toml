@@ -10,7 +10,6 @@ license-file = "LICENSE.md"
 readme = "README.md"
 repository = "https://github.com/alphal00p/gammaloop"
 
-
 [profile.dev-optim]
 inherits = "dev"
 opt-level = 2
@@ -18,21 +17,38 @@ opt-level = 2
 
 [profile.bench]
 lto = "fat"
+opt-level = 3
+
+[[bench]]
+name = "cff_scalar"
+
+harness = false
+
+[[bench]]
+name = "three_loop_photon"
+harness = false
+
+[[bench]]
+name = "polarization"
+
+harness = false
+
+[profile.release]
+lto = "fat"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
 
 
 [dependencies]
-# symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-symbolica = { version = "0.5.0" }
-spenso = { version = "0.1.1", features = ["shadowing"] }
-# spencer = { path = "../spencer" }
+# These will be patched
+symbolica = { version = "0.11.0" }
+spenso = { version = "0.2.0", features = ["shadowing"] }
 
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
-bincode = "1.3.3"
+bincode = { version = "2.0.0-rc.3", features = ["serde"] }
 clap = "2.34"
 color-eyre = { version = "^0.3", default-features = false }
 eyre = "^0.4"
@@ -43,53 +59,46 @@ lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = 
     "f128_support",
 ] }
 hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
-rand = "0.8"
+rand = { version = "0.8", features = ["small_rng"] }
 rayon = "1.5"
 tabled = "0.7"
 enum_dispatch = "*"
 git-version = "0.3"
 colored = "*"
-yaml-rust = "0.4"
 libc = "0.2.0"
 statrs = "0.16.0"
-smallvec = { version = "1.7", features = ["const_generics"] }
+smallvec = { version = "1.7", features = ["const_generics", "serde"] }
 itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
-vectorize = "0.2.0"
 log = "*"
 env_logger = "*"
-pyo3-log = "*"
+pyo3-log = "0.11.0"
 nalgebra = "0.32.3"
-num-complex = "0.4.4"
-rug = "1.22.0"
-wide = "0.7.13"
-arbitrary-int = { version = "1.2.6", features = ["num-traits"] }
-duplicate = "1.0.0"
-rustc-hash = "1.1.0"
+rug = { version = "1.22.0", features = ["serde"] }
+clarabel = "0"
 petgraph = "0.6.4"
-enum-try-as-inner = "0.1.1"
-indexmap = { version = "2.2.2", features = ["serde"] }
-nohash-hasher = "0.2.0"
-
-permutation = "0.4.1"
-slotmap = { version = "1.0.7", features = ["serde"] }
+indexmap = "2.2.2"
+vectorize = "0.2.0"
 ahash = { version = "0.8.8", features = ["serde"] }
-num = { version = "0.4.1", features = ["serde"] }
-pprof = { version = "0.13.0", features = ["flamegraph"] }
+# num = { version = "0.4.1", features = ["serde"] }
+pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 derive_more = "0.99.17"
-rand_xoshiro = "0.6.0"
-funty = "2.0.0"
-block-id = "0.2.1"
-once_cell = "1.19.0"
-enum_delegate = { git = "https://gitlab.com/dawn_app/enum_delegate" }
-treena = "0.0.5"
 serde_json = "1.0.115"
 ctrlc = "3.4.4"
 constcat = "0.5.0"
-bitvec = { version = "1.0.1", features = ["serde"] }
-anyhow = { version = "1.0.82", features = ["backtrace"] }
-thiserror = "1.0.58"
-pathfinding = "4.9.1"
+ref-ops = "0.2.5"
+delegate = "0.12.0"
+typed-index-collections = { version = "3.1.0", features = [
+    "serde",
+    "serde-alloc",
+] }
+gat-lending-iterator = "0.1.5"
+# gxhash = "3.4.1"
+thiserror = "1.0.63"
+serde_repr = "0.1.19"
+compensated-summation = "0.3.0"
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
+serde_with = "3.9.0"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -111,14 +120,14 @@ bench = false
 [features]
 extension-module = ["pyo3/extension-module"]
 default = ["python_api"]
+higher_loops = []
 
 python_api = ["pyo3", "extension-module"]
 binary = []
 fail-on-warnings = []
-
-[profile.dev.package]
-insta.opt-level = 3
-similar.opt-level = 3
+# insta.opt-level = 3
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
+spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+# spenso = { path = "../../alphal00p/spenso" }

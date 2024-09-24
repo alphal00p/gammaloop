@@ -14,7 +14,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.momenta [\
 [5.,0.,0.,5.],\
-[-5.,0.,0.,5.],\
+[5.,0.,0.,-5.],\
 [8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\
 [3.283294192270986e0,-1.038496118834563e0,-3.019337553895401e0,7.649492138716588e-1],\
 [1.523581094674306e0,-1.058809596665922e0,-9.770963832697570e-1,4.954838522679282e-1],\
@@ -29,10 +29,11 @@ class TestScalarTopologies:
         command_list.add_command("set_model_param mass_scalar_1 172.0")
 
         gl.run(command_list)
+
         inspect_res = gl.do_inspect(
             'scalar_3L_6P_topology_A -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327')
         check_inspect_result(
-            inspect_res, complex(0, 2.3706290494305587e-44), max_relative_diff=1.0e-12)
+            inspect_res, complex(0, 2.2265511758628186e-44), max_relative_diff=1.0e-12)
 
 
 class TestPhysicalTopologies:
@@ -49,7 +50,7 @@ class TestPhysicalTopologies:
         command_list.add_command(
             "set externals.momenta [\
 [5.,0.,0.,5.],\
-[-5.,0.,0.,5.],\
+[5.,0.,0.,-5.],\
 [8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\
 [3.283294192270986e0,-1.038496118834563e0,-3.019337553895401e0,7.649492138716588e-1],\
 [1.523581094674306e0,-1.058809596665922e0,-9.770963832697570e-1,4.954838522679282e-1],\
@@ -66,4 +67,4 @@ class TestPhysicalTopologies:
         inspect_res = gl.do_inspect(
             'physical_3L_6photons_topology_A -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327')
         check_inspect_result(
-            inspect_res, complex(0, 2.3706290494305587e-44), max_relative_diff=1.0e-12)
+            inspect_res, complex(0, 2.2265511758628186e-44), max_relative_diff=1.0e-12)

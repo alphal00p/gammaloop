@@ -1,39 +1,276 @@
 #![allow(unused_imports)]
-use crate::cff::generate_cff_expression;
+use crate::cff::esurface::{
+    get_existing_esurfaces, Esurface, EsurfaceCollection, EsurfaceDerivedData, EsurfaceID,
+    ExistingEsurfaceId, ExistingEsurfaces,
+};
+use crate::cff::expression;
+use crate::cff::generation::generate_cff_expression;
+use crate::cff::hsurface::HsurfaceCollection;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
-use crate::graph::{Edge, EdgeType, HasVertexInfo, InteractionVertexInfo, VertexInfo};
-use crate::model::Model;
-use crate::utils::{assert_approx_eq, compute_momentum, upgrade_lorentz_vector};
+use crate::gammaloop_integrand::{DefaultSample, GammaLoopIntegrand};
+use crate::graph::{
+    BareGraph, DerivedGraphData, Edge, EdgeType, Graph, HasVertexInfo, InteractionVertexInfo,
+    LoopMomentumBasisSpecification, SerializableGraph, VertexInfo,
+};
+use crate::model::{LorentzStructure, Model};
+use crate::momentum::{
+    Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, Signature, ThreeMomentum,
+};
+use crate::numerator::{
+    ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, IterativeOptions,
+    Numerator, NumeratorCompileOptions, NumeratorEvaluateFloat, NumeratorEvaluatorOptions,
+    NumeratorSettings, NumeratorState, PythonState, UnInit,
+};
+use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
+use crate::subtraction::static_counterterm;
+use crate::tests::load_default_settings;
+use crate::utils::{f128, F};
+use crate::utils::{ApproxEq, FloatLike, PrecisionUpgradable};
+use crate::{cff, ltd, Externals, GeneralSettings, Integrand, Polarizations, RotationSetting};
+use crate::{
+    inspect::inspect, ExportSettings, GammaloopCompileOptions, Settings,
+    TropicalSubgraphTableSettings,
+};
+use ahash::AHashMap;
+use bincode::{Decode, Encode};
+use clarabel::solver::default;
 use colored::Colorize;
-use itertools::Itertools;
+use indexmap::set::Iter;
+use itertools::{FormatWith, Itertools};
+use nalgebra::Point;
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
+use symbolica::domains::rational::Rational;
+//use libc::__c_anonymous_ptrace_syscall_info_exit;
+use core::f64;
 use lorentz_vector::LorentzVector;
-use num::Complex;
+use petgraph::algo::greedy_matching;
+use petgraph::graph;
 use rayon::prelude::IndexedParallelIterator;
-use serde;
-use std::fs::File;
-use std::path::Path;
+use rayon::vec;
+use serde::{self, Deserialize, Serialize};
+use spenso::complex::{Complex, SymbolicaComplex};
+use spenso::network::TensorNetwork;
+use spenso::structure::{IsAbstractSlot, Lorentz, RepName};
+use statrs::function::evaluate;
+use std::collections::HashMap;
+use std::f32::consts::E;
+use std::fs::{self, File};
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 use std::{clone, env};
 use symbolica;
+use symbolica::atom::{Atom, AtomView, FunctionBuilder};
+use symbolica::domains::float::{Complex as SymComplex, NumericalFloatLike, Real};
+use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, FunctionMap, OptimizationSettings};
+use symbolica::id::{
+    AtomMatchIterator, Condition, Match, MatchSettings, MatchStack, Pattern, PatternOrMap,
+    Replacement,
+};
+use symbolica::state::State;
+use typed_index_collections::TiVec;
 
 #[allow(unused)]
-const LTD_COMPARISON_TOLERANCE: f64 = 1.0e-12;
+const LTD_COMPARISON_TOLERANCE: F<f64> = F(1.0e-11);
 
-pub fn load_amplitude_output(output_path: &str) -> (Model, Amplitude) {
-    let path = Path::new(output_path);
-    let output_meta_data: OutputMetaData =
-        serde_yaml::from_reader(File::open(path.join("output_metadata.yaml")).unwrap()).unwrap();
+#[allow(unused)]
+const PHASEONE: F<f64> = F(0.);
+
+#[allow(unused)]
+const PHASEI: F<f64> = F(f64::consts::FRAC_PI_2);
+
+#[allow(unused)]
+const PHASEMINUSONE: F<f64> = F(f64::consts::PI);
+
+#[allow(unused)]
+const PHASEMINUSI: F<f64> = F(-f64::consts::FRAC_PI_2);
+
+pub fn test_export_settings() -> ExportSettings {
+    ExportSettings {
+        compile_cff: true,
+        numerator_settings: NumeratorSettings {
+            eval_settings: NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::Compiled,
+            }),
+            global_numerator: None,
+            gamma_algebra: GammaAlgebraMode::Concrete,
+        },
+        cpe_rounds_cff: Some(1),
+        compile_separate_orientations: false,
+        tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
+            target_omega: 1.0,
+            panic_on_fail: false,
+        },
+        gammaloop_compile_options: GammaloopCompileOptions {
+            inline_asm: env::var("NO_ASM").is_err(),
+            optimization_level: 3,
+            fast_math: true,
+            unsafe_math: true,
+            compiler: "g++".to_string(),
+            custom: vec![],
+        },
+    }
+}
+
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
+
+// Create small, cheap to initialize and fast RNG with a random seed.
+// The randomness is supplied by the operating system.
+
+pub fn sample_generator<T: FloatLike>(
+    seed: u64,
+    bare_graph: &BareGraph,
+    helicities: Option<Vec<Helicity>>,
+) -> DefaultSample<T>
+where
+    Standard: Distribution<T> + Distribution<f64>,
+{
+    let mut rng = SmallRng::seed_from_u64(seed);
+
+    let n_loops = bare_graph.loop_momentum_basis.basis.len();
+    let n_indep_externals = bare_graph.external_edges.len() - 1;
+    let mut external_moms: Vec<ExternalMomenta<F<f64>>> = vec![];
+    for _ in 0..n_indep_externals {
+        external_moms.push(ExternalMomenta::Independent([
+            F(rng.gen::<f64>()),
+            F(rng.gen::<f64>()),
+            F(rng.gen::<f64>()),
+            F(rng.gen::<f64>()),
+        ]));
+    }
+
+    external_moms.push(ExternalMomenta::Dependent(Dep::Dep));
+
+    let mut loop_moms = vec![];
+
+    for _ in 0..n_loops {
+        loop_moms.push(ThreeMomentum::new(F(rng.gen()), F(rng.gen()), F(rng.gen())));
+    }
+
+    let jacobian = F(1.0);
+
+    let helicities = if let Some(hel) = helicities {
+        if hel.len() != n_indep_externals + 1 {
+            panic!("Helicities must have the same length as the number of external edges")
+        }
+        hel
+    } else {
+        vec![Helicity::Plus; n_indep_externals + 1]
+    };
+
+    let externals = Externals::Constant {
+        momenta: external_moms,
+        helicities,
+    };
+
+    let external_signature = bare_graph.external_in_or_out_signature();
+
+    DefaultSample::new(
+        loop_moms,
+        &externals,
+        jacobian,
+        &externals.generate_polarizations(&bare_graph.external_particles(), &external_signature),
+        &external_signature,
+    )
+}
+
+pub fn kinematics_builder(
+    n_indep_externals: usize,
+    n_loops: usize,
+    bare_graph: &BareGraph,
+) -> DefaultSample<f64> {
+    let mut external_moms = vec![];
+
+    for i in 0..n_indep_externals {
+        external_moms.push(ExternalMomenta::Independent([
+            F(i as f64),
+            F(i as f64 + 0.25),
+            F(i as f64 + 0.5),
+            F(i as f64 + 0.75),
+        ]));
+    }
+
+    external_moms.push(ExternalMomenta::Dependent(Dep::Dep));
+
+    let mut loop_moms = vec![];
+
+    for i in n_indep_externals..n_indep_externals + n_loops {
+        loop_moms.push(ThreeMomentum::new(
+            F(i as f64),
+            F(i as f64 + 0.33),
+            F(i as f64 + 0.66),
+        ));
+    }
+
+    let jacobian = F(1.0);
+
+    let helicities = vec![Helicity::Plus; n_indep_externals + 1];
+
+    let externals = Externals::Constant {
+        momenta: external_moms,
+        helicities,
+    };
+
+    let external_signature = bare_graph.external_in_or_out_signature();
+
+    DefaultSample::new(
+        loop_moms,
+        &externals,
+        jacobian,
+        &externals.generate_polarizations(&bare_graph.external_particles(), &external_signature),
+        &external_signature,
+    )
+}
+
+pub fn load_amplitude_output(
+    output_path: &str,
+    load_generic_model: bool,
+) -> (Model, Amplitude<UnInit>, PathBuf) {
+    let output_dir = if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
+        pytest_output_path
+    } else {
+        String::from("./src/test_resources")
+    };
+    let path = Path::new(&output_dir).join(output_path);
+    let output_meta_data: OutputMetaData = serde_yaml::from_reader(
+        File::open(path.join("output_metadata.yaml")).unwrap_or_else(|e| {
+            panic!(
+                "Could not open file '{:?}'. Error: {:?}",
+                path.join("output_metadata.yaml"),
+                e
+            )
+        }),
+    )
+    .unwrap();
     assert_eq!(output_meta_data.output_type, OutputType::Amplitudes);
     assert_eq!(output_meta_data.contents.len(), 1);
 
-    let model = Model::from_file(String::from(
-        path.join(format!(
-            "sources/model/{}.yaml",
-            output_meta_data.model_name
+    let model = if load_generic_model {
+        Model::from_file(String::from(
+            Path::new(&output_dir)
+                .join(format!(
+                    "gammaloop_models/{}.yaml",
+                    output_meta_data.model_name.as_str()
+                ))
+                .to_str()
+                .unwrap(),
         ))
-        .to_str()
-        .unwrap(),
-    ))
-    .unwrap();
+        .unwrap()
+    } else {
+        Model::from_file(String::from(
+            path.join(format!(
+                "sources/model/{}.yaml",
+                output_meta_data.model_name
+            ))
+            .to_str()
+            .unwrap(),
+        ))
+        .unwrap()
+    };
+
     let amplitude = Amplitude::from_file(
         &model,
         String::from(
@@ -46,882 +283,1840 @@ pub fn load_amplitude_output(output_path: &str) -> (Model, Amplitude) {
         ),
     )
     .unwrap();
-    (model, amplitude)
+
+    let out_path = Path::new(&path)
+        .join("sources")
+        .join("amplitudes")
+        .join(amplitude.name.as_str());
+    (model, amplitude, out_path)
 }
 
-#[cfg(test)]
-mod tests_scalar_massless_triangle {
-    use lorentz_vector::LorentzVector;
-    use num::complex::Complex64;
-    use rayon::prelude::IndexedParallelIterator;
-    use smartstring::SmartString;
-
-    use crate::{graph::EdgeType, observables::AFBSettings};
-
-    use super::*;
-
-    #[test]
-    #[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
-    fn pytest_massless_scalar_triangle() {
-        assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-
-        let (model, amplitude) =
-            load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-        assert_eq!(model.name, "scalars");
-        assert!(amplitude.amplitude_graphs.len() == 1);
-        assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 6);
-        assert!(
-            amplitude.amplitude_graphs[0]
-                .graph
-                .external_connections
-                .len()
-                == 3
-        );
-
-        let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-        graph.generate_loop_momentum_bases();
-
-        graph.generate_cff();
-        assert_eq!(
-            graph
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .terms
-                .len(),
-            6
-        );
-        assert_eq!(
-            graph
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .esurfaces
-                .len(),
-            6
-        );
-
-        let p1 = LorentzVector::from_args(1.0, 3.0, 4.0, 5.0);
-        let p2 = LorentzVector::from_args(1.0, 6.0, 7.0, 8.0);
-
-        let k = LorentzVector::from_args(0.0, 1.0, 2.0, 3.0);
-
-        let energy_product = graph.compute_energy_product(&[k], &[p1, p2]);
-
-        let cff_res = graph.evaluate_cff_expression(&[k], &[p1, p2]) / energy_product;
-
-        // println!("res = {:+e}", res);
-
-        // test the lmb generation;;
-        assert_eq!(
-            graph
-                .derived_data
-                .loop_momentum_bases
-                .as_ref()
-                .unwrap()
-                .len(),
-            3
-        );
-
-        let absolute_truth = Complex::new(0.0, 4.531238289663331e-6);
-
-        graph.generate_ltd();
-
-        let ltd_res = graph.evaluate_ltd_expression(&[k], &[p1, p2]) / energy_product;
-
-        println!("cff_res = {:+e}", cff_res);
-        println!("ltd_res = {:+e}", ltd_res);
-        println!("cltd_m = {:+e}", absolute_truth);
-
-        assert_approx_eq(cff_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
-        assert_approx_eq(cff_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
-        assert_approx_eq(ltd_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
-        assert_approx_eq(ltd_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
-        // TODO: @Mathijs, you can put your own checks there
-    }
+pub enum SampleType<T: FloatLike> {
+    Random(u64),
+    Kinematic,
+    RandomWithHelicity(u64, Vec<Helicity>),
+    Custom(DefaultSample<T>),
 }
 
-#[test]
-#[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
-fn pytest_scalar_fishnet_2x2() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+pub struct AmplitudeCheck {
+    pub name: &'static str,
+    pub sample: SampleType<f64>,
+    pub model_name: &'static str,
+    pub n_edges: usize,
+    pub n_external_connections: usize,
+    pub n_cff_trees: usize,
+    pub n_esurfaces: usize,
+    pub n_vertices: usize,
+    pub n_lmb: usize,
+    pub cff_phase: F<f64>,
+    pub cff_norm: Option<F<f64>>,
+    pub n_prop_groups: usize,
+    pub n_existing_esurfaces: usize,
+    pub n_expanded_terms: usize,
+    pub n_terms_unfolded: usize,
+    pub n_overlap_groups: usize,
+    pub n_existing_per_overlap: Option<usize>,
+    pub tolerance: F<f64>,
+    pub fail_lower_prec: bool,
+}
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 16);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 13);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 4
+#[allow(unused)]
+fn check_load(amp_check: &AmplitudeCheck) -> (Model, Amplitude<UnInit>, PathBuf) {
+    let (model, amplitude, path) = load_amplitude_output(
+        &("TEST_AMPLITUDE_".to_string() + amp_check.name + "/GL_OUTPUT"),
+        true,
     );
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-    let cff = generate_cff_expression(&graph).unwrap();
-    assert!(!cff.terms.is_empty());
+    assert_eq!(model.name, amp_check.model_name, "Model name mismatch");
+    assert_eq!(
+        amplitude.amplitude_graphs.len(),
+        1,
+        "Number of graphs should be 1"
+    );
+    assert_eq!(
+        amplitude.amplitude_graphs[0].graph.bare_graph.edges.len(),
+        amp_check.n_edges,
+        "Graph should have {} edges, but has {}. Note: this includes external edges",
+        amp_check.n_edges,
+        amplitude.amplitude_graphs[0].graph.bare_graph.edges.len()
+    );
+    assert_eq!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
+            .vertices
+            .len(),
+        amp_check.n_vertices,
+        "Graph should have {} vertices, but has {}. Note we count the external vertices",
+        amp_check.n_vertices,
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
+            .vertices
+            .len()
+    );
+    assert_eq!(
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
+            .external_connections
+            .len(),
+        amp_check.n_external_connections,
+        "Graph should have {} external connections, but has {}",
+        amp_check.n_external_connections,
+        amplitude.amplitude_graphs[0]
+            .graph
+            .bare_graph
+            .external_connections
+            .len()
+    );
+    (model, amplitude, path)
+}
 
-    // println!("basis size: {:?}", graph.loop_momentum_basis.basis);
-    graph.generate_loop_momentum_bases();
+use color_eyre::{Report, Result};
+use eyre::{eyre, Context};
 
-    let k1 = LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.);
-    let k2 = LorentzVector::from_args(0., 7. / 11., 11. / 13., 13. / 17.);
-    let k3 = LorentzVector::from_args(0., 17. / 19., 19. / 23., 23. / 29.);
-    let k4 = LorentzVector::from_args(0., 29. / 31., 31. / 37., 37. / 41.);
-    let p1 = LorentzVector::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.);
-    let p2 = LorentzVector::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.);
-    let p3 = LorentzVector::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.);
-
-    let emr = graph.compute_emr(&[k1, k2, k3, k4], &[p1, p2, p3]);
-    let n_lmb = graph
-        .clone()
-        .derived_data
-        .loop_momentum_bases
-        .unwrap()
-        .len();
-    assert_eq!(n_lmb, 192);
-    //println!("number of lmbs: {}", n_lmb);
-
+#[allow(unused)]
+fn check_cff_generation<N: NumeratorState>(
+    mut graph: Graph<N>,
+    amp_check: &AmplitudeCheck,
+) -> Result<Graph<N>> {
     graph.generate_cff();
-    graph.generate_ltd();
-
-    for basis in graph
+    let cff = graph
         .derived_data
+        .as_ref()
+        .ok_or(eyre!("No derived data"))?
+        .cff_expression
+        .as_ref()
+        .ok_or(eyre!("No cff expression"))?;
+
+    assert!(!cff.esurfaces.is_empty());
+
+    let num_trees = cff.get_num_trees();
+    let esurfaces = cff.esurfaces.len();
+    assert_eq!(
+        num_trees, amp_check.n_cff_trees,
+        "Graph should have {} cff trees, but has {}",
+        amp_check.n_cff_trees, num_trees
+    );
+    assert_eq!(
+        esurfaces, amp_check.n_esurfaces,
+        "Graph should have {} esurfaces, but has {}",
+        amp_check.n_esurfaces, esurfaces
+    );
+    let unfolded = cff.expand_terms();
+
+    assert_eq!(unfolded.len(), amp_check.n_expanded_terms);
+
+    for term in unfolded.iter() {
+        assert_eq!(term.len(), amp_check.n_terms_unfolded);
+    }
+    Ok(graph)
+}
+
+#[allow(unused)]
+fn check_lmb_generation<N: NumeratorState>(
+    mut graph: Graph<N>,
+    sample: &DefaultSample<f64>,
+    amp_check: &AmplitudeCheck,
+) -> Result<Graph<N>> {
+    graph.generate_loop_momentum_bases();
+    let lmb = graph
+        .derived_data
+        .as_ref()
+        .ok_or(eyre!("No derived data"))?
         .loop_momentum_bases
         .as_ref()
-        .unwrap()
-        .iter()
-    {
+        .ok_or(eyre!("No lmbs"))?;
+
+    let emr = graph
+        .bare_graph
+        .compute_emr(sample.loop_moms(), sample.external_moms());
+
+    for basis in lmb {
         let momenta_in_basis = basis.basis.iter().map(|index| emr[*index]).collect_vec();
         let new_emr = basis
             .edge_signatures
             .iter()
-            .map(|s| compute_momentum(s, &momenta_in_basis, &[p1, p2, p3]))
+            .map(|s| s.compute_three_momentum_from_four(&momenta_in_basis, sample.external_moms()))
             .collect_vec();
         assert_eq!(emr.len(), new_emr.len());
 
         for (e1, e2) in emr.iter().zip(new_emr.iter()) {
-            assert_approx_eq(e1.t, e2.t, LTD_COMPARISON_TOLERANCE);
-            assert_approx_eq(e1.x, e2.x, LTD_COMPARISON_TOLERANCE);
-            assert_approx_eq(e1.y, e2.y, LTD_COMPARISON_TOLERANCE);
-            assert_approx_eq(e1.z, e2.z, LTD_COMPARISON_TOLERANCE);
+            F::assert_approx_eq(&e1.px, &e2.px, &LTD_COMPARISON_TOLERANCE);
+            F::assert_approx_eq(&e1.py, &e2.py, &LTD_COMPARISON_TOLERANCE);
+            F::assert_approx_eq(&e1.pz, &e2.pz, &LTD_COMPARISON_TOLERANCE);
         }
     }
 
-    //println!("lmb consistency check passed");
-
-    let k1_f128 = upgrade_lorentz_vector(&k1);
-    let k2_f128 = upgrade_lorentz_vector(&k2);
-    let k3_f128 = upgrade_lorentz_vector(&k3);
-    let k4_f128 = upgrade_lorentz_vector(&k4);
-    let p1_f128 = upgrade_lorentz_vector(&p1);
-    let p2_f128 = upgrade_lorentz_vector(&p2);
-    let p3_f128 = upgrade_lorentz_vector(&p3);
-
-    let loop_moms_f128 = [k1_f128, k2_f128, k3_f128, k4_f128];
-    let externals_f128 = [p1_f128, p2_f128, p3_f128];
-
-    let energy_product = graph.compute_energy_product(&loop_moms_f128, &externals_f128);
-
-    let cff_res = graph.evaluate_cff_expression(&loop_moms_f128, &externals_f128) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&loop_moms_f128, &externals_f128) / energy_product;
-
-    let absolute_truth = Complex::new(0.000019991301832169422, 0.0);
-
-    assert_approx_eq(
-        cff_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
+    let num_lmbs = lmb.len();
+    assert_eq!(
+        num_lmbs, amp_check.n_lmb,
+        "Graph should have {} loop momentum bases, but has {}",
+        amp_check.n_lmb, num_lmbs
     );
-    assert_approx_eq(
-        cff_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
-    assert_approx_eq(
-        ltd_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        ltd_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
-    // TODO: @Mathijs, you can put your own checks there
+    Ok(graph)
 }
 
-#[test]
-#[ignore]
-fn pytest_scalar_sunrise() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+#[allow(unused)]
+fn check_sample(bare_graph: &BareGraph, amp_check: &AmplitudeCheck) -> DefaultSample<f64> {
+    let n_loops = amp_check.n_edges - amp_check.n_vertices + 1; //circuit rank=n_loops
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+    match &amp_check.sample {
+        SampleType::Random(seed) => sample_generator(*seed, bare_graph, None),
+        SampleType::Kinematic => {
+            kinematics_builder(amp_check.n_external_connections - 1, n_loops, bare_graph)
+        }
+        SampleType::RandomWithHelicity(seed, helicities) => {
+            sample_generator(*seed, bare_graph, Some(helicities.clone()))
+        }
+        SampleType::Custom(sample) => sample.clone(),
+    }
+}
 
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 5);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 4);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 2
-    );
+fn check_rotations<T: FloatLike>(
+    sample: &DefaultSample<T>,
+    graph: &mut Graph,
+    amp_check: &AmplitudeCheck,
+) -> Result<()> {
+    let default_settings = load_default_settings();
+    let cff_res: Complex<F<T>> = graph.evaluate_cff_expression(sample, &default_settings);
 
-    let k1 = LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.);
-    let k2 = LorentzVector::from_args(0., 7. / 11., 11. / 13., 13. / 17.);
+    let rotation: Rotation = RotationSetting::Pi2X.rotation_method().into();
+    let rotated_sample = sample.get_rotated_sample(&rotation);
+    let rotated_cff_res: Complex<F<T>> =
+        graph.evaluate_cff_expression(&rotated_sample, &default_settings);
 
-    let p1 = LorentzVector::from_args(0., 0., 0., 0.);
+    let cff_norm = <Complex<F<T>> as Real>::norm(&cff_res).re;
 
-    let absolute_truth = Complex::new(0.24380172488169907, 0.);
+    let rot_cff_norm = <Complex<F<T>> as Real>::norm(&rotated_cff_res).re;
+    let tol = F::<T>::from_ff64(amp_check.tolerance);
+    F::approx_eq_res(&cff_norm, &rot_cff_norm, &tol).wrap_err("rotated value does not match")?;
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-    graph.generate_loop_momentum_bases();
-    graph.generate_cff();
+    Ok(())
+}
+
+#[allow(unused)]
+fn compare_cff_to_ltd<T: FloatLike>(
+    sample: &DefaultSample<T>,
+    graph: &mut Graph,
+    amp_check: &AmplitudeCheck,
+) -> Result<()> {
+    let default_settings = load_default_settings();
+    let lmb_specification =
+        LoopMomentumBasisSpecification::Literal(&graph.bare_graph.loop_momentum_basis);
+    // let cff_res = graph.evaluate_cff_orientations(sample, &lmb_specification, &default_settings);
+    // // for o in cff_res.iter() {
+    // //     println!("cff: {}", o);
+    // // }
+    let cff_res: Complex<F<T>> = graph.evaluate_cff_expression(sample, &default_settings);
     graph.generate_ltd();
+    let ltd_res = graph.evaluate_ltd_expression(sample, &default_settings);
 
-    let energy_product = graph.compute_energy_product(&[k1, k2], &[p1]);
+    let cff_norm = <Complex<F<T>> as Real>::norm(&cff_res).re;
+    let cff_phase_actual = <Complex<F<T>> as SymbolicaComplex>::arg(&cff_res);
 
-    let cff_res = graph.evaluate_cff_expression(&[k1, k2], &[p1]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k1, k2], &[p1]) / energy_product;
+    let ltd_norm = <Complex<F<T>> as Real>::norm(&ltd_res).re;
+    // let ltd_phase = ltd_res.arg();
 
-    println!("cff_res = {:+e}", cff_res);
-    println!("ltd_res = {:+e}", ltd_res);
+    let ltd_comparison_tolerance = F::<T>::from_ff64(amp_check.tolerance);
 
-    assert_approx_eq(cff_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
-    assert_approx_eq(cff_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
-    println!("cff correct");
-    assert_approx_eq(ltd_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
-    assert_approx_eq(ltd_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
-    println!("ltd correct");
+    F::approx_eq_res(&cff_norm, &ltd_norm, &ltd_comparison_tolerance).wrap_err(format!(
+        "cff: {} and ltd: {} norms do not match",
+        cff_res, ltd_res
+    ))?;
+
+    if let Some(truth) = amp_check.cff_norm {
+        let energy_product = graph
+            .bare_graph
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
+        F::approx_eq_res(
+            &(cff_norm / &energy_product),
+            &F::<T>::from_ff64(truth),
+            &ltd_comparison_tolerance,
+        )
+        .wrap_err("Normalised cff is not what was expected")?;
+    }
+
+    F::approx_eq_res(
+        &F::<T>::from_ff64(amp_check.cff_phase),
+        &cff_phase_actual,
+        &ltd_comparison_tolerance,
+    )
+    .wrap_err(format!(
+        "Phase does not match expected, orig values: \nltd:{}\ncff:{}",
+        ltd_res, cff_res
+    ))?;
+    Ok(())
 }
 
-#[test]
-#[ignore] // Important since this test will only run successfully when called from with pytest where the massless_triangle_generation fixture will be run
-fn pytest_scalar_fishnet_2x3() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-
-    let (model, mut amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 21);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 16);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 4
+#[allow(unused)]
+fn check_graph(graph: &BareGraph, n_prop_groups: usize) {
+    let propagator_groups = graph.group_edges_by_signature();
+    assert_eq!(
+        propagator_groups.len(),
+        n_prop_groups,
+        "Expected {} propagator groups, but found {}",
+        n_prop_groups,
+        propagator_groups.len()
     );
-
-    // generate cff
-    amplitude.amplitude_graphs[0].graph.generate_cff();
-    amplitude.amplitude_graphs[0].graph.generate_ltd();
-
-    let externals = (0..3)
-        .map(|i| {
-            upgrade_lorentz_vector(&LorentzVector::from_args(
-                1.0,
-                i as f64 + 2.0,
-                i as f64 + 3.0,
-                i as f64 + 4.0,
-            ))
-        })
-        .collect_vec();
-
-    let loop_moms = (0..6)
-        .map(|i| {
-            upgrade_lorentz_vector(&LorentzVector::from_args(
-                1.0,
-                i as f64 - 2.0,
-                i as f64 + 3.5,
-                i as f64 + 4.5001,
-            ))
-        })
-        .collect_vec();
-
-    // let before_cff = std::time::Instant::now();
-
-    let cff_res = amplitude.amplitude_graphs[0]
-        .graph
-        .evaluate_cff_expression(&loop_moms, &externals);
-
-    // let cff_duration = before_cff.elapsed();
-    // println!("cff_duration: {}", cff_duration.as_micros());
-
-    // let before_ltd = std::time::Instant::now();
-    let ltd_res = amplitude.amplitude_graphs[0]
-        .graph
-        .evaluate_ltd_expression(&loop_moms, &externals);
-
-    // let ltd_duration = before_ltd.elapsed();
-    // println!("ltd_duration: {}", ltd_duration.as_micros());
-
-    assert_approx_eq(
-        cff_res.re.into(),
-        ltd_res.re.into(),
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        cff_res.im.into(),
-        ltd_res.im.into(),
-        LTD_COMPARISON_TOLERANCE,
-    );
-    // TODO: @Mathijs, you can put your own checks there
 }
 
-#[test]
-#[ignore]
-fn pytest_scalar_cube() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+#[allow(unused)]
+fn check_esurface_existance<N: NumeratorState>(
+    graph: &mut Graph<N>,
+    sample: &DefaultSample<f64>,
+    n_existing_esurfaces: usize,
+    n_overlap_groups: usize,
+    n_existing_per_overlap: Option<usize>,
+) -> Result<()> {
+    graph.generate_esurface_data().unwrap();
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 20);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 16);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 8
+    let cff = graph
+        .derived_data
+        .as_ref()
+        .ok_or(eyre!("derived data missing"))?
+        .cff_expression
+        .as_ref()
+        .ok_or(eyre!("No cff expression"))?;
+    let existing = get_existing_esurfaces(
+        &cff.esurfaces,
+        graph
+            .derived_data
+            .as_ref()
+            .ok_or(eyre!("derived data missing"))?
+            .esurface_derived_data
+            .as_ref()
+            .ok_or(eyre!("no esurface derived data"))?,
+        sample.external_moms(),
+        &graph.bare_graph.loop_momentum_basis,
+        0,
+        F(2.),
     );
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-    graph.generate_loop_momentum_bases();
-    graph.generate_cff();
-    graph.generate_ltd();
-
-    let ext = graph
+    let edge_masses = graph
+        .bare_graph
         .edges
         .iter()
-        .filter(|e| e.edge_type != EdgeType::Virtual)
-        .count();
+        .map(|edge| edge.particle.mass.value)
+        .collect_vec();
 
-    assert_eq!(ext, 8);
-
-    let mut external_momenta = Vec::with_capacity(7);
-    for i in 0..7 {
-        external_momenta.push(upgrade_lorentz_vector(&LorentzVector::from_args(
-            1.0,
-            3.0 + i as f64,
-            5.0 + i as f64,
-            4.0 + i as f64,
-        )));
-    }
-
-    assert_eq!(graph.loop_momentum_basis.edge_signatures[0].1.len(), 8);
-
-    assert_eq!(graph.loop_momentum_basis.edge_signatures[0].0.len(), 5);
-
-    let mut loop_momenta = Vec::with_capacity(5);
-    for i in 0..5 {
-        loop_momenta.push(upgrade_lorentz_vector(&LorentzVector::from_args(
-            0.0,
-            1.5 + i as f64,
-            2.5 + i as f64,
-            4.5 + i as f64,
-        )));
-    }
-
-    let ltd_res = graph.evaluate_ltd_expression(&loop_momenta, &external_momenta);
-    let cff_res = graph.evaluate_cff_expression(&loop_momenta, &external_momenta);
-    assert_approx_eq(
-        cff_res.re.into(),
-        ltd_res.re.into(),
-        LTD_COMPARISON_TOLERANCE,
+    find_maximal_overlap(
+        &graph.bare_graph.loop_momentum_basis,
+        &existing,
+        &cff.esurfaces,
+        &edge_masses,
+        sample.external_moms(),
+        0,
     );
 
-    assert_approx_eq(
-        cff_res.im.into(),
-        ltd_res.im.into(),
-        LTD_COMPARISON_TOLERANCE,
+    let maximal_overlap = find_maximal_overlap(
+        &graph.bare_graph.loop_momentum_basis,
+        &existing,
+        &cff.esurfaces,
+        &edge_masses,
+        sample.external_moms(),
+        0,
     );
+
+    assert_eq!(
+        maximal_overlap.overlap_groups.len(),
+        n_overlap_groups,
+        "Number of overlap groups mismatch"
+    );
+    for overlap in maximal_overlap.overlap_groups.iter() {
+        if let Some(n_existing_per_overlap) = n_existing_per_overlap {
+            assert_eq!(
+                overlap.existing_esurfaces.len(),
+                n_existing_per_overlap,
+                "Number of existing surfaces per overlap mismatch"
+            );
+        }
+    }
+
+    assert_eq!(
+        existing.len(),
+        n_existing_esurfaces,
+        "Number of existing surfaces mismatch"
+    );
+    Ok(())
+}
+
+#[allow(unused)]
+fn check_amplitude(amp_check: AmplitudeCheck) {
+    let (model, amplitude, path) = check_load(&amp_check);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    check_graph(&graph.bare_graph, amp_check.n_prop_groups);
+    let sample = check_sample(&graph.bare_graph, &amp_check);
+
+    graph = check_lmb_generation(graph, &sample, &amp_check).unwrap();
+    graph = check_cff_generation(graph, &amp_check).unwrap();
+
+    let sample_quad = sample.higher_precision();
+
+    let export_settings = test_export_settings();
+
+    println!(
+        "numerator:{}",
+        graph
+            .clone()
+            .apply_feynman_rules()
+            .derived_data
+            .unwrap()
+            .numerator
+            .export()
+    );
+    let mut graph =
+        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+
+    let f64_check_1 = compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+        .wrap_err("combined num f64 cff and ltd failed");
+
+    check_rotations(&sample, &mut graph, &amp_check)
+        .wrap_err("rotation does not match")
+        .unwrap();
+
+    graph
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_combined();
+
+    let f64_check_2 = compare_cff_to_ltd(&sample, &mut graph, &amp_check)
+        .wrap_err("separate num f64 cff and ltd failed");
+
+    if amp_check.fail_lower_prec {
+        assert!(f64_check_1.is_err(), "expected failure for f64");
+        assert!(f64_check_2.is_err(), "expected failure for f64");
+    } else {
+        f64_check_1.unwrap();
+        f64_check_2.unwrap();
+    }
+
+    graph
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .enable_combined(None);
+
+    compare_cff_to_ltd(&sample.higher_precision(), &mut graph, &amp_check)
+        .wrap_err("f128 cff and ltd failed")
+        .unwrap();
+
+    check_esurface_existance(
+        &mut graph,
+        &sample,
+        amp_check.n_existing_esurfaces,
+        amp_check.n_overlap_groups,
+        amp_check.n_existing_per_overlap,
+    )
+    .unwrap();
+}
+
+#[allow(unused)]
+fn init() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+#[test]
+fn pytest_scalar_massless_triangle() {
+    init();
+
+    let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.0), F(5.0));
+    let p2 = FourMomentum::from_args(F(1.), F(6.0), F(7.), F(8.));
+
+    let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
+
+    let externals = Externals::Constant {
+        momenta: vec![
+            ExternalMomenta::Independent(p1.into()),
+            ExternalMomenta::Independent(p2.into()),
+            ExternalMomenta::Dependent(Dep::Dep),
+        ],
+        helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
+    };
+
+    let sample = DefaultSample::new(
+        vec![k],
+        &externals,
+        F(1.),
+        &crate::Polarizations::None,
+        &Signature::from_iter([1i8, 1, -1]),
+    );
+    let amp_check = AmplitudeCheck {
+        name: "massless_scalar_triangle",
+        sample: SampleType::Custom(sample),
+        model_name: "scalars",
+        n_edges: 6,
+        n_external_connections: 3,
+        n_cff_trees: 6,
+        n_esurfaces: 6,
+        n_vertices: 6,
+        n_lmb: 3,
+        cff_phase: PHASEI, //(0.).PI(),
+        cff_norm: Some(F(4.531238289663331e-6)),
+        n_prop_groups: 3,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 6,
+        n_terms_unfolded: 2,
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        tolerance: LTD_COMPARISON_TOLERANCE,
+        fail_lower_prec: false,
+    };
+    check_amplitude(amp_check);
 }
 
 #[test]
-#[ignore]
+fn pytest_scalar_fishnet_2x2() {
+    init();
+
+    let k1 = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.));
+    let k2 = ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.));
+    let k3 = ThreeMomentum::new(F(17. / 19.), F(19. / 23.), F(23. / 29.));
+    let k4: ThreeMomentum<F<f64>> = ThreeMomentum::new(29. / 31., 31. / 37., 37. / 41.).into();
+    let p1: FourMomentum<F<f64>> =
+        FourMomentum::from_args(79. / 83., 41. / 43., 43. / 47., 47. / 53.).into();
+    let p2: FourMomentum<F<f64>> =
+        FourMomentum::from_args(83. / 89., 53. / 59., 59. / 61., 61. / 67.).into();
+    let p3: FourMomentum<F<f64>> =
+        FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.).into();
+
+    let sample = DefaultSample::new(
+        vec![k1, k2, k3, k4],
+        &Externals::Constant {
+            momenta: vec![
+                ExternalMomenta::Independent(p1.into()),
+                ExternalMomenta::Independent(p2.into()),
+                ExternalMomenta::Independent(p3.into()),
+                ExternalMomenta::Dependent(Dep::Dep),
+            ],
+            helicities: vec![
+                Helicity::Zero,
+                Helicity::Zero,
+                Helicity::Zero,
+                Helicity::Zero,
+            ],
+        },
+        F(1.),
+        &Polarizations::None,
+        &Signature::from_iter([1i8, 1, -1, -1]),
+    );
+
+    let amp_check = AmplitudeCheck {
+        name: "scalar_fishnet_2x2",
+        model_name: "scalars",
+        sample: SampleType::Custom(sample),
+        n_edges: 16,
+        n_vertices: 13,
+        n_external_connections: 4,
+        n_lmb: 192,
+        n_cff_trees: 2398,
+        n_prop_groups: 12,
+        n_esurfaces: 97,
+        cff_norm: Some(F(0.000019991301832169422)),
+        cff_phase: PHASEI,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 22852,
+        n_terms_unfolded: 8,
+
+        tolerance: LTD_COMPARISON_TOLERANCE,
+        n_existing_per_overlap: Some(0),
+        n_overlap_groups: 0,
+        fail_lower_prec: true,
+    };
+
+    check_amplitude(amp_check);
+}
+
+#[test]
+fn pytest_scalar_sunrise() {
+    init();
+    let amp_check = AmplitudeCheck {
+        name: "scalar_sunrise",
+        model_name: "scalars",
+        sample: SampleType::Kinematic,
+        n_edges: 5,
+        n_vertices: 4,
+        n_external_connections: 2,
+        cff_phase: PHASEMINUSI,
+        cff_norm: Some(F(3.808857767867812e-3)),
+        n_prop_groups: 3,
+        n_cff_trees: 2,
+        n_esurfaces: 2,
+        n_lmb: 3,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 2,
+        n_terms_unfolded: 1,
+
+        tolerance: LTD_COMPARISON_TOLERANCE,
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+
+    check_amplitude(amp_check);
+}
+
+#[test]
+fn pytest_scalar_fishnet_2x3() {
+    init();
+
+    let amp_check = AmplitudeCheck {
+        name: "scalar_fishnet_2x3",
+        model_name: "scalars",
+        n_edges: 21,
+        n_vertices: 16,
+        sample: SampleType::Random(3),
+        n_external_connections: 4,
+        n_prop_groups: 17,
+        n_cff_trees: 58670,
+        n_esurfaces: 263,
+        n_existing_esurfaces: 16,
+        n_expanded_terms: 2566256,
+        n_lmb: 2415,
+        n_terms_unfolded: 11,
+        cff_norm: None,
+        cff_phase: PHASEMINUSI,
+
+        tolerance: LTD_COMPARISON_TOLERANCE,
+        n_existing_per_overlap: None, //bogus
+        n_overlap_groups: 1,          //bogus
+        fail_lower_prec: true,
+    };
+
+    check_amplitude(amp_check);
+}
+
+#[test]
+fn pytest_scalar_cube() {
+    init();
+    // had to change tolerance to make it pass
+    let amp_check = AmplitudeCheck {
+        name: "scalar_cube",
+        model_name: "scalars",
+        n_edges: 20,
+        n_vertices: 16,
+        n_external_connections: 8,
+        n_prop_groups: 12,
+        n_cff_trees: 1862,
+        n_esurfaces: 126,
+        sample: SampleType::Kinematic,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 10584,
+        n_lmb: 384,
+        n_terms_unfolded: 7,
+        cff_norm: None,
+        cff_phase: PHASEMINUSI,
+
+        tolerance: F(1.0e-9),
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    check_amplitude(amp_check);
+}
+
+#[test]
 fn pytest_scalar_bubble() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+    init();
+    let amp_check = AmplitudeCheck {
+        name: "scalar_bubble",
+        model_name: "scalars",
+        sample: SampleType::Kinematic,
+        n_edges: 4,
+        n_vertices: 4,
+        n_external_connections: 2,
+        n_prop_groups: 2,
+        n_cff_trees: 2,
+        n_esurfaces: 2,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 2,
+        n_lmb: 2,
+        n_terms_unfolded: 1,
+        cff_norm: None,
+        cff_phase: PHASEMINUSI,
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 4);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 4);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 2
-    );
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    let p1 = LorentzVector::from_args(17. / 19., 7. / 11., 11. / 13., 13. / 17.);
-    let k = LorentzVector::from_args(0.0, 2. / 3., 3. / 5., 5. / 7.);
-
-    let onshell_energies = graph.compute_onshell_energies(&[k], &[p1, p1]);
-
-    assert_eq!(onshell_energies.len(), 4);
-
-    graph.generate_ltd();
-    graph.generate_cff();
-
-    let energy_product = graph.compute_energy_product(&[k], &[p1, p1]);
-
-    let ltd_res = graph.evaluate_ltd_expression(&[k], &[p1]) / energy_product;
-    let cff_res = graph.evaluate_cff_expression(&[k], &[p1]) / energy_product;
-
-    let absolute_truth = Complex::new(0., -0.052955801144924944);
-
-    assert_approx_eq(cff_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
-    assert_approx_eq(cff_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
-    assert_approx_eq(ltd_res.re, absolute_truth.re, LTD_COMPARISON_TOLERANCE);
-    assert_approx_eq(ltd_res.im, absolute_truth.im, LTD_COMPARISON_TOLERANCE);
+        tolerance: LTD_COMPARISON_TOLERANCE,
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    check_amplitude(amp_check);
 }
 
 #[test]
-#[ignore]
-fn pytest_massless_scalar_box() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+fn pytest_scalar_massless_box() {
+    init();
+    let amp_check = AmplitudeCheck {
+        name: "scalar_massless_box",
+        model_name: "scalars",
+        n_edges: 8,
+        n_vertices: 8,
+        n_external_connections: 4,
+        n_prop_groups: 4,
+        sample: SampleType::Kinematic,
+        n_cff_trees: 14,
+        n_esurfaces: 12,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 20,
+        n_lmb: 4,
+        n_terms_unfolded: 3,
+        cff_norm: None,
+        cff_phase: PHASEMINUSI,
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 8);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 8);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 4
-    );
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    graph.generate_ltd();
-    graph.generate_cff();
-
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        79. / 83.,
-        41. / 43.,
-        43. / 47.,
-        47. / 53.,
-    ));
-    let p2 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        83. / 89.,
-        53. / 59.,
-        59. / 61.,
-        61. / 67.,
-    ));
-    let p3 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        89. / 97.,
-        67. / 71.,
-        71. / 73.,
-        73. / 79.,
-    ));
-
-    let externals = [p1, p2, p3];
-
-    let absolute_truth = Complex::new(0.0, -1.5735382832053006e-6);
-
-    let k = upgrade_lorentz_vector(&LorentzVector::from_args(0.0, 1.0, 2.0, 3.0));
-
-    let energy_product = graph.compute_energy_product(&[k], &externals);
-
-    let cff_res = graph.evaluate_cff_expression(&[k], &externals) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k], &externals) / energy_product;
-
-    assert_approx_eq(
-        cff_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-    assert_approx_eq(
-        cff_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
-    assert_approx_eq(
-        ltd_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-    assert_approx_eq(
-        ltd_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
+        tolerance: LTD_COMPARISON_TOLERANCE,
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    check_amplitude(amp_check);
 }
 
 #[test]
-#[ignore]
 fn pytest_scalar_double_triangle() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+    init();
+    let amp_check = AmplitudeCheck {
+        name: "scalar_double_triangle",
+        model_name: "scalars",
+        n_edges: 7,
+        n_vertices: 6,
+        n_external_connections: 2,
+        n_prop_groups: 5,
+        n_lmb: 8,
+        n_cff_trees: 18,
+        sample: SampleType::Kinematic,
+        n_esurfaces: 10,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 20,
+        n_terms_unfolded: 3,
+        cff_norm: None,
+        cff_phase: PHASEMINUSI,
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 7);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 6);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 2
-    );
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    graph.generate_ltd();
-    graph.generate_cff();
-
-    let absolute_truth = Complex::new(0.00009115369712210525, 0.0);
-
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        53. / 59.,
-        41. / 43.,
-        43. / 47.,
-        47. / 53.,
-    ));
-
-    let k0 = upgrade_lorentz_vector(&LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.));
-    let k1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        0.,
-        7. / 11.,
-        11. / 13.,
-        13. / 17.,
-    ));
-
-    let energy_product = graph.compute_energy_product(&[k0, k1], &[p1]);
-
-    let cff_res = graph.evaluate_cff_expression(&[k0, k1], &[p1]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k0, k1], &[p1]) / energy_product;
-
-    assert_approx_eq(
-        cff_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-    assert_approx_eq(
-        cff_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        ltd_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-    assert_approx_eq(
-        ltd_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
+        tolerance: F(1.0e-9),
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    check_amplitude(amp_check);
 }
 
 #[test]
-#[ignore]
 fn pytest_scalar_mercedes() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+    //had to lower tolerance again
+    let amp_check = AmplitudeCheck {
+        name: "scalar_mercedes",
+        model_name: "scalars",
+        n_edges: 9,
+        n_vertices: 7,
+        sample: SampleType::Kinematic,
+        n_external_connections: 3,
+        n_prop_groups: 6,
+        n_lmb: 16,
+        n_cff_trees: 24,
+        n_esurfaces: 13,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 24,
+        n_terms_unfolded: 3,
+        cff_norm: None,
+        cff_phase: PHASEMINUSI,
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 9);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 7);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 3
-    );
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    graph.generate_ltd();
-    graph.generate_cff();
-
-    let absolute_truth = Complex::new(0.0, 2.3081733247975594e-13);
-
-    let k0 = upgrade_lorentz_vector(&LorentzVector::from_args(0.0, 3., 4., 5.));
-    let k1 = upgrade_lorentz_vector(&LorentzVector::from_args(0.0, 7., 7., 9.));
-    let k2 = upgrade_lorentz_vector(&LorentzVector::from_args(0.0, 9., 3., 1.));
-
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(1.0, 12., 13., 14.));
-    let p2 = upgrade_lorentz_vector(&LorentzVector::from_args(2.0, 15., 17., 19.));
-
-    let energy_product = graph.compute_energy_product(&[k0, k1, k2], &[p1, p2]);
-
-    let cff_res = graph.evaluate_cff_expression(&[k0, k1, k2], &[p1, p2]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k0, k1, k2], &[p1, p2]) / energy_product;
-
-    assert_approx_eq(
-        cff_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        cff_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        ltd_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        ltd_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
+        tolerance: F(1.0e-5),
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    check_amplitude(amp_check);
 }
 
 #[test]
-#[ignore]
 fn pytest_scalar_triangle_box() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
-
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
-
-    assert_eq!(model.name, "scalars");
-    assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 9);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 8);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 3
-    );
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    graph.generate_ltd();
-    graph.generate_cff();
-
-    let absolute_truth = Complex::new(-1.264_354_742_167_213_3e-7, 0.0);
-
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        53. / 59.,
-        41. / 43.,
-        43. / 47.,
-        47. / 53.,
-    ));
-
-    let p2 = upgrade_lorentz_vector(&LorentzVector::from_args(2., 15., 17., 19.));
-
-    let k0 = upgrade_lorentz_vector(&LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.));
-    let k1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        0.,
-        7. / 11.,
-        11. / 13.,
-        13. / 17.,
-    ));
-
-    let energy_product = graph.compute_energy_product(&[k0, k1], &[p1, p2]);
-
-    let cff_res = graph.evaluate_cff_expression(&[k0, k1], &[p1, p2]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k0, k1], &[p1, p2]) / energy_product;
-
-    assert_approx_eq(
-        cff_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        cff_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        ltd_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
-    );
-
-    assert_approx_eq(
-        ltd_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
-    );
+    init();
+    let amp_check = AmplitudeCheck {
+        name: "scalar_triangle_box",
+        model_name: "scalars",
+        n_edges: 9,
+        n_vertices: 8,
+        n_external_connections: 3,
+        n_prop_groups: 6,
+        n_lmb: 11,
+        sample: SampleType::Kinematic,
+        n_cff_trees: 42,
+        n_esurfaces: 18,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 70,
+        n_terms_unfolded: 4,
+        cff_norm: None,
+        cff_phase: PHASEI,
+        tolerance: F(1.0e-7),
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    check_amplitude(amp_check);
 }
 
 #[test]
-#[ignore]
 fn pytest_scalar_isopod() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+    init();
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+    let p1: FourMomentum<F<f64>> =
+        FourMomentum::from_args(53. / 59., 41. / 43., 43. / 47., 47. / 53.).cast();
+
+    let p2: FourMomentum<F<f64>> = FourMomentum::from_args(2., 15., 17., 19.).cast();
+
+    let k0: ThreeMomentum<F<f64>> = ThreeMomentum::new(F(2. / 3.), F(3. / 5.), F(5. / 7.)).cast();
+    let k1: ThreeMomentum<F<f64>> =
+        ThreeMomentum::new(F(7. / 11.), F(11. / 13.), F(13. / 17.)).cast();
+
+    let k2: ThreeMomentum<F<f64>> = ThreeMomentum::new(8., 9., 10.).cast();
+
+    let loop_moms = vec![k0, k1, k2];
+    let externals = Externals::Constant {
+        momenta: vec![
+            ExternalMomenta::Independent(p1.into()),
+            ExternalMomenta::Independent(p2.into()),
+            ExternalMomenta::Dependent(Dep::Dep),
+        ],
+        helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
+    };
+
+    let sample = DefaultSample::new(
+        loop_moms,
+        &externals,
+        F(1.),
+        &crate::Polarizations::None,
+        &Signature::from_iter([1i8, 1, -1i8]),
+    );
+    let amp_check = AmplitudeCheck {
+        name: "scalar_isopod",
+        model_name: "scalars",
+        n_edges: 12,
+        n_vertices: 10,
+        sample: SampleType::Custom(sample),
+        n_external_connections: 3,
+        n_prop_groups: 9,
+        n_lmb: 41,
+        n_cff_trees: 294,
+        n_esurfaces: 36,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 924,
+        n_terms_unfolded: 6,
+        cff_norm: None,
+        cff_phase: PHASEI,
+        tolerance: F(1.0e-7),
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: true,
+    };
+    check_amplitude(amp_check);
+}
+
+#[test]
+fn pytest_scalar_raised_triangle() {
+    init();
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_raised_triangle/GL_OUTPUT", true);
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
-    assert!(amplitude.amplitude_graphs[0].graph.edges.len() == 12);
-    assert!(amplitude.amplitude_graphs[0].graph.vertices.len() == 10);
-    assert!(
-        amplitude.amplitude_graphs[0]
-            .graph
-            .external_connections
-            .len()
-            == 3
-    );
+
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    let propagator_groups = graph.bare_graph.group_edges_by_signature();
+    assert_eq!(propagator_groups.len(), 5);
+}
+
+#[test]
+fn pytest_scalar_hexagon() {
+    init();
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_hexagon/GL_OUTPUT", true);
+
+    assert_eq!(model.name, "scalars");
+    assert!(amplitude.amplitude_graphs.len() == 1);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
     graph.generate_ltd();
     graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
 
-    let absolute_truth = Complex::new(0.0, -2.9299520787585056e-23);
+    let esurfaces = &graph
+        .derived_data
+        .as_ref()
+        .unwrap()
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
 
-    let p1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        53. / 59.,
-        41. / 43.,
-        43. / 47.,
-        47. / 53.,
-    ));
+    let kinematics = [
+        FourMomentum::from_args(F(24.), F(-21.2), F(71.), F(0.)),
+        FourMomentum::from_args(F(50.4), F(15.8), F(-18.8), F(0.)),
+        FourMomentum::from_args(F(-0.2), F(46.2), F(8.6), F(0.)),
+        -FourMomentum::from_args(F(-33.2), F(2.6), F(-70.8), F(0.)),
+        -FourMomentum::from_args(F(-80.), F(-5.6), F(-40.0), F(0.0)),
+    ];
 
-    let p2 = upgrade_lorentz_vector(&LorentzVector::from_args(2., 15., 17., 19.));
-
-    let k0 = upgrade_lorentz_vector(&LorentzVector::from_args(0., 2. / 3., 3. / 5., 5. / 7.));
-    let k1 = upgrade_lorentz_vector(&LorentzVector::from_args(
-        0.,
-        7. / 11.,
-        11. / 13.,
-        13. / 17.,
-    ));
-
-    let k2 = upgrade_lorentz_vector(&LorentzVector::from_args(0., 8., 9., 10.));
-
-    let energy_product = graph.compute_energy_product(&[k0, k1, k2], &[p1, p2]);
-
-    let cff_res = graph.evaluate_cff_expression(&[k0, k1, k2], &[p1, p2]) / energy_product;
-    let ltd_res = graph.evaluate_ltd_expression(&[k0, k1, k2], &[p1, p2]) / energy_product;
-
-    println!("cff_res = {:+e}", cff_res);
-    println!("ltd_res = {:+e}", ltd_res);
-
-    assert_approx_eq(
-        cff_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
+    let existing_esurface = get_existing_esurfaces(
+        esurfaces,
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
+        &kinematics,
+        &graph.bare_graph.loop_momentum_basis,
+        0,
+        F(75.),
     );
 
-    assert_approx_eq(
-        cff_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
+    assert_eq!(existing_esurface.len(), 6);
+
+    let edge_masses = graph
+        .bare_graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .collect_vec();
+
+    let now = std::time::Instant::now();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.bare_graph.loop_momentum_basis,
+        &existing_esurface,
+        esurfaces,
+        &edge_masses,
+        &kinematics,
+        0,
+    );
+    let duration = now.elapsed();
+    println!("duration: {}", duration.as_micros());
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 4);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        3
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[3].existing_esurfaces.len(),
+        2
     );
 
-    assert_approx_eq(
-        ltd_res.re.into(),
-        absolute_truth.re,
-        LTD_COMPARISON_TOLERANCE,
+    let hexagon_10_e = [
+        FourMomentum::from_args(F(-80.), F(29.), F(-70.), F(0.)),
+        FourMomentum::from_args(F(83.5), F(14.0), F(70.0), F(0.0)),
+        FourMomentum::from_args(F(88.5), F(6.5), F(-6.), F(0.)),
+        -FourMomentum::from_args(F(36.5), F(-71.), F(97.5), F(0.)),
+        -FourMomentum::from_args(F(12.5), F(-83.5), F(-57.5), F(0.)),
+    ];
+
+    let existing_esurfaces = get_existing_esurfaces(
+        esurfaces,
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
+        &hexagon_10_e,
+        &graph.bare_graph.loop_momentum_basis,
+        0,
+        F(88.),
     );
 
-    assert_approx_eq(
-        ltd_res.im.into(),
-        absolute_truth.im,
-        LTD_COMPARISON_TOLERANCE,
+    assert_eq!(existing_esurfaces.len(), 10);
+
+    let now = std::time::Instant::now();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.bare_graph.loop_momentum_basis,
+        &existing_esurfaces,
+        esurfaces,
+        &edge_masses,
+        &hexagon_10_e,
+        0,
+    );
+    let duration = now.elapsed();
+    println!("duration: {}", duration.as_micros());
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 4);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        8
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        8
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        7
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[3].existing_esurfaces.len(),
+        7
     );
 }
 
 #[test]
-#[ignore]
+fn pytest_scalar_ltd_topology_c() {
+    init();
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_ltd_topology_c/GL_OUTPUT", true);
 
-fn pytest_lbl_box() {
-    assert!(env::var("PYTEST_OUTPUT_PATH_FOR_RUST").is_ok());
+    assert_eq!(model.name, "scalars");
+    assert!(amplitude.amplitude_graphs.len() == 1);
 
-    let (model, amplitude) =
-        load_amplitude_output(&env::var("PYTEST_OUTPUT_PATH_FOR_RUST").unwrap());
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let esurfaces = &graph
+        .derived_data
+        .as_ref()
+        .unwrap()
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .esurfaces;
+
+    let kinematics = [
+        FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(8.94427190999916)),
+        FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(-8.94427190999916)),
+        -FourMomentum::from_args(
+            F(1.83442509122858),
+            F(-0.383828222192743),
+            F(0.69085529916260),
+            F(-1.31653190094982),
+        ),
+        -FourMomentum::from_args(
+            F(5.78920098524940),
+            F(-1.80358221330469),
+            F(-5.24375913342836),
+            F(1.328506453),
+        ),
+        -FourMomentum::from_args(F(2.82869), F(-1.83886), F(-1.6969477), F(0.8605192)),
+    ];
+
+    let _edge_masses = graph
+        .bare_graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re.0 == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        esurfaces,
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
+        &kinematics,
+        &graph.bare_graph.loop_momentum_basis,
+        2,
+        F(18.),
+    );
+
+    let overlap = find_maximal_overlap(
+        &graph.bare_graph.loop_momentum_basis,
+        &existing_esurfaces,
+        esurfaces,
+        &_edge_masses,
+        &kinematics,
+        0,
+    );
+
+    assert_eq!(overlap.overlap_groups.len(), 9);
+    assert_eq!(overlap.overlap_groups[0].existing_esurfaces.len(), 22);
+    assert_eq!(overlap.overlap_groups[1].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[2].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[3].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[4].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[5].existing_esurfaces.len(), 21);
+    assert_eq!(overlap.overlap_groups[6].existing_esurfaces.len(), 20);
+    assert_eq!(overlap.overlap_groups[7].existing_esurfaces.len(), 17);
+    assert_eq!(overlap.overlap_groups[8].existing_esurfaces.len(), 17);
+}
+
+#[test]
+fn pytest_scalar_massless_pentabox() {
+    init();
+    let (_model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_massless_pentabox/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let rescaling = F(1.0e-3);
+    let kinematics = [
+        &FourMomentum::from_args(
+            F(5.980_260_048_915_123e2),
+            F(0.0),
+            F(0.0),
+            F(5.724_562_014_045_295e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(5.980_260_048_915_123e2),
+            F(0.0),
+            F(0.0),
+            F(-5.724_562_014_045_295e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-5.394_473_213_122_507e2),
+            F(-1.971_081_698_462_961e2),
+            F(-4.416_135_519_343_869e2),
+            F(2.250_822_886_064_787e2),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-2.255_538_754_188_549e2),
+            F(1.757_868_459_829_899e2),
+            F(3.716_353_112_335_996e1),
+            F(-1.013_763_093_935_658e2),
+        ) * &rescaling,
+    ];
+
+    let edge_masses = graph
+        .bare_graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re.0 == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        &graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
+        &kinematics,
+        &graph.bare_graph.loop_momentum_basis,
+        0,
+        F(1.0),
+    );
+
+    assert_eq!(existing_esurfaces.len(), 17);
+
+    let maximal_overlap = find_maximal_overlap(
+        &graph.bare_graph.loop_momentum_basis,
+        &existing_esurfaces,
+        &graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        &edge_masses,
+        &kinematics,
+        0,
+    );
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 3);
+
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        16
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        13
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[2].existing_esurfaces.len(),
+        13
+    );
+}
+
+#[test]
+fn pytest_scalar_massless_3l_pentabox() {
+    init();
+    let (_model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_massless_3l_pentabox/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_ltd();
+    graph.generate_cff();
+    graph.generate_loop_momentum_bases();
+    graph.generate_esurface_data().unwrap();
+
+    let rescaling = F(1.0e0);
+    let kinematics = [
+        &FourMomentum::from_args(
+            F(0.149500000000000E+01),
+            F(0.000000000000000E+00),
+            F(0.000000000000000E+00),
+            F(0.149165176901313E+01),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(0.150500000000000E+01),
+            F(0.000000000000000E+00),
+            F(0.000000000000000E+00),
+            F(-0.149165176901313E+01),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-0.126041949101381e+01),
+            F(-0.452362952912639e+00),
+            F(-0.101350243653045e+01),
+            F(0.516563513332600e+00),
+        ) * &rescaling,
+        &FourMomentum::from_args(
+            F(-0.105098730574850e+01),
+            F(0.489324061520790e-01),
+            F(0.928212188578101e+00),
+            F(-0.283905035967510e+00),
+        ) * &rescaling,
+    ];
+
+    let edge_masses = graph
+        .bare_graph
+        .edges
+        .iter()
+        .map(|edge| edge.particle.mass.value)
+        .map(|mass| {
+            if let Some(value) = mass {
+                if value.re.0 == 0.0 {
+                    None
+                } else {
+                    Some(value)
+                }
+            } else {
+                mass
+            }
+        })
+        .collect_vec();
+
+    let existing_esurfaces = get_existing_esurfaces(
+        &graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .esurface_derived_data
+            .as_ref()
+            .unwrap(),
+        &kinematics,
+        &graph.bare_graph.loop_momentum_basis,
+        0,
+        F(1.0),
+    );
+
+    assert_eq!(graph.bare_graph.loop_momentum_basis.basis.len(), 3);
+    assert_eq!(existing_esurfaces.len(), 28);
+
+    let now = std::time::Instant::now();
+    let maximal_overlap = find_maximal_overlap(
+        &graph.bare_graph.loop_momentum_basis,
+        &existing_esurfaces,
+        &graph
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .esurfaces,
+        &edge_masses,
+        &kinematics,
+        0,
+    );
+    let _elapsed = now.elapsed();
+
+    assert_eq!(maximal_overlap.overlap_groups.len(), 2);
+    assert_eq!(
+        maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+        27
+    );
+    assert_eq!(
+        maximal_overlap.overlap_groups[1].existing_esurfaces.len(),
+        26
+    );
+}
+
+// #[test]
+// fn pytest_lbl_box() {
+//     init();
+//     let (model, amplitude, _) = load_amplitude_output("TEST_AMPLITUDE_lbl_box/GL_OUTPUT", true);
+
+//     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+//     graph.generate_cff();
+//     let export_settings = test_export_settings();
+//     let _graph = graph.process_numerator(
+//         &model,
+//         ContractionSettings::Normal,
+//         PathBuf::new(),
+//         &export_settings,
+//     );
+// }
+
+// #[test]
+// #[allow(non_snake_case)]
+// fn pytest_physical_3L_6photons_topology_A_inspect() {//too slow
+//     init();
+
+//     let (model, amplitude, path) = load_amplitude_output(
+//         "TEST_AMPLITUDE_physical_3L_6photons_topology_A/GL_OUTPUT",
+//         true,
+//     );
+
+//     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+//     graph.generate_cff();
+//     let export_settings = ExportSettings {
+//         compile_cff: true,
+//         numerator_settings: NumeratorSettings {
+//             eval_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+//                 cpe_rounds: Some(1),
+//                 compile_options: NumeratorCompileOptions::Compiled,
+//             }),
+//             global_numerator: None,
+//             gamma_algebra: GammaAlgebraMode::Concrete,
+//         },
+//         cpe_rounds_cff: Some(1),
+//         compile_separate_orientations: false,
+//         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
+//             target_omega: 1.0,
+//             panic_on_fail: false,
+//         },
+//         gammaloop_compile_options: GammaloopCompileOptions {
+//             inline_asm: env::var("NO_ASM").is_err(),
+//             optimization_level: 3,
+//             fast_math: true,
+//             unsafe_math: true,
+//             compiler: "g++".to_string(),
+//             custom: vec![],
+//         },
+//     };
+
+//     let mut graph =
+//         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+
+//     let sample = kinematics_builder(5, 3, &graph.bare_graph);
+
+//     let settings = load_default_settings();
+
+//     graph.evaluate_cff_expression(&sample, &settings);
+// }
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_physical_1L_6photons() {
+    init();
+
+    let amp_check = AmplitudeCheck {
+        name: "physical_1L_6photons",
+        model_name: "sm",
+        n_edges: 12,
+        n_vertices: 12,
+        sample: SampleType::Random(3),
+        n_external_connections: 6,
+        n_prop_groups: 6,
+        n_lmb: 6,
+        n_cff_trees: 62,
+        n_esurfaces: 30,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 252,
+        n_terms_unfolded: 5,
+        cff_norm: Some(F(1.4618496452655858e-16)),
+        cff_phase: F(-1.0823765660512161),
+        tolerance: F(1.0e-8),
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    check_amplitude(amp_check);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_physical_2L_6photons() {
+    //slow
+    init();
+
+    //ltd-cff too mismatched
+
+    // let amp_check = AmplitudeCheck {
+    //     name: "physical_2L_6photons",
+    //     model_name: "sm",
+    //     n_edges: 15,
+    //     n_vertices: 14,
+    //     sample: SampleType::Random(2),
+    //     n_external_connections: 6,
+    //     n_prop_groups: 9,
+    //     n_lmb: 24,
+    //     n_cff_trees: 450,
+    //     n_esurfaces: 54,
+    //     n_existing_esurfaces: 0,
+    //     n_expanded_terms: 3432,
+    //     n_terms_unfolded: 7,
+    //     cff_norm: Some(F(1.4618496452655858e-16)),
+    //     cff_phase: F(-1.0823765660512161),
+    //     tolerance: F(1.0e-8),
+    //     n_existing_per_overlap: Some(1),
+    //     n_overlap_groups: 0,
+    //     fail_lower_prec: false,
+    // };
+    // check_amplitude(amp_check);
+}
+
+// #[test] too slow for now
+// #[allow(non_snake_case)]
+// fn physical_1L_6photons_gamma() {
+//     init();
+//     let (model, amplitude, path) =
+//         load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
+
+//     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+//     graph.generate_cff();
+
+//     let extra_info = graph
+//         .derived_data
+//         .as_ref()
+//         .unwrap()
+//         .generate_extra_info(path.clone());
+//     let contraction_settings = ContractionSettings::Normal;
+//     let export_settings = test_export_settings();
+
+//     let mut graph_no_gamma = graph.clone().process_numerator(
+//         &model,
+//         ContractionSettings::Normal,
+//         path,
+//         &export_settings,
+//     );
+//     let mut graph = graph
+//         .map_numerator_res(|n, g| {
+//             Result::<_, Report>::Ok(
+//                 n.from_graph(g)
+//                     .color_symplify()
+//                     .gamma_symplify()
+//                     .parse()
+//                     .contract::<Rational>(contraction_settings)?
+//                     .generate_evaluators(&model, g, &extra_info, &export_settings),
+//             )
+//         })
+//         .unwrap();
+
+//     let sample = kinematics_builder(2, 1, &graph.bare_graph);
+
+//     let default_settings = load_default_settings();
+//     let gamma_eval = graph.evaluate_cff_expression(&sample, &default_settings);
+//     let eval = graph_no_gamma.evaluate_cff_expression(&sample, &default_settings);
+
+//     Complex::approx_eq_res(&gamma_eval, &eval, &LTD_COMPARISON_TOLERANCE)
+//         .wrap_err("Gamma algebra and spenso do not match")
+//         .unwrap();
+// }
+
+#[test]
+#[allow(non_snake_case)]
+fn top_bubble_CP() {
+    init();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_physical_1L_6photons/GL_OUTPUT", true);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_numerator(&model);
-    println!();
+    graph.generate_cff();
 
-    // for v in graph
-    //     .vertices
-    //     .iter()
-    //     .filter(|v| v.vertex_info.get_type() == "interacton_vertex_info")
-    // {
-    //     println!("vertex: {}", v.name);
+    let mut export_settings = test_export_settings();
+    export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Concrete;
 
-    //     println!("From edges: ");
-    //     for (i, e) in v.edges.clone().iter().enumerate() {
-    //         println!("{} : {:?}", i, graph.edges[*e].particle.name)
-    //     }
-    //     println!("From vertex info: ");
-    //     if let VertexInfo::InteractonVertexInfo(s) = &v.vertex_info {
-    //         s.vertex_rule
-    //             .particles
-    //             .iter()
-    //             .enumerate()
-    //             .for_each(|(i, p)| println!("{} : {:?}", i, p.name));
-    //     }
-    // }
+    let mut graph =
+        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    // for e in graph.edges.iter() {
-    //     println!("edge: {}", e.name);
-    //     for v in e.vertices {
-    //         if e.is_incoming_to(v) {
-    //             println!("incoming to vertex: {}", graph.vertices[v].name);
-    //         } else {
-    //             println!("outgoing to vertex: {}", graph.vertices[v].name);
-    //         }
-    //         let i = graph.vertices[v]
-    //             .edges
-    //             .iter()
-    //             .enumerate()
-    //             .filter(|(_, &es)| es == graph.get_edge_position(&e.name).unwrap())
-    //             .map(|(i, _)| i)
-    //             .collect::<Vec<usize>>();
+    let sample: DefaultSample<f64> =
+        sample_generator(3, &graph.bare_graph, Some(vec![Helicity::Plus; 6]));
 
-    //         if let VertexInfo::InteractonVertexInfo(s) = &graph.vertices[v].vertex_info {
-    //             let p = &s.vertex_rule.particles[i[0]];
-    //             println!("{:?}", p.name);
-    //         }
-    //     }
-    // }
+    // println!("IO signature {}", graph.bare_graph.external_in_or_out_signature());
 
-    println!("{}", graph.derived_data.numerator.unwrap());
+    #[allow(non_snake_case)]
+    let sample_CP = sample_generator(3, &graph.bare_graph, Some(vec![Helicity::Minus; 6]));
+
+    let default_settings = load_default_settings();
+
+    let eval = graph.evaluate_cff_expression(&sample, &default_settings);
+
+    for i in &graph
+        .derived_data
+        .as_ref()
+        .unwrap()
+        .numerator
+        .state
+        .double_param_values[48..72]
+    {
+        println!("{}", i)
+    }
+
+    println!("================");
+
+    for i in sample.polarizations() {
+        for p in i {
+            println!("{}", p);
+        }
+    }
+
+    #[allow(non_snake_case)]
+    let eval_CP = graph.evaluate_cff_expression(&sample_CP, &default_settings);
+    // println!("{}", sample);
+    // println!("{}", sample_CP);
+    println!("{}", eval);
+    println!("{}", eval_CP);
+
+    Complex::approx_eq_res(&eval.norm(), &eval_CP.norm(), &LTD_COMPARISON_TOLERANCE)
+        .wrap_err("CP conjugation does not match")
+        .unwrap();
 }
+
+#[test]
+fn top_bubble_gamma() {
+    init();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_top_bubble/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+
+    let mut export_settings = test_export_settings();
+    export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Concrete;
+
+    let mut graph_no_gamma = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+
+    export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Symbolic;
+
+    // fs::create_dir(path.join("sym")).unwrap();
+    let mut graph = graph.process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.join("sym"),
+        &export_settings,
+    );
+
+    for seed in 0..10 {
+        let sample = sample_generator(
+            seed,
+            &graph.bare_graph,
+            Some(vec![Helicity::Plus, Helicity::Plus]),
+        );
+
+        let sample_cp = sample_generator(
+            seed,
+            &graph.bare_graph,
+            Some(vec![Helicity::Minus, Helicity::Minus]),
+        );
+
+        let default_settings = load_default_settings();
+        let gamma_eval = graph.evaluate_cff_expression(&sample, &default_settings);
+        let eval = graph_no_gamma.evaluate_cff_expression(&sample, &default_settings);
+
+        let gamma_eval_cp = graph.evaluate_cff_expression(&sample_cp, &default_settings);
+        let eval_cp = graph_no_gamma.evaluate_cff_expression(&sample_cp, &default_settings);
+
+        Complex::approx_eq_res(&gamma_eval, &eval, &LTD_COMPARISON_TOLERANCE)
+            .wrap_err("Gamma algebra and spenso do not match")
+            .unwrap();
+        Complex::approx_eq_res(&eval_cp, &eval, &LTD_COMPARISON_TOLERANCE)
+            .wrap_err("Gamma algebra and spenso do not match")
+            .unwrap();
+        Complex::approx_eq_res(&gamma_eval, &gamma_eval_cp, &LTD_COMPARISON_TOLERANCE)
+            .wrap_err("Gamma algebra and spenso do not match")
+            .unwrap();
+    }
+}
+
+#[test]
+fn scalar_box_to_triangle() {
+    init();
+    let default_settings = load_default_settings();
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_scalar_massless_box/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    let mut export_settings = test_export_settings();
+
+    graph.generate_cff();
+    export_settings.numerator_settings.global_numerator= Some("Q(4,cind(0))*(Q(7,cind(0))+Q(0,cind(0)))-Q(4,cind(1))*Q(4,cind(1))-Q(4,cind(2))*Q(4,cind(2))-Q(4,cind(3))*Q(4,cind(3))".into());
+
+    let box_sample = sample_generator(3, &graph.bare_graph, None);
+
+    let mut box_graph =
+        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+
+    println!("{}", box_graph.bare_graph.dot_lmb());
+
+    let box_emr = box_graph
+        .bare_graph
+        .compute_emr(box_sample.loop_moms(), box_sample.external_moms());
+
+    let (model, amplitude, path) =
+        load_amplitude_output("TEST_AMPLITUDE_massless_scalar_triangle/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    graph.generate_cff();
+
+    let export_settings = test_export_settings();
+    let mut triangle_graph =
+        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+
+    let box_energy = box_graph
+        .bare_graph
+        .compute_energy_product(box_sample.loop_moms(), box_sample.external_moms());
+
+    let normalized_box =
+        box_graph.evaluate_cff_expression(&box_sample, &default_settings) / box_energy;
+
+    let box_externals = box_sample.external_moms();
+
+    let triangle_sample = DefaultSample::new(
+        vec![box_emr[6]],
+        &Externals::Constant {
+            momenta: vec![
+                ExternalMomenta::Independent((box_externals[0] - box_externals[1]).into()),
+                box_externals[2].into(),
+                ExternalMomenta::Dependent(Dep::Dep),
+            ],
+            helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
+        },
+        F(1.),
+        &crate::Polarizations::None,
+        &triangle_graph.bare_graph.external_in_or_out_signature(),
+    );
+
+    let triangle_energy = triangle_graph
+        .bare_graph
+        .compute_energy_product(triangle_sample.loop_moms(), triangle_sample.external_moms());
+
+    let normalized_triangle = triangle_graph
+        .evaluate_cff_expression(&triangle_sample, &default_settings)
+        / triangle_energy;
+
+    Complex::approx_eq_res(
+        &normalized_box,
+        &normalized_triangle,
+        &LTD_COMPARISON_TOLERANCE,
+    )
+    .wrap_err("Modified Box and triangle do not match")
+    .unwrap();
+}
+
+pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
+    let default_settings = load_default_settings();
+    let (model, amplitude, path) =
+        load_amplitude_output(&format!("TEST_AMPLITUDE_{amp_name}/GL_OUTPUT"), true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    let externals = graph.bare_graph.external_edges.len() - 1;
+    let loops = graph.bare_graph.loop_momentum_basis.basis.len();
+
+    let sample = kinematics_builder(externals, loops, &graph.bare_graph);
+
+    graph.generate_cff();
+    let mut export_settings = test_export_settings();
+
+    export_settings.gammaloop_compile_options.inline_asm = true;
+
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+            eval_options: EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::Compiled,
+            },
+            iterations: 1,
+            n_cores: 1,
+            verbose: false,
+        });
+
+    let mut graph_iterative_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        });
+
+    let mut graph_joint_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+            cpe_rounds: Some(1),
+            compile_options: NumeratorCompileOptions::Compiled,
+        });
+
+    let mut graph_single_compiled = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+    export_settings.numerator_settings.eval_settings =
+        NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+            eval_options: EvaluatorOptions {
+                cpe_rounds: Some(1),
+                compile_options: NumeratorCompileOptions::NotCompiled,
+            },
+            iterations: 1,
+            n_cores: 1,
+            verbose: false,
+        });
+    let mut graph_iterative = graph_iterative_compiled.clone();
+    graph_iterative
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    let mut graph_joint = graph_joint_compiled.clone();
+    graph_joint
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    let mut graph_single = graph_single_compiled.clone();
+    graph_single
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    let eval_single = graph_single.evaluate_cff_expression(&sample, &default_settings);
+    let eval_joint = graph_joint.evaluate_cff_expression(&sample, &default_settings);
+    let eval_iter = graph_iterative.evaluate_cff_expression(&sample, &default_settings);
+    let eval_single_comp =
+        graph_single_compiled.evaluate_cff_expression(&sample, &default_settings);
+    let eval_joint_comp = graph_joint_compiled.evaluate_cff_expression(&sample, &default_settings);
+    let eval_iter_comp =
+        graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings);
+
+    Complex::approx_eq_res(&eval_single, &eval_joint, &LTD_COMPARISON_TOLERANCE)
+        .wrap_err("Single and joint evaluation differ in norm")?;
+
+    Complex::approx_eq_res(&eval_single, &eval_iter, &F(1e-8))
+        .wrap_err("Single and iterative evaluation differ in norm")?;
+
+    Complex::approx_eq_res(
+        &eval_single_comp,
+        &eval_joint_comp,
+        &LTD_COMPARISON_TOLERANCE,
+    )
+    .wrap_err("Single compiled and joint compiled evaluation differ in norm")?;
+
+    Complex::approx_eq_res(
+        &eval_single_comp,
+        &eval_iter_comp,
+        &LTD_COMPARISON_TOLERANCE,
+    )
+    .wrap_err("Single compiled and iterative compiled evaluation differ in norm")?;
+
+    Complex::approx_eq_res(&eval_single, &eval_single_comp, &LTD_COMPARISON_TOLERANCE)
+        .wrap_err("Single and Single compiled evaluation differ in norm")?;
+
+    Ok(())
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_top_bubble() {
+    init();
+    compare_numerator_evals("top_bubble")
+        .wrap_err("top bubble failure:")
+        .unwrap();
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn pytest_physical_1L_6photons_generate() {
+    init();
+
+    compare_numerator_evals("physical_1L_6photons")
+        .wrap_err("physical 1L photon failure:")
+        .unwrap();
+}
+
+// #[test]
+// fn yaml_settings() {
+//     let numerator_settings = GeneralSettings::default();
+
+//     let yaml = serde_yaml::to_string(&numerator_settings).unwrap();
+//     println!("{}", yaml);
+// }

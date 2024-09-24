@@ -30,4 +30,16 @@ drawing:
     anchor_tension: 2.0
     caption_size: "40pt"
 export_settings:
-  write_default_settings: false
+  compile_cff: true
+  compile_separate_orientations: false
+  cpe_rounds_cff: 1
+  gammaloop_compile_options:
+    inline_asm: true
+    optimization_level: 3
+    fast_math: true
+    unsafe_math: true
+    compiler: "g++"
+    custom: []
+  tropical_subgraph_table_settings:
+    panic_on_fail: false
+    target_omega: 1.0

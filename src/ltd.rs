@@ -1,14 +1,23 @@
 use core::panic;
 
 use crate::{
-    graph::{EdgeType, Graph, LoopMomentumBasisSpecification},
-    utils::{compute_momentum, FloatLike},
+    gammaloop_integrand::DefaultSample,
+    graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
+    momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
+    numerator::{AtomStructure, Evaluate, Evaluators, Numerator, NumeratorState},
+    utils::{FloatLike, F},
+    Settings,
 };
+use bincode::{Decode, Encode};
 use itertools::Itertools;
 use log::debug;
-use lorentz_vector::LorentzVector;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
+use spenso::{
+    arithmetic::ScalarMul, complex::Complex, data::DataTensor, structure::ScalarTensor,
+    upgrading_arithmetic::FallibleAdd,
+};
+use symbolica::domains::float::{NumericalFloatLike, Real};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ContourClosure {
@@ -17,13 +26,13 @@ enum ContourClosure {
 }
 
 struct CutStructureGenerator {
-    loop_line_signatures: Vec<Vec<isize>>,
+    loop_line_signatures: Vec<Signature>,
     n_loops: usize,
     n_loop_lines: usize,
 }
 
 impl CutStructureGenerator {
-    fn new(loop_line_signatures: Vec<Vec<isize>>) -> Self {
+    fn new(loop_line_signatures: Vec<Signature>) -> Self {
         let n_loops = loop_line_signatures[0].len();
         let n_loop_lines = loop_line_signatures.len();
 
@@ -110,7 +119,7 @@ impl CutStructureGenerator {
                 self.n_loops,
                 reference_signature_matrix
                     .iter()
-                    .flat_map(|row| row.iter().map(|s| *s as f64).collect_vec())
+                    .flat_map(|row| row.into_iter().map(|s| (s as i8) as f64).collect_vec())
                     .collect_vec(),
             );
 
@@ -130,12 +139,12 @@ impl CutStructureGenerator {
 
 struct SpanningTreeGenerator {
     n_loops: usize,
-    reference_signature_matrix: Vec<Vec<isize>>,
+    reference_signature_matrix: Vec<Signature>,
     basis: Vec<usize>,
 }
 
 impl SpanningTreeGenerator {
-    fn new(reference_signature_matrix: Vec<Vec<isize>>, basis: Vec<usize>) -> Self {
+    fn new(reference_signature_matrix: Vec<Signature>, basis: Vec<usize>) -> Self {
         Self {
             n_loops: reference_signature_matrix[0].len(),
             reference_signature_matrix,
@@ -214,7 +223,12 @@ impl SpanningTreeGenerator {
                 let sub_matrix = permutated_signature_matrix
                     .iter()
                     .take(r + 1)
-                    .map(|row| row.iter().take(r + 1).map(|s| *s as f64).collect_vec())
+                    .map(|row| {
+                        row.into_iter()
+                            .take(r + 1)
+                            .map(|s| (s as i8) as f64)
+                            .collect_vec()
+                    })
                     .collect_vec();
 
                 let sub_matrix = DMatrix::from_vec(r + 1, r + 1, sub_matrix.concat());
@@ -231,7 +245,7 @@ impl SpanningTreeGenerator {
                     self.n_loops,
                     &permutated_signature_matrix
                         .iter()
-                        .flat_map(|row| row.iter().map(|s| *s as f64).collect_vec())
+                        .flat_map(|row| row.into_iter().map(|s| (s as i8) as f64).collect_vec())
                         .collect_vec(),
                 );
 
@@ -404,92 +418,148 @@ impl Heaviside {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 struct LTDTerm {
     associated_lmb: Vec<(usize, f64)>,
-    signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
+    signature_of_lmb: Vec<LoopExtSignature>,
 }
 
 impl LTDTerm {
+    #[allow(clippy::type_complexity)]
     fn evaluate<T: FloatLike>(
         &self,
-        external_moms: &[LorentzVector<T>],
-        emr: &[LorentzVector<T>],
-        graph: &Graph,
-    ) -> T {
+        emr: (&[ThreeMomentum<F<T>>], Option<&[ThreeMomentum<F<T>>]>),
+        external_moms: (&[FourMomentum<F<T>>], Option<&[FourMomentum<F<T>>]>),
+        polarizations: (
+            &[Polarization<Complex<F<T>>>],
+            Option<&[Polarization<Complex<F<T>>>]>,
+        ),
+        graph: &BareGraph,
+        num: &mut Numerator<Evaluators>,
+        setting: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
         // compute on shell energies of the momenta in associated_lmb
+
+        let zero = emr.0.iter().next().unwrap().px.zero();
+        let one = zero.one();
+        let two = zero.from_i64(2);
 
         let edge_momenta_of_associated_lmb = self
             .associated_lmb
             .iter()
             .map(|(i, s)| {
-                let mut momentum = emr[*i];
-                match graph.edges[*i].particle.mass.value {
-                    Some(mass) => {
-                        momentum.t =
-                            (emr[*i].spatial_squared() + Into::<T>::into(mass.re * mass.re)).sqrt()
-                                * Into::<T>::into(*s)
-                    }
-                    None => {
-                        momentum.t = emr[*i].spatial_distance() * Into::<T>::into(*s);
-                    }
-                }
+                let mut momentum = emr.0[*i].clone().into_on_shell_four_momentum(
+                    graph.edges[*i]
+                        .particle
+                        .mass
+                        .value
+                        .map(|m| F::<T>::from_ff64(m.re)),
+                );
+
+                momentum.temporal *= Energy::new(F::<T>::from_f64(*s));
                 momentum
             })
             .collect_vec();
 
+        let edge_momenta_of_associated_lmb_rot = if let Some(rot_emr) = emr.1 {
+            self.associated_lmb
+                .iter()
+                .map(|(i, s)| {
+                    let mut momentum = rot_emr[*i].clone().into_on_shell_four_momentum(
+                        graph.edges[*i]
+                            .particle
+                            .mass
+                            .value
+                            .map(|m| F::<T>::from_ff64(m.re)),
+                    );
+
+                    momentum.temporal *= Energy::new(F::<T>::from_f64(*s));
+                    momentum
+                })
+                .collect_vec()
+        } else {
+            edge_momenta_of_associated_lmb.clone()
+        };
+
         // iterate over remaining propagators
-        let mut inv_res = Into::<T>::into(1.);
-        let mut energy_product = Into::<T>::into(1.);
+        let mut inv_res = one.clone();
+        let mut energy_product = one.clone();
 
-        for (index, edge) in graph.edges.iter().enumerate().filter(|(index, e)| {
-            e.edge_type == EdgeType::Virtual && self.associated_lmb.iter().all(|(i, _)| i != index)
-        }) {
-            let momentum = compute_momentum(
-                &self.signature_of_lmb[index],
-                &edge_momenta_of_associated_lmb,
-                external_moms,
-            );
+        let mut ltd_emr = vec![];
 
-            match edge.particle.mass.value {
-                Some(mass) => {
-                    inv_res *=
-                        momentum.square() - Into::<T>::into(mass.re) * Into::<T>::into(mass.re);
-                    energy_product *= Into::<T>::into(2.)
-                        * (momentum.spatial_squared() + Into::<T>::into(mass.re * mass.re)).sqrt();
+        for (index, edge) in graph.edges.iter().enumerate()
+        // .filter(|(index, e)| {
+        // e.edge_type == EdgeType::Virtual && self.associated_lmb.iter().all(|(i, _)| i != index)
+        // })
+        {
+            if let Some(i) = self.associated_lmb.iter().position(|(i, _)| i == &index) {
+                if setting.stability.rotate_numerator {
+                    ltd_emr.push(edge_momenta_of_associated_lmb_rot[i].clone());
+                } else {
+                    ltd_emr.push(edge_momenta_of_associated_lmb[i].clone());
                 }
-                None => {
-                    inv_res *= momentum.square();
-                    energy_product *= Into::<T>::into(2.) * momentum.spatial_distance();
+            } else {
+                match edge.edge_type {
+                    EdgeType::Virtual => {
+                        let momentum = self.signature_of_lmb[index].compute_momentum(
+                            &edge_momenta_of_associated_lmb_rot,
+                            external_moms.1.unwrap_or(external_moms.0),
+                        );
+
+                        if setting.stability.rotate_numerator {
+                            ltd_emr.push(momentum.clone());
+                        } else {
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                                &edge_momenta_of_associated_lmb,
+                                external_moms.0,
+                            ));
+                        }
+
+                        match edge.particle.mass.value {
+                            Some(mass) => {
+                                inv_res *=
+                                    momentum.clone().square() - F::<T>::from_ff64(mass.re).square();
+                                energy_product *= (momentum.spatial.norm_squared()
+                                    + F::<T>::from_ff64(mass.re).square())
+                                .sqrt()
+                                    * &two;
+                            }
+                            None => {
+                                inv_res *= momentum.clone().square();
+                                energy_product *= momentum.spatial.norm() * &two;
+                            }
+                        }
+                    }
+                    _ => {
+                        if setting.stability.rotate_numerator {
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                                &edge_momenta_of_associated_lmb_rot,
+                                external_moms.1.unwrap_or(external_moms.0),
+                            ));
+                        } else {
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                                &edge_momenta_of_associated_lmb,
+                                external_moms.0,
+                            ));
+                        }
+                    }
                 }
             }
         }
 
-        inv_res.recip() * energy_product
-    }
+        let polarizations = if setting.stability.rotate_numerator {
+            polarizations.1.unwrap_or(polarizations.0)
+        } else {
+            polarizations.0
+        };
 
-    fn to_serializable(&self) -> SerializableLTDTerm {
-        SerializableLTDTerm {
-            associated_lmb: self.associated_lmb.clone(),
-            signature_of_lmb: self.signature_of_lmb.clone(),
-        }
-    }
+        let num = num.evaluate_single(&ltd_emr, polarizations, None, setting);
 
-    fn from_serializable(serializable: SerializableLTDTerm) -> Self {
-        Self {
-            associated_lmb: serializable.associated_lmb,
-            signature_of_lmb: serializable.signature_of_lmb,
-        }
+        num.scalar_mul(&(inv_res.inv() * energy_product)).unwrap()
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerializableLTDTerm {
-    associated_lmb: Vec<(usize, f64)>,
-    signature_of_lmb: Vec<(Vec<isize>, Vec<isize>)>,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct LTDExpression {
     terms: Vec<LTDTerm>,
 }
@@ -497,76 +567,97 @@ pub struct LTDExpression {
 impl LTDExpression {
     pub fn evaluate<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-        graph: &Graph,
-    ) -> T {
-        let emr = graph.compute_emr(loop_moms, external_moms);
+        sample: &DefaultSample<T>,
+        graph: &BareGraph,
+        num: &mut Numerator<Evaluators>,
+        setting: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let zero = sample.zero();
+        let possibly_rotated_emr = sample
+            .rotated_sample
+            .as_ref()
+            .map(|s| graph.compute_emr(&s.loop_moms, &s.external_moms));
+        let unrotated_emr =
+            graph.compute_emr(&sample.sample.loop_moms, &sample.sample.external_moms);
+
+        let external_moms = sample.external_mom_pair();
 
         self.terms
             .iter()
-            .map(|term| term.evaluate(external_moms, &emr, graph))
-            .sum()
+            .map(|term| {
+                term.evaluate(
+                    (&unrotated_emr, possibly_rotated_emr.as_deref()),
+                    external_moms,
+                    sample.polarizations_pair(),
+                    graph,
+                    num,
+                    setting,
+                )
+            })
+            .reduce(|acc, e| acc.add_fallible(&e).unwrap())
+            .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
     }
 
     pub fn evaluate_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[LorentzVector<T>],
-        external_moms: &[LorentzVector<T>],
-        graph: &Graph,
-        lmb_specification: &LoopMomentumBasisSpecification,
-    ) -> T {
-        let emr = graph.compute_emr_in_lmb(loop_moms, external_moms, lmb_specification);
-
+        sample: &DefaultSample<T>,
+        graph: &BareGraph,
+        lmb: &LoopMomentumBasis,
+        num: &mut Numerator<Evaluators>,
+        setting: &Settings,
+    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+        let zero = sample.zero();
+        let possibly_rotated_emr = sample
+            .rotated_sample
+            .as_ref()
+            .map(|s| graph.compute_emr_in_lmb(&s.loop_moms, &s.external_moms, lmb));
+        let unrotated_emr =
+            graph.compute_emr_in_lmb(&sample.sample.loop_moms, &sample.sample.external_moms, lmb);
+        let external_moms = sample.external_mom_pair();
         self.terms
             .iter()
-            .map(|term| term.evaluate(external_moms, &emr, graph))
-            .sum()
-    }
-
-    pub fn to_serializable(&self) -> SerializableLTDExpression {
-        SerializableLTDExpression {
-            terms: self
-                .terms
-                .iter()
-                .map(|term| term.to_serializable())
-                .collect(),
-        }
-    }
-
-    pub fn from_serializable(serializable: SerializableLTDExpression) -> Self {
-        Self {
-            terms: serializable
-                .terms
-                .into_iter()
-                .map(LTDTerm::from_serializable)
-                .collect(),
-        }
+            .map(|term| {
+                term.evaluate(
+                    (&unrotated_emr, possibly_rotated_emr.as_deref()),
+                    external_moms,
+                    sample.polarizations_pair(),
+                    graph,
+                    num,
+                    setting,
+                )
+            })
+            .reduce(|acc, e| acc.add_fallible(&e).unwrap())
+            .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerializableLTDExpression {
-    terms: Vec<SerializableLTDTerm>,
-}
-
-pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
-    debug!("generating ltd expression for graph: {:?}", graph.name);
+pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDExpression {
+    debug!(
+        "generating ltd expression for graph: {:?}",
+        graph.bare_graph.name
+    );
 
     let loop_line_signatures = graph
+        .bare_graph
         .get_virtual_edges_iterator()
-        .map(|(index, _e)| graph.loop_momentum_basis.edge_signatures[index].0.clone())
+        .map(|(index, _e)| {
+            graph.bare_graph.loop_momentum_basis.edge_signatures[index]
+                .internal
+                .clone()
+        })
         .collect_vec();
 
     let loop_number = loop_line_signatures[0].len();
 
     let position_map = graph
+        .bare_graph
         .get_virtual_edges_iterator()
         .map(|(index, _e)| index)
         .collect_vec();
 
     let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);
-    let countour_closure = vec![ContourClosure::Above; graph.loop_momentum_basis.basis.len()];
+    let countour_closure =
+        vec![ContourClosure::Above; graph.bare_graph.loop_momentum_basis.basis.len()];
     let cut_structure = cut_structure_generator.generate_structure(&countour_closure, true);
 
     graph.generate_loop_momentum_bases_if_not_exists();
@@ -574,6 +665,8 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
         "number of spanning trees: {}",
         graph
             .derived_data
+            .as_ref()
+            .unwrap()
             .loop_momentum_bases
             .as_ref()
             .unwrap()
@@ -595,6 +688,8 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
 
         for loop_momentum_basis in graph
             .derived_data
+            .as_ref()
+            .unwrap()
             .loop_momentum_bases
             .as_ref()
             .unwrap()
@@ -620,7 +715,7 @@ pub fn generate_ltd_expression(graph: &mut Graph) -> LTDExpression {
                 "cut structure has no equivalent in the lmb: cut_structure: {:?}. associated_lmb: {:?}. all_lmbs: {:?}",
                 cut_signature,
                 associated_lmb  ,
-                graph.derived_data.loop_momentum_bases.as_ref().unwrap(),
+                graph.derived_data.as_ref().unwrap().loop_momentum_bases.as_ref().unwrap(),
             )
         }
     }
@@ -727,7 +822,11 @@ mod tests {
         let test_sigmas_1 = [1., -1., 1.];
         let test_sigmas_2 = [-1., 1., -1.];
 
-        let reference_signature_matrix = vec![vec![-1, 0, 1], vec![0, 1, 0], vec![1, 0, 0]];
+        let reference_signature_matrix = vec![
+            vec![-1, 0, 1].into(),
+            vec![0, 1, 0].into(),
+            vec![1, 0, 0].into(),
+        ];
         let spanning_tree_generator = SpanningTreeGenerator::new(reference_signature_matrix, basis);
 
         let residue_generators = spanning_tree_generator.get_residue_generators();
@@ -760,12 +859,12 @@ mod tests {
     #[test]
     fn test_ltd() {
         let loop_line_signatures = vec![
-            vec![1, 0, 0],
-            vec![0, 1, 0],
-            vec![0, 0, 1],
-            vec![1, -1, 0],
-            vec![-1, 0, 1],
-            vec![0, 1, -1],
+            vec![1, 0, 0].into(),
+            vec![0, 1, 0].into(),
+            vec![0, 0, 1].into(),
+            vec![1, -1, 0].into(),
+            vec![-1, 0, 1].into(),
+            vec![0, 1, -1].into(),
         ];
 
         let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);

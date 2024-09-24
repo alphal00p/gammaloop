@@ -1,0 +1,459 @@
+name: physical_3L_6photons_topology_A
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: physical_3L_6photons_topology_A_0
+    vertices:
+    - name: v1
+      vertex_info:
+        type: external_vertex_info
+        particle: a
+        direction: in
+      edges:
+      - p1
+    - name: v2
+      vertex_info:
+        type: external_vertex_info
+        particle: a
+        direction: in
+      edges:
+      - p2
+    - name: v3
+      vertex_info:
+        type: external_vertex_info
+        particle: a
+        direction: out
+      edges:
+      - p3
+    - name: v4
+      vertex_info:
+        type: external_vertex_info
+        particle: a
+        direction: out
+      edges:
+      - p4
+    - name: v5
+      vertex_info:
+        type: external_vertex_info
+        particle: a
+        direction: out
+      edges:
+      - p5
+    - name: v6
+      vertex_info:
+        type: external_vertex_info
+        particle: a
+        direction: out
+      edges:
+      - p6
+    - name: v7
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_134
+      edges:
+      - q1
+      - q10
+      - p1
+    - name: v8
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_134
+      edges:
+      - q2
+      - q1
+      - p2
+    - name: v9
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_137
+      edges:
+      - q3
+      - q2
+      - q11
+    - name: v10
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_134
+      edges:
+      - q4
+      - q3
+      - p6
+    - name: v11
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_137
+      edges:
+      - q5
+      - q4
+      - q12
+    - name: v12
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_134
+      edges:
+      - q6
+      - q5
+      - p5
+    - name: v13
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_134
+      edges:
+      - q7
+      - q6
+      - p4
+    - name: v14
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_137
+      edges:
+      - q8
+      - q7
+      - q11
+    - name: v15
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_134
+      edges:
+      - q9
+      - q8
+      - p3
+    - name: v16
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_137
+      edges:
+      - q10
+      - q9
+      - q12
+    edges:
+    - name: p1
+      edge_type: in
+      particle: a
+      propagator: a_propFeynman
+      vertices:
+      - v1
+      - v7
+    - name: p2
+      edge_type: in
+      particle: a
+      propagator: a_propFeynman
+      vertices:
+      - v2
+      - v8
+    - name: p3
+      edge_type: out
+      particle: a
+      propagator: a_propFeynman
+      vertices:
+      - v15
+      - v3
+    - name: p4
+      edge_type: out
+      particle: a
+      propagator: a_propFeynman
+      vertices:
+      - v13
+      - v4
+    - name: p5
+      edge_type: out
+      particle: a
+      propagator: a_propFeynman
+      vertices:
+      - v12
+      - v5
+    - name: p6
+      edge_type: out
+      particle: a
+      propagator: a_propFeynman
+      vertices:
+      - v10
+      - v6
+    - name: q1
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v7
+      - v8
+    - name: q10
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v16
+      - v7
+    - name: q11
+      edge_type: virtual
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v9
+      - v14
+    - name: q12
+      edge_type: virtual
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v11
+      - v16
+    - name: q2
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v8
+      - v9
+    - name: q3
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v9
+      - v10
+    - name: q4
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v10
+      - v11
+    - name: q5
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v11
+      - v12
+    - name: q6
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v12
+      - v13
+    - name: q7
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v13
+      - v14
+    - name: q8
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v14
+      - v15
+    - name: q9
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v15
+      - v16
+    external_connections:
+    - - v1
+      - null
+    - - v2
+      - null
+    - - null
+      - v3
+    - - null
+      - v4
+    - - null
+      - v5
+    - - null
+      - v6
+    overall_factor: '1'
+    loop_momentum_basis:
+    - q7
+    - q8
+    - q12
+    edge_signatures:
+    - - p1
+      - - - 0
+          - 0
+          - 0
+        - - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p2
+      - - - 0
+          - 0
+          - 0
+        - - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p3
+      - - - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+    - - p4
+      - - - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+    - - p5
+      - - - 0
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+    - - p6
+      - - - 0
+          - 0
+          - 0
+        - - 1
+          - 1
+          - -1
+          - -1
+          - -1
+          - 0
+    - - q1
+      - - - 0
+          - 1
+          - 1
+        - - 1
+          - 0
+          - -1
+          - 0
+          - 0
+          - 0
+    - - q10
+      - - - 0
+          - 1
+          - 1
+        - - 0
+          - 0
+          - -1
+          - 0
+          - 0
+          - 0
+    - - q11
+      - - - -1
+          - 1
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q12
+      - - - 0
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q2
+      - - - 0
+          - 1
+          - 1
+        - - 1
+          - 1
+          - -1
+          - 0
+          - 0
+          - 0
+    - - q3
+      - - - 1
+          - 0
+          - 1
+        - - 1
+          - 1
+          - -1
+          - 0
+          - 0
+          - 0
+    - - q4
+      - - - 1
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 0
+          - 1
+          - 1
+          - 0
+    - - q5
+      - - - 1
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 1
+          - 1
+          - 0
+    - - q6
+      - - - 1
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+    - - q7
+      - - - 1
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q8
+      - - - 0
+          - 1
+          - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q9
+      - - - 0
+          - 1
+          - 0
+        - - 0
+          - 0
+          - -1
+          - 0
+          - 0
+          - 0
+  multiplicity: '1'
+  multi_channeling_channels: []

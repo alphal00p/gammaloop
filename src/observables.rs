@@ -1,13 +1,14 @@
-use crate::utils::FloatLike;
+use crate::momentum::FourMomentum;
+use crate::utils::{FloatLike, F};
 use crate::Settings;
 use itertools::Itertools;
 use libc::{c_double, c_int, c_void};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use lorentz_vector::LorentzVector;
-use num::Complex;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+use spenso::complex::Complex;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -210,7 +211,7 @@ impl AverageAndErrorAccumulator {
 
         w = ((w + self.sum) * (w - self.sum)) / (n - 1.);
         if w == 0. {
-            w = std::f64::EPSILON;
+            w = f64::EPSILON;
         }
         w = 1. / w;
 
@@ -336,23 +337,23 @@ impl EventManager {
 
     pub fn create_event<T: FloatLike>(
         &self,
-        orig_incoming_momenta: Vec<LorentzVector<T>>,
-        cut_momenta: Vec<LorentzVector<T>>,
+        orig_incoming_momenta: Vec<FourMomentum<F<T>>>,
+        cut_momenta: Vec<FourMomentum<F<T>>>,
     ) -> Event {
         let mut incoming_momenta = SmallVec::new();
         for p in orig_incoming_momenta.iter() {
-            incoming_momenta.push(p.cast::<f64>())
+            incoming_momenta.push(p.to_f64())
         }
-        let mut outgoing_momenta: SmallVec<[LorentzVector<f64>; 4]> = SmallVec::new();
+        let mut outgoing_momenta: SmallVec<[FourMomentum<F<f64>>; 4]> = SmallVec::new();
         for p in cut_momenta.iter() {
-            outgoing_momenta.push(p.cast::<f64>())
+            outgoing_momenta.push(p.to_f64())
         }
         let final_state_particle_ids = SmallVec::from(vec![0; outgoing_momenta.len()]);
         Event {
             kinematic_configuration: (incoming_momenta, outgoing_momenta),
             final_state_particle_ids,
-            integrand: Complex::new(1., 0.),
-            weights: SmallVec::from_slice(&[0.]),
+            integrand: Complex::new(F(1.), F(0.)),
+            weights: SmallVec::from_slice(&[F(0.)]),
         }
     }
 
@@ -455,80 +456,16 @@ impl EventManager {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     #[allow(clippy::type_complexity)]
     pub kinematic_configuration: (
-        SmallVec<[LorentzVector<f64>; 2]>,
-        SmallVec<[LorentzVector<f64>; 4]>,
+        SmallVec<[FourMomentum<F<f64>>; 2]>,
+        SmallVec<[FourMomentum<F<f64>>; 4]>,
     ),
     pub final_state_particle_ids: SmallVec<[isize; 5]>,
-    pub integrand: Complex<f64>,
-    pub weights: SmallVec<[f64; 1]>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SerializableEvent {
-    pub kinematic_configuration: (Vec<[f64; 4]>, Vec<[f64; 4]>),
-    pub final_state_particle_ids: Vec<isize>,
-    pub integrand: (f64, f64),
-    pub weights: Vec<f64>,
-}
-
-impl SerializableEvent {
-    pub fn from_event(event: &Event) -> Self {
-        let kinematic_configuration = (
-            event
-                .kinematic_configuration
-                .0
-                .iter()
-                .map(|k| [k.t, k.x, k.y, k.z])
-                .collect::<Vec<_>>(),
-            event
-                .kinematic_configuration
-                .1
-                .iter()
-                .map(|k| [k.t, k.x, k.y, k.z])
-                .collect::<Vec<_>>(),
-        );
-
-        let final_state_particle_ids = event.final_state_particle_ids.to_vec();
-        let integrand = (event.integrand.re, event.integrand.im);
-        let weights = event.weights.to_vec();
-
-        Self {
-            kinematic_configuration,
-            final_state_particle_ids,
-            integrand,
-            weights,
-        }
-    }
-
-    pub fn into_event(self) -> Event {
-        let kinematic_configuration = (
-            self.kinematic_configuration
-                .0
-                .iter()
-                .map(|k| LorentzVector::from_args(k[0], k[1], k[2], k[3]))
-                .collect::<SmallVec<[LorentzVector<f64>; 2]>>(),
-            self.kinematic_configuration
-                .1
-                .iter()
-                .map(|k| LorentzVector::from_args(k[0], k[1], k[2], k[3]))
-                .collect::<SmallVec<[LorentzVector<f64>; 4]>>(),
-        );
-
-        let final_state_particle_ids: SmallVec<[isize; 5]> = self.final_state_particle_ids.into();
-        let integrand = Complex::new(self.integrand.0, self.integrand.1);
-        let weights: SmallVec<[f64; 1]> = self.weights.into();
-
-        Event {
-            kinematic_configuration,
-            final_state_particle_ids,
-            integrand,
-            weights,
-        }
-    }
+    pub integrand: Complex<F<f64>>,
+    pub weights: SmallVec<[F<f64>; 1]>,
 }
 
 #[allow(unused)]
@@ -583,12 +520,12 @@ impl EventSelector for RangedSelector {
         {
             if self.pdgs.contains(pdg) {
                 let value = match self.filter {
-                    FilterQuantity::Energy => mom.t,
-                    FilterQuantity::CosThetaP => mom.z / mom.spatial_distance(),
+                    FilterQuantity::Energy => mom.temporal.value,
+                    FilterQuantity::CosThetaP => mom.spatial.pz / mom.spatial.norm(),
                     FilterQuantity::PT => mom.pt(),
                 };
 
-                if value < self.min_value || value > self.max_value {
+                if value < F(self.min_value) || value > F(self.max_value) {
                     return false;
                 }
             }
@@ -661,7 +598,7 @@ impl JetClustering {
                 || (id.abs() >= 3370 && id.abs() < 3380)
                 || id.abs() == 0
             {
-                self.fastjet_jets_in.extend(&[e.t, e.x, e.y, e.z]);
+                self.fastjet_jets_in.extend(e.into_iter().map(|x| x.0));
                 len += 1;
             }
         }
@@ -729,25 +666,25 @@ impl JetClustering {
             let dr23 = ext[index_offset + 1].delta_r(&ext[index_offset + 2]);
 
             // we have at least 2 jets
-            if dr12 < self.d_r {
+            if dr12 < F(self.d_r) {
                 let m12 = ext[index_offset] + ext[index_offset + 1];
                 let pt12 = m12.pt();
-                self.ordered_pt.push(pt12);
-                self.ordered_pt.push(pt3);
-            } else if dr13 < self.d_r {
+                self.ordered_pt.push(pt12.0);
+                self.ordered_pt.push(pt3.0);
+            } else if dr13 < F(self.d_r) {
                 let m13 = ext[index_offset] + ext[index_offset + 2];
                 let pt13 = m13.pt();
-                self.ordered_pt.push(pt13);
-                self.ordered_pt.push(pt2);
-            } else if dr23 < self.d_r {
+                self.ordered_pt.push(pt13.0);
+                self.ordered_pt.push(pt2.0);
+            } else if dr23 < F(self.d_r) {
                 let m23 = ext[index_offset + 1] + ext[index_offset + 2];
                 let pt23 = m23.pt();
-                self.ordered_pt.push(pt23);
-                self.ordered_pt.push(pt1);
+                self.ordered_pt.push(pt23.0);
+                self.ordered_pt.push(pt1.0);
             } else {
-                self.ordered_pt.push(pt1);
-                self.ordered_pt.push(pt2);
-                self.ordered_pt.push(pt3);
+                self.ordered_pt.push(pt1.0);
+                self.ordered_pt.push(pt2.0);
+                self.ordered_pt.push(pt3.0);
             }
 
             // sort from large pt to small
@@ -756,7 +693,7 @@ impl JetClustering {
         } else {
             // treat every external momentum as its own jet for now
             for m in ext {
-                self.ordered_pt.push(m.pt());
+                self.ordered_pt.push(m.pt().0);
             }
             self.ordered_pt
                 .sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
@@ -887,13 +824,13 @@ impl CrossSectionObservable {
 
 impl Observable for CrossSectionObservable {
     fn process_event_group(&mut self, events: &[Event], integrator_weight: f64) {
-        let mut integrand = Complex::<f64>::default();
+        let mut integrand = Complex::<F<f64>>::new_zero();
         for e in events {
             integrand += e.integrand;
         }
 
-        self.re.add_sample(integrand.re * integrator_weight);
-        self.im.add_sample(integrand.im * integrator_weight);
+        self.re.add_sample(integrand.re.0 * integrator_weight);
+        self.im.add_sample(integrand.im.0 * integrator_weight);
     }
 
     fn merge_samples(&mut self, other: &mut CrossSectionObservable) {
@@ -958,14 +895,14 @@ impl Observable for Jet1PTObservable {
                 let mut new = true;
                 for i in self.index_event_accumulator.iter_mut() {
                     if i.0 == index {
-                        *i = (index, i.1 + e.integrand.re * integrator_weight);
+                        *i = (index, i.1 + e.integrand.re.0 * integrator_weight);
                         new = false;
                         break;
                     }
                 }
                 if new {
                     self.index_event_accumulator
-                        .push((index, e.integrand.re * integrator_weight));
+                        .push((index, e.integrand.re.0 * integrator_weight));
                 }
             }
         }
@@ -1092,23 +1029,23 @@ impl Observable for AFBObservable {
                 .unwrap();
 
             let costheta =
-                pin.spatial_dot(&pout) / (pin.spatial_distance() * pout.spatial_distance());
+                pin.spatial * (pout.spatial) / (pin.spatial.norm() * pout.spatial.norm());
 
-            let index = ((costheta - self.x_min) / (self.x_max - self.x_min)
+            let index = ((costheta.0 - self.x_min) / (self.x_max - self.x_min)
                 * self.bins.len() as f64) as isize;
 
             if index >= 0 && index < self.bins.len() as isize {
                 let mut new = true;
                 for i in self.event_accumulator.iter_mut() {
                     if i.0 == index {
-                        *i = (index, i.1 + e.integrand.re * integrator_weight);
+                        *i = (index, i.1 + e.integrand.re.0 * integrator_weight);
                         new = false;
                         break;
                     }
                 }
                 if new {
                     self.event_accumulator
-                        .push((index, e.integrand.re * integrator_weight));
+                        .push((index, e.integrand.re.0 * integrator_weight));
                 }
             }
         }
@@ -1252,29 +1189,29 @@ impl Observable for SingleParticleObservable {
             for pout in pout_iter {
                 let mut obs_evaluated = match self.quantity {
                     FilterQuantity::CosThetaP => {
-                        pin.spatial_dot(&pout) / (pin.spatial_distance() * pout.spatial_distance())
+                        pin.spatial * pout.spatial / (pin.spatial.norm() * pout.spatial.norm())
                     }
-                    FilterQuantity::Energy => pout.t,
+                    FilterQuantity::Energy => pout.temporal.value,
                     FilterQuantity::PT => pout.pt(),
                 };
                 if self.log_obs {
                     obs_evaluated = obs_evaluated.log10();
                 }
-                let index = ((obs_evaluated - self.x_min) / (self.x_max - self.x_min)
+                let index = ((obs_evaluated.0 - self.x_min) / (self.x_max - self.x_min)
                     * self.bins.len() as f64) as isize;
 
                 if index >= 0 && index < self.bins.len() as isize {
                     let mut new = true;
                     for i in self.event_accumulator.iter_mut() {
                         if i.0 == index {
-                            *i = (index, i.1 + e.integrand.re * integrator_weight);
+                            *i = (index, i.1 + e.integrand.re.0 * integrator_weight);
                             new = false;
                             break;
                         }
                     }
                     if new {
                         self.event_accumulator
-                            .push((index, e.integrand.re * integrator_weight));
+                            .push((index, e.integrand.re.0 * integrator_weight));
                     }
                 }
             }

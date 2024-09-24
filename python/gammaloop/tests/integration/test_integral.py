@@ -7,22 +7,39 @@ import pytest
 
 class TestScalarTopologies:
 
-    def test_box(self):
-        assert True
-        # TODO
-        # gl = get_gamma_loop_interpreter()
-        # gl.run(CommandList.from_string("import_model sm"))
+    def test_box(self, scalar_massless_box_export: Path):
+        target_re = 6.57830e-8
+        target_im = 7.43707e-8
 
-    def test_scalar_triangle(self, scalar_massless_triangle_export: Path):
+        gl = get_gamma_loop_interpreter()
+        command_list = gl_interface.CommandList.from_string(
+            "launch {}".format(scalar_massless_box_export))
+        command_list.add_command(
+            "set externals.momenta [[14.0,-6.6,-40.,0.],[43.,-15.2,-33.,0.],[17.9,50.0,-11.8,0.0],]")
+        command_list.add_command(
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+        command_list.add_command("set continuous_dim_learning_rate 0.0")
+        command_list.add_command("set rotation_axis ['x']")
+        command_list.add_command("set n_start 1_000_000")
+        command_list.add_command("set n_max 1_000_000")
+        command_list.add_command("set dampen_integrable_singularity True")
+        command_list.add_command("integrate massless_box -r")
+        gl.run(command_list)
+
+        check_integration_result(target_re, scalar_massless_box_export)
+        check_integration_result(
+            target_im, scalar_massless_box_export, imag_phase=True)
+
+    def test_scalar_triangle(self, massless_scalar_triangle_export: Path):
         target = 0.00009765455799148221
         gl = get_gamma_loop_interpreter()
 
         command_list = gl_interface.CommandList.from_string(
-            "launch {}".format(scalar_massless_triangle_export))
+            "launch {}".format(massless_scalar_triangle_export))
         command_list.add_command(
             "set externals.momenta [[1,3,4,5],[-1,-6,-7,-8],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 10000")
         command_list.add_command("set n_max 10000")
         command_list.add_command("set seed 1")
@@ -30,7 +47,7 @@ class TestScalarTopologies:
 
         gl.run(command_list)
         check_integration_result(
-            target, scalar_massless_triangle_export, imag_phase=True)
+            target, massless_scalar_triangle_export, imag_phase=True)
 
     def test_tree_triangle(self, scalar_tree_triangle_export: Path):
         target = 0.00009765455799148221 / -49
@@ -42,7 +59,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.momenta [[0.5,1.5,2,2.5],[0.5,1.5,2,2.5],[-1,-6,-7,-8],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 10000")
         command_list.add_command("set n_max 10000")
         command_list.add_command("set seed 1")
@@ -61,7 +78,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.momenta [[0,0,0,1],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 100000")
         command_list.add_command("set n_max 100000")
         command_list.add_command("set seed 1")
@@ -81,7 +98,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.momenta [[0,0,0,1],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 100000")
         command_list.add_command("set n_max 100000")
         command_list.add_command("set seed 1")
@@ -95,35 +112,38 @@ class TestScalarTopologies:
 
         gl = get_gamma_loop_interpreter()
 
-        command_list = gl_interface.CommandList.from_string(
+        command_list = gl_interface.CommandList()
+
+        command_list.add_command(
             "launch {}".format(scalar_3L_6P_topology_A_export))
 
+        command_list.add_command("set_model_param mass_scalar_1 172.0")
         command_list.add_command(
             "set externals.momenta [\
 [5.,0.,0.,5.],\
-[-5.,0.,0.,5.],\
+[5.,0.,0.,-5.],\
 [8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\
 [3.283294192270986e0,-1.038496118834563e0,-3.019337553895401e0,7.649492138716588e-1],\
 [1.523581094674306e0,-1.058809596665922e0,-9.770963832697570e-1,4.954838522679282e-1],\
 [4.307611382509676e0,2.318312618377385e0,3.595630405248305e0,-5.023787565702210e-1],\
 ]")
-        command_list.add_command("set_model_param mass_scalar_1 172.0")
 
         command_list.add_command("set integrated_phase 'imag'")
-        command_list.add_command("set e_cm 1.")
+        command_list.add_command("set e_cm 10.")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
-        command_list.add_command("set n_start 5000")
-        command_list.add_command("set n_max 10000")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+        command_list.add_command("set n_start 40000")
+        command_list.add_command("set n_max 40000")
+        command_list.add_command("set continuous_dim_learning_rate 0.0")
         command_list.add_command("set seed 1")
         command_list.add_command("integrate scalar_3L_6P_topology_A -r")
 
         gl.run(command_list)
         check_integration_result(
             0., scalar_3L_6P_topology_A_export, imag_phase=False)
-        # This target is approximate, actual reference run showed 2.8555(17)e-36
+        # PySecDec reference run showed 2.8555(17)e-36
         check_integration_result(
-            2.8555e-36, scalar_3L_6P_topology_A_export, imag_phase=True, max_mc_error_diff=5.0, max_rel_error_diff=0.2, max_percent_error=0.2)
+            2.8555e-36, scalar_3L_6P_topology_A_export, imag_phase=True, max_mc_error_diff=5.0, max_rel_error_diff=0.1, max_percent_error=0.1)
 
 
 class TestPhysicalTopologies:
@@ -141,7 +161,7 @@ class TestPhysicalTopologies:
         command_list.add_command(
             "set externals.momenta [\
 [5.,0.,0.,5.],\
-[-5.,0.,0.,5.],\
+[5.,0.,0.,-5.],\
 [8.855133305450298e-1,-2.210069028768998e-1,4.008035319168533e-1,-7.580543095693663e-1],\
 [3.283294192270986e0,-1.038496118834563e0,-3.019337553895401e0,7.649492138716588e-1],\
 [1.523581094674306e0,-1.058809596665922e0,-9.770963832697570e-1,4.954838522679282e-1],\
@@ -153,7 +173,7 @@ class TestPhysicalTopologies:
         command_list.add_command("set integrated_phase 'imag'")
         command_list.add_command("set e_cm 1.")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 5000")
         command_list.add_command("set n_max 10000")
         command_list.add_command("set seed 1")

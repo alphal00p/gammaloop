@@ -1,0 +1,4 @@
+model_name: sm
+output_type: amplitudes
+contents:
+- physical_3L_6photons_topology_A

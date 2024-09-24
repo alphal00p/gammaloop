@@ -1,0 +1,43 @@
+// Folder-specific settings
+//
+// For a full list of overridable settings, and general information on folder-specific settings,
+// see the documentation: https://zed.dev/docs/configuring-zed#folder-specific-settings
+{
+  "shell": {
+    "program": "bash"
+  },
+  "ui_font_family": "Iosevka-Custom-Heavy",
+  "buffer_font_family": "Iosevka-Custom-Heavy",
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "inlayHints": {
+          "typeHints": true,
+          "maxLength": null,
+          "lifetimeElisionHints": {
+            "useParameterNames": true,
+            "enable": "skip_trivial"
+          },
+          "closureReturnTypeHints": {
+            "enable": "always"
+          }
+        },
+        "cargo": {
+          "features": "all"
+        },
+        "diagnostics": {
+          "experimental": {
+            "enable": true
+          }
+        },
+        // To disable the checking entirely
+        // (ignores all cargo and check settings below)
+        "checkOnSave": true,
+        "check": {
+          "onSave": true,
+          "features": ["all"]
+        }
+      }
+    }
+  }
+}

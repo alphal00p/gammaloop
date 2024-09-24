@@ -28,7 +28,7 @@ build_dependencies () {
         exit 1
     fi
 
-    echo "Run 'tail -f "$(PWD)"/dependencies/dependency_build.log' to follow installation progress.";
+    echo "Run 'tail -f "$(pwd)"/dependencies/dependency_build.log' to follow installation progress.";
 
     cd dependencies
     touch LOCK
@@ -183,21 +183,39 @@ build_dependencies () {
     fi
 
     if ! test -d symbolica; then
-        echo "Cloning symbolica ...";
         CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}"
+        echo "Cloning symbolica with '"$CMD_TO_ACCESS_SYMBOLICA"' ...";
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
-        cd symbolica && git reset --hard a260306 >> ../dependency_build.log 2>&1
+        RETCODE=$RETCODE+$?
+        if [ ! $(($RETCODE)) == 0 ]
+        then
+            cat ../dependency_build.log;
+            echo -e "\033[91mERROR: failed to clone symbolica iwth command '"$CMD_TO_ACCESS_SYMBOLICA"'. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
+            rm -f LOCK
+            exit $(($RETCODE))
+        fi
+        echo "Patching symbolica ...";
+        cd symbolica && ln -s ../../bin/patch_symbolica.py . && ./patch_symbolica.py >> ../dependency_build.log 2>&1
+        RETCODE=$RETCODE+$?
+        if [ ! $(($RETCODE)) == 0 ]
+        then
+            cat ../dependency_build.log;
+            echo -e "\033[91mERROR: failed to patch symbolica. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
+            rm -f LOCK
+            exit $(($RETCODE))
+        fi
         cd ..
     fi
 
     if ! test -f symbolica/symbolica_path.txt; then
         cd symbolica
-
+        
+		SYMBOLICA_BUILD_PROFILE="${SYMBOLICA_BUILD_PROFILE:-release}"
         if [ "$1" == "with_venv" ]
         then
 
             echo "Building symbolica with maturin within a venv ...";
-            maturin develop --release >> ../dependency_build.log 2>&1
+            maturin develop >> ../dependency_build.log 2>&1
             RETCODE=$RETCODE+$?
             if [ ! $(($RETCODE)) == 0 ]
             then
@@ -218,8 +236,7 @@ build_dependencies () {
 
         else
             echo "Building symbolica ...";
-
-            PYO3_PYTHON=$PYTHON3BIN cargo build --release --features=python_api >> ../dependency_build.log 2>&1
+            PYO3_PYTHON=$PYTHON3BIN cargo rustc --profile=$SYMBOLICA_BUILD_PROFILE --features=python_api --crate-type=cdylib >> ../dependency_build.log 2>&1
             RETCODE=$RETCODE+$?
             if [ ! $(($RETCODE)) == 0 ]
             then
@@ -228,13 +245,20 @@ build_dependencies () {
                 rm -f LOCK
                 exit $(($RETCODE))
             fi
+            
+            if [[ $SYMBOLICA_BUILD_PROFILE = "dev" ]]
+            then
+                COMPILE_PATH="debug"
+            else
+                COMPILE_PATH=$SYMBOLICA_BUILD_PROFILE
+            fi
 
-            if test -f target/release/libsymbolica.so; then
-                ln -s target/release/libsymbolica.so symbolica.so
-            elif test -f target/release/libsymbolica.dylib; then
-                ln -s target/release/libsymbolica.dylib symbolica.so
-            elif test -f target/release/libsymbolica.dll; then
-                ln -s target/release/libsymbolica.dll symbolica.pyd
+            if test -f target/$COMPILE_PATH/libsymbolica.so; then
+                ln -s target/$COMPILE_PATH/libsymbolica.so symbolica.so
+            elif test -f target/$COMPILE_PATH/libsymbolica.dylib; then
+                ln -s target/$COMPILE_PATH/libsymbolica.dylib symbolica.so
+            elif test -f target/$COMPILE_PATH/libsymbolica.dll; then
+                ln -s target/$COMPILE_PATH/libsymbolica.dll symbolica.pyd
             else
                 echo -e "\033[91mERROR: failed to find manually compiled symbolica's python module. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
                 rm -f LOCK

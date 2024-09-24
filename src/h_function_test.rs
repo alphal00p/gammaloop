@@ -4,13 +4,15 @@ use crate::evaluation_result::EvaluationMetaData;
 use crate::evaluation_result::EvaluationResult;
 use crate::integrands::*;
 use crate::utils;
+use crate::utils::f128;
 use crate::utils::FloatLike;
+use crate::utils::F;
 use crate::ParameterizationMapping;
 use crate::Precision;
 use crate::Settings;
-use num::traits::ToPrimitive;
-use num::Complex;
 use serde::{Deserialize, Serialize};
+use spenso::complex::Complex;
+use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -39,27 +41,31 @@ impl HFunctionTestIntegrand {
         }
     }
 
-    fn evaluate_sample_generic<T: FloatLike>(&self, xs: &[T]) -> (Complex<T>, Duration, Duration) {
-        let e_cm = Into::<T>::into(self.settings.kinematics.e_cm);
-        let mut jac = T::one();
+    fn evaluate_sample_generic<T: FloatLike>(
+        &self,
+        xs: &[F<T>],
+    ) -> (Complex<F<T>>, Duration, Duration) {
+        let e_cm: F<T> = F::<T>::from_ff64(self.settings.kinematics.e_cm);
+        let one = e_cm.one();
+        let mut jac = e_cm.one();
 
         let parameterization_start = std::time::Instant::now();
 
         let t = match self.settings.parameterization.mapping {
             ParameterizationMapping::Log => {
                 // r = e_cm * ln(1 + b*x/(1-x))
-                let x = xs[0];
-                let b: T = Into::<T>::into(self.settings.parameterization.b);
-                let r = e_cm * (T::one() + b * x / (T::one() - x)).ln();
-                jac *= e_cm * b / (T::one() - x) / (T::one() + x * (b - T::one()));
+                let x = xs[0].clone();
+                let b: F<T> = F::<T>::from_f64(self.settings.parameterization.b);
+                let r = &e_cm * (&one + &b * &x / (&one - &x)).ln();
+                jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
 
                 r
             }
             ParameterizationMapping::Linear => {
                 // r = e_cm * b * x/(1-x)
-                let b = Into::<T>::into(self.settings.parameterization.b);
-                let radius = e_cm * b * xs[0] / (T::one() - xs[0]);
-                jac *= <T as num::traits::Float>::powi(e_cm * b + radius, 2) / e_cm / b;
+                let b: F<T> = F::<T>::from_f64(self.settings.parameterization.b);
+                let radius = &e_cm * &b * &xs[0] / (&one - &xs[0]);
+                jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
                 radius
             }
         };
@@ -70,17 +76,13 @@ impl HFunctionTestIntegrand {
         let h = utils::h(t, None, None, &self.integrand_settings.h_function);
         let evaluation_time = evaluation_time.elapsed();
 
-        (
-            Complex::new(h * jac, T::zero()),
-            parameterization_time,
-            evaluation_time,
-        )
+        ((h * jac).into(), parameterization_time, evaluation_time)
     }
 }
 
 #[allow(unused)]
 impl HasIntegrand for HFunctionTestIntegrand {
-    fn create_grid(&self) -> Grid<f64> {
+    fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(ContinuousGrid::new(
             self.n_dim,
             self.settings.integrator.n_bins,
@@ -95,12 +97,12 @@ impl HasIntegrand for HFunctionTestIntegrand {
     }
 
     fn evaluate_sample(
-        &self,
-        sample: &Sample<f64>,
-        wgt: f64,
+        &mut self,
+        sample: &Sample<F<f64>>,
+        wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        _max_eval: f64,
+        _max_eval: F<f64>,
     ) -> EvaluationResult {
         let start_evaluate_sample = std::time::Instant::now();
 
@@ -109,7 +111,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
             _ => panic!("Wrong sample type"),
         };
 
-        let mut sample_xs = vec![];
+        let mut sample_xs: Vec<F<f64>> = vec![];
         sample_xs.extend(xs);
         if self.settings.general.debug > 1 {
             println!(
@@ -128,14 +130,14 @@ impl HasIntegrand for HFunctionTestIntegrand {
             if use_f128 {
                 let sample_xs_f128 = sample_xs
                     .iter()
-                    .map(|x| Into::<f128::f128>::into(*x))
-                    .collect::<Vec<_>>();
+                    .map(|x| x.higher())
+                    .collect::<Vec<F<f128>>>();
                 if self.settings.general.debug > 1 {
                     println!(
                         "f128 Upcasted x-space sample : ( {} )",
                         sample_xs_f128
                             .iter()
-                            .map(|&x| format!("{:+e}", x))
+                            .map(|x| format!("{:+e}", x))
                             .collect::<Vec<_>>()
                             .join(", ")
                     );
@@ -143,10 +145,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
                 let (res, parameterization_timing, evaluation_timing) =
                     self.evaluate_sample_generic(sample_xs_f128.as_slice());
                 (
-                    Complex::new(
-                        f128::f128::to_f64(&res.re).unwrap(),
-                        f128::f128::to_f64(&res.im).unwrap(),
-                    ),
+                    Complex::new(res.re.lower(), res.im.lower()),
                     parameterization_timing,
                     evaluation_timing,
                     Precision::Quad,
@@ -169,7 +168,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
             total_timing: start_evaluate_sample.elapsed(),
             rep3d_evaluation_time: evaluation_timing,
             parameterization_time: parameterization_timing,
-            relative_instability_error: Complex::new(0.0, 0.0),
+            relative_instability_error: Complex::new_zero(),
             highest_precision: precision,
             is_nan,
         };

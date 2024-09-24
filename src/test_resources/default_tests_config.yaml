@@ -1,6 +1,8 @@
 General:
   debug: 0
   use_ltd: false
+  load_compiled_cff: false
+  load_compiled_separate_orientations: false
 Integrand:
   type: unit_volume
   n_3d_momenta: 11
@@ -30,14 +32,15 @@ Integrator:
   n_increase: 10000
   n_max: 10000000000
   integrated_phase: real
-  learning_rate: 1.5
+  discrete_dim_learning_rate: 1.5
+  continuous_dim_learning_rate: 1.5
   train_on_avg: false
   show_max_wgt_info: true
   max_prob_ratio: 0.01
 Observables: []
 Selectors: []
 Stability:
-  rotation_axis: x
+  rotation_axis: []
   levels:
   - precision: Double
     required_precision_for_re: 1e-5
@@ -49,3 +52,12 @@ Stability:
     escalate_for_large_weight_threshold: -1.0
 sampling: 
   type: default
+subtraction:
+  sliver_width: 10.0
+  dampen_integrable_singularity: false
+  dynamic_sliver: false
+  integrated_ct_hfunction: 
+    function: poly_exponential
+    sigma: 1.0
+    enabled_dampening: true
+    power: null

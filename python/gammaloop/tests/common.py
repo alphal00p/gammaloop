@@ -15,19 +15,47 @@ RESOURCES_PATH = os.path.join(os.path.dirname(
 
 def get_gamma_loop_interpreter() -> gl_interface.GammaLoop:
     gloop = gl_interface.GammaLoop()
+    gloop.run(gl_interface.CommandList.from_string("set compile_cff False"))
+    gloop.run(gl_interface.CommandList.from_string(
+        "set load_compiled_cff False"))
     gammaloop.misc.common.GL_DEBUG = True
     gammaloop.misc.common.GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
     return gloop
 
 
-def run_rust_test(rust_tests_binary: Path, output_path: Path, test_name: str) -> bool:
-
+def run_rust_test(rust_tests_binary: Path | None, output_path: Path, test_name: str) -> bool:
     new_env: dict[str, str] = os.environ.copy()
-    new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = str(output_path)
+    match new_env.get('PYTEST_OUTPUT_PATH_FOR_RUST', None):
+        case "TMP":
+            if os.path.isfile(output_path):
+                new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = os.path.normpath(
+                    os.path.join(os.path.dirname(output_path), os.path.pardir))
+            elif os.path.isdir(output_path):
+                new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = os.path.normpath(
+                    os.path.join(output_path, os.path.pardir, os.path.pardir))
+            else:
+                raise gammaloop.misc.common.GammaLoopError(
+                    f"Could not find specified output path '{output_path}' to run the rust test on.")
+        case None:
+            new_env['PYTEST_OUTPUT_PATH_FOR_RUST'] = os.path.normpath(os.path.join(
+                GL_PATH, os.path.pardir, os.path.pardir, 'src', 'test_resources'))
+        case _:
+            pass
+
     if 'SYMBOLICA_LICENSE' not in new_env:
         new_env['SYMBOLICA_LICENSE'] = 'GAMMALOOP_USER'
-    process = Popen(['cargo', 'test', f'pytest_{test_name}', '--features=binary,fail-on-warnings', '--no-default-features', '--release', '--target-dir', os.path.join(GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries'), '--', '--test-threads=1', '--ignored',
-                    '--nocapture'], cwd=GL_PATH, stdout=PIPE, stderr=PIPE, env=new_env)
+
+    if rust_tests_binary is None:
+        cmd_list = ['cargo', 'test', f'pytest_{test_name}', '--features=binary,fail-on-warnings', '--no-default-features',
+                    '--release', '--target-dir', os.path.normpath(os.path.join(
+                        GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries')),
+                    '--', '--test-threads=1', '--nocapture']
+    else:
+        cmd_list = [rust_tests_binary, f'pytest_{test_name}',
+                    '--test-threads=1', '--nocapture']
+    logger.debug("Running rust test with command: %s", " ".join(cmd_list))
+    process = Popen(cmd_list, cwd=GL_PATH, stdout=PIPE,
+                    stderr=PIPE, env=new_env)
     output, error = process.communicate()
     if process.returncode != 0:
         logger.info("RUST TEST STDOUT:\n%s", output.decode("utf-8"))
@@ -68,11 +96,17 @@ def check_integration_result(target: float, process_path: Path, max_mc_error_dif
     error_for_check = run_yaml["error"][index_for_check]
 
     absolute_difference = abs(res_for_check - target)
-    assert absolute_difference < max_mc_error_diff * error_for_check
+    assert absolute_difference <= max_mc_error_diff * error_for_check
 
     if abs(target) > 0.:
         relative_difference = absolute_difference / abs(target)
+        if relative_difference >= max_rel_error_diff:
+            logger.debug("Failing test: relative_difference = %.16e (>= max_rel_error_diff = %.16e)",
+                         relative_difference, max_rel_error_diff)
         assert relative_difference < max_rel_error_diff
+        if error_for_check >= max_percent_error * abs(target):
+            logger.debug("Failing test: error_for_check = %.16e (>= max_percent_error * abs(target) = %.16e)",
+                         error_for_check, max_percent_error * abs(target))
         assert error_for_check < max_percent_error * abs(target)
 
 
@@ -82,6 +116,12 @@ def check_inspect_result(inspect_result: complex, target: complex, max_relative_
         (abs(target.imag), abs(inspect_result.imag - target.imag))
     ]:
         if abs(target) > 0.:
+            if diff >= max_relative_diff * target:
+                logger.debug("Failing test: diff = %.16e (>= max_relative_diff * target = %.16e)",
+                             diff, max_relative_diff * target)
             assert diff < max_relative_diff * target
         else:
+            if diff >= max_relative_diff:
+                logger.debug("Failing test: diff = %.16e (>= max_relative_diff = %.16e)",
+                             diff, max_relative_diff)
             assert diff < max_relative_diff

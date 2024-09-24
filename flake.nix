@@ -148,11 +148,15 @@
         # Additional dev-shell environment variables can be set directly
         # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+        RUSTFLAGS = "-C target-cpu=native";
+
+        LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
           # pkgs.ripgrep
           cargo-insta
+          cargo-udeps
           openssl
           gnum4
           gmp.dev

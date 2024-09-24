@@ -4,8 +4,10 @@ import os
 import itertools
 from pathlib import Path
 from enum import StrEnum
+import re
 from typing import Any
 import yaml
+import pydot
 
 from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger, EMPTY_LIST  # pylint: disable=unused-import # type: ignore
 import gammaloop.misc.utils as utils
@@ -38,6 +40,9 @@ class VertexInfo(object):
     def get_particles(self) -> list[Particle]:
         raise NotImplementedError()
 
+    def get_vertex_rule_name(self) -> str | None:
+        raise NotImplementedError()
+
     def is_external(self) -> bool:
         return False
 
@@ -56,6 +61,9 @@ class InteractonVertexInfo(VertexInfo):
 
     def get_type(self) -> str:
         return 'interacton_vertex_info'
+
+    def get_vertex_rule_name(self) -> str | None:
+        return self.vertex_rule.name
 
     def to_serializable_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +90,9 @@ class ExternalVertexInfo(VertexInfo):
 
     def get_type(self) -> str:
         return 'external_vertex_info'
+
+    def get_vertex_rule_name(self) -> str | None:
+        return None
 
     def to_serializable_dict(self) -> dict[str, Any]:
         return {
@@ -140,8 +151,6 @@ class Vertex(object):
             raise GammaLoopError(
                 "Vertex rule already set to a different type.")
 
-        self.sort_edges_according_to_vertex_info(model)
-
     def sort_edges_according_to_vertex_info(self, model: Model) -> None:
         vertex_particles: list[Particle] = self.vertex_info.get_particles()
         if len(vertex_particles) <= 1:
@@ -168,6 +177,15 @@ class Vertex(object):
             'vertex_info': self.vertex_info.to_serializable_dict(),
             'edges': [e.name for e in self.edges]
         }
+
+    def to_pydot(self) -> pydot.Node:
+        node_attr = {}
+        if self.vertex_info.get_vertex_rule_name() is not None:
+            node_attr['int_id'] = self.vertex_info.get_vertex_rule_name()
+        return pydot.Node(
+            self.name,
+            **node_attr
+        )
 
     def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_vertex_labels: bool = False,
              use_vertex_names: bool = False, vertex_size: float = 2.5, vertex_shape: str = 'circle', **_opts: dict[str, Any]) -> list[str]:
@@ -238,12 +256,17 @@ class Edge(object):
             'vertices': [self.vertices[0].name, self.vertices[1].name]
         }
 
+    def to_pydot(self, **attributes) -> pydot.Edge:
+        return pydot.Edge(
+            self.vertices[0].name, self.vertices[1].name, pdg=self.particle.pdg_code, **attributes)
+
     def draw(self, graph: Graph, _model: Model, constant_definitions: dict[str, str], show_edge_labels: bool = True, show_particle_names: bool = True, show_edge_names: bool = True, show_edge_composite_momenta: bool = False,
              label_size: str = '15pt', label_distance: float = 13.0, show_edge_momenta: bool = True, draw_arrow_for_all_edges: bool = True, draw_lmb: bool = True,
              arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
              arrow_size_for_single_line: float = 2.5, arrow_size_for_double_line: float = 2.5, line_color: str = 'black', label_color: str = 'black', lmb_color: str = 'red', non_lmb_color: str = 'blue', **_opts: Any) -> list[str]:
         constant_definitions['arcMaxDistance'] = f'{arc_max_distance:.2f}'
-        constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'
+        constant_definitions['externalLegTension'] = f'{
+            external_legs_tension:.2f}'
         constant_definitions['defaultTension'] = f'{default_tension:.2f}'
         constant_definitions['lineWidth'] = f'{line_width:.2f}'
         constant_definitions['lineColor'] = line_color
@@ -252,7 +275,8 @@ class Edge(object):
         constant_definitions['labelSize'] = label_size
         constant_definitions['nonLmbColor'] = non_lmb_color
         constant_definitions['arrowSize'] = f'{arrow_size_for_single_line:.2f}'
-        constant_definitions['doubleArrowSize'] = f'{arrow_size_for_double_line:.2f}'
+        constant_definitions['doubleArrowSize'] = f'{
+            arrow_size_for_double_line:.2f}'
         constant_definitions['labelDistance'] = f'{label_distance:.2f}'
 
         template_line = r'\efmf{%(line_type)s%(comma)s%(options)s}{%(left_vertex)s,%(right_vertex)s}'
@@ -300,7 +324,10 @@ class Edge(object):
             edge_name_label = self.name  # pylint: disable=consider-using-f-string
         label_components: list[str] = []
         if show_particle_names:
-            label_components.append(self.particle.texname)
+            # \overline{x} sadly does not work with the \fmfX{} command.
+            # We must therefore change by appending an x
+            label_components.append(
+                re.sub(r"\\overline\{([^}]*)\}", r"\1x", self.particle.texname))
 
         if show_edge_momenta:
             if self.edge_type != EdgeType.VIRTUAL:
@@ -393,8 +420,10 @@ class Edge(object):
 
         replace_dict = {}
         replace_dict['line_type'] = line_type.replace('_arrow', '')
-        replace_dict['left_vertex'] = f'v{graph.get_vertex_position(self.vertices[0].name)}'
-        replace_dict['right_vertex'] = f'v{graph.get_vertex_position(self.vertices[1].name)}'
+        replace_dict['left_vertex'] = f'v{
+            graph.get_vertex_position(self.vertices[0].name)}'
+        replace_dict['right_vertex'] = f'v{
+            graph.get_vertex_position(self.vertices[1].name)}'
         replace_dict['options'] = ','.join(
             f'{k}={v}' for k, v in line_options.items())
         replace_dict['comma'] = ',' if len(replace_dict['options']) > 0 else ''
@@ -456,8 +485,8 @@ class Edge(object):
 
 class Graph(object):
     def __init__(self, name: str, vertices: list[Vertex], edges: list[Edge], external_connections: list[tuple[Vertex | None, Vertex | None]],
-                 loop_momentum_basis: list[Edge] | None = None, overall_factor: float = 1.0, edge_signatures: dict[str,
-                                                                                                                   tuple[list[int], list[int]]] | None = None):
+                 loop_momentum_basis: list[Edge] | None = None, overall_factor: str = "1",
+                 edge_signatures: dict[str, tuple[list[int], list[int]]] | None = None):
         self.name: str = name
         self.vertices: list[Vertex] = vertices
         self.edges: list[Edge] = edges
@@ -467,7 +496,7 @@ class Graph(object):
         else:
             self.edge_signatures: dict[str,
                                        tuple[list[int], list[int]]] = edge_signatures
-        self.overall_factor = overall_factor
+        self.overall_factor: str = overall_factor
         # For forward scattering graphs, keep track of the bipartite map, i.e. which in and out externals will carry identical momenta.
         self.external_connections: list[tuple[
             Vertex | None, Vertex | None]] = external_connections
@@ -476,6 +505,18 @@ class Graph(object):
         # else:
         self.loop_momentum_basis: list[Edge] | None = loop_momentum_basis
         self.name_to_position: dict[str, dict[str, int]] = {}
+
+    def are_edges_and_vertices_list_consistent(self) -> None:
+        """ Tests that the list of edges assigned to each vertex is consistent with the list of vertices assigned to each edge."""
+        edge_ids_per_vertex_id: dict[str, set[str]] = {
+            v.name: set() for v in self.vertices}
+        for edge in self.edges:
+            for vertex in edge.vertices:
+                edge_ids_per_vertex_id[vertex.name].add(edge.name)
+        for vertex in self.vertices:
+            if set(e.name for e in vertex.edges) != edge_ids_per_vertex_id[vertex.name]:
+                raise GammaLoopError(
+                    f"Graph '{self.name}' has inconsistent list of edges and vertices. Vertex '{vertex.name}' is defined with edges {set(e.name for e in vertex.edges)} but has the following edges pointing to it {edge_ids_per_vertex_id[vertex.name]}.")
 
     def get_sorted_incoming_edges(self) -> list[Edge]:
         sorted_incoming_edges: list[Edge] = []
@@ -504,7 +545,10 @@ class Graph(object):
 
     @ staticmethod
     def empty_graph(name: str) -> Graph:
-        return Graph(name, [], [], [], loop_momentum_basis=[], overall_factor=1.0, edge_signatures={})
+        return Graph(name, [], [], [], loop_momentum_basis=[], overall_factor="1", edge_signatures={})
+
+    def is_empty(self) -> bool:
+        return len(self.vertices) == 0 and len(self.edges) == 0
 
     def get_edge(self, edge_name: str) -> Edge:
         return self.edges[self.name_to_position['edges'][edge_name]]
@@ -550,7 +594,7 @@ class Graph(object):
                                       e[1].name if e[1] is not None else None] for e in self.external_connections],
             'overall_factor': self.overall_factor,
             'loop_momentum_basis': [e.name for e in self.loop_momentum_basis] if self.loop_momentum_basis is not None else None,
-            'edge_signatures': self.edge_signatures
+            'edge_signatures': sorted([(k, v) for k, v in self.edge_signatures.items()], key=lambda x: x[0])
         }
 
     @ staticmethod
@@ -592,7 +636,8 @@ class Graph(object):
         loop_momentum_basis: list[Edge] = [edge_name_to_edge_map[e_name]
                                            for e_name in serializable_dict['loop_momentum_basis']]
         graph = Graph(serializable_dict['name'], graph_vertices, graph_edges,
-                      external_connections, loop_momentum_basis, serializable_dict['overall_factor'], serializable_dict['edge_signatures'])
+                      external_connections, loop_momentum_basis, serializable_dict['overall_factor'],
+                      dict(serializable_dict['edge_signatures']))
         graph.synchronize_name_map()
 
         return graph
@@ -604,6 +649,217 @@ class Graph(object):
 
     def to_yaml_str(self) -> str:
         return utils.verbose_yaml_dump(self.to_serializable_dict())
+
+    def to_pydot(self, graph_attributes: dict[str, Any]) -> pydot.Graph:
+        graph = pydot.Graph(graph_type='digraph',
+                            graph_name=self.name,
+                            overall_factor=self.overall_factor,
+                            **graph_attributes)
+        for vertex in self.vertices:
+            graph.add_node(vertex.to_pydot())
+
+        sorted_incoming_edges: list[tuple[Edge, dict[str, Any]]] = []
+        sorted_outgoing_edges: list[tuple[Edge, dict[str, Any]]] = []
+        for i_ext, (u, v) in enumerate(self.external_connections):
+            if u is not None:
+                for e in self.get_incoming_edges():
+                    if e.vertices[0] == u:
+                        sorted_incoming_edges.append(
+                            (e, {"name": f"p{i_ext+1}_IN" if v is not None else f"p{i_ext+1}", "mom": f"p{i_ext+1}"}))
+                        break
+            if v is not None:
+                for e in self.get_outgoing_edges():
+                    if e.vertices[1] == v:
+                        sorted_outgoing_edges.append(
+                            (e, {"name": f"p{i_ext+1}_OUT" if u is not None else f"p{i_ext+1}", "mom": f"p{i_ext+1}"}))
+                        break
+        sorted_virtual_edges: list[tuple[Edge, dict[str, Any]]] = []
+        for i_e_virt, e in enumerate([e for e in self.edges if e.edge_type == EdgeType.VIRTUAL]):
+            edge_attrs: dict[str, Any] = {"name": f"q{i_e_virt+1}"}
+            if self.loop_momentum_basis is not None and e in self.loop_momentum_basis:
+                edge_attrs["lmb_index"] = self.loop_momentum_basis.index(e)
+            sorted_virtual_edges.append((e, edge_attrs))
+        sorted_virtual_edges = sorted(
+            sorted_virtual_edges, key=lambda e: e[0].name)
+        for edge, edge_attr in sorted_incoming_edges + sorted_outgoing_edges + sorted_virtual_edges:
+            graph.add_edge(edge.to_pydot(**edge_attr))
+
+        return graph
+
+    @staticmethod
+    def from_pydot(model: Model, g: pydot.Graph) -> Graph:
+        """ Imports graph from a pydot graph object. If some information is missing in the graph supplied, it will be modified in-place to make it consistent."""
+
+        # Sanity check
+        for e in g.get_edges():
+            if 'pdg' not in e.get_attributes():
+                raise GammaLoopError(
+                    f"Dot Edge {e} does not have a PDG assigned.")
+
+        pydot_edges: list[pydot.Edge] = g.get_edges()
+
+        # Add nodes that may not be specified
+        existing_node_names = {n.get_name() for n in g.get_nodes()}
+        for e in pydot_edges:
+            if e.get_source() not in existing_node_names:
+                existing_node_names.add(e.get_source())
+                g.add_node(pydot.Node(e.get_source()))
+            if e.get_destination() not in existing_node_names:
+                existing_node_names.add(e.get_destination())
+                g.add_node(pydot.Node(e.get_destination()))
+        pydot_nodes: list[pydot.Node] = g.get_nodes()
+
+        adjacency_map: dict[str, list[tuple[pydot.Edge, EdgeType]]] = {
+            n.get_name(): [
+                (e, EdgeType.INCOMING if e.get_destination()
+                 == n.get_name() else EdgeType.OUTGOING)
+                for e in pydot_edges if n.get_name() in [e.get_source(), e.get_destination()]
+            ]
+            for n in pydot_nodes
+        }
+
+        # The logic below is just to assign names if they are absent
+        incoming_momenta = []
+        outgoing_momenta = []
+        # First pass to collect momenta names
+        for n in pydot_nodes:
+            if len(adjacency_map[n.get_name()]) == 1:
+                half_edge, direction = adjacency_map[n.get_name()][0]
+                if "mom" not in half_edge.get_attributes():
+                    raise GammaLoopError(
+                        f"External dot half-edge {half_edge} does not have a momentum assigned.")
+                if direction == EdgeType.INCOMING:
+                    incoming_momenta.append(half_edge.get_attributes()["mom"])
+                else:
+                    outgoing_momenta.append(half_edge.get_attributes()["mom"])
+        # Second pass to assign edge names if missing
+        i_internal_edge = 0
+        for e in pydot_edges:
+            e_attr = e.get_attributes()
+            if len(adjacency_map[e.get_source()]) == 1:
+                if "name" not in e_attr:
+                    if e_attr["mom"] in outgoing_momenta:
+                        e_attr["name"] = f"{e_attr['mom']}_IN"
+                    else:
+                        e_attr["name"] = e_attr['mom']
+            elif len(adjacency_map[e.get_destination()]) == 1:
+                if "name" not in e_attr:
+                    if e_attr["mom"] in incoming_momenta:
+                        e_attr["name"] = f"{e_attr['mom']}_OUT"
+                    else:
+                        e_attr["name"] = e_attr['mom']
+            else:
+                i_internal_edge += 1
+                if "name" not in e_attr:
+                    e_attr["name"] = f"q{i_internal_edge}"
+
+        # Sort edge by name, with first incoming externals, then outgoing externals, then virtual edges.
+        sorted_pydot_incoming_edges = sorted(
+            [e for e in pydot_edges if len(adjacency_map[e.get_source()]) == 1], key=lambda e: e.get_attributes()["name"])
+        sorted_pydot_outgoing_edges = sorted(
+            [e for e in pydot_edges if len(adjacency_map[e.get_destination()]) == 1], key=lambda e: e.get_attributes()["name"])
+        for e in sorted_pydot_incoming_edges+sorted_pydot_outgoing_edges:
+            if "mom" not in e.get_attributes():
+                raise GammaLoopError(
+                    f"External dot half-edge {e} does not have a momentum assigned.")
+        sorted_pydot_virtual_edges = sorted(
+            [e for e in pydot_edges if len(adjacency_map[e.get_source()]) > 1 and len(
+                adjacency_map[e.get_destination()]) > 1],
+            key=lambda e: e.get_attributes()["name"])
+        pydot_edges = sorted_pydot_incoming_edges + \
+            sorted_pydot_outgoing_edges + sorted_pydot_virtual_edges
+
+        graph_vertices: list[Vertex] = []
+        pydot_vertex_name_to_vertex_map: dict[str, Vertex] = {}
+
+        for n in pydot_nodes:
+            vert = Vertex(n.get_name())
+            pydot_vertex_name_to_vertex_map[n.get_name()] = vert
+            graph_vertices.append(vert)
+
+        graph_edges: list[Edge] = []
+        pydot_edge_name_to_edge_map: dict[str, Edge] = {}
+        for e in pydot_edges:
+            e_attr = e.get_attributes()
+            if 'propagator' in e_attr:
+                props = model.get_propagator(e_attr['propagator'])
+            else:
+                props = None
+            if len(adjacency_map[e.get_source()]) == 1:
+                edge_type = EdgeType.INCOMING
+            elif len(adjacency_map[e.get_destination()]) == 1:
+                edge_type = EdgeType.OUTGOING
+            else:
+                edge_type = EdgeType.VIRTUAL
+            edge = Edge(e_attr['name'], edge_type, model.get_particle_from_pdg(int(e_attr['pdg'])), props,
+                        (pydot_vertex_name_to_vertex_map[e.get_source()],
+                        pydot_vertex_name_to_vertex_map[e.get_destination()])
+                        )
+            pydot_edge_name_to_edge_map[e_attr['name']] = edge
+            graph_edges.append(edge)
+
+        for (vert, node) in zip(graph_vertices, pydot_nodes):
+            vert.edges = [pydot_edge_name_to_edge_map[e.get_attributes()["name"]] for (
+                e, e_type) in adjacency_map[node.get_name()]]
+            node_attr = node.get_attributes()
+            if "int_id" in node_attr:
+                # Sadly the pydot parser adds quotes around string attributes for nodes (but not for edges)
+                processed_int_id = node_attr["int_id"].strip('"')
+                vert.vertex_info = InteractonVertexInfo(
+                    model.get_vertex_rule(processed_int_id))
+            else:
+                vert.set_vertex_rule_from_model(model)
+            vert.sort_edges_according_to_vertex_info(model)
+
+        external_connections: dict[str, list[Vertex | None]] = {}
+        for n in sorted_pydot_incoming_edges:
+            momentum = n.get_attributes()["mom"]
+            if momentum in external_connections:
+                external_connections[momentum][0] = pydot_vertex_name_to_vertex_map[n.get_source(
+                )]
+            else:
+                external_connections[momentum] = [
+                    pydot_vertex_name_to_vertex_map[n.get_source()], None]
+        for n in sorted_pydot_outgoing_edges:
+            momentum = n.get_attributes()["mom"]
+            if momentum in external_connections:
+                external_connections[momentum][1] = pydot_vertex_name_to_vertex_map[n.get_destination(
+                )]
+            else:
+                external_connections[momentum] = [
+                    None, pydot_vertex_name_to_vertex_map[n.get_destination()]]
+
+        external_connections_for_graph: list[tuple[Vertex | None, Vertex | None]] = [(v[0], v[1]) for _, v in sorted(
+            list(external_connections.items()), key=lambda el: el[0])]
+
+        graph = Graph(g.get_name(), graph_vertices, graph_edges,
+                      external_connections_for_graph, None, g.get_attributes().get("overall_factor", "1"), None)
+        graph.synchronize_name_map()
+
+        # Enforce specified LMB if available
+        # NO CHECKS PERFORMED!
+        specified_lmb = [(int(e.get_attributes()["lmb_index"]), pydot_edge_name_to_edge_map[e.get_attributes()[
+                          "name"]]) for e in sorted_pydot_virtual_edges if 'lmb_index' in e.get_attributes()]
+        if len(specified_lmb) > 0:
+            graph.loop_momentum_basis = [e for _, e in sorted(
+                specified_lmb, key=lambda el: el[0])]
+        else:
+            all_lmbs = graph.generate_loop_momentum_bases(
+                target_n_lmbs_to_generate=1)
+            if len(all_lmbs) == 0:
+                raise GammaLoopError(
+                    f"Could not find any valid loop momentum basis for graph '{g.get_name()}'.")
+            else:
+                # Arbitrarily pick the first valid momentum basis as the chosen one.
+                graph.loop_momentum_basis = all_lmbs[0]
+
+        graph.edge_signatures = {graph.edges[i].name: sig for i, sig in enumerate(
+            graph.generate_momentum_flow())}
+
+        # Make sure vertices are defined with a consistent set of edge names
+        graph.are_edges_and_vertices_list_consistent()
+
+        return graph
 
     @staticmethod
     def from_qgraph(model: Model, qgraph_object: dict[str, Any], name: str = 'default') -> Graph:
@@ -636,6 +892,7 @@ class Graph(object):
             vert.edges = [edge_qgraph_index_to_edge_map[e_qgraph_index]
                           for e_qgraph_index in v_qgraph['edge_ids']]
             vert.set_vertex_rule_from_model(model)
+            vert.sort_edges_according_to_vertex_info(model)
 
         external_connections: dict[str,
                                    list[Vertex | None]] = {}
@@ -670,7 +927,7 @@ class Graph(object):
             list(external_connections.items()), key=lambda el: el[0])]
 
         graph = Graph(name, graph_vertices, graph_edges,
-                      external_connections_for_graph, None, float(qgraph_object['overall_factor']), None)
+                      external_connections_for_graph, None, qgraph_object['overall_factor'], None)
         graph.synchronize_name_map()
 
         all_lmbs = graph.generate_loop_momentum_bases(
@@ -684,6 +941,9 @@ class Graph(object):
 
         graph.edge_signatures = {graph.edges[i].name: sig for i, sig in enumerate(
             graph.generate_momentum_flow())}
+
+        # Make sure vertices are defined with a consistent set of edge names
+        graph.are_edges_and_vertices_list_consistent()
 
         return graph
 
@@ -794,10 +1054,12 @@ class Graph(object):
 
         return merged_signatures
 
-    def draw(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, **drawing_options: Any) -> Path:
+    def draw(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, **drawing_options: Any) -> Path | None:
         match drawing_options['mode']:
             case 'feynmp':
                 return self.draw_feynmp(model, file_path_without_extension, caption, diagram_id, **drawing_options['feynmp'])
+            case None:
+                return None
             case _:
                 raise GammaLoopError(
                     f"Feynman drawing mode '{drawing_options['mode']}' is not supported. Currently only 'feynmp' is supported.")
@@ -833,6 +1095,10 @@ class Graph(object):
 
             edge_map = self.get_edge_map()
             longest_cycle_edges = utils.find_longest_cycle(edge_map)
+            if len(longest_cycle_edges) == 0:
+                # Tree-level graphs
+                longest_cycle_edges = [self.get_edge_position(
+                    self.get_sorted_incoming_edges()[0].name),]
             longest_cycle = utils.edges_cycle_to_vertex_cycle([
                 self.edges[i_e].get_vertex_positions(self) for i_e in longest_cycle_edges])
             incoming_edges_paths: list[tuple[Edge, list[int]]] = []

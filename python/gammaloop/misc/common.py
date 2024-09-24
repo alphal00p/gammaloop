@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import subprocess
 from enum import Enum
 import yaml
 from typing import Any
@@ -25,6 +26,22 @@ GAMMALOOP_CONFIG_PATHS = [
 
 # Useful for pyLance to work fine when doing something like sum([[1,2],[4,5]],[]) to flatten the nested list
 EMPTY_LIST: list[Any] = []
+
+
+def get_git_revision() -> str | None:
+    try:
+        rev = subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()
+        if int(subprocess.check_output('git status --porcelain -uno | wc -l', shell=True).decode('ascii').strip()) > 0:
+            dirty_flag = '-modified'
+        else:
+            dirty_flag = ''
+        return f"{rev}{dirty_flag}"
+    except:
+        return None
+
+
+GIT_REVISION = get_git_revision()
 
 
 class GammaLoopWarning(Enum):
@@ -107,7 +124,7 @@ def register_symbolica() -> bool:
                 set_license_key(symbolica_license)
                 gl_is_symbolica_registered = True
                 return True
-            except:  # pylint: disable=bare-except
+            except Exception:  # pylint: disable=bare-except
                 logger.critical(
                     "Could not set Symbolica license key from gammaloop configuration file specifying license '%s'.", symbolica_license)
                 gl_is_symbolica_registered = False
@@ -129,6 +146,9 @@ def register_symbolica() -> bool:
             gl_is_symbolica_registered = True
             return True
         except:  # pylint: disable=bare-except
+            if hasattr(symbolica, 'is_licensed') and symbolica.is_licensed():
+                gl_is_symbolica_registered = True
+                return True
             logger.critical(
                 "Could not set Symbolica license key from environment variable 'SYMBOLICA_LICENSE' specifying license '%s'.", os.environ['SYMBOLICA_LICENSE'])
             gl_is_symbolica_registered = False

@@ -13,7 +13,7 @@ from pprint import pformat
 import gammaloop.misc.common as common
 from gammaloop.misc import LOGGING_PREFIX_FORMAT
 
-from symbolica import Expression as SBE  # pylint: disable=import-error # nopep8
+from symbolica import Expression as SBE  # pylint: disable=import-error # nopep8 # type: ignore
 import symbolica as sb  # pylint: disable=import-error # type: ignore # nopep8
 
 
@@ -94,7 +94,8 @@ def replace_pseudo_floats(expression: str) -> str:
 
     def rationalize_float(fl: re.Match[str]) -> sb.Expression:
         fl_eval: float = eval(fl.group())
-        rationalized_fl = SBE.num(fl_eval, 10000)  # type: ignore
+        # Work around a bug for 0.0 in symbolica
+        rationalized_fl = SBE.num(fl_eval, 1e-13) if fl_eval != 0. else SBE.num(0) # type: ignore
         rationalized_fl_eval: float = eval(str(rationalized_fl)+'.')
         if common.GammaLoopWarning.FloatInExpression not in common.GL_WARNINGS_ISSUED:
             common.GL_WARNINGS_ISSUED.add(

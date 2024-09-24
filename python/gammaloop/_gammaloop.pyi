@@ -57,8 +57,8 @@ class Worker:
     def export_cross_sections(self, export_root: str, cross_section_names: list[str]) -> None:
         """ Exports the cross sections given in argument to the export root given in argument. """
 
-    def export_amplitudes(self, export_root: str, amplitude_names: list[str]) -> None:
-        """ Exports the amplitudes given in argument to the export root given in argument. """
+    def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str) -> None:
+        """ Exports the amplitudes given in argument to the export root given in argument, parse export settings as yaml str"""
 
     def export_expressions(self, export_root: str, format: str) -> None:
         """Exports the numerator and denominator to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
@@ -74,6 +74,9 @@ class Worker:
 
     def inspect_integrand(self, integrand: str, pt: list[float], term: list[int], force_radius: bool, is_momentum_space: bool, use_f128: bool) -> tuple[float, float]:
         """ Inspects the integrand given in argument at the point given in argument. """
+
+    def inspect_lmw_integrand(self, integrand: str, workspace_path: str, use_f128: bool) -> tuple[float, float]:
+        """ inspects the integrand given at the max weight point of the previous run. """
 
     def integrate_integrand(self, integrand: str, num_cores: int, result_path: str, workspace_path: str, target: tuple[float, float] | None) -> list[tuple[float, float]]:
         """ Integrates the integrand given in argument over the target given in argument. """
@@ -92,3 +95,6 @@ class Worker:
 
     def update_iter(self) -> None:
         """finish the iteration"""
+
+    def sync(self) -> None:
+        """sync the worker"""

@@ -1,0 +1,270 @@
+name: isopod
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: isopod_0
+    vertices:
+    - name: v1
+      vertex_info:
+        type: external_vertex_info
+        particle: scalar_0
+        direction: in
+      edges:
+      - p1
+    - name: v2
+      vertex_info:
+        type: external_vertex_info
+        particle: scalar_0
+        direction: out
+      edges:
+      - p2
+    - name: v3
+      vertex_info:
+        type: external_vertex_info
+        particle: scalar_0
+        direction: out
+      edges:
+      - p3
+    - name: v4
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - p1
+      - q1
+      - q2
+    - name: v5
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - p2
+      - q7
+      - q9
+    - name: v6
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - p3
+      - q8
+      - q9
+    - name: v7
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q1
+      - q3
+      - q4
+    - name: v8
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q2
+      - q3
+      - q5
+    - name: v9
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q4
+      - q6
+      - q7
+    - name: v10
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_3_SCALAR_000
+      edges:
+      - q5
+      - q6
+      - q8
+    edges:
+    - name: p1
+      edge_type: in
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v1
+      - v4
+    - name: p2
+      edge_type: out
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v5
+      - v2
+    - name: p3
+      edge_type: out
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v6
+      - v3
+    - name: q1
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v4
+      - v7
+    - name: q2
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v4
+      - v8
+    - name: q3
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v7
+      - v8
+    - name: q4
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v7
+      - v9
+    - name: q5
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v8
+      - v10
+    - name: q6
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v9
+      - v10
+    - name: q7
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v9
+      - v5
+    - name: q8
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v10
+      - v6
+    - name: q9
+      edge_type: virtual
+      particle: scalar_0
+      propagator: scalar_0_propFeynman
+      vertices:
+      - v5
+      - v6
+    external_connections:
+    - - v1
+      - null
+    - - null
+      - v2
+    - - null
+      - v3
+    overall_factor: '1'
+    loop_momentum_basis:
+    - q3
+    - q6
+    - q9
+    edge_signatures:
+    - - p1
+      - - - 0
+          - 0
+          - 0
+        - - 1
+          - 0
+          - 0
+    - - p2
+      - - - 0
+          - 0
+          - 0
+        - - 0
+          - 1
+          - 0
+    - - p3
+      - - - 0
+          - 0
+          - 0
+        - - 1
+          - -1
+          - 0
+    - - q1
+      - - - 1
+          - 1
+          - 1
+        - - 0
+          - 1
+          - 0
+    - - q2
+      - - - -1
+          - -1
+          - -1
+        - - 1
+          - -1
+          - 0
+    - - q3
+      - - - 1
+          - 0
+          - 0
+        - - 0
+          - 0
+          - 0
+    - - q4
+      - - - 0
+          - 1
+          - 1
+        - - 0
+          - 1
+          - 0
+    - - q5
+      - - - 0
+          - -1
+          - -1
+        - - 1
+          - -1
+          - 0
+    - - q6
+      - - - 0
+          - 1
+          - 0
+        - - 0
+          - 0
+          - 0
+    - - q7
+      - - - 0
+          - 0
+          - 1
+        - - 0
+          - 1
+          - 0
+    - - q8
+      - - - 0
+          - 0
+          - -1
+        - - 1
+          - -1
+          - 0
+    - - q9
+      - - - 0
+          - 0
+          - 1
+        - - 0
+          - 0
+          - 0
+  multiplicity: '1'
+  multi_channeling_channels: []
