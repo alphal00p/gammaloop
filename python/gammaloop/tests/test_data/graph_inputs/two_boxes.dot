@@ -1,0 +1,40 @@
+digraph box_A {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5 [int_id="V_3_SCALAR_000"];
+v6 [int_id="V_3_SCALAR_000"];
+v7 [int_id="V_3_SCALAR_000"];
+v8 [int_id="V_3_SCALAR_000"];
+v1 -> v5 [pdg=1000, name=p1, mom=p1];
+v6 -> v2 [pdg=1000, name=p2, mom=p2];
+v7 -> v3 [pdg=1000, name=p3, mom=p3];
+v8 -> v4 [pdg=1000, name=p4, mom=p4];
+v5 -> v6 [pdg=1000, name=q1];
+v6 -> v7 [pdg=1000, name=q2];
+v7 -> v8 [pdg=1000, name=q3, lmb_index=0];
+v8 -> v5 [pdg=1000, name=q4];
+}
+digraph box_B {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5 [int_id="V_3_SCALAR_000"];
+v6 [int_id="V_3_SCALAR_000"];
+v7 [int_id="V_3_SCALAR_000"];
+v8 [int_id="V_3_SCALAR_000"];
+v1 -> v5 [pdg=1000, name=p1, mom=p1];
+v6 -> v2 [pdg=1000, name=p2, mom=p2];
+v7 -> v3 [pdg=1000, name=p4, mom=p4];
+v8 -> v4 [pdg=1000, name=p3, mom=p3];
+v5 -> v6 [pdg=1000, name=q1];
+v6 -> v7 [pdg=1000, name=q2];
+v7 -> v8 [pdg=1000, name=q3, lmb_index=0];
+v8 -> v5 [pdg=1000, name=q4];
+}
