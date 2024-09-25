@@ -1,0 +1,215 @@
+name: triangle_box_triangle_phys
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: triangle_box_triangle
+    vertices:
+    - name: v1
+      vertex_info:
+        type: external_vertex_info
+        particle: a
+        direction: in
+      edges:
+      - p1_IN
+    - name: v7
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_134
+      edges:
+      - q1
+      - q8
+      - p1_IN
+    - name: v10
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_134
+      edges:
+      - q6
+      - q5
+      - p2_OUT
+    - name: v4
+      vertex_info:
+        type: external_vertex_info
+        particle: a
+        direction: out
+      edges:
+      - p2_OUT
+    - name: v8
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_137
+      edges:
+      - q3
+      - q1
+      - q2
+    - name: v9
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_137
+      edges:
+      - q5
+      - q4
+      - q2
+    - name: v12
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_137
+      edges:
+      - q8
+      - q3
+      - q7
+    - name: v11
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_137
+      edges:
+      - q4
+      - q6
+      - q7
+    edges:
+    - name: p1_IN
+      edge_type: in
+      particle: a
+      propagator: a_propFeynman
+      vertices:
+      - v1
+      - v7
+    - name: p2_OUT
+      edge_type: out
+      particle: a
+      propagator: a_propFeynman
+      vertices:
+      - v10
+      - v4
+    - name: q1
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v7
+      - v8
+    - name: q2
+      edge_type: virtual
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v8
+      - v9
+    - name: q3
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v8
+      - v12
+    - name: q4
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v11
+      - v9
+    - name: q5
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v9
+      - v10
+    - name: q6
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v10
+      - v11
+    - name: q7
+      edge_type: virtual
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v11
+      - v12
+    - name: q8
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v12
+      - v7
+    external_connections:
+    - - v1
+      - null
+    - - null
+      - v4
+    overall_factor: '1'
+    loop_momentum_basis:
+    - q3
+    - q6
+    - q7
+    edge_signatures:
+    - - p1_IN
+      - - - 0
+          - 0
+          - 0
+        - - 1
+          - 0
+    - - p2_OUT
+      - - - 0
+          - 0
+          - 0
+        - - 1
+          - 0
+    - - q1
+      - - - 1
+          - 0
+          - 1
+        - - 1
+          - 0
+    - - q2
+      - - - 0
+          - 0
+          - 1
+        - - 1
+          - 0
+    - - q3
+      - - - 1
+          - 0
+          - 0
+        - - 0
+          - 0
+    - - q4
+      - - - 0
+          - 1
+          - -1
+        - - 0
+          - 0
+    - - q5
+      - - - 0
+          - 1
+          - 0
+        - - 1
+          - 0
+    - - q6
+      - - - 0
+          - 1
+          - 0
+        - - 0
+          - 0
+    - - q7
+      - - - 0
+          - 0
+          - 1
+        - - 0
+          - 0
+    - - q8
+      - - - 1
+          - 0
+          - 1
+        - - 0
+          - 0
+  multiplicity: '1'
+  multi_channeling_channels: []
