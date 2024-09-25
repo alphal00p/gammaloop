@@ -552,7 +552,7 @@ impl CFFExpression {
         let path_to_compiled = path.join("compiled");
         std::fs::create_dir_all(&path_to_compiled)?;
 
-        let path_to_code = path_to_compiled.join(&format!("{}.cpp", expr_str));
+        let path_to_code = path_to_compiled.join(format!("{}.cpp", expr_str));
 
         info!(
             "Compiling cff source_code {}",
@@ -561,7 +561,7 @@ impl CFFExpression {
                 .ok_or(eyre!("could not convert path to string"))?
         );
 
-        let path_to_so = path_to_compiled.join(&format!("{}.so", expr_str));
+        let path_to_so = path_to_compiled.join(format!("{}.so", expr_str));
         let path_to_so_str = path_to_so
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;
