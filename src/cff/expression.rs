@@ -10,6 +10,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use log::info;
 use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
 use spenso::parametric::SerializableCompiledEvaluator;
 use std::{cell::RefCell, fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
@@ -538,18 +539,20 @@ impl CFFExpression {
         &mut self,
         params: &[Atom],
         path: PathBuf,
+        graph_name: SmartString<LazyCompact>,
         export_settings: &ExportSettings,
     ) -> Result<(), Report> {
         if !export_settings.compile_cff && !export_settings.compile_separate_orientations {
             return Ok(());
         }
 
+        let expr_str = format!("expression_{}", graph_name);
         let mut cpp_str = String::new();
 
         let path_to_compiled = path.join("compiled");
         std::fs::create_dir_all(&path_to_compiled)?;
 
-        let path_to_code = path_to_compiled.join("expression.cpp");
+        let path_to_code = path_to_compiled.join(&format!("{}.cpp", expr_str));
 
         info!(
             "Compiling cff source_code {}",
@@ -558,7 +561,7 @@ impl CFFExpression {
                 .ok_or(eyre!("could not convert path to string"))?
         );
 
-        let path_to_so = path_to_compiled.join("expression.so");
+        let path_to_so = path_to_compiled.join(&format!("{}.so", expr_str));
         let path_to_so_str = path_to_so
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;
@@ -617,6 +620,7 @@ impl CFFExpression {
 
         let metadata = CompiledCFFExpressionMetaData {
             name: path_to_compiled,
+            graph_name,
             num_orientations: self.get_num_trees(),
             compile_cff_present: export_settings.compile_cff,
             compile_separate_orientations_present: export_settings.compile_separate_orientations,
@@ -629,9 +633,15 @@ impl CFFExpression {
         Ok(())
     }
 
-    pub fn load_compiled(&mut self, path: PathBuf, settings: &Settings) -> Result<(), Report> {
+    pub fn load_compiled(
+        &mut self,
+        path: PathBuf,
+        graph_name: SmartString<LazyCompact>,
+        settings: &Settings,
+    ) -> Result<(), Report> {
         let metadata = CompiledCFFExpressionMetaData {
             name: path.join("compiled"),
+            graph_name,
             num_orientations: self.get_num_trees(),
             compile_cff_present: settings.general.load_compiled_cff,
             compile_separate_orientations_present: settings
@@ -805,6 +815,7 @@ pub struct InnerCompiledCFF {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct CompiledCFFExpressionMetaData {
     name: PathBuf,
+    graph_name: SmartString<LazyCompact>,
     num_orientations: usize,
     compile_cff_present: bool,
     compile_separate_orientations_present: bool,
@@ -851,7 +862,9 @@ impl CompiledCFFExpression {
     }
 
     fn from_metedata(metadata: CompiledCFFExpressionMetaData) -> Result<Self, Report> {
-        let path_to_joint = metadata.name.join("expression.so");
+        let path_to_joint = metadata
+            .name
+            .join(format!("expression_{}.so", metadata.graph_name));
         let path_to_joint_str = path_to_joint
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;

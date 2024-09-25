@@ -1580,7 +1580,7 @@ impl BareGraph {
             .cff_expression
             .as_mut()
             .unwrap()
-            .load_compiled(path.into(), settings)?;
+            .load_compiled(path.into(), self.name.clone(), settings)?;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
         let lmb_indices = self.loop_momentum_basis.basis.clone();
@@ -1749,9 +1749,12 @@ impl<S: NumeratorState> Graph<S> {
     ) -> Result<(), Report> {
         let params = self.bare_graph.build_params_for_cff();
         match self.derived_data.as_mut().unwrap().cff_expression.as_mut() {
-            Some(cff) => {
-                cff.build_compiled_expression::<f64>(&params, export_path, export_settings)
-            }
+            Some(cff) => cff.build_compiled_expression::<f64>(
+                &params,
+                export_path,
+                self.bare_graph.name.clone(),
+                export_settings,
+            ),
             None => {
                 self.generate_cff();
                 self.build_compiled_expression(export_path, export_settings)
