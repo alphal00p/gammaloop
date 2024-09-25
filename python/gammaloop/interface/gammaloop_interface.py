@@ -774,6 +774,8 @@ class GammaLoop(object):
                                       default=False, help='Prevent compilation of qgraph python output.')
     import_graphs_parser.add_argument('--format', '-f', type=str, default='dot',
                                       choices=['dot', 'yaml', 'qgraph'], help='Format to import the graphs in.')
+    import_graphs_parser.add_argument('--ids_to_load', '-ids', type=int, default=None, nargs='+',
+                                      help='Graph indices to import (default: all).')
 
     def do_import_graphs(self, str_args: str) -> None:
         if str_args == 'help':
@@ -799,6 +801,9 @@ class GammaLoop(object):
                 if pydot_graphs is None:
                     raise GammaLoopError(
                         "Failed to load graphs from dot file '%s'.", args.file_path)
+                if args.ids_to_load is not None:
+                    pydot_graphs = [
+                        qg for i_g, qg in enumerate(pydot_graphs) if i_g in args.ids_to_load]
                 graphs = [
                     (
                         Graph.from_pydot(self.model, pydot_g),
@@ -813,7 +818,9 @@ class GammaLoop(object):
                 except Exception as exc:
                     raise GammaLoopError(
                         f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
-
+                if args.ids_to_load is not None:
+                    all_raw_graphs = [
+                        qg for i_g, qg in enumerate(all_raw_graphs) if i_g in args.ids_to_load]
                 for i_qg, qgraph_object in enumerate(all_raw_graphs):
                     new_graph = Graph.from_qgraph(
                         self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
@@ -837,7 +844,9 @@ class GammaLoop(object):
                             len(qgraph_loaded_module.graphs), args.file_path)
                 del sys.path[0]
                 all_raw_graphs: list[Any] = qgraph_loaded_module.graphs
-
+                if args.ids_to_load is not None:
+                    all_raw_graphs = [
+                        qg for i_g, qg in enumerate(all_raw_graphs) if i_g in args.ids_to_load]
                 for i_qg, qgraph_object in enumerate(all_raw_graphs):
                     new_graph = Graph.from_qgraph(
                         self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
