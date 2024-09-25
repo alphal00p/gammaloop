@@ -472,7 +472,7 @@ impl Edge {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = Atom::parse(&format!("Q({num},aind(lord(4,{index})))")).unwrap();
         let mom2 = Atom::parse(&format!("Q({num},aind(loru(4,{index})))")).unwrap();
-        let mass = Atom::parse(&self.particle.name).unwrap();
+        let mass = Atom::parse(&self.particle.mass.name).unwrap();
         &mom * &mom2 - &mass * &mass
     }
 
