@@ -1,4 +1,11 @@
-use std::{clone, cmp::Ordering, collections::VecDeque, hash::Hash, iter::Map, ops::Sub};
+use std::{
+    clone,
+    cmp::Ordering,
+    collections::VecDeque,
+    hash::Hash,
+    iter::Map,
+    ops::{Index, Sub},
+};
 
 use ahash::{AHashMap, AHashSet};
 use bitvec::{slice::IterOnes, vec::BitVec};
@@ -8,7 +15,10 @@ use petgraph::{algo::Cycle, graph};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use spenso::parametric::SerializableAtom;
-use symbolica::atom::Atom;
+use symbolica::{
+    atom::{Atom, FunctionBuilder},
+    state::State,
+};
 
 use crate::{
     cross_section::SuperGraph,
@@ -180,6 +190,25 @@ impl<N, E> Involution<N, E> {
         }
     }
 
+    fn get_smart_data(&self, index: usize, subgraph: &SubGraph) -> Option<&E> {
+        //should be a better enum (none,internal,external)
+        if subgraph.filter[index] {
+            match &self.inv[index].1 {
+                InvolutiveMapping::Identity(data) => Some(data.as_ref().unwrap()),
+                InvolutiveMapping::Source((data, _)) => Some(data.as_ref().unwrap()),
+                InvolutiveMapping::Sink(i) => {
+                    if subgraph.filter[*i] {
+                        None
+                    } else {
+                        Some(self.get_data(*i))
+                    }
+                }
+            }
+        } else {
+            None
+        }
+    }
+
     pub fn find_from_data(&self, data: &E) -> Option<usize>
     where
         E: PartialEq,
@@ -322,6 +351,9 @@ impl PartialOrd for SubGraph {
 }
 
 impl SubGraph {
+    pub fn to_nesting_node<E, V>(&self, graph: &NestingGraph<E, V>) -> NestingNode {
+        graph.nesting_node_from_subgraph(self.clone())
+    }
     pub fn is_empty(&self) -> bool {
         self.filter.count_ones() == 0
     }
@@ -677,6 +709,16 @@ impl<E, V> NestingGraph<E, V> {
             .filter
             .iter_ones()
             .map(|i| self.involution.get_data(i))
+    }
+
+    pub fn iter_internal_edge_data<'a>(
+        &'a self,
+        subgraph: &'a SubGraph,
+    ) -> impl Iterator<Item = &E> + '_ {
+        subgraph
+            .filter
+            .iter_ones()
+            .flat_map(|i| self.involution.get_smart_data(i, subgraph))
     }
 
     pub fn is_connected(&self, subgraph: &SubGraph) -> bool {
@@ -1580,6 +1622,19 @@ where
     nodes: Vec<N>,
 }
 
+pub struct BfsIterator<N: Index<usize>> {
+    order: Vec<usize>,
+    nodes: N,
+}
+
+impl<N: Index<usize, Output: Sized + Clone>> Iterator for BfsIterator<N> {
+    type Item = N::Output;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.nodes[self.order.pop()?].clone())
+    }
+}
+
 pub struct CoverSet<N>
 where
     N: PartialOrd,
@@ -1589,6 +1644,18 @@ where
 }
 
 impl<N: PartialOrd> CoverSet<N> {
+    pub fn build_predecessors(&self) -> Vec<Vec<usize>> {
+        let mut predecessors = vec![Vec::new(); self.nodes.len()];
+
+        for (node_index, successors) in self.covers.iter().enumerate() {
+            for &succ_index in successors {
+                predecessors[succ_index].push(node_index);
+            }
+        }
+
+        predecessors
+    }
+
     pub fn covers(&self, a: usize, b: usize) -> bool {
         self.covers[a].contains(&b)
     }
@@ -1628,6 +1695,16 @@ impl<N: PartialOrd> CoverSet<N> {
         }
 
         order
+    }
+
+    pub fn bfs_iter(&self, start: usize) -> BfsIterator<Vec<N>>
+    where
+        N: Clone,
+    {
+        BfsIterator {
+            order: self.bfs(start),
+            nodes: self.nodes.clone(),
+        }
     }
 }
 
@@ -1680,12 +1757,28 @@ where
             }
         }
 
+        for (i, _n) in self.nodes.iter().enumerate() {
+            out.push_str(&format!("{};\n", i));
+        }
+
         out += "}";
         out
     }
 
     pub fn greater_than(&self, a: usize) -> Vec<usize> {
         self.greater_than[a].clone()
+    }
+
+    pub fn build_predecessors(&self) -> Vec<Vec<usize>> {
+        let mut predecessors = vec![Vec::new(); self.nodes.len()];
+
+        for (node_index, successors) in self.greater_than.iter().enumerate() {
+            for &succ_index in successors {
+                predecessors[succ_index].push(node_index);
+            }
+        }
+
+        predecessors
     }
 }
 
@@ -1749,18 +1842,21 @@ impl PartialOrd for BitFilter {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 struct UVEdge {
     og_edge: usize,
-    dod: isize,
+    dod: i32,
     num: SerializableAtom,
     den: SerializableAtom,
 }
 
 impl UVEdge {
     pub fn from_edge(edge: &Edge, id: usize, bare_graph: &BareGraph) -> Self {
+        println!("name: {}", edge.name);
+        print!("dod: {}", edge.dod());
+        let index = (id * 100) as i32;
         UVEdge {
             og_edge: id,
-            dod: edge.dod(),
+            dod: edge.dod() as i32,
             num: edge.numerator(bare_graph).into(),
-            den: edge.full_den(bare_graph).into(),
+            den: edge.full_den(bare_graph, index).into(),
         }
     }
 
@@ -1771,14 +1867,16 @@ impl UVEdge {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct UVNode {
-    dod: isize,
+    dod: i32,
     num: SerializableAtom,
 }
 
 impl UVNode {
     pub fn from_vertex(vertex: &Vertex, graph: &BareGraph) -> Self {
+        println!("name: {}", vertex.name);
+        print!("dod: {}", vertex.dod());
         UVNode {
-            dod: vertex.dod(),
+            dod: vertex.dod() as i32,
             num: vertex
                 .contracted_vertex_rule(graph)
                 .unwrap_or(Atom::new_num(1))
@@ -1877,7 +1975,7 @@ impl UVGraph {
         rank
     }
 
-    fn wood(&self) -> PoSet<SubGraph> {
+    fn wood(&self) -> Wood {
         let mut cycles = self.0.cycle_basis();
 
         let mut all_combinations = PowersetIterator::new(cycles.len() as u8);
@@ -1910,7 +2008,7 @@ impl UVGraph {
                 spinneys.insert(c.internal_graph);
             }
         }
-        spinneys.into_iter().collect()
+        Wood::from_spinneys(spinneys)
     }
 
     fn n_loops(&self, subgraph: &SubGraph) -> usize {
@@ -1923,10 +2021,10 @@ impl UVGraph {
         }
     }
 
-    fn dod(&self, subgraph: &SubGraph) -> isize {
-        let mut dod: isize = self.n_loops(subgraph) as isize;
+    fn dod(&self, subgraph: &SubGraph) -> i32 {
+        let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
 
-        for e in self.0.iter_egde_data(subgraph) {
+        for e in self.0.iter_internal_edge_data(subgraph) {
             dod += e.dod;
         }
 
@@ -1936,7 +2034,127 @@ impl UVGraph {
 
         dod
     }
+
+    fn numerator(&self, subgraph: &SubGraph) -> SerializableAtom {
+        let mut num = Atom::new_num(1);
+        for (_, n) in self.0.iter_node_data(subgraph) {
+            num = num * &n.num.0;
+        }
+
+        for e in self.0.iter_internal_edge_data(subgraph) {
+            num = num * &e.num.0;
+        }
+
+        FunctionBuilder::new(State::get_symbol("num"))
+            .add_arg(&num)
+            .finish()
+            .into()
+    }
+
+    fn denominator(&self, subgraph: &SubGraph) -> SerializableAtom {
+        let mut den = Atom::new_num(1);
+
+        for e in self.0.iter_internal_edge_data(subgraph) {
+            den = den * &e.den.0;
+        }
+
+        FunctionBuilder::new(State::get_symbol("den"))
+            .add_arg(&den)
+            .finish()
+            .into()
+    }
+
+    fn dot(&self, subgraph: &SubGraph) -> String {
+        self.0.dot(&subgraph.to_nesting_node(&self.0))
+    }
+
+    fn t_op<I: Iterator<Item = SubGraph>>(&self, mut subgraph_iter: I) -> Atom {
+        if let Some(subgraph) = subgraph_iter.next() {
+            let mut t = self.t_op(subgraph_iter);
+            FunctionBuilder::new(State::get_symbol("Top"))
+                .add_arg(&Atom::new_num(self.dod(&subgraph)))
+                .add_arg(&t)
+                .finish()
+        } else {
+            Atom::new_num(1)
+        }
+    }
 }
 
+pub struct Wood {
+    poset: PoSet<SubGraph>,
+}
+
+impl Wood {
+    pub fn from_spinneys<I: IntoIterator<Item = SubGraph>>(s: I) -> Self {
+        let poset = PoSet::from_iter(s);
+
+        // let coverset = poset.to_cover_set();
+        Wood { poset }
+    }
+
+    pub fn dot(&self) -> String {
+        self.poset.dot()
+    }
+
+    // pub fn unfold(&self, graph: &UVGraph) -> Atom {
+    //     for (i, _) in self.coverset.nodes.iter().enumerate() {
+
+    //         let mut t = graph.t_op(self.coverset.bfs_iter(v));
+    //         t = FunctionBuilder::new(State::get_symbol("Top"))
+    //             .add_arg(&Atom::new_num(v.numerator_rank()))
+    //             .add_arg(&t)
+    //             .finish();
+    //     }
+    //     // for s in self.coverset.bfs_iter(0){
+
+    //     // }
+    // }
+}
+
+impl Wood {
+    pub fn unfold(&self, graph: &UVGraph) -> Atom {
+        let mut t_results = AHashMap::<SubGraph, Atom>::new();
+        let predecessors = self.poset.build_predecessors();
+
+        let mut res = Atom::new_num(0);
+
+        for (node_index, subgraph) in self.poset.nodes.iter().enumerate() {
+            let t_result =
+                self.compute_t_operator(subgraph, graph, &t_results, &predecessors, node_index);
+            res = res + &t_result;
+            t_results.insert(subgraph.clone(), t_result);
+        }
+
+        res
+    }
+
+    fn compute_t_operator(
+        &self,
+        subgraph: &SubGraph,
+        graph: &UVGraph,
+        t_results: &AHashMap<SubGraph, Atom>,
+        predecessors: &[Vec<usize>],
+        node_index: usize,
+    ) -> Atom {
+        let t = FunctionBuilder::new(State::get_symbol("Top"))
+            .add_arg(&Atom::new_num(graph.dod(subgraph)));
+
+        let mut result = graph.numerator(subgraph).0 * graph.denominator(subgraph).0;
+        for &pred_index in &predecessors[node_index] {
+            let predecessor = &self.poset.nodes[pred_index];
+            let pred_t_value = t_results.get(predecessor).unwrap();
+
+            let complement = subgraph.complement().intersection(subgraph);
+
+            let comp_num = graph.numerator(&complement).0;
+            let comp_den = graph.denominator(&complement).0;
+
+            result = result + comp_den * comp_num * pred_t_value;
+        }
+
+        -t.add_arg(&result).finish()
+    }
+}
 #[cfg(test)]
 mod tests;

@@ -431,6 +431,18 @@ output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
 
 
 @pytest.fixture(scope="session")
+def triangle_box_triangle_phys_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_triangle_box_triangle_phys", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'triangle_box_triangle_phys.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+@pytest.fixture(scope="session")
 def ta_ta_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     # Specify "True" below for a pytest designed to generate input for a rust test.
@@ -501,6 +513,7 @@ def aa_aahhttx_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
 import_graphs {pjoin(output_path, 'tree_amplitude_1_aa_aahhttx.yaml')} --format yaml --no_compile
 output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
+
 
 
 

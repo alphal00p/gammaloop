@@ -153,3 +153,6 @@ class TestRust:
     def test_generate_aa_aahhttx_tree(self, aa_aahhttx_tree_export: Path):
         assert True
 
+    def test_generate_triangle_box_triangle_phys(self, triangle_box_triangle_phys_export: Path):
+        assert True
+

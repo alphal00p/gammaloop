@@ -17,6 +17,8 @@ fn lbl() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
+    println!("{}", graph.bare_graph.dot());
+
     // graph.generate_uv();
 
     graph.generate_loop_momentum_bases();
@@ -52,7 +54,85 @@ fn lbl() {
     //     }
     // }
 
+    for e in uv_graph
+        .0
+        .iter_internal_edge_data(&uv_graph.0.full_node().internal_graph)
+    {
+        println!("{}", e.num);
+    }
+
+    for (_, n) in uv_graph
+        .0
+        .iter_node_data(&uv_graph.0.full_node().internal_graph)
+    {
+        println!("{}", n.num);
+    }
+
+    println!("{}", uv_graph.dod(&uv_graph.0.full_node().internal_graph));
     println!("{}", uv_graph.wood().dot());
+    println!("{}", uv_graph.wood().unfold(&uv_graph));
+}
+
+#[test]
+#[allow(unused)]
+fn tbt() {
+    let (model, amplitude, _) =
+        load_amplitude_output("TEST_AMPLITUDE_triangle_box_triangle_phys/GL_OUTPUT", true);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    // graph.generate_uv();
+
+    graph.generate_loop_momentum_bases();
+
+    let uv_graph = UVGraph::from_graph(&graph.bare_graph);
+
+    println!("tbt_dot{}", uv_graph.0.base_dot());
+
+    let lmb = graph.bare_graph.loop_momentum_basis.clone();
+
+    let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
+
+    let all_cycles = uv_graph.0.read_tarjan();
+    // assert_eq!(all_cycles.len(), 1);
+
+    for cycle in all_cycles {
+        println!("{}", uv_graph.0.dot(&cycle));
+    }
+
+    // insta::assert_ron_snapshot!("lbl_cycles", cycles);
+
+    // for cycle in cycles {
+    //     println!("{:?}", cycle);
+    //     println!("{}", uv_graph.0.dot(&cycle));
+    // }
+
+    // if let AtomView::Mul(mul) = numerator.as_view() {
+    //     let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
+
+    //     println!("{}", net.dot());
+    //     for (_, t) in net.graph.nodes {
+    //         // println!("{}", t.structure());
+    //     }
+    // }
+
+    for e in uv_graph
+        .0
+        .iter_internal_edge_data(&uv_graph.0.full_node().internal_graph)
+    {
+        println!("{}", e.num);
+    }
+
+    for (_, n) in uv_graph
+        .0
+        .iter_node_data(&uv_graph.0.full_node().internal_graph)
+    {
+        println!("{}", n.num);
+    }
+
+    println!("{}", uv_graph.dod(&uv_graph.0.full_node().internal_graph));
+    println!("{}", uv_graph.wood().dot());
+    println!("{}", uv_graph.wood().unfold(&uv_graph));
 }
 
 #[test]
@@ -559,4 +639,98 @@ fn flower_snark() {
     } else {
         println!("not found");
     }
+}
+
+use super::*;
+
+use std::cmp::Ordering;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct TestNode(&'static str);
+
+// Implement PartialOrd and Ord for TestNode to define the partial order
+impl PartialOrd for TestNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self.0, other.0) {
+            ("A", "A") => Some(Ordering::Equal),
+            ("B", "B") => Some(Ordering::Equal),
+            ("C", "C") => Some(Ordering::Equal),
+            ("D", "D") => Some(Ordering::Equal),
+            ("A", _) => Some(Ordering::Less), // A < B, A < C, A < D
+            (_, "A") => Some(Ordering::Greater), // B > A, C > A, D > A
+            ("B", "D") => Some(Ordering::Less), // B < D
+            ("D", "B") => Some(Ordering::Greater), // D > B
+            ("C", "D") => Some(Ordering::Less), // C < D
+            ("D", "C") => Some(Ordering::Greater), // D > C
+            _ => None,                        // Other pairs are incomparable
+        }
+    }
+}
+
+impl Ord for TestNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Since our partial order can be undefined for some pairs (None), we unwrap safely here
+        // because we know our test cases only involve comparable nodes.
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+#[test]
+fn test_poset_topological_order() {
+    // Define nodes
+    let nodes = vec![TestNode("A"), TestNode("B"), TestNode("C"), TestNode("D")];
+
+    // Build PoSet from iterator
+    let poset = PoSet::from_iter(nodes.clone());
+
+    // Expected topological order
+    // Since A < B, A < C, B < D, C < D, the expected order is ["A", "B", "C", "D"]
+
+    let expected_order = vec!["A", "B", "C", "D"];
+
+    // Check that the nodes are in the expected order
+    for (node, &expected_label) in poset.nodes.iter().zip(&expected_order) {
+        assert_eq!(node.0, expected_label);
+    }
+}
+
+#[test]
+fn test_coverset_topological_order() {
+    // Define nodes
+    let nodes = vec![TestNode("A"), TestNode("B"), TestNode("C"), TestNode("D")];
+
+    // Build PoSet from iterator
+    let poset = PoSet::from_iter(nodes.clone());
+
+    // Convert PoSet to CoverSet
+    let coverset = poset.to_cover_set();
+
+    // Expected topological order is ["A", "B", "C", "D"]
+    let expected_order = vec!["A", "B", "C", "D"];
+
+    // Check that the nodes are in the expected order
+    for (node, &expected_label) in coverset.nodes.iter().zip(&expected_order) {
+        assert_eq!(node.0, expected_label);
+    }
+
+    // Additionally, we can check that the covers are correct
+    // For example, in the coverset, node A should cover nodes B and C
+    // Node B and C should cover D
+
+    // Get the indices of the nodes
+    let a_index = coverset.nodes.iter().position(|n| n.0 == "A").unwrap();
+    let b_index = coverset.nodes.iter().position(|n| n.0 == "B").unwrap();
+    let c_index = coverset.nodes.iter().position(|n| n.0 == "C").unwrap();
+    let d_index = coverset.nodes.iter().position(|n| n.0 == "D").unwrap();
+
+    // Check that A covers B and C
+    assert!(coverset.covers(a_index, b_index));
+    assert!(coverset.covers(a_index, c_index));
+
+    // Check that B and C cover D
+    assert!(coverset.covers(b_index, d_index));
+    assert!(coverset.covers(c_index, d_index));
+
+    // Check that A does not directly cover D (since there is a node between them)
+    assert!(!coverset.covers(a_index, d_index));
 }
