@@ -302,8 +302,10 @@ impl CounterTerm {
                 let loop_number = sample.loop_moms().len();
                 let (jacobian_ratio_plus, jacobian_ratio_minus) = (
                     (&positive_result.solution / &hemispherical_radius)
+                        .abs()
                         .pow(3 * loop_number as u64 - 1),
                     (&negative_result.solution / &hemispherical_radius)
+                        .abs()
                         .pow(3 * loop_number as u64 - 1),
                 );
 
@@ -412,8 +414,8 @@ impl CounterTerm {
         // match the complex prefactor off cff
         let loop_number = graph.bare_graph.loop_momentum_basis.basis.len();
 
-        let prefactor =
-            Complex::new(const_builder.zero(), -const_builder.one()).pow(loop_number as u64);
+        let prefactor = Complex::new(const_builder.zero(), const_builder.one())
+            * Complex::new(const_builder.zero(), -const_builder.one()).pow(loop_number as u64);
 
         res * prefactor
     }
