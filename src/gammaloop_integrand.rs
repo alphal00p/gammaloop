@@ -27,6 +27,7 @@ use crate::{
 };
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
+use hyperdual::Float;
 use itertools::Itertools;
 use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
@@ -446,7 +447,10 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
     settings: &Settings,
 ) -> Complex<F<T>> {
     if settings.general.debug > 0 {
-        DEBUG_LOGGER.write("momenta_sample", sample.get_default_sample());
+        DEBUG_LOGGER.write(
+            "momenta_sample",
+            sample.get_default_sample().possibly_rotated_sample(),
+        );
     }
 
     let zero = sample.zero();
