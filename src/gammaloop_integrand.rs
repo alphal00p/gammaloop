@@ -2,7 +2,6 @@
 //! amplitudes and Local Unitarity crosssections.
 
 use core::panic;
-use std::borrow::Borrow;
 use std::fmt::Display;
 use std::time::{Duration, Instant};
 
@@ -27,7 +26,6 @@ use crate::{
 };
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
-use hyperdual::Float;
 use itertools::Itertools;
 use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
@@ -337,7 +335,10 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             sample,
             rotation_for_overlap,
             settings,
-        );
+        ) * self
+            .get_graph()
+            .bare_graph
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
 
         let final_energy_product = &energy_product / &tree_product;
 
