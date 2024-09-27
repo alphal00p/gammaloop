@@ -186,7 +186,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             sample.zero(),
         );
 
-        let prefactor = if let Some(p) = settings.general.amplidude_prefactor {
+        let prefactor = if let Some(p) = settings.general.amplitude_prefactor {
             p.map(|x| F::from_ff64(x))
         } else {
             Complex::new(one, zero)
@@ -266,7 +266,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             settings,
         );
 
-        let prefactor = if let Some(p) = settings.general.amplidude_prefactor {
+        let prefactor = if let Some(p) = settings.general.amplitude_prefactor {
             p.map(|x| F::from_ff64(x))
         } else {
             Complex::new(zero_builder.one(), zero_builder.zero())
@@ -342,6 +342,12 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
 
         let final_energy_product = &energy_product / &tree_product;
 
+        let prefactor = if let Some(p) = settings.general.amplitude_prefactor {
+            p.map(|x| F::from_ff64(x))
+        } else {
+            Complex::new(sample.one(), sample.zero())
+        };
+
         if settings.general.debug > 0 {
             DEBUG_LOGGER.write("rep3d", &rep3d);
             DEBUG_LOGGER.write("ose_product", &energy_product);
@@ -352,7 +358,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             );
         }
 
-        (rep3d - counterterm) * final_energy_product
+        (rep3d - counterterm) * final_energy_product * prefactor
     }
 }
 

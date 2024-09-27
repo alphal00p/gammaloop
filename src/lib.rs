@@ -158,7 +158,7 @@ pub struct GeneralSettings {
     pub load_compiled_cff: bool,
     pub load_compiled_numerator: bool,
     pub joint_numerator_eval: bool,
-    pub amplidude_prefactor: Option<Complex<F<f64>>>,
+    pub amplitude_prefactor: Option<Complex<F<f64>>>,
     pub load_compiled_separate_orientations: bool,
     pub force_orientations: Option<Vec<usize>>,
 }
@@ -173,7 +173,7 @@ impl Default for GeneralSettings {
             joint_numerator_eval: true,
             load_compiled_cff: false,
             load_compiled_separate_orientations: false,
-            amplidude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
+            amplitude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
             force_orientations: None,
         }
     }
@@ -599,7 +599,6 @@ impl Externals {
 
                 for ((i, m), s) in momenta.iter().enumerate().zip(signature.iter()) {
                     if let Ok(a) = FourMomentum::try_from(*m) {
-                        println!("external{i}: {}", a);
                         sum -= *s * a.higher();
                     } else {
                         pos_dep = i;

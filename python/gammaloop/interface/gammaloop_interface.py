@@ -72,6 +72,7 @@ class GammaLoopConfiguration(object):
                 'mode': 'feynmp',
                 'combined_graphs_pdf_grid_shape': [3, 2],
                 'feynmp': {
+                    'reverse_outgoing_edges_order': True,
                     'show_edge_labels': True,
                     'show_particle_names': True,
                     'show_edge_names': True,
@@ -168,7 +169,7 @@ class GammaLoopConfiguration(object):
                     'n_max': 1000000000,
                     'integrated_phase': 'real',
                     'discrete_dim_learning_rate': 1.5,
-                    'continuous_dim_learning_rate': 1.5,
+                    'continuous_dim_learning_rate': 0.0,
                     'train_on_avg': False,
                     'show_max_wgt_info': False,
                     'max_prob_ratio': 0.01,
@@ -195,7 +196,9 @@ class GammaLoopConfiguration(object):
                     'rotate_numerator': False,
                 },
                 'sampling': {
-                    'type': 'default'
+                    'type': 'discrete_graph_sampling',
+                    'subtype': 'tropical',
+                    'upcast_on_failure': True
                 },
                 'subtraction': {
                     'sliver_width': 1.0,
@@ -521,7 +524,9 @@ class GammaLoop(object):
                                           help='Model external parameter name to modify')
     set_model_param_settings.add_argument('value', metavar='value', type=float,
                                           help='Value to assign to that model parameter')
-    set_model_param_settings.add_argument('--no_overwrite', '-n',
+    set_model_param_settings.add_argument('--no_update', '-nu',
+                                          default=False, action='store_true', help='Do not update dependent model parameters yet')
+    set_model_param_settings.add_argument('--no_overwrite', '-no',
                                           default=False, action='store_true', help='Do not overwrite the param card and YAML model on disk with the new value')
 
     def do_set_model_param(self, str_args: str) -> None:
@@ -541,31 +546,39 @@ class GammaLoop(object):
 
         input_card = InputParamCard.from_model(self.model)
 
-        if args.param not in input_card:
-            raise GammaLoopError(
-                f"Model parameter '{args.param}' not found in model '{self.model.get_full_name()}'. Available external parameters are:\n\
-                    {', '.join(p for p in input_card.keys())}")
+        if args.param != 'update_only':
+            if args.param not in input_card:
+                raise GammaLoopError(
+                    f"Model parameter '{args.param}' not found in model '{self.model.get_full_name()}'. Available external parameters are:\n\
+                        {', '.join(p for p in input_card.keys())}")
 
-        input_card[args.param] = complex(args.value)
-        self.model.apply_input_param_card(input_card, simplify=False)
-        processed_yaml_model = self.model.to_yaml()
-        self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+            input_card[args.param] = complex(args.value)
 
-        logger.info("Setting model parameter '%s%s%s' to %s%s%s", Colour.GREEN,
-                    args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+        self.model.apply_input_param_card(
+            input_card, simplify=False, update=not args.no_update)
 
-        if not args.no_overwrite:
-            ParamCardWriter.write(
-                self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
-            logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
-                         self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
-            with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
-                output_metadata = OutputMetaData.from_yaml_str(file.read())
-            self.launched_output.joinpath('cards', 'param_card.dat')
-            with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
-                file.write(processed_yaml_model)
-            logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
-                'sources', 'model', f"{output_metadata['model_name']}.yaml"))
+        if args.param != 'update_only':
+            logger.info("Setting model parameter '%s%s%s' to %s%s%s", Colour.GREEN,
+                        args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+        else:
+            logger.info("Updating all dependent model parameters")
+
+        if not args.no_update:
+            processed_yaml_model = self.model.to_yaml()
+            self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+
+            if not args.no_overwrite:
+                ParamCardWriter.write(
+                    self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
+                logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
+                             self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+                with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
+                    output_metadata = OutputMetaData.from_yaml_str(file.read())
+                self.launched_output.joinpath('cards', 'param_card.dat')
+                with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
+                    file.write(processed_yaml_model)
+                logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
+                    'sources', 'model', f"{output_metadata['model_name']}.yaml"))
 
     # show_settings command
     show_settings = ArgumentParser(prog='show_settings')
@@ -761,6 +774,8 @@ class GammaLoop(object):
                                       default=False, help='Prevent compilation of qgraph python output.')
     import_graphs_parser.add_argument('--format', '-f', type=str, default='dot',
                                       choices=['dot', 'yaml', 'qgraph'], help='Format to import the graphs in.')
+    import_graphs_parser.add_argument('--ids_to_load', '-ids', type=int, default=None, nargs='+',
+                                      help='Graph indices to import (default: all).')
 
     def do_import_graphs(self, str_args: str) -> None:
         if str_args == 'help':
@@ -786,6 +801,9 @@ class GammaLoop(object):
                 if pydot_graphs is None:
                     raise GammaLoopError(
                         "Failed to load graphs from dot file '%s'.", args.file_path)
+                if args.ids_to_load is not None:
+                    pydot_graphs = [
+                        qg for i_g, qg in enumerate(pydot_graphs) if i_g in args.ids_to_load]
                 graphs = [
                     (
                         Graph.from_pydot(self.model, pydot_g),
@@ -800,7 +818,9 @@ class GammaLoop(object):
                 except Exception as exc:
                     raise GammaLoopError(
                         f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
-
+                if args.ids_to_load is not None:
+                    all_raw_graphs = [
+                        qg for i_g, qg in enumerate(all_raw_graphs) if i_g in args.ids_to_load]
                 for i_qg, qgraph_object in enumerate(all_raw_graphs):
                     new_graph = Graph.from_qgraph(
                         self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
@@ -824,7 +844,9 @@ class GammaLoop(object):
                             len(qgraph_loaded_module.graphs), args.file_path)
                 del sys.path[0]
                 all_raw_graphs: list[Any] = qgraph_loaded_module.graphs
-
+                if args.ids_to_load is not None:
+                    all_raw_graphs = [
+                        qg for i_g, qg in enumerate(all_raw_graphs) if i_g in args.ids_to_load]
                 for i_qg, qgraph_object in enumerate(all_raw_graphs):
                     new_graph = Graph.from_qgraph(
                         self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")

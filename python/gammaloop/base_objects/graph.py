@@ -1079,8 +1079,11 @@ class Graph(object):
             if len(self.get_incoming_edges()) > 0 and len(self.get_outgoing_edges()) > 0:
                 replace_dict['incoming_vertices'] = r"\fmfleft{%s}" % ','.join(  # pylint: disable=consider-using-f-string
                     f'v{self.get_vertex_position(e.vertices[0].name)}' for e in self.get_incoming_edges())
+                outgoing_edges = self.get_outgoing_edges()
+                if drawing_options.get('reverse_outgoing_edges_order', False):
+                    outgoing_edges = outgoing_edges[::-1]
                 replace_dict['outgoing_vertices'] = r"\fmfright{%s}" % ','.join(  # pylint: disable=consider-using-f-string
-                    f'v{self.get_vertex_position(e.vertices[1].name)}' for e in self.get_outgoing_edges())
+                    f'v{self.get_vertex_position(e.vertices[1].name)}' for e in outgoing_edges)
             elif len(self.get_incoming_edges()) > 0:
                 replace_dict['incoming_vertices'] = r"\fmfsurround{%s}" % ','.join(  # pylint: disable=consider-using-f-string
                     f'v{self.get_vertex_position(e.vertices[0].name)}' for e in self.get_incoming_edges())
