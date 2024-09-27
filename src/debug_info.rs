@@ -2,6 +2,7 @@ use std::{
     collections::hash_map::Entry::Vacant,
     fmt::Debug,
     fs::{create_dir_all, File, OpenOptions},
+    hash::Hash,
     io::Write,
     path::PathBuf,
     sync::{LazyLock, Mutex},
@@ -18,10 +19,36 @@ pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 
 /// This could also include channel_id or graph_id if the user is doing the explicit sum over lmb channels/graphs, but I don't
 /// support it for now, as it is not used much especially not when debugging.
-#[derive(Hash, Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug)]
 pub enum EvalState {
     General,
     PrecRot((RotationSetting, Precision)),
+}
+
+impl From<&EvalState> for String {
+    fn from(value: &EvalState) -> Self {
+        match value {
+            EvalState::General => "general".to_owned(),
+            EvalState::PrecRot((rotation_settings, prec)) => {
+                format!("{}_{}", rotation_settings.as_str(), prec.as_string())
+            }
+        }
+    }
+}
+
+// This is needed since RotationSetting may now contain f64
+impl PartialEq for EvalState {
+    fn eq(&self, other: &Self) -> bool {
+        Into::<String>::into(self) == Into::<String>::into(other)
+    }
+}
+
+impl Eq for EvalState {}
+
+impl Hash for EvalState {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        String::from(self).hash(state);
+    }
 }
 
 impl EvalState {
