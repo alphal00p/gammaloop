@@ -69,7 +69,8 @@ fn lbl() {
     }
 
     println!("{}", uv_graph.dod(&uv_graph.0.full_node().internal_graph));
-    println!("{}", uv_graph.wood().dot());
+    println!("{}", uv_graph.wood().dot(&uv_graph));
+
     println!("{}", uv_graph.wood().unfold(&uv_graph));
 }
 
@@ -89,50 +90,91 @@ fn tbt() {
 
     println!("tbt_dot{}", uv_graph.0.base_dot());
 
-    let lmb = graph.bare_graph.loop_momentum_basis.clone();
+    // let lmb = graph.bare_graph.loop_momentum_basis.clone();
 
-    let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
+    // let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
 
-    let all_cycles = uv_graph.0.read_tarjan();
-    // assert_eq!(all_cycles.len(), 1);
+    // let all_cycles = uv_graph.0.read_tarjan();
+    // // assert_eq!(all_cycles.len(), 1);
 
-    for cycle in all_cycles {
-        println!("{}", uv_graph.0.dot(&cycle));
-    }
-
-    // insta::assert_ron_snapshot!("lbl_cycles", cycles);
-
-    // for cycle in cycles {
-    //     println!("{:?}", cycle);
+    // for cycle in all_cycles {
     //     println!("{}", uv_graph.0.dot(&cycle));
     // }
 
-    // if let AtomView::Mul(mul) = numerator.as_view() {
-    //     let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
+    // // insta::assert_ron_snapshot!("lbl_cycles", cycles);
 
-    //     println!("{}", net.dot());
-    //     for (_, t) in net.graph.nodes {
-    //         // println!("{}", t.structure());
-    //     }
+    // // for cycle in cycles {
+    // //     println!("{:?}", cycle);
+    // //     println!("{}", uv_graph.0.dot(&cycle));
+    // // }
+
+    // // if let AtomView::Mul(mul) = numerator.as_view() {
+    // //     let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
+
+    // //     println!("{}", net.dot());
+    // //     for (_, t) in net.graph.nodes {
+    // //         // println!("{}", t.structure());
+    // //     }
+    // // }
+
+    // for e in uv_graph
+    //     .0
+    //     .iter_internal_edge_data(&uv_graph.0.full_node().internal_graph)
+    // {
+    //     println!("{}", e.num);
     // }
 
-    for e in uv_graph
-        .0
-        .iter_internal_edge_data(&uv_graph.0.full_node().internal_graph)
-    {
-        println!("{}", e.num);
-    }
+    // for (_, n) in uv_graph
+    //     .0
+    //     .iter_node_data(&uv_graph.0.full_node().internal_graph)
+    // {
+    //     println!("{}", n.num);
+    // }
 
-    for (_, n) in uv_graph
-        .0
-        .iter_node_data(&uv_graph.0.full_node().internal_graph)
-    {
-        println!("{}", n.num);
-    }
+    // println!("{}", uv_graph.dod(&uv_graph.0.full_node().internal_graph));
 
-    println!("{}", uv_graph.dod(&uv_graph.0.full_node().internal_graph));
-    println!("{}", uv_graph.wood().dot());
-    println!("{}", uv_graph.wood().unfold(&uv_graph));
+    // // println!("{}", pset.dot_structure());
+
+    // // println!("{}", pset.remove_transitive_edges().dot_structure());
+
+    // // uv_graph.wood().dot_spinneys(&uv_graph);
+
+    // let mut wood = uv_graph.wood();
+
+    // println!("{}", wood.dot(&uv_graph));
+
+    // let shift = wood.poset.shift();
+
+    // println!(
+    //     "{}",
+    //     wood.poset.nodes[wood.poset.minimum().unwrap()].dot_id(shift)
+    // );
+
+    // for (i, p) in wood.poset.bfs_paths().enumerate() {
+    //     println!("path {}", i);
+    //     for n in p {
+    //         print!("{}->", wood.poset.nodes[n].dot_id(shift));
+    //     }
+    //     println!();
+    // }
+
+    // println!("Inverse");
+
+    // wood.poset.invert();
+
+    // println!("{}", wood.dot(&uv_graph));
+    // for (i, p) in wood.poset.bfs_paths().enumerate() {
+    //     println!("path {}", i);
+    //     for n in p {
+    //         print!("{}->", wood.poset.nodes[n].dot_id(shift));
+    //     }
+    //     println!();
+    // }
+
+    let wood = uv_graph.wood();
+
+    let structure = wood.unfold(&uv_graph);
+    println!("{}", structure.show_structure(&wood, &uv_graph));
 }
 
 #[test]
@@ -421,6 +463,21 @@ fn K33() {
 
     let graph = builder.build();
 
+    println!("{}", graph.dot(&graph.full_node()));
+
+    for (s, v) in graph.all_spinneys() {
+        println!("cyclotomatic_number: {}", graph.cyclotomatic_number(&s));
+        println!(
+            "paton_count_loops {}",
+            graph
+                .paton_count_loops(&s, s.filter.iter_ones().next().unwrap())
+                .unwrap()
+        );
+
+        println!("paton_cycle_basislen {}", s.cycle_basis(&graph).len());
+        println!("{}", graph.dot(&s.to_nesting_node(&graph)));
+    }
+
     assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
 }
 
@@ -623,6 +680,10 @@ fn flower_snark() {
 
     println!("loop count {}", graph.cycle_basis().len());
     println!("cycle count {}", graph.all_cycles().len());
+    println!(
+        "loop count {}",
+        graph.paton_count_loops(&graph.full_graph(), 0).unwrap()
+    );
     if let Some((s, v)) = graph
         .all_spinneys()
         .iter()
@@ -734,3 +795,128 @@ fn test_coverset_topological_order() {
     // Check that A does not directly cover D (since there is a node between them)
     assert!(!coverset.covers(a_index, d_index));
 }
+
+// #[test]
+// fn test_triangle_graph_loop_count() {
+//     // Create a triangle graph
+//     let mut graph = BareGraph::new();
+//     let v0 = graph.add_vertex(Vertex::new("v0"));
+//     let v1 = graph.add_vertex(Vertex::new("v1"));
+//     let v2 = graph.add_vertex(Vertex::new("v2"));
+
+//     graph.add_edge(Edge::new("e0", v0, v1, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e1", v1, v2, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e2", v2, v0, EdgeType::Virtual));
+
+//     // Generate UVGraph
+//     let uv_graph = UVGraph::from_graph(&graph);
+
+//     // Create SubGraph representing the full graph
+//     let mut filter = bitvec![usize, Lsb0; 1; uv_graph.0.n_hedges()];
+//     let subgraph = SubGraph::from(filter);
+
+//     // Compute loop count
+//     let loop_count = uv_graph.n_loops(&subgraph);
+//     let basis_length = uv_graph.0.cycle_basis().len();
+
+//     // Expected loop count is 1
+//     assert_eq!(loop_count, 1);
+//     assert_eq!(basis_length, 1);
+// }
+
+// #[test]
+// fn test_square_graph_loop_count() {
+//     // Create a square graph
+//     let mut graph = BareGraph::new();
+//     let v0 = graph.add_vertex(Vertex::new("v0"));
+//     let v1 = graph.add_vertex(Vertex::new("v1"));
+//     let v2 = graph.add_vertex(Vertex::new("v2"));
+//     let v3 = graph.add_vertex(Vertex::new("v3"));
+
+//     graph.add_edge(Edge::new("e0", v0, v1, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e1", v1, v2, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e2", v2, v3, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e3", v3, v0, EdgeType::Virtual));
+
+//     // Generate UVGraph
+//     let uv_graph = UVGraph::from_graph(&graph);
+
+//     // Create SubGraph representing the full graph
+//     let mut filter = bitvec![usize, Lsb0; 1; uv_graph.0.n_hedges()];
+//     let subgraph = SubGraph::from(filter);
+
+//     // Compute loop count
+//     let loop_count = uv_graph.n_loops(&subgraph);
+//     let basis_length = uv_graph.0.cycle_basis().len();
+
+//     // Expected loop count is 1
+//     assert_eq!(loop_count, 1);
+//     assert_eq!(basis_length, 1);
+// }
+
+// #[test]
+// fn test_figure_eight_graph_loop_count() {
+//     // Create a figure-eight graph
+//     let mut graph = BareGraph::new();
+//     let v0 = graph.add_vertex(Vertex::new("v0"));
+//     let v1 = graph.add_vertex(Vertex::new("v1"));
+//     let v2 = graph.add_vertex(Vertex::new("v2"));
+
+//     // First loop
+//     graph.add_edge(Edge::new("e0", v0, v1, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e1", v1, v0, EdgeType::Virtual));
+
+//     // Second loop
+//     graph.add_edge(Edge::new("e2", v0, v2, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e3", v2, v0, EdgeType::Virtual));
+
+//     // Generate UVGraph
+//     let uv_graph = UVGraph::from_graph(&graph);
+
+//     // Create SubGraph representing the full graph
+//     let mut filter = bitvec![usize, Lsb0; 1; uv_graph.0.n_hedges()];
+//     let subgraph = SubGraph::from(filter);
+
+//     // Compute loop count
+//     let loop_count = uv_graph.n_loops(&subgraph);
+//     let basis_length = uv_graph.0.cycle_basis().len();
+
+//     // Expected loop count is 2
+//     assert_eq!(loop_count, 2);
+//     assert_eq!(basis_length, 2);
+// }
+
+// #[test]
+// fn test_complex_graph_loop_count() {
+//     // Create a more complex graph
+//     let mut graph = BareGraph::new();
+//     let v0 = graph.add_vertex(Vertex::new("v0"));
+//     let v1 = graph.add_vertex(Vertex::new("v1"));
+//     let v2 = graph.add_vertex(Vertex::new("v2"));
+//     let v3 = graph.add_vertex(Vertex::new("v3"));
+//     let v4 = graph.add_vertex(Vertex::new("v4"));
+
+//     graph.add_edge(Edge::new("e0", v0, v1, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e1", v1, v2, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e2", v2, v3, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e3", v3, v0, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e4", v1, v3, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e5", v3, v4, EdgeType::Virtual));
+//     graph.add_edge(Edge::new("e6", v4, v1, EdgeType::Virtual));
+
+//     // Generate UVGraph
+//     let uv_graph = UVGraph::from_graph(&graph);
+
+//     // Create SubGraph representing the full graph
+//     let mut filter = bitvec![usize, Lsb0; 1; uv_graph.0.n_hedges()];
+//     let subgraph = SubGraph::from(filter);
+
+//     // Compute loop count
+//     let loop_count = uv_graph.n_loops(&subgraph);
+//     let basis_length = uv_graph.0.cycle_basis().len();
+
+//     // Expected loop count is 3
+//     // Calculated as E - N + 1 = 7 edges - 5 vertices + 1 = 3 loops
+//     assert_eq!(loop_count, 3);
+//     assert_eq!(basis_length, 3);
+// }

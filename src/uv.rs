@@ -2,23 +2,32 @@ use std::{
     clone,
     cmp::Ordering,
     collections::VecDeque,
+    fmt::{self, format, Display, Formatter},
     hash::Hash,
     iter::Map,
-    ops::{Index, Sub},
+    ops::{Deref, Index, Sub},
 };
 
 use ahash::{AHashMap, AHashSet};
-use bitvec::{slice::IterOnes, vec::BitVec};
+use bincode::de;
+use bitvec::{
+    slice::IterOnes,
+    vec::{self, BitVec},
+};
+use color_eyre::Report;
+use eyre::eyre;
 use indexmap::IndexMap;
 use itertools::Itertools;
+use pathfinding::prelude::BfsReachable;
 use petgraph::{algo::Cycle, graph};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use spenso::parametric::SerializableAtom;
 use symbolica::{
-    atom::{Atom, FunctionBuilder},
+    atom::{Atom, AtomView, FunctionBuilder},
     state::State,
 };
+use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 
 use crate::{
     cross_section::SuperGraph,
@@ -149,6 +158,15 @@ impl<N, E> Involution<N, E> {
         Involution { inv: Vec::new() }
     }
 
+    fn n_internals(&self, subgraph: &SubGraph) -> usize {
+        subgraph
+            .filter
+            .iter_ones()
+            .filter(|i| self.is_internal(*i, subgraph))
+            .count()
+            / 2
+    }
+
     fn first_internal(&self) -> Option<usize> {
         self.inv
             .iter()
@@ -187,6 +205,17 @@ impl<N, E> Involution<N, E> {
             InvolutiveMapping::Identity(data) => data.as_ref().unwrap(),
             InvolutiveMapping::Source((data, _)) => data.as_ref().unwrap(),
             InvolutiveMapping::Sink(i) => self.get_data(*i),
+        }
+    }
+
+    fn is_internal(&self, index: usize, subgraph: &SubGraph) -> bool {
+        if !subgraph.filter[index] {
+            return false;
+        }
+        match &self.inv[index].1 {
+            InvolutiveMapping::Identity(_) => false,
+            InvolutiveMapping::Source((_, i)) => subgraph.filter[*i],
+            InvolutiveMapping::Sink(i) => subgraph.filter[*i],
         }
     }
 
@@ -277,6 +306,7 @@ impl<N, E> Involution<N, E> {
 struct GVEdgeAttrs {
     label: Option<String>,
     color: Option<String>,
+    other: Option<String>,
 }
 
 impl Default for GVEdgeAttrs {
@@ -284,6 +314,7 @@ impl Default for GVEdgeAttrs {
         GVEdgeAttrs {
             label: None,
             color: None,
+            other: None,
         }
     }
 }
@@ -296,6 +327,9 @@ impl std::fmt::Display for GVEdgeAttrs {
         }
         if let Some(color) = &self.color {
             out.push_str(&format!("color=\"{}\",", color));
+        }
+        if let Some(other) = &self.other {
+            out.push_str(&format!("{},", other));
         }
         out.push(']');
         write!(f, "{}", out)
@@ -359,11 +393,13 @@ impl SubGraph {
     }
 
     pub fn set_loopcount<E, V>(&mut self, graph: &NestingGraph<E, V>) {
-        self.loopcount = Some(
-            graph
-                .paton_count_loops(self, self.filter.first_one().unwrap())
-                .unwrap(),
-        );
+        self.loopcount = Some(graph.cyclotomatic_number(self));
+    }
+
+    pub fn cycle_basis<E, V>(&self, graph: &NestingGraph<E, V>) -> Vec<NestingNode> {
+        graph
+            .paton_cycle_basis(self, self.filter.first_one().unwrap())
+            .unwrap()
     }
 
     pub fn intersect_with(&mut self, other: &SubGraph) {
@@ -730,6 +766,56 @@ impl<E, V> NestingGraph<E, V> {
         } else {
             true
         }
+    }
+
+    pub fn count_connected_components(&self, subgraph: &SubGraph) -> usize {
+        let mut visited_edges = bitvec![usize, Lsb0; 0; self.n_hedges()];
+        let mut component_count = 0;
+
+        // Iterate over all edges in the subgraph
+        for hedge_index in subgraph.filter.iter_ones() {
+            if !visited_edges[hedge_index] {
+                // Start a new component
+                component_count += 1;
+
+                // Perform DFS to find all reachable edges from this edge
+                let reachable_edges = self.dfs_reach(subgraph, hedge_index);
+
+                // Mark all reachable edges as visited
+                for edge in reachable_edges {
+                    visited_edges.set(edge, true);
+                }
+            }
+        }
+
+        component_count
+    }
+
+    pub fn cyclotomatic_number(&self, subgraph: &SubGraph) -> usize {
+        let n_hedges = self.count_internal_edges(subgraph);
+        let n_nodes = self.number_of_nodes_in_subgraph(subgraph);
+        let n_components = self.count_connected_components(subgraph);
+
+        n_hedges - n_nodes + n_components
+    }
+
+    pub fn count_internal_edges(&self, subgraph: &SubGraph) -> usize {
+        let mut internal_edge_count = 0;
+
+        // Iterate over all half-edges in the subgraph
+        for hedge_index in subgraph.filter.iter_ones() {
+            let inv_hedge_index = self.involution.inv(hedge_index);
+
+            // Check if the involuted half-edge is also in the subgraph
+            if subgraph.filter[inv_hedge_index] {
+                // To avoid double-counting, only count when hedge_index < inv_hedge_index
+                if hedge_index < inv_hedge_index {
+                    internal_edge_count += 1;
+                }
+            }
+        }
+
+        internal_edge_count
     }
 
     pub fn dfs_reach(&self, subgraph: &SubGraph, start: usize) -> Vec<usize> {
@@ -1260,6 +1346,10 @@ impl<E, V> NestingGraph<E, V> {
         is
     }
 
+    pub fn full_graph(&self) -> SubGraph {
+        self.full_node().internal_graph
+    }
+
     fn paton_count_loops(
         &self,
         subgraph: &SubGraph,
@@ -1310,6 +1400,26 @@ impl<E, V> NestingGraph<E, V> {
         }
 
         Ok(loopcount)
+    }
+
+    pub fn number_of_nodes_in_subgraph(&self, subgraph: &SubGraph) -> usize {
+        self.iter_node_data(subgraph).count()
+    }
+
+    pub fn node_degrees_in_subgraph(&self, subgraph: &SubGraph) -> AHashMap<usize, usize> {
+        let mut degrees = AHashMap::new();
+
+        for (node, _) in self.iter_node_data(subgraph) {
+            let node_pos = self.get_node_pos(node);
+
+            // Count the number of edges in the subgraph incident to this node
+            let incident_edges = node.externalhedges.clone() & &subgraph.filter;
+            let degree = incident_edges.count_ones();
+
+            degrees.insert(node_pos, degree);
+        }
+
+        degrees
     }
 
     fn paton_cycle_basis(
@@ -1378,25 +1488,46 @@ impl<E, V> NestingGraph<E, V> {
         Ok(cycle_basis)
     }
 
-    pub fn dot(&self, node_as_graph: &NestingNode) -> String {
+    pub fn dot_impl(
+        &self,
+        node_as_graph: &NestingNode,
+        graph_info: String,
+        edge_attr: &impl Fn(&E) -> String,
+        node_attr: &impl Fn(&V) -> String,
+    ) -> String {
         let mut out = "graph {\n ".to_string();
         out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
+
+        out.push_str(graph_info.as_str());
+
+        for (n, v) in self.iter_node_data(&node_as_graph.internal_graph) {
+            out.push_str(
+                format!(
+                    "  {} [{}];\n",
+                    self.nodes.get_index_of(n).unwrap(),
+                    node_attr(v)
+                )
+                .as_str(),
+            );
+        }
 
         for (hedge_id, (incident_node, edge)) in self.involution.inv.iter().enumerate() {
             match &edge {
                 //Internal graphs never have unpaired edges
-                InvolutiveMapping::Identity(_) => {
+                InvolutiveMapping::Identity(data) => {
                     let attr = if *node_as_graph.internal_graph.filter.get(hedge_id).unwrap() {
                         None
                     } else if *node_as_graph.externalhedges.get(hedge_id).unwrap() {
                         Some(GVEdgeAttrs {
                             color: Some("gray50".to_string()),
                             label: None,
+                            other: data.as_ref().map(|x| edge_attr(&x)),
                         })
                     } else {
                         Some(GVEdgeAttrs {
                             color: Some("gray75".to_string()),
                             label: None,
+                            other: data.as_ref().map(|x| edge_attr(&x)),
                         })
                     };
                     out.push_str(&InvolutiveMapping::<()>::identity_dot(
@@ -1405,7 +1536,7 @@ impl<E, V> NestingGraph<E, V> {
                         attr.as_ref(),
                     ));
                 }
-                InvolutiveMapping::Source((_, _)) => {
+                InvolutiveMapping::Source((data, _)) => {
                     let attr = if *node_as_graph.internal_graph.filter.get(hedge_id).unwrap() {
                         None
                     } else if *node_as_graph.externalhedges.get(hedge_id).unwrap()
@@ -1417,6 +1548,7 @@ impl<E, V> NestingGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray50:gray75;0.5".to_string()),
                             label: None,
+                            other: data.as_ref().map(|x| edge_attr(&x)),
                         })
                     } else if *node_as_graph
                         .externalhedges
@@ -1427,6 +1559,7 @@ impl<E, V> NestingGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray75:gray50;0.5".to_string()),
                             label: None,
+                            other: data.as_ref().map(|x| edge_attr(&x)),
                         })
                     } else if *node_as_graph
                         .externalhedges
@@ -1437,11 +1570,13 @@ impl<E, V> NestingGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray50".to_string()),
                             label: None,
+                            other: data.as_ref().map(|x| edge_attr(&x)),
                         })
                     } else {
                         Some(GVEdgeAttrs {
                             color: Some("gray75".to_string()),
                             label: None,
+                            other: data.as_ref().map(|x| edge_attr(&x)),
                         })
                     };
                     out.push_str(&InvolutiveMapping::<()>::pair_dot(
@@ -1464,6 +1599,11 @@ impl<E, V> NestingGraph<E, V> {
 
         out += "}";
         out
+    }
+    pub fn dot(&self, node_as_graph: &NestingNode) -> String {
+        self.dot_impl(node_as_graph, "".to_string(), &|_| "".to_string(), &|_| {
+            "".to_string()
+        })
     }
 
     fn cut_branches(&self, subgraph: &mut NestingNode) {
@@ -1975,7 +2115,7 @@ impl UVGraph {
         rank
     }
 
-    fn wood(&self) -> Wood {
+    fn wood_impl(&self) -> AHashSet<SubGraph> {
         let mut cycles = self.0.cycle_basis();
 
         let mut all_combinations = PowersetIterator::new(cycles.len() as u8);
@@ -1997,9 +2137,8 @@ impl UVGraph {
             let union = ci.internal_graph.union(&cj.internal_graph);
             if self.dod(&union) >= 0 {
                 spinneys.insert(union);
-                println!("found spinney");
             } else {
-                println!("not dod >=0 spinney");
+                // println!("not dod >=0 spinney :{}", self.dod(&union));
             }
         }
 
@@ -2008,21 +2147,27 @@ impl UVGraph {
                 spinneys.insert(c.internal_graph);
             }
         }
-        Wood::from_spinneys(spinneys)
+
+        spinneys.insert(self.0.empty_filter().into());
+        spinneys
+    }
+
+    fn wood(&self) -> Wood {
+        Wood::from_spinneys(self.wood_impl())
     }
 
     fn n_loops(&self, subgraph: &SubGraph) -> usize {
         if let Some(loop_count) = subgraph.loopcount {
+            // println!("found loop_count nloops: {}", loop_count);
             loop_count
         } else {
-            self.0
-                .paton_count_loops(subgraph, subgraph.filter.first_one().unwrap())
-                .unwrap()
+            self.0.cyclotomatic_number(subgraph)
         }
     }
 
     fn dod(&self, subgraph: &SubGraph) -> i32 {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
+        // println!("nloops: {}", dod / 4);
 
         for e in self.0.iter_internal_edge_data(subgraph) {
             dod += e.dod;
@@ -2065,7 +2210,12 @@ impl UVGraph {
     }
 
     fn dot(&self, subgraph: &SubGraph) -> String {
-        self.0.dot(&subgraph.to_nesting_node(&self.0))
+        self.0.dot_impl(
+            &subgraph.to_nesting_node(&self.0),
+            format!("{}", self.dod(subgraph)),
+            &|e| format!("label=\"{}\"", e.dod),
+            &|n| format!("label=\"{}\"", n.dod),
+        )
     }
 
     fn t_op<I: Iterator<Item = SubGraph>>(&self, mut subgraph_iter: I) -> Atom {
@@ -2082,19 +2232,182 @@ impl UVGraph {
 }
 
 pub struct Wood {
-    poset: PoSet<SubGraph>,
+    poset: Poset<SubGraph, Option<Top>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TrieWood {
+    trie: Trie<Top>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct UnfoldedWoodEl {
+    expr: SerializableAtom,
+    graphs: Vec<NodeRef>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct UnfoldedWood {
+    elements: Vec<UnfoldedWoodEl>,
+}
+
+impl UnfoldedWood {
+    pub fn show_structure(&self, wood: &Wood, graph: &UVGraph) -> String {
+        let mut out = wood.show_graphs(graph);
+        for e in &self.elements {
+            out.push('\n');
+            for g in &e.graphs {
+                out.push_str(&format!("{} ->", wood.poset.dot_id(*g)));
+            }
+            out.push('\n');
+            out.push_str(&format!("+{} \n", e.expr));
+        }
+        out
+    }
+}
+
+impl Display for UnfoldedWood {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for e in &self.elements {
+            writeln!(f, "{}", e.expr)?;
+            writeln!(f, " + ")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct IntegrandExpr {
+    num: SerializableAtom,
+    den: SerializableAtom,
+}
+
+impl IntegrandExpr {
+    pub fn from_subgraph(subgraph: &SubGraph, graph: &UVGraph) -> Self {
+        IntegrandExpr {
+            num: graph.numerator(subgraph),
+            den: graph.denominator(subgraph),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Top {
+    dod: i32,
+    graph_ref: NodeRef,
+    pub reduced: IntegrandExpr,
+    graph: TopoOrdered<SubGraph>,
+}
+
+impl Top {
+    pub fn from_subgraph(
+        subgraph: TopoOrdered<SubGraph>,
+        graph: &UVGraph,
+        graph_ref: NodeRef,
+    ) -> Self {
+        let reduced = subgraph
+            .data
+            .complement()
+            .intersection(&graph.0.full_graph());
+
+        Top {
+            graph_ref,
+            dod: graph.dod(&subgraph.data),
+            reduced: IntegrandExpr::from_subgraph(&reduced, graph),
+            graph: subgraph,
+        }
+    }
+
+    pub fn to_atom(&self, other: Option<AtomView>) -> SerializableAtom {
+        if let Some(o) = other {
+            self.to_fn_builder().add_arg(o)
+        } else {
+            self.to_fn_builder()
+        }
+        .finish()
+        .into()
+    }
+
+    pub fn to_fn_builder(&self) -> FunctionBuilder {
+        let num = &self.reduced.num.0;
+        let den = &self.reduced.den.0;
+        let dod = self.dod;
+        FunctionBuilder::new(State::get_symbol("Top"))
+            .add_arg(&Atom::new_num(dod))
+            .add_arg(num)
+            .add_arg(den)
+    }
+}
+
+impl PartialOrd for Top {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.graph.partial_cmp(&other.graph)
+    }
+}
+
+impl Ord for Top {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.graph.cmp(&other.graph)
+    }
+}
+
+impl TryFromIterator<Top, ()> for UnfoldedWoodEl {
+    type Error = Report;
+
+    fn try_from_iter<T>(iter: T) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+        T: IntoIterator<Item = Top>,
+    {
+        let mut iter = iter.into_iter();
+        let first_top = iter.next().ok_or(eyre!("empty iter.."))?;
+
+        let mut expr = first_top.to_atom(None);
+
+        let mut graphs = vec![first_top.graph_ref];
+
+        for t in iter {
+            expr = t.to_atom(Some(expr.0.as_view()));
+            graphs.push(t.graph_ref);
+        }
+
+        Ok(UnfoldedWoodEl { expr, graphs })
+    }
 }
 
 impl Wood {
     pub fn from_spinneys<I: IntoIterator<Item = SubGraph>>(s: I) -> Self {
-        let poset = PoSet::from_iter(s);
+        let mut poset = Poset::from_iter(s.into_iter().map(|s| (s, None)));
+
+        poset.invert();
+        poset.compute_topological_order();
 
         // let coverset = poset.to_cover_set();
         Wood { poset }
     }
 
-    pub fn dot(&self) -> String {
-        self.poset.dot()
+    pub fn dot(&self, graph: &UVGraph) -> String {
+        let shift = self.poset.shift();
+        self.poset.to_dot_impl(&|n| {
+            format!(
+                "label={}, dod={}, n_edges = {},topo_order = {}",
+                n.dot_id(shift),
+                graph.dod(&n.data),
+                graph.0.count_internal_edges(&n.data),
+                n.order.unwrap()
+            )
+        })
+    }
+
+    pub fn dot_spinneys(&self, graph: &UVGraph) {
+        for s in self.poset.node_values() {
+            println!(
+                "found {} loop spinney with dod {}:{} ",
+                graph.n_loops(s),
+                graph.dod(s),
+                graph.0.dot(&s.to_nesting_node(&graph.0))
+            );
+        }
     }
 
     // pub fn unfold(&self, graph: &UVGraph) -> Atom {
@@ -2113,47 +2426,660 @@ impl Wood {
 }
 
 impl Wood {
-    pub fn unfold(&self, graph: &UVGraph) -> Atom {
-        let mut t_results = AHashMap::<SubGraph, Atom>::new();
-        let predecessors = self.poset.build_predecessors();
+    pub fn show_graphs(&self, graph: &UVGraph) -> String {
+        let mut out = String::new();
+        out.push_str("Poset structure:\n");
+        out.push_str(&self.poset.dot_structure());
 
-        let mut res = Atom::new_num(0);
-
-        for (node_index, subgraph) in self.poset.nodes.iter().enumerate() {
-            let t_result =
-                self.compute_t_operator(subgraph, graph, &t_results, &predecessors, node_index);
-            res = res + &t_result;
-            t_results.insert(subgraph.clone(), t_result);
+        out.push_str("Graphs:\n");
+        for (k, n) in self.poset.nodes.iter() {
+            out.push_str(&graph.0.dot_impl(
+                &n.data.to_nesting_node(&graph.0),
+                format!(
+                    "dod={};nodeid ={};\n",
+                    graph.dod(&n.data),
+                    self.poset.dot_id(k)
+                ),
+                &|e| format!("dod={}", e.dod),
+                &|n| format!("dod={}", n.dod),
+            ));
+            out.push('\n');
         }
+        out
+    }
+    pub fn unfold(&self, graph: &UVGraph) -> UnfoldedWood {
+        let mut trie_builder = TrieBuilder::new();
+        let shift = self.poset.shift();
 
-        res
+        for p in self.poset.bfs_paths().map(|s| {
+            s.into_iter()
+                .map(|k| {
+                    (
+                        self.poset.nodes.get(k).unwrap().to_topo_ordered().unwrap(),
+                        k,
+                    )
+                })
+                .collect::<Vec<_>>()
+        }) {
+            let top_chain: Vec<_> = p
+                .into_iter()
+                .map(|(s, k)| Top::from_subgraph(s, graph, k))
+                .collect();
+            trie_builder.push(top_chain);
+        }
+        let triewood = TrieWood {
+            trie: trie_builder.build(),
+        };
+
+        UnfoldedWood {
+            elements: triewood.trie.iter::<UnfoldedWoodEl, ()>().collect(),
+        }
     }
 
-    fn compute_t_operator(
-        &self,
-        subgraph: &SubGraph,
-        graph: &UVGraph,
-        t_results: &AHashMap<SubGraph, Atom>,
-        predecessors: &[Vec<usize>],
-        node_index: usize,
-    ) -> Atom {
-        let t = FunctionBuilder::new(State::get_symbol("Top"))
-            .add_arg(&Atom::new_num(graph.dod(subgraph)));
+    // fn compute_t_operator(
+    //     &self,
+    //     subgraph: &SubGraph,
+    //     graph: &UVGraph,
+    //     t_results: &AHashMap<SubGraph, Atom>,
+    //     predecessors: &[Vec<usize>],
+    //     node_index: usize,
+    // ) -> Atom {
+    //     let t = FunctionBuilder::new(State::get_symbol("Top"))
+    //         .add_arg(&Atom::new_num(graph.dod(subgraph)));
 
-        let mut result = graph.numerator(subgraph).0 * graph.denominator(subgraph).0;
-        for &pred_index in &predecessors[node_index] {
-            let predecessor = &self.poset.nodes[pred_index];
-            let pred_t_value = t_results.get(predecessor).unwrap();
+    //     let mut result = graph.numerator(subgraph).0 * graph.denominator(subgraph).0;
+    //     for &pred_index in &predecessors[node_index] {
+    //         let predecessor = &self.poset.nodes[pred_index];
+    //         let pred_t_value = t_results.get(predecessor).unwrap();
 
-            let complement = subgraph.complement().intersection(subgraph);
+    //         let complement = subgraph.complement().intersection(subgraph);
 
-            let comp_num = graph.numerator(&complement).0;
-            let comp_den = graph.denominator(&complement).0;
+    //         let comp_num = graph.numerator(&complement).0;
+    //         let comp_den = graph.denominator(&complement).0;
 
-            result = result + comp_den * comp_num * pred_t_value;
+    //         result = result + comp_den * comp_num * pred_t_value;
+    //     }
+
+    //     -t.add_arg(&result).finish()
+    // }
+}
+
+use slotmap::{new_key_type, SecondaryMap, SlotMap};
+use std::collections::HashSet;
+
+// Define a new key type for the Poset
+new_key_type! {
+    pub struct NodeRef;
+}
+
+/// Trait to define DOT attributes for node data.
+pub trait DotAttrs {
+    fn dot_attrs(&self) -> String;
+}
+
+/// A node in the poset, storing generic data, edges to child nodes, and references to parent nodes.
+#[derive(Debug, Eq)]
+pub struct SlotNode<T> {
+    data: T,
+    order: Option<u64>,
+    id: NodeRef,
+    parents: Vec<NodeRef>,  // References to parent nodes by key
+    children: Vec<NodeRef>, // Edges to child nodes by key
+}
+
+impl<T: Hash> Hash for SlotNode<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+        self.id.hash(state);
+    }
+}
+
+impl<T: PartialEq> PartialEq for SlotNode<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data && self.id == other.id
+    }
+}
+
+impl<T: PartialEq> PartialOrd for SlotNode<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.order.unwrap().partial_cmp(&other.order.unwrap())
+    }
+}
+
+impl<T: PartialEq + Eq> Ord for SlotNode<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.order.unwrap().cmp(&other.order.unwrap())
+    }
+}
+
+impl<T> SlotNode<T> {
+    pub fn dot_id(&self, shift: u64) -> String {
+        format!("node{}", base62::encode(self.id() - shift))
+    }
+
+    pub fn to_topo_ordered(&self) -> Result<TopoOrdered<T>>
+    where
+        T: Clone,
+    {
+        Ok(TopoOrdered::new(
+            self.data.clone(),
+            self.order
+                .ok_or_else(|| eyre!("Node has no topological order"))?,
+        ))
+    }
+
+    pub fn in_degree(&self) -> usize {
+        self.parents.len()
+    }
+
+    pub fn out_degree(&self) -> usize {
+        self.children.len()
+    }
+
+    pub fn id(&self) -> u64 {
+        self.id.0.as_ffi()
+    }
+
+    pub fn add_parent(&mut self, parent: NodeRef) {
+        self.parents.push(parent);
+    }
+
+    pub fn add_child(&mut self, child: NodeRef) {
+        self.children.push(child);
+    }
+
+    pub fn remove_child(&mut self, child: NodeRef) {
+        self.children.retain(|&c| c != child);
+    }
+
+    pub fn remove_parent(&mut self, parent: NodeRef) {
+        self.parents.retain(|&c| c != parent);
+    }
+
+    pub fn is_parent_of(&self, child: NodeRef) -> bool {
+        self.children.contains(&child)
+    }
+
+    pub fn new(data: T, id: NodeRef) -> Self {
+        SlotNode {
+            data,
+            id,
+            order: None,
+            parents: Vec::new(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn compare_data(&self, other: &Self) -> Option<std::cmp::Ordering>
+    where
+        T: PartialOrd,
+    {
+        self.data.partial_cmp(&other.data)
+    }
+}
+
+/// A partially ordered set (poset) that can be built from an iterator and a slotmap.
+pub struct DAG<T, D = ()> {
+    nodes: SlotMap<NodeRef, SlotNode<T>>,
+    associated_data: SecondaryMap<NodeRef, D>,
+}
+
+pub type Poset<T, D> = DAG<T, D>;
+pub type HasseDiagram<T, D> = DAG<T, D>;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct TopoOrdered<T> {
+    pub data: T,
+    order: u64,
+}
+
+impl<T> TopoOrdered<T> {
+    pub fn new(data: T, order: u64) -> Self {
+        TopoOrdered { data, order }
+    }
+}
+
+impl<T> PartialOrd for TopoOrdered<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.order.partial_cmp(&other.order)
+    }
+}
+
+impl<T> PartialEq for TopoOrdered<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.order == other.order
+    }
+}
+
+impl<T> Eq for TopoOrdered<T> {}
+
+impl<T> Ord for TopoOrdered<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.order.cmp(&other.order)
+    }
+}
+
+use color_eyre::Result;
+
+impl<T, D> Poset<T, D> {
+    pub fn new() -> Self {
+        Poset {
+            nodes: SlotMap::with_key(),
+            associated_data: SecondaryMap::new(),
+        }
+    }
+
+    pub fn dot_id(&self, key: NodeRef) -> String {
+        self.nodes.get(key).unwrap().dot_id(self.shift())
+    }
+
+    pub fn node_values(&self) -> impl Iterator<Item = &T> {
+        self.nodes.values().map(|node| &node.data)
+    }
+
+    pub fn add_edge(&mut self, from: NodeRef, to: NodeRef) {
+        let from_node = self.nodes.get_mut(from).unwrap();
+        from_node.add_child(to);
+        let to_node = self.nodes.get_mut(to).unwrap();
+        to_node.add_parent(from);
+    }
+
+    pub fn add_edge_if_new(&mut self, from: NodeRef, to: NodeRef) {
+        if !self.nodes.get(from).unwrap().is_parent_of(to) {
+            self.add_edge(from, to);
+        }
+    }
+
+    pub fn remove_edge(&mut self, from: NodeRef, to: NodeRef) {
+        let from_node = self.nodes.get_mut(from).unwrap();
+        from_node.remove_child(to);
+        let to_node = self.nodes.get_mut(to).unwrap();
+        to_node.remove_parent(from);
+    }
+
+    // /// Returns an iterator over all paths starting from the root node, traversed in BFS order.
+    // pub fn bfs_paths_topo_ordered(&self) -> impl Iterator<Item = Vec<TopoOrdered<T>>>
+    // where
+    //     T: Clone,
+    // {
+    //     self.bfs_paths().map(|s| {
+    //         s.into_iter()
+    //             .map(|k| self.nodes.get(k).unwrap().to_topo_ordered().unwrap())
+    //             .collect::<Vec<_>>()
+    //     })
+    // }
+
+    pub fn bfs_reach<'a>(
+        &'a self,
+        start: &'a NodeRef,
+    ) -> BfsReachable<&'a NodeRef, impl FnMut(&'a &'a NodeRef) -> &'a [NodeRef]> {
+        pathfinding::directed::bfs::bfs_reach(start, |&s| self.succesors(*s))
+    }
+
+    pub fn maximum(&self) -> Option<NodeRef>
+    where
+        T: Eq,
+    {
+        Some(self.nodes.values().max()?.id)
+    }
+
+    pub fn minimum(&self) -> Option<NodeRef>
+    where
+        T: Eq,
+    {
+        Some(self.nodes.values().min()?.id)
+    }
+
+    pub fn succesors(&self, node_key: NodeRef) -> &[NodeRef] {
+        &self.nodes.get(node_key).unwrap().children
+    }
+
+    /// Returns an iterator over all paths starting from the root node, traversed in BFS order.
+    pub fn bfs_paths(&self) -> BfsPaths<T>
+    where
+        T: Eq,
+    {
+        let mut queue = VecDeque::new();
+        queue.push_back(vec![self.minimum().unwrap()]);
+        BfsPaths {
+            queue,
+            visited: HashSet::new(),
+            nodes: &self.nodes,
+        }
+    }
+
+    pub fn invert(&mut self) {
+        self.nodes.iter_mut().for_each(|(_, node)| {
+            std::mem::swap(&mut node.children, &mut node.parents);
+        });
+    }
+
+    pub fn bfs_paths_inv(&self) -> BfsPaths<T> {
+        let mut queue = VecDeque::new();
+        let mut maximal_elements = Vec::new();
+        let mut has_incoming = HashSet::new();
+
+        for node in self.nodes.values() {
+            for &parent in node.parents.iter() {
+                has_incoming.insert(parent);
+            }
         }
 
-        -t.add_arg(&result).finish()
+        for (key, _node) in self.nodes.iter() {
+            if !has_incoming.contains(&key) {
+                maximal_elements.push(key);
+            }
+        }
+
+        for &max in &maximal_elements {
+            queue.push_back(vec![max]);
+        }
+
+        BfsPaths {
+            queue,
+            visited: HashSet::new(),
+            nodes: &self.nodes,
+        }
+    }
+
+    pub fn data(&self, key: NodeRef) -> &T {
+        &self.nodes.get(key).unwrap().data
+    }
+
+    fn shift(&self) -> u64 {
+        self.nodes.iter().next().unwrap().1.id()
+    }
+
+    pub fn to_dot(&self, label: &impl Fn(&T) -> String) -> String {
+        self.to_dot_impl(&|node| label(&node.data))
+    }
+
+    fn to_dot_impl(&self, label: &impl Fn(&SlotNode<T>) -> String) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph Poset {\n");
+        dot.push_str("    node [shape=circle];\n");
+
+        let shift = self.shift();
+
+        for node in self.nodes.values() {
+            let node_id = node.dot_id(shift);
+            dot.push_str(&format!("{} [{}];\n", node_id, label(node)));
+            for &child in node.children.iter() {
+                dot.push_str(&format!(
+                    "{} -> {};\n",
+                    node_id,
+                    self.nodes.get(child).unwrap().dot_id(shift)
+                ));
+            }
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
+    pub fn dot_structure(&self) -> String {
+        let shift = self.shift();
+        self.to_dot_impl(&|n| format!("label={}", n.dot_id(shift)))
+    }
+
+    pub fn poset_family(&self, data: &T) -> [Vec<NodeRef>; 2]
+    where
+        T: PartialOrd,
+    {
+        let mut parents = Vec::new();
+        let mut children = Vec::new();
+        for (key, node) in self.nodes.iter() {
+            match data.partial_cmp(&node.data) {
+                Some(std::cmp::Ordering::Greater) => {
+                    children.push(key);
+                }
+                Some(std::cmp::Ordering::Less) => {
+                    parents.push(key);
+                }
+                _ => {}
+            }
+        }
+        [parents, children]
+    }
+
+    pub fn poset_push(&mut self, data: T, associated_data: D, flip: bool) -> NodeRef
+    where
+        T: PartialOrd,
+    {
+        let id = self.nodes.insert_with_key(|key| SlotNode::new(data, key));
+
+        self.associated_data.insert(id, associated_data);
+        let new_node = self.nodes.get(id).unwrap();
+
+        let [mut parents, mut children] = self.poset_family(&new_node.data);
+
+        if flip {
+            std::mem::swap(&mut parents, &mut children);
+        }
+
+        for &parent_key in &parents {
+            self.add_edge(parent_key, id);
+        }
+
+        for &child_key in &children {
+            self.add_edge(id, child_key);
+        }
+
+        self.update_transitive_closure(id);
+
+        id
+    }
+
+    /// Updates the transitive closure of the poset by propagating the relationships.
+    fn update_transitive_closure(&mut self, new_node_key: NodeRef) {
+        // Propagate relationships for all descendants of new_node
+        let descendants = self.get_all_descendants(new_node_key);
+        for &descendant_key in &descendants {
+            self.add_edge_if_new(new_node_key, descendant_key);
+        }
+
+        // Propagate relationships for all ancestors of new_node
+        let ancestors = self.get_all_ancestors(new_node_key);
+        for &ancestor_key in &ancestors {
+            self.add_edge_if_new(ancestor_key, new_node_key);
+        }
+    }
+
+    /// Returns all descendants of the node, used for propagating transitive relations.
+    fn get_all_descendants(&self, node_key: NodeRef) -> HashSet<NodeRef> {
+        let mut descendants = HashSet::new();
+        let mut stack = vec![node_key];
+        while let Some(current_key) = stack.pop() {
+            let current_node = self.nodes.get(current_key).unwrap();
+            for &child_key in current_node.children.iter() {
+                if descendants.insert(child_key) {
+                    stack.push(child_key);
+                }
+            }
+        }
+        descendants
+    }
+
+    /// Returns all ancestors of the node, used for propagating transitive relations.
+    fn get_all_ancestors(&self, node_key: NodeRef) -> HashSet<NodeRef> {
+        let mut ancestors = HashSet::new();
+        let mut stack = vec![node_key];
+        while let Some(current_key) = stack.pop() {
+            let current_node = self.nodes.get(current_key).unwrap();
+            for &parent_key in current_node.parents.iter() {
+                if ancestors.insert(parent_key) {
+                    stack.push(parent_key);
+                }
+            }
+        }
+        ancestors
+    }
+
+    pub fn remove_transitive_edges(mut self) -> HasseDiagram<T, D> {
+        let edges_to_remove: Vec<_> = self
+            .nodes
+            .keys()
+            .flat_map(|node_key| self.transitive_edges(node_key))
+            .collect();
+
+        // let shift = self.shift();
+        for (a, b) in edges_to_remove {
+            // println!(
+            //     "removing edge from {} to {}",
+            //     base62::encode(a.0.as_ffi() - shift),
+            //     base62::encode(b.0.as_ffi() - shift)
+            // );
+            self.remove_edge(a, b);
+        }
+
+        HasseDiagram {
+            nodes: self.nodes,
+            associated_data: self.associated_data,
+        }
+    }
+
+    pub fn transitive_edges(&self, a: NodeRef) -> Vec<(NodeRef, NodeRef)> {
+        let mut edges = Vec::new();
+
+        let children: AHashSet<_> = self
+            .nodes
+            .get(a)
+            .unwrap()
+            .children
+            .iter()
+            .cloned()
+            .collect();
+
+        for &child in &children {
+            for descendant in self.get_all_descendants(child) {
+                if children.contains(&descendant) {
+                    edges.push((a, descendant));
+                }
+            }
+        }
+        edges
+    }
+
+    pub fn in_degree(&self, key: NodeRef) -> usize {
+        self.nodes.get(key).unwrap().in_degree()
+    }
+
+    pub fn compute_topological_order(&mut self) {
+        // Initialize queue with nodes having in-degree zero
+        let mut queue = VecDeque::new(); //S in the wikipedia article
+
+        let mut indegrees = SecondaryMap::new();
+
+        for (key, node) in self.nodes.iter() {
+            indegrees.insert(key, node.in_degree());
+            if node.in_degree() == 0 {
+                queue.push_back(key);
+            }
+        }
+
+        let mut order = 0;
+        while let Some(node_key) = queue.pop_front() {
+            // Assign the order number to the node
+            if let Some(node) = self.nodes.get_mut(node_key) {
+                node.order = Some(order);
+                order += 1;
+            }
+
+            // For each child, decrement its in-degree
+            for &child_key in &self.nodes.get(node_key).unwrap().children {
+                indegrees[child_key] -= 1;
+                if indegrees[child_key] == 0 {
+                    queue.push_back(child_key);
+                }
+            }
+        }
+
+        // Optional: Check if graph has cycles
+        if order as usize != self.nodes.len() {
+            panic!("The graph contains a cycle!");
+        }
+    }
+}
+
+impl<T, D> Default for Poset<T, D> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: PartialOrd, D> FromIterator<(T, D)> for Poset<T, D> {
+    fn from_iter<I: IntoIterator<Item = (T, D)>>(iter: I) -> Self {
+        let mut poset = Poset::new();
+        for (data, assoc) in iter {
+            poset.poset_push(data, assoc, false);
+        }
+        poset
+    }
+}
+
+/// An iterator over paths in the poset, traversed in BFS order.
+pub struct BfsPaths<'a, T> {
+    queue: VecDeque<Vec<NodeRef>>,
+    visited: HashSet<Vec<NodeRef>>,
+    nodes: &'a SlotMap<NodeRef, SlotNode<T>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct SubGraphChainLink {
+    subgraph: SubGraph,
+}
+
+impl Deref for SubGraphChainLink {
+    type Target = SubGraph;
+
+    fn deref(&self) -> &Self::Target {
+        &self.subgraph
+    }
+}
+
+impl From<SubGraph> for SubGraphChainLink {
+    fn from(subgraph: SubGraph) -> Self {
+        SubGraphChainLink { subgraph }
+    }
+}
+impl PartialOrd for SubGraphChainLink {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self.subgraph.partial_cmp(&other.subgraph) {
+            None => None, //panic!("SubGraphChainLink should be comparable"),
+            Some(o) => Some(o),
+        }
+    }
+}
+
+impl Ord for SubGraphChainLink {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl<'a, T> Iterator for BfsPaths<'a, T> {
+    type Item = Vec<NodeRef>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(path) = self.queue.pop_front() {
+            if !self.visited.insert(path.clone()) {
+                continue;
+            }
+
+            let last_node_key = path.last().unwrap();
+            let last_node = self.nodes.get(*last_node_key).unwrap();
+
+            for &child_key in last_node.children.iter() {
+                if !path.contains(&child_key) {
+                    let mut new_path = path.clone();
+                    new_path.push(child_key);
+                    self.queue.push_back(new_path);
+                }
+            }
+
+            return Some(path);
+        }
+        None
     }
 }
 #[cfg(test)]
