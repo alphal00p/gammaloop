@@ -15,6 +15,7 @@ use gat_lending_iterator::LendingIterator;
 use itertools::Itertools;
 use log::info;
 use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
 use spenso::{complex::Complex, parametric::SerializableCompiledEvaluator};
 use std::{cell::RefCell, fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
