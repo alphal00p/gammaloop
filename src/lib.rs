@@ -375,6 +375,7 @@ impl StabilityLevelSetting {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, PartialEq)]
+#[serde(tag = "type")]
 pub enum RotationSetting {
     #[serde(rename = "x")]
     #[default]
@@ -385,7 +386,8 @@ pub enum RotationSetting {
     Pi2Z,
     #[serde(rename = "none")]
     None,
-    EulerAngles(f64, f64, f64),
+    #[serde(rename = "euler_angles")]
+    EulerAngles { alpha: f64, beta: f64, gamma: f64 },
 }
 
 impl RotationSetting {
@@ -395,7 +397,7 @@ impl RotationSetting {
             Self::Pi2Y => RotationMethod::Pi2Y,
             Self::Pi2Z => RotationMethod::Pi2Z,
             Self::None => RotationMethod::Identity,
-            Self::EulerAngles(alpha, beta, gamma) => {
+            Self::EulerAngles { alpha, beta, gamma } => {
                 RotationMethod::EulerAngles(*alpha, *beta, *gamma)
             }
         }
@@ -410,7 +412,7 @@ impl RotationSetting {
             Self::Pi2Y => Box::new(ThreeMomentum::perform_pi2_rotation_y),
             Self::Pi2Z => Box::new(ThreeMomentum::perform_pi2_rotation_z),
             Self::None => Box::new(|vector: &ThreeMomentum<F<T>>| vector.clone()),
-            Self::EulerAngles(alpha, beta, gamma) => Box::new(|vector: &ThreeMomentum<F<T>>| {
+            Self::EulerAngles { alpha, beta, gamma } => Box::new(|vector: &ThreeMomentum<F<T>>| {
                 let mut cloned_vector = vector.clone();
                 let alpha_t = F::<T>::from_f64(*alpha);
                 let beta_t = F::<T>::from_f64(*beta);
@@ -427,7 +429,9 @@ impl RotationSetting {
             Self::Pi2Y => "y".to_owned(),
             Self::Pi2Z => "z".to_owned(),
             Self::None => "none".to_owned(),
-            Self::EulerAngles(alpha, beta, gamma) => format!("euler {} {} {}", alpha, beta, gamma),
+            Self::EulerAngles { alpha, beta, gamma } => {
+                format!("euler {} {} {}", alpha, beta, gamma)
+            }
         }
     }
 }

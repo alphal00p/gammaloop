@@ -2554,7 +2554,7 @@ impl Rotation {
     pub fn setting(&self) -> RotationSetting {
         match self.method {
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
-                RotationSetting::EulerAngles(alpha, beta, gamma)
+                RotationSetting::EulerAngles { alpha, beta, gamma }
             }
             RotationMethod::Pi2X => RotationSetting::Pi2X,
             RotationMethod::Pi2Y => RotationSetting::Pi2Y,
