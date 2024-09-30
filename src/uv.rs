@@ -2283,11 +2283,28 @@ pub struct IntegrandExpr {
 }
 
 impl IntegrandExpr {
-    pub fn from_subgraph(subgraph: &SubGraph, graph: &UVGraph) -> Self {
+    pub fn from_subgraph(
+        subgraph: &SubGraph,
+        graph: &UVGraph,
+        // add_arg: Option<IntegrandExpr>,
+    ) -> Self {
         IntegrandExpr {
             num: graph.numerator(subgraph),
             den: graph.denominator(subgraph),
         }
+    }
+
+    pub fn top(&self, dod: i32) -> SerializableAtom {
+        FunctionBuilder::new(State::get_symbol("Top"))
+            .add_arg(&Atom::new_num(dod))
+            .add_arg(&self.num.0)
+            .add_arg(&self.den.0)
+            .finish()
+            .into()
+    }
+
+    pub fn bare(&self) -> SerializableAtom {
+        (&self.num.0 * &self.den.0).into()
     }
 }
 
@@ -2295,25 +2312,35 @@ impl IntegrandExpr {
 pub struct Top {
     dod: i32,
     graph_ref: NodeRef,
-    pub reduced: IntegrandExpr,
+    pub t_arg: Option<IntegrandExpr>,
+    pub contracted: IntegrandExpr,
     graph: TopoOrdered<SubGraph>,
 }
 
 impl Top {
+    pub fn root(graph: &UVGraph, root_ref: NodeRef) -> Self {
+        Top {
+            dod: 0,
+            graph_ref: root_ref,
+            t_arg: None,
+            contracted: IntegrandExpr::from_subgraph(&graph.0.full_graph(), graph),
+            graph: TopoOrdered::new(graph.0.full_graph().complement(), 0),
+        }
+    }
+
     pub fn from_subgraph(
+        &self,
         subgraph: TopoOrdered<SubGraph>,
         graph: &UVGraph,
         graph_ref: NodeRef,
     ) -> Self {
-        let reduced = subgraph
-            .data
-            .complement()
-            .intersection(&graph.0.full_graph());
+        let reduced = self.graph.data.complement().intersection(&subgraph.data);
 
         Top {
             graph_ref,
             dod: graph.dod(&subgraph.data),
-            reduced: IntegrandExpr::from_subgraph(&reduced, graph),
+            t_arg: Some(IntegrandExpr::from_subgraph(&reduced, graph)),
+            contracted: IntegrandExpr::from_subgraph(&subgraph.data.complement(), graph),
             graph: subgraph,
         }
     }
@@ -2329,13 +2356,17 @@ impl Top {
     }
 
     pub fn to_fn_builder(&self) -> FunctionBuilder {
-        let num = &self.reduced.num.0;
-        let den = &self.reduced.den.0;
-        let dod = self.dod;
-        FunctionBuilder::new(State::get_symbol("Top"))
-            .add_arg(&Atom::new_num(dod))
-            .add_arg(num)
-            .add_arg(den)
+        if let Some(integrand) = &self.t_arg {
+            let num = &integrand.num.0;
+            let den = &integrand.den.0;
+            let dod = self.dod;
+            FunctionBuilder::new(State::get_symbol("Top"))
+                .add_arg(&Atom::new_num(dod))
+                .add_arg(num)
+                .add_arg(den)
+        } else {
+            FunctionBuilder::new(State::get_symbol("Top"))
+        }
     }
 }
 
@@ -2363,13 +2394,20 @@ impl TryFromIterator<Top, ()> for UnfoldedWoodEl {
         let first_top = iter.next().ok_or(eyre!("empty iter.."))?;
 
         let mut expr = first_top.to_atom(None);
+        let mut sign = 1;
 
         let mut graphs = vec![first_top.graph_ref];
+
+        let mut last = first_top.contracted;
 
         for t in iter {
             expr = t.to_atom(Some(expr.0.as_view()));
             graphs.push(t.graph_ref);
+            sign *= -1;
+            last = t.contracted;
         }
+
+        expr = (&expr.0 * &last.bare().0 * sign).into();
 
         Ok(UnfoldedWoodEl { expr, graphs })
     }
@@ -2461,10 +2499,14 @@ impl Wood {
                 })
                 .collect::<Vec<_>>()
         }) {
-            let top_chain: Vec<_> = p
-                .into_iter()
-                .map(|(s, k)| Top::from_subgraph(s, graph, k))
-                .collect();
+            let root = Top::root(graph, self.poset.minimum().unwrap());
+
+            let mut top_chain = vec![];
+
+            for (s, k) in p {
+                let new_top = top_chain.last().unwrap_or(&root).from_subgraph(s, graph, k);
+                top_chain.push(new_top);
+            }
             trie_builder.push(top_chain);
         }
         let triewood = TrieWood {
