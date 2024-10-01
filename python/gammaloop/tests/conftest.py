@@ -109,7 +109,7 @@ def scalar_massless_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'massless_box.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -435,74 +435,77 @@ def ta_ta_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     # Specify "True" below for a pytest designed to generate input for a rust test.
     output_path = get_test_directory(tmpdir_factory,
-                                     pjoin('trees','ta_ta'), True)
+                                     pjoin('trees', 'ta_ta'), True)
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(output_path, 'tree_amplitude_1_ta_ta.yaml')} --format yaml --no_compile
 output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
 
+
 @pytest.fixture(scope="session")
 def th_th_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     # Specify "True" below for a pytest designed to generate input for a rust test.
     output_path = get_test_directory(tmpdir_factory,
-                                     pjoin('trees','th_th'), True)
+                                     pjoin('trees', 'th_th'), True)
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(output_path, 'tree_amplitude_1_th_th.yaml')} --format yaml --no_compile
 output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
 
+
 @pytest.fixture(scope="session")
 def t_ta_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     # Specify "True" below for a pytest designed to generate input for a rust test.
     output_path = get_test_directory(tmpdir_factory,
-                                     pjoin('trees','t_ta'), True)
+                                     pjoin('trees', 't_ta'), True)
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(output_path, 'tree_amplitude_1_t_ta.yaml')} --format yaml --no_compile
 output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
 
+
 @pytest.fixture(scope="session")
 def hh_ttxaa_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     # Specify "True" below for a pytest designed to generate input for a rust test.
     output_path = get_test_directory(tmpdir_factory,
-                                     pjoin('trees','hh_ttxaa'), True)
+                                     pjoin('trees', 'hh_ttxaa'), True)
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(output_path, 'tree_amplitude_1_hh_ttxaa.yaml')} --format yaml --no_compile
 output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
 
+
 @pytest.fixture(scope="session")
 def h_ttxaah_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     # Specify "True" below for a pytest designed to generate input for a rust test.
     output_path = get_test_directory(tmpdir_factory,
-                                     pjoin('trees','h_ttxaah'), True)
+                                     pjoin('trees', 'h_ttxaah'), True)
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(output_path, 'tree_amplitude_1_h_ttxaah.yaml')} --format yaml --no_compile
 output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
 
+
 @pytest.fixture(scope="session")
 def aa_aahhttx_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     # Specify "True" below for a pytest designed to generate input for a rust test.
     output_path = get_test_directory(tmpdir_factory,
-                                     pjoin('trees','aa_aahhttx'), True)
+                                     pjoin('trees', 'aa_aahhttx'), True)
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(output_path, 'tree_amplitude_1_aa_aahhttx.yaml')} --format yaml --no_compile
 output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
-
-
 
 
 @pytest.fixture(scope="session")
