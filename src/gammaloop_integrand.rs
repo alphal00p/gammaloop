@@ -1073,38 +1073,29 @@ impl GammaLoopIntegrand {
             .fold(Complex::<F<f64>>::new_zero(), |acc, x| acc + x)
             / F(results.len() as f64);
 
-        let (results_for_comparison, average_for_comparison, max_wgt_for_comparison) =
-            match integrated_phase {
-                IntegratedPhase::Real => (
-                    results.iter().map(|r| r.re).collect_vec(),
-                    average.re,
-                    max_eval,
-                ),
-                IntegratedPhase::Imag => (
-                    results.iter().map(|r| r.im).collect_vec(),
-                    average.im,
-                    max_eval,
-                ),
-                IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
-            };
+        let mut errors = results.iter().map(|res| {
+            let res_arr = [res.re, res.im];
+            let avg_arr = [average.re, average.im];
 
-        let mut errors = results_for_comparison.iter().map(|res| {
-            if IsZero::is_zero(res) && IsZero::is_zero(&average_for_comparison) {
-                F(0.)
-            } else {
-                ((res - average_for_comparison) / average_for_comparison).abs()
-            }
+            let (error_re, error_im) = res_arr
+                .iter()
+                .zip(avg_arr)
+                .map(|(res_component, average_component)| {
+                    if IsZero::is_zero(res_component) && IsZero::is_zero(&average_component) {
+                        F(0.)
+                    } else {
+                        ((res_component - average_component) / average_component).abs()
+                    }
+                })
+                .collect_tuple()
+                .unwrap();
+            Complex::new(error_re, error_im)
         });
 
-        let unstable_sample = match integrated_phase {
-            IntegratedPhase::Real => {
-                errors.position(|error| error > stability_settings.required_precision_for_re)
-            }
-            IntegratedPhase::Imag => {
-                errors.position(|error| error > stability_settings.required_precision_for_im)
-            }
-            IntegratedPhase::Both => unimplemented!("integrated phase both not implemented"),
-        };
+        let unstable_sample = errors.position(|error| {
+            error.re > stability_settings.required_precision_for_re
+                || error.im > stability_settings.required_precision_for_im
+        });
 
         if self.global_data.settings.general.debug > 0 {
             if let Some(unstable_index) = unstable_sample {
@@ -1134,12 +1125,19 @@ impl GammaLoopIntegrand {
 
         let stable = unstable_sample.is_none();
 
+        let average_for_comparison = match integrated_phase {
+            IntegratedPhase::Real => average.re,
+            IntegratedPhase::Imag => average.im,
+            IntegratedPhase::Both => {
+                unimplemented!("max wgt test unimplemented for integrated phase both")
+            }
+        };
+
         let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > F(0.)
-            && max_wgt_for_comparison.is_non_zero()
+            && max_eval.is_non_zero()
         {
             average_for_comparison.abs() * wgt
-                < stability_settings.escalate_for_large_weight_threshold
-                    * max_wgt_for_comparison.abs()
+                < stability_settings.escalate_for_large_weight_threshold * max_eval.abs()
         } else {
             true
         };
