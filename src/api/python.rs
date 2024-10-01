@@ -242,7 +242,7 @@ impl PythonWorker {
             g.statefull_apply::<_, UnInit, AppliedFeynmanRule>(|d, b| {
                 d.map_numerator(|n| n.from_graph(b))
             })
-            .unwrap()
+            .expect("could not apply Feynman rules")
         });
     }
 
@@ -422,7 +422,7 @@ impl PythonWorker {
                                 &state_bytes,
                                 bincode::config::standard(),
                             )
-                            .unwrap()
+                            .expect("failed to obtain state")
                             .0;
                         let path_to_workspace_settings = workspace_path.join("settings.yaml");
                         let workspace_settings_string =
@@ -441,9 +441,15 @@ impl PythonWorker {
                         let max_weight_sample = if integration_state.integral.max_eval_positive
                             > integration_state.integral.max_eval_negative.abs()
                         {
-                            integration_state.integral.max_eval_positive_xs.unwrap()
+                            integration_state
+                                .integral
+                                .max_eval_positive_xs
+                                .expect("no max eval found")
                         } else {
-                            integration_state.integral.max_eval_negative_xs.unwrap()
+                            integration_state
+                                .integral
+                                .max_eval_negative_xs
+                                .expect("no max eval found")
                         };
 
                         // bypass inspect function as it does not take a symbolica sample as input
@@ -518,7 +524,7 @@ impl PythonWorker {
                                     &state_bytes,
                                     bincode::config::standard(),
                                 )
-                                .unwrap()
+                                .expect("Could not deserialize state")
                                 .0;
 
                             let path_to_workspace_settings = workspace_path.join("settings.yaml");
@@ -623,7 +629,10 @@ impl PythonWorker {
         workspace_path: &str,
         job_id: usize,
     ) -> PyResult<String> {
-        let master_node = self.master_node.as_mut().unwrap();
+        let master_node = self
+            .master_node
+            .as_mut()
+            .expect("Could not get master node");
 
         // extract the integrated phase in a hacky way
         match master_node
@@ -647,7 +656,10 @@ impl PythonWorker {
         workspace_path: &str,
         job_id: usize,
     ) -> PyResult<String> {
-        let master_node = self.master_node.as_mut().unwrap();
+        let master_node = self
+            .master_node
+            .as_mut()
+            .expect("could not get master node");
 
         let job_out_name = format!("job_{}_out", job_id);
         let job_out_path = Path::new(workspace_path).join(job_out_name);
@@ -655,7 +667,7 @@ impl PythonWorker {
         let output_file = std::fs::read(job_out_path)?;
         let batch_result: BatchResult =
             bincode::decode_from_slice(&output_file, bincode::config::standard())
-                .unwrap()
+                .expect("Could not deserialize batch")
                 .0;
 
         master_node
