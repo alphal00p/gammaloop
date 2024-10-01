@@ -87,7 +87,7 @@ class TestScalarTopologies:
         gl.run(command_list)
 
         check_integration_result(
-            target, scalar_ltd_topology_f_export, imag_phase=True)
+            target, scalar_ltd_topology_f_export, imag_phase=False)
 
     def test_ltd_topology_h(self, scalar_ltd_topology_h_export: Path):
         target = -8.36515e-8
