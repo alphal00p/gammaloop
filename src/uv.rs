@@ -32,6 +32,7 @@ use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 use crate::{
     cross_section::SuperGraph,
     graph::{BareGraph, Edge, EdgeType, Graph, LoopMomentumBasis, Vertex},
+    model::normalise_complex,
     numerator::{AppliedFeynmanRule, Numerator},
 };
 
@@ -1996,7 +1997,7 @@ impl UVEdge {
         UVEdge {
             og_edge: id,
             dod: edge.dod() as i32,
-            num: colorless.into(),
+            num: normalise_complex(&colorless).into(),
             den: edge.full_den(bare_graph, index).into(),
         }
     }
@@ -2019,7 +2020,7 @@ impl UVNode {
         if let Some(colorless) = vertex.contracted_colorless_vertex_rule(graph) {
             UVNode {
                 dod: vertex.dod() as i32,
-                num: colorless.into(),
+                num: normalise_complex(&colorless).into(),
             }
         } else {
             UVNode {

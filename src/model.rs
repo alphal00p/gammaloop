@@ -43,7 +43,7 @@ use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::State;
 
 #[allow(unused)]
-fn normalise_complex(atom: &Atom) -> Atom {
+pub fn normalise_complex(atom: &Atom) -> Atom {
     let re = Atom::parse("re_").unwrap();
     let im = Atom::parse("im_").unwrap();
 
