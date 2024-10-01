@@ -1518,18 +1518,25 @@ class GammaLoop(object):
 
         if args.eval is not None:
             tmp = eval(args.eval)
-            for tmp_elem in tmp:
-                rotation, precision = tmp_elem[0], tmp_elem[1]
-                eval_dict = debug_display.build_eval_debug_dict(
-                    args.log_file, rotation, precision)
+            file_list = ["{}_{}.jsonl".format(
+                tmp_elem[0], tmp_elem[1]) for tmp_elem in tmp]
+        else:
+            file_list = os.listdir(args.log_file)
 
-                logger.info("Debug info for for rotation '%s%s%s' and precision '%s%s%s'",
-                            Colour.BLUE, rotation, Colour.END, Colour.BLUE, precision, Colour.END)
+        for file in file_list:
+            if file == "general.jsonl":
+                continue
 
-                debug_display.display_eval_default(eval_dict)
+            eval_dict = debug_display.build_eval_debug_dict(
+                args.log_file, file)
 
-                if args.subtraction:
-                    logger.info("")
-                    logger.info("subtraction: ")
-                    logger.info("")
-                    debug_display.display_subtraction_data(eval_dict)
+            logger.info("Debug info for for rotation '%s%s%s'",
+                        Colour.BLUE, file, Colour.END, )
+
+            debug_display.display_eval_default(eval_dict)
+
+            if args.subtraction:
+                logger.info("")
+                logger.info("subtraction: ")
+                logger.info("")
+                debug_display.display_subtraction_data(eval_dict)

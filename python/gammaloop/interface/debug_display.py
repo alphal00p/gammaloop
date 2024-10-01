@@ -27,8 +27,7 @@ def build_general_debug_dict(log_file: str) -> Dict[str, Any]:
     return parse_log_impl(general_log_path)
 
 
-def build_eval_debug_dict(log_file: str, rotation: str, prec: str) -> Dict[str, Any]:
-    file_name = "{}_{}.jsonl".format(rotation, prec)
+def build_eval_debug_dict(log_file: str, file_name: str) -> Dict[str, Any]:
     eval_log_path = pjoin(log_file, file_name)
     return parse_log_impl(eval_log_path)
 
