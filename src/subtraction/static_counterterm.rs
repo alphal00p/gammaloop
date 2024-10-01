@@ -352,7 +352,7 @@ impl CounterTerm {
                     }
                 };
 
-                let (r_plus_eval, r_minus_eval) = (
+                let ((r_plus_eval, r_plus_energy_cache), (r_minus_eval, r_minus_energy_cache)) = (
                     CounterTerm::radius_star_eval(
                         &rplus_sample,
                         graph,
@@ -474,6 +474,14 @@ impl CounterTerm {
                         ct_minus: into_complex_ff64(&ct_minus),
                         integrated_ct_plus: into_complex_ff64(&integrated_ct_plus),
                         integrated_ct_minus: into_complex_ff64(&integrated_ct_minus),
+                        r_plus_energy_cache: r_plus_energy_cache
+                            .iter()
+                            .map(|x| x.into_ff64())
+                            .collect_vec(),
+                        r_minus_energy_cache: r_minus_energy_cache
+                            .iter()
+                            .map(|x| x.into_ff64())
+                            .collect_vec(),
                     };
 
                     DEBUG_LOGGER.write("esurface_subtraction", &debug_helper);
@@ -501,7 +509,7 @@ impl CounterTerm {
         overlap_complement: &[ExistingEsurfaceId],
         existing_esurface_id: ExistingEsurfaceId,
         settings: &Settings,
-    ) -> Complex<F<T>> {
+    ) -> (Complex<F<T>>, Vec<F<T>>) {
         let energy_cache =
             graph.compute_onshell_energies(rstar_sample.loop_moms(), rstar_sample.external_moms());
 
@@ -535,7 +543,10 @@ impl CounterTerm {
             settings,
         );
 
-        eval_terms * &multichanneling_factor / rstar_energy_product
+        (
+            eval_terms * &multichanneling_factor / rstar_energy_product,
+            energy_cache,
+        )
     }
 }
 
@@ -668,4 +679,6 @@ struct DebugHelper {
     ct_minus: Complex<F<f64>>,
     integrated_ct_plus: Complex<F<f64>>,
     integrated_ct_minus: Complex<F<f64>>,
+    r_plus_energy_cache: Vec<F<f64>>,
+    r_minus_energy_cache: Vec<F<f64>>,
 }

@@ -213,6 +213,15 @@ def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
             logger.info("ict+ = %s, ict- = %s",
                         ict_plus, ict_minus)
 
+            r_plus_energy_cache = esurface_subtraction_data['r_plus_energy_cache']
+            r_minus_energy_cache = esurface_subtraction_data['r_minus_energy_cache']
+
+            logger.info("r*+ energy cache")
+            logger.info(r_plus_energy_cache)
+
+            logger.info("r*- energy cache")
+            logger.info(r_minus_energy_cache)
+
             logger.info("")
 
         counter += len(overlap_structure[0])
