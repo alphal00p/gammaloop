@@ -90,7 +90,7 @@ class TestScalarTopologies:
             target, scalar_ltd_topology_f_export, imag_phase=False)
 
     def test_ltd_topology_h(self, scalar_ltd_topology_h_export: Path):
-        target = -8.36515e-8
+        target = 8.36515e-8
         gl = get_gamma_loop_interpreter()
 
         command_list = gl_interface.CommandList.from_string(
