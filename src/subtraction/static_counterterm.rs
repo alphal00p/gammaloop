@@ -2,7 +2,6 @@ use bincode::{Decode, Encode};
 /// Counterterm for amplitudes with constant externals.
 use colored::Colorize;
 use itertools::Itertools;
-use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -237,10 +236,11 @@ impl CounterTerm {
                 let esurface = &esurfaces[esurface_id];
 
                 // solve the radius
-                let radius_guess = esurface.get_radius_guess(
+                let (radius_guess_plus, radius_guess_negative) = esurface.get_radius_guess(
                     &hemispherical_unit_shifted_momenta,
                     sample.external_moms(),
                     &graph.loop_momentum_basis,
+                    &real_mass_vector,
                 );
 
                 let function = |r: &_| {
@@ -255,7 +255,7 @@ impl CounterTerm {
                 };
 
                 let positive_result = newton_iteration_and_derivative(
-                    &radius_guess,
+                    &radius_guess_plus,
                     function,
                     &F::from_f64(TOLERANCE),
                     MAX_ITERATIONS,
@@ -263,12 +263,15 @@ impl CounterTerm {
                 );
 
                 let negative_result = newton_iteration_and_derivative(
-                    &radius_guess.ref_neg(),
+                    &radius_guess_negative,
                     function,
                     &F::from_f64(TOLERANCE),
                     MAX_ITERATIONS,
                     &e_cm,
                 );
+
+                assert!(positive_result.solution > const_builder.zero());
+                assert!(negative_result.solution < const_builder.zero());
 
                 if settings.general.debug > 1 {
                     println!("Positive solution: ");
@@ -371,6 +374,7 @@ impl CounterTerm {
                         settings,
                     ),
                 );
+
                 let loop_number = sample.loop_moms().len();
                 let (jacobian_ratio_plus, jacobian_ratio_minus) = (
                     (&positive_result.solution / &hemispherical_radius)
@@ -396,7 +400,7 @@ impl CounterTerm {
                         (hemispherical_radius.one(), hemispherical_radius.one())
                     };
 
-                let i = Complex::new(radius_guess.zero(), radius_guess.one());
+                let i = Complex::new(const_builder.zero(), const_builder.one());
 
                 let radius_sign_plus = if positive_result.solution > hemispherical_radius.zero() {
                     const_builder.one()
@@ -420,7 +424,7 @@ impl CounterTerm {
 
                 let minus_half = -const_builder.one() / (const_builder.one() + const_builder.one());
 
-                let integrated_ct_plus = &i * radius_guess.PI() * &minus_half * r_plus_eval
+                let integrated_ct_plus = &i * const_builder.PI() * &minus_half * r_plus_eval
                     / &positive_result.derivative_at_solution
                     / &positive_result.solution
                     * utils::h(
@@ -440,7 +444,7 @@ impl CounterTerm {
                     * &singularity_damper_minus
                     * &jacobian_ratio_minus;
 
-                let integrated_ct_minus = &i * radius_guess.PI() * r_minus_eval * &minus_half
+                let integrated_ct_minus = &i * const_builder.PI() * r_minus_eval * &minus_half
                     / &negative_result.derivative_at_solution
                     / &negative_result.solution
                     * utils::h(
@@ -457,7 +461,7 @@ impl CounterTerm {
                 if settings.general.debug > 0 {
                     let debug_helper = DebugHelper {
                         esurface_id,
-                        initial_radius: radius_guess.into_ff64(),
+                        initial_radius: radius_guess_plus.into_ff64(),
                         plus_solution: positive_result.as_f64(),
                         minus_solution: negative_result.as_f64(),
                         jacobian_ratio_plus: jacobian_ratio_plus.into_ff64(),
@@ -498,12 +502,6 @@ impl CounterTerm {
         existing_esurface_id: ExistingEsurfaceId,
         settings: &Settings,
     ) -> Complex<F<T>> {
-        //  let loop_momenta_at_star = unit_loop_momenta
-        //      .iter()
-        //      .zip(center.iter())
-        //      .map(|(k, center)| k * rstar + center)
-        //      .collect_vec();
-
         let energy_cache =
             graph.compute_onshell_energies(rstar_sample.loop_moms(), rstar_sample.external_moms());
 

@@ -182,14 +182,14 @@ class GammaLoopConfiguration(object):
                     'levels': [
                         {
                             'precision': 'Double',
-                            'required_precision_for_re': 1.e-5,
-                            'required_precision_for_im': 1.e-5,
+                            'required_precision_for_re': 1.e-7,
+                            'required_precision_for_im': 1.e-7,
                             'escalate_for_large_weight_threshold': 0.9
                         },
                         {
                             'precision': 'Quad',
-                            'required_precision_for_re': 1.e-5,
-                            'required_precision_for_im': 1.e-5,
+                            'required_precision_for_re': 1.e-10,
+                            'required_precision_for_im': 1.e-10,
                             'escalate_for_large_weight_threshold': -1.0
                         }
                     ],
