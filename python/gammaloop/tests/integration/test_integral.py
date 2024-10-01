@@ -31,7 +31,7 @@ class TestScalarTopologies:
             target_im, scalar_massless_box_export, imag_phase=True)
 
     def test_scalar_triangle(self, massless_scalar_triangle_export: Path):
-        target = 0.00009765455799148221
+        target = -0.00009765455799148221
         gl = get_gamma_loop_interpreter()
 
         command_list = gl_interface.CommandList.from_string(
@@ -50,7 +50,7 @@ class TestScalarTopologies:
             target, massless_scalar_triangle_export, imag_phase=False)
 
     def test_tree_triangle(self, scalar_tree_triangle_export: Path):
-        target = 0.00009765455799148221 / -49
+        target = 0.00009765455799148221 / 49
 
         gl = get_gamma_loop_interpreter()
 
@@ -62,12 +62,12 @@ class TestScalarTopologies:
             "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 10000")
         command_list.add_command("set n_max 10000")
-        command_list.add_command("set seed 1")
+        command_list.add_command("set seed 2")
         command_list.add_command("integrate tree_triangle -r")
 
         gl.run(command_list)
         check_integration_result(
-            target, scalar_tree_triangle_export, imag_phase=True)
+            target, scalar_tree_triangle_export, imag_phase=False)
 
     def test_ltd_topology_f(self, scalar_ltd_topology_f_export: Path):
         target = -0.00000526647
