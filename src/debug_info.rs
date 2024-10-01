@@ -1,7 +1,7 @@
 use std::{
     collections::hash_map::Entry::Vacant,
     fmt::Debug,
-    fs::{create_dir_all, File, OpenOptions},
+    fs::{self, create_dir_all, File, OpenOptions},
     hash::Hash,
     io::Write,
     path::PathBuf,
@@ -78,6 +78,10 @@ impl DebugLogger {
             logger: LazyLock::new(|| {
                 let path = PathBuf::from("log.glog");
                 let path_to_general = path.join("general.jsonl");
+
+                if path.exists() {
+                    fs::remove_dir_all(&path).expect("unable to remove older log file");
+                }
 
                 create_dir_all(&path).expect("unable to create log file");
 
