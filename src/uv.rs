@@ -22,7 +22,7 @@ use pathfinding::prelude::BfsReachable;
 use petgraph::{algo::Cycle, graph};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use spenso::parametric::SerializableAtom;
+use spenso::{data::DataTensor, parametric::SerializableAtom, structure::ScalarTensor};
 use symbolica::{
     atom::{Atom, AtomView, FunctionBuilder},
     state::State,
@@ -1992,10 +1992,11 @@ impl UVEdge {
         println!("name: {}", edge.name);
         print!("dod: {}", edge.dod());
         let index = (id * 100) as i32;
+        let [colorless, _] = edge.color_separated_numerator(bare_graph);
         UVEdge {
             og_edge: id,
             dod: edge.dod() as i32,
-            num: edge.numerator(bare_graph).into(),
+            num: colorless.into(),
             den: edge.full_den(bare_graph, index).into(),
         }
     }
@@ -2015,12 +2016,16 @@ impl UVNode {
     pub fn from_vertex(vertex: &Vertex, graph: &BareGraph) -> Self {
         println!("name: {}", vertex.name);
         print!("dod: {}", vertex.dod());
-        UVNode {
-            dod: vertex.dod() as i32,
-            num: vertex
-                .contracted_vertex_rule(graph)
-                .unwrap_or(Atom::new_num(1))
-                .into(),
+        if let Some(colorless) = vertex.contracted_colorless_vertex_rule(graph) {
+            UVNode {
+                dod: vertex.dod() as i32,
+                num: colorless.into(),
+            }
+        } else {
+            UVNode {
+                dod: vertex.dod() as i32,
+                num: Atom::new_num(1).into(),
+            }
         }
     }
 
@@ -2252,6 +2257,10 @@ pub struct UnfoldedWood {
 }
 
 impl UnfoldedWood {
+    pub fn n_elements(&self) -> usize {
+        self.elements.len()
+    }
+
     pub fn show_structure(&self, wood: &Wood, graph: &UVGraph) -> String {
         let mut out = wood.show_graphs(graph);
         for e in &self.elements {
@@ -2666,6 +2675,18 @@ pub struct DAG<T, D = ()> {
     associated_data: SecondaryMap<NodeRef, D>,
 }
 
+pub struct TreeNode<T> {
+    data: T,
+    order: Option<u64>,
+    id: NodeRef,
+    parent: NodeRef,
+    children: Vec<NodeRef>, // Edges to child nodes by key
+}
+pub struct Tree<T, D = ()> {
+    nodes: SlotMap<NodeRef, TreeNode<T>>,
+    associated_data: SecondaryMap<NodeRef, D>,
+}
+
 pub type Poset<T, D> = DAG<T, D>;
 pub type HasseDiagram<T, D> = DAG<T, D>;
 
@@ -2738,18 +2759,6 @@ impl<T, D> Poset<T, D> {
         let to_node = self.nodes.get_mut(to).unwrap();
         to_node.remove_parent(from);
     }
-
-    // /// Returns an iterator over all paths starting from the root node, traversed in BFS order.
-    // pub fn bfs_paths_topo_ordered(&self) -> impl Iterator<Item = Vec<TopoOrdered<T>>>
-    // where
-    //     T: Clone,
-    // {
-    //     self.bfs_paths().map(|s| {
-    //         s.into_iter()
-    //             .map(|k| self.nodes.get(k).unwrap().to_topo_ordered().unwrap())
-    //             .collect::<Vec<_>>()
-    //     })
-    // }
 
     pub fn bfs_reach<'a>(
         &'a self,

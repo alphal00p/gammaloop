@@ -45,9 +45,10 @@ use spenso::{
     contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     structure::{
-        AbstractIndex, BaseRepName, Euclidean, HasStructure, Lorentz, NamedStructure, PhysReps,
-        Representation, ScalarTensor, ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND,
-        COLORANTISEXT, COLORFUND, COLORSEXT, EUCLIDEAN,
+        AbstractIndex, BaseRepName, CastStructure, Euclidean, HasStructure, Lorentz,
+        NamedStructure, PhysReps, Representation, ScalarTensor, Shadowable, TensorStructure,
+        ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND, COLORSEXT,
+        EUCLIDEAN,
     },
     ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
 };
@@ -69,6 +70,7 @@ use symbolica::{
     atom::Atom,
     domains::{float::NumericalFloatLike, rational::Rational},
     id::{Pattern, Replacement},
+    state::State,
 };
 //use symbolica::{atom::Symbol,state::State};
 
@@ -126,10 +128,7 @@ impl VertexInfo {
             VertexInfo::InteractonVertexInfo(i) => i.dod(),
         }
     }
-    pub fn generate_vertex_slots(
-        &self,
-        shifts: (usize, usize, usize),
-    ) -> (VertexSlots, (usize, usize, usize)) {
+    pub fn generate_vertex_slots(&self, shifts: Shifts) -> (VertexSlots, Shifts) {
         match self {
             VertexInfo::ExternalVertexInfo(e) => {
                 let (e, shifts) = e.particle.slots(shifts);
@@ -308,25 +307,21 @@ impl InteractionVertexInfo {
             })
             .collect();
 
-        let irep: Representation<PhysReps> =
-            Euclidean::new_dimed_rep_selfless(color_structure.len()).cast();
-        let i = irep.new_slot(AbstractIndex::try_from(format!("i{}", vertex_pos)).unwrap());
+        let [i, j] = vertex_slots.coupling_indices.unwrap();
 
         let color_structure = DataTensor::Dense(
-            DenseTensor::from_data(color_structure, VecStructure::from(vec![i])).unwrap(),
+            DenseTensor::from_data(color_structure, VecStructure::from(vec![i.cast()])).unwrap(),
         );
 
-        let jrep: Representation<PhysReps> =
-            Euclidean::new_dimed_rep_selfless(spin_structure.len()).cast();
-
-        let j = jrep.new_slot(AbstractIndex::try_from(format!("j{}", vertex_pos)).unwrap());
-
         let spin_structure = DataTensor::Dense(
-            DenseTensor::from_data(spin_structure, VecStructure::from(vec![j])).unwrap(),
+            DenseTensor::from_data(spin_structure, VecStructure::from(vec![j.cast()])).unwrap(),
         );
 
         let mut couplings: DataTensor<Atom> =
-            DataTensor::Sparse(SparseTensor::empty(VecStructure::from(vec![i, j])));
+            DataTensor::Sparse(SparseTensor::empty(VecStructure::from(vec![
+                i.cast(),
+                j.cast(),
+            ])));
 
         for (i, row) in self.vertex_rule.couplings.iter().enumerate() {
             for (j, col) in row.iter().enumerate() {
@@ -503,13 +498,25 @@ impl Edge {
     }
 
     pub fn numerator(&self, graph: &BareGraph) -> Atom {
+        let [colorless, color] = self.color_separated_numerator(graph);
+
+        colorless * color
+    }
+
+    pub fn color_separated_numerator(&self, graph: &BareGraph) -> [Atom; 2] {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let in_slots = self.in_slot(graph);
         let out_slots = self.out_slot(graph);
 
         match self.edge_type {
-            EdgeType::Incoming => self.particle.incoming_polarization_atom(&out_slots, num),
-            EdgeType::Outgoing => self.particle.outgoing_polarization_atom(&in_slots, num),
+            EdgeType::Incoming => [
+                self.particle.incoming_polarization_atom(&out_slots, num),
+                Atom::new_num(1),
+            ],
+            EdgeType::Outgoing => [
+                self.particle.outgoing_polarization_atom(&in_slots, num),
+                Atom::new_num(1),
+            ],
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
@@ -575,10 +582,11 @@ impl Edge {
                     Atom::parse("x_").unwrap().into_pattern().into(),
                 ));
 
+                let mut color_atom = Atom::new_num(1);
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
                     let id: NamedStructure<String, ()> =
                         NamedStructure::from_iter([cin, cout], "id".into(), None);
-                    atom = atom * &id.to_symbolic().unwrap();
+                    color_atom = color_atom * &id.to_symbolic().unwrap();
                 }
 
                 let reps: Vec<Replacement> = replacements_in
@@ -587,7 +595,10 @@ impl Edge {
                     .map(|(pat, rhs)| Replacement::new(pat, rhs))
                     .collect();
 
-                atom.replace_all_multiple(&reps)
+                [
+                    atom.replace_all_multiple(&reps),
+                    color_atom.replace_all_multiple(&reps),
+                ]
             }
         }
     }
@@ -635,10 +646,7 @@ impl Vertex {
             .0
     }
 
-    pub fn generate_vertex_slots(
-        &self,
-        shifts: (usize, usize, usize),
-    ) -> (VertexSlots, (usize, usize, usize)) {
+    pub fn generate_vertex_slots(&self, shifts: Shifts) -> (VertexSlots, Shifts) {
         self.vertex_info.generate_vertex_slots(shifts)
     }
 
@@ -692,6 +700,39 @@ impl Vertex {
             .clone();
 
         Some(scalar)
+    }
+
+    pub fn colorless_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 2]> {
+        let [spin, color, couplings] = self.apply_vertex_rule(graph)?;
+
+        let colorless = spin.contract(&couplings).unwrap();
+
+        Some([colorless, color])
+    }
+
+    pub fn contracted_colorless_vertex_rule(&self, graph: &BareGraph) -> Option<Atom> {
+        let [spin, color, couplings] = self.apply_vertex_rule(graph)?;
+
+        let v = graph.get_vertex_position(&self.name).unwrap();
+        let color_shadow = color
+            .structure()
+            .clone()
+            .to_named(State::get_symbol("Col"), Some(v))
+            .to_shell()
+            .expanded_shadow()
+            .unwrap()
+            .cast_structure()
+            .into();
+
+        let colorless = spin
+            .contract(&couplings)
+            .unwrap()
+            .contract(&color_shadow)
+            .unwrap()
+            .scalar()
+            .unwrap();
+
+        Some(colorless)
     }
 }
 
@@ -819,7 +860,26 @@ pub struct BareGraph {
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub vertex_slots: Vec<VertexSlots>,
-    pub shifts: (usize, usize, usize),
+    pub shifts: Shifts,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Shifts {
+    pub lorentz: usize,
+    pub color: usize,
+    pub spin: usize,
+    pub coupling: usize,
+}
+
+impl Default for Shifts {
+    fn default() -> Self {
+        Shifts {
+            lorentz: 0,
+            color: 0,
+            spin: 0,
+            coupling: 0,
+        }
+    }
 }
 
 impl BareGraph {
@@ -967,7 +1027,7 @@ impl BareGraph {
             vertex_name_to_position,
             edge_name_to_position: HashMap::default(),
             vertex_slots: vec![],
-            shifts: (0, 0, MAX_COLOR_INNER_CONTRACTIONS),
+            shifts: Shifts::default(),
         };
 
         // let mut edges: Vec<Edge> = vec![];
@@ -1046,10 +1106,16 @@ impl BareGraph {
     }
 
     fn generate_vertex_slots(&mut self) {
+        let initial_shifts = Shifts {
+            spin: 0,
+            color: MAX_COLOR_INNER_CONTRACTIONS,
+            lorentz: 0,
+            coupling: 0,
+        };
         let (v, s) = self
             .vertices
             .iter()
-            .fold((vec![], self.shifts), |(mut acc, shifts), v| {
+            .fold((vec![], initial_shifts), |(mut acc, shifts), v| {
                 let (e, new_shifts) = v.generate_vertex_slots(shifts);
                 acc.push(e);
                 (acc, new_shifts)
@@ -1059,9 +1125,9 @@ impl BareGraph {
     }
 
     fn generate_internal_indices_for_edges(&mut self) {
-        self.shifts.0 = self.shifts.1 + self.shifts.2;
+        self.shifts.lorentz = self.shifts.spin + self.shifts.color;
         for (i, edge) in self.edges.iter_mut().enumerate() {
-            edge.internal_index = Some(self.shifts.0 + i + 1);
+            edge.internal_index = Some(self.shifts.lorentz + i + 1);
         }
     }
 

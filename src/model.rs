@@ -1,3 +1,4 @@
+use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::utils::{self, FloatLike, F};
 
@@ -11,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
 use spenso::parametric::{ExpandedCoefficent, TensorCoefficient};
-use spenso::structure::{Dimension, ExpandedIndex, FlatIndex, VecStructure, CONCRETEIND};
+use spenso::structure::{
+    ConstructibleSlot, Dimension, Euclidean, ExpandedIndex, FlatIndex, VecStructure, CONCRETEIND,
+};
 use spenso::{
     contraction::IsZero,
     structure::{
@@ -154,6 +157,7 @@ pub struct VertexRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VertexSlots {
     edge_slots: Vec<EdgeSlots<Dual<Lorentz>>>,
+    pub coupling_indices: Option<[Slot<Euclidean>; 2]>, //None for external vertices
 }
 
 impl Index<usize> for VertexSlots {
@@ -167,6 +171,7 @@ impl From<EdgeSlots<Dual<Lorentz>>> for VertexSlots {
     fn from(value: EdgeSlots<Dual<Lorentz>>) -> Self {
         VertexSlots {
             edge_slots: vec![value],
+            coupling_indices: None,
         }
     }
 }
@@ -191,17 +196,39 @@ impl VertexRule {
         dod
     }
 
-    pub fn generate_vertex_slots(
-        &self,
-        mut shifts: (usize, usize, usize),
-    ) -> (VertexSlots, (usize, usize, usize)) {
+    pub fn generate_vertex_slots(&self, mut shifts: Shifts) -> (VertexSlots, Shifts) {
         let mut edge_slots = vec![];
         for p in &self.particles {
             let (e, s) = p.slots(shifts);
             edge_slots.push(e);
             shifts = s;
         }
-        (VertexSlots { edge_slots }, shifts)
+
+        let Shifts {
+            coupling: coupling_shift,
+            ..
+        } = shifts;
+
+        let i_dim = self.couplings.len();
+        let j_dim = self.couplings[0].len();
+
+        let coupling_indices = Some([
+            Euclidean::new_slot_selfless(i_dim, coupling_shift),
+            Euclidean::new_slot_selfless(j_dim, coupling_shift + 1),
+        ]);
+
+        (
+            VertexSlots {
+                edge_slots,
+                coupling_indices,
+            },
+            Shifts {
+                lorentz: shifts.lorentz,
+                spin: shifts.spin,
+                color: shifts.color,
+                coupling: coupling_shift + 2,
+            },
+        )
     }
     pub fn from_serializable_vertex_rule(
         model: &Model,
@@ -681,13 +708,10 @@ impl Particle {
         (vec![rep.new_slot(shift)], shift + 1)
     }
 
-    pub fn slots<LR: BaseRepName>(
-        &self,
-        shifts: (usize, usize, usize),
-    ) -> (EdgeSlots<LR>, (usize, usize, usize)) {
-        let (lorentz, shift_lor) = self.lorentz_slots(shifts.0);
-        let (spin, shift_spin) = self.spin_slots(shifts.1);
-        let (color, shift_color) = self.color_slots(shifts.2);
+    pub fn slots<LR: BaseRepName>(&self, shifts: Shifts) -> (EdgeSlots<LR>, Shifts) {
+        let (lorentz, shift_lor) = self.lorentz_slots(shifts.lorentz);
+        let (spin, shift_spin) = self.spin_slots(shifts.spin);
+        let (color, shift_color) = self.color_slots(shifts.color);
 
         (
             EdgeSlots {
@@ -695,7 +719,12 @@ impl Particle {
                 spin,
                 color,
             },
-            (shift_lor, shift_spin, shift_color),
+            Shifts {
+                lorentz: shift_lor,
+                spin: shift_spin,
+                color: shift_color,
+                coupling: shifts.coupling,
+            },
         )
     }
 

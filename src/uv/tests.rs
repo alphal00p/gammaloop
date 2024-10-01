@@ -40,38 +40,16 @@ fn lbl() {
 
     insta::assert_ron_snapshot!("lbl_cycles", cycles);
 
-    // for cycle in cycles {
-    //     println!("{:?}", cycle);
-    //     println!("{}", uv_graph.0.dot(&cycle));
-    // }
+    let uv_graph = UVGraph::from_graph(&graph.bare_graph);
 
-    // if let AtomView::Mul(mul) = numerator.as_view() {
-    //     let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
+    println!("tbt_dot{}", uv_graph.0.base_dot());
 
-    //     println!("{}", net.dot());
-    //     for (_, t) in net.graph.nodes {
-    //         // println!("{}", t.structure());
-    //     }
-    // }
+    let wood = uv_graph.wood();
 
-    for e in uv_graph
-        .0
-        .iter_internal_edge_data(&uv_graph.0.full_node().internal_graph)
-    {
-        println!("{}", e.num);
-    }
+    let structure = wood.unfold(&uv_graph);
 
-    for (_, n) in uv_graph
-        .0
-        .iter_node_data(&uv_graph.0.full_node().internal_graph)
-    {
-        println!("{}", n.num);
-    }
-
-    println!("{}", uv_graph.dod(&uv_graph.0.full_node().internal_graph));
-    println!("{}", uv_graph.wood().dot(&uv_graph));
-
-    println!("{}", uv_graph.wood().unfold(&uv_graph));
+    println!("{}", structure.show_structure(&wood, &uv_graph));
+    println!("{}", structure.n_elements());
 }
 
 #[test]
@@ -90,91 +68,12 @@ fn tbt() {
 
     println!("tbt_dot{}", uv_graph.0.base_dot());
 
-    // let lmb = graph.bare_graph.loop_momentum_basis.clone();
-
-    // let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
-
-    // let all_cycles = uv_graph.0.read_tarjan();
-    // // assert_eq!(all_cycles.len(), 1);
-
-    // for cycle in all_cycles {
-    //     println!("{}", uv_graph.0.dot(&cycle));
-    // }
-
-    // // insta::assert_ron_snapshot!("lbl_cycles", cycles);
-
-    // // for cycle in cycles {
-    // //     println!("{:?}", cycle);
-    // //     println!("{}", uv_graph.0.dot(&cycle));
-    // // }
-
-    // // if let AtomView::Mul(mul) = numerator.as_view() {
-    // //     let net = SymbolicTensor::mul_to_tracking_network(mul).unwrap();
-
-    // //     println!("{}", net.dot());
-    // //     for (_, t) in net.graph.nodes {
-    // //         // println!("{}", t.structure());
-    // //     }
-    // // }
-
-    // for e in uv_graph
-    //     .0
-    //     .iter_internal_edge_data(&uv_graph.0.full_node().internal_graph)
-    // {
-    //     println!("{}", e.num);
-    // }
-
-    // for (_, n) in uv_graph
-    //     .0
-    //     .iter_node_data(&uv_graph.0.full_node().internal_graph)
-    // {
-    //     println!("{}", n.num);
-    // }
-
-    // println!("{}", uv_graph.dod(&uv_graph.0.full_node().internal_graph));
-
-    // // println!("{}", pset.dot_structure());
-
-    // // println!("{}", pset.remove_transitive_edges().dot_structure());
-
-    // // uv_graph.wood().dot_spinneys(&uv_graph);
-
-    // let mut wood = uv_graph.wood();
-
-    // println!("{}", wood.dot(&uv_graph));
-
-    // let shift = wood.poset.shift();
-
-    // println!(
-    //     "{}",
-    //     wood.poset.nodes[wood.poset.minimum().unwrap()].dot_id(shift)
-    // );
-
-    // for (i, p) in wood.poset.bfs_paths().enumerate() {
-    //     println!("path {}", i);
-    //     for n in p {
-    //         print!("{}->", wood.poset.nodes[n].dot_id(shift));
-    //     }
-    //     println!();
-    // }
-
-    // println!("Inverse");
-
-    // wood.poset.invert();
-
-    // println!("{}", wood.dot(&uv_graph));
-    // for (i, p) in wood.poset.bfs_paths().enumerate() {
-    //     println!("path {}", i);
-    //     for n in p {
-    //         print!("{}->", wood.poset.nodes[n].dot_id(shift));
-    //     }
-    //     println!();
-    // }
-
     let wood = uv_graph.wood();
 
     let structure = wood.unfold(&uv_graph);
+
     println!("{}", structure.show_structure(&wood, &uv_graph));
+    println!("{}", structure.n_elements());
 }
 
 #[test]
