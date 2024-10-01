@@ -38,7 +38,7 @@
       inherit (pkgs) lib;
 
       craneLib =
-        crane.lib.${system}.overrideToolchain
+        (crane.mkLib nixpkgs.legacyPackages.${system}).overrideToolchain
         fenix.packages.${system}.stable.toolchain;
       src = craneLib.cleanCargoSource (craneLib.path ./.);
 
@@ -156,6 +156,7 @@
         packages = with pkgs; [
           # pkgs.ripgrep
           cargo-udeps
+          cargo-insta
           openssl
           gnum4
           gmp.dev

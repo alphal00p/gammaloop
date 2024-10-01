@@ -430,6 +430,18 @@ import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'top_bubble.dot')} --no_com
 output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
 
+@pytest.fixture(scope="session")
+def hairy_glue_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_hairy_glue_box", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'hairy_glue_box.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
 
 @pytest.fixture(scope="session")
 def ta_ta_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:

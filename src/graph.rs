@@ -9,7 +9,7 @@ use crate::{
     },
     gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
-    model::{self, EdgeSlots, Model, Particle, VertexSlots},
+    model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, Signature, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
@@ -37,6 +37,7 @@ use momtrop::SampleGenerator;
 use nalgebra::DMatrix;
 
 use gat_lending_iterator::LendingIterator;
+use rayon::collections::vec_deque;
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
@@ -44,10 +45,12 @@ use spenso::{
     complex::Complex,
     contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
+    scalar::Scalar,
     structure::{
-        AbstractIndex, BaseRepName, Euclidean, HasStructure, Lorentz, NamedStructure, PhysReps,
-        Representation, ScalarTensor, ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND,
-        COLORANTISEXT, COLORFUND, COLORSEXT, EUCLIDEAN,
+        AbstractIndex, BaseRepName, CastStructure, Euclidean, HasStructure, Lorentz,
+        NamedStructure, PhysReps, Representation, ScalarTensor, Shadowable, TensorStructure,
+        ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND, COLORSEXT,
+        EUCLIDEAN,
     },
     ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
 };
@@ -58,7 +61,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fmt::{Display, Formatter},
     ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
@@ -66,9 +69,10 @@ use std::{
 };
 
 use symbolica::{
-    atom::Atom,
+    atom::{Atom, Symbol},
     domains::{float::NumericalFloatLike, rational::Rational},
     id::{Pattern, Replacement},
+    state::State,
 };
 //use symbolica::{atom::Symbol,state::State};
 
@@ -110,24 +114,67 @@ pub enum SerializableVertexInfo {
 #[enum_dispatch]
 pub trait HasVertexInfo {
     fn get_type(&self) -> SmartString<LazyCompact>;
+
+    fn apply_vertex_rule(
+        &self,
+        edges: &[isize],
+        vertex_pos: usize,
+        vertex_slots: &VertexSlots,
+    ) -> Option<[DataTensor<Atom>; 3]>;
 }
 
 #[derive(Debug, Clone)]
-#[enum_dispatch(HasVertexInfo)]
+// #[enum_dispatch(HasVertexInfo)]
 pub enum VertexInfo {
     ExternalVertexInfo(ExternalVertexInfo),
     InteractonVertexInfo(InteractionVertexInfo),
 }
 
-impl VertexInfo {
-    pub fn generate_vertex_slots(
+impl HasVertexInfo for VertexInfo {
+    fn get_type(&self) -> SmartString<LazyCompact> {
+        match self {
+            VertexInfo::ExternalVertexInfo(e) => e.get_type(),
+            VertexInfo::InteractonVertexInfo(i) => i.get_type(),
+        }
+    }
+
+    fn apply_vertex_rule(
         &self,
-        shifts: (usize, usize, usize),
-    ) -> (VertexSlots, (usize, usize, usize)) {
+        edges: &[isize],
+        vertex_pos: usize,
+        vertex_slots: &VertexSlots,
+    ) -> Option<[DataTensor<Atom>; 3]> {
         match self {
             VertexInfo::ExternalVertexInfo(e) => {
-                let (e, shifts) = e.particle.slots(shifts);
-                (e.into(), shifts)
+                e.apply_vertex_rule(edges, vertex_pos, vertex_slots)
+            }
+            VertexInfo::InteractonVertexInfo(i) => {
+                i.apply_vertex_rule(edges, vertex_pos, vertex_slots)
+            }
+        }
+    }
+}
+
+impl VertexInfo {
+    pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
+        match self {
+            VertexInfo::ExternalVertexInfo(e) => {
+                let (e, mut updated_shifts) = match e.direction {
+                    EdgeType::Outgoing => e.particle.get_anti_particle(model).slots(shifts),
+                    EdgeType::Incoming => e.particle.slots(shifts),
+                    EdgeType::Virtual => panic!("Virtual external vertex not supported"),
+                };
+
+                if updated_shifts.color == shifts.color {
+                    updated_shifts.color += 1;
+                }
+                if updated_shifts.spin == shifts.spin {
+                    updated_shifts.spin += 1;
+                }
+                if updated_shifts.lorentz == shifts.lorentz {
+                    updated_shifts.lorentz += 1;
+                }
+                (e.into(), updated_shifts)
             }
             VertexInfo::InteractonVertexInfo(i) => i.vertex_rule.generate_vertex_slots(shifts),
         }
@@ -155,6 +202,29 @@ impl HasVertexInfo for ExternalVertexInfo {
     fn get_type(&self) -> SmartString<LazyCompact> {
         SmartString::<LazyCompact>::from("external_vertex_info")
     }
+
+    fn apply_vertex_rule(
+        &self,
+        edges: &[isize],
+        vertex_pos: usize,
+        vertex_slots: &VertexSlots,
+    ) -> Option<[DataTensor<Atom>; 3]> {
+        let polarization = match self.direction {
+            EdgeType::Incoming => self
+                .particle
+                .incoming_polarization_atom(&vertex_slots[0].dual(), vertex_pos),
+            EdgeType::Outgoing => self
+                .particle
+                .outgoing_polarization_atom(&vertex_slots[0].dual(), vertex_pos),
+            EdgeType::Virtual => panic!("Virtual external vertex not supported"),
+        };
+
+        Some([
+            DataTensor::new_scalar(polarization),
+            DataTensor::new_scalar(Atom::one()),
+            DataTensor::new_scalar(Atom::one()),
+        ])
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -163,8 +233,12 @@ pub struct InteractionVertexInfo {
     pub vertex_rule: Arc<model::VertexRule>,
 }
 
-impl InteractionVertexInfo {
-    pub fn apply_vertex_rule(
+impl HasVertexInfo for InteractionVertexInfo {
+    fn get_type(&self) -> SmartString<LazyCompact> {
+        SmartString::<LazyCompact>::from("interacton_vertex_info")
+    }
+
+    fn apply_vertex_rule(
         &self,
         edges: &[isize],
         vertex_pos: usize,
@@ -215,11 +289,13 @@ impl InteractionVertexInfo {
             })
             .collect_vec();
 
+        let mut color_dummy_shift = 0;
         let color_structure: Vec<Atom> = self
             .vertex_rule
             .color_structures
             .iter()
             .map(|cs| {
+                let n_dummies = ColorStructure::number_of_dummies_in_atom(cs.as_view());
                 let mut atom = cs.clone();
                 //a is adjoint index, i is fundamental index, ia is antifundamental index, s is sextet ,sa is antisextet
 
@@ -281,42 +357,44 @@ impl InteractionVertexInfo {
                     atom = atom.replace_all_multiple(&reps);
                 }
 
-                for i in 0..MAX_COLOR_INNER_CONTRACTIONS {
+                for i in 0..n_dummies {
                     let pat: Pattern = Atom::parse(&format!("indexid({})", -1 - i as i64))
                         .unwrap()
                         .into_pattern();
 
                     atom = pat.replace_all(
                         atom.as_view(),
-                        &Atom::new_num(i as i64).into_pattern().into(),
+                        &Atom::new_num(usize::from(
+                            vertex_slots.internal_dummy.color[i + color_dummy_shift],
+                        ) as i64)
+                        .into_pattern()
+                        .into(),
                         None,
                         None,
                     );
                 }
 
+                color_dummy_shift += n_dummies;
+
                 atom
             })
             .collect();
 
-        let irep: Representation<PhysReps> =
-            Euclidean::new_dimed_rep_selfless(color_structure.len()).cast();
-        let i = irep.new_slot(AbstractIndex::try_from(format!("i{}", vertex_pos)).unwrap());
+        let [i, j] = vertex_slots.coupling_indices.unwrap();
 
         let color_structure = DataTensor::Dense(
-            DenseTensor::from_data(color_structure, VecStructure::from(vec![i])).unwrap(),
+            DenseTensor::from_data(color_structure, VecStructure::from(vec![i.cast()])).unwrap(),
         );
 
-        let jrep: Representation<PhysReps> =
-            Euclidean::new_dimed_rep_selfless(spin_structure.len()).cast();
-
-        let j = jrep.new_slot(AbstractIndex::try_from(format!("j{}", vertex_pos)).unwrap());
-
         let spin_structure = DataTensor::Dense(
-            DenseTensor::from_data(spin_structure, VecStructure::from(vec![j])).unwrap(),
+            DenseTensor::from_data(spin_structure, VecStructure::from(vec![j.cast()])).unwrap(),
         );
 
         let mut couplings: DataTensor<Atom> =
-            DataTensor::Sparse(SparseTensor::empty(VecStructure::from(vec![i, j])));
+            DataTensor::Sparse(SparseTensor::empty(VecStructure::from(vec![
+                i.cast(),
+                j.cast(),
+            ])));
 
         for (i, row) in self.vertex_rule.couplings.iter().enumerate() {
             for (j, col) in row.iter().enumerate() {
@@ -327,12 +405,6 @@ impl InteractionVertexInfo {
         }
 
         Some([spin_structure, color_structure, couplings])
-    }
-}
-
-impl HasVertexInfo for InteractionVertexInfo {
-    fn get_type(&self) -> SmartString<LazyCompact> {
-        SmartString::<LazyCompact>::from("interacton_vertex_info")
     }
 }
 
@@ -407,6 +479,7 @@ pub struct Edge {
     pub propagator: Arc<model::Propagator>,
     pub particle: Arc<model::Particle>,
     pub vertices: [usize; 2],
+    pub internal_index: Vec<AbstractIndex>,
 }
 
 impl Edge {
@@ -428,6 +501,7 @@ impl Edge {
                     .get_vertex_position(&serializable_edge.vertices[1])
                     .unwrap(),
             ],
+            internal_index: vec![],
         }
     }
 
@@ -474,14 +548,28 @@ impl Edge {
         graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn numerator(&self, graph: &BareGraph) -> (Atom, usize) {
+    pub fn numerator(&self, graph: &BareGraph) -> Atom {
+        let [colorless, color] = self.color_separated_numerator(graph);
+
+        colorless * color
+    }
+
+    pub fn color_separated_numerator(&self, graph: &BareGraph) -> [Atom; 2] {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let in_slots = self.in_slot(graph);
         let out_slots = self.out_slot(graph);
 
         match self.edge_type {
-            EdgeType::Incoming => (self.particle.incoming_polarization_atom(&out_slots, num), 0),
-            EdgeType::Outgoing => (self.particle.outgoing_polarization_atom(&in_slots, num), 0),
+            EdgeType::Incoming => {
+                let [lorentz, spin, color] = in_slots.dual().kroneker(&out_slots);
+                println!("Incoming color: {}", color);
+                [lorentz * spin, color]
+            }
+            EdgeType::Outgoing => {
+                let [lorentz, spin, color] = out_slots.dual().kroneker(&in_slots);
+                println!("Outgoing color: {}", color);
+                [lorentz * spin, color]
+            }
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
@@ -507,7 +595,7 @@ impl Edge {
                 }
 
                 let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
-                let pindex_num = graph.shifts.0 + 1;
+                let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.is_antiparticle() {
                     atom = pslashfun.replace_all(
                         atom.as_view(),
@@ -547,10 +635,11 @@ impl Edge {
                     Atom::parse("x_").unwrap().into_pattern().into(),
                 ));
 
+                let mut color_atom = Atom::new_num(1);
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
                     let id: NamedStructure<String, ()> =
                         NamedStructure::from_iter([cin, cout], "id".into(), None);
-                    atom = atom * &id.to_symbolic().unwrap();
+                    color_atom = color_atom * &id.to_symbolic().unwrap();
                 }
 
                 let reps: Vec<Replacement> = replacements_in
@@ -559,7 +648,10 @@ impl Edge {
                     .map(|(pat, rhs)| Replacement::new(pat, rhs))
                     .collect();
 
-                (atom.replace_all_multiple(&reps), pindex_num + 1)
+                [
+                    atom.replace_all_multiple(&reps),
+                    color_atom.replace_all_multiple(&reps),
+                ]
             }
         }
     }
@@ -604,11 +696,8 @@ impl Vertex {
             .0
     }
 
-    pub fn generate_vertex_slots(
-        &self,
-        shifts: (usize, usize, usize),
-    ) -> (VertexSlots, (usize, usize, usize)) {
-        self.vertex_info.generate_vertex_slots(shifts)
+    pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
+        self.vertex_info.generate_vertex_slots(shifts, model)
     }
 
     pub fn from_serializable_vertex(model: &model::Model, vertex: &SerializableVertex) -> Vertex {
@@ -639,15 +728,11 @@ impl Vertex {
 
     pub fn apply_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 3]> {
         let pos = graph.get_vertex_position(&self.name).unwrap();
-        match &self.vertex_info {
-            VertexInfo::ExternalVertexInfo(_) => None,
-            VertexInfo::InteractonVertexInfo(interaction_vertex_info) => interaction_vertex_info
-                .apply_vertex_rule(
-                    &self.add_signs_to_edges(graph),
-                    pos,
-                    &graph.vertex_slots[pos],
-                ),
-        }
+        self.vertex_info.apply_vertex_rule(
+            &self.add_signs_to_edges(graph),
+            pos,
+            &graph.vertex_slots[pos],
+        )
     }
 
     pub fn contracted_vertex_rule(&self, graph: &BareGraph) -> Option<Atom> {
@@ -661,6 +746,37 @@ impl Vertex {
             .clone();
 
         Some(scalar)
+    }
+
+    pub fn colorless_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 2]> {
+        let [spin, color, couplings] = self.apply_vertex_rule(graph)?;
+
+        let colorless = spin.contract(&couplings).unwrap();
+
+        Some([colorless, color])
+    }
+
+    pub fn contracted_colorless_vertex_rule(
+        &self,
+        graph: &BareGraph,
+    ) -> Option<(Atom, DataTensor<Atom, NamedStructure<Symbol, usize>>)> {
+        let [spin, color, couplings] = self.apply_vertex_rule(graph)?;
+
+        let v = graph.get_vertex_position(&self.name).unwrap();
+
+        let color = color.map_structure(|s| s.to_named(State::get_symbol("Col"), Some(v)));
+
+        let color_shadow = color.expanded_shadow().unwrap().cast_structure().into();
+
+        let colorless = spin
+            .contract(&couplings)
+            .unwrap()
+            .contract(&color_shadow)
+            .unwrap()
+            .scalar()
+            .unwrap();
+
+        Some((colorless, color))
     }
 }
 
@@ -788,10 +904,61 @@ pub struct BareGraph {
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub vertex_slots: Vec<VertexSlots>,
-    pub shifts: (usize, usize, usize),
+    pub shifts: Shifts,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Shifts {
+    pub lorentz: usize,
+    pub lorentzdummy: usize,
+    pub color: usize,
+    pub colordummy: usize,
+    pub spin: usize,
+    pub coupling: usize,
+}
+
+impl Default for Shifts {
+    fn default() -> Self {
+        Shifts {
+            lorentz: 0,
+            color: 0,
+            spin: 0,
+            coupling: 0,
+            lorentzdummy: 0,
+            colordummy: 0,
+        }
+    }
 }
 
 impl BareGraph {
+    pub fn external_slots(&self) -> Vec<EdgeSlots<Lorentz>> {
+        self.vertices
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| {
+                if matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)) {
+                    Some(self.vertex_slots[i][0].dual())
+                } else {
+                    None
+                }
+            })
+            .collect()
+        // self.external_edges()
+        //     .iter()
+        //     .map(|e| match e.edge_type {
+        //         EdgeType::Incoming => e.out_slot(self),
+        //         EdgeType::Outgoing => e.in_slot(self),
+        //         _ => panic!("External edge is not incoming or outgoing"),
+        //     })
+        //     .collect()
+    }
+
+    pub fn external_edges(&self) -> Vec<&Edge> {
+        self.external_edges
+            .iter()
+            .map(|&i| &self.edges[i])
+            .collect()
+    }
     pub fn external_particle_spin(&self) -> Vec<isize> {
         self.external_edges
             .iter()
@@ -936,7 +1103,7 @@ impl BareGraph {
             vertex_name_to_position,
             edge_name_to_position: HashMap::default(),
             vertex_slots: vec![],
-            shifts: (0, 0, MAX_COLOR_INNER_CONTRACTIONS),
+            shifts: Shifts::default(),
         };
 
         // let mut edges: Vec<Edge> = vec![];
@@ -1006,24 +1173,58 @@ impl BareGraph {
             .map(|e| g.get_edge_position(e).unwrap())
             .collect();
 
-        g.generate_vertex_slots();
+        g.generate_vertex_slots(model);
 
         // panic!("{:?}", g.edge_name_to_position);
-
+        g.generate_internal_indices_for_edges();
         g
     }
 
-    fn generate_vertex_slots(&mut self) {
-        let (v, s) = self
+    fn generate_vertex_slots(&mut self, model: &Model) {
+        let initial_shifts = Shifts {
+            spin: 0,
+            lorentzdummy: 0,
+            colordummy: 0,
+            color: 0,
+            lorentz: 0,
+            coupling: 0,
+        };
+
+        let (mut external, s) = self
             .vertices
             .iter()
-            .fold((vec![], self.shifts), |(mut acc, shifts), v| {
-                let (e, new_shifts) = v.generate_vertex_slots(shifts);
+            .filter(|v| matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)))
+            .fold((VecDeque::new(), initial_shifts), |(mut acc, shifts), v| {
+                let (e, new_shifts) = v.generate_vertex_slots(shifts, model);
+                acc.push_back(e);
+                (acc, new_shifts)
+            }); //assumes that the order of the external vertices is the same as the order of the external edges... this is a bit dangerous
+
+        let (mut v, s) = self
+            .vertices
+            .iter()
+            .fold((vec![], s), |(mut acc, shifts), v| {
+                if matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)) {
+                    acc.push(external.pop_front().unwrap());
+                    return (acc, shifts);
+                }
+                let (e, new_shifts) = v.generate_vertex_slots(shifts, model);
                 acc.push(e);
                 (acc, new_shifts)
             });
         self.shifts = s;
+        for slot in &mut v {
+            slot.shift_internals(&self.shifts);
+        }
+
         self.vertex_slots = v;
+    }
+
+    fn generate_internal_indices_for_edges(&mut self) {
+        self.shifts.lorentz = self.shifts.spin + self.shifts.color;
+        for (i, edge) in self.edges.iter_mut().enumerate() {
+            edge.internal_index = vec![(self.shifts.lorentz + i + 1).into()];
+        }
     }
 
     #[inline]
@@ -2403,6 +2604,11 @@ impl DerivedGraphData<UnInit> {
         export_settings: &ExportSettings,
     ) -> DerivedGraphData<Evaluators> {
         let extra_info = self.generate_extra_info(export_path);
+        let color_projector = export_settings
+            .numerator_settings
+            .color_projector
+            .as_ref()
+            .map(|s| Atom::parse(s).unwrap());
 
         let color_simplified =
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
@@ -2410,16 +2616,17 @@ impl DerivedGraphData<UnInit> {
                 let global = Atom::parse(global).unwrap();
                 self.map_numerator(|n| {
                     n.from_global(global, base_graph)
-                        .color_symplify()
-                        .color_project()
+                        .color_simplify(color_projector)
+                    // .color_project()
                 })
             } else {
-                self.map_numerator(|n| n.from_graph(base_graph).color_symplify().color_project())
+                self.map_numerator(|n| n.from_graph(base_graph).color_simplify(color_projector))
+                //.color_project())
             };
 
         let parsed = match &export_settings.numerator_settings.gamma_algebra {
             GammaAlgebraMode::Symbolic => {
-                color_simplified.map_numerator(|n| n.gamma_symplify().parse())
+                color_simplified.map_numerator(|n| n.gamma_simplify().parse())
             }
             GammaAlgebraMode::Concrete => color_simplified.map_numerator(|n| n.parse()),
         };

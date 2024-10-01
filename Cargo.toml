@@ -99,6 +99,7 @@ serde_repr = "0.1.19"
 compensated-summation = "0.3.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 serde_with = "3.9.0"
+insta = { version = "1.40.0", features = ["ron", "toml"] }
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -129,5 +130,5 @@ fail-on-warnings = []
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-# spenso = { path = "../../alphal00p/spenso" }
+# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+spenso = { path = "../../alphal00p/spenso" }

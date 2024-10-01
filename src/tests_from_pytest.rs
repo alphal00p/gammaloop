@@ -95,6 +95,7 @@ pub fn test_export_settings() -> ExportSettings {
                 compile_options: NumeratorCompileOptions::Compiled,
             }),
             global_numerator: None,
+            color_projector: None,
             gamma_algebra: GammaAlgebraMode::Concrete,
         },
         cpe_rounds_cff: Some(1),
@@ -1851,7 +1852,7 @@ fn top_bubble_gamma() {
 
     export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Symbolic;
 
-    // fs::create_dir(path.join("sym")).unwrap();
+    fs::create_dir(path.join("sym")).unwrap();
     let mut graph = graph.process_numerator(
         &model,
         ContractionSettings::Normal,
