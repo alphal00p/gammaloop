@@ -97,7 +97,7 @@ def massless_scalar_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> P
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'massless_triangle.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
