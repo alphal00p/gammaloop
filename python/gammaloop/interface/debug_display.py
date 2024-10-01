@@ -27,8 +27,7 @@ def build_general_debug_dict(log_file: str) -> Dict[str, Any]:
     return parse_log_impl(general_log_path)
 
 
-def build_eval_debug_dict(log_file: str, rotation: str, prec: str) -> Dict[str, Any]:
-    file_name = "{}_{}.jsonl".format(rotation, prec)
+def build_eval_debug_dict(log_file: str, file_name: str) -> Dict[str, Any]:
     eval_log_path = pjoin(log_file, file_name)
     return parse_log_impl(eval_log_path)
 
@@ -212,6 +211,15 @@ def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
 
             logger.info("ict+ = %s, ict- = %s",
                         ict_plus, ict_minus)
+
+            r_plus_energy_cache = esurface_subtraction_data['r_plus_energy_cache']
+            r_minus_energy_cache = esurface_subtraction_data['r_minus_energy_cache']
+
+            logger.info("r*+ energy cache")
+            logger.info(r_plus_energy_cache)
+
+            logger.info("r*- energy cache")
+            logger.info(r_minus_energy_cache)
 
             logger.info("")
 

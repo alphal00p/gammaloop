@@ -171,6 +171,7 @@ pub fn generate_cff_limit(
     limit_esurface: &Esurface,
     dep_mom: usize,
     dep_mom_expr: &ExternalShift,
+    orientations_in_limit: (Vec<Vec<bool>>, Vec<TermId>),
 ) -> Result<CFFLimit, String> {
     assert_eq!(
         left_dags.len(),
@@ -197,7 +198,7 @@ pub fn generate_cff_limit(
     )
     .unwrap();
 
-    Ok(CFFLimit { left, right })
+    Ok(CFFLimit { left, right, orientations_in_limit })
 }
 
 fn generate_cff_from_orientations(

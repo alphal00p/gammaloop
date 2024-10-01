@@ -374,7 +374,8 @@ impl StabilityLevelSetting {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Hash, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, PartialEq)]
+#[serde(tag = "type")]
 pub enum RotationSetting {
     #[serde(rename = "x")]
     #[default]
@@ -385,34 +386,52 @@ pub enum RotationSetting {
     Pi2Z,
     #[serde(rename = "none")]
     None,
+    #[serde(rename = "euler_angles")]
+    EulerAngles { alpha: f64, beta: f64, gamma: f64 },
 }
 
 impl RotationSetting {
     pub fn rotation_method(&self) -> RotationMethod {
         match self {
-            RotationSetting::Pi2X => RotationMethod::Pi2X,
-            RotationSetting::Pi2Y => RotationMethod::Pi2Y,
-            RotationSetting::Pi2Z => RotationMethod::Pi2Z,
-            RotationSetting::None => RotationMethod::Identity,
-        }
-    }
-    pub fn rotation_function<T: FloatLike>(
-        &self,
-    ) -> impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> {
-        match self {
-            RotationSetting::Pi2X => ThreeMomentum::perform_pi2_rotation_x,
-            RotationSetting::Pi2Y => ThreeMomentum::perform_pi2_rotation_y,
-            RotationSetting::Pi2Z => ThreeMomentum::perform_pi2_rotation_z,
-            RotationSetting::None => |vector: &ThreeMomentum<F<T>>| vector.clone(),
+            Self::Pi2X => RotationMethod::Pi2X,
+            Self::Pi2Y => RotationMethod::Pi2Y,
+            Self::Pi2Z => RotationMethod::Pi2Z,
+            Self::None => RotationMethod::Identity,
+            Self::EulerAngles { alpha, beta, gamma } => {
+                RotationMethod::EulerAngles(*alpha, *beta, *gamma)
+            }
         }
     }
 
-    fn as_str(&self) -> &str {
+    #[allow(clippy::type_complexity)]
+    pub fn rotation_function<'a, T: FloatLike + 'a>(
+        &'a self,
+    ) -> Box<dyn Fn(&'a ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> + 'a> {
         match self {
-            Self::Pi2X => "x",
-            Self::Pi2Y => "y",
-            Self::Pi2Z => "z",
-            Self::None => "none",
+            Self::Pi2X => Box::new(ThreeMomentum::perform_pi2_rotation_x),
+            Self::Pi2Y => Box::new(ThreeMomentum::perform_pi2_rotation_y),
+            Self::Pi2Z => Box::new(ThreeMomentum::perform_pi2_rotation_z),
+            Self::None => Box::new(|vector: &ThreeMomentum<F<T>>| vector.clone()),
+            Self::EulerAngles { alpha, beta, gamma } => Box::new(|vector: &ThreeMomentum<F<T>>| {
+                let mut cloned_vector = vector.clone();
+                let alpha_t = F::<T>::from_f64(*alpha);
+                let beta_t = F::<T>::from_f64(*beta);
+                let gamma_t = F::<T>::from_f64(*gamma);
+                cloned_vector.rotate_mut(&alpha_t, &beta_t, &gamma_t);
+                cloned_vector
+            }),
+        }
+    }
+
+    fn as_str(&self) -> String {
+        match self {
+            Self::Pi2X => "x".to_owned(),
+            Self::Pi2Y => "y".to_owned(),
+            Self::Pi2Z => "z".to_owned(),
+            Self::None => "none".to_owned(),
+            Self::EulerAngles { alpha, beta, gamma } => {
+                format!("euler {} {} {}", alpha, beta, gamma)
+            }
         }
     }
 }

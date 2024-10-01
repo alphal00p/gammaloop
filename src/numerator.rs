@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use crate::debug_info::DEBUG_LOGGER;
 use crate::graph::BareGraph;
 use crate::momentum::Polarization;
 use crate::utils::f128;
@@ -255,9 +256,7 @@ impl NumeratorEvaluateFloat for f64 {
         }
 
         if settings.general.debug > 0 {
-            for (i, p) in params.iter().enumerate() {
-                println!("{}:{}", i, p);
-            }
+            DEBUG_LOGGER.write("params", &params);
         }
     }
 
@@ -355,9 +354,7 @@ impl NumeratorEvaluateFloat for f128 {
         }
 
         if settings.general.debug > 0 {
-            for (i, p) in params.iter().enumerate() {
-                println!("{}:{}", i, p);
-            }
+            DEBUG_LOGGER.write("params", &params);
         }
     }
 

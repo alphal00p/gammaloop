@@ -10,7 +10,7 @@ use crate::{
     gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, EdgeSlots, Model, Particle, VertexSlots},
-    momentum::{FourMomentum, Polarization, Signature, ThreeMomentum},
+    momentum::{FourMomentum, Polarization, Rotation, Signature, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
         GammaAlgebraMode, Numerator, NumeratorState, NumeratorStateError, PythonState,
@@ -18,7 +18,7 @@ use crate::{
     },
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
-        static_counterterm,
+        static_counterterm::{self, CounterTerm},
     },
     utils::{sorted_vectorize, FloatLike, F},
     ExportSettings, Settings, TropicalSubgraphTableSettings,
@@ -1985,6 +1985,23 @@ impl Graph<Evaluators> {
             .unwrap()
             .evaluate_orientations(&energy_cache, settings)
     }
+
+    pub fn evaluate_threshold_counterterm<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        rotation_for_overlap: &Rotation,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        self.derived_data
+            .as_mut()
+            .unwrap()
+            .evaluate_threshold_counterterm(
+                &self.bare_graph,
+                sample,
+                rotation_for_overlap,
+                settings,
+            )
+    }
 }
 
 #[allow(dead_code)]
@@ -2287,6 +2304,27 @@ impl DerivedGraphData<Evaluators> {
                     panic!("Empty iterator in sum");
                 }
             }
+        }
+    }
+
+    pub fn evaluate_threshold_counterterm<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        rotation_for_overlap: &Rotation,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        match self.static_counterterm.as_ref() {
+            Some(ct) => CounterTerm::evaluate(
+                sample,
+                graph,
+                &self.cff_expression.as_ref().unwrap().esurfaces,
+                ct,
+                &mut self.numerator,
+                rotation_for_overlap,
+                settings,
+            ),
+            None => Complex::new(sample.zero(), sample.zero()),
         }
     }
 

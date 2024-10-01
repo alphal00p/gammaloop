@@ -2553,7 +2553,9 @@ impl Rotation {
     }
     pub fn setting(&self) -> RotationSetting {
         match self.method {
-            RotationMethod::EulerAngles(_, _, _) => panic!("Euler angles not supported"),
+            RotationMethod::EulerAngles(alpha, beta, gamma) => {
+                RotationSetting::EulerAngles { alpha, beta, gamma }
+            }
             RotationMethod::Pi2X => RotationSetting::Pi2X,
             RotationMethod::Pi2Y => RotationSetting::Pi2Y,
             RotationMethod::Pi2Z => RotationSetting::Pi2Z,
