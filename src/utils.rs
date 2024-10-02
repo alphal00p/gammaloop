@@ -3107,3 +3107,70 @@ fn complex_compare() {
 
     let ltd_arg = ltd.arg();
 }
+
+/// Checks if two lists are permutations of eachother, and establish a map between indices
+pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<PermutationMap> {
+    if left.len() != right.len() {
+        return None;
+    }
+
+    let mut left_to_right = Vec::with_capacity(left.len());
+    for elem_in_left in left.iter() {
+        let option_position = right
+            .iter()
+            .enumerate()
+            .position(|(right_index, elem_in_right)| {
+                elem_in_right == elem_in_left && !left_to_right.contains(&right_index)
+            });
+
+        if let Some(position) = option_position {
+            left_to_right.push(position);
+        } else {
+            return None;
+        }
+    }
+
+    let mut right_to_left = vec![0; left.len()];
+    for (index, left_to_right_elem) in left_to_right.iter().enumerate() {
+        right_to_left[*left_to_right_elem] = index
+    }
+
+    Some(PermutationMap {
+        left_to_right,
+        right_to_left,
+    })
+}
+
+#[derive(Clone, Debug)]
+pub struct PermutationMap {
+    left_to_right: Vec<usize>,
+    right_to_left: Vec<usize>,
+}
+
+impl PermutationMap {
+    pub fn left_to_right(&self, left_index: usize) -> usize {
+        self.left_to_right[left_index]
+    }
+
+    pub fn right_to_left(&self, right_index: usize) -> usize {
+        self.right_to_left[right_index]
+    }
+}
+
+#[test]
+fn test_is_permutation() {
+    let a = ["a", "b"];
+    let b = ["a", "c"];
+
+    assert!(is_permutation(&a, &b).is_none());
+
+    let a = ["a", "b", "b", "c", "d"];
+    let b = ["d", "b", "a", "c", "b"];
+
+    let permutation_map = is_permutation(&a, &b).unwrap();
+
+    for ind in 0..5 {
+        assert_eq!(a[ind], b[permutation_map.left_to_right[ind]]);
+        assert_eq!(b[ind], a[permutation_map.right_to_left[ind]]);
+    }
+}

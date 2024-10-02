@@ -20,7 +20,7 @@ use crate::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm::{self, CounterTerm},
     },
-    utils::{sorted_vectorize, FloatLike, F},
+    utils::{self, sorted_vectorize, FloatLike, F},
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
@@ -62,6 +62,7 @@ use std::{
     fmt::{Display, Formatter},
     ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -1781,20 +1782,42 @@ impl<S: NumeratorState> Graph<S> {
 
     // attempt to set a new loop momentum basis
     pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
-        let position = self
-            .derived_data
-            .as_mut()
-            .unwrap()
-            .search_lmb_position(lmb)?;
-        self.bare_graph.loop_momentum_basis = self
-            .derived_data
-            .as_ref()
-            .unwrap()
-            .loop_momentum_bases
-            .as_ref()
-            .unwrap()[position]
-            .clone();
-        Ok(())
+        match &self.derived_data.as_ref().unwrap().loop_momentum_bases {
+            None => Err(eyre!("lmbs not yet generated")),
+            Some(lmbs) => {
+                for (position, lmb_from_list) in lmbs.iter().enumerate() {
+                    // search a matching lmb
+                    if let Some(permutation_map) = utils::is_permutation(lmb, &lmb_from_list.basis)
+                    {
+                        // obtain the edge signatures
+                        let mut new_edge_signatures = self
+                            .derived_data
+                            .as_ref()
+                            .unwrap()
+                            .loop_momentum_bases
+                            .as_ref()
+                            .unwrap()[position]
+                            .edge_signatures
+                            .clone();
+
+                        // permutate the elemements of the loop part to match the ordering in the basis
+                        for edge in new_edge_signatures.iter_mut() {
+                            let new_loop_signature = edge
+                                .internal
+                                .iter()
+                                .enumerate()
+                                .map(|(ind, _)| edge.internal[permutation_map.right_to_left(ind)])
+                                .collect();
+                            edge.internal = new_loop_signature;
+                        }
+
+                        return Ok(());
+                    }
+                }
+
+                Err(eyre!("lmb does not exist"))
+            }
+        }
     }
 
     #[inline]
@@ -2510,25 +2533,6 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
                     path.display()
                 ))
                 // Ok(Self::new_empty())
-            }
-        }
-    }
-
-    // search the lmb position in the list of lmbs
-    fn search_lmb_position(&self, potential_lmb: &[usize]) -> Result<usize, Report> {
-        match &self.loop_momentum_bases {
-            None => Err(eyre!("loop momentum bases not yet generated")),
-            Some(lmbs) => {
-                let sorted_potential_lmb = potential_lmb.iter().sorted().collect_vec();
-
-                for (position, lmb) in lmbs.iter().enumerate() {
-                    let sorted_lmb = lmb.basis.iter().sorted().collect_vec();
-
-                    if sorted_lmb == sorted_potential_lmb {
-                        return Ok(position);
-                    }
-                }
-                Err(eyre!("lmb not found"))
             }
         }
     }
