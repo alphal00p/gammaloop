@@ -385,9 +385,21 @@ impl CounterTerm {
                         .pow(3 * loop_number as u64 - 1),
                 );
 
+                let local_ct_width = F::<T>::from_f64(settings.subtraction.local_ct_width);
+
                 let (uv_damper_plus, uv_damper_minus) = (
-                    unnormalized_gaussian(&hemispherical_radius, &positive_result.solution, &e_cm),
-                    unnormalized_gaussian(&hemispherical_radius, &negative_result.solution, &e_cm),
+                    unnormalized_gaussian(
+                        &hemispherical_radius,
+                        &positive_result.solution,
+                        &e_cm,
+                        &local_ct_width,
+                    ),
+                    unnormalized_gaussian(
+                        &hemispherical_radius,
+                        &negative_result.solution,
+                        &e_cm,
+                        &local_ct_width,
+                    ),
                 );
 
                 let (singularity_dampener_plus, singularity_damper_minus) =
@@ -654,9 +666,15 @@ impl<T: FloatLike> NewtonIterationResult<T> {
     }
 }
 
-fn unnormalized_gaussian<T: FloatLike>(radius: &F<T>, radius_star: &F<T>, e_cm: &F<T>) -> F<T> {
+fn unnormalized_gaussian<T: FloatLike>(
+    radius: &F<T>,
+    radius_star: &F<T>,
+    e_cm: &F<T>,
+    width: &F<T>,
+) -> F<T> {
     let delta_r = radius - radius_star;
-    (-&delta_r * &delta_r / (e_cm * e_cm)).exp()
+    let sigma = e_cm * width;
+    (-&delta_r * &delta_r / (&sigma * &sigma)).exp()
 }
 
 fn singularity_dampener<T: FloatLike>(radius: &F<T>, radius_star: &F<T>) -> F<T> {

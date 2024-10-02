@@ -211,6 +211,7 @@ class GammaLoopConfiguration(object):
                         'power': None,
                     },
                     'integrated_ct_sigma': None,
+                    'local_ct_width': 1.0,
                 }
             }
         }

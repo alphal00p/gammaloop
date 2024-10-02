@@ -827,6 +827,7 @@ pub struct SubtractionSettings {
     pub dynamic_sliver: bool,
     pub integrated_ct_hfunction: HFunctionSettings,
     pub integrated_ct_sigma: Option<f64>,
+    pub local_ct_width: f64,
 }
 
 impl Default for SubtractionSettings {
@@ -837,6 +838,7 @@ impl Default for SubtractionSettings {
             dynamic_sliver: false,
             integrated_ct_hfunction: HFunctionSettings::default(),
             integrated_ct_sigma: None,
+            local_ct_width: 1.0,
         }
     }
 }
