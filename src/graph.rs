@@ -62,7 +62,6 @@ use std::{
     fmt::{Display, Formatter},
     ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
 };
 
