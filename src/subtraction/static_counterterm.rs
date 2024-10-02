@@ -430,7 +430,10 @@ impl CounterTerm {
                     * utils::h(
                         &positive_result.solution / &hemispherical_radius,
                         None,
-                        None,
+                        settings
+                            .subtraction
+                            .integrated_ct_sigma
+                            .map(F::<T>::from_f64),
                         &settings.subtraction.integrated_ct_hfunction,
                     )
                     * &jacobian_ratio_plus
@@ -450,7 +453,10 @@ impl CounterTerm {
                     * utils::h(
                         &negative_result.solution / &hemispherical_radius,
                         None,
-                        None,
+                        settings
+                            .subtraction
+                            .integrated_ct_sigma
+                            .map(F::<T>::from_f64),
                         &settings.subtraction.integrated_ct_hfunction,
                     )
                     * &jacobian_ratio_minus

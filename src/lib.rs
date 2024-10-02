@@ -826,6 +826,7 @@ pub struct SubtractionSettings {
     pub dampen_integrable_singularity: bool,
     pub dynamic_sliver: bool,
     pub integrated_ct_hfunction: HFunctionSettings,
+    pub integrated_ct_sigma: Option<f64>,
 }
 
 impl Default for SubtractionSettings {
@@ -835,6 +836,7 @@ impl Default for SubtractionSettings {
             dampen_integrable_singularity: false,
             dynamic_sliver: false,
             integrated_ct_hfunction: HFunctionSettings::default(),
+            integrated_ct_sigma: None,
         }
     }
 }

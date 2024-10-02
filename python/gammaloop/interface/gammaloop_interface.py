@@ -210,6 +210,7 @@ class GammaLoopConfiguration(object):
                         'enabled_dampening': True,
                         'power': None,
                     },
+                    'integrated_ct_sigma': None,
                 }
             }
         }
