@@ -362,7 +362,8 @@ def scalar_3L_6P_topology_A_export(tmpdir_factory: pytest.TempPathFactory) -> Pa
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'scalar_3L_6P_topology_A.dot')} --no_compile
 set target_omega 2.0
-output {output_path} -exp -ef file"""))
+set panic_on_fail True
+output {output_path} --overwrite_output"""))
     return output_path
 
 
