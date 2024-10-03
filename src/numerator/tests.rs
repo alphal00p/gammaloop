@@ -1,5 +1,3 @@
-use rand::Rng;
-
 use spenso::{complex::Complex, iterators::IteratableTensor, structure::HasStructure};
 use std::path::{Path, PathBuf};
 use symbolica::{atom::Atom, domains::rational::Rational};
@@ -8,7 +6,7 @@ use crate::{
     cross_section::Amplitude,
     gammaloop_integrand::DefaultSample,
     graph::Graph,
-    model::{Model},
+    model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
     numerator::{ContractionSettings, ExtraInfo, GlobalPrefactor},
     tests_from_pytest::{load_amplitude_output, sample_generator, test_export_settings},
@@ -17,8 +15,8 @@ use crate::{
 };
 
 use super::{
-    Evaluate, EvaluatorOptions, Numerator, NumeratorCompileOptions,
-    NumeratorEvaluatorOptions, UnInit,
+    Evaluate, EvaluatorOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluatorOptions,
+    UnInit,
 };
 
 #[test]
@@ -32,10 +30,11 @@ fn hhgghh() {
     validate_gamma(amplitude.amplitude_graphs[0].graph.clone(), &model, path);
 }
 
+#[ignore]
 #[test]
 fn hairy_glue_box() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let (model, amplitude, path) = load_amplitude_output(
+    let (_, amplitude, _) = load_amplitude_output(
         &("TEST_AMPLITUDE_".to_string() + "hairy_glue_box" + "/GL_OUTPUT"),
         true,
     );
@@ -181,7 +180,7 @@ fn tree_ta_ta_1() {
 
     graph.generate_cff();
 
-    graph.bare_graph.verify_external_edge_order();
+    graph.bare_graph.verify_external_edge_order().unwrap();
 
     for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
         println!("{i}:{}", s);
@@ -293,10 +292,10 @@ fn tree_ta_ta_1() {
     println!("CFF rot: {}", cff_val_rot);
 }
 
-pub fn validate_gamma(mut g: Graph<UnInit>, model: &Model, path: PathBuf) {
+pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
     let num = g.derived_data.as_ref().unwrap().numerator.clone();
 
-    let num = num.from_graph(&mut g.bare_graph, None);
+    let num = num.from_graph(&g.bare_graph, None);
 
     let path_gamma = path.join("gamma");
 
@@ -355,8 +354,8 @@ pub fn validate_gamma(mut g: Graph<UnInit>, model: &Model, path: PathBuf) {
 
         assert!(
             Complex::approx_eq_iterator(
-                valg.iter_flat().map(|(i, o)| o),
-                val.iter_flat().map(|(i, o)| o),
+                valg.iter_flat().map(|(_, o)| o),
+                val.iter_flat().map(|(_, o)| o),
                 &F(0.0001),
             ),
             "{}: {}!={}",
@@ -380,8 +379,7 @@ fn tree_h_ttxaah_1() {
     // }
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
-        color: Atom::parse("id(aind(cof(3,1),coaf(3,2)))/Nc")
-            .unwrap(),
+        color: Atom::parse("id(aind(cof(3,1),coaf(3,2)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });
 

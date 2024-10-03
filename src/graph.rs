@@ -46,10 +46,9 @@ use spenso::{
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     scalar::Scalar,
     structure::{
-        AbstractIndex, CastStructure, HasStructure, Lorentz,
-        NamedStructure, ScalarTensor, Shadowable,
-        ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND, COLORSEXT,
-        EUCLIDEAN,
+        AbstractIndex, CastStructure, HasStructure, Lorentz, NamedStructure, ScalarTensor,
+        Shadowable, ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND,
+        COLORSEXT, EUCLIDEAN,
     },
     ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
 };
@@ -76,8 +75,6 @@ use symbolica::{
 //use symbolica::{atom::Symbol,state::State};
 
 use constcat::concat;
-
-const MAX_COLOR_INNER_CONTRACTIONS: usize = 3;
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -204,7 +201,7 @@ impl HasVertexInfo for ExternalVertexInfo {
 
     fn apply_vertex_rule(
         &self,
-        edges: &[isize],
+        _edges: &[isize],
         vertex_pos: usize,
         vertex_slots: &VertexSlots,
     ) -> Option<[DataTensor<Atom>; 3]> {
@@ -240,7 +237,7 @@ impl HasVertexInfo for InteractionVertexInfo {
     fn apply_vertex_rule(
         &self,
         edges: &[isize],
-        vertex_pos: usize,
+        _vertex_pos: usize,
         vertex_slots: &VertexSlots,
     ) -> Option<[DataTensor<Atom>; 3]> {
         let spin_structure = self
@@ -755,6 +752,7 @@ impl Vertex {
         Some([colorless, color])
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn contracted_colorless_vertex_rule(
         &self,
         graph: &BareGraph,
@@ -906,8 +904,7 @@ pub struct BareGraph {
     pub shifts: Shifts,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub struct Shifts {
     pub lorentz: usize,
     pub lorentzdummy: usize,
@@ -916,7 +913,6 @@ pub struct Shifts {
     pub spin: usize,
     pub coupling: usize,
 }
-
 
 impl BareGraph {
     pub fn external_slots(&self) -> Vec<EdgeSlots<Lorentz>> {

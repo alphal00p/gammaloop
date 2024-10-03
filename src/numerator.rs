@@ -653,6 +653,7 @@ impl<E: ExpressionState> GetSingleAtom for SymbolicExpression<E> {
 }
 
 impl<E: ExpressionState> SymbolicExpression<E> {
+    #[allow(dead_code)]
     fn map_color(self, f: impl Fn(SerializableAtom) -> SerializableAtom) -> Self {
         SymbolicExpression {
             colorless: self.colorless,
@@ -661,10 +662,11 @@ impl<E: ExpressionState> SymbolicExpression<E> {
         }
     }
 
+    #[allow(dead_code)]
     fn map_color_mut(&mut self, f: impl FnMut(&mut SerializableAtom)) {
         self.color.map_data_mut(f);
     }
-
+    #[allow(dead_code)]
     fn map_colorless(self, f: impl Fn(SerializableAtom) -> SerializableAtom) -> Self {
         SymbolicExpression {
             colorless: self.colorless.map_data(f),

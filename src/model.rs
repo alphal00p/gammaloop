@@ -13,8 +13,7 @@ use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
 use spenso::parametric::{ExpandedCoefficent, TensorCoefficient};
 use spenso::structure::{
-    AbstractIndex, ConstructibleSlot, Dimension, Euclidean, ExpandedIndex, FlatIndex, VecStructure,
-    CONCRETEIND,
+    AbstractIndex, Dimension, Euclidean, ExpandedIndex, FlatIndex, VecStructure, CONCRETEIND,
 };
 use spenso::{
     contraction::IsZero,
@@ -246,7 +245,7 @@ impl From<EdgeSlots<Dual<Lorentz>>> for VertexSlots {
 
 impl VertexRule {
     pub fn dod(&self) -> isize {
-        let mut dod = 0;
+        let dod;
         let mut spins = vec![];
         for p in &self.particles {
             spins.push(p.spin);
