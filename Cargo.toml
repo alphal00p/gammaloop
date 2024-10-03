@@ -130,5 +130,5 @@ fail-on-warnings = []
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
-spenso = { path = "../../alphal00p/spenso" }
+spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+# spenso = { path = "../../alphal00p/spenso" }
