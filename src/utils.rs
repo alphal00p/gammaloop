@@ -3104,8 +3104,6 @@ fn complex_compare() {
     let cff = Complex::new(0.11773583589023458, -0.22157450446824836).map(F);
 
     ltd.approx_eq_res(&cff, &F(0.00000001)).unwrap();
-
-    let ltd_arg = ltd.arg();
 }
 
 /// Checks if two lists are permutations of eachother, and establish a map between indices

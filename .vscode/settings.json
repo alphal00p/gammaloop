@@ -1,11 +1,6 @@
 {
   "editor.formatOnSave": true,
-  "editor.wordWrap": "wordWrapColumn",
-  "python.formatting.provider": "black",
   "rust-analyzer.check.command": "clippy",
-  "editor.fontFamily": "'Iosevka custom', 'BlexMono Nerd Font', monospace",
-  "editor.fontSize": 16,
-  "editor.fontWeight": 400,
   "rust-analyzer.runnables.extraArgs": ["--no-default-features"],
   "rust-analyzer.runnables.extraTestBinaryArgs": [
     "--nocapture"

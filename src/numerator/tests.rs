@@ -1,18 +1,16 @@
-use rand::{rngs::SmallRng, Rng, SeedableRng};
-
 use spenso::{complex::Complex, iterators::IteratableTensor, structure::HasStructure};
 use std::path::{Path, PathBuf};
-use symbolica::{atom::Atom, domains::rational::Rational, state::State};
+use symbolica::{atom::Atom, domains::rational::Rational};
 
 use crate::{
     cross_section::Amplitude,
     gammaloop_integrand::DefaultSample,
     graph::Graph,
-    model::{self, Model},
-    momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, Polarization},
-    numerator::{Contracted, ContractionSettings, ExtraInfo},
+    model::Model,
+    momentum::{Dep, ExternalMomenta, Helicity},
+    numerator::{ContractionSettings, ExtraInfo},
     tests_from_pytest::{load_amplitude_output, sample_generator, test_export_settings},
-    utils::{f128, ApproxEq, F},
+    utils::{ApproxEq, F},
     Externals, RotationSetting, Settings,
 };
 
@@ -350,8 +348,8 @@ pub fn validate_gamma(mut g: Graph<UnInit>, model: &Model, path: PathBuf) {
 
         assert!(
             Complex::approx_eq_iterator(
-                valg.iter_flat().map(|(i, o)| o),
-                val.iter_flat().map(|(i, o)| o),
+                valg.iter_flat().map(|(_i, o)| o),
+                val.iter_flat().map(|(_i, o)| o),
                 &F(0.0001),
             ),
             "{}: {}!={}",
