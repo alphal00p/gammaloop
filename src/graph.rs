@@ -562,12 +562,12 @@ impl Edge {
         match self.edge_type {
             EdgeType::Incoming => {
                 let [lorentz, spin, color] = in_slots.dual().kroneker(&out_slots);
-                println!("Incoming color: {}", color);
+                // println!("Incoming color: {}", color);
                 [lorentz * spin, color]
             }
             EdgeType::Outgoing => {
                 let [lorentz, spin, color] = out_slots.dual().kroneker(&in_slots);
-                println!("Outgoing color: {}", color);
+                // println!("Outgoing color: {}", color);
                 [lorentz * spin, color]
             }
             EdgeType::Virtual => {
@@ -2348,7 +2348,7 @@ impl DerivedGraphData<Evaluators> {
         let mut den = Complex::new_re(F::from_f64(1.));
         for (e, q) in bare_graph.edges.iter().zip(emr.iter()) {
             if e.edge_type == EdgeType::Virtual {
-                println!("q: {}", q);
+                // println!("q: {}", q);
                 if let Some(mass) = e.particle.mass.value {
                     let m2 = mass.norm_squared();
                     let m2: F<T> = F::from_ff64(m2);
@@ -2358,7 +2358,7 @@ impl DerivedGraphData<Evaluators> {
                 }
             }
         }
-        println!("den: {}", den);
+        // println!("den: {}", den);
         let den = den.inv();
 
         let num = self
