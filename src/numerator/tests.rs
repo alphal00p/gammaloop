@@ -1,23 +1,23 @@
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::Rng;
 
 use spenso::{complex::Complex, iterators::IteratableTensor, structure::HasStructure};
 use std::path::{Path, PathBuf};
-use symbolica::{atom::Atom, domains::rational::Rational, state::State};
+use symbolica::{atom::Atom, domains::rational::Rational};
 
 use crate::{
     cross_section::Amplitude,
     gammaloop_integrand::DefaultSample,
     graph::Graph,
-    model::{self, Model},
-    momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, Polarization},
-    numerator::{Contracted, ContractionSettings, ExtraInfo, GlobalPrefactor},
+    model::{Model},
+    momentum::{Dep, ExternalMomenta, Helicity},
+    numerator::{ContractionSettings, ExtraInfo, GlobalPrefactor},
     tests_from_pytest::{load_amplitude_output, sample_generator, test_export_settings},
-    utils::{f128, ApproxEq, F},
+    utils::{ApproxEq, F},
     Externals, RotationSetting, Settings,
 };
 
 use super::{
-    Evaluate, EvaluatorOptions, Global, Numerator, NumeratorCompileOptions,
+    Evaluate, EvaluatorOptions, Numerator, NumeratorCompileOptions,
     NumeratorEvaluatorOptions, UnInit,
 };
 
@@ -40,7 +40,7 @@ fn hairy_glue_box() {
         true,
     );
 
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
     for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
         println!("{i}:{}", s);
     }
@@ -381,8 +381,7 @@ fn tree_h_ttxaah_1() {
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
         color: Atom::parse("id(aind(cof(3,1),coaf(3,2)))/Nc")
-            .unwrap()
-            .into(),
+            .unwrap(),
         colorless: Atom::new_num(1),
     });
 

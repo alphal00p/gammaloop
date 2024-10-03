@@ -4,7 +4,7 @@ use crate::model::{Model, Particle};
 use crate::momentum::Signature;
 use crate::numerator::{
     AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, NumeratorState,
-    PythonState, TypedNumeratorState, UnInit, UnexpandedNumerator,
+    PythonState, TypedNumeratorState, UnInit,
 };
 use crate::{utils::*, ExportSettings, Externals, Polarizations, Settings};
 use bincode;

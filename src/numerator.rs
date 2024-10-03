@@ -29,7 +29,7 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use spenso::arithmetic::ScalarMul;
 use spenso::contraction::Contract;
-use spenso::data::{CastData, DataTensor};
+use spenso::data::DataTensor;
 
 use spenso::network::Levels;
 use spenso::parametric::{
@@ -44,7 +44,7 @@ use spenso::{
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
 };
 
-use symbolica::atom::{AtomView, Mul};
+use symbolica::atom::AtomView;
 use symbolica::evaluate::ExpressionEvaluator;
 use symbolica::id::{Condition, Match, MatchSettings};
 use symbolica::{

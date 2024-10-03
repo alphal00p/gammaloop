@@ -37,7 +37,6 @@ use momtrop::SampleGenerator;
 use nalgebra::DMatrix;
 
 use gat_lending_iterator::LendingIterator;
-use rayon::collections::vec_deque;
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
@@ -47,8 +46,8 @@ use spenso::{
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     scalar::Scalar,
     structure::{
-        AbstractIndex, BaseRepName, CastStructure, Euclidean, HasStructure, Lorentz,
-        NamedStructure, PhysReps, Representation, ScalarTensor, Shadowable, TensorStructure,
+        AbstractIndex, CastStructure, HasStructure, Lorentz,
+        NamedStructure, ScalarTensor, Shadowable,
         ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND, COLORSEXT,
         EUCLIDEAN,
     },
@@ -908,6 +907,7 @@ pub struct BareGraph {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct Shifts {
     pub lorentz: usize,
     pub lorentzdummy: usize,
@@ -917,18 +917,6 @@ pub struct Shifts {
     pub coupling: usize,
 }
 
-impl Default for Shifts {
-    fn default() -> Self {
-        Shifts {
-            lorentz: 0,
-            color: 0,
-            spin: 0,
-            coupling: 0,
-            lorentzdummy: 0,
-            colordummy: 0,
-        }
-    }
-}
 
 impl BareGraph {
     pub fn external_slots(&self) -> Vec<EdgeSlots<Lorentz>> {
