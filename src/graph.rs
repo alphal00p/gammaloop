@@ -10,7 +10,7 @@ use crate::{
     gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
-    momentum::{FourMomentum, Polarization, Rotation, Signature, ThreeMomentum},
+    momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
         GammaAlgebraMode, Numerator, NumeratorState, NumeratorStateError, PythonState,
@@ -1180,6 +1180,121 @@ impl BareGraph {
         g
     }
 
+    pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
+        let last = self.external_edges.len() - 1;
+        let mut external_vertices_in_external_edge_order = vec![];
+        for (i, ext) in self.external_edges.iter().enumerate() {
+            let edge = &self.edges[*ext];
+
+            match edge.edge_type {
+                EdgeType::Incoming => match self.vertices[edge.vertices[0]].vertex_info {
+                    VertexInfo::ExternalVertexInfo(_) => {
+                        external_vertices_in_external_edge_order.push(edge.vertices[0]);
+                    }
+                    _ => {
+                        return Err(eyre!(
+                                "Incoming edge {} at position {i} is not connected to an external vertex with the correct direction",
+                                edge.name
+                            ));
+                    }
+                },
+                EdgeType::Outgoing => match self.vertices[edge.vertices[1]].vertex_info {
+                    VertexInfo::ExternalVertexInfo(_) => {
+                        external_vertices_in_external_edge_order.push(edge.vertices[1]);
+                    }
+                    _ => {
+                        return Err(eyre!(
+                                "Outgoing edge {} at position {i} is not connected to an external vertex with the correct direction",
+                                edge.name
+                            ));
+                    }
+                },
+
+                _ => {
+                    return Err(eyre!(
+                        "External edge {} at position {i} is not incoming or outgoing",
+                        edge.name
+                    ));
+                }
+            }
+            for s in &self.loop_momentum_basis.edge_signatures[*ext].internal {
+                if !s.is_zero() {
+                    return Err(eyre!(
+                        "External edge {} at position {i} has a non-zero internal momentum signature",
+                        edge.name
+                    ));
+                }
+            }
+
+            let edge_name = &edge.name;
+            let signatures = &self.loop_momentum_basis.edge_signatures[*ext].external;
+
+            for (j, &s) in signatures.iter().enumerate() {
+                if j != i && s.is_sign() && i != last {
+                    return Err(eyre!(
+                        "External edge {} at position {i} has non-zero sign at position {} in its signature, expected zero",
+                        edge_name,
+                        j
+                    ));
+                } else if j != i && s.is_zero() && i == last {
+                    return Err(eyre!(
+                        "Last external edge {} at position {} in its signature has zero sign, expected non-zero, as it should be a sum of all other external edges",
+                        edge_name,
+                        j
+                    ));
+                }
+
+                if j == i {
+                    match (i, s) {
+                        (idx, SignOrZero::Plus) if idx != last => {}
+                        (idx, SignOrZero::Zero) if idx == last => {}
+                        (idx, SignOrZero::Plus) if idx == last => {
+                            return Err(eyre!(
+                        "Last external edge {} at position {} should have zero sign, found positive",
+                        edge_name, idx
+                    ));
+                        }
+                        (idx, SignOrZero::Minus) => {
+                            return Err(eyre!(
+                                "External edge {} at position {} has a negative sign",
+                                edge_name,
+                                idx
+                            ));
+                        }
+                        _ => {
+                            return Err(eyre!(
+                                "External edge {} at position {} has an unexpected sign",
+                                edge_name,
+                                i
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        let mut sorted = external_vertices_in_external_edge_order.clone();
+
+        // sorted.as_slice().is_sorted(); wait for 1.82
+        // warn!(
+        //     "External vertices are not in the same order as the external edges. This may cause issues."
+        // }
+        sorted.sort();
+
+        let validate_external_vertices = self
+            .vertices
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)))
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+
+        if sorted != validate_external_vertices {
+            return Err(eyre!("External vertices do not match the external edges."));
+        }
+
+        Ok(external_vertices_in_external_edge_order)
+    }
+
     fn generate_vertex_slots(&mut self, model: &Model) {
         let initial_shifts = Shifts {
             spin: 0,
@@ -1190,15 +1305,16 @@ impl BareGraph {
             coupling: 0,
         };
 
-        let (mut external, s) = self
-            .vertices
-            .iter()
-            .filter(|v| matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)))
-            .fold((VecDeque::new(), initial_shifts), |(mut acc, shifts), v| {
+        let ext_vertices = self.verify_external_edge_order().unwrap();
+
+        let (mut external, s) = ext_vertices.into_iter().map(|i| &self.vertices[i]).fold(
+            (VecDeque::new(), initial_shifts),
+            |(mut acc, shifts), v| {
                 let (e, new_shifts) = v.generate_vertex_slots(shifts, model);
                 acc.push_back(e);
                 (acc, new_shifts)
-            }); //assumes that the order of the external vertices is the same as the order of the external edges... this is a bit dangerous
+            },
+        );
 
         let (mut v, s) = self
             .vertices

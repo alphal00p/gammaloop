@@ -118,7 +118,7 @@ fn trees() {
         println!("{i}:{}", s);
     }
     export_settings.numerator_settings.color_projector =
-        Some("id(aind(cof(3,7),coaf(3,6)))/Nc".into());
+        Some("id(aind(cof(3,2),coaf(3,0)))/Nc".into());
 
     graph.generate_cff();
     let mut graph =
@@ -177,6 +177,8 @@ fn tree_ta_ta_1() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     graph.generate_cff();
+
+    graph.bare_graph.verify_external_edge_order();
 
     for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
         println!("{i}:{}", s);
@@ -373,7 +375,7 @@ fn tree_h_ttxaah_1() {
     // }
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.color_projector =
-        Some("id(aind(cof(3,5),coaf(3,10)))/Nc".into());
+        Some("id(aind(cof(3,1),coaf(3,2)))/Nc".into());
 
     let mut graph = graph.process_numerator(
         &model,
@@ -410,12 +412,12 @@ fn tree_hh_ttxaa_1() {
 
     graph.generate_cff();
 
-    // for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
-    //     println!("{i}:{}", s);
-    // }
+    for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
+        println!("{i}:{}", s);
+    }
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.color_projector =
-        Some("id(aind(cof(3,5),coaf(3,8)))/Nc".into());
+        Some("id(aind(cof(3,2),coaf(3,3)))/Nc".into());
 
     let mut graph = graph.process_numerator(
         &model,
@@ -565,12 +567,13 @@ fn load_tree(tree_name: &str, amp_num: usize) -> (Model, Amplitude<UnInit>, Path
 
 #[test]
 fn tree_h_ttxaah_0() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let expr = Atom::parse("-8/3*𝑖*ee^2*vev*lam*yt*(MT*id(aind(bis(4,3),bis(4,4)))+Q(6,aind(lord(4,5)))*γ(aind(loru(4,5),bis(4,3),bis(4,4))))*(MT*id(aind(bis(4,5),bis(4,6)))+Q(7,aind(lord(4,11)))*γ(aind(loru(4,11),bis(4,5),bis(4,6))))*(ProjM(aind(bis(4,7),bis(4,6)))+ProjP(aind(bis(4,7),bis(4,6))))*sqrt(2)^-1*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,6),cof(3,7)))*id(aind(coaf(3,7),cof(3,8)))*id(aind(coaf(3,8),cof(3,9)))*id(aind(coaf(3,9),cof(3,10)))*γ(aind(lord(4,2),bis(4,3),bis(4,2)))*γ(aind(lord(4,3),bis(4,5),bis(4,4)))*ubar(1,aind(bis(4,2)))*v(2,aind(bis(4,7)))*ϵbar(3,aind(loru(4,2)))*ϵbar(4,aind(loru(4,3)))").unwrap();
 
     let new = Numerator {
         state: Global::new(expr.clone().into()),
     }
-    .color_simplify(None)
+    .color_simplify(Some(Atom::parse("id(aind(cof(3,5),coaf(3,10)))").unwrap()))
     // .color_project()
     // .gamma_symplify()
     .parse()
