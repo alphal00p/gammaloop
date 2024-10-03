@@ -44,7 +44,7 @@ fn hairy_glue_box() {
         println!("{i}:{}", s);
     }
 
-    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,Some(&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,4),coad(8,5),coad(8,10)))*f(aind(coad(8,11),coad(8,16),coad(8,17)))*id(aind(coad(8,22),coad(8,23)))").unwrap(),colorless:Atom::new_num(1)})).color_simplify().state.color.to_sparse().map_data(|a|a.to_string());
+    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,Some(&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))").unwrap(),colorless:Atom::new_num(1)})).color_simplify().state.color.to_sparse().map_data(|a|a.to_string());
 
     insta::assert_ron_snapshot!(color);
 }
@@ -215,8 +215,11 @@ fn tree_ta_ta_1() {
         .scalar()
         .unwrap();
 
-    println!("4d: {}", val);
-    println!("CFF: {}", cff_val);
+    let expected_val = Complex::new(F(0.0002488992442101011), F(0.00003005190084792535));
+    let expected_cff = Complex::new(F(-0.000248899244210101), F(-0.000030051900847925438));
+
+    val.approx_eq_res(&expected_val, &F(1e-10)).unwrap();
+    cff_val.approx_eq_res(&expected_cff, &F(1e-10)).unwrap();
 
     let mut externals = Externals::Constant {
         momenta: vec![
@@ -280,16 +283,22 @@ fn tree_ta_ta_1() {
 
     let rotated_sample = sample.get_rotated_sample(&RotationSetting::Pi2X.rotation_method().into());
 
-    println!("rotated sample: {}", rotated_sample);
-    println!("sample: {}", sample);
+    // println!("rotated sample: {}", rotated_sample);
+    // println!("sample: {}", sample);
 
     let cff_val_rot = graph.evaluate_cff_expression(&rotated_sample, &Settings::default())
         / graph
             .bare_graph
             .compute_energy_product(rotated_sample.loop_moms(), rotated_sample.external_moms());
-    println!("4d: {}", val);
-    println!("CFF: {}", cff_val);
-    println!("CFF rot: {}", cff_val_rot);
+
+    let expected_val = Complex::new(F(0.), F(0.));
+    let expected_cff = Complex::new(F(-0.0), F(-0.0));
+    let expected_cff_rot = Complex::new(F(-0.0), F(-0.0));
+    val.approx_eq_res(&expected_val, &F(1e-10)).unwrap();
+    cff_val.approx_eq_res(&expected_cff, &F(1e-10)).unwrap();
+    cff_val_rot
+        .approx_eq_res(&expected_cff_rot, &F(1e-10))
+        .unwrap();
 }
 
 pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
@@ -306,6 +315,22 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
             compile_options: NumeratorCompileOptions::NotCompiled,
         });
 
+    let mut num_nogamma = num
+        .clone()
+        .color_simplify()
+        // .gamma_symplify()
+        .parse()
+        .contract(ContractionSettings::<Rational>::Normal)
+        .unwrap()
+        .generate_evaluators(
+            model,
+            &g.bare_graph,
+            &ExtraInfo {
+                path,
+                orientations: vec![vec![true; g.bare_graph.edges.len()]],
+            },
+            &export_settings,
+        );
     let mut num_gamma = num
         .clone()
         .color_simplify()
@@ -323,22 +348,6 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
             &export_settings,
         );
 
-    let mut num = num
-        .color_simplify()
-        // .gamma_symplify()
-        .parse()
-        .contract(ContractionSettings::<Rational>::Normal)
-        .unwrap()
-        .generate_evaluators(
-            model,
-            &g.bare_graph,
-            &ExtraInfo {
-                path,
-                orientations: vec![vec![true; g.bare_graph.edges.len()]],
-            },
-            &export_settings,
-        );
-
     for i in 0..10 {
         let s: DefaultSample<f64> = sample_generator(i, &g.bare_graph, None);
 
@@ -348,7 +357,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
 
         let polarizations = s.polarizations();
 
-        let val = num.evaluate_single(&emr, polarizations, None, &Settings::default());
+        let val = num_nogamma.evaluate_single(&emr, polarizations, None, &Settings::default());
 
         let valg = num_gamma.evaluate_single(&emr, polarizations, None, &Settings::default());
 
@@ -406,8 +415,16 @@ fn tree_h_ttxaah_1() {
         .scalar()
         .unwrap();
 
-    println!("4d: {}", val);
-    println!("CFF: {}", cff_val);
+    let expected_val = Complex::new(
+        F(0.0000000018402069973971576),
+        F(0.000000006517984974022169),
+    );
+    let expected_cff = Complex::new(
+        F(-0.0000000018402069973971528),
+        F(-0.000000006517984974022173),
+    );
+    val.approx_eq_res(&expected_val, &F(1e-10)).unwrap();
+    cff_val.approx_eq_res(&expected_cff, &F(1e-10)).unwrap();
 }
 
 #[test]
@@ -450,8 +467,16 @@ fn tree_hh_ttxaa_1() {
         .scalar()
         .unwrap();
 
-    println!("4d: {}", val);
-    println!("CFF: {}", cff_val);
+    let expected_val = Complex::new(
+        F(-0.000000007061511384861008),
+        F(0.0000000024246582518362876),
+    );
+    let expected_cff = Complex::new(
+        F(0.000000007061511384861011),
+        F(-0.0000000024246582518362864),
+    );
+    val.approx_eq_res(&expected_val, &F(1e-10)).unwrap();
+    cff_val.approx_eq_res(&expected_cff, &F(1e-10)).unwrap();
 
     let externals = Externals::Constant {
         momenta: vec![
@@ -532,8 +557,16 @@ fn tree_hh_ttxaa_1() {
         .scalar()
         .unwrap();
 
-    println!("4d: {}", val);
-    println!("CFF: {}", cff_val);
+    let expected_val = Complex::new(
+        F(0.000000029250807246513418),
+        F(-0.00000000017560186291318082),
+    );
+    let expected_cff = Complex::new(
+        F(-0.00000002925080724651342),
+        F(0.00000000017560186291318444),
+    );
+    val.approx_eq_res(&expected_val, &F(1e-10)).unwrap();
+    cff_val.approx_eq_res(&expected_cff, &F(1e-10)).unwrap();
 }
 
 fn load_tree(tree_name: &str, amp_num: usize) -> (Model, Amplitude<UnInit>, PathBuf) {
@@ -579,7 +612,7 @@ fn tree_h_ttxaah_0() {
     let expr = Atom::parse("-8/3*𝑖*ee^2*vev*lam*yt*(MT*id(aind(bis(4,3),bis(4,4)))+Q(6,aind(lord(4,5)))*γ(aind(loru(4,5),bis(4,3),bis(4,4))))*(MT*id(aind(bis(4,5),bis(4,6)))+Q(7,aind(lord(4,11)))*γ(aind(loru(4,11),bis(4,5),bis(4,6))))*(ProjM(aind(bis(4,7),bis(4,6)))+ProjP(aind(bis(4,7),bis(4,6))))*sqrt(2)^-1*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,6),cof(3,7)))*id(aind(coaf(3,7),cof(3,8)))*id(aind(coaf(3,8),cof(3,9)))*id(aind(coaf(3,9),cof(3,10)))*γ(aind(lord(4,2),bis(4,3),bis(4,2)))*γ(aind(lord(4,3),bis(4,5),bis(4,4)))*ubar(1,aind(bis(4,2)))*v(2,aind(bis(4,7)))*ϵbar(3,aind(loru(4,2)))*ϵbar(4,aind(loru(4,3)))").unwrap();
 
     let prefactor = GlobalPrefactor {
-        color: Atom::parse("id(aind(cof(3,1),coaf(3,2))").unwrap(),
+        color: Atom::parse("id(aind(cof(3,5),coaf(3,10)))").unwrap(),
         colorless: Atom::new_num(1),
     };
 
@@ -595,24 +628,8 @@ fn tree_h_ttxaah_0() {
 }
 
 #[test]
-fn color_three_loop_physical_photon() {
-    //     let color_expr= Atom::parse(concat!(
-    //         // "T(aind(coad(8,9),cof(3,8),coaf(3,7)))*T(aind(coad(8,14),cof(3,13),coaf(3,12)))*T(aind(coad(8,21),cof(3,20),coaf(3,19)))*T(aind(coad(8,26),cof(3,25),coaf(3,24)))*",
-    //     // "id(aind(coaf(3,3),cof(3,4)))*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,10),cof(3,11)))*id(aind(coaf(3,15),cof(3,16)))*id(aind(coaf(3,17),cof(3,18)))*id(aind(coaf(3,22),cof(3,23)))*id(aind(cof(3,4),coaf(3,24)))*id(aind(cof(3,6),coaf(3,3)))*id(aind(cof(3,8),coaf(3,5)))*id(aind(cof(3,11),coaf(3,7)))*id(aind(cof(3,13),coaf(3,10)))*id(aind(cof(3,16),coaf(3,12)))*id(aind(cof(3,18),coaf(3,15)))*id(aind(cof(3,20),coaf(3,17)))*id(aind(cof(3,23),coaf(3,19)))*id(aind(cof(3,25),coaf(3,22)))*id(aind(coad(8,21),coad(8,9)))*id(aind(coad(8,26),coad(8,14)))",
-    // "id(aind(coaf(3,3),cof(3,4)))*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,10),cof(3,11)))*id(aind(coaf(3,15),cof(3,16)))*id(aind(coaf(3,17),cof(3,18)))*id(aind(coaf(3,22),cof(3,23)))*id(aind(cof(3,4),coaf(3,24)))*id(aind(cof(3,6),coaf(3,3)))*id(aind(cof(3,8),coaf(3,5)))*id(aind(cof(3,11),coaf(3,7)))*id(aind(cof(3,13),coaf(3,10)))*id(aind(cof(3,16),coaf(3,12)))*id(aind(cof(3,18),coaf(3,15)))*id(aind(cof(3,20),coaf(3,17)))*id(aind(cof(3,23),coaf(3,19)))*id(aind(cof(3,25),coaf(3,22)))*id(aind(coad(8,21),coad(8,9)))*id(aind(coad(8,26),coad(8,14)))")).unwrap();
+fn color() {
+    println!("{}",Numerator::default().from_global(Atom::parse("id(aind(coaf(3,6),cof(3,7)))*id(aind(coaf(3,8),cof(3,9)))*id(aind(coaf(3,10),cof(3,11)))*id(aind(coaf(3,12),cof(3,13)))*id(aind(coaf(3,14),cof(3,15)))*id(aind(coaf(3,16),cof(3,17)))*id(aind(cof(3,6),coaf(3,9)))*id(aind(cof(3,8),coaf(3,11)))*id(aind(cof(3,10),coaf(3,13)))*id(aind(cof(3,12),coaf(3,15)))*id(aind(cof(3,14),coaf(3,17)))*id(aind(cof(3,16),coaf(3,7)))").unwrap(), None).color_simplify().export());
 
-    //     let mut color_num = Numerator {
-    //         expression: color_expr,
-    //         network: None,
-    //         const_map: AHashMap::new(),
-    //         eval: crate::numerator::EvaluatorNumerator::UnInit,
-    //         extra_info: ExtraInfo {
-    //             emr_size: 17,
-    //             graph_name: "srt".into(),
-    //         },
-    //     };
-
-    //     color_num.process_color_simple();
-
-    //     println!("{}", color_num.expression)
+    insta::assert_snapshot!("{}",Numerator::default().from_global(Atom::parse("f(aind(coad(8,1),coad(8,11),coad(8,21)))*f(aind(coad(8,21),coad(8,2),coad(8,12)))*f(aind(coad(8,3),coad(8,12),coad(8,22)))*f(aind(coad(8,22),coad(8,4),coad(8,13)))*f(aind(coad(8,5),coad(8,13),coad(8,23)))*f(aind(coad(8,23),coad(8,6),coad(8,14)))*f(aind(coad(8,7),coad(8,14),coad(8,24)))*f(aind(coad(8,24),coad(8,8),coad(8,11)))*f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,8)))").unwrap(), None).color_simplify().export());
 }

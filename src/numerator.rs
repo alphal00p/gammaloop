@@ -1427,6 +1427,24 @@ impl GammaSimplified {
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
     }
+
+    pub fn parse_only_colorless(self) -> Network {
+        let net = TensorNetwork::try_from(
+            self.colorless
+                .clone()
+                .scalar()
+                .ok_or(NumeratorStateError::Any(eyre!("not a scalar")))
+                .unwrap()
+                .0
+                .as_view(),
+        )
+        .unwrap()
+        .to_fully_parametric()
+        .cast();
+
+        // println!("net scalar{}", net.scalar.as_ref().unwrap());
+        Network { net }
+    }
 }
 
 impl Numerator<GammaSimplified> {
@@ -1435,6 +1453,14 @@ impl Numerator<GammaSimplified> {
         debug!("parsing numerator into tensor network");
         Numerator {
             state: self.state.parse(),
+        }
+    }
+
+    pub fn parse_only_colorless(self) -> Numerator<Network> {
+        // debug!("GammaSymplified numerator: {}", self.export());
+        debug!("parsing numerator into tensor network");
+        Numerator {
+            state: self.state.parse_only_colorless(),
         }
     }
 }
