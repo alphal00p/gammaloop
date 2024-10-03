@@ -322,6 +322,9 @@ class Edge(object):
         edge_name_label = ''
         if show_edge_names:
             edge_name_label = self.name  # pylint: disable=consider-using-f-string
+        # Sanitize edge_name_label for latex
+        edge_name_label = edge_name_label.replace('_', '')
+
         label_components: list[str] = []
         if show_particle_names:
             # \overline{x} sadly does not work with the \fmfX{} command.
@@ -738,13 +741,13 @@ class Graph(object):
             e_attr = e.get_attributes()
             if len(adjacency_map[e.get_source()]) == 1:
                 if "name" not in e_attr:
-                    if e_attr["mom"] in outgoing_momenta:
+                    if e_attr["mom"] in incoming_momenta:
                         e_attr["name"] = f"{e_attr['mom']}_IN"
                     else:
                         e_attr["name"] = e_attr['mom']
             elif len(adjacency_map[e.get_destination()]) == 1:
                 if "name" not in e_attr:
-                    if e_attr["mom"] in incoming_momenta:
+                    if e_attr["mom"] in outgoing_momenta:
                         e_attr["name"] = f"{e_attr['mom']}_OUT"
                     else:
                         e_attr["name"] = e_attr['mom']
