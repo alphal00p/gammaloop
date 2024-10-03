@@ -202,17 +202,25 @@ class GammaLoopConfiguration(object):
                     'upcast_on_failure': True
                 },
                 'subtraction': {
-                    'sliver_width': 1.0,
-                    'dampen_integrable_singularity': True,
-                    'dynamic_sliver': False,
-                    'integrated_ct_hfunction': {
-                        'function': 'poly_exponential',
-                        'sigma': 1.0,
-                        'enabled_dampening': True,
-                        'power': None,
+                    'ct_settings':  {
+                        'sliver_width': 1.0,
+                        'dampen_integrable_singularity': True,
+                        'dynamic_sliver': False,
+                        'integrated_ct_hfunction': {
+                            'function': 'poly_exponential',
+                            'sigma': 1.0,
+                            'enabled_dampening': True,
+                            'power': None,
+                        },
+                        'integrated_ct_sigma': None,
+                        'local_ct_width': 1.0,
                     },
-                    'integrated_ct_sigma': None,
-                    'local_ct_width': 1.0,
+                    'overlap_settings': {
+                        'force_global_center': None,
+                        'check_global_center': True,
+                        'try_origin': False,
+                        'try_origin_all_lmbs': False,
+                    }
                 }
             }
         }

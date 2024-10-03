@@ -2055,7 +2055,7 @@ impl<S: NumeratorState> Graph<S> {
             &self.get_cff().esurfaces,
             &self.bare_graph.get_mass_vector(),
             externals,
-            settings.general.debug,
+            settings,
         )
     }
 

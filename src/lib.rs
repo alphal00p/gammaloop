@@ -821,7 +821,7 @@ pub enum DiscreteGraphSamplingSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SubtractionSettings {
+pub struct CounterTermSettings {
     pub sliver_width: f64,
     pub dampen_integrable_singularity: bool,
     pub dynamic_sliver: bool,
@@ -830,7 +830,32 @@ pub struct SubtractionSettings {
     pub local_ct_width: f64,
 }
 
-impl Default for SubtractionSettings {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OverlapSettings {
+    pub force_global_center: Option<Vec<[f64; 3]>>,
+    pub check_global_center: bool,
+    pub try_origin: bool,
+    pub try_origin_all_lmbs: bool,
+}
+
+impl Default for OverlapSettings {
+    fn default() -> Self {
+        Self {
+            force_global_center: None,
+            check_global_center: true,
+            try_origin: false,
+            try_origin_all_lmbs: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct SubtractionSettings {
+    pub ct_settings: CounterTermSettings,
+    pub overlap_settings: OverlapSettings,
+}
+
+impl Default for CounterTermSettings {
     fn default() -> Self {
         Self {
             sliver_width: 10.0,

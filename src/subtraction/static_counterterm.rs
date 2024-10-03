@@ -385,7 +385,8 @@ impl CounterTerm {
                         .pow(3 * loop_number as u64 - 1),
                 );
 
-                let local_ct_width = F::<T>::from_f64(settings.subtraction.local_ct_width);
+                let local_ct_width =
+                    F::<T>::from_f64(settings.subtraction.ct_settings.local_ct_width);
 
                 let (uv_damper_plus, uv_damper_minus) = (
                     unnormalized_gaussian(
@@ -402,15 +403,18 @@ impl CounterTerm {
                     ),
                 );
 
-                let (singularity_dampener_plus, singularity_damper_minus) =
-                    if settings.subtraction.dampen_integrable_singularity {
-                        (
-                            singularity_dampener(&hemispherical_radius, &positive_result.solution),
-                            singularity_dampener(&hemispherical_radius, &negative_result.solution),
-                        )
-                    } else {
-                        (hemispherical_radius.one(), hemispherical_radius.one())
-                    };
+                let (singularity_dampener_plus, singularity_damper_minus) = if settings
+                    .subtraction
+                    .ct_settings
+                    .dampen_integrable_singularity
+                {
+                    (
+                        singularity_dampener(&hemispherical_radius, &positive_result.solution),
+                        singularity_dampener(&hemispherical_radius, &negative_result.solution),
+                    )
+                } else {
+                    (hemispherical_radius.one(), hemispherical_radius.one())
+                };
 
                 let i = Complex::new(const_builder.zero(), const_builder.one());
 
@@ -444,9 +448,10 @@ impl CounterTerm {
                         None,
                         settings
                             .subtraction
+                            .ct_settings
                             .integrated_ct_sigma
                             .map(F::<T>::from_f64),
-                        &settings.subtraction.integrated_ct_hfunction,
+                        &settings.subtraction.ct_settings.integrated_ct_hfunction,
                     )
                     * &jacobian_ratio_plus
                     * &radius_sign_plus;
@@ -467,9 +472,10 @@ impl CounterTerm {
                         None,
                         settings
                             .subtraction
+                            .ct_settings
                             .integrated_ct_sigma
                             .map(F::<T>::from_f64),
-                        &settings.subtraction.integrated_ct_hfunction,
+                        &settings.subtraction.ct_settings.integrated_ct_hfunction,
                     )
                     * &jacobian_ratio_minus
                     * &radius_sign_minus;
