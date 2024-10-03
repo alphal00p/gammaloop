@@ -663,7 +663,7 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
         "numerator:{}",
         graph
             .clone()
-            .apply_feynman_rules()
+            .apply_feynman_rules(&export_settings)
             .derived_data
             .unwrap()
             .numerator

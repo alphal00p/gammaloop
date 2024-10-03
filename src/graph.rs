@@ -1942,10 +1942,13 @@ impl Graph<UnInit> {
         }
     }
 
-    pub fn apply_feynman_rules(mut self) -> Graph<AppliedFeynmanRule> {
+    pub fn apply_feynman_rules(
+        mut self,
+        export_settings: &ExportSettings,
+    ) -> Graph<AppliedFeynmanRule> {
         let processed_data = self
             .derived_data
-            .map(|d| d.apply_feynman_rules(&mut self.bare_graph));
+            .map(|d| d.apply_feynman_rules(&mut self.bare_graph, export_settings));
         Graph {
             bare_graph: self.bare_graph,
             derived_data: processed_data,
@@ -2720,23 +2723,28 @@ impl DerivedGraphData<UnInit> {
         export_settings: &ExportSettings,
     ) -> DerivedGraphData<Evaluators> {
         let extra_info = self.generate_extra_info(export_path);
-        let color_projector = export_settings
-            .numerator_settings
-            .color_projector
-            .as_ref()
-            .map(|s| Atom::parse(s).unwrap());
 
         let color_simplified =
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
                 debug!("Using global numerator: {}", global);
                 let global = Atom::parse(global).unwrap();
                 self.map_numerator(|n| {
-                    n.from_global(global, base_graph)
-                        .color_simplify(color_projector)
+                    n.from_global(
+                        global,
+                        // base_graph,
+                        export_settings.numerator_settings.color_projector.as_ref(),
+                    )
+                    .color_simplify()
                     // .color_project()
                 })
             } else {
-                self.map_numerator(|n| n.from_graph(base_graph).color_simplify(color_projector))
+                self.map_numerator(|n| {
+                    n.from_graph(
+                        base_graph,
+                        export_settings.numerator_settings.color_projector.as_ref(),
+                    )
+                    .color_simplify()
+                })
                 //.color_project())
             };
 
@@ -2762,8 +2770,14 @@ impl DerivedGraphData<UnInit> {
     fn apply_feynman_rules(
         self,
         base_graph: &mut BareGraph,
+        export_settings: &ExportSettings,
     ) -> DerivedGraphData<AppliedFeynmanRule> {
-        self.map_numerator(|n| n.from_graph(base_graph))
+        self.map_numerator(|n| {
+            n.from_graph(
+                base_graph,
+                export_settings.numerator_settings.color_projector.as_ref(),
+            )
+        })
     }
 }
 

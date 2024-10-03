@@ -44,7 +44,7 @@ logos/
 *.swp
 
 # ignore vscode repo
-.vscode/
+.vscode
 
 # compiled library
 *.a

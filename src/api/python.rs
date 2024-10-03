@@ -10,7 +10,7 @@ use crate::{
     model::Model,
     numerator::{AppliedFeynmanRule, PythonState, UnInit},
     utils::F,
-    HasIntegrand, Settings,
+    ExportSettings, HasIntegrand, Settings,
 };
 use ahash::HashMap;
 
@@ -237,10 +237,18 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
-    pub fn apply_feynman_rules(&mut self) {
+    pub fn apply_feynman_rules(&mut self, export_yaml_str: &str) {
+        let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+            .unwrap();
         self.amplitudes.map_mut_graphs(|g| {
             g.statefull_apply::<_, UnInit, AppliedFeynmanRule>(|d, b| {
-                d.map_numerator(|n| n.from_graph(b))
+                d.map_numerator(|n| {
+                    n.from_graph(
+                        b,
+                        export_settings.numerator_settings.color_projector.as_ref(),
+                    )
+                })
             })
             .expect("could not apply Feynman rules")
         });
@@ -337,8 +345,13 @@ impl PythonWorker {
         ))
     }
 
-    pub fn export_expressions(&mut self, export_root: &str, format: &str) -> PyResult<String> {
-        self.apply_feynman_rules();
+    pub fn export_expressions(
+        &mut self,
+        export_root: &str,
+        format: &str,
+        export_yaml_str: &str,
+    ) -> PyResult<String> {
+        self.apply_feynman_rules(export_yaml_str);
 
         for amplitude in self.amplitudes.container.iter_mut() {
             amplitude

@@ -25,6 +25,7 @@ use itertools::Itertools;
 use log::{debug, trace};
 
 use serde::de::DeserializeOwned;
+use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use spenso::arithmetic::ScalarMul;
 use spenso::contraction::Contract;
@@ -43,7 +44,7 @@ use spenso::{
     structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
 };
 
-use symbolica::atom::AtomView;
+use symbolica::atom::{AtomView, Mul};
 use symbolica::evaluate::ExpressionEvaluator;
 use symbolica::id::{Condition, Match, MatchSettings};
 use symbolica::{
@@ -60,7 +61,7 @@ use symbolica::{
 pub struct NumeratorSettings {
     pub eval_settings: NumeratorEvaluatorOptions,
     pub global_numerator: Option<String>,
-    pub color_projector: Option<String>,
+    pub color_projector: Option<GlobalPrefactor>,
     pub gamma_algebra: GammaAlgebraMode,
 }
 
@@ -542,18 +543,72 @@ impl TypedNumeratorState for UnInit {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct GlobalPrefactor {
+    pub color: Atom,
+    pub colorless: Atom,
+}
+
+impl Serialize for GlobalPrefactor {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("GlobalPrefactor", 2)?;
+        state.serialize_field("color", &self.color.to_string())?;
+        state.serialize_field("colorless", &self.colorless.to_string())?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for GlobalPrefactor {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct GlobalPrefactorHelper {
+            color: String,
+            colorless: String,
+        }
+        let helper = GlobalPrefactorHelper::deserialize(deserializer)?;
+        Ok(GlobalPrefactor {
+            color: Atom::parse(&helper.color).unwrap(),
+            colorless: Atom::parse(&helper.colorless).unwrap(),
+        })
+    }
+}
+
 impl Numerator<UnInit> {
-    pub fn from_graph(self, graph: &BareGraph) -> Numerator<AppliedFeynmanRule> {
+    pub fn from_graph(
+        self,
+        graph: &BareGraph,
+        prefactor: Option<&GlobalPrefactor>,
+    ) -> Numerator<AppliedFeynmanRule> {
         debug!("applying feynman rules ");
         Numerator {
-            state: AppliedFeynmanRule::from_graph(graph),
+            state: AppliedFeynmanRule::from_graph(graph, prefactor),
         }
     }
 
-    pub fn from_global(self, global: Atom, _graph: &BareGraph) -> Numerator<Global> {
+    pub fn from_global(
+        self,
+        global: Atom,
+        // _graph: &BareGraph,
+        prefactor: Option<&GlobalPrefactor>,
+    ) -> Numerator<Global> {
         debug!("setting global numerator");
-        Numerator {
-            state: Global::new(global.into()),
+
+        if let Some(prefactor) = prefactor {
+            let mut global = global;
+            global = global * &prefactor.color * &prefactor.colorless;
+            Numerator {
+                state: Global::new(global.into()),
+            }
+        } else {
+            Numerator {
+                state: Global::new(global.into()),
+            }
         }
     }
 }
@@ -724,11 +779,34 @@ impl ExpressionState for NonLocal {
 }
 
 impl Numerator<Global> {
-    pub fn color_simplify(self, color_projector: Option<Atom>) -> Numerator<ColorSimplified> {
+    pub fn color_simplify(self) -> Numerator<ColorSimplified> {
+        let new_state = ColorSimplified {
+            colorless: self
+                .state
+                .colorless
+                .map_data(Self::color_simplify_global_impl),
+            color: self.state.color,
+            state: Default::default(),
+        };
         debug!("color simplifying global numerator");
-        Numerator {
-            state: ColorSimplified::color_simplify(self.state, color_projector),
+        Numerator { state: new_state }
+    }
+
+    fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
+        ColorSimplified::isolate_color(&mut expression);
+        let (mut coefs, rem) = expression.0.coefficient_list(State::get_symbol("color"));
+        let mut atom = Atom::new_num(0);
+        for (key, coef) in coefs.iter_mut() {
+            let color_simplified = ColorSimplified::color_symplify_impl(key.clone().into())
+                .0
+                .factor();
+
+            atom = atom + coef.factor() * color_simplified;
+            // println!("coef {i}:{}\n", coef.factor());
         }
+        atom = atom + rem;
+        expression.0 = atom;
+        expression
     }
 }
 
@@ -819,7 +897,7 @@ impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
 }
 
 impl AppliedFeynmanRule {
-    pub fn from_graph(graph: &BareGraph) -> Self {
+    pub fn from_graph(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>) -> Self {
         debug!("generating numerator for graph: {}", graph.name);
         debug!("momentum: {}", graph.dot_lmb());
 
@@ -858,6 +936,11 @@ impl AppliedFeynmanRule {
             colorful_builder = colorful_builder.scalar_mul(c).unwrap();
         }
 
+        if let Some(prefactor) = prefactor {
+            colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
+            colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
+        }
+
         AppliedFeynmanRule {
             colorless: colorless_builder.map_data(|a| normalise_complex(&a).into()),
             color: colorful_builder.map_data(|a| normalise_complex(&a).into()),
@@ -867,7 +950,7 @@ impl AppliedFeynmanRule {
 }
 
 impl Numerator<AppliedFeynmanRule> {
-    pub fn color_simplify(self, color_projector: Option<Atom>) -> Numerator<ColorSimplified> {
+    pub fn color_simplify(self) -> Numerator<ColorSimplified> {
         debug!(
             "Applied feynman rules: color:{}\n colorless:{}",
             self.state.color, self.state.colorless
@@ -875,7 +958,7 @@ impl Numerator<AppliedFeynmanRule> {
         debug!("color symplifying local numerator");
 
         Numerator {
-            state: ColorSimplified::color_simplify(self.state, color_projector),
+            state: ColorSimplified::color_simplify(self.state),
         }
     }
 }
@@ -912,11 +995,30 @@ impl ColorSimplified {
             .collect();
 
         expression.replace_repeat_multiple(&reps);
+
+        // let mut color = Atom::new();
+
+        // if let AtomView::Mul(mul) = expression.0.as_view() {
+        //     for a in mul {
+        //         if let AtomView::Fun(f) = a {
+        //             if f.get_symbol() == State::get_symbol("color") {
+        //                 color.set_from_view(&f.iter().next().unwrap());
+        //             }
+        //         }
+        //     }
+        // }
+
+        // expression.0.replace_all(
+        //     &Pattern::Fn(State::get_symbol("color"), vec![]),
+        //     &Pattern::Literal(Atom::new_num(1)).into(),
+        //     None,
+        //     None,
+        // );
+
+        // color.into()
     }
 
     pub fn color_symplify_impl(mut expression: SerializableAtom) -> SerializableAtom {
-        let (mut coefs, rem) = expression.0.coefficient_list(State::get_symbol("color"));
-
         let replacements = vec![
             (Pattern::parse("color(a___)").unwrap(),Pattern::parse("a___").unwrap().into()),
             (Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*id(aind(coaf(i__),cof(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(j__),z___))").unwrap().into()),
@@ -963,30 +1065,11 @@ impl ColorSimplified {
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect();
 
-        let mut atom = Atom::new_num(0);
-        for (key, coef) in coefs.iter_mut() {
-            SerializableAtom::replace_repeat_multiple_atom_expand(key, &reps);
-
-            atom = atom + coef.factor() * key.factor();
-            // println!("coef {i}:{}\n", coef.factor());
-        }
-        atom = atom + rem;
-        expression.0 = atom;
+        SerializableAtom::replace_repeat_multiple_atom_expand(&mut expression.0, &reps);
         expression
     }
 
-    pub fn color_simplify<T: ExpressionState>(
-        expr: SymbolicExpression<T>,
-        color_projector: Option<Atom>,
-    ) -> ColorSimplified {
-        let mut expr = if let Some(projector) = color_projector {
-            expr.map_color(|a| (a.0 * &projector).into())
-        } else {
-            expr
-        };
-
-        expr.map_color_mut(Self::isolate_color);
-
+    pub fn color_simplify<T: ExpressionState>(expr: SymbolicExpression<T>) -> ColorSimplified {
         ColorSimplified {
             colorless: expr.colorless,
             color: expr.color.map_data(Self::color_symplify_impl),

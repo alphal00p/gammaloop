@@ -1,16 +1,18 @@
+use rand::{rngs::SmallRng, Rng, SeedableRng};
+
 use spenso::{complex::Complex, iterators::IteratableTensor, structure::HasStructure};
 use std::path::{Path, PathBuf};
-use symbolica::{atom::Atom, domains::rational::Rational};
+use symbolica::{atom::Atom, domains::rational::Rational, state::State};
 
 use crate::{
     cross_section::Amplitude,
     gammaloop_integrand::DefaultSample,
     graph::Graph,
-    model::Model,
-    momentum::{Dep, ExternalMomenta, Helicity},
-    numerator::{ContractionSettings, ExtraInfo},
+    model::{self, Model},
+    momentum::{Dep, ExternalMomenta, FourMomentum, Helicity, Polarization},
+    numerator::{Contracted, ContractionSettings, ExtraInfo, GlobalPrefactor},
     tests_from_pytest::{load_amplitude_output, sample_generator, test_export_settings},
-    utils::{ApproxEq, F},
+    utils::{f128, ApproxEq, F},
     Externals, RotationSetting, Settings,
 };
 
@@ -42,7 +44,8 @@ fn hairy_glue_box() {
     for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
         println!("{i}:{}", s);
     }
-    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph).color_simplify(Some(Atom::parse("f(aind(coad(8,4),coad(8,5),coad(8,10)))*f(aind(coad(8,11),coad(8,16),coad(8,17)))*id(aind(coad(8,22),coad(8,23)))").unwrap())).state.color.to_sparse().map_data(|a|a.to_string());
+
+    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,Some(&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,4),coad(8,5),coad(8,10)))*f(aind(coad(8,11),coad(8,16),coad(8,17)))*id(aind(coad(8,22),coad(8,23)))").unwrap(),colorless:Atom::new_num(1)})).color_simplify().state.color.to_sparse().map_data(|a|a.to_string());
 
     insta::assert_ron_snapshot!(color);
 }
@@ -115,8 +118,10 @@ fn trees() {
     for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
         println!("{i}:{}", s);
     }
-    export_settings.numerator_settings.color_projector =
-        Some("id(aind(cof(3,2),coaf(3,0)))/Nc".into());
+    export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
+        color: Atom::parse("id(aind(cof(3,2),coaf(3,0)))/Nc").unwrap(),
+        colorless: Atom::new_num(1),
+    });
 
     graph.generate_cff();
     let mut graph =
@@ -183,8 +188,10 @@ fn tree_ta_ta_1() {
     }
 
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.color_projector =
-        Some("id(aind(coaf(3,0),cof(3,2)))/Nc".into());
+    test_export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
+        color: Atom::parse("id(aind(coaf(3,0),cof(3,2)))/Nc").unwrap(),
+        colorless: Atom::new_num(1),
+    });
 
     let mut graph = graph.process_numerator(
         &model,
@@ -289,7 +296,7 @@ fn tree_ta_ta_1() {
 pub fn validate_gamma(mut g: Graph<UnInit>, model: &Model, path: PathBuf) {
     let num = g.derived_data.as_ref().unwrap().numerator.clone();
 
-    let num = num.from_graph(&mut g.bare_graph);
+    let num = num.from_graph(&mut g.bare_graph, None);
 
     let path_gamma = path.join("gamma");
 
@@ -302,7 +309,7 @@ pub fn validate_gamma(mut g: Graph<UnInit>, model: &Model, path: PathBuf) {
 
     let mut num_gamma = num
         .clone()
-        .color_simplify(None)
+        .color_simplify()
         .gamma_simplify()
         .parse()
         .contract(ContractionSettings::<Rational>::Normal)
@@ -318,7 +325,7 @@ pub fn validate_gamma(mut g: Graph<UnInit>, model: &Model, path: PathBuf) {
         );
 
     let mut num = num
-        .color_simplify(None)
+        .color_simplify()
         // .gamma_symplify()
         .parse()
         .contract(ContractionSettings::<Rational>::Normal)
@@ -348,8 +355,8 @@ pub fn validate_gamma(mut g: Graph<UnInit>, model: &Model, path: PathBuf) {
 
         assert!(
             Complex::approx_eq_iterator(
-                valg.iter_flat().map(|(_i, o)| o),
-                val.iter_flat().map(|(_i, o)| o),
+                valg.iter_flat().map(|(i, o)| o),
+                val.iter_flat().map(|(i, o)| o),
                 &F(0.0001),
             ),
             "{}: {}!={}",
@@ -372,8 +379,12 @@ fn tree_h_ttxaah_1() {
     //     println!("{i}:{}", s);
     // }
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.color_projector =
-        Some("id(aind(cof(3,1),coaf(3,2)))/Nc".into());
+    test_export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
+        color: Atom::parse("id(aind(cof(3,1),coaf(3,2)))/Nc")
+            .unwrap()
+            .into(),
+        colorless: Atom::new_num(1),
+    });
 
     let mut graph = graph.process_numerator(
         &model,
@@ -414,8 +425,10 @@ fn tree_hh_ttxaa_1() {
         println!("{i}:{}", s);
     }
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.color_projector =
-        Some("id(aind(cof(3,2),coaf(3,3)))/Nc".into());
+    test_export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
+        color: Atom::parse("id(aind(cof(3,2),coaf(3,3)))/Nc").unwrap(),
+        colorless: Atom::new_num(1),
+    });
 
     let mut graph = graph.process_numerator(
         &model,
@@ -568,16 +581,20 @@ fn tree_h_ttxaah_0() {
     let _ = env_logger::builder().is_test(true).try_init();
     let expr = Atom::parse("-8/3*𝑖*ee^2*vev*lam*yt*(MT*id(aind(bis(4,3),bis(4,4)))+Q(6,aind(lord(4,5)))*γ(aind(loru(4,5),bis(4,3),bis(4,4))))*(MT*id(aind(bis(4,5),bis(4,6)))+Q(7,aind(lord(4,11)))*γ(aind(loru(4,11),bis(4,5),bis(4,6))))*(ProjM(aind(bis(4,7),bis(4,6)))+ProjP(aind(bis(4,7),bis(4,6))))*sqrt(2)^-1*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,6),cof(3,7)))*id(aind(coaf(3,7),cof(3,8)))*id(aind(coaf(3,8),cof(3,9)))*id(aind(coaf(3,9),cof(3,10)))*γ(aind(lord(4,2),bis(4,3),bis(4,2)))*γ(aind(lord(4,3),bis(4,5),bis(4,4)))*ubar(1,aind(bis(4,2)))*v(2,aind(bis(4,7)))*ϵbar(3,aind(loru(4,2)))*ϵbar(4,aind(loru(4,3)))").unwrap();
 
-    let new = Numerator {
-        state: Global::new(expr.clone().into()),
-    }
-    .color_simplify(Some(Atom::parse("id(aind(cof(3,5),coaf(3,10)))").unwrap()))
-    // .color_project()
-    // .gamma_symplify()
-    .parse()
-    .contract(ContractionSettings::<Rational>::Normal)
-    .unwrap();
-    println!("{}", new.export());
+    let prefactor = GlobalPrefactor {
+        color: Atom::parse("id(aind(cof(3,1),coaf(3,2))").unwrap(),
+        colorless: Atom::new_num(1),
+    };
+
+    Numerator::default()
+        .from_global(expr, Some(&prefactor))
+        .color_simplify()
+        // .color_project()
+        // .gamma_symplify()
+        .parse()
+        .contract(ContractionSettings::<Rational>::Normal)
+        .unwrap();
+    // println!("{}", new.export());
 }
 
 #[test]
