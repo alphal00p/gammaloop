@@ -44,7 +44,7 @@ fn hairy_glue_box() {
         println!("{i}:{}", s);
     }
 
-    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,Some(&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))").unwrap(),colorless:Atom::new_num(1)})).color_simplify().state.color.to_sparse().map_data(|a|a.to_string());
+    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,Some(&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))").unwrap(),colorless:Atom::new_num(1)})).color_simplify().state.color.to_dense().map_data(|a|a.to_string());
 
     insta::assert_ron_snapshot!(color);
 }
@@ -644,7 +644,5 @@ fn tree_h_ttxaah_0() {
 
 #[test]
 fn color() {
-    println!("{}",Numerator::default().from_global(Atom::parse("id(aind(coaf(3,6),cof(3,7)))*id(aind(coaf(3,8),cof(3,9)))*id(aind(coaf(3,10),cof(3,11)))*id(aind(coaf(3,12),cof(3,13)))*id(aind(coaf(3,14),cof(3,15)))*id(aind(coaf(3,16),cof(3,17)))*id(aind(cof(3,6),coaf(3,9)))*id(aind(cof(3,8),coaf(3,11)))*id(aind(cof(3,10),coaf(3,13)))*id(aind(cof(3,12),coaf(3,15)))*id(aind(cof(3,14),coaf(3,17)))*id(aind(cof(3,16),coaf(3,7)))").unwrap(), None).color_simplify().export());
-
-    insta::assert_snapshot!("{}",Numerator::default().from_global(Atom::parse("f(aind(coad(8,1),coad(8,11),coad(8,21)))*f(aind(coad(8,21),coad(8,2),coad(8,12)))*f(aind(coad(8,3),coad(8,12),coad(8,22)))*f(aind(coad(8,22),coad(8,4),coad(8,13)))*f(aind(coad(8,5),coad(8,13),coad(8,23)))*f(aind(coad(8,23),coad(8,6),coad(8,14)))*f(aind(coad(8,7),coad(8,14),coad(8,24)))*f(aind(coad(8,24),coad(8,8),coad(8,11)))*f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,8)))").unwrap(), None).color_simplify().export());
+    insta::assert_snapshot!("Single color string",Numerator::default().from_global(Atom::parse("f(aind(coad(8,1),coad(8,11),coad(8,21)))*f(aind(coad(8,21),coad(8,2),coad(8,12)))*f(aind(coad(8,3),coad(8,12),coad(8,22)))*f(aind(coad(8,22),coad(8,4),coad(8,13)))*f(aind(coad(8,5),coad(8,13),coad(8,23)))*f(aind(coad(8,23),coad(8,6),coad(8,14)))*f(aind(coad(8,7),coad(8,14),coad(8,24)))*f(aind(coad(8,24),coad(8,8),coad(8,11)))*f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,8)))").unwrap(), None).color_simplify().export());
 }

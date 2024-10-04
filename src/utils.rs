@@ -467,6 +467,10 @@ impl<const N: u32> SingleFloat for VarFloat<N> {
     fn is_zero(&self) -> bool {
         self.float == 0.
     }
+
+    fn from_rational(&self, rat: &Rational) -> Self {
+        rat.into()
+    }
 }
 impl<const N: u32> RealNumberLike for VarFloat<N> {
     fn to_f64(&self) -> f64 {
@@ -808,6 +812,9 @@ impl<T: FloatLike> SingleFloat for F<T> {
             fn is_one(&self)->bool;
             fn is_finite(&self)->bool;
         }
+    }
+    fn from_rational(&self, rat: &Rational) -> Self {
+        F(self.0.from_rational(rat))
     }
 }
 

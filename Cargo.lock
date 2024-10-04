@@ -2353,7 +2353,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?branch=master#74901cf356803de662853609efc1432db43eb782"
+source = "git+https://github.com/alphal00p/spenso?branch=master#ecf099d9aac7b05b3f10c40d490cdb7a4447ccc3"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2459,7 +2459,7 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -2679,9 +2679,9 @@ dependencies = [
 
 [[package]]
 name = "typed-index-collections"
-version = "3.2.2"
+version = "3.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9db9d52cbe79f2c778128f00190032aad34a34b9aaffad910a7f92b402e4189a"
+checksum = "8d844b11f547a6fb9dee7ed073d9860174917a072aabe05df6ee60dbe79e7afa"
 dependencies = [
  "serde",
 ]
