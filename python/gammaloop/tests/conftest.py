@@ -401,7 +401,7 @@ def physical_1L_6photons_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'physical_1L_6photons.dot')} --no_compile
-output {output_path} --overwrite_output -exp -ef file"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
