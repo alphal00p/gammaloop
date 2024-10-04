@@ -1,28 +1,21 @@
 use std::{
-    clone,
     cmp::Ordering,
     collections::VecDeque,
-    fmt::{self, format, Display, Formatter},
+    fmt::{self, Display, Formatter},
     hash::Hash,
-    iter::Map,
-    ops::{Deref, Index, Sub},
+    ops::{Deref, Index},
 };
 
 use ahash::{AHashMap, AHashSet};
-use bincode::de;
-use bitvec::{
-    slice::IterOnes,
-    vec::{self, BitVec},
-};
+use bitvec::{slice::IterOnes, vec::BitVec};
 use color_eyre::Report;
 use eyre::eyre;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use pathfinding::prelude::BfsReachable;
-use petgraph::{algo::Cycle, graph};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use spenso::{data::DataTensor, parametric::SerializableAtom, structure::ScalarTensor};
+use spenso::parametric::SerializableAtom;
 use symbolica::{
     atom::{Atom, AtomView, FunctionBuilder},
     state::State,
@@ -30,10 +23,8 @@ use symbolica::{
 use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 
 use crate::{
-    cross_section::SuperGraph,
-    graph::{BareGraph, Edge, EdgeType, Graph, LoopMomentumBasis, Vertex},
+    graph::{BareGraph, Edge, EdgeType, LoopMomentumBasis, Vertex},
     model::normalise_complex,
-    numerator::{AppliedFeynmanRule, Numerator},
 };
 
 use bitvec::prelude::*;
@@ -303,21 +294,11 @@ impl<N, E> Involution<N, E> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 struct GVEdgeAttrs {
     label: Option<String>,
     color: Option<String>,
     other: Option<String>,
-}
-
-impl Default for GVEdgeAttrs {
-    fn default() -> Self {
-        GVEdgeAttrs {
-            label: None,
-            color: None,
-            other: None,
-        }
-    }
 }
 
 impl std::fmt::Display for GVEdgeAttrs {
@@ -712,7 +693,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 
-enum NestingNodeError {
+pub enum NestingNodeError {
     #[error("Invalid start node")]
     InvalidStart,
 }
@@ -1044,11 +1025,11 @@ impl<E, V> NestingGraph<E, V> {
         filter
     }
 
-    fn filter_from_pos(&self, pos: &[usize]) -> BitVec {
+    pub fn filter_from_pos(&self, pos: &[usize]) -> BitVec {
         NestingNode::filter_from_pos(pos, self.involution.len())
     }
 
-    fn nesting_node_from_pos(&self, pos: &[usize]) -> NestingNode {
+    pub fn nesting_node_from_pos(&self, pos: &[usize]) -> NestingNode {
         self.nesting_node_from_subgraph(SubGraph::from(self.filter_from_pos(pos)))
     }
 
@@ -1094,7 +1075,7 @@ impl<E, V> NestingGraph<E, V> {
 
     ///Read, R.C. and Tarjan, R.E. (1975), Bounds on Backtrack Algorithms for Listing Cycles, Paths, and Spanning Trees. Networks, 5: 237-252. https://doi.org/10.1002/net.1975.5.3.237
 
-    fn read_tarjan(&self) -> Vec<NestingNode> {
+    pub fn read_tarjan(&self) -> Vec<NestingNode> {
         let mut cycles = Vec::new();
         for (i, (_, e)) in self.involution.inv.iter().enumerate() {
             if matches!(e, InvolutiveMapping::Source(_)) {
@@ -1104,7 +1085,7 @@ impl<E, V> NestingGraph<E, V> {
         cycles
     }
 
-    fn backtrack(
+    pub fn backtrack(
         &self,
         options: &mut SubGraph,
         tree: &mut SubGraph,
@@ -1133,7 +1114,7 @@ impl<E, V> NestingGraph<E, V> {
         }
     }
 
-    fn increasing_cycles_from(&self, start: usize) -> Vec<NestingNode> {
+    pub fn increasing_cycles_from(&self, start: usize) -> Vec<NestingNode> {
         let mut cycles = Vec::new();
 
         let mut tree: SubGraph = self.empty_filter().into();
@@ -1209,7 +1190,7 @@ impl<E, V> NestingGraph<E, V> {
         cycles
     }
 
-    fn order_basis(&self, basis: &[NestingNode]) -> Vec<Vec<SubGraph>> {
+    pub fn order_basis(&self, basis: &[NestingNode]) -> Vec<Vec<SubGraph>> {
         let mut seen = vec![basis[0].internal_graph.clone()];
         let mut partitions = vec![seen.clone()];
 
@@ -1233,7 +1214,7 @@ impl<E, V> NestingGraph<E, V> {
         partitions
     }
 
-    fn welchs_violating(partitions: &[Vec<SubGraph>]) -> Vec<SubGraph> {
+    pub fn welchs_violating(partitions: &[Vec<SubGraph>]) -> Vec<SubGraph> {
         let mut violations = Vec::new();
 
         for (b1, b2) in partitions.iter().tuple_windows() {
@@ -1254,11 +1235,11 @@ impl<E, V> NestingGraph<E, V> {
         violations
     }
 
-    fn all_cycles(&self) -> Vec<NestingNode> {
+    pub fn all_cycles(&self) -> Vec<NestingNode> {
         self.all_composite_cycles_with_basis(&self.cycle_basis())
     }
 
-    fn all_cycle_unions(&self) -> AHashSet<SubGraph> {
+    pub fn all_cycle_unions(&self) -> AHashSet<SubGraph> {
         let cycles = self.read_tarjan();
         let mut spinneys = AHashSet::new();
 
@@ -1291,7 +1272,7 @@ impl<E, V> NestingGraph<E, V> {
         spinneys
     }
 
-    fn all_basis_sym_diffs(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
+    pub fn all_basis_sym_diffs(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
         let mut diffs = Vec::new();
 
         let mut pset = PowersetIterator::new(basis.len() as u8);
@@ -1311,7 +1292,7 @@ impl<E, V> NestingGraph<E, V> {
         diffs
     }
 
-    fn all_composite_cycles_with_basis(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
+    pub fn all_composite_cycles_with_basis(&self, basis: &[NestingNode]) -> Vec<NestingNode> {
         let mut cycles = Vec::new();
 
         // println!("loops: {}", basis.len());
@@ -1351,7 +1332,7 @@ impl<E, V> NestingGraph<E, V> {
         self.full_node().internal_graph
     }
 
-    fn paton_count_loops(
+    pub fn paton_count_loops(
         &self,
         subgraph: &SubGraph,
         start: usize,
@@ -1522,13 +1503,13 @@ impl<E, V> NestingGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray50".to_string()),
                             label: None,
-                            other: data.as_ref().map(|x| edge_attr(&x)),
+                            other: data.as_ref().map(edge_attr),
                         })
                     } else {
                         Some(GVEdgeAttrs {
                             color: Some("gray75".to_string()),
                             label: None,
-                            other: data.as_ref().map(|x| edge_attr(&x)),
+                            other: data.as_ref().map(edge_attr),
                         })
                     };
                     out.push_str(&InvolutiveMapping::<()>::identity_dot(
@@ -1549,7 +1530,7 @@ impl<E, V> NestingGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray50:gray75;0.5".to_string()),
                             label: None,
-                            other: data.as_ref().map(|x| edge_attr(&x)),
+                            other: data.as_ref().map(edge_attr),
                         })
                     } else if *node_as_graph
                         .externalhedges
@@ -1560,7 +1541,7 @@ impl<E, V> NestingGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray75:gray50;0.5".to_string()),
                             label: None,
-                            other: data.as_ref().map(|x| edge_attr(&x)),
+                            other: data.as_ref().map(edge_attr),
                         })
                     } else if *node_as_graph
                         .externalhedges
@@ -1571,13 +1552,13 @@ impl<E, V> NestingGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray50".to_string()),
                             label: None,
-                            other: data.as_ref().map(|x| edge_attr(&x)),
+                            other: data.as_ref().map(edge_attr),
                         })
                     } else {
                         Some(GVEdgeAttrs {
                             color: Some("gray75".to_string()),
                             label: None,
-                            other: data.as_ref().map(|x| edge_attr(&x)),
+                            other: data.as_ref().map(edge_attr),
                         })
                     };
                     out.push_str(&InvolutiveMapping::<()>::pair_dot(
@@ -1651,7 +1632,7 @@ impl<E, V> NestingGraph<E, V> {
         PoSet::from_iter(iter)
     }
 
-    fn all_spinneys_with_basis(&self, basis: &[&SubGraph]) -> AHashSet<NestingNode> {
+    pub fn all_spinneys_with_basis(&self, basis: &[&SubGraph]) -> AHashSet<NestingNode> {
         let mut spinneys = AHashSet::new();
         let mut base_cycle: SubGraph = self.empty_filter().into();
 
@@ -1682,21 +1663,25 @@ impl<E, V> NestingGraph<E, V> {
         spinneys
     }
 
-    fn all_spinneys_rec(&self, spinneys: &mut AHashSet<NestingNode>, cycle_sums: Vec<NestingNode>) {
-        let len = spinneys.len();
+    pub fn all_spinneys_rec(
+        &self,
+        spinneys: &mut AHashSet<NestingNode>,
+        cycle_sums: Vec<NestingNode>,
+    ) {
+        let _len = spinneys.len();
 
         let mut pset = PowersetIterator::new(cycle_sums.len() as u8);
 
         pset.next(); //Skip empty set
 
         for (ci, cj) in cycle_sums.iter().tuple_combinations() {
-            let union = ci.internal_graph.union(&cj.internal_graph);
+            let _union = ci.internal_graph.union(&cj.internal_graph);
 
             // spinneys.insert(union);
         }
     }
 
-    fn all_spinneys(&self) -> AHashMap<SubGraph, Vec<(NestingNode, Option<NestingNode>)>> {
+    pub fn all_spinneys(&self) -> AHashMap<SubGraph, Vec<(NestingNode, Option<NestingNode>)>> {
         let mut cycles = self.cycle_basis();
 
         let mut all_combinations = PowersetIterator::new(cycles.len() as u8);
@@ -1731,9 +1716,9 @@ impl<E, V> NestingGraph<E, V> {
         spinneys
     }
 
-    fn all_spinneys_alt(&self) -> AHashSet<SubGraph> {
+    pub fn all_spinneys_alt(&self) -> AHashSet<SubGraph> {
         let mut spinneys = AHashSet::new();
-        let mut cycles = self.all_cycles();
+        let cycles = self.all_cycles();
 
         let mut pset = PowersetIterator::new(cycles.len() as u8);
         pset.next(); //Skip empty set
@@ -2226,7 +2211,7 @@ impl UVGraph {
 
     fn t_op<I: Iterator<Item = SubGraph>>(&self, mut subgraph_iter: I) -> Atom {
         if let Some(subgraph) = subgraph_iter.next() {
-            let mut t = self.t_op(subgraph_iter);
+            let t = self.t_op(subgraph_iter);
             FunctionBuilder::new(State::get_symbol("Top"))
                 .add_arg(&Atom::new_num(self.dod(&subgraph)))
                 .add_arg(&t)
@@ -2380,6 +2365,7 @@ impl Top {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for Top {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.graph.partial_cmp(&other.graph)
@@ -2497,7 +2483,7 @@ impl Wood {
     }
     pub fn unfold(&self, graph: &UVGraph) -> UnfoldedWood {
         let mut trie_builder = TrieBuilder::new();
-        let shift = self.poset.shift();
+        let _shift = self.poset.shift();
 
         for p in self.poset.bfs_paths().map(|s| {
             s.into_iter()
@@ -2676,6 +2662,7 @@ pub struct DAG<T, D = ()> {
     associated_data: SecondaryMap<NodeRef, D>,
 }
 
+#[allow(dead_code)]
 pub struct TreeNode<T> {
     data: T,
     order: Option<u64>,
@@ -2683,6 +2670,8 @@ pub struct TreeNode<T> {
     parent: NodeRef,
     children: Vec<NodeRef>, // Edges to child nodes by key
 }
+
+#[allow(dead_code)]
 pub struct Tree<T, D = ()> {
     nodes: SlotMap<NodeRef, TreeNode<T>>,
     associated_data: SecondaryMap<NodeRef, D>,
@@ -2703,6 +2692,7 @@ impl<T> TopoOrdered<T> {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl<T> PartialOrd for TopoOrdered<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.order.partial_cmp(&other.order)
@@ -3094,12 +3084,11 @@ impl From<SubGraph> for SubGraphChainLink {
         SubGraphChainLink { subgraph }
     }
 }
+
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for SubGraphChainLink {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.subgraph.partial_cmp(&other.subgraph) {
-            None => None, //panic!("SubGraphChainLink should be comparable"),
-            Some(o) => Some(o),
-        }
+        self.subgraph.partial_cmp(&other.subgraph)
     }
 }
 

@@ -1,14 +1,11 @@
 use std::time::Instant;
 
-use itertools::Itertools;
-use symbolica::printer::PrintOptions;
-
 use crate::{
     tests_from_pytest::load_amplitude_output,
     uv::{PoSet, UVGraph},
 };
 
-use super::{BitFilter, Involution, NestingGraph, NestingGraphBuilder};
+use super::{Involution, NestingGraph, NestingGraphBuilder};
 
 #[test]
 #[allow(unused)]
@@ -278,7 +275,7 @@ fn alt_vs_pair() {
         let before = Instant::now();
         let all_spinneys_alt = rand_graph.all_spinneys_alt();
         let after_alt = before.elapsed();
-        // println!("{s} {after:?} {after_alt:?}");
+        println!("{s} {after:?} {after_alt:?}");
 
         assert_eq!(
             all_spinneys.len(),
@@ -337,7 +334,7 @@ fn read_tarjan_vs_cycle_space() {
 //         println!("{}", rand_graph.dot(&c));
 //     }
 // }
-
+#[allow(non_snake_case)]
 #[test]
 fn K33() {
     let mut builder: NestingGraphBuilder<(), ()> = NestingGraphBuilder::new();
@@ -364,7 +361,7 @@ fn K33() {
 
     println!("{}", graph.dot(&graph.full_node()));
 
-    for (s, v) in graph.all_spinneys() {
+    for (s, _) in graph.all_spinneys() {
         println!("cyclotomatic_number: {}", graph.cyclotomatic_number(&s));
         println!(
             "paton_count_loops {}",
@@ -435,8 +432,8 @@ fn petersen() {
             graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
         );
         for (ci, cj) in v {
-            println!("{}", graph.dot(&ci));
-            println!("{}", graph.dot(&cj.as_ref().unwrap()));
+            println!("{}", graph.dot(ci));
+            println!("{}", graph.dot(cj.as_ref().unwrap()));
         }
     } else {
         println!("not found");
@@ -493,8 +490,8 @@ fn wagner_graph() {
             graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
         );
         for (ci, cj) in v {
-            println!("{}", graph.dot(&ci));
-            println!("{}", graph.dot(&cj.as_ref().unwrap()));
+            println!("{}", graph.dot(ci));
+            println!("{}", graph.dot(cj.as_ref().unwrap()));
         }
     } else {
         println!("not found");
@@ -593,8 +590,8 @@ fn flower_snark() {
             graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
         );
         for (ci, cj) in v {
-            println!("{}", graph.dot(&ci));
-            println!("{}", graph.dot(&cj.as_ref().unwrap()));
+            println!("{}", graph.dot(ci));
+            println!("{}", graph.dot(cj.as_ref().unwrap()));
         }
     } else {
         println!("not found");
@@ -608,6 +605,7 @@ use std::cmp::Ordering;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct TestNode(&'static str);
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 // Implement PartialOrd and Ord for TestNode to define the partial order
 impl PartialOrd for TestNode {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
