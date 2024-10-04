@@ -1,0 +1,29 @@
+import_model scalars-full
+import_graphs ./python/gammaloop/tests/test_data/graph_inputs/massless_triangle.dot 
+set compile_cff True
+set compile_separate_orientations False
+set load_compiled_cff True
+set load_compiled_separate_orientations False
+set inline_asm True
+
+!rm -rf examples/cards/box
+output examples/cards/box
+launch examples/cards/box
+info
+set integrated_phase 'real'
+# Tropical sampling
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+
+set externals.data.momenta [\
+[0.,0.,-2.,1],\
+[1,2.,0.,-1],\
+]
+
+# set externals.data.momenta [\
+# [0.5,0.,-2.,1],\
+# [1,2.,0.,-1],\
+# ]
+set e_cm 1.
+set n_start 1000000
+set n_max 50000000000
+integrate massless_triangle -r -c 4

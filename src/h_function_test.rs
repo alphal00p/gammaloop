@@ -97,7 +97,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
     }
 
     fn evaluate_sample(
-        &self,
+        &mut self,
         sample: &Sample<F<f64>>,
         wgt: F<f64>,
         iter: usize,

@@ -96,7 +96,7 @@ def massless_scalar_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> P
         tmpdir_factory, "TEST_AMPLITUDE_massless_scalar_triangle", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'massless_triangle.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'massless_triangle.dot')} --no_compile
 output {output_path} --overwrite_output"""))
     return output_path
 
@@ -108,7 +108,7 @@ def scalar_massless_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_massless_box", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'massless_box.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'massless_box.dot')} --no_compile
 output {output_path} --overwrite_output"""))
     return output_path
 
@@ -120,8 +120,8 @@ def scalar_fishnet_2x2_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_fishnet_2x2", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'fishnet_2x2.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'fishnet_2x2.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -132,8 +132,8 @@ def scalar_fishnet_2x3_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_fishnet_2x3", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'fishnet_2x3.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'fishnet_2x3.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -144,8 +144,8 @@ def scalar_cube_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_cube", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'cube.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'cube.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -156,8 +156,8 @@ def scalar_bubble_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_bubble", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'bubble.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'bubble.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -168,8 +168,8 @@ def scalar_sunrise_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_sunrise", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'sunrise.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'sunrise.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -180,8 +180,8 @@ def scalar_double_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> Pat
                                      "TEST_AMPLITUDE_scalar_double_triangle", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'double_triangle.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'double_triangle.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -192,8 +192,8 @@ def scalar_mercedes_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_mercedes", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'mercedes.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'mercedes.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -204,8 +204,8 @@ def scalar_triangle_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_triangle_box", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'triangle_box.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'triangle_box.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -216,8 +216,8 @@ def scalar_isopod_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_isopod", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'isopod.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'isopod.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -228,7 +228,7 @@ def scalar_tree_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_tree_triangle", False).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'tree_triangle.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'tree_triangle.dot')} --no_compile
 output {output_path}"""))
     return output_path
 
@@ -240,7 +240,7 @@ def scalar_ltd_topology_f_export(tmpdir_factory: pytest.TempPathFactory) -> Path
                                      "TEST_AMPLITUDE_ltd_topology_f", False).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'ltd_topology_f.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'ltd_topology_f.dot')} --no_compile
 output {output_path}"""))
     return output_path
 
@@ -252,7 +252,7 @@ def scalar_ltd_topology_h_export(tmpdir_factory: pytest.TempPathFactory) -> Path
                                      "TEST_AMPLITUDE_ltd_topology_h", False).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'ltd_topology_h.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'ltd_topology_h.dot')} --no_compile
 output {output_path}"""))
     return output_path
 
@@ -264,8 +264,8 @@ def scalar_raised_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> Pat
                                      "TEST_AMPLITUDE_scalar_raised_triangle", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'raised_triangle.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'raised_triangle.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -276,8 +276,8 @@ def lbl_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_lbl_box", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model sm;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'lbl_box.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'lbl_box.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -288,7 +288,7 @@ def epem_a_ddx_nlo_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_CROSS_SECTION_epem_a_ddx_nlo", False).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model sm
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'epem_a_ddx_NLO.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'epem_a_ddx_NLO.py')} -f qgraph --no_compile
 output {output_path}"""))
     return output_path
 
@@ -300,7 +300,7 @@ def massive_epem_a_ddx_nlo_export(tmpdir_factory: pytest.TempPathFactory) -> Pat
                                      "TEST_CROSS_SECTION_massive_epem_a_ddx_nlo", False).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model sm-full
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'epem_a_ddx_NLO.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'epem_a_ddx_NLO.py')} -f qgraph --no_compile
 output {output_path}"""))
     return output_path
 
@@ -312,8 +312,8 @@ def scalar_hexagon_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_AMPLITUDE_scalar_hexagon", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'hexagon.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'hexagon.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -324,8 +324,8 @@ def scalar_ltd_topology_c_export(tmpdir_factory: pytest.TempPathFactory) -> Path
                                      "TEST_AMPLITUDE_scalar_ltd_topology_c", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'ltd_topology_c.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'ltd_topology_c.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -337,7 +337,7 @@ def scalar_massless_pentabox_export(tmpdir_factory: pytest.TempPathFactory) -> P
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 generate_graph --name=massless_pentabox -ve=[(1000,1,6),(1000,6,7),(1000,7,2),(1000,2,1),(1000,7,3),(1000,3,4),(1000,4,5),(1000,5,6)] -ee=[("in",1),("in",2),("in",3),("in",4),("out",5)]
-output {output_path} --overwrite_output"""))
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -349,7 +349,7 @@ def scalar_massless_3l_pentabox_export(tmpdir_factory: pytest.TempPathFactory) -
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 generate_graph --name=massless_3l_pentabox -ve=[(1000,1,6),(1000,6,7),(1000,7,2),(1000,2,1),(1000,7,8),(1000,8,9),(1000,9,6),(1000,8,3),(1000,3,4),(1000,4,5),(1000,5,9)] -ee=[("in",1),("in",2),("in",3),("in",4),("out",5)]
-output {output_path} --overwrite_output"""))
+output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
 
@@ -360,9 +360,10 @@ def scalar_3L_6P_topology_A_export(tmpdir_factory: pytest.TempPathFactory) -> Pa
                                      "TEST_AMPLITUDE_scalar_3L_6P_topology_A", False).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'scalar_3L_6P_topology_A.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'scalar_3L_6P_topology_A.dot')} --no_compile
 set target_omega 2.0
-output {output_path} -exp -ef file"""))
+set panic_on_fail True
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -373,19 +374,198 @@ def physical_3L_6photons_topology_A_export(tmpdir_factory: pytest.TempPathFactor
                                      "TEST_AMPLITUDE_physical_3L_6photons_topology_A", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
-import_graphs {pjoin(RESOURCES_PATH, 'qgraf_outputs', 'physical_3L_6photons_topology_A.py')} -f qgraph --no_compile
-output {output_path} --overwrite_output -exp -ef file"""))
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'physical_3L_6photons_topology_A.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
+
+
+@pytest.fixture(scope="session")
+def physical_2L_6photons_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_physical_2L_6photons", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'physical_2L_6photons.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def physical_1L_6photons_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_physical_1L_6photons", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'physical_1L_6photons.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def physical_1L_2A_final_4H_top_internal_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_physical_1L_2A_final_4H_top_internal", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'physical_1L_2A_final_4H_top_internal.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def top_bubble_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_top_bubble", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'top_bubble.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+@pytest.fixture(scope="session")
+def hairy_glue_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_hairy_glue_box", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'hairy_glue_box.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+@pytest.fixture(scope="session")
+def hairy_glue_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_hairy_glue_box", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'hairy_glue_box.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def triangle_box_triangle_phys_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_triangle_box_triangle_phys", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'triangle_box_triangle_phys.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+@pytest.fixture(scope="session")
+def triangle_box_triangle_phys_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     "TEST_AMPLITUDE_triangle_box_triangle_phys", True).joinpath("GL_OUTPUT")
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'triangle_box_triangle_phys.dot')} --no_compile
+output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+@pytest.fixture(scope="session")
+def ta_ta_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     pjoin('trees', 'ta_ta'), True)
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(output_path, 'tree_amplitude_1_ta_ta.yaml')} --format yaml --no_compile
+output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def th_th_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     pjoin('trees', 'th_th'), True)
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(output_path, 'tree_amplitude_1_th_th.yaml')} --format yaml --no_compile
+output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def t_ta_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     pjoin('trees', 't_ta'), True)
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(output_path, 'tree_amplitude_1_t_ta.yaml')} --format yaml --no_compile
+output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def hh_ttxaa_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     pjoin('trees', 'hh_ttxaa'), True)
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(output_path, 'tree_amplitude_1_hh_ttxaa.yaml')} --format yaml --no_compile
+output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def h_ttxaah_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     pjoin('trees', 'h_ttxaah'), True)
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(output_path, 'tree_amplitude_1_h_ttxaah.yaml')} --format yaml --no_compile
+output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
+
+@pytest.fixture(scope="session")
+def aa_aahhttx_tree_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+    gloop = get_gamma_loop_interpreter()
+    # Specify "True" below for a pytest designed to generate input for a rust test.
+    output_path = get_test_directory(tmpdir_factory,
+                                     pjoin('trees', 'aa_aahhttx'), True)
+    gloop.run(CommandList.from_string(
+        f"""import_model sm-full;
+import_graphs {pjoin(output_path, 'tree_amplitude_1_aa_aahhttx.yaml')} --format yaml --no_compile
+output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -ef file"""))
+    return output_path
+
 
 
 @pytest.fixture(scope="session")
 def compile_rust_tests() -> Path | None:
 
     # If you want to bypass the "manual" compilation of the rust tests, then uncomment the line below
-    # return None
+    return None
 
     cmd_list = ['cargo', 'build', '--release', '--target-dir', os.path.normpath(os.path.join(
-        GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries')), '--features=binary,fail-on-warnings', '--no-default-features',
+        GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries')), '--features=binary', '--no-default-features',
         '--tests', '--message-format=json']
     logger.debug("Compiling rust tests with command: %s", " ".join(cmd_list))
     process = Popen(cmd_list, cwd=GL_PATH, stdout=PIPE, stderr=PIPE)

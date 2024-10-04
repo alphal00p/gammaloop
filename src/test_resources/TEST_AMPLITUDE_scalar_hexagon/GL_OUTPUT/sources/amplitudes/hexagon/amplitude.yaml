@@ -10,43 +10,43 @@ amplitude_graphs:
     - name: v1
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p1
     - name: v2
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p2
     - name: v3
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p3
     - name: v4
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: scalar_0
+        direction: out
       edges:
       - p4
     - name: v5
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: scalar_0
+        direction: out
       edges:
       - p5
     - name: v6
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: scalar_0
+        direction: out
       edges:
       - p6
     - name: v7
@@ -54,49 +54,49 @@ amplitude_graphs:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
+      - p1
       - q1
       - q6
-      - p1
     - name: v8
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q2
-      - q1
       - p2
+      - q1
+      - q2
     - name: v9
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q3
-      - q2
       - p3
+      - q2
+      - q3
     - name: v10
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q4
-      - q3
       - p4
+      - q3
+      - q4
     - name: v11
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q5
-      - q4
       - p5
+      - q4
+      - q5
     - name: v12
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q6
-      - q5
       - p6
+      - q5
+      - q6
     edges:
     - name: p1
       edge_type: in
@@ -182,7 +182,6 @@ amplitude_graphs:
       vertices:
       - v12
       - v7
-    overall_factor: 1.0
     external_connections:
     - - v1
       - null
@@ -196,6 +195,7 @@ amplitude_graphs:
       - v5
     - - null
       - v6
+    overall_factor: '1'
     loop_momentum_basis:
     - q5
     edge_signatures:
@@ -295,4 +295,5 @@ amplitude_graphs:
           - 1
           - 1
           - 0
+  multiplicity: '1'
   multi_channeling_channels: []

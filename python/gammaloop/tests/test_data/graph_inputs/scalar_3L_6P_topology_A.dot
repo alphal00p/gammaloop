@@ -1,0 +1,38 @@
+digraph scalar_3L_6P_topology_A_0 {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5;
+v6;
+v7 [int_id="V_3_SCALAR_011"];
+v8 [int_id="V_3_SCALAR_011"];
+v9 [int_id="V_3_SCALAR_011"];
+v10 [int_id="V_3_SCALAR_011"];
+v11 [int_id="V_3_SCALAR_011"];
+v12 [int_id="V_3_SCALAR_011"];
+v13 [int_id="V_3_SCALAR_011"];
+v14 [int_id="V_3_SCALAR_011"];
+v15 [int_id="V_3_SCALAR_011"];
+v16 [int_id="V_3_SCALAR_011"];
+v1 -> v7 [pdg=1000, name=p1, mom=p1];
+v2 -> v8 [pdg=1000, name=p2, mom=p2];
+v15 -> v3 [pdg=1000, name=p3, mom=p3];
+v13 -> v4 [pdg=1000, name=p4, mom=p4];
+v12 -> v5 [pdg=1000, name=p5, mom=p5];
+v10 -> v6 [pdg=1000, name=p6, mom=p6];
+v9 -> v14 [pdg=1000, name=q11];
+v11 -> v16 [pdg=1000, name=q12, lmb_index=2];
+v7 -> v8 [pdg=1001, name=q1];
+v16 -> v7 [pdg=1001, name=q10];
+v8 -> v9 [pdg=1001, name=q2];
+v9 -> v10 [pdg=1001, name=q3];
+v10 -> v11 [pdg=1001, name=q4];
+v11 -> v12 [pdg=1001, name=q5];
+v12 -> v13 [pdg=1001, name=q6];
+v13 -> v14 [pdg=1001, name=q7, lmb_index=0];
+v14 -> v15 [pdg=1001, name=q8, lmb_index=1];
+v15 -> v16 [pdg=1001, name=q9];
+}

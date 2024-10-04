@@ -1,0 +1,40 @@
+---
+source: src/uv/tests.rs
+expression: rand_graph.base_dot()
+---
+graph {
+   node [shape=circle,height=0.1,label=""];  overlap="scale";
+   8 -- 14 [color="red:blue;0.5 " ];
+  1 -- 10 [color="red:blue;0.5 " ];
+  2 -- 16 [color="red:blue;0.5 " ];
+  8 -- 12 [color="red:blue;0.5 " ];
+  8 -- 13 [color="red:blue;0.5 " ];
+ext10 [shape=none, label=""];
+ 16 -- ext10 ;
+ ext11 [shape=none, label=""];
+ 9 -- ext11 ;
+   5 -- 16 [color="red:blue;0.5 " ];
+  8 -- 12 [color="red:blue;0.5 " ];
+  2 -- 16 [color="red:blue;0.5 " ];
+  8 -- 17 [color="red:blue;0.5 " ];
+  4 -- 18 [color="red:blue;0.5 " ];
+  7 -- 14 [color="red:blue;0.5 " ];
+  8 -- 14 [color="red:blue;0.5 " ];
+  2 -- 16 [color="red:blue;0.5 " ];
+  0 -- 11 [color="red:blue;0.5 " ];
+ext30 [shape=none, label=""];
+ 17 -- ext30 ;
+   2 -- 11 [color="red:blue;0.5 " ];
+  2 -- 11 [color="red:blue;0.5 " ];
+  5 -- 15 [color="red:blue;0.5 " ];
+  0 -- 9 [color="red:blue;0.5 " ];
+  5 -- 9 [color="red:blue;0.5 " ];
+  5 -- 17 [color="red:blue;0.5 " ];
+  3 -- 18 [color="red:blue;0.5 " ];
+  3 -- 16 [color="red:blue;0.5 " ];
+  7 -- 16 [color="red:blue;0.5 " ];
+  6 -- 16 [color="red:blue;0.5 " ];
+  1 -- 14 [color="red:blue;0.5 " ];
+  8 -- 18 [color="red:blue;0.5 " ];
+  3 -- 15 [color="red:blue;0.5 " ];
+}

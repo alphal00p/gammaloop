@@ -10,43 +10,43 @@ amplitude_graphs:
     - name: v1
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p1
     - name: v2
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p2
     - name: v3
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p3
     - name: v4
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p4
     - name: v5
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p5
     - name: v6
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: scalar_0
+        direction: out
       edges:
       - p6
     - name: v7
@@ -110,9 +110,9 @@ amplitude_graphs:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q9
       - q4
       - q5
+      - q9
     edges:
     - name: p1
       edge_type: in
@@ -219,7 +219,6 @@ amplitude_graphs:
       vertices:
       - v12
       - v14
-    overall_factor: 1.0
     external_connections:
     - - v1
       - null
@@ -233,6 +232,7 @@ amplitude_graphs:
       - null
     - - null
       - v6
+    overall_factor: '1'
     loop_momentum_basis:
     - q4
     - q9
@@ -372,4 +372,5 @@ amplitude_graphs:
           - 0
           - 0
           - 0
+  multiplicity: '1'
   multi_channeling_channels: []

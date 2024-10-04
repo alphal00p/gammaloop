@@ -1,5 +1,5 @@
 import_model scalars-full
-import_graphs ./python/gammaloop/tests/test_data/qgraf_outputs/ltd_topology_f.py --format=qgraph
+import_graphs ./python/gammaloop/tests/test_data/graph_inputs/ltd_topology_f.dot
 set drawing.feynmp.show_edge_composite_momenta True
 show_settings drawing.feynmp.show_edge_composite_momenta
 #set drawing.feynmp.show_edge_labels False
@@ -13,12 +13,26 @@ launch examples/cards/scalar_mercedes
 info
 set integrated_phase 'imag'
 # Tropical sampling
-#set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
 # Regular sampling with cartesian product of spherical parameterisation
-set sampling {'type':'default'}
+#set sampling {'type':'default'}
 set e_cm 1.
-set externals.momenta [[0.,0.,0.,1.],]
-set n_start 100
-set n_max 1000
+set externals.data.momenta [[0.,0.,0.,1.],]
+set n_start 10000
+set n_max 100000000
+set use_ltd False
+#set rotation_axis ["x","y"]
+#set Stability.levels [{\
+#'precision':'Double',\
+#'required_precision_for_re':1.e-40,\
+#'required_precision_for_im':1.e-40,\
+#'escalate_for_large_weight_threshold':0.9\
+#},\
+#{\
+#'precision':'Quad',\
+#'required_precision_for_re':1.e-5,\
+#'required_precision_for_im':1.e-5,\
+#'escalate_for_large_weight_threshold':-1.0\
+#}]
 #inspect ltd_topology_f -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327 -t 0
-integrate ltd_topology_f -c 1 -r -t (0.,-5.26647e-6)
+integrate ltd_topology_f -c 1 -r -t (5.26647e-6,0.)

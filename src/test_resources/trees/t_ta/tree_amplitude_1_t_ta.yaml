@@ -1,0 +1,70 @@
+graphs:
+- edges:
+    1:
+      name: p1
+      PDG: 6
+      momentum: p1
+      type: in
+      indices: []
+      vertices:
+      - 1
+      - 4
+    2:
+      name: p2
+      PDG: 6
+      momentum: p2
+      type: out
+      indices: []
+      vertices:
+      - 4
+      - 2
+    3:
+      name: p3
+      PDG: 22
+      momentum: p3
+      type: out
+      indices: []
+      vertices:
+      - 4
+      - 3
+  nodes:
+    1:
+      PDGs:
+      - 6
+      momenta:
+      - p1
+      indices: []
+      vertex_id: -1
+      edge_ids:
+      - 1
+    2:
+      PDGs:
+      - 6
+      momenta:
+      - p2
+      indices: []
+      vertex_id: -1
+      edge_ids:
+      - 2
+    3:
+      PDGs:
+      - 22
+      momenta:
+      - p3
+      indices: []
+      vertex_id: -1
+      edge_ids:
+      - 3
+    4:
+      PDGs:
+      - 6
+      - 22
+      - 6
+      momenta: []
+      indices: []
+      vertex_id: -1
+      edge_ids:
+      - 2
+      - 3
+      - 1
+  overall_factor: 1

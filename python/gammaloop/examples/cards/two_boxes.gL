@@ -1,0 +1,16 @@
+import_model scalars-full
+import_graphs ./python/gammaloop/tests/test_data/graph_inputs/two_boxes.dot
+!rm -rf examples/cards/two_boxes
+output examples/cards/two_boxes
+launch examples/cards/two_boxes
+info
+set integrated_phase 'real'
+set rotation_axis []
+set n_start 100000
+set n_max 5000000000
+set externals.data.momenta [\
+[0.5,0.,1.,0.5],\
+[0.5,0.,3.,-0.5],\
+[1,2.,0.,-1],\
+]
+integrate two_boxes -r -c 4

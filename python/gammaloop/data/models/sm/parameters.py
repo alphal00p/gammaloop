@@ -139,7 +139,7 @@ MC = Parameter(name='MC',
 MT = Parameter(name='MT',
                nature='external',
                type='real',
-               value=172.,
+               value=173.,
                texname='\\text{MT}',
                lhablock='MASS',
                lhacode=[6])

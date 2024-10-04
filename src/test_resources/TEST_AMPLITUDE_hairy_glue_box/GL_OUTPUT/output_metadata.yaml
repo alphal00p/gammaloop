@@ -1,0 +1,4 @@
+model_name: sm
+output_type: amplitudes
+contents:
+- hairy_glue_box

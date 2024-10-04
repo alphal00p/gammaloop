@@ -1,0 +1,133 @@
+name: tree_amplitude_1_th_th
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: tree_amplitude_1_th_th_0
+    vertices:
+    - name: v1
+      vertex_info:
+        type: external_vertex_info
+        particle: t
+        direction: in
+      edges:
+      - p1
+    - name: v2
+      vertex_info:
+        type: external_vertex_info
+        particle: H
+        direction: in
+      edges:
+      - p2
+    - name: v3
+      vertex_info:
+        type: external_vertex_info
+        particle: t
+        direction: out
+      edges:
+      - p3
+    - name: v4
+      vertex_info:
+        type: external_vertex_info
+        particle: H
+        direction: out
+      edges:
+      - p4
+    - name: v5
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_141
+      edges:
+      - q5
+      - p1
+      - p4
+    - name: v6
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_141
+      edges:
+      - p3
+      - q5
+      - p2
+    edges:
+    - name: p1
+      edge_type: in
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v1
+      - v5
+    - name: p2
+      edge_type: in
+      particle: H
+      propagator: H_propFeynman
+      vertices:
+      - v2
+      - v6
+    - name: p3
+      edge_type: out
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v6
+      - v3
+    - name: p4
+      edge_type: out
+      particle: H
+      propagator: H_propFeynman
+      vertices:
+      - v5
+      - v4
+    - name: q5
+      edge_type: virtual
+      particle: t
+      propagator: t_propFeynman
+      vertices:
+      - v5
+      - v6
+    external_connections:
+    - - v1
+      - null
+    - - v2
+      - null
+    - - null
+      - v3
+    - - null
+      - v4
+    overall_factor: 1
+    loop_momentum_basis: []
+    edge_signatures:
+    - - p1
+      - - []
+        - - 1
+          - 0
+          - 0
+          - 0
+    - - p2
+      - - []
+        - - 0
+          - 1
+          - 0
+          - 0
+    - - p3
+      - - []
+        - - 0
+          - 0
+          - 1
+          - 0
+    - - p4
+      - - []
+        - - 1
+          - 1
+          - -1
+          - 0
+    - - q5
+      - - []
+        - - 0
+          - -1
+          - 1
+          - 0
+  multiplicity: '1'
+  multi_channeling_channels: []

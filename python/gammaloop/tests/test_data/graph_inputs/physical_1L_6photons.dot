@@ -1,0 +1,14 @@
+digraph physical_1L_6photons_0 {
+v1 -> v7 [pdg=22, mom=p1];
+v2 -> v8 [pdg=22, mom=p2];
+v9 -> v3 [pdg=22, mom=p3];
+v10 -> v4 [pdg=22, mom=p4];
+v11 -> v5 [pdg=22, mom=p5];
+v12 -> v6 [pdg=22, mom=p6];
+v7 -> v8 [pdg=6];
+v8 -> v9 [pdg=6];
+v9 -> v10 [pdg=6];
+v10 -> v11 [pdg=6];
+v11 -> v12 [pdg=6];
+v12 -> v7 [pdg=6];
+}

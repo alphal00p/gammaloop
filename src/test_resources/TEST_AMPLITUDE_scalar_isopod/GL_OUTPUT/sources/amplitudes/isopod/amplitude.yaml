@@ -10,22 +10,22 @@ amplitude_graphs:
     - name: v1
       vertex_info:
         type: external_vertex_info
-        direction: in
         particle: scalar_0
+        direction: in
       edges:
       - p1
     - name: v2
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: scalar_0
+        direction: out
       edges:
       - p2
     - name: v3
       vertex_info:
         type: external_vertex_info
-        direction: out
         particle: scalar_0
+        direction: out
       edges:
       - p3
     - name: v4
@@ -33,56 +33,56 @@ amplitude_graphs:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q1
       - p1
+      - q1
       - q2
     - name: v5
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
+      - p2
       - q7
       - q9
-      - p2
     - name: v6
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q8
       - p3
+      - q8
       - q9
     - name: v7
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q4
       - q1
       - q3
+      - q4
     - name: v8
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q5
       - q2
       - q3
+      - q5
     - name: v9
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q6
       - q4
+      - q6
       - q7
     - name: v10
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_3_SCALAR_000
       edges:
-      - q6
       - q5
+      - q6
       - q8
     edges:
     - name: p1
@@ -169,7 +169,6 @@ amplitude_graphs:
       vertices:
       - v5
       - v6
-    overall_factor: 1.0
     external_connections:
     - - v1
       - null
@@ -177,6 +176,7 @@ amplitude_graphs:
       - v2
     - - null
       - v3
+    overall_factor: '1'
     loop_momentum_basis:
     - q3
     - q6
@@ -266,4 +266,5 @@ amplitude_graphs:
         - - 0
           - 0
           - 0
+  multiplicity: '1'
   multi_channeling_channels: []

@@ -1,6 +1,6 @@
 #![allow(unused)]
 use crate::integrands::IntegrandSettings;
-use crate::utils::{self, approx_eq, F};
+use crate::utils::{self, ApproxEq, F};
 use crate::{
     h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
     observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings, IntegratedPhase,
@@ -60,7 +60,7 @@ fn compare_integration(
         IntegratedPhase::Both => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
-            if !approx_eq(&res.result[0], &target.re, &applied_tolerance)
+            if !F::approx_eq(&res.result[0], &target.re, &applied_tolerance)
                 || !validate_error(res.error[0], target.re - res.result[0])
             {
                 println!(
@@ -77,7 +77,7 @@ fn compare_integration(
             }
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
-            if !approx_eq(&res.result[1], &target.im, &applied_tolerance)
+            if !F::approx_eq(&res.result[1], &target.im, &applied_tolerance)
                 || !validate_error(res.error[1], target.re - res.result[1])
             {
                 println!(
@@ -96,7 +96,7 @@ fn compare_integration(
         IntegratedPhase::Real => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
-            if !approx_eq(&res.result[0], &target.re, &applied_tolerance)
+            if !F::approx_eq(&res.result[0], &target.re, &applied_tolerance)
                 || !validate_error(res.error[0], target.im - res.result[0])
             {
                 println!(
@@ -115,7 +115,7 @@ fn compare_integration(
         IntegratedPhase::Imag => {
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
-            if !approx_eq(&res.result[1], &target.im, &applied_tolerance)
+            if !F::approx_eq(&res.result[1], &target.im, &applied_tolerance)
                 || !validate_error(res.error[1], target.im - res.result[1])
             {
                 println!(
@@ -154,8 +154,8 @@ fn compare_inspect(
         is_momentum_space,
         true,
     );
-    if !approx_eq(&res.re, &target.re, &INSPECT_TOLERANCE)
-        || !approx_eq(&res.im, &target.im, &INSPECT_TOLERANCE)
+    if !F::approx_eq(&res.re, &target.re, &INSPECT_TOLERANCE)
+        || !F::approx_eq(&res.im, &target.im, &INSPECT_TOLERANCE)
     {
         println!(
             "Incorrect result from inspect: {}\n                            vs {}",

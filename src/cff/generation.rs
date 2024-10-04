@@ -6,11 +6,11 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
-    graph::Graph,
+    graph::BareGraph,
 };
 use ahash::HashMap;
 use color_eyre::Report;
-use eyre::Result;
+use color_eyre::Result;
 use itertools::Itertools;
 use std::fmt::Debug;
 
@@ -136,7 +136,7 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-fn get_orientations(graph: &Graph) -> Vec<CFFGenerationGraph> {
+fn get_orientations(graph: &BareGraph) -> Vec<CFFGenerationGraph> {
     let num_virtual_edges = graph.get_virtual_edges_iterator().count();
     let possible_orientations = iterate_possible_orientations(num_virtual_edges);
 
@@ -149,7 +149,7 @@ fn get_orientations(graph: &Graph) -> Vec<CFFGenerationGraph> {
         .collect()
 }
 
-pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
+pub fn generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Report> {
     // construct a hashmap that contains as keys all vertices that connect to external edges
     // and as values those external edges that it connects to
 
@@ -159,7 +159,8 @@ pub fn generate_cff_expression(graph: &Graph) -> Result<CFFExpression, Report> {
 
     let (dep_mom, dep_mom_expr) = graph.get_dep_mom_expr();
 
-    let graph_cff = generate_cff_from_orientations(graphs, None, None, None, dep_mom, &dep_mom_expr)?;
+    let graph_cff =
+        generate_cff_from_orientations(graphs, None, None, None, dep_mom, &dep_mom_expr)?;
 
     Ok(graph_cff)
 }
@@ -171,6 +172,7 @@ pub fn generate_cff_limit(
     limit_esurface: &Esurface,
     dep_mom: usize,
     dep_mom_expr: &ExternalShift,
+    orientations_in_limit: (Vec<Vec<bool>>, Vec<TermId>),
 ) -> Result<CFFLimit, String> {
     assert_eq!(
         left_dags.len(),
@@ -197,7 +199,11 @@ pub fn generate_cff_limit(
     )
     .unwrap();
 
-    Ok(CFFLimit { left, right })
+    Ok(CFFLimit {
+        left,
+        right,
+        orientations_in_limit,
+    })
 }
 
 fn generate_cff_from_orientations(
@@ -284,6 +290,8 @@ fn generate_cff_from_orientations(
     //    );
     //}
 
+    // let terms =vec![terms[0].clone(),terms[1].clone(),terms[2].clone(),terms[3].clone()];
+
     Ok(CFFExpression {
         orientations: terms.into(),
         esurfaces: generator_cache.esurface_cache,
@@ -314,9 +322,14 @@ fn generate_tree_for_orientation(
         surface_id: None,
     });
 
-    while let Some(()) = advance_tree(&mut tree, term_id, generator_cache, rewrite_at_cache_growth, dep_mom, dep_mom_expr)
-    {
-    }
+    while let Some(()) = advance_tree(
+        &mut tree,
+        term_id,
+        generator_cache,
+        rewrite_at_cache_growth,
+        dep_mom,
+        dep_mom_expr,
+    ) {}
 
     tree
 }
@@ -389,8 +402,6 @@ fn advance_tree(
                                         "rewriting the esurface did not yield an existing esurface\n
                                         rewritten esurface: {:#?} \n
                                         using {:#?}\n ", esurface, rewrite_esurface,
-                                        
-
                                     ),
                                 }
                             } else {
@@ -484,10 +495,19 @@ fn advance_tree(
 
 #[cfg(test)]
 mod tests_cff {
-    use symbolica::{atom::Atom, domains::float::{NumericalFloatLike, Real},id::Pattern};
+    use symbolica::{
+        atom::Atom,
+        domains::float::{NumericalFloatLike, Real},
+        id::Pattern,
+    };
     use utils::FloatLike;
 
-    use crate::{cff::cff_graph::CFFEdgeType, momentum::{FourMomentum, ThreeMomentum}, tests::{self, load_default_settings}, utils::{self, RefDefault, F}};
+    use crate::{
+        cff::cff_graph::CFFEdgeType,
+        momentum::{FourMomentum, ThreeMomentum},
+        tests::{self, load_default_settings},
+        utils::{self, RefDefault, F},
+    };
 
     use super::*;
 
@@ -527,7 +547,11 @@ mod tests_cff {
     }
 
     #[allow(unused)]
-    fn compute_one_loop_energy<T: FloatLike>(k: ThreeMomentum<F<T>>, p: ThreeMomentum<F<T>>, m: F<T>) -> F<T> {
+    fn compute_one_loop_energy<T: FloatLike>(
+        k: ThreeMomentum<F<T>>,
+        p: ThreeMomentum<F<T>>,
+        m: F<T>,
+    ) -> F<T> {
         ((k + p).norm_squared() + &m * &m).sqrt()
     }
 
@@ -569,16 +593,23 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
         assert_eq!(orientations.len(), 6);
 
-        let dep_mom = 2; 
+        let dep_mom = 2;
         let dep_mom_expr = vec![(0, -1), (1, -1)];
 
-        let cff = generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr).unwrap();
-        assert_eq!(cff.esurfaces.len(), 6, "too many esurfaces: {:#?}", cff.esurfaces);
+        let cff =
+            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+                .unwrap();
+        assert_eq!(
+            cff.esurfaces.len(),
+            6,
+            "too many esurfaces: {:#?}",
+            cff.esurfaces
+        );
 
         let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
         let p2 = FourMomentum::from_args(F(1.), F(6.), F(7.), F(8.));
         let p3 = -p1 - p2;
-        let zero = FourMomentum::from_args(F(0.),F( 0.), F(0.), F(0.));
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
         let m = F(0.);
 
         let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
@@ -598,12 +629,14 @@ mod tests_cff {
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| acc * x).unwrap();
+            .reduce(|acc, x| acc * x)
+            .unwrap();
 
         let settings = tests::load_default_settings();
 
-        let cff_res: F<f64> =
-            energy_prefactor * cff.eager_evaluate(&energy_cache, &settings) * F((2. * std::f64::consts::PI).powi(-3));
+        let cff_res: F<f64> = energy_prefactor
+            * cff.eager_evaluate(&energy_cache, &settings)
+            * F((2. * std::f64::consts::PI).powi(-3));
 
         let target_res = F(6.333_549_225_536_17e-9_f64);
         let absolute_error = cff_res - target_res;
@@ -621,14 +654,16 @@ mod tests_cff {
         for (esurface_id, _) in cff.esurfaces.iter_enumerated() {
             let expanded_limit = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id));
 
-            let limit = cff.limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr).unwrap();
+            let limit = cff
+                .limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr)
+                .unwrap();
             let limit_atom = limit.limit_to_atom_with_rewrite(Some(&cff.esurfaces[esurface_id]));
 
             let p2_atom = Atom::parse("p2").unwrap();
             let rhs = Atom::parse("- p0 - p1").unwrap();
 
             let p2_pattern = Pattern::Literal(p2_atom);
-            let rhs_pattern = Pattern::Literal(rhs);
+            let rhs_pattern = Pattern::Literal(rhs).into();
 
             let conditions = None;
             let settings = None;
@@ -656,10 +691,12 @@ mod tests_cff {
         let orientations =
             generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
 
-        let dep_mom = 1; 
+        let dep_mom = 1;
         let dep_mom_expr = vec![(0, -1)];
 
-        let cff = generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr).unwrap();
+        let cff =
+            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+                .unwrap();
 
         let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
         let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
@@ -686,7 +723,8 @@ mod tests_cff {
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| acc * x).unwrap();
+            .reduce(|acc, x| acc * x)
+            .unwrap();
 
         let cff_res = energy_prefactor * cff.eager_evaluate(&energy_cache, &settings);
 
@@ -695,7 +733,7 @@ mod tests_cff {
         let relative_error = absolute_error / cff_res;
 
         assert!(
-            relative_error.abs() < F(1.0e-15) ,
+            relative_error.abs() < F(1.0e-15),
             "relative error: {:+e}, target: {:+e}, result: {:+e}",
             relative_error,
             target,
@@ -706,17 +744,16 @@ mod tests_cff {
 
         // for (esurface_id, esurface) in cff.esurfaces.iter_enumerated() {
 
-           // let expanded_limit: RationalPolynomial<IntegerRing, u8> = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id)).to_rational_polynomial(&Z, &Z, None);
+        // let expanded_limit: RationalPolynomial<IntegerRing, u8> = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id)).to_rational_polynomial(&Z, &Z, None);
 
+        // let factorised_limit = cff.limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr).unwrap();
+        // let factorised_limit_atom = factorised_limit.limit_to_atom_with_rewrite(Some(esurface)).to_rational_polynomial(&Z, &Z, None);
 
-           // let factorised_limit = cff.limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr).unwrap();
-           // let factorised_limit_atom = factorised_limit.limit_to_atom_with_rewrite(Some(esurface)).to_rational_polynomial(&Z, &Z, None);
-
-            // apply energy conservation
-           // let diff = expanded_limit - factorised_limit_atom;
-           // println!("diff: {}", diff); 
-            // can't test all, but probably works?
-            // symbolica crash, probably works on newer version? can't change because everything is outdated, need to merge with main 
+        // apply energy conservation
+        // let diff = expanded_limit - factorised_limit_atom;
+        // println!("diff: {}", diff);
+        // can't test all, but probably works?
+        // symbolica crash, probably works on newer version? can't change because everything is outdated, need to merge with main
         //}
     }
 
@@ -735,11 +772,13 @@ mod tests_cff {
 
         let incoming_vertices = vec![0, 5];
 
-        let dep_mom = 1; 
+        let dep_mom = 1;
         let dep_mom_expr = vec![(0, -1)];
 
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-        let cff = generate_cff_from_orientations(orientataions, None, None, None, dep_mom, &dep_mom_expr).unwrap();
+        let cff =
+            generate_cff_from_orientations(orientataions, None, None, None, dep_mom, &dep_mom_expr)
+                .unwrap();
 
         let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
         let zero_vector = q.default();
@@ -747,8 +786,8 @@ mod tests_cff {
         let p0 = q;
         let p5 = -q;
 
-        let k = ThreeMomentum::new( F(6.), F(23.), F(9.));
-        let l = ThreeMomentum::new(F( 3.), F(12.), F(34.));
+        let k = ThreeMomentum::new(F(6.), F(23.), F(9.));
+        let l = ThreeMomentum::new(F(3.), F(12.), F(34.));
         let m = ThreeMomentum::new(F(7.), F(24.), F(1.));
 
         let mass = F(0.);
@@ -771,7 +810,8 @@ mod tests_cff {
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| acc * x).unwrap();
+            .reduce(|acc, x| acc * x)
+            .unwrap();
 
         let settings = tests::load_default_settings();
 
@@ -806,7 +846,7 @@ mod tests_cff {
 
         let incoming_vertices = vec![0, 2, 6, 8];
 
-        let dep_mom = 3; 
+        let dep_mom = 3;
         let dep_mom_expr = vec![(0, -1), (1, -1), (2, -1)];
 
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
@@ -814,7 +854,9 @@ mod tests_cff {
         // get time before cff generation
         let start = std::time::Instant::now();
 
-        let _cff = generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr).unwrap();
+        let _cff =
+            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+                .unwrap();
 
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
@@ -848,7 +890,7 @@ mod tests_cff {
             position_map.insert(i, i);
         }
 
-        let dep_mom = 7; 
+        let dep_mom = 7;
         let dep_mom_expr = (0..7).map(|i| (i, -1)).collect();
 
         let incoming_vertices = vec![0, 1, 2, 3, 4, 5, 6, 7];
@@ -858,7 +900,9 @@ mod tests_cff {
         // get time before cff generation
         let _start = std::time::Instant::now();
 
-        let _cff = generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr).unwrap();
+        let _cff =
+            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+                .unwrap();
 
         let _finish = std::time::Instant::now();
     }
@@ -889,11 +933,13 @@ mod tests_cff {
         let incoming_vertices = vec![];
 
         let dep_mom = 3;
-        let dep_mom_expr = vec![(0,-1), (1, -1), (2, -1)];
+        let dep_mom_expr = vec![(0, -1), (1, -1), (2, -1)];
 
         let start = std::time::Instant::now();
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
-            let cff = generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr).unwrap(); 
+        let cff =
+            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+                .unwrap();
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
 

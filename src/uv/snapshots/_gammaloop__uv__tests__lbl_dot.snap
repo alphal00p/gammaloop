@@ -1,0 +1,19 @@
+---
+source: src/uv/tests.rs
+expression: uv_graph.0.base_dot()
+---
+graph {
+   node [shape=circle,height=0.1,label=""];  overlap="scale";
+ ext0 [shape=none, label=""];
+ 1 -- ext0 ;
+ ext1 [shape=none, label=""];
+ 2 -- ext1 ;
+ ext2 [shape=none, label=""];
+ 3 -- ext2 ;
+ ext3 [shape=none, label=""];
+ 4 -- ext3 ;
+   1 -- 2 [color="red:blue;0.5 " ];
+  2 -- 3 [color="red:blue;0.5 " ];
+  3 -- 4 [color="red:blue;0.5 " ];
+  4 -- 1 [color="red:blue;0.5 " ];
+}

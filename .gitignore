@@ -44,11 +44,17 @@ logos/
 *.swp
 
 # ignore vscode repo
-.vscode/
+.vscode
 
 # compiled library
 *.a
 *.dylib
+
+# ignore gammaLoop cards
+*.gL
+
+# ignore dot files as they are usually for testing only
+*.dot
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -68,6 +74,10 @@ TEST_OUTPUT*/
 ignore/
 
 src/test_resources/gammaloop_models/*.dat
+
+src/test_resources/trees
+
+GL_OUTPUT*
 
 src/test_resources/TEST_AMPLITUDE_*
 # Sadly this does not work because the exclusion above is for an entire directory
@@ -193,8 +203,17 @@ default.nix
 # Ignore the local test resources
 src/test_resources/qqddg/
 
+
+# Ignore the local compiled numerators 
+/*.cpp
+/*.so
+
+
+# Ignore tmp compiled files:
+
+TMP_COMPILED/
 # My own process outputs
 process_outputs
-
+ignore/
 # the default log file
 log.glog/
