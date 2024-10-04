@@ -182,7 +182,7 @@ def expression_to_string_safe(expr: sb.Expression) -> str:
         return expr.pretty_str(
             terms_on_new_line=False,
             color_top_level_sum=False,
-            color_builtin_symbols=False,
+            color_builtin_functions=False,
             print_finite_field=False,
             explicit_rational_polynomial=False,
             number_thousands_separator=None,
