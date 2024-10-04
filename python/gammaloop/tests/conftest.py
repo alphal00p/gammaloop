@@ -121,7 +121,7 @@ def scalar_fishnet_2x2_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'fishnet_2x2.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -145,7 +145,7 @@ def scalar_cube_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'cube.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -157,7 +157,7 @@ def scalar_bubble_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'bubble.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -181,7 +181,7 @@ def scalar_double_triangle_export(tmpdir_factory: pytest.TempPathFactory) -> Pat
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'double_triangle.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -193,7 +193,7 @@ def scalar_mercedes_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'mercedes.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -205,7 +205,7 @@ def scalar_triangle_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'triangle_box.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -217,7 +217,7 @@ def scalar_isopod_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'isopod.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 
@@ -289,7 +289,7 @@ def epem_a_ddx_nlo_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model sm
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'epem_a_ddx_NLO.dot')} --no_compile
-output {output_path}"""))
+output {output_path} --yaml_only"""))
     return output_path
 
 
@@ -301,7 +301,7 @@ def massive_epem_a_ddx_nlo_export(tmpdir_factory: pytest.TempPathFactory) -> Pat
     gloop.run(CommandList.from_string(
         f"""import_model sm-full
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'epem_a_ddx_NLO.dot')} --no_compile
-output {output_path}"""))
+output {output_path} --yaml_only"""))
     return output_path
 
 
@@ -401,7 +401,7 @@ def physical_1L_6photons_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'physical_1L_6photons.dot')} --no_compile
-output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
+output {output_path} --overwrite_output -exp -ef file"""))
     return output_path
 
 
@@ -429,6 +429,7 @@ def top_bubble_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'top_bubble.dot')} --no_compile
 output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
+
 
 @pytest.fixture(scope="session")
 def hairy_glue_box_export(tmpdir_factory: pytest.TempPathFactory) -> Path:

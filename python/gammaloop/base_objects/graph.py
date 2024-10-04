@@ -323,6 +323,7 @@ class Edge(object):
         if show_edge_names:
             edge_name_label = self.name  # pylint: disable=consider-using-f-string
         # Sanitize edge_name_label for latex
+        edge_name_label = edge_name_label.replace('"', '')
         edge_name_label = edge_name_label.replace('_', '')
 
         label_components: list[str] = []
