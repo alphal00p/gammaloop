@@ -112,6 +112,7 @@ class GammaLoopConfiguration(object):
                         }
                     },
                     'global_numerator': None,
+                    'global_prefactor': None,
                     'gamma_algebra': 'Concrete',
                 },
                 'cpe_rounds_cff': 1,

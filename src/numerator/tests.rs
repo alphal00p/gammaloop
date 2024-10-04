@@ -117,7 +117,7 @@ fn trees() {
     for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
         println!("{i}:{}", s);
     }
-    export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
+    export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
         color: Atom::parse("id(aind(cof(3,2),coaf(3,0)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });
@@ -187,7 +187,7 @@ fn tree_ta_ta_1() {
     }
 
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
+    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
         color: Atom::parse("id(aind(coaf(3,0),cof(3,2)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });
@@ -307,7 +307,7 @@ fn tree_ta_ta_1() {
                 &graph.bare_graph,
                 test_export_settings
                     .numerator_settings
-                    .color_projector
+                    .global_prefactor
                     .as_ref()
             )
             .color_simplify()
@@ -402,7 +402,7 @@ fn tree_h_ttxaah_1() {
     //     println!("{i}:{}", s);
     // }
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
+    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
         color: Atom::parse("id(aind(cof(3,1),coaf(3,2)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });
@@ -454,7 +454,7 @@ fn tree_hh_ttxaa_1() {
         println!("{i}:{}", s);
     }
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.color_projector = Some(GlobalPrefactor {
+    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
         color: Atom::parse("id(aind(cof(3,2),coaf(3,3)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });

@@ -25,7 +25,7 @@ fn load_helper(path: &str) -> Graph {
                 compile_options: NumeratorCompileOptions::Compiled,
                 cpe_rounds: Some(1),
             }),
-            color_projector: None,
+            global_prefactor: None,
             gamma_algebra: GammaAlgebraMode::Concrete,
             global_numerator: None,
         },

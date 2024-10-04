@@ -95,7 +95,7 @@ pub fn test_export_settings() -> ExportSettings {
                 compile_options: NumeratorCompileOptions::Compiled,
             }),
             global_numerator: None,
-            color_projector: None,
+            global_prefactor: None,
             gamma_algebra: GammaAlgebraMode::Concrete,
         },
         cpe_rounds_cff: Some(1),

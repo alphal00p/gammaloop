@@ -246,7 +246,7 @@ impl PythonWorker {
                 d.map_numerator(|n| {
                     n.from_graph(
                         b,
-                        export_settings.numerator_settings.color_projector.as_ref(),
+                        export_settings.numerator_settings.global_prefactor.as_ref(),
                     )
                 })
             })

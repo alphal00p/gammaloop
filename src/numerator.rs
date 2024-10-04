@@ -61,7 +61,7 @@ use symbolica::{
 pub struct NumeratorSettings {
     pub eval_settings: NumeratorEvaluatorOptions,
     pub global_numerator: Option<String>,
-    pub color_projector: Option<GlobalPrefactor>,
+    pub global_prefactor: Option<GlobalPrefactor>,
     pub gamma_algebra: GammaAlgebraMode,
 }
 
@@ -70,7 +70,7 @@ impl Default for NumeratorSettings {
         NumeratorSettings {
             eval_settings: Default::default(),
             global_numerator: None,
-            color_projector: None,
+            global_prefactor: None,
             gamma_algebra: GammaAlgebraMode::Symbolic,
         }
     }
