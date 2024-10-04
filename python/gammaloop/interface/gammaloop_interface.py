@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import platform
 import sys
 from pathlib import Path
 import importlib
@@ -72,6 +73,7 @@ class GammaLoopConfiguration(object):
                 'mode': 'feynmp',
                 'combined_graphs_pdf_grid_shape': [3, 2],
                 'feynmp': {
+                    'reverse_outgoing_edges_order': True,
                     'show_edge_labels': True,
                     'show_particle_names': True,
                     'show_edge_names': True,
@@ -168,7 +170,7 @@ class GammaLoopConfiguration(object):
                     'n_max': 1000000000,
                     'integrated_phase': 'real',
                     'discrete_dim_learning_rate': 1.5,
-                    'continuous_dim_learning_rate': 1.5,
+                    'continuous_dim_learning_rate': 0.0,
                     'train_on_avg': False,
                     'show_max_wgt_info': False,
                     'max_prob_ratio': 0.01,
@@ -177,36 +179,48 @@ class GammaLoopConfiguration(object):
                 'Observables': [],
                 'Selectors': [],
                 'Stability': {
-                    'rotation_axis': ['x'],
+                    'rotation_axis': [{'type': 'x'}],
                     'levels': [
                         {
                             'precision': 'Double',
-                            'required_precision_for_re': 1.e-5,
-                            'required_precision_for_im': 1.e-5,
+                            'required_precision_for_re': 1.e-7,
+                            'required_precision_for_im': 1.e-7,
                             'escalate_for_large_weight_threshold': 0.9
                         },
                         {
                             'precision': 'Quad',
-                            'required_precision_for_re': 1.e-5,
-                            'required_precision_for_im': 1.e-5,
+                            'required_precision_for_re': 1.e-10,
+                            'required_precision_for_im': 1.e-10,
                             'escalate_for_large_weight_threshold': -1.0
                         }
                     ],
                     'rotate_numerator': False,
                 },
                 'sampling': {
-                    'type': 'default'
+                    'type': 'discrete_graph_sampling',
+                    'subtype': 'tropical',
+                    'upcast_on_failure': True
                 },
                 'subtraction': {
-                    'sliver_width': 1.0,
-                    'dampen_integrable_singularity': True,
-                    'dynamic_sliver': False,
-                    'integrated_ct_hfunction': {
-                        'function': 'poly_exponential',
-                        'sigma': 1.0,
-                        'enabled_dampening': True,
-                        'power': None,
+                    'ct_settings':  {
+                        'sliver_width': 1.0,
+                        'dampen_integrable_singularity': True,
+                        'dynamic_sliver': False,
+                        'integrated_ct_hfunction': {
+                            'function': 'poly_exponential',
+                            'sigma': 1.0,
+                            'enabled_dampening': True,
+                            'power': None,
+                        },
+                        'integrated_ct_sigma': None,
+                        'local_ct_width': 1.0,
                     },
+                    'overlap_settings': {
+                        'force_global_center': None,
+                        'check_global_center': True,
+                        'try_origin': False,
+                        'try_origin_all_lmbs': False,
+                    }
                 }
             }
         }
@@ -521,7 +535,9 @@ class GammaLoop(object):
                                           help='Model external parameter name to modify')
     set_model_param_settings.add_argument('value', metavar='value', type=float,
                                           help='Value to assign to that model parameter')
-    set_model_param_settings.add_argument('--no_overwrite', '-n',
+    set_model_param_settings.add_argument('--no_update', '-nu',
+                                          default=False, action='store_true', help='Do not update dependent model parameters yet')
+    set_model_param_settings.add_argument('--no_overwrite', '-no',
                                           default=False, action='store_true', help='Do not overwrite the param card and YAML model on disk with the new value')
 
     def do_set_model_param(self, str_args: str) -> None:
@@ -541,31 +557,39 @@ class GammaLoop(object):
 
         input_card = InputParamCard.from_model(self.model)
 
-        if args.param not in input_card:
-            raise GammaLoopError(
-                f"Model parameter '{args.param}' not found in model '{self.model.get_full_name()}'. Available external parameters are:\n\
-                    {', '.join(p for p in input_card.keys())}")
+        if args.param != 'update_only':
+            if args.param not in input_card:
+                raise GammaLoopError(
+                    f"Model parameter '{args.param}' not found in model '{self.model.get_full_name()}'. Available external parameters are:\n\
+                        {', '.join(p for p in input_card.keys())}")
 
-        input_card[args.param] = complex(args.value)
-        self.model.apply_input_param_card(input_card, simplify=False)
-        processed_yaml_model = self.model.to_yaml()
-        self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+            input_card[args.param] = complex(args.value)
 
-        logger.info("Setting model parameter '%s%s%s' to %s%s%s", Colour.GREEN,
-                    args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+        self.model.apply_input_param_card(
+            input_card, simplify=False, update=not args.no_update)
 
-        if not args.no_overwrite:
-            ParamCardWriter.write(
-                self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
-            logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
-                         self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
-            with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
-                output_metadata = OutputMetaData.from_yaml_str(file.read())
-            self.launched_output.joinpath('cards', 'param_card.dat')
-            with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
-                file.write(processed_yaml_model)
-            logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
-                'sources', 'model', f"{output_metadata['model_name']}.yaml"))
+        if args.param != 'update_only':
+            logger.info("Setting model parameter '%s%s%s' to %s%s%s", Colour.GREEN,
+                        args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+        else:
+            logger.info("Updating all dependent model parameters")
+
+        if not args.no_update:
+            processed_yaml_model = self.model.to_yaml()
+            self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
+
+            if not args.no_overwrite:
+                ParamCardWriter.write(
+                    self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
+                logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
+                             self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+                with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
+                    output_metadata = OutputMetaData.from_yaml_str(file.read())
+                self.launched_output.joinpath('cards', 'param_card.dat')
+                with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
+                    file.write(processed_yaml_model)
+                logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
+                    'sources', 'model', f"{output_metadata['model_name']}.yaml"))
 
     # show_settings command
     show_settings = ArgumentParser(prog='show_settings')
@@ -761,6 +785,8 @@ class GammaLoop(object):
                                       default=False, help='Prevent compilation of qgraph python output.')
     import_graphs_parser.add_argument('--format', '-f', type=str, default='dot',
                                       choices=['dot', 'yaml', 'qgraph'], help='Format to import the graphs in.')
+    import_graphs_parser.add_argument('--ids_to_load', '-ids', type=int, default=None, nargs='+',
+                                      help='Graph indices to import (default: all).')
 
     def do_import_graphs(self, str_args: str) -> None:
         if str_args == 'help':
@@ -786,6 +812,9 @@ class GammaLoop(object):
                 if pydot_graphs is None:
                     raise GammaLoopError(
                         "Failed to load graphs from dot file '%s'.", args.file_path)
+                if args.ids_to_load is not None:
+                    pydot_graphs = [
+                        qg for i_g, qg in enumerate(pydot_graphs) if i_g in args.ids_to_load]
                 graphs = [
                     (
                         Graph.from_pydot(self.model, pydot_g),
@@ -800,7 +829,9 @@ class GammaLoop(object):
                 except Exception as exc:
                     raise GammaLoopError(
                         f"Error while loading graphs from YAML file '{args.file_path}'. Error:\n{exc}") from exc
-
+                if args.ids_to_load is not None:
+                    all_raw_graphs = [
+                        qg for i_g, qg in enumerate(all_raw_graphs) if i_g in args.ids_to_load]
                 for i_qg, qgraph_object in enumerate(all_raw_graphs):
                     new_graph = Graph.from_qgraph(
                         self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
@@ -824,7 +855,9 @@ class GammaLoop(object):
                             len(qgraph_loaded_module.graphs), args.file_path)
                 del sys.path[0]
                 all_raw_graphs: list[Any] = qgraph_loaded_module.graphs
-
+                if args.ids_to_load is not None:
+                    all_raw_graphs = [
+                        qg for i_g, qg in enumerate(all_raw_graphs) if i_g in args.ids_to_load]
                 for i_qg, qgraph_object in enumerate(all_raw_graphs):
                     new_graph = Graph.from_qgraph(
                         self.model, qgraph_object, name=f"{file_path.stem}_{i_qg}")
@@ -1056,6 +1089,16 @@ class GammaLoop(object):
         if self.model.is_empty():
             raise GammaLoopError(
                 "No model loaded. Please load a model first with 'import_model' command.")
+
+        if self.config.get_setting('export_settings.gammaloop_compile_options.inline_asm'):
+            architecture = platform.machine()
+            if "arm" in architecture:
+                logger.warning(
+                    f"Inline assembly is only supported for x86 architectures, and this machine is {architecture}.")
+                logger.warning(
+                    f"{Colour.RED}Inline assembly will now be disabled now in your gammaLoop configuration.{Colour.END}")
+                self.config.set_setting(
+                    'export_settings.gammaloop_compile_options.inline_asm', False)
 
         if args.model_replacements:
             self.rust_worker.export_coupling_replacement_rules(
@@ -1496,18 +1539,25 @@ class GammaLoop(object):
 
         if args.eval is not None:
             tmp = eval(args.eval)
-            for tmp_elem in tmp:
-                rotation, precision = tmp_elem[0], tmp_elem[1]
-                eval_dict = debug_display.build_eval_debug_dict(
-                    args.log_file, rotation, precision)
+            file_list = ["{}_{}.jsonl".format(
+                tmp_elem[0], tmp_elem[1]) for tmp_elem in tmp]
+        else:
+            file_list = os.listdir(args.log_file)
 
-                logger.info("Debug info for for rotation '%s%s%s' and precision '%s%s%s'",
-                            Colour.BLUE, rotation, Colour.END, Colour.BLUE, precision, Colour.END)
+        for file in file_list:
+            if file == "general.jsonl":
+                continue
 
-                debug_display.display_eval_default(eval_dict)
+            eval_dict = debug_display.build_eval_debug_dict(
+                args.log_file, file)
 
-                if args.subtraction:
-                    logger.info("")
-                    logger.info("subtraction: ")
-                    logger.info("")
-                    debug_display.display_subtraction_data(eval_dict)
+            logger.info("Debug info for for rotation '%s%s%s'",
+                        Colour.BLUE, file, Colour.END, )
+
+            debug_display.display_eval_default(eval_dict)
+
+            if args.subtraction:
+                logger.info("")
+                logger.info("subtraction: ")
+                logger.info("")
+                debug_display.display_subtraction_data(eval_dict)

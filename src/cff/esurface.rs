@@ -186,15 +186,41 @@ impl Esurface {
     #[inline]
     pub fn get_radius_guess<T: FloatLike>(
         &self,
-        _unit_loops: &[ThreeMomentum<F<T>>],
+        unit_loops: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
         lmb: &LoopMomentumBasis,
-    ) -> F<T> {
-        //let mut radius_guess = T::zero();
-        //let mut denominator = T::zero();
+        real_mass_vector: &[F<T>],
+    ) -> (F<T>, F<T>) {
+        let const_builder = &unit_loops[0].px;
 
         let esurface_shift = self.compute_shift_part_from_momenta(lmb, external_moms);
-        F::from_f64(2.0) * esurface_shift.abs()
+
+        let mut try_positive = F::from_f64(2.0) * &esurface_shift.abs();
+
+        let mut rescaled_momenta = unit_loops.iter().map(|k| k * &try_positive).collect_vec();
+        let mut esurface_value =
+            self.compute_from_momenta(lmb, real_mass_vector, &rescaled_momenta, external_moms);
+
+        while esurface_value < const_builder.zero() {
+            try_positive += &esurface_shift.abs();
+            rescaled_momenta = unit_loops.iter().map(|k| k * &try_positive).collect_vec();
+            esurface_value =
+                self.compute_from_momenta(lmb, real_mass_vector, &rescaled_momenta, external_moms);
+        }
+
+        let mut try_negative = F::from_f64(-2.0) * &esurface_shift.abs();
+        let mut rescaled_momenta = unit_loops.iter().map(|k| k * &try_negative).collect_vec();
+        let mut esurface_value =
+            self.compute_from_momenta(lmb, real_mass_vector, &rescaled_momenta, external_moms);
+
+        while esurface_value < const_builder.zero() {
+            try_negative -= &esurface_shift.abs();
+            rescaled_momenta = unit_loops.iter().map(|k| k * &try_negative).collect_vec();
+            esurface_value =
+                self.compute_from_momenta(lmb, real_mass_vector, &rescaled_momenta, external_moms);
+        }
+
+        (try_positive, try_negative)
 
         //for energy in self.energies.iter() {
         //    let signature = &lmb.edge_signatures[*energy];

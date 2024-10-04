@@ -157,6 +157,7 @@
           # pkgs.ripgrep
           cargo-insta
           cargo-udeps
+          cargo-insta
           openssl
           gnum4
           gmp.dev

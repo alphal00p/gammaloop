@@ -7,12 +7,18 @@ launch examples/cards/boxes_2L4P
 set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
 # Regular sampling with cartesian product of spherical parameterisation
 #set sampling {'type':'default'}
-# K1 point below
+# K0 point below
 set externals.data.momenta [\
-[2.50925,0.,0.,2.30138],\
-[2.55075,0.,0.,-2.30138],\
-[2.5053,0.487891,1.95655,-0.877716],\
+[1.,2.,3.,4.],\
+[2.,3.,-4.,5.],\
+[1.5,3.5,2.5,1.],\
 ]
+# K1 point below
+#set externals.data.momenta [\
+#[2.50925,0.,0.,2.30138],\
+#[2.55075,0.,0.,-2.30138],\
+#[2.5053,0.487891,1.95655,-0.877716],\
+#]
 # K2 point below
 #set externals.data.momenta [\
 #[6.,0.,0.,5.91607978309962],\
@@ -27,10 +33,12 @@ set externals.data.momenta [\
 #]
 set n_start 10000
 set n_max 50000000000
-#set use_ltd false
+set use_ltd False
 set integrated_phase 'real'
+# K0 target below
+integrate boxes_2L4P -c 8 -r
 # K1 target below
-integrate boxes_2L4P -c 8 -r -t (-1.0841e-6,2.8682e-6)
+#integrate boxes_2L4P -c 8 -r -t (-1.0841e-6,2.8682e-6)
 # K2 target below
 #integrate boxes_2L4P -c 8 -r -t (3.1105e-8,9.5389e-8)
 # K3 target below

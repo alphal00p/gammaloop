@@ -95,6 +95,7 @@ pub fn test_export_settings() -> ExportSettings {
                 compile_options: NumeratorCompileOptions::Compiled,
             }),
             global_numerator: None,
+            color_projector: None,
             gamma_algebra: GammaAlgebraMode::Concrete,
         },
         cpe_rounds_cff: Some(1),
@@ -601,13 +602,14 @@ fn check_esurface_existance<N: NumeratorState>(
         .map(|edge| edge.particle.mass.value)
         .collect_vec();
 
+    let settings = Settings::default();
     find_maximal_overlap(
         &graph.bare_graph.loop_momentum_basis,
         &existing,
         &cff.esurfaces,
         &edge_masses,
         sample.external_moms(),
-        0,
+        &settings,
     );
 
     let maximal_overlap = find_maximal_overlap(
@@ -616,7 +618,7 @@ fn check_esurface_existance<N: NumeratorState>(
         &cff.esurfaces,
         &edge_masses,
         sample.external_moms(),
-        0,
+        &settings,
     );
 
     assert_eq!(
@@ -662,7 +664,7 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
         "numerator:{}",
         graph
             .clone()
-            .apply_feynman_rules()
+            .apply_feynman_rules(&export_settings)
             .derived_data
             .unwrap()
             .numerator
@@ -1138,6 +1140,7 @@ fn pytest_scalar_hexagon() {
 
     assert_eq!(model.name, "scalars");
     assert!(amplitude.amplitude_graphs.len() == 1);
+    let settings = Settings::default();
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
     graph.generate_ltd();
@@ -1193,7 +1196,7 @@ fn pytest_scalar_hexagon() {
         esurfaces,
         &edge_masses,
         &kinematics,
-        0,
+        &settings,
     );
     let duration = now.elapsed();
     println!("duration: {}", duration.as_micros());
@@ -1240,7 +1243,6 @@ fn pytest_scalar_hexagon() {
     );
 
     assert_eq!(existing_esurfaces.len(), 10);
-
     let now = std::time::Instant::now();
     let maximal_overlap = find_maximal_overlap(
         &graph.bare_graph.loop_momentum_basis,
@@ -1248,7 +1250,7 @@ fn pytest_scalar_hexagon() {
         esurfaces,
         &edge_masses,
         &hexagon_10_e,
-        0,
+        &settings,
     );
     let duration = now.elapsed();
     println!("duration: {}", duration.as_micros());
@@ -1346,14 +1348,14 @@ fn pytest_scalar_ltd_topology_c() {
         2,
         F(18.),
     );
-
+    let settings = Settings::default();
     let overlap = find_maximal_overlap(
         &graph.bare_graph.loop_momentum_basis,
         &existing_esurfaces,
         esurfaces,
         &_edge_masses,
         &kinematics,
-        0,
+        &settings,
     );
 
     assert_eq!(overlap.overlap_groups.len(), 9);
@@ -1379,7 +1381,7 @@ fn pytest_scalar_massless_pentabox() {
     graph.generate_cff();
     graph.generate_loop_momentum_bases();
     graph.generate_esurface_data().unwrap();
-
+    let settings = Settings::default();
     let rescaling = F(1.0e-3);
     let kinematics = [
         &FourMomentum::from_args(
@@ -1463,7 +1465,7 @@ fn pytest_scalar_massless_pentabox() {
             .esurfaces,
         &edge_masses,
         &kinematics,
-        0,
+        &settings,
     );
 
     assert_eq!(maximal_overlap.overlap_groups.len(), 3);
@@ -1493,6 +1495,8 @@ fn pytest_scalar_massless_3l_pentabox() {
     graph.generate_cff();
     graph.generate_loop_momentum_bases();
     graph.generate_esurface_data().unwrap();
+
+    let settings = Settings::default();
 
     let rescaling = F(1.0e0);
     let kinematics = [
@@ -1579,7 +1583,7 @@ fn pytest_scalar_massless_3l_pentabox() {
             .esurfaces,
         &edge_masses,
         &kinematics,
-        0,
+        &settings,
     );
     let _elapsed = now.elapsed();
 
@@ -1851,7 +1855,7 @@ fn top_bubble_gamma() {
 
     export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Symbolic;
 
-    // fs::create_dir(path.join("sym")).unwrap();
+    fs::create_dir(path.join("sym")).unwrap();
     let mut graph = graph.process_numerator(
         &model,
         ContractionSettings::Normal,

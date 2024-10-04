@@ -3,8 +3,8 @@ use crate::graph::{BareGraph, Graph, SerializableGraph};
 use crate::model::{Model, Particle};
 use crate::momentum::Signature;
 use crate::numerator::{
-    AppliedFeynmanRule, ContractionSettings, Evaluators, NumeratorState, PythonState,
-    TypedNumeratorState, UnInit, UnexpandedNumerator,
+    AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, NumeratorState,
+    PythonState, TypedNumeratorState, UnInit,
 };
 use crate::{utils::*, ExportSettings, Externals, Polarizations, Settings};
 use bincode;
@@ -427,8 +427,11 @@ impl AmplitudeGraph<UnInit> {
         }
     }
 
-    pub fn apply_feynman_rules(self) -> AmplitudeGraph<AppliedFeynmanRule> {
-        let graph = self.graph.apply_feynman_rules();
+    pub fn apply_feynman_rules(
+        self,
+        export_settings: &ExportSettings,
+    ) -> AmplitudeGraph<AppliedFeynmanRule> {
+        let graph = self.graph.apply_feynman_rules(export_settings);
         AmplitudeGraph {
             sg_id: self.sg_id,
             sg_cut_id: self.sg_cut_id,
@@ -807,11 +810,14 @@ impl Amplitude<UnInit> {
         Ok(amp)
     }
 
-    pub fn apply_feynman_rules(self) -> Amplitude<AppliedFeynmanRule> {
+    pub fn apply_feynman_rules(
+        self,
+        export_settings: &ExportSettings,
+    ) -> Amplitude<AppliedFeynmanRule> {
         let graphs = self
             .amplitude_graphs
             .into_iter()
-            .map(AmplitudeGraph::apply_feynman_rules)
+            .map(|ag| ag.apply_feynman_rules(export_settings))
             .collect();
 
         Amplitude {
@@ -907,7 +913,7 @@ impl Amplitude<PythonState> {
         Ok(())
     }
 }
-impl<S: UnexpandedNumerator> Amplitude<S> {
+impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
     pub fn export_expressions(
         &self,
         export_root: &str,
@@ -925,7 +931,7 @@ impl<S: UnexpandedNumerator> Amplitude<S> {
                 .as_ref()
                 .unwrap()
                 .numerator
-                .expr();
+                .get_single_atom();
             let dens: Vec<(String, String)> = amplitude_graph
                 .graph
                 .bare_graph
@@ -1251,11 +1257,14 @@ impl AmplitudeList<UnInit> {
         })
     }
 
-    pub fn generate_numerator(self) -> AmplitudeList<AppliedFeynmanRule> {
+    pub fn generate_numerator(
+        self,
+        export_settings: &ExportSettings,
+    ) -> AmplitudeList<AppliedFeynmanRule> {
         let container = self
             .container
             .into_iter()
-            .map(Amplitude::apply_feynman_rules)
+            .map(|a| a.apply_feynman_rules(export_settings))
             .collect();
 
         AmplitudeList { container }

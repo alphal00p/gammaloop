@@ -1,5 +1,9 @@
 use crate::{
     debug_info::DEBUG_LOGGER,
+    gammaloop_integrand::DefaultSample,
+    graph::BareGraph,
+    momentum::FourMomentum,
+    numerator::{Evaluate, Evaluators, Numerator, RepeatingIteratorTensorOrScalar},
     utils::{FloatLike, VarFloat, F},
     ExportSettings, Settings,
 };
@@ -7,10 +11,12 @@ use bincode::{Decode, Encode};
 use color_eyre::Report;
 use derive_more::{From, Into};
 use eyre::eyre;
+use gat_lending_iterator::LendingIterator;
 use itertools::Itertools;
 use log::info;
 use serde::{Deserialize, Serialize};
-use spenso::parametric::SerializableCompiledEvaluator;
+use smartstring::{LazyCompact, SmartString};
+use spenso::{complex::Complex, parametric::SerializableCompiledEvaluator};
 use std::{cell::RefCell, fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
@@ -19,7 +25,7 @@ use symbolica::{
 };
 use typed_index_collections::TiVec;
 
-#[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TermId(usize);
 
 use super::{
@@ -466,10 +472,13 @@ impl CFFExpression {
             .iter_term_ids()
             .filter(|&term_id| self.term_has_esurface(term_id, esurface_id));
 
-        let (dag_left, dag_right) = terms_with_esurface
+        let ((dag_left, dag_right), orientations_in_limit) = terms_with_esurface
             .map(|term_id| {
                 let term_dag = &self[term_id].dag;
-                term_dag.generate_cut(circling)
+                (
+                    term_dag.generate_cut(circling),
+                    (self[term_id].orientation.clone(), term_id),
+                )
             })
             .unzip();
 
@@ -482,6 +491,7 @@ impl CFFExpression {
             ref_to_esurface,
             temp_dep_mom,
             temp_dep_mom_expr,
+            orientations_in_limit,
         )
     }
 
@@ -538,18 +548,20 @@ impl CFFExpression {
         &mut self,
         params: &[Atom],
         path: PathBuf,
+        graph_name: SmartString<LazyCompact>,
         export_settings: &ExportSettings,
     ) -> Result<(), Report> {
         if !export_settings.compile_cff && !export_settings.compile_separate_orientations {
             return Ok(());
         }
 
+        let expr_str = format!("expression_{}", graph_name);
         let mut cpp_str = String::new();
 
         let path_to_compiled = path.join("compiled");
         std::fs::create_dir_all(&path_to_compiled)?;
 
-        let path_to_code = path_to_compiled.join("expression.cpp");
+        let path_to_code = path_to_compiled.join(format!("{}.cpp", expr_str));
 
         info!(
             "Compiling cff source_code {}",
@@ -558,7 +570,7 @@ impl CFFExpression {
                 .ok_or(eyre!("could not convert path to string"))?
         );
 
-        let path_to_so = path_to_compiled.join("expression.so");
+        let path_to_so = path_to_compiled.join(format!("{}.so", expr_str));
         let path_to_so_str = path_to_so
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;
@@ -617,6 +629,7 @@ impl CFFExpression {
 
         let metadata = CompiledCFFExpressionMetaData {
             name: path_to_compiled,
+            graph_name,
             num_orientations: self.get_num_trees(),
             compile_cff_present: export_settings.compile_cff,
             compile_separate_orientations_present: export_settings.compile_separate_orientations,
@@ -629,9 +642,15 @@ impl CFFExpression {
         Ok(())
     }
 
-    pub fn load_compiled(&mut self, path: PathBuf, settings: &Settings) -> Result<(), Report> {
+    pub fn load_compiled(
+        &mut self,
+        path: PathBuf,
+        graph_name: SmartString<LazyCompact>,
+        settings: &Settings,
+    ) -> Result<(), Report> {
         let metadata = CompiledCFFExpressionMetaData {
             name: path.join("compiled"),
+            graph_name,
             num_orientations: self.get_num_trees(),
             compile_cff_present: settings.general.load_compiled_cff,
             compile_separate_orientations_present: settings
@@ -728,14 +747,33 @@ impl Index<TermId> for CFFExpression {
 pub struct CFFLimit {
     pub left: CFFExpression,
     pub right: CFFExpression,
+    pub orientations_in_limit: (Vec<Vec<bool>>, Vec<TermId>),
 }
 
 impl CFFLimit {
     pub fn evaluate_from_esurface_cache<T: FloatLike>(
         &self,
+        graph: &BareGraph,
+        numerator: &mut Numerator<Evaluators>,
+        numerator_sample: &DefaultSample<T>,
         esurface_cache: &EsurfaceCache<F<T>>,
         energy_cache: &[F<T>],
-    ) -> F<T> {
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        let (numerator_sample, tag) = numerator_sample.numerator_sample(settings);
+
+        let emr_energies = graph
+            .compute_onshell_energies(&numerator_sample.loop_moms, &numerator_sample.external_moms);
+
+        let emr_3d =
+            graph.compute_emr(&numerator_sample.loop_moms, &numerator_sample.external_moms);
+
+        let emr_4d = emr_energies
+            .into_iter()
+            .zip(emr_3d)
+            .map(|(e, p)| FourMomentum::from_args(e, p.px, p.py, p.pz))
+            .collect_vec();
+
         let left_orientations = self
             .left
             .evaluate_orientations_from_esurface_cache(esurface_cache, energy_cache);
@@ -743,12 +781,36 @@ impl CFFLimit {
             .right
             .evaluate_orientations_from_esurface_cache(esurface_cache, energy_cache);
 
-        left_orientations
+        let num_iter = numerator
+            .evaluate_all_orientations(&emr_4d, &numerator_sample.polarizations, tag, settings)
+            .unwrap();
+
+        let mut cff = left_orientations
             .into_iter()
             .zip(right_orientations)
-            .map(|(l, r)| l * r)
-            .reduce(|acc, x| &acc + &x)
-            .unwrap_or_else(|| esurface_cache[EsurfaceID::from(0usize)].zero())
+            .map(|(l, r)| l * r);
+
+        match num_iter {
+            RepeatingIteratorTensorOrScalar::Scalars(mut num) => {
+                let mut term = 0;
+                let mut terms_evaluated = 0;
+                let mut sum = Complex::new_re(energy_cache[0].zero());
+
+                while let Some(num) = num.next() {
+                    if self.orientations_in_limit.1.contains(&TermId(term)) {
+                        let cff_term = Complex::new_re(cff.next().unwrap());
+                        sum += num * cff_term;
+                        terms_evaluated += 1;
+                    }
+                    term += 1;
+                }
+                assert_eq!(terms_evaluated, self.orientations_in_limit.1.len());
+                sum
+            }
+            RepeatingIteratorTensorOrScalar::Tensors(mut _num_iter) => {
+                todo!()
+            }
+        }
     }
 
     pub fn limit_to_atom_with_rewrite(&self, rewriter_esurface: Option<&Esurface>) -> Atom {
@@ -805,6 +867,7 @@ pub struct InnerCompiledCFF {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct CompiledCFFExpressionMetaData {
     name: PathBuf,
+    graph_name: SmartString<LazyCompact>,
     num_orientations: usize,
     compile_cff_present: bool,
     compile_separate_orientations_present: bool,
@@ -851,7 +914,9 @@ impl CompiledCFFExpression {
     }
 
     fn from_metedata(metadata: CompiledCFFExpressionMetaData) -> Result<Self, Report> {
-        let path_to_joint = metadata.name.join("expression.so");
+        let path_to_joint = metadata
+            .name
+            .join(format!("expression_{}.so", metadata.graph_name));
         let path_to_joint_str = path_to_joint
             .to_str()
             .ok_or(eyre!("could not convert path to string"))?;

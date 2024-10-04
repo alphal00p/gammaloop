@@ -13,7 +13,7 @@ use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
 use spenso::parametric::{ExpandedCoefficent, TensorCoefficient};
 use spenso::structure::{
-    ConstructibleSlot, Dimension, Euclidean, ExpandedIndex, FlatIndex, VecStructure, CONCRETEIND,
+    AbstractIndex, Dimension, Euclidean, ExpandedIndex, FlatIndex, VecStructure, CONCRETEIND,
 };
 use spenso::{
     contraction::IsZero,
@@ -22,7 +22,7 @@ use spenso::{
         IsAbstractSlot, Lorentz, PhysReps, RepName, Representation, Slot, ABSTRACTIND,
     },
 };
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 use std::fs;
 use symbolica::evaluate::FunctionMap;
 
@@ -136,6 +136,35 @@ impl ColorStructure {
     pub fn iter(&self) -> std::slice::Iter<Atom> {
         self.color_structure.iter()
     }
+
+    pub fn number_of_dummies_in_atom(a: AtomView) -> usize {
+        let mut count = 0;
+
+        if let AtomView::Mul(m) = a {
+            for a in m {
+                if let AtomView::Fun(f) = a {
+                    for a in f {
+                        if let Ok(i) = i64::try_from(a) {
+                            if i < 0 {
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        count / 2
+    }
+
+    pub fn number_of_dummies(&self) -> usize {
+        let mut count = 0;
+
+        for a in &self.color_structure {
+            count += Self::number_of_dummies_in_atom(a.as_view());
+        }
+        count
+    }
 }
 
 impl FromIterator<Atom> for ColorStructure {
@@ -158,6 +187,43 @@ pub struct VertexRule {
 pub struct VertexSlots {
     edge_slots: Vec<EdgeSlots<Dual<Lorentz>>>,
     pub coupling_indices: Option<[Slot<Euclidean>; 2]>, //None for external vertices
+    pub internal_dummy: DummyIndices,
+}
+
+impl VertexSlots {
+    pub fn shift_internals(&mut self, shifts: &Shifts) {
+        let lorentz_shift = shifts.lorentz + shifts.spin;
+        let color_shift = shifts.color;
+
+        self.internal_dummy
+            .color
+            .iter_mut()
+            .for_each(|c| *c += color_shift.into());
+
+        self.internal_dummy
+            .lorentz_and_spin
+            .iter_mut()
+            .for_each(|l| *l += lorentz_shift.into());
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DummyIndices {
+    pub lorentz_and_spin: Vec<AbstractIndex>,
+    pub color: Vec<AbstractIndex>,
+}
+
+impl std::fmt::Display for VertexSlots {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for edge_slot in &self.edge_slots {
+            write!(f, "{}", edge_slot)?;
+        }
+        if let Some([i, j]) = self.coupling_indices {
+            write!(f, "{} {}", i, j)
+        } else {
+            write!(f, "None")
+        }
+    }
 }
 
 impl Index<usize> for VertexSlots {
@@ -172,13 +238,14 @@ impl From<EdgeSlots<Dual<Lorentz>>> for VertexSlots {
         VertexSlots {
             edge_slots: vec![value],
             coupling_indices: None,
+            internal_dummy: Default::default(),
         }
     }
 }
 
 impl VertexRule {
     pub fn dod(&self) -> isize {
-        let mut dod = 0;
+        let dod;
         let mut spins = vec![];
         for p in &self.particles {
             spins.push(p.spin);
@@ -194,6 +261,34 @@ impl VertexRule {
             dod = 0;
         }
         dod
+    }
+
+    fn generate_dummy_indices(&self, shifts: &mut Shifts) -> DummyIndices {
+        let mut lorentz_and_spin = vec![];
+        let mut color = vec![];
+
+        let n_color_dummies = self.color_structures.number_of_dummies();
+        for a in 0..n_color_dummies {
+            color.push((shifts.colordummy + a).into());
+        }
+
+        shifts.colordummy += n_color_dummies;
+
+        let mut n_lorentz_dummies = 0;
+        for a in &self.lorentz_structures {
+            n_lorentz_dummies += a.number_of_dummies();
+        }
+
+        for a in 0..n_lorentz_dummies {
+            lorentz_and_spin.push((shifts.lorentzdummy + a).into());
+        }
+
+        shifts.lorentzdummy += n_lorentz_dummies;
+
+        DummyIndices {
+            lorentz_and_spin,
+            color,
+        }
     }
 
     pub fn generate_vertex_slots(&self, mut shifts: Shifts) -> (VertexSlots, Shifts) {
@@ -221,11 +316,14 @@ impl VertexRule {
             VertexSlots {
                 edge_slots,
                 coupling_indices,
+                internal_dummy: self.generate_dummy_indices(&mut shifts),
             },
             Shifts {
                 lorentz: shifts.lorentz,
                 spin: shifts.spin,
+                lorentzdummy: shifts.lorentzdummy,
                 color: shifts.color,
+                colordummy: shifts.colordummy,
                 coupling: coupling_shift + 2,
             },
         )
@@ -504,6 +602,24 @@ pub struct EdgeSlots<LorRep: RepName> {
     pub color: Vec<Slot<PhysReps>>,
 }
 
+impl<LorRep: BaseRepName> Display for EdgeSlots<LorRep> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Lorentz: ")?;
+        for l in &self.lorentz {
+            write!(f, "{} ", l)?;
+        }
+        write!(f, "Spin: ")?;
+        for s in &self.spin {
+            write!(f, "{} ", s)?;
+        }
+        write!(f, "Color: ")?;
+        for c in &self.color {
+            write!(f, "{} ", c)?;
+        }
+        Ok(())
+    }
+}
+
 impl From<EdgeSlots<Lorentz>> for VecStructure {
     fn from(value: EdgeSlots<Lorentz>) -> Self {
         VecStructure {
@@ -522,6 +638,29 @@ impl<LorRep: BaseRepName> EdgeSlots<LorRep>
 where
     PhysReps: From<LorRep>,
 {
+    pub fn kroneker(&self, other: &EdgeSlots<LorRep::Dual>) -> [Atom; 3] {
+        let lorentz = self
+            .lorentz
+            .iter()
+            .zip(other.lorentz.iter())
+            .map(|(a, b)| a.kroneker_atom(b))
+            .fold(Atom::parse("1").unwrap(), |acc, x| acc * x);
+        let spin = self
+            .spin
+            .iter()
+            .zip(other.spin.iter())
+            .map(|(a, b)| a.kroneker_atom(b))
+            .fold(Atom::parse("1").unwrap(), |acc, x| acc * x);
+        let color = self
+            .color
+            .iter()
+            .zip(other.color.iter())
+            .map(|(a, b)| a.kroneker_atom(b))
+            .fold(Atom::parse("1").unwrap(), |acc, x| acc * x);
+
+        [lorentz, spin, color]
+    }
+
     pub fn expanded_index(&self, flat_index: FlatIndex) -> Result<ExpandedIndex> {
         let mut indices = vec![];
         let mut index: usize = flat_index.into();
@@ -677,6 +816,10 @@ impl Particle {
         self.pdg_code < 0
     }
 
+    pub fn get_anti_particle(&self, model: &Model) -> Arc<Particle> {
+        model.get_particle(&self.antiname)
+    }
+
     fn lorentz_slots<LR: BaseRepName>(&self, shift: usize) -> (Vec<Slot<LR>>, usize) {
         let fourd_lor = LR::new_dimed_rep_selfless(4);
 
@@ -721,6 +864,8 @@ impl Particle {
             },
             Shifts {
                 lorentz: shift_lor,
+                lorentzdummy: shifts.lorentzdummy,
+                colordummy: shifts.colordummy,
                 spin: shift_spin,
                 color: shift_color,
                 coupling: shifts.coupling,
@@ -1105,6 +1250,24 @@ impl LorentzStructure {
             spins: ls.spins.clone(),
             structure: utils::parse_python_expression(ls.structure.as_str()),
         }
+    }
+
+    pub fn number_of_dummies(&self) -> usize {
+        let mut count = 0;
+        if let AtomView::Mul(m) = self.structure.as_view() {
+            for a in m {
+                if let AtomView::Fun(f) = a {
+                    for a in f {
+                        if let Ok(i) = i64::try_from(a) {
+                            if i < 0 {
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        count / 2
     }
 }
 

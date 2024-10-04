@@ -8,17 +8,19 @@ use colored::Colorize;
 
 use itertools::{izip, Itertools};
 use rand::Rng;
-use ref_ops::{
-    RefAdd, RefDiv, RefMul, RefNeg, RefSub,RefRem
-};
+use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
 use rug::float::Constant;
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Serialize};
 use spenso::complex::SymbolicaComplex;
-use spenso::{contraction::{RefOne, RefZero},upgrading_arithmetic:: TrySmallestUpgrade,complex::{R,Complex}};
+use spenso::{
+    complex::{Complex, R},
+    contraction::{RefOne, RefZero},
+    upgrading_arithmetic::TrySmallestUpgrade,
+};
 use symbolica::domains::float::{
-    ConstructibleFloat, RealNumberLike, NumericalFloatLike, SingleFloat,
+    ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
 use symbolica::evaluate::CompiledEvaluatorFloat;
@@ -70,7 +72,7 @@ pub mod sorted_vectorize {
     pub fn serialize<'a, T, K, V, S>(target: T, ser: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
-        T: IntoIterator<Item = (&'a K, &'a V)> ,
+        T: IntoIterator<Item = (&'a K, &'a V)>,
         K: Serialize + PartialOrd + 'a,
         V: Serialize + PartialOrd + 'a,
     {
@@ -112,23 +114,21 @@ pub trait FloatConvertFrom<U> {
 //     }
 // }
 
-#[derive(Debug, Clone, PartialEq,PartialOrd,Serialize,Deserialize,Encode,Decode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize, Encode, Decode)]
 pub struct VarFloat<const N: u32> {
     #[bincode(with_serde)]
     float: rug::Float,
 }
 
-
-impl<'a,const N:u32> Rem<&VarFloat<N>> for &'a VarFloat<N>{
+impl<'a, const N: u32> Rem<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn rem(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float%&rhs.float).complete(N as i64).into()
+        (&self.float % &rhs.float).complete(N as i64).into()
     }
 }
 
-
-impl<const N:u32> From<Float> for VarFloat<N> {
+impl<const N: u32> From<Float> for VarFloat<N> {
     fn from(x: Float) -> Self {
         VarFloat {
             float: rug::Float::with_val(N, x),
@@ -136,26 +136,25 @@ impl<const N:u32> From<Float> for VarFloat<N> {
     }
 }
 
-
-impl<const N:u32> From<&Rational> for VarFloat<N> {
+impl<const N: u32> From<&Rational> for VarFloat<N> {
     fn from(x: &Rational) -> Self {
         let n = x.numerator();
 
-        let n =match n {
-            Integer::Double(f)=>Float::with_val(N,f),
-            Integer::Large(f)=>Float::with_val(N,f),
-            Integer::Natural(f)=>Float::with_val(N,f),
+        let n = match n {
+            Integer::Double(f) => Float::with_val(N, f),
+            Integer::Large(f) => Float::with_val(N, f),
+            Integer::Natural(f) => Float::with_val(N, f),
         };
 
         let d = x.denominator();
 
-        let d =match d {
-            Integer::Double(f)=>Float::with_val(N,f),
-            Integer::Large(f)=>Float::with_val(N,f),
-            Integer::Natural(f)=>Float::with_val(N,f),
+        let d = match d {
+            Integer::Double(f) => Float::with_val(N, f),
+            Integer::Large(f) => Float::with_val(N, f),
+            Integer::Natural(f) => Float::with_val(N, f),
         };
 
-        let r =n/d;
+        let r = n / d;
 
         VarFloat {
             float: rug::Float::with_val(N, r),
@@ -179,19 +178,19 @@ impl<const N: u32> std::ops::Mul<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a,const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
+impl<'a, const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float*&rhs.float).complete(N as i64).into()
+        (&self.float * &rhs.float).complete(N as i64).into()
     }
 }
 
-impl<'a,const N: u32> std::ops::Mul<&VarFloat<N>> for &'a VarFloat<N> {
+impl<'a, const N: u32> std::ops::Mul<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float*&rhs.float).complete(N as i64).into()
+        (&self.float * &rhs.float).complete(N as i64).into()
     }
 }
 
@@ -225,19 +224,19 @@ impl<const N: u32> std::ops::Add<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a,const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
+impl<'a, const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float+&rhs.float).complete(N as i64).into()
+        (&self.float + &rhs.float).complete(N as i64).into()
     }
 }
 
-impl<'a,const N: u32> std::ops::Add<&VarFloat<N>> for &'a VarFloat<N> {
+impl<'a, const N: u32> std::ops::Add<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float+&rhs.float).complete(N as i64).into()
+        (&self.float + &rhs.float).complete(N as i64).into()
     }
 }
 
@@ -271,19 +270,19 @@ impl<const N: u32> std::ops::Sub<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a,const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
+impl<'a, const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float-&rhs.float).complete(N as i64).into()
+        (&self.float - &rhs.float).complete(N as i64).into()
     }
 }
 
-impl<'a,const N: u32> std::ops::Sub<&VarFloat<N>> for &'a VarFloat<N> {
+impl<'a, const N: u32> std::ops::Sub<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float-&rhs.float).complete(N as i64).into()
+        (&self.float - &rhs.float).complete(N as i64).into()
     }
 }
 
@@ -317,19 +316,19 @@ impl<const N: u32> Div<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a,const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
+impl<'a, const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float/&rhs.float).complete(N as i64).into()
+        (&self.float / &rhs.float).complete(N as i64).into()
     }
 }
 
-impl<'a,const N: u32> Div<&VarFloat<N>> for &'a VarFloat<N> {
+impl<'a, const N: u32> Div<&VarFloat<N>> for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float/&rhs.float).complete(N as i64).into()
+        (&self.float / &rhs.float).complete(N as i64).into()
     }
 }
 
@@ -355,7 +354,7 @@ impl<const N: u32> std::ops::Neg for VarFloat<N> {
     }
 }
 
-impl<'a,const N: u32> std::ops::Neg for &'a VarFloat<N> {
+impl<'a, const N: u32> std::ops::Neg for &'a VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn neg(self) -> Self::Output {
@@ -375,27 +374,25 @@ impl<const N: u32> std::fmt::LowerExp for VarFloat<N> {
     }
 }
 
-
-impl<const N:u32> RefZero for VarFloat<N> {
+impl<const N: u32> RefZero for VarFloat<N> {
     fn ref_zero(&self) -> Self {
         Self::new_zero()
     }
-    
 }
 
+impl<const N: u32> R for VarFloat<N> {}
 
-impl<const N:u32> R for VarFloat<N> {}
-
-impl<const N:u32> RefOne for VarFloat<N> {
+impl<const N: u32> RefOne for VarFloat<N> {
     fn ref_one(&self) -> Self {
         self.one()
     }
-    
 }
 
-impl<const N:u32> NumericalFloatLike for VarFloat<N>{
+impl<const N: u32> NumericalFloatLike for VarFloat<N> {
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
-        (&self.float*&a.float+&b.float).complete(N as i64).into()  
+        (&self.float * &a.float + &b.float)
+            .complete(N as i64)
+            .into()
     }
 
     // fn norm(&self) -> Self {
@@ -403,11 +400,15 @@ impl<const N:u32> NumericalFloatLike for VarFloat<N>{
     // }
 
     fn from_i64(&self, a: i64) -> Self {
-        VarFloat{ float:Float::with_val(N,a )}
+        VarFloat {
+            float: Float::with_val(N, a),
+        }
     }
 
     fn from_usize(&self, a: usize) -> Self {
-        VarFloat{ float:Float::with_val(N,a )}
+        VarFloat {
+            float: Float::with_val(N, a),
+        }
     }
 
     fn get_precision(&self) -> u32 {
@@ -420,10 +421,12 @@ impl<const N:u32> NumericalFloatLike for VarFloat<N>{
 
     fn one(&self) -> Self {
         self.from_i64(1)
-    }   
+    }
 
     fn new_zero() -> Self {
-        VarFloat{ float:Float::new(N )}
+        VarFloat {
+            float: Float::new(N),
+        }
     }
 
     fn inv(&self) -> Self {
@@ -450,10 +453,9 @@ impl<const N:u32> NumericalFloatLike for VarFloat<N>{
     fn fixed_precision(&self) -> bool {
         true
     }
-
 }
 
-impl<const N:u32> SingleFloat for VarFloat<N> {
+impl<const N: u32> SingleFloat for VarFloat<N> {
     fn is_finite(&self) -> bool {
         self.float.is_finite()
     }
@@ -465,10 +467,8 @@ impl<const N:u32> SingleFloat for VarFloat<N> {
     fn is_zero(&self) -> bool {
         self.float == 0.
     }
-
-
 }
-impl<const N:u32> RealNumberLike for VarFloat<N>{
+impl<const N: u32> RealNumberLike for VarFloat<N> {
     fn to_f64(&self) -> f64 {
         self.float.to_f64()
     }
@@ -480,12 +480,9 @@ impl<const N:u32> RealNumberLike for VarFloat<N>{
             .to_usize()
             .unwrap_or(usize::MAX)
     }
-    
 }
 
-
-impl<const N:u32> Real for VarFloat<N> {
-
+impl<const N: u32> Real for VarFloat<N> {
     fn atan2(&self, x: &Self) -> Self {
         self.float.clone().atan2(&x.float).into()
     }
@@ -494,13 +491,10 @@ impl<const N:u32> Real for VarFloat<N> {
         self.float.clone().pow(e.float.clone()).into()
     }
 
-    fn log(&self)->Self{
-        self.float
-                .ln_ref()
-                .complete(N as i64)
-                .into()
+    fn log(&self) -> Self {
+        self.float.ln_ref().complete(N as i64).into()
     }
-    fn norm(&self) -> Self{
+    fn norm(&self) -> Self {
         self.float.clone().abs().into()
     }
 
@@ -519,12 +513,12 @@ impl<const N:u32> Real for VarFloat<N> {
             fn tanh(&self) -> Self;
             fn asinh(&self) -> Self;
             fn acosh(&self) -> Self;
-            fn atanh(&self) -> Self; 
+            fn atanh(&self) -> Self;
         }
     }
 }
 
-impl FloatLike for VarFloat<113>{
+impl FloatLike for VarFloat<113> {
     fn E(&self) -> Self {
         Self::E()
     }
@@ -543,14 +537,12 @@ impl FloatLike for VarFloat<113>{
 
     fn rem_euclid(&self, rhs: &Self) -> Self {
         let r = self.ref_rem(rhs);
-        if r<r.zero() {
+        if r < r.zero() {
             r + rhs
         } else {
             r
         }
     }
-
-    
 
     fn FRAC_1_PI(&self) -> Self {
         Self::FRAC_1_PI()
@@ -586,7 +578,6 @@ impl FloatLike for VarFloat<113>{
 }
 
 impl<const N: u32> VarFloat<N> {
-
     fn one() -> Self {
         VarFloat {
             float: rug::Float::with_val(N, 1.0),
@@ -597,7 +588,6 @@ impl<const N: u32> VarFloat<N> {
         Self::one().exp()
     }
 
-    
     #[allow(non_snake_case)]
     fn PIHALF() -> Self {
         Self::PI() / Self::from_f64(2.0)
@@ -621,9 +611,6 @@ impl<const N: u32> VarFloat<N> {
     fn FRAC_1_PI() -> Self {
         Self::PI().inv()
     }
-
-
-
 
     pub fn from_f64(x: f64) -> Self {
         VarFloat {
@@ -655,23 +642,23 @@ impl PrecisionUpgradable for f128 {
     fn lower(&self) -> Self::Lower {
         self.to_f64()
     }
-    
 }
 
-impl<T:Real+PrecisionUpgradable,H:Real,L:Real> PrecisionUpgradable for Complex<T> where T: PrecisionUpgradable<Higher = H, Lower = L> {
+impl<T: Real + PrecisionUpgradable, H: Real, L: Real> PrecisionUpgradable for Complex<T>
+where
+    T: PrecisionUpgradable<Higher = H, Lower = L>,
+{
     type Higher = Complex<H>;
     type Lower = Complex<L>;
 
     fn higher(&self) -> Self::Higher {
-        Complex::new(self.re.higher(),self.im.higher())
+        Complex::new(self.re.higher(), self.im.higher())
     }
 
     fn lower(&self) -> Self::Lower {
-        Complex::new(self.re.lower(),self.im.lower())
+        Complex::new(self.re.lower(), self.im.lower())
     }
 }
-
-
 
 // #[allow(non_camel_case_types)]
 // pub type f256 = VarFloat<243>;
@@ -683,7 +670,6 @@ pub trait PrecisionUpgradable {
     fn higher(&self) -> Self::Higher;
     fn lower(&self) -> Self::Lower;
 }
-
 
 pub trait FloatLike:
     Real
@@ -715,10 +701,9 @@ pub trait FloatLike:
     + Serialize
     + Display
     + CFFFloat<Self>
-    + NumeratorEvaluateFloat{
-    
+    + NumeratorEvaluateFloat
+    {
 
-    
     #[allow(non_snake_case)]
     fn PI(&self) -> Self;
     #[allow(non_snake_case)]
@@ -786,16 +771,14 @@ pub trait FloatLike:
     fn rem_euclid(&self, rhs: &Self) -> Self;
 }
 
-
-
-
-#[derive(Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize,Encode,Decode,Hash)]
+#[derive(
+    Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize, Encode, Decode, Hash,
+)]
 pub struct F<T: FloatLike>(pub T);
 
-impl<T:FloatLike> R for F<T> {}
+impl<T: FloatLike> R for F<T> {}
 
-
-impl<'a,T:FloatLike> Rem<&F<T>> for &'a F<T>{
+impl<'a, T: FloatLike> Rem<&F<T>> for &'a F<T> {
     type Output = F<T>;
 
     fn rem(self, rhs: &F<T>) -> Self::Output {
@@ -803,25 +786,23 @@ impl<'a,T:FloatLike> Rem<&F<T>> for &'a F<T>{
     }
 }
 
-
-impl<T:FloatLike> RefZero<F<T>> for &F<T>{
+impl<T: FloatLike> RefZero<F<T>> for &F<T> {
     fn ref_zero(&self) -> F<T> {
         F(self.0.ref_zero())
     }
 }
 
-impl<T:FloatLike> RealNumberLike for F<T>{
-    delegate!{
+impl<T: FloatLike> RealNumberLike for F<T> {
+    delegate! {
         to self.0{
             fn to_usize_clamped(&self)->usize;
             fn to_f64(&self)->f64;
         }
     }
-
 }
 
-impl<T:FloatLike> SingleFloat for F<T>{
-    delegate!{
+impl<T: FloatLike> SingleFloat for F<T> {
+    delegate! {
         to self.0{
             fn is_zero(&self)->bool;
             fn is_one(&self)->bool;
@@ -830,7 +811,11 @@ impl<T:FloatLike> SingleFloat for F<T>{
     }
 }
 
-impl<T: FloatLike> PrecisionUpgradable for F<T> where T::Higher: FloatLike, T::Lower: FloatLike{
+impl<T: FloatLike> PrecisionUpgradable for F<T>
+where
+    T::Higher: FloatLike,
+    T::Lower: FloatLike,
+{
     type Higher = F<T::Higher>;
     type Lower = F<T::Lower>;
 
@@ -843,31 +828,26 @@ impl<T: FloatLike> PrecisionUpgradable for F<T> where T::Higher: FloatLike, T::L
     }
 }
 
-
-
-
-impl<T:FloatLike> RefZero for F<T> {
-   fn ref_zero(&self) -> Self {
-         F(self.0.zero())
-   }
+impl<T: FloatLike> RefZero for F<T> {
+    fn ref_zero(&self) -> Self {
+        F(self.0.zero())
+    }
 }
 
-impl<T:FloatLike> RefOne for F<T> {
+impl<T: FloatLike> RefOne for F<T> {
     fn ref_one(&self) -> Self {
-        F(self.0.one())   
+        F(self.0.one())
     }
- }
+}
 
-impl<T:FloatLike> TrySmallestUpgrade<F<T>> for F<T> {
+impl<T: FloatLike> TrySmallestUpgrade<F<T>> for F<T> {
     type LCM = F<T>;
     fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
         Some(std::borrow::Cow::Borrowed(self))
     }
 }
 
- 
-
-impl<T:FloatLike> TrySmallestUpgrade<F<T>> for Complex<F<T>> {
+impl<T: FloatLike> TrySmallestUpgrade<F<T>> for Complex<F<T>> {
     type LCM = Complex<F<T>>;
     fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
         Some(std::borrow::Cow::Borrowed(self))
@@ -881,7 +861,7 @@ impl<T:FloatLike> TrySmallestUpgrade<F<T>> for Complex<F<T>> {
 //     }
 // }
 
-impl<'a,T:FloatLike> From<&'a Rational> for F<T>{
+impl<'a, T: FloatLike> From<&'a Rational> for F<T> {
     fn from(x: &'a Rational) -> Self {
         F(T::from_f64(x.to_f64()))
     }
@@ -954,8 +934,6 @@ impl<T: FloatLike + ConstructibleFloat> ConstructibleFloat for F<T> {
     }
 }
 
-
-
 impl<T: FloatLike> Real for F<T> {
     fn atan2(&self, x: &Self) -> Self {
         F(self.0.atan2(&x.0))
@@ -968,7 +946,7 @@ impl<T: FloatLike> Real for F<T> {
     fn norm(&self) -> Self {
         F(self.0.norm())
     }
-    
+
     delegate! {
         #[into]
         to self.0{
@@ -991,12 +969,10 @@ impl<T: FloatLike> Real for F<T> {
     }
 }
 
-
 use delegate::delegate;
 
 impl<T: FloatLike> F<T> {
-
-    pub fn max(self,other:F<T>)->F<T>{
+    pub fn max(self, other: F<T>) -> F<T> {
         if self < other {
             other
         } else {
@@ -1008,20 +984,25 @@ impl<T: FloatLike> F<T> {
         self.0 = -self.0.clone();
     }
 
-    pub fn from_ff64( x: F<f64>) -> Self {
+    pub fn from_ff64(x: F<f64>) -> Self {
         F(T::from_f64(x.0))
     }
 
-    pub fn higher(&self) -> F<T::Higher> where T::Higher: FloatLike {
+    pub fn higher(&self) -> F<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
         F(self.0.higher())
     }
 
-    pub fn lower(&self) -> F<T::Lower> where T::Lower: FloatLike{
+    pub fn lower(&self) -> F<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
         F(self.0.lower())
     }
 
-
-    pub fn from_f64(x: f64) -> Self{
+    pub fn from_f64(x: f64) -> Self {
         F(T::from_f64(x))
     }
 
@@ -1033,23 +1014,20 @@ impl<T: FloatLike> F<T> {
         F(self.0.norm())
     }
 
-    pub fn i(&self)-> Complex<Self>{
-        Complex::new(self.zero(),self.one())
+    pub fn i(&self) -> Complex<Self> {
+        Complex::new(self.zero(), self.one())
     }
-
 
     pub fn log10(&self) -> Self {
         self.ln()
     }
 
     pub fn complex_sqrt(&self) -> Complex<Self> {
-
         if self.positive() {
             Complex::new(self.sqrt(), self.zero())
         } else {
             Complex::new(self.zero(), (-self).sqrt())
         }
-        
     }
 
     pub fn rem_euclid(&self, rhs: &Self) -> Self {
@@ -1090,17 +1068,21 @@ impl<T: FloatLike> F<T> {
 }
 
 impl CompiledEvaluatorFloat for F<f64> {
-    fn evaluate(eval: &mut symbolica::evaluate::CompiledEvaluator, args: &[Self], out: &mut [Self]) {
+    fn evaluate(
+        eval: &mut symbolica::evaluate::CompiledEvaluator,
+        args: &[Self],
+        out: &mut [Self],
+    ) {
         // cast to f64
-        let args_f64: Vec<f64> = args.iter().map(|x| x.0).collect_vec(); 
+        let args_f64: Vec<f64> = args.iter().map(|x| x.0).collect_vec();
         let mut out_f64 = out.iter().map(|x| x.0).collect_vec();
-        
+
         eval.evaluate_double(&args_f64, &mut out_f64);
 
         // write the result to out
-        out.iter_mut().zip(out_f64).for_each(|(out_ff64, out_f64)| {
-            *out_ff64 = F(out_f64)
-        });
+        out.iter_mut()
+            .zip(out_f64)
+            .for_each(|(out_ff64, out_f64)| *out_ff64 = F(out_f64));
     }
 }
 
@@ -1304,13 +1286,9 @@ impl PrecisionUpgradable for f64 {
     fn lower(&self) -> Self::Lower {
         *self
     }
-    
 }
 
 impl FloatLike for f64 {
-
-    
-
     fn PI(&self) -> Self {
         std::f64::consts::PI
     }
@@ -1323,9 +1301,8 @@ impl FloatLike for f64 {
         std::f64::consts::SQRT_2 / 2.0
     }
 
-
     fn PIHALF(&self) -> Self {
-        std::f64::consts::PI/2.0
+        std::f64::consts::PI / 2.0
     }
 
     fn E(&self) -> Self {
@@ -1364,14 +1341,14 @@ impl FloatLike for f64 {
         f64::rem_euclid(*self, *rhs)
     }
 }
-impl From<F<f64>> for f64{
-  fn from(value: F<f64>) -> Self {
-      value.0
-  }
+impl From<F<f64>> for f64 {
+    fn from(value: F<f64>) -> Self {
+        value.0
+    }
 }
 
 #[allow(non_camel_case_types)]
-pub type f128 = VarFloat<113>;  
+pub type f128 = VarFloat<113>;
 
 /// An iterator which iterates two other iterators simultaneously
 #[derive(Clone, Debug)]
@@ -1787,7 +1764,6 @@ pub fn h<T: FloatLike>(
             // println!("sig: {}", sig);
             // println!("power: {:?}", power);
 
-
             let prefactor = match power {
                 None | Some(0) => normalisation.inv(),
                 Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
@@ -1795,7 +1771,8 @@ pub fn h<T: FloatLike>(
 
             // println!("prefactor: {}", prefactor);
             prefactor
-                * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig)).exp()
+                * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig))
+                    .exp()
         }
         crate::HFunction::ExponentialCT => {
             let delta_t_sq = (tstar.clone().unwrap() - &t).square();
@@ -1953,17 +1930,15 @@ pub fn compute_t_part_of_shift_part<T: FloatLike>(
     external_signature: &Signature,
     external_moms: &[FourMomentum<F<T>>],
 ) -> F<T> {
-    
     // external_signature.panic_validate_basis(external_moms);
-    external_signature.apply_iter(external_moms.iter().map(|m| m.temporal.value.clone())).unwrap_or(external_moms[0].temporal.value.zero())
+    external_signature
+        .apply_iter(external_moms.iter().map(|m| m.temporal.value.clone()))
+        .unwrap_or(external_moms[0].temporal.value.zero())
 }
-
-
-
 
 // Bilinear form for E-surface defined as sqrt[(k+p1)^2+m1sq] + sqrt[(k+p2)^2+m2sq] + e_shift
 // The Bilinear system then reads 4 k.a.k + 4 k.n + C = 0
-#[allow(unused,clippy::type_complexity)]
+#[allow(unused, clippy::type_complexity)]
 pub fn one_loop_e_surface_bilinear_form<T: FloatLike>(
     p1: &[F<T>; 3],
     p2: &[F<T>; 3],
@@ -2032,37 +2007,53 @@ pub fn one_loop_e_surface_exists<T: FloatLike>(
     }
 }
 
-
-
-
-
 use color_eyre::Result;
 use eyre::eyre;
 #[allow(unused)]
-
 use std::fmt::LowerExp;
 
-pub trait ApproxEq<U:LowerExp,T:LowerExp>:LowerExp{
-    fn approx_eq(&self, other: &U, tolerance: &T)->bool;
+pub trait ApproxEq<U: LowerExp, T: LowerExp>: LowerExp {
+    fn approx_eq(&self, other: &U, tolerance: &T) -> bool;
 
-    fn approx_eq_slice(lhs: &[Self], rhs: &[U], tolerance: &T)->bool where Self: Sized{
-        lhs.iter().zip_eq(rhs).all(|(l,r)| l.approx_eq(r,tolerance))
+    fn approx_eq_slice(lhs: &[Self], rhs: &[U], tolerance: &T) -> bool
+    where
+        Self: Sized,
+    {
+        lhs.iter()
+            .zip_eq(rhs)
+            .all(|(l, r)| l.approx_eq(r, tolerance))
     }
 
-    fn approx_eq_iterator<'a,I,J>(lhs: I, rhs: J, tolerance: &'a T)->bool where Self: Sized+'a ,U:'a , I: IntoIterator<Item = &'a Self>, J: IntoIterator<Item = &'a U>{
-        lhs.into_iter().zip_eq(rhs).all(|(l,r)| l.approx_eq(r,tolerance))
+    fn approx_eq_iterator<'a, I, J>(lhs: I, rhs: J, tolerance: &'a T) -> bool
+    where
+        Self: Sized + 'a,
+        U: 'a,
+        I: IntoIterator<Item = &'a Self>,
+        J: IntoIterator<Item = &'a U>,
+    {
+        lhs.into_iter()
+            .zip_eq(rhs)
+            .all(|(l, r)| l.approx_eq(r, tolerance))
     }
 
-    fn assert_approx_eq(&self, other: &U, tolerance: &T){
-        assert!(self.approx_eq(other, tolerance),"assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",self, other, tolerance)
+    fn assert_approx_eq(&self, other: &U, tolerance: &T) {
+        assert!(
+            self.approx_eq(other, tolerance),
+            "assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",
+            self,
+            other,
+            tolerance
+        )
     }
-    fn approx_eq_res(&self, other: &U, tolerance: &T)->Result<()>{
+    fn approx_eq_res(&self, other: &U, tolerance: &T) -> Result<()> {
         if self.approx_eq(other, tolerance) {
             Ok(())
         } else {
             Err(eyre!(
                 "assert_approx_eq failed: \n{:+e} != \n{:+e} with tolerance {:+e}",
-                self, other, tolerance
+                self,
+                other,
+                tolerance
             ))
         }
     }
@@ -2072,8 +2063,8 @@ pub trait ApproxEq<U:LowerExp,T:LowerExp>:LowerExp{
 
 // impl<T: Real+PartialOrd+ for<'a> RefSub<&'a T,Output = T>+IsZero> ApproxEqable for T{}
 
-impl<T:FloatLike> ApproxEq<F<T>,F<T>> for F<T>{
-    fn approx_eq(&self, other: &F<T>, tolerance: &F<T>)->bool{
+impl<T: FloatLike> ApproxEq<F<T>, F<T>> for F<T> {
+    fn approx_eq(&self, other: &F<T>, tolerance: &F<T>) -> bool {
         if other.is_zero() {
             self.norm() < tolerance.clone()
         } else {
@@ -2082,97 +2073,96 @@ impl<T:FloatLike> ApproxEq<F<T>,F<T>> for F<T>{
     }
 }
 
-
-impl<T:FloatLike> ApproxEq<Complex<F<T>>,F<T>> for Complex<F<T>>{
-
-    fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>)->bool {
-        if !self.norm().re.approx_eq(& other.norm().re, tolerance) {
-            return false
+impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
+    fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>) -> bool {
+        if !self.norm().re.approx_eq(&other.norm().re, tolerance) {
+            return false;
         } else if self.norm().is_zero() || other.norm().is_zero() {
             return true;
         }
-        let two_pi = self.re.PI()+self.re.PI();
+        let two_pi = self.re.PI() + self.re.PI();
         let arg_self = self.arg().rem_euclid(&two_pi);
         let arg_other = other.arg().rem_euclid(&two_pi);
-        if !arg_self.approx_eq(&arg_other, tolerance)  {
-            return  false
+        if !arg_self.approx_eq(&arg_other, tolerance) {
+            return false;
         }
         true
     }
-    fn approx_eq_res(&self, other: &Complex<F<T>>, tolerance: &F<T>)->Result<()>{
-        if !self.norm().re.approx_eq(& other.norm().re, tolerance) {
+    fn approx_eq_res(&self, other: &Complex<F<T>>, tolerance: &F<T>) -> Result<()> {
+        if !self.norm().re.approx_eq(&other.norm().re, tolerance) {
             return Err(eyre!(
                 "Norms are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
-                &self.norm().re, other.norm().re, tolerance
-            ))
-        }else if self.norm().is_zero() || other.norm().is_zero() {
+                &self.norm().re,
+                other.norm().re,
+                tolerance
+            ));
+        } else if self.norm().is_zero() || other.norm().is_zero() {
             return Ok(());
         }
 
-        let two_pi = self.re.PI()+self.re.PI();
+        let two_pi = self.re.PI() + self.re.PI();
         let arg_self = self.arg().rem_euclid(&two_pi);
         let arg_other = other.arg().rem_euclid(&two_pi);
-        // let arg_diff = (&self.arg() - &other.arg()).rem_euclid(&two_pi);  
+        // let arg_diff = (&self.arg() - &other.arg()).rem_euclid(&two_pi);
         // let arg_zero = self.re.zero();
-        if !arg_self.approx_eq(&arg_other, tolerance)  {
+        if !arg_self.approx_eq(&arg_other, tolerance) {
             return  Err(eyre!(
                 "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
                 arg_self, arg_other,&arg_self-&arg_other, tolerance
-            ))
-        } 
-            Ok(())
-        
+            ));
+        }
+        Ok(())
     }
 }
 
-
-impl<T:FloatLike> ApproxEq<F<T>,F<T>> for Complex<F<T>>{
-
-    fn approx_eq(&self, other: &F<T>, tolerance: &F<T>)->bool {
-        self.re.approx_eq(other, tolerance)&& self.im.approx_eq(tolerance,tolerance) 
+impl<T: FloatLike> ApproxEq<F<T>, F<T>> for Complex<F<T>> {
+    fn approx_eq(&self, other: &F<T>, tolerance: &F<T>) -> bool {
+        self.re.approx_eq(other, tolerance) && self.im.approx_eq(tolerance, tolerance)
     }
-    fn approx_eq_res(&self, other: &F<T>, tolerance: &F<T>)->Result<()>{
-        if self.im.approx_eq(tolerance,tolerance) {
+    fn approx_eq_res(&self, other: &F<T>, tolerance: &F<T>) -> Result<()> {
+        if self.im.approx_eq(tolerance, tolerance) {
             return Err(eyre!(
                 "Non-zero imaginary part: \n{:+e} with tolerance {:+e}",
-                &self.im,tolerance
-            ))
+                &self.im,
+                tolerance
+            ));
         }
         if !self.re.approx_eq(other, tolerance) {
             return Err(eyre!(
                 "Real parts are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
-                &self.re, other, tolerance
-            ))
+                &self.re,
+                other,
+                tolerance
+            ));
         }
-            Ok(())
-        
+        Ok(())
     }
 }
 
-
-impl<T:FloatLike> ApproxEq<Complex<F<T>>,F<T>> for F<T>{
-    fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>)->bool{
-        other.re.approx_eq(self, tolerance) && other.im.approx_eq(tolerance,tolerance)
+impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for F<T> {
+    fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>) -> bool {
+        other.re.approx_eq(self, tolerance) && other.im.approx_eq(tolerance, tolerance)
     }
 
-    fn approx_eq_res(&self, other: &Complex<F<T>>, tolerance: &F<T>)->Result<()> {
-        if other.im.approx_eq(tolerance,tolerance) {
+    fn approx_eq_res(&self, other: &Complex<F<T>>, tolerance: &F<T>) -> Result<()> {
+        if other.im.approx_eq(tolerance, tolerance) {
             return Err(eyre!(
                 "Non-zero imaginary part: \n{:+e} with tolerance {:+e}",
-                &other.im,tolerance
-            ))
+                &other.im,
+                tolerance
+            ));
         }
         if !other.re.approx_eq(self, tolerance) {
             return Err(eyre!(
                 "Real parts are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
-                &other.re, self, tolerance
-            ))
+                &other.re,
+                self,
+                tolerance
+            ));
         }
-            Ok(())
+        Ok(())
     }
 }
-
-
 
 #[allow(unused)]
 pub fn one_loop_eval_e_surf<T: FloatLike>(
@@ -2284,9 +2274,10 @@ pub fn get_n_dim_for_n_loop_momenta(
     force_radius: bool,
     n_edges: Option<usize>, // for tropical parameterization, we need to know the number of edges
 ) -> usize {
-    if matches!(settings.sampling
-        ,SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_)))
-    {
+    if matches!(
+        settings.sampling,
+        SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_))
+    ) {
         let tropical_part = 2 * n_edges.unwrap() - 1;
         let d_l = 3 * n_loop_momenta;
         return if d_l % 2 == 1 {
@@ -2330,7 +2321,8 @@ pub fn global_parameterize<T: FloatLike>(
     let one = zero.one();
     match settings.parameterization.mode {
         ParameterizationMode::HyperSpherical | ParameterizationMode::HyperSphericalFlat => {
-            let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[0].0);
+            let e_cm =
+                e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[0].0);
             let mut jac = one.clone();
             // rescale the input to the desired range
             let mut x_r = Vec::with_capacity(x.len());
@@ -2427,7 +2419,8 @@ pub fn global_parameterize<T: FloatLike>(
                     let curr_norm = normal_distributed_xs[..]
                         .iter()
                         .map(|x| x.square())
-                        .reduce(|acc,e| acc+&e).unwrap_or(zero.clone())
+                        .reduce(|acc, e| acc + &e)
+                        .unwrap_or(zero.clone())
                         .sqrt();
                     let surface =
                         compute_surface_and_volume(normal_distributed_xs.len() - 1, radius.clone())
@@ -2476,14 +2469,16 @@ pub fn global_inv_parameterize<T: FloatLike>(
 ) -> (Vec<F<T>>, F<T>) {
     let one = e_cm_squared.one();
     let zero = one.zero();
-    if matches!(settings.sampling
-        ,SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_)))
-    {
+    if matches!(
+        settings.sampling,
+        SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_))
+    ) {
         panic!("Trying to inverse parameterize a tropical parametrization.")
     }
     match settings.parameterization.mode {
         ParameterizationMode::HyperSpherical => {
-            let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[0].0);
+            let e_cm =
+                e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[0].0);
             let mut inv_jac = one.clone();
             let mut xs = Vec::with_capacity(moms.len() * 3);
 
@@ -2492,7 +2487,11 @@ pub fn global_inv_parameterize<T: FloatLike>(
                 .flat_map(|lv| lv.clone().into_iter())
                 .collect::<Vec<F<T>>>();
 
-            let mut k_r_sq = cartesian_xs.iter().map(|xi| xi.square()).reduce(|acc,e| acc+&e).unwrap_or(zero.clone());
+            let mut k_r_sq = cartesian_xs
+                .iter()
+                .map(|xi| xi.square())
+                .reduce(|acc, e| acc + &e)
+                .unwrap_or(zero.clone());
             // cover the degenerate case
             if k_r_sq.is_zero() {
                 return (vec![zero.clone(); cartesian_xs.len()], zero);
@@ -2584,7 +2583,8 @@ pub fn parameterize3d<T: FloatLike>(
 ) -> ([F<T>; 3], F<T>) {
     let zero = e_cm_squared.zero();
     let one = zero.one();
-    let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[loop_index].0);
+    let e_cm =
+        e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[loop_index].0);
     let mut l_space = [zero.clone(), zero.clone(), zero.clone()];
     let mut jac = one.clone();
 
@@ -2679,7 +2679,8 @@ pub fn inv_parametrize3d<T: FloatLike>(
     }
 
     let mut jac = one.clone();
-    let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[loop_index].0);
+    let e_cm =
+        e_cm_squared.sqrt() * F::<T>::from_f64(settings.parameterization.shifts[loop_index].0);
 
     let x = &mom.px - &e_cm * F::<T>::from_f64(settings.parameterization.shifts[loop_index].1);
     let y = &mom.py - &e_cm * F::<T>::from_f64(settings.parameterization.shifts[loop_index].2);
@@ -3071,10 +3072,6 @@ pub fn format_sample(sample: &Sample<F<f64>>) -> String {
     }
 }
 
-
-
-
-
 pub fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
     vec1: &TiSlice<K, T>,
     vec2: &TiSlice<K, T>,
@@ -3101,12 +3098,77 @@ pub fn into_complex_ff64<T: FloatLike>(c: &Complex<F<T>>) -> Complex<F<f64>> {
 }
 
 #[test]
-fn complex_compare(){
-    let ltd= Complex::new(0.11773583919739394,-0.22157450463964778).map(F);
+fn complex_compare() {
+    let ltd = Complex::new(0.11773583919739394, -0.22157450463964778).map(F);
 
-    let cff = Complex::new(0.11773583589023458,-0.22157450446824836).map(F);
+    let cff = Complex::new(0.11773583589023458, -0.22157450446824836).map(F);
 
     ltd.approx_eq_res(&cff, &F(0.00000001)).unwrap();
+}
 
-    let ltd_arg = ltd.arg();
+/// Checks if two lists are permutations of eachother, and establish a map between indices
+pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<PermutationMap> {
+    if left.len() != right.len() {
+        return None;
+    }
+
+    let mut left_to_right = Vec::with_capacity(left.len());
+    for elem_in_left in left.iter() {
+        let option_position = right
+            .iter()
+            .enumerate()
+            .position(|(right_index, elem_in_right)| {
+                elem_in_right == elem_in_left && !left_to_right.contains(&right_index)
+            });
+
+        if let Some(position) = option_position {
+            left_to_right.push(position);
+        } else {
+            return None;
+        }
+    }
+
+    let mut right_to_left = vec![0; left.len()];
+    for (index, left_to_right_elem) in left_to_right.iter().enumerate() {
+        right_to_left[*left_to_right_elem] = index
+    }
+
+    Some(PermutationMap {
+        left_to_right,
+        right_to_left,
+    })
+}
+
+#[derive(Clone, Debug)]
+pub struct PermutationMap {
+    left_to_right: Vec<usize>,
+    right_to_left: Vec<usize>,
+}
+
+impl PermutationMap {
+    pub fn left_to_right(&self, left_index: usize) -> usize {
+        self.left_to_right[left_index]
+    }
+
+    pub fn right_to_left(&self, right_index: usize) -> usize {
+        self.right_to_left[right_index]
+    }
+}
+
+#[test]
+fn test_is_permutation() {
+    let a = ["a", "b"];
+    let b = ["a", "c"];
+
+    assert!(is_permutation(&a, &b).is_none());
+
+    let a = ["a", "b", "b", "c", "d"];
+    let b = ["d", "b", "a", "c", "b"];
+
+    let permutation_map = is_permutation(&a, &b).unwrap();
+
+    for ind in 0..5 {
+        assert_eq!(a[ind], b[permutation_map.left_to_right[ind]]);
+        assert_eq!(b[ind], a[permutation_map.right_to_left[ind]]);
+    }
 }

@@ -9,8 +9,8 @@ use crate::{
     },
     gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
-    model::{self, EdgeSlots, Model, Particle, VertexSlots},
-    momentum::{FourMomentum, Polarization, Signature, ThreeMomentum},
+    model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
+    momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     numerator::{
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
         GammaAlgebraMode, Numerator, NumeratorState, NumeratorStateError, PythonState,
@@ -18,16 +18,12 @@ use crate::{
     },
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
-        static_counterterm,
+        static_counterterm::{self, CounterTerm},
     },
-    utils::{sorted_vectorize, FloatLike, F},
+    utils::{self, sorted_vectorize, FloatLike, F},
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
-
-use ahash::{HashSet, RandomState};
-
-use bincode::{Decode, Encode};
-use color_eyre::Result;
+use ahash::RandomState;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
@@ -44,11 +40,11 @@ use spenso::{
     complex::Complex,
     contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
+    scalar::Scalar,
     structure::{
-        AbstractIndex, BaseRepName, CastStructure, Euclidean, HasStructure, Lorentz,
-        NamedStructure, PhysReps, Representation, ScalarTensor, Shadowable, TensorStructure,
-        ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND, COLORSEXT,
-        EUCLIDEAN,
+        AbstractIndex, CastStructure, HasStructure, Lorentz, NamedStructure, ScalarTensor,
+        Shadowable, ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND,
+        COLORSEXT, EUCLIDEAN,
     },
     ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
 };
@@ -59,7 +55,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fmt::{Display, Formatter},
     ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
@@ -67,16 +63,15 @@ use std::{
 };
 
 use symbolica::{
-    atom::Atom,
+    atom::{Atom, Symbol},
     domains::{float::NumericalFloatLike, rational::Rational},
     id::{Pattern, Replacement},
+    state::State,
     state::State,
 };
 //use symbolica::{atom::Symbol,state::State};
 
 use constcat::concat;
-
-const MAX_COLOR_INNER_CONTRACTIONS: usize = 3;
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -112,27 +107,67 @@ pub enum SerializableVertexInfo {
 #[enum_dispatch]
 pub trait HasVertexInfo {
     fn get_type(&self) -> SmartString<LazyCompact>;
+
+    fn apply_vertex_rule(
+        &self,
+        edges: &[isize],
+        vertex_pos: usize,
+        vertex_slots: &VertexSlots,
+    ) -> Option<[DataTensor<Atom>; 3]>;
 }
 
 #[derive(Debug, Clone)]
-#[enum_dispatch(HasVertexInfo)]
+// #[enum_dispatch(HasVertexInfo)]
 pub enum VertexInfo {
     ExternalVertexInfo(ExternalVertexInfo),
     InteractonVertexInfo(InteractionVertexInfo),
 }
 
-impl VertexInfo {
-    pub fn dod(&self) -> isize {
+impl HasVertexInfo for VertexInfo {
+    fn get_type(&self) -> SmartString<LazyCompact> {
         match self {
-            VertexInfo::ExternalVertexInfo(e) => 0,
-            VertexInfo::InteractonVertexInfo(i) => i.dod(),
+            VertexInfo::ExternalVertexInfo(e) => e.get_type(),
+            VertexInfo::InteractonVertexInfo(i) => i.get_type(),
         }
     }
-    pub fn generate_vertex_slots(&self, shifts: Shifts) -> (VertexSlots, Shifts) {
+
+    fn apply_vertex_rule(
+        &self,
+        edges: &[isize],
+        vertex_pos: usize,
+        vertex_slots: &VertexSlots,
+    ) -> Option<[DataTensor<Atom>; 3]> {
         match self {
             VertexInfo::ExternalVertexInfo(e) => {
-                let (e, shifts) = e.particle.slots(shifts);
-                (e.into(), shifts)
+                e.apply_vertex_rule(edges, vertex_pos, vertex_slots)
+            }
+            VertexInfo::InteractonVertexInfo(i) => {
+                i.apply_vertex_rule(edges, vertex_pos, vertex_slots)
+            }
+        }
+    }
+}
+
+impl VertexInfo {
+    pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
+        match self {
+            VertexInfo::ExternalVertexInfo(e) => {
+                let (e, mut updated_shifts) = match e.direction {
+                    EdgeType::Outgoing => e.particle.get_anti_particle(model).slots(shifts),
+                    EdgeType::Incoming => e.particle.slots(shifts),
+                    EdgeType::Virtual => panic!("Virtual external vertex not supported"),
+                };
+
+                if updated_shifts.color == shifts.color {
+                    updated_shifts.color += 1;
+                }
+                if updated_shifts.spin == shifts.spin {
+                    updated_shifts.spin += 1;
+                }
+                if updated_shifts.lorentz == shifts.lorentz {
+                    updated_shifts.lorentz += 1;
+                }
+                (e.into(), updated_shifts)
             }
             VertexInfo::InteractonVertexInfo(i) => i.vertex_rule.generate_vertex_slots(shifts),
         }
@@ -160,6 +195,29 @@ impl HasVertexInfo for ExternalVertexInfo {
     fn get_type(&self) -> SmartString<LazyCompact> {
         SmartString::<LazyCompact>::from("external_vertex_info")
     }
+
+    fn apply_vertex_rule(
+        &self,
+        _edges: &[isize],
+        vertex_pos: usize,
+        vertex_slots: &VertexSlots,
+    ) -> Option<[DataTensor<Atom>; 3]> {
+        let polarization = match self.direction {
+            EdgeType::Incoming => self
+                .particle
+                .incoming_polarization_atom(&vertex_slots[0].dual(), vertex_pos),
+            EdgeType::Outgoing => self
+                .particle
+                .outgoing_polarization_atom(&vertex_slots[0].dual(), vertex_pos),
+            EdgeType::Virtual => panic!("Virtual external vertex not supported"),
+        };
+
+        Some([
+            DataTensor::new_scalar(polarization),
+            DataTensor::new_scalar(Atom::one()),
+            DataTensor::new_scalar(Atom::one()),
+        ])
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -168,15 +226,15 @@ pub struct InteractionVertexInfo {
     pub vertex_rule: Arc<model::VertexRule>,
 }
 
-impl InteractionVertexInfo {
-    pub fn dod(&self) -> isize {
-        self.vertex_rule.dod()
+impl HasVertexInfo for InteractionVertexInfo {
+    fn get_type(&self) -> SmartString<LazyCompact> {
+        SmartString::<LazyCompact>::from("interacton_vertex_info")
     }
 
-    pub fn apply_vertex_rule(
+    fn apply_vertex_rule(
         &self,
         edges: &[isize],
-        vertex_pos: usize,
+        _vertex_pos: usize,
         vertex_slots: &VertexSlots,
     ) -> Option<[DataTensor<Atom>; 3]> {
         let spin_structure = self
@@ -224,11 +282,13 @@ impl InteractionVertexInfo {
             })
             .collect_vec();
 
+        let mut color_dummy_shift = 0;
         let color_structure: Vec<Atom> = self
             .vertex_rule
             .color_structures
             .iter()
             .map(|cs| {
+                let n_dummies = ColorStructure::number_of_dummies_in_atom(cs.as_view());
                 let mut atom = cs.clone();
                 //a is adjoint index, i is fundamental index, ia is antifundamental index, s is sextet ,sa is antisextet
 
@@ -290,18 +350,24 @@ impl InteractionVertexInfo {
                     atom = atom.replace_all_multiple(&reps);
                 }
 
-                for i in 0..MAX_COLOR_INNER_CONTRACTIONS {
+                for i in 0..n_dummies {
                     let pat: Pattern = Atom::parse(&format!("indexid({})", -1 - i as i64))
                         .unwrap()
                         .into_pattern();
 
                     atom = pat.replace_all(
                         atom.as_view(),
-                        &Atom::new_num(i as i64).into_pattern().into(),
+                        &Atom::new_num(usize::from(
+                            vertex_slots.internal_dummy.color[i + color_dummy_shift],
+                        ) as i64)
+                        .into_pattern()
+                        .into(),
                         None,
                         None,
                     );
                 }
+
+                color_dummy_shift += n_dummies;
 
                 atom
             })
@@ -332,12 +398,6 @@ impl InteractionVertexInfo {
         }
 
         Some([spin_structure, color_structure, couplings])
-    }
-}
-
-impl HasVertexInfo for InteractionVertexInfo {
-    fn get_type(&self) -> SmartString<LazyCompact> {
-        SmartString::<LazyCompact>::from("interacton_vertex_info")
     }
 }
 
@@ -412,7 +472,7 @@ pub struct Edge {
     pub propagator: Arc<model::Propagator>,
     pub particle: Arc<model::Particle>,
     pub vertices: [usize; 2],
-    pub internal_index: Option<usize>,
+    pub internal_index: Vec<AbstractIndex>,
 }
 
 impl Edge {
@@ -442,7 +502,7 @@ impl Edge {
                     .get_vertex_position(&serializable_edge.vertices[1])
                     .unwrap(),
             ],
-            internal_index: None,
+            internal_index: vec![],
         }
     }
 
@@ -509,14 +569,16 @@ impl Edge {
         let out_slots = self.out_slot(graph);
 
         match self.edge_type {
-            EdgeType::Incoming => [
-                self.particle.incoming_polarization_atom(&out_slots, num),
-                Atom::new_num(1),
-            ],
-            EdgeType::Outgoing => [
-                self.particle.outgoing_polarization_atom(&in_slots, num),
-                Atom::new_num(1),
-            ],
+            EdgeType::Incoming => {
+                let [lorentz, spin, color] = in_slots.dual().kroneker(&out_slots);
+                // println!("Incoming color: {}", color);
+                [lorentz * spin, color]
+            }
+            EdgeType::Outgoing => {
+                let [lorentz, spin, color] = out_slots.dual().kroneker(&in_slots);
+                // println!("Outgoing color: {}", color);
+                [lorentz * spin, color]
+            }
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
@@ -542,7 +604,7 @@ impl Edge {
                 }
 
                 let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
-                let pindex_num = self.internal_index.unwrap(); //graph.shifts.0 + 1;
+                let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.is_antiparticle() {
                     atom = pslashfun.replace_all(
                         atom.as_view(),
@@ -646,8 +708,8 @@ impl Vertex {
             .0
     }
 
-    pub fn generate_vertex_slots(&self, shifts: Shifts) -> (VertexSlots, Shifts) {
-        self.vertex_info.generate_vertex_slots(shifts)
+    pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
+        self.vertex_info.generate_vertex_slots(shifts, model)
     }
 
     pub fn from_serializable_vertex(model: &model::Model, vertex: &SerializableVertex) -> Vertex {
@@ -678,15 +740,11 @@ impl Vertex {
 
     pub fn apply_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 3]> {
         let pos = graph.get_vertex_position(&self.name).unwrap();
-        match &self.vertex_info {
-            VertexInfo::ExternalVertexInfo(_) => None,
-            VertexInfo::InteractonVertexInfo(interaction_vertex_info) => interaction_vertex_info
-                .apply_vertex_rule(
-                    &self.add_signs_to_edges(graph),
-                    pos,
-                    &graph.vertex_slots[pos],
-                ),
-        }
+        self.vertex_info.apply_vertex_rule(
+            &self.add_signs_to_edges(graph),
+            pos,
+            &graph.vertex_slots[pos],
+        )
     }
 
     pub fn contracted_vertex_rule(&self, graph: &BareGraph) -> Option<Atom> {
@@ -710,19 +768,18 @@ impl Vertex {
         Some([colorless, color])
     }
 
-    pub fn contracted_colorless_vertex_rule(&self, graph: &BareGraph) -> Option<Atom> {
+    #[allow(clippy::type_complexity)]
+    pub fn contracted_colorless_vertex_rule(
+        &self,
+        graph: &BareGraph,
+    ) -> Option<(Atom, DataTensor<Atom, NamedStructure<Symbol, usize>>)> {
         let [spin, color, couplings] = self.apply_vertex_rule(graph)?;
 
         let v = graph.get_vertex_position(&self.name).unwrap();
-        let color_shadow = color
-            .structure()
-            .clone()
-            .to_named(State::get_symbol("Col"), Some(v))
-            .to_shell()
-            .expanded_shadow()
-            .unwrap()
-            .cast_structure()
-            .into();
+
+        let color = color.map_structure(|s| s.to_named(State::get_symbol("Col"), Some(v)));
+
+        let color_shadow = color.expanded_shadow().unwrap().cast_structure().into();
 
         let colorless = spin
             .contract(&couplings)
@@ -732,7 +789,7 @@ impl Vertex {
             .scalar()
             .unwrap();
 
-        Some(colorless)
+        Some((colorless, color))
     }
 }
 
@@ -863,26 +920,45 @@ pub struct BareGraph {
     pub shifts: Shifts,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub struct Shifts {
     pub lorentz: usize,
+    pub lorentzdummy: usize,
     pub color: usize,
+    pub colordummy: usize,
     pub spin: usize,
     pub coupling: usize,
 }
 
-impl Default for Shifts {
-    fn default() -> Self {
-        Shifts {
-            lorentz: 0,
-            color: 0,
-            spin: 0,
-            coupling: 0,
-        }
-    }
-}
-
 impl BareGraph {
+    pub fn external_slots(&self) -> Vec<EdgeSlots<Lorentz>> {
+        self.vertices
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| {
+                if matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)) {
+                    Some(self.vertex_slots[i][0].dual())
+                } else {
+                    None
+                }
+            })
+            .collect()
+        // self.external_edges()
+        //     .iter()
+        //     .map(|e| match e.edge_type {
+        //         EdgeType::Incoming => e.out_slot(self),
+        //         EdgeType::Outgoing => e.in_slot(self),
+        //         _ => panic!("External edge is not incoming or outgoing"),
+        //     })
+        //     .collect()
+    }
+
+    pub fn external_edges(&self) -> Vec<&Edge> {
+        self.external_edges
+            .iter()
+            .map(|&i| &self.edges[i])
+            .collect()
+    }
     pub fn external_particle_spin(&self) -> Vec<isize> {
         self.external_edges
             .iter()
@@ -1097,37 +1173,173 @@ impl BareGraph {
             .map(|e| g.get_edge_position(e).unwrap())
             .collect();
 
-        g.generate_vertex_slots();
+        g.generate_vertex_slots(model);
 
         // panic!("{:?}", g.edge_name_to_position);
-
         g.generate_internal_indices_for_edges();
         g
     }
 
-    fn generate_vertex_slots(&mut self) {
+    pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
+        let last = self.external_edges.len() - 1;
+        let mut external_vertices_in_external_edge_order = vec![];
+        for (i, ext) in self.external_edges.iter().enumerate() {
+            let edge = &self.edges[*ext];
+
+            match edge.edge_type {
+                EdgeType::Incoming => match self.vertices[edge.vertices[0]].vertex_info {
+                    VertexInfo::ExternalVertexInfo(_) => {
+                        external_vertices_in_external_edge_order.push(edge.vertices[0]);
+                    }
+                    _ => {
+                        return Err(eyre!(
+                                "Incoming edge {} at position {i} is not connected to an external vertex with the correct direction",
+                                edge.name
+                            ));
+                    }
+                },
+                EdgeType::Outgoing => match self.vertices[edge.vertices[1]].vertex_info {
+                    VertexInfo::ExternalVertexInfo(_) => {
+                        external_vertices_in_external_edge_order.push(edge.vertices[1]);
+                    }
+                    _ => {
+                        return Err(eyre!(
+                                "Outgoing edge {} at position {i} is not connected to an external vertex with the correct direction",
+                                edge.name
+                            ));
+                    }
+                },
+
+                _ => {
+                    return Err(eyre!(
+                        "External edge {} at position {i} is not incoming or outgoing",
+                        edge.name
+                    ));
+                }
+            }
+            for s in &self.loop_momentum_basis.edge_signatures[*ext].internal {
+                if !s.is_zero() {
+                    return Err(eyre!(
+                        "External edge {} at position {i} has a non-zero internal momentum signature",
+                        edge.name
+                    ));
+                }
+            }
+
+            let edge_name = &edge.name;
+            let signatures = &self.loop_momentum_basis.edge_signatures[*ext].external;
+
+            for (j, &s) in signatures.iter().enumerate() {
+                if j != i && s.is_sign() && i != last {
+                    return Err(eyre!(
+                        "External edge {} at position {i} has non-zero sign at position {} in its signature, expected zero",
+                        edge_name,
+                        j
+                    ));
+                } else if j != i && s.is_zero() && i == last {
+                    return Err(eyre!(
+                        "Last external edge {} at position {} in its signature has zero sign, expected non-zero, as it should be a sum of all other external edges",
+                        edge_name,
+                        j
+                    ));
+                }
+
+                if j == i {
+                    match (i, s) {
+                        (idx, SignOrZero::Plus) if idx != last => {}
+                        (idx, SignOrZero::Zero) if idx == last => {}
+                        (idx, SignOrZero::Plus) if idx == last => {
+                            return Err(eyre!(
+                        "Last external edge {} at position {} should have zero sign, found positive",
+                        edge_name, idx
+                    ));
+                        }
+                        (idx, SignOrZero::Minus) => {
+                            return Err(eyre!(
+                                "External edge {} at position {} has a negative sign",
+                                edge_name,
+                                idx
+                            ));
+                        }
+                        _ => {
+                            return Err(eyre!(
+                                "External edge {} at position {} has an unexpected sign",
+                                edge_name,
+                                i
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        let mut sorted = external_vertices_in_external_edge_order.clone();
+
+        // sorted.as_slice().is_sorted(); wait for 1.82
+        // warn!(
+        //     "External vertices are not in the same order as the external edges. This may cause issues."
+        // }
+        sorted.sort();
+
+        let validate_external_vertices = self
+            .vertices
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)))
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+
+        if sorted != validate_external_vertices {
+            return Err(eyre!("External vertices do not match the external edges."));
+        }
+
+        Ok(external_vertices_in_external_edge_order)
+    }
+
+    fn generate_vertex_slots(&mut self, model: &Model) {
         let initial_shifts = Shifts {
             spin: 0,
-            color: MAX_COLOR_INNER_CONTRACTIONS,
+            lorentzdummy: 0,
+            colordummy: 0,
+            color: 0,
             lorentz: 0,
             coupling: 0,
         };
-        let (v, s) = self
+
+        let ext_vertices = self.verify_external_edge_order().unwrap();
+
+        let (mut external, s) = ext_vertices.into_iter().map(|i| &self.vertices[i]).fold(
+            (VecDeque::new(), initial_shifts),
+            |(mut acc, shifts), v| {
+                let (e, new_shifts) = v.generate_vertex_slots(shifts, model);
+                acc.push_back(e);
+                (acc, new_shifts)
+            },
+        );
+
+        let (mut v, s) = self
             .vertices
             .iter()
-            .fold((vec![], initial_shifts), |(mut acc, shifts), v| {
-                let (e, new_shifts) = v.generate_vertex_slots(shifts);
+            .fold((vec![], s), |(mut acc, shifts), v| {
+                if matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)) {
+                    acc.push(external.pop_front().unwrap());
+                    return (acc, shifts);
+                }
+                let (e, new_shifts) = v.generate_vertex_slots(shifts, model);
                 acc.push(e);
                 (acc, new_shifts)
             });
         self.shifts = s;
+        for slot in &mut v {
+            slot.shift_internals(&self.shifts);
+        }
+
         self.vertex_slots = v;
     }
 
     fn generate_internal_indices_for_edges(&mut self) {
         self.shifts.lorentz = self.shifts.spin + self.shifts.color;
         for (i, edge) in self.edges.iter_mut().enumerate() {
-            edge.internal_index = Some(self.shifts.lorentz + i + 1);
+            edge.internal_index = vec![(self.shifts.lorentz + i + 1).into()];
         }
     }
 
@@ -1685,7 +1897,7 @@ impl BareGraph {
             .cff_expression
             .as_mut()
             .unwrap()
-            .load_compiled(path.into(), settings)?;
+            .load_compiled(path.into(), self.name.clone(), settings)?;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
         let lmb_indices = self.loop_momentum_basis.basis.clone();
@@ -1730,10 +1942,13 @@ impl Graph<UnInit> {
         }
     }
 
-    pub fn apply_feynman_rules(mut self) -> Graph<AppliedFeynmanRule> {
+    pub fn apply_feynman_rules(
+        mut self,
+        export_settings: &ExportSettings,
+    ) -> Graph<AppliedFeynmanRule> {
         let processed_data = self
             .derived_data
-            .map(|d| d.apply_feynman_rules(&mut self.bare_graph));
+            .map(|d| d.apply_feynman_rules(&mut self.bare_graph, export_settings));
         Graph {
             bare_graph: self.bare_graph,
             derived_data: processed_data,
@@ -1843,7 +2058,7 @@ impl<S: NumeratorState> Graph<S> {
             &self.get_cff().esurfaces,
             &self.bare_graph.get_mass_vector(),
             externals,
-            settings.general.debug,
+            settings,
         )
     }
 
@@ -1854,9 +2069,12 @@ impl<S: NumeratorState> Graph<S> {
     ) -> Result<(), Report> {
         let params = self.bare_graph.build_params_for_cff();
         match self.derived_data.as_mut().unwrap().cff_expression.as_mut() {
-            Some(cff) => {
-                cff.build_compiled_expression::<f64>(&params, export_path, export_settings)
-            }
+            Some(cff) => cff.build_compiled_expression::<f64>(
+                &params,
+                export_path,
+                self.bare_graph.name.clone(),
+                export_settings,
+            ),
             None => {
                 self.generate_cff();
                 self.build_compiled_expression(export_path, export_settings)
@@ -1883,20 +2101,42 @@ impl<S: NumeratorState> Graph<S> {
 
     // attempt to set a new loop momentum basis
     pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
-        let position = self
-            .derived_data
-            .as_mut()
-            .unwrap()
-            .search_lmb_position(lmb)?;
-        self.bare_graph.loop_momentum_basis = self
-            .derived_data
-            .as_ref()
-            .unwrap()
-            .loop_momentum_bases
-            .as_ref()
-            .unwrap()[position]
-            .clone();
-        Ok(())
+        match &self.derived_data.as_ref().unwrap().loop_momentum_bases {
+            None => Err(eyre!("lmbs not yet generated")),
+            Some(lmbs) => {
+                for (position, lmb_from_list) in lmbs.iter().enumerate() {
+                    // search a matching lmb
+                    if let Some(permutation_map) = utils::is_permutation(lmb, &lmb_from_list.basis)
+                    {
+                        // obtain the edge signatures
+                        let mut new_edge_signatures = self
+                            .derived_data
+                            .as_ref()
+                            .unwrap()
+                            .loop_momentum_bases
+                            .as_ref()
+                            .unwrap()[position]
+                            .edge_signatures
+                            .clone();
+
+                        // permutate the elemements of the loop part to match the ordering in the basis
+                        for edge in new_edge_signatures.iter_mut() {
+                            let new_loop_signature = edge
+                                .internal
+                                .iter()
+                                .enumerate()
+                                .map(|(ind, _)| edge.internal[permutation_map.right_to_left(ind)])
+                                .collect();
+                            edge.internal = new_loop_signature;
+                        }
+
+                        return Ok(());
+                    }
+                }
+
+                Err(eyre!("lmb does not exist"))
+            }
+        }
     }
 
     #[inline]
@@ -2087,6 +2327,23 @@ impl Graph<Evaluators> {
             .unwrap()
             .evaluate_orientations(&energy_cache, settings)
     }
+
+    pub fn evaluate_threshold_counterterm<T: FloatLike>(
+        &mut self,
+        sample: &DefaultSample<T>,
+        rotation_for_overlap: &Rotation,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        self.derived_data
+            .as_mut()
+            .unwrap()
+            .evaluate_threshold_counterterm(
+                &self.bare_graph,
+                sample,
+                rotation_for_overlap,
+                settings,
+            )
+    }
 }
 
 #[allow(dead_code)]
@@ -2210,7 +2467,7 @@ impl DerivedGraphData<Evaluators> {
         let mut den = Complex::new_re(F::from_f64(1.));
         for (e, q) in bare_graph.edges.iter().zip(emr.iter()) {
             if e.edge_type == EdgeType::Virtual {
-                println!("q: {}", q);
+                // println!("q: {}", q);
                 if let Some(mass) = e.particle.mass.value {
                     let m2 = mass.norm_squared();
                     let m2: F<T> = F::from_ff64(m2);
@@ -2220,7 +2477,7 @@ impl DerivedGraphData<Evaluators> {
                 }
             }
         }
-        println!("den: {}", den);
+        // println!("den: {}", den);
         let den = den.inv();
 
         let num = self
@@ -2240,8 +2497,9 @@ impl DerivedGraphData<Evaluators> {
         let zero = one.zero();
         let i = Complex::new(zero, one);
         let loop_number = bare_graph.loop_momentum_basis.basis.len();
-        // Unexplained minus overall sign to match with cFF
-        let prefactor = -i.pow(loop_number as u64);
+        // Unexplained overall (-1)^(L+1) sign to match with cFF which we know is correct
+        let prefactor = (Complex::new(-sample.one(), sample.zero())).pow((loop_number + 1) as u64)
+            * i.pow(loop_number as u64);
 
         self.ltd_expression
             .as_ref()
@@ -2263,8 +2521,9 @@ impl DerivedGraphData<Evaluators> {
         let zero = one.zero();
         let i = Complex::new(zero, one);
         let loop_number = bare_graph.loop_momentum_basis.basis.len();
-        // Unexplained minus overall sign to match with cFF
-        let prefactor = -i.pow(loop_number as u64);
+        // Unexplained overall (-1)^(L+1) sign to match with cFF which we know is correct
+        let prefactor = (Complex::new(-sample.one(), sample.zero())).pow((loop_number + 1) as u64)
+            * i.pow(loop_number as u64);
 
         self.ltd_expression
             .as_ref()
@@ -2390,6 +2649,27 @@ impl DerivedGraphData<Evaluators> {
         }
     }
 
+    pub fn evaluate_threshold_counterterm<T: FloatLike>(
+        &mut self,
+        graph: &BareGraph,
+        sample: &DefaultSample<T>,
+        rotation_for_overlap: &Rotation,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        match self.static_counterterm.as_ref() {
+            Some(ct) => CounterTerm::evaluate(
+                sample,
+                graph,
+                &self.cff_expression.as_ref().unwrap().esurfaces,
+                ct,
+                &mut self.numerator,
+                rotation_for_overlap,
+                settings,
+            ),
+            None => Complex::new(sample.zero(), sample.zero()),
+        }
+    }
+
     #[inline]
     /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
     pub fn evaluate_numerator_orientations<T: FloatLike>(
@@ -2449,17 +2729,28 @@ impl DerivedGraphData<UnInit> {
                 debug!("Using global numerator: {}", global);
                 let global = Atom::parse(global).unwrap();
                 self.map_numerator(|n| {
-                    n.from_global(global, base_graph)
-                        .color_symplify()
-                        .color_project()
+                    n.from_global(
+                        global,
+                        // base_graph,
+                        export_settings.numerator_settings.color_projector.as_ref(),
+                    )
+                    .color_simplify()
+                    // .color_project()
                 })
             } else {
-                self.map_numerator(|n| n.from_graph(base_graph).color_symplify().color_project())
+                self.map_numerator(|n| {
+                    n.from_graph(
+                        base_graph,
+                        export_settings.numerator_settings.color_projector.as_ref(),
+                    )
+                    .color_simplify()
+                })
+                //.color_project())
             };
 
         let parsed = match &export_settings.numerator_settings.gamma_algebra {
             GammaAlgebraMode::Symbolic => {
-                color_simplified.map_numerator(|n| n.gamma_symplify().parse())
+                color_simplified.map_numerator(|n| n.gamma_simplify().parse())
             }
             GammaAlgebraMode::Concrete => color_simplified.map_numerator(|n| n.parse()),
         };
@@ -2479,8 +2770,14 @@ impl DerivedGraphData<UnInit> {
     fn apply_feynman_rules(
         self,
         base_graph: &mut BareGraph,
+        export_settings: &ExportSettings,
     ) -> DerivedGraphData<AppliedFeynmanRule> {
-        self.map_numerator(|n| n.from_graph(base_graph))
+        self.map_numerator(|n| {
+            n.from_graph(
+                base_graph,
+                export_settings.numerator_settings.color_projector.as_ref(),
+            )
+        })
     }
 }
 
@@ -2572,25 +2869,6 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
                     path.display()
                 ))
                 // Ok(Self::new_empty())
-            }
-        }
-    }
-
-    // search the lmb position in the list of lmbs
-    fn search_lmb_position(&self, potential_lmb: &[usize]) -> Result<usize, Report> {
-        match &self.loop_momentum_bases {
-            None => Err(eyre!("loop momentum bases not yet generated")),
-            Some(lmbs) => {
-                let sorted_potential_lmb = potential_lmb.iter().sorted().collect_vec();
-
-                for (position, lmb) in lmbs.iter().enumerate() {
-                    let sorted_lmb = lmb.basis.iter().sorted().collect_vec();
-
-                    if sorted_lmb == sorted_potential_lmb {
-                        return Ok(position);
-                    }
-                }
-                Err(eyre!("lmb not found"))
             }
         }
     }

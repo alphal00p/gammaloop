@@ -129,6 +129,9 @@ class TestRust:
     def test_generate_top_bubble(self, top_bubble_export: Path):
         assert True
 
+    def test_generate_hairy_glue_box(self, hairy_glue_box_export: Path):
+        assert True
+        
     def test_rust_top_bubble(self, compile_rust_tests: Path, scalars_model_yaml_file: Path, top_bubble_export: Path):
         assert run_rust_test(compile_rust_tests, top_bubble_export, 'top_bubble')
 

@@ -10,7 +10,7 @@ v7 -> v5 [pdg=1000, name=q4];
 v8 -> v10 [pdg=1000, name=q5, lmb_index=1];
 v10 -> v9 [pdg=1000, name=q6];
 v9 -> v7 [pdg=1000, name=q7];
-v10 -> v12 [pdg=1000, name=q5, lmb_index=2];
-v12 -> v11 [pdg=1000, name=q6];
-v11 -> v9 [pdg=1000, name=q7];
+v10 -> v12 [pdg=1000, name=q8, lmb_index=2];
+v12 -> v11 [pdg=1000, name=q9];
+v11 -> v9 [pdg=1000, name=q10];
 }

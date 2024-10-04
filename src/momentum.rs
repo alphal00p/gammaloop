@@ -1961,7 +1961,7 @@ impl TryFrom<i8> for SignOrZero {
 impl Display for SignOrZero {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SignOrZero::Zero => write!(f, ""),
+            SignOrZero::Zero => write!(f, "."),
             SignOrZero::Plus => write!(f, "+"),
             SignOrZero::Minus => write!(f, "-"),
         }
@@ -1974,6 +1974,15 @@ pub type Helicity = SignOrZero;
     Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Encode, Decode, PartialOrd, Ord, Hash,
 )]
 pub struct Signature(Vec<SignOrZero>);
+
+impl Display for Signature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for sign in &self.0 {
+            write!(f, "{}", sign)?;
+        }
+        Ok(())
+    }
+}
 
 impl FromIterator<SignOrZero> for Signature {
     fn from_iter<I: IntoIterator<Item = SignOrZero>>(iter: I) -> Self {
@@ -2553,7 +2562,9 @@ impl Rotation {
     }
     pub fn setting(&self) -> RotationSetting {
         match self.method {
-            RotationMethod::EulerAngles(_, _, _) => panic!("Euler angles not supported"),
+            RotationMethod::EulerAngles(alpha, beta, gamma) => {
+                RotationSetting::EulerAngles { alpha, beta, gamma }
+            }
             RotationMethod::Pi2X => RotationSetting::Pi2X,
             RotationMethod::Pi2Y => RotationSetting::Pi2Y,
             RotationMethod::Pi2Z => RotationSetting::Pi2Z,

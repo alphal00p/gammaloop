@@ -1,0 +1,130 @@
+---
+source: src/numerator/tests.rs
+expression: color
+---
+SparseTensor(
+  elements: {
+    FlatIndex(
+      index: 61,
+    ): "4*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2-2)",
+    FlatIndex(
+      index: 56,
+    ): "-4*Nc^5*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 47,
+    ): "-2*Nc^3*TR^5*(Nc-1)*(Nc+1)*(7*Nc^2-4)",
+    FlatIndex(
+      index: 32,
+    ): "2*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2-6)",
+    FlatIndex(
+      index: 64,
+    ): "-4*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2+3)",
+    FlatIndex(
+      index: 35,
+    ): "Nc*TR^5*(Nc-1)*(Nc+1)*(-5*Nc^2+Nc^4+12)",
+    FlatIndex(
+      index: 52,
+    ): "Nc*TR^5*(Nc-1)*(Nc+1)*(17*Nc^2-12)",
+    FlatIndex(
+      index: 34,
+    ): "4*Nc^3*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 58,
+    ): "2*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2-6)",
+    FlatIndex(
+      index: 71,
+    ): "Nc^3*TR^5*(Nc-1)*(Nc+1)*(5*Nc^2-6)",
+    FlatIndex(
+      index: 76,
+    ): "-2*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2+8)",
+    FlatIndex(
+      index: 68,
+    ): "-28*Nc^3*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 77,
+    ): "-48*Nc^3*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 29,
+    ): "-8*Nc^3*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 65,
+    ): "-2*Nc^3*TR^5*(Nc-1)*(Nc+1)*(5*Nc^2+8)",
+    FlatIndex(
+      index: 53,
+    ): "Nc*TR^5*(Nc-1)^2*(Nc+1)^2*(Nc^2+12)",
+    FlatIndex(
+      index: 62,
+    ): "2*Nc^3*TR^5*(Nc-1)*(Nc+1)*(3*Nc^2-10)",
+    FlatIndex(
+      index: 55,
+    ): "-8*Nc^3*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 67,
+    ): "-2*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2+3)",
+    FlatIndex(
+      index: 79,
+    ): "28*Nc^3*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 50,
+    ): "-24*Nc^3*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 73,
+    ): "-8*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2+2)",
+    FlatIndex(
+      index: 46,
+    ): "-3*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2+4)",
+    FlatIndex(
+      index: 49,
+    ): "-Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2+8)",
+    FlatIndex(
+      index: 80,
+    ): "4*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2+2)",
+    FlatIndex(
+      index: 59,
+    ): "8*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2-5)",
+    FlatIndex(
+      index: 70,
+    ): "2*Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2+5)",
+    FlatIndex(
+      index: 31,
+    ): "-Nc^3*TR^5*(Nc-1)*(Nc+1)*(Nc^2-2)",
+    FlatIndex(
+      index: 28,
+    ): "-Nc^5*TR^5*(Nc-1)*(Nc+1)",
+    FlatIndex(
+      index: 74,
+    ): "-24*Nc^5*TR^5*(Nc-1)*(Nc+1)",
+  },
+  structure: VecStructure(
+    structure: [
+      Slot(
+        aind: Normal(0),
+        rep: Representation(
+          dim: Concrete(3),
+          rep: Euclidean(Euclidean()),
+        ),
+      ),
+      Slot(
+        aind: Normal(2),
+        rep: Representation(
+          dim: Concrete(3),
+          rep: Euclidean(Euclidean()),
+        ),
+      ),
+      Slot(
+        aind: Normal(4),
+        rep: Representation(
+          dim: Concrete(3),
+          rep: Euclidean(Euclidean()),
+        ),
+      ),
+      Slot(
+        aind: Normal(6),
+        rep: Representation(
+          dim: Concrete(3),
+          rep: Euclidean(Euclidean()),
+        ),
+      ),
+    ],
+  ),
+)

@@ -10,7 +10,7 @@ use crate::{
     model::Model,
     numerator::{AppliedFeynmanRule, PythonState, UnInit},
     utils::F,
-    HasIntegrand, Settings,
+    ExportSettings, HasIntegrand, Settings,
 };
 use ahash::HashMap;
 
@@ -237,12 +237,20 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
-    pub fn apply_feynman_rules(&mut self) {
+    pub fn apply_feynman_rules(&mut self, export_yaml_str: &str) {
+        let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+            .unwrap();
         self.amplitudes.map_mut_graphs(|g| {
             g.statefull_apply::<_, UnInit, AppliedFeynmanRule>(|d, b| {
-                d.map_numerator(|n| n.from_graph(b))
+                d.map_numerator(|n| {
+                    n.from_graph(
+                        b,
+                        export_settings.numerator_settings.color_projector.as_ref(),
+                    )
+                })
             })
-            .unwrap()
+            .expect("could not apply Feynman rules")
         });
     }
 
@@ -337,8 +345,13 @@ impl PythonWorker {
         ))
     }
 
-    pub fn export_expressions(&mut self, export_root: &str, format: &str) -> PyResult<String> {
-        self.apply_feynman_rules();
+    pub fn export_expressions(
+        &mut self,
+        export_root: &str,
+        format: &str,
+        export_yaml_str: &str,
+    ) -> PyResult<String> {
+        self.apply_feynman_rules(export_yaml_str);
 
         for amplitude in self.amplitudes.container.iter_mut() {
             amplitude
@@ -422,7 +435,7 @@ impl PythonWorker {
                                 &state_bytes,
                                 bincode::config::standard(),
                             )
-                            .unwrap()
+                            .expect("failed to obtain state")
                             .0;
                         let path_to_workspace_settings = workspace_path.join("settings.yaml");
                         let workspace_settings_string =
@@ -441,9 +454,15 @@ impl PythonWorker {
                         let max_weight_sample = if integration_state.integral.max_eval_positive
                             > integration_state.integral.max_eval_negative.abs()
                         {
-                            integration_state.integral.max_eval_positive_xs.unwrap()
+                            integration_state
+                                .integral
+                                .max_eval_positive_xs
+                                .expect("no max eval found")
                         } else {
-                            integration_state.integral.max_eval_negative_xs.unwrap()
+                            integration_state
+                                .integral
+                                .max_eval_negative_xs
+                                .expect("no max eval found")
                         };
 
                         // bypass inspect function as it does not take a symbolica sample as input
@@ -518,7 +537,7 @@ impl PythonWorker {
                                     &state_bytes,
                                     bincode::config::standard(),
                                 )
-                                .unwrap()
+                                .expect("Could not deserialize state")
                                 .0;
 
                             let path_to_workspace_settings = workspace_path.join("settings.yaml");
@@ -623,7 +642,10 @@ impl PythonWorker {
         workspace_path: &str,
         job_id: usize,
     ) -> PyResult<String> {
-        let master_node = self.master_node.as_mut().unwrap();
+        let master_node = self
+            .master_node
+            .as_mut()
+            .expect("Could not get master node");
 
         // extract the integrated phase in a hacky way
         match master_node
@@ -647,7 +669,10 @@ impl PythonWorker {
         workspace_path: &str,
         job_id: usize,
     ) -> PyResult<String> {
-        let master_node = self.master_node.as_mut().unwrap();
+        let master_node = self
+            .master_node
+            .as_mut()
+            .expect("could not get master node");
 
         let job_out_name = format!("job_{}_out", job_id);
         let job_out_path = Path::new(workspace_path).join(job_out_name);
@@ -655,7 +680,7 @@ impl PythonWorker {
         let output_file = std::fs::read(job_out_path)?;
         let batch_result: BatchResult =
             bincode::decode_from_slice(&output_file, bincode::config::standard())
-                .unwrap()
+                .expect("Could not deserialize batch")
                 .0;
 
         master_node
