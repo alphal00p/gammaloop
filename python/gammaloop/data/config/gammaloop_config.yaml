@@ -39,6 +39,7 @@ export_settings:
       compile_options:
         subtype: Compiled
     global_numerator: null
+    global_prefactor: null
     gamma_algebra: Concrete
   cpe_rounds_cff: 1
   compile_separate_orientations: false

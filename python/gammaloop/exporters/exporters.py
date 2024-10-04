@@ -272,7 +272,7 @@ class AmplitudesExporter(GammaLoopExporter):
             os.makedirs(pjoin(export_root, 'sources',
                         'amplitudes', f'{amplitude.name}', 'expressions'))
 
-        self.gammaloop.rust_worker.export_expressions(str(export_root), format)
+        self.gammaloop.rust_worker.export_expressions(str(export_root), format, yaml.dump(self.gammaloop.config['export_settings']))
 
     def export(self, export_root: Path, amplitudes: AmplitudeList):
 

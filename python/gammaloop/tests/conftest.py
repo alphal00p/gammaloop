@@ -288,7 +288,7 @@ def epem_a_ddx_nlo_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
                                      "TEST_CROSS_SECTION_epem_a_ddx_nlo", False).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model sm
-import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'epem_a_ddx_NLO.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'epem_a_ddx_NLO.dot')} --no_compile
 output {output_path}"""))
     return output_path
 
@@ -300,7 +300,7 @@ def massive_epem_a_ddx_nlo_export(tmpdir_factory: pytest.TempPathFactory) -> Pat
                                      "TEST_CROSS_SECTION_massive_epem_a_ddx_nlo", False).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model sm-full
-import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'epem_a_ddx_NLO.py')} -f qgraph --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'epem_a_ddx_NLO.dot')} --no_compile
 output {output_path}"""))
     return output_path
 

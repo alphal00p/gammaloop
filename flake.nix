@@ -158,6 +158,7 @@
           cargo-udeps
           cargo-insta
           openssl
+          pyright
           gnum4
           gmp.dev
           mpfr.dev
