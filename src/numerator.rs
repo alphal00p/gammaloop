@@ -1371,6 +1371,10 @@ impl GammaSimplified {
             Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),loru(b__)))").unwrap(),
             Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
         ));
+        reps.push((
+            Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+        ));
         // Uu
         reps.push((
             Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),loru(b__)))").unwrap(),
@@ -1381,7 +1385,10 @@ impl GammaSimplified {
             Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),lord(b__)))").unwrap(),
             Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
         ));
-
+        reps.push((
+            Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+        ));
         // dD
         reps.push((
             Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(b__),lord(a__)))").unwrap(),
@@ -1392,6 +1399,10 @@ impl GammaSimplified {
             Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(loru(b__),lord(a__)))").unwrap(),
             Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
         ));
+        reps.push((
+            Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+        ));
         // uU
         reps.push((
             Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(b__),loru(a__)))").unwrap(),
@@ -1400,6 +1411,10 @@ impl GammaSimplified {
         // dU
         reps.push((
             Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(lord(b__),loru(a__)))").unwrap(),
+            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+        ));
+        reps.push((
+            Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))").unwrap(),
             Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
         ));
 

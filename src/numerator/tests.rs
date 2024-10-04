@@ -299,6 +299,21 @@ fn tree_ta_ta_1() {
     cff_val_rot
         .approx_eq_res(&expected_cff_rot, &F(1e-10))
         .unwrap();
+
+    println!(
+        "{}",
+        Numerator::default()
+            .from_graph(
+                &graph.bare_graph,
+                test_export_settings
+                    .numerator_settings
+                    .color_projector
+                    .as_ref()
+            )
+            .color_simplify()
+            .gamma_simplify()
+            .export()
+    );
 }
 
 pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
