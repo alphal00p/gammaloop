@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::debug_info::DEBUG_LOGGER;
-use crate::graph::BareGraph;
+use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
 use crate::momentum::Polarization;
 use crate::utils::f128;
@@ -46,7 +46,7 @@ use spenso::{
 
 use symbolica::atom::AtomView;
 use symbolica::evaluate::ExpressionEvaluator;
-use symbolica::id::{Condition, Match, MatchSettings};
+use symbolica::id::{Condition, Match, MatchSettings, PatternOrMap};
 use symbolica::{
     atom::{Atom, FunctionBuilder},
     state::State,
@@ -899,6 +899,34 @@ impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
 }
 
 impl AppliedFeynmanRule {
+    pub fn simplify_ids(&mut self) {
+        let replacements: Vec<(Pattern, PatternOrMap)> = vec![
+            (
+                Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))").unwrap(),
+                Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+            ),
+            (
+                Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))").unwrap(),
+                Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+            ),
+            (
+                Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))").unwrap(),
+                Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+            ),
+            (
+                Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))").unwrap(),
+                Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+            ),
+        ];
+
+        let reps: Vec<Replacement> = replacements
+            .iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect();
+
+        self.colorless
+            .map_data_mut(|a| a.replace_repeat_multiple(&reps));
+    }
     pub fn from_graph(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>) -> Self {
         debug!("generating numerator for graph: {}", graph.name);
         debug!("momentum: {}", graph.dot_lmb());
@@ -943,11 +971,13 @@ impl AppliedFeynmanRule {
             colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
         }
 
-        AppliedFeynmanRule {
+        let mut num = AppliedFeynmanRule {
             colorless: colorless_builder.map_data(|a| normalise_complex(&a).into()),
             color: colorful_builder.map_data(|a| normalise_complex(&a).into()),
             state: Default::default(),
-        }
+        };
+        num.simplify_ids();
+        num
     }
 }
 
@@ -1614,6 +1644,7 @@ impl Contracted {
         params: &[Atom],
     ) -> EvaluatorSingle {
         debug!("generating single evaluator");
+        // println!("{}", self.tensor);
         let mut fn_map: FunctionMap = FunctionMap::new();
 
         Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
@@ -1762,7 +1793,7 @@ impl Contracted {
         let mut param_values: Vec<Complex<F<f64>>> = vec![];
         let mut pols = Vec::new();
 
-        for (i, ext) in graph.edges.iter().enumerate() {
+        for (i, _) in graph.edges.iter().enumerate() {
             let named_structure: NamedStructure<String> = NamedStructure::from_iter(
                 [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
                 "Q".into(),
@@ -1777,17 +1808,17 @@ impl Contracted {
                     .clone(),
             );
             param_values.extend([Complex::new_zero(); 4]);
-            match ext.edge_type {
-                EdgeType::Incoming => pols.extend(
-                    ext.particle
-                        .incoming_polarization_atom_concrete(&ext.in_slot(graph), i),
-                ),
+        }
 
-                EdgeType::Outgoing => pols.extend(
-                    ext.particle
-                        .outgoing_polarization_atom_concrete(&ext.in_slot(graph), i),
-                ),
-                _ => {}
+        for i in graph
+            .vertices
+            .iter()
+            .filter(|v| matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)))
+        {
+            let pos = graph.get_vertex_position(&i.name).unwrap();
+            let vertex_slot = &graph.vertex_slots[pos];
+            if let VertexInfo::ExternalVertexInfo(e) = &i.vertex_info {
+                pols.extend(e.get_concrete_polarization_atom(pos, vertex_slot));
             }
         }
 

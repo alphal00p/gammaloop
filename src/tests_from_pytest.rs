@@ -1855,7 +1855,7 @@ fn top_bubble_gamma() {
 
     export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Symbolic;
 
-    fs::create_dir(path.join("sym")).unwrap();
+    let _ = fs::create_dir(path.join("sym"));
     let mut graph = graph.process_numerator(
         &model,
         ContractionSettings::Normal,

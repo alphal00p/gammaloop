@@ -191,7 +191,25 @@ pub struct SerializableExternalVertexInfo {
 #[derive(Debug, Clone)]
 pub struct ExternalVertexInfo {
     direction: EdgeType,
-    particle: Arc<model::Particle>,
+    pub particle: Arc<model::Particle>,
+}
+
+impl ExternalVertexInfo {
+    pub fn get_concrete_polarization_atom(
+        &self,
+        vertex_pos: usize,
+        vertex_slots: &VertexSlots,
+    ) -> Vec<Atom> {
+        match self.direction {
+            EdgeType::Incoming => self
+                .particle
+                .incoming_polarization_atom_concrete(&vertex_slots[0].dual(), vertex_pos),
+            EdgeType::Outgoing => self
+                .particle
+                .outgoing_polarization_atom_concrete(&vertex_slots[0].dual(), vertex_pos),
+            EdgeType::Virtual => panic!("Virtual external vertex not supported"),
+        }
+    }
 }
 
 impl HasVertexInfo for ExternalVertexInfo {
