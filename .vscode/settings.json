@@ -5,7 +5,9 @@
   "rust-analyzer.runnables.extraTestBinaryArgs": [
     "--nocapture"
   ],
-  "conventionalCommits.scopes": ["cargo", "python", "build", "rust"],
+  "conventionalCommits.scopes": [
+    "rust"
+  ],
   "rust-analyzer.linkedProjects": ["./Cargo.toml"],
   "github.copilot.enable": {
     "*": true

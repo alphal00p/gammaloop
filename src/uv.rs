@@ -2017,7 +2017,7 @@ impl UVNode {
     pub fn from_vertex(vertex: &Vertex, graph: &BareGraph) -> Self {
         println!("name: {}", vertex.name);
         print!("dod: {}", vertex.dod());
-        if let Some(colorless) = vertex.contracted_colorless_vertex_rule(graph) {
+        if let Some(colorless) = vertex.contracted_vertex_rule(graph) {
             UVNode {
                 dod: vertex.dod() as i32,
                 num: normalise_complex(&colorless).into(),

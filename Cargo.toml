@@ -105,7 +105,6 @@ insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
 slotmap = { version = "1.0.7", features = ["serde"] }
 base62 = "2.0.2"
 trie-rs = { version = "0.4.2", features = ["serde"] }
-insta = { version = "1.40.0", features = ["ron", "toml"] }
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

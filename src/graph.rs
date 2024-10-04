@@ -23,8 +23,9 @@ use crate::{
     utils::{self, sorted_vectorize, FloatLike, F},
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
-use ahash::RandomState;
-use color_eyre::{Help, Report};
+use ahash::{AHashSet, RandomState};
+use bincode::{Decode, Encode};
+use color_eyre::{Help, Report,Result};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use itertools::Itertools;
@@ -66,7 +67,6 @@ use symbolica::{
     atom::{Atom, Symbol},
     domains::{float::NumericalFloatLike, rational::Rational},
     id::{Pattern, Replacement},
-    state::State,
     state::State,
 };
 //use symbolica::{atom::Symbol,state::State};
@@ -149,6 +149,12 @@ impl HasVertexInfo for VertexInfo {
 }
 
 impl VertexInfo {
+    pub fn dod(&self) -> isize {
+        match self {
+            VertexInfo::ExternalVertexInfo(_) => 0,
+            VertexInfo::InteractonVertexInfo(i) => i.dod(),
+        }
+    }
     pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
         match self {
             VertexInfo::ExternalVertexInfo(e) => {
@@ -224,6 +230,12 @@ impl HasVertexInfo for ExternalVertexInfo {
 pub struct InteractionVertexInfo {
     #[allow(unused)]
     pub vertex_rule: Arc<model::VertexRule>,
+}
+
+impl InteractionVertexInfo{
+    pub fn dod(&self) -> isize {
+        self.vertex_rule.dod()
+    }
 }
 
 impl HasVertexInfo for InteractionVertexInfo {
@@ -1827,7 +1839,7 @@ impl BareGraph {
             .collect_vec();
 
         // Candidates to be external vertices of the tree-stripped graph
-        let mut external_vertices_pool = HashSet::default();
+        let mut external_vertices_pool =AHashSet::default();
 
         for edge in self
             .edges

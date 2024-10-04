@@ -239,6 +239,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "base62"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f879ef8fc74665ed7f0e6127cb106315888fc2744f68e14b74f83edbb2a08992"
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -741,6 +747,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "deprecate-until"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a3767f826efbbe5a5ae093920b58b43b01734202be697e1354914e862e8e704"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "semver",
+ "syn 2.0.79",
+]
+
+[[package]]
 name = "deranged"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -803,7 +821,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "syn 2.0.79",
 ]
 
@@ -924,6 +942,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8c02a5121d4ea3eb16a80748c74f5549a5665e4c21333c6098f283870fbdea6"
 
 [[package]]
+name = "fid-rs"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6956a1e60e2d1412b44b4169d44a03dae518f8583d3e10090c912c105e48447"
+dependencies = [
+ "rayon",
+ "serde",
+]
+
+[[package]]
 name = "findshlibs"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -972,7 +1000,9 @@ name = "gammalooprs"
 version = "0.0.1"
 dependencies = [
  "ahash",
+ "base62",
  "bincode",
+ "bitvec",
  "clap 2.34.0",
  "clarabel",
  "color-eyre",
@@ -998,6 +1028,7 @@ dependencies = [
  "lorentz_vector",
  "momtrop",
  "nalgebra 0.32.6",
+ "pathfinding",
  "petgraph",
  "pprof",
  "pyo3",
@@ -1012,6 +1043,7 @@ dependencies = [
  "serde_repr",
  "serde_with",
  "serde_yaml",
+ "slotmap",
  "smallvec",
  "smartstring",
  "spenso",
@@ -1019,6 +1051,7 @@ dependencies = [
  "symbolica",
  "tabled",
  "thiserror",
+ "trie-rs",
  "typed-index-collections",
  "uuid",
  "vectorize",
@@ -1244,6 +1277,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "integer-sqrt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "276ec31bcb4a9ee45f58bec6f9ec700ae4cf4f4f8f2fa7e06cb406bd5ffdd770"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "inventory"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1381,6 +1423,16 @@ dependencies = [
  "f128",
  "hyperdual",
  "num 0.3.1",
+ "serde",
+]
+
+[[package]]
+name = "louds-rs"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "936de6c22f08e7135a921f8ada907acd0d88880c4f42b5591f634b9f1dd8e07f"
+dependencies = [
+ "fid-rs",
  "serde",
 ]
 
@@ -1731,6 +1783,20 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
+name = "pathfinding"
+version = "4.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cff69f3ba9d0346c1dbe1248fc2ed4523567b683d1b6ff4144a6b3583369082"
+dependencies = [
+ "deprecate-until",
+ "indexmap 2.6.0",
+ "integer-sqrt",
+ "num-traits",
+ "rustc-hash 2.0.0",
+ "thiserror",
+]
 
 [[package]]
 name = "petgraph"
@@ -2126,6 +2192,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
+name = "rustc-hash"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
+
+[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2470,7 +2542,6 @@ dependencies = [
  "dyn-clone",
  "libloading",
  "once_cell",
- "pyo3-build-config 0.22.3",
  "rand",
  "rand_xoshiro",
  "rayon",
@@ -2675,6 +2746,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "trie-rs"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6f88f4b0a1ebd6c3d16be3e45eb0e8089372ccadd88849b7ca162ba64b5e6f6"
+dependencies = [
+ "louds-rs",
+ "serde",
 ]
 
 [[package]]
