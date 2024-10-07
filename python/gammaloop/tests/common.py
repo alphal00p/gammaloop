@@ -25,6 +25,20 @@ def get_gamma_loop_interpreter() -> gl_interface.GammaLoop:
     return gloop
 
 
+def get_gamma_loop_interpreter_no_compilation() -> gl_interface.GammaLoop:
+    gloop = gl_interface.GammaLoop()
+    gloop.run(gl_interface.CommandList.from_string("set compile_cff False"))
+    gloop.run(gl_interface.CommandList.from_string(
+        "set load_compiled_cff False"))
+    gloop.run(gl_interface.CommandList.from_string(
+        "set export_settings.numerator_settings.eval_settings.compile_options.subtype 'NotCompiled'"))
+    # gloop.run(gl_interface.CommandList.from_string("set export_settings.gammaloop_compile_options.inline_asm False"))
+
+    gammaloop.misc.common.GL_DEBUG = True
+    gammaloop.misc.common.GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
+    return gloop
+
+
 def run_rust_test(rust_tests_binary: Path | None, output_path: Path, test_name: str) -> bool:
     new_env: dict[str, str] = os.environ.copy()
     match new_env.get('PYTEST_OUTPUT_PATH_FOR_RUST', None):

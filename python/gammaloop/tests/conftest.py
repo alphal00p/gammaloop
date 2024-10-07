@@ -3,7 +3,7 @@ from subprocess import Popen, PIPE
 import pytest
 import os
 from pathlib import Path
-from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin
+from gammaloop.tests.common import get_gamma_loop_interpreter, get_gamma_loop_interpreter_no_compilation, RESOURCES_PATH, pjoin
 from gammaloop.interface.gammaloop_interface import CommandList
 from gammaloop.misc.common import GL_PATH, GammaLoopError, logger
 
@@ -22,6 +22,7 @@ from gammaloop.misc.common import GL_PATH, GammaLoopError, logger
 
 # pytest_plugins = ['pytest_profiling']
 
+
 GIT_REVISION: str = 'N/A'
 
 
@@ -32,9 +33,51 @@ def pytest_addoption(parser):
     parser.addoption(
         "--codecheck", action="store_true", default=False, help="run code checks"
     )
+    parser.addoption(
+        "--max-runtime",
+        action="store",
+        type=float,
+        default=None,
+        help="Run only tests that last less than the specified time (in seconds).",
+    )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    # Execute all other hooks to obtain the report object
+    outcome = yield
+    report = outcome.get_result()
+    # We are only interested in the call phase (not setup/teardown)
+    if report.when == "call" and report.passed:
+        # Use the duration attribute from the report
+        duration = report.duration
+        if duration is not None:
+            # Get the existing runtimes from the cache
+            runtimes = item.config.cache.get("test_runtimes", {})
+            # Update the runtime for this test
+            runtimes[item.nodeid] = duration
+            # Save the updated runtimes back to the cache
+            item.config.cache.set("test_runtimes", runtimes)
 
 
 def pytest_collection_modifyitems(config, items):
+    max_runtime = config.getoption("--max-runtime")
+    if max_runtime is not None:
+        runtimes = config.cache.get("test_runtimes", {})
+        selected_items = []
+        deselected_items = []
+
+        for item in items:
+            duration = runtimes.get(item.nodeid, None)
+            if duration is not None and duration <= max_runtime:
+                selected_items.append(item)
+            else:
+                deselected_items.append(item)
+
+        if deselected_items:
+            config.hook.pytest_deselected(items=deselected_items)
+            items[:] = selected_items
+
     run_rust = config.getoption("--runrust")
     run_codecheck = config.getoption("--codecheck")
 
@@ -127,13 +170,13 @@ output {output_path} --overwrite_output"""))
 
 @pytest.fixture(scope="session")
 def scalar_fishnet_2x3_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
-    gloop = get_gamma_loop_interpreter()
+    gloop = get_gamma_loop_interpreter_no_compilation()
     output_path = get_test_directory(tmpdir_factory,
                                      "TEST_AMPLITUDE_scalar_fishnet_2x3", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
 import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'fishnet_2x3.dot')}
-output {output_path} --overwrite_output --yaml_only"""))
+output {output_path} --overwrite_output"""))
     return output_path
 
 

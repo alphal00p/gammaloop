@@ -2,7 +2,7 @@ import pytest
 import os
 from gammaloop.interface.gammaloop_interface import CommandList, GammaLoopConfiguration
 from gammaloop.misc.common import load_configuration, GL_PATH
-from gammaloop.tests.common import get_gamma_loop_interpreter, RESOURCES_PATH, pjoin, run_drawing
+from gammaloop.tests.common import get_gamma_loop_interpreter, get_gamma_loop_interpreter_no_compilation, RESOURCES_PATH, pjoin, run_drawing
 from pathlib import Path
 
 
@@ -231,7 +231,7 @@ class TestScalarFishnet2x2:
 class TestScalarFishnet2x3:
 
     def test_info(self, scalar_fishnet_2x3_export: Path):
-        gloop = get_gamma_loop_interpreter()
+        gloop = get_gamma_loop_interpreter_no_compilation()
         gloop.run(CommandList.from_string(
             f"launch {scalar_fishnet_2x3_export}"))
         assert gloop.model.name == 'scalars'

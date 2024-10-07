@@ -1,0 +1,4 @@
+{
+  "tests/unit/test_commands.py::TestShellCommand::test_load_sm_from_ufo": 0.00648349997936748,
+  "tests/unit/test_commands.py::TestShellCommand::test_set_drawing_config": 0.002493459003744647
+}
