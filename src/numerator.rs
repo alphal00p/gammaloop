@@ -919,9 +919,14 @@ impl AppliedFeynmanRule {
             ),
         ];
 
+        let settings = MatchSettings {
+            rhs_cache_size: 0,
+            ..Default::default()
+        };
+
         let reps: Vec<Replacement> = replacements
             .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs).with_settings(&settings))
             .collect();
 
         self.colorless
@@ -1021,9 +1026,14 @@ impl ColorSimplified {
                     .into(),
             ),
         ];
+        let settings = MatchSettings {
+            rhs_cache_size: 0,
+            ..Default::default()
+        };
+
         let reps: Vec<Replacement> = replacements
             .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs).with_settings(&settings))
             .collect();
 
         expression.replace_repeat_multiple(&reps);
@@ -1091,10 +1101,14 @@ impl ColorSimplified {
                 Pattern::parse("1/TR *(T(aind(coad(8,a_),cof(3,i(a_,b_,c_)),coaf(3,j(a_,b_,c_))))*T(aind(coad(8,b_),cof(3,j(a_,b_,c_)),coaf(3,k(a_,b_,c_))))*T(aind(coad(8,c_),cof(3,k(a_,b_,c_)),coaf(3,i(a_,b_,c_))))-T(aind(coad(8,a_),cof(3,j(a_,b_,c_)),coaf(3,k(a_,b_,c_))))*T(aind(coad(8,b_),cof(3,i(a_,b_,c_)),coaf(3,j(a_,b_,c_))))*T(aind(coad(8,c_),cof(3,k(a_,b_,c_)),coaf(3,i(a_,b_,c_)))))").unwrap().into(),
             )
         ];
+        let settings = MatchSettings {
+            rhs_cache_size: 0,
+            ..Default::default()
+        };
 
         let reps: Vec<Replacement> = replacements
             .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs).with_settings(&settings))
             .collect();
 
         SerializableAtom::replace_repeat_multiple_atom_expand(&mut expression.0, &reps);
@@ -2170,6 +2184,11 @@ impl EvaluatorSingle {
             })
             .collect_vec();
 
+        let settings = MatchSettings {
+            rhs_cache_size: 0,
+            ..Default::default()
+        };
+
         for (ni, o) in extra_info.orientations.iter().enumerate() {
             let time = Instant::now();
             let elapsed_parse = time.elapsed();
@@ -2181,7 +2200,7 @@ impl EvaluatorSingle {
                     if o[i] {
                         None
                     } else {
-                        Some(Replacement::new(lhs, rhs))
+                        Some(Replacement::new(lhs, rhs).with_settings(&settings))
                     }
                 })
                 .collect_vec();
@@ -2370,6 +2389,11 @@ impl EvaluatorSingle {
             })
             .collect_vec();
 
+        let settings = MatchSettings {
+            rhs_cache_size: 0,
+            ..Default::default()
+        };
+
         for (ni, o) in extra_info.orientations.iter().enumerate() {
             let time = Instant::now();
             let elapsed_parse = time.elapsed();
@@ -2381,7 +2405,7 @@ impl EvaluatorSingle {
                     if o[i] {
                         None
                     } else {
-                        Some(Replacement::new(lhs, rhs))
+                        Some(Replacement::new(lhs, rhs).with_settings(&settings))
                     }
                 })
                 .collect_vec();

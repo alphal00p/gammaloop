@@ -2072,19 +2072,19 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
     let eval_iter_comp =
         graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings);
 
-    Complex::approx_eq_res(&eval_single, &eval_joint, &F(0.01))
+    Complex::approx_eq_res(&eval_single, &eval_joint, &F(1e-10))
         .wrap_err("Single and joint evaluation differ in norm")?;
 
-    Complex::approx_eq_res(&eval_single, &eval_iter, &F(0.01))
+    Complex::approx_eq_res(&eval_single, &eval_iter, &F(1e-10))
         .wrap_err("Single and iterative evaluation differ in norm")?;
 
-    Complex::approx_eq_res(&eval_single_comp, &eval_joint_comp, &F(0.01))
+    Complex::approx_eq_res(&eval_single_comp, &eval_joint_comp, &F(1e-10))
         .wrap_err("Single compiled and joint compiled evaluation differ in norm")?;
 
-    Complex::approx_eq_res(&eval_single_comp, &eval_iter_comp, &F(0.01))
+    Complex::approx_eq_res(&eval_single_comp, &eval_iter_comp, &F(1e-10))
         .wrap_err("Single compiled and iterative compiled evaluation differ in norm")?;
 
-    Complex::approx_eq_res(&eval_single, &eval_single_comp, &F(0.01))
+    Complex::approx_eq_res(&eval_single, &eval_single_comp, &F(1e-10))
         .wrap_err("Single and Single compiled evaluation differ in norm")?;
 
     Ok(())
