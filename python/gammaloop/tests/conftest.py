@@ -2,6 +2,7 @@ import json
 from subprocess import Popen, PIPE
 import pytest
 import os
+from filelock import FileLock
 from pathlib import Path
 from gammaloop.tests.common import get_gamma_loop_interpreter, get_gamma_loop_interpreter_no_compilation, RESOURCES_PATH, pjoin
 from gammaloop.interface.gammaloop_interface import CommandList
@@ -40,6 +41,12 @@ def pytest_addoption(parser):
         default=None,
         help="Run only tests that last less than the specified time (in seconds).",
     )
+    parser.addoption(
+        "--update-runtime",
+        action="store_true",
+        default=False,
+        help="Update the stored test runtimes.",
+    )
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -47,17 +54,23 @@ def pytest_runtest_makereport(item, call):
     # Execute all other hooks to obtain the report object
     outcome = yield
     report = outcome.get_result()
-    # We are only interested in the call phase (not setup/teardown)
     if report.when == "call" and report.passed:
-        # Use the duration attribute from the report
         duration = report.duration
         if duration is not None:
-            # Get the existing runtimes from the cache
-            runtimes = item.config.cache.get("test_runtimes", {})
-            # Update the runtime for this test
-            runtimes[item.nodeid] = duration
-            # Save the updated runtimes back to the cache
-            item.config.cache.set("test_runtimes", runtimes)
+            # Use a file lock to ensure thread-safe cache access
+            cache_dir = item.config.cache._cachedir
+            lock_file = os.path.join(cache_dir, "test_runtimes.lock")
+            with FileLock(lock_file):
+                # Get the existing runtimes from the cache
+                runtimes = item.config.cache.get("test_runtimes", {})
+                update_runtime = item.config.getoption("--update-runtime")
+                runtime_exists = item.nodeid in runtimes
+                # Update the runtime if --update-runtime is set OR there is no existing runtime
+                if update_runtime or not runtime_exists:
+                    # Update the runtime for this test
+                    runtimes[item.nodeid] = duration
+                    # Save the updated runtimes back to the cache
+                    item.config.cache.set("test_runtimes", runtimes)
 
 
 def pytest_collection_modifyitems(config, items):
