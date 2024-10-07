@@ -1188,6 +1188,25 @@ impl GammaLoopIntegrand {
                     }
 
                     if !existing_esurfaces.is_empty() {
+                        if settings.general.force_orientations.is_some() {
+                            panic!("force orientations not supported with thresholds")
+                        }
+
+                        match &settings.sampling {
+                            SamplingSettings::Default => {}
+                            SamplingSettings::MultiChanneling(_) => panic!(),
+                            SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
+                                match discrete_graph_settings {
+                                    DiscreteGraphSamplingSettings::Default => {}
+                                    DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
+                                        panic!()
+                                    }
+                                    DiscreteGraphSamplingSettings::MultiChanneling(_) => panic!(),
+                                    DiscreteGraphSamplingSettings::TropicalSampling(_) => {}
+                                }
+                            }
+                        }
+
                         let maximal_overlap = graph.get_maximal_overlap(
                             &external_moms,
                             settings.kinematics.e_cm,

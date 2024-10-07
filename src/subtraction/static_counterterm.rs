@@ -270,8 +270,18 @@ impl CounterTerm {
                     &e_cm,
                 );
 
-                assert!(positive_result.solution > const_builder.zero());
-                assert!(negative_result.solution < const_builder.zero());
+                assert!(
+                    positive_result.solution > const_builder.zero(),
+                    "positive result has wrong sign: ({}, {})",
+                    positive_result.solution,
+                    negative_result.solution
+                );
+                assert!(
+                    negative_result.solution < const_builder.zero(),
+                    "negative result has wrong sign: ({}, {})",
+                    positive_result.solution,
+                    negative_result.solution
+                );
 
                 if settings.general.debug > 1 {
                     println!("Positive solution: ");
@@ -483,6 +493,10 @@ impl CounterTerm {
                 res += &ct_plus + &integrated_ct_plus + &ct_minus + &integrated_ct_minus;
 
                 if settings.general.debug > 0 {
+                    let ose_product = into_complex_ff64(&Complex::new(
+                        graph.compute_energy_product(sample.loop_moms(), sample.external_moms()),
+                        res.re.zero(),
+                    ));
                     let debug_helper = DebugHelper {
                         esurface_id,
                         initial_radius: radius_guess_plus.into_ff64(),
@@ -494,10 +508,10 @@ impl CounterTerm {
                         uv_damper_minus: uv_damper_minus.into_ff64(),
                         singularity_dampener_plus: singularity_dampener_plus.into_ff64(),
                         singularity_dampener_minus: singularity_damper_minus.into_ff64(),
-                        ct_plus: into_complex_ff64(&ct_plus),
-                        ct_minus: into_complex_ff64(&ct_minus),
-                        integrated_ct_plus: into_complex_ff64(&integrated_ct_plus),
-                        integrated_ct_minus: into_complex_ff64(&integrated_ct_minus),
+                        ct_plus: into_complex_ff64(&ct_plus) * ose_product,
+                        ct_minus: into_complex_ff64(&ct_minus) * ose_product,
+                        integrated_ct_plus: into_complex_ff64(&integrated_ct_plus) * ose_product,
+                        integrated_ct_minus: into_complex_ff64(&integrated_ct_minus) * ose_product,
                         r_plus_energy_cache: r_plus_energy_cache
                             .iter()
                             .map(|x| x.into_ff64())
@@ -618,7 +632,6 @@ fn newton_iteration_and_derivative<T: FloatLike>(
     while iteration < max_iterations && val_f_x.abs() > guess.epsilon() * tolerance * e_cm {
         x -= val_f_x / val_df_x;
         (val_f_x, val_df_x) = f_x_and_df_x(&x);
-
         iteration += 1;
     }
 
