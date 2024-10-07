@@ -1985,8 +1985,6 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
     graph.generate_cff();
     let mut export_settings = test_export_settings();
 
-    export_settings.gammaloop_compile_options.inline_asm = true;
-
     export_settings.numerator_settings.eval_settings =
         NumeratorEvaluatorOptions::Iterative(IterativeOptions {
             eval_options: EvaluatorOptions {
