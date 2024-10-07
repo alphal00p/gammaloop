@@ -85,5 +85,6 @@
   "tests/unit/test_rust.py::TestRust::test_generate_th_th_tree": 0.00012202560901641846,
   "tests/unit/test_rust.py::TestRust::test_generate_hh_ttxaa_tree": 0.00012986734509468079,
   "tests/unit/test_rust.py::TestRust::test_generate_h_ttxaah_tree": 0.00021889060735702515,
-  "tests/unit/test_rust.py::TestRust::test_generate_aa_aahhttx_tree": 0.000167209655046463
+  "tests/unit/test_rust.py::TestRust::test_generate_aa_aahhttx_tree": 0.000167209655046463,
+  "tests/unit/test_inspect.py::TestPhysicalTopologies::test_inspect_euclidean_1L_6photons": 0.3680586249975022
 }

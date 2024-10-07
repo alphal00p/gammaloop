@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gammaloop"
-version = "0.1.1"
+version = "0.2.0"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 authors = [
   "Valentin Hirschi <valentin.hirschi@gmail.com>",
@@ -9,7 +9,7 @@ authors = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 pytest = "^7.4.2"
 autopep8 = "^2.0.4"
 pyaml = "^23.12.0"
@@ -21,7 +21,7 @@ pydot = "^3.0.1"
 
 [tool.poetry.dev-dependencies]
 PyYAML = "^6.0.1"
-symbolica = "^0.1.0"
+symbolica = "^0.12.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.12.1"
