@@ -1,12 +1,78 @@
+import sys
+import shutil
+from gammaloop.misc.common import GL_PATH, GammaLoopError, logger
+from gammaloop.interface.gammaloop_interface import CommandList
+from gammaloop.tests.common import get_gamma_loop_interpreter, get_gamma_loop_interpreter_no_compilation, RESOURCES_PATH, pjoin
+from pathlib import Path
 import json
 from subprocess import Popen, PIPE
 import pytest
 import os
-from filelock import FileLock
-from pathlib import Path
-from gammaloop.tests.common import get_gamma_loop_interpreter, get_gamma_loop_interpreter_no_compilation, RESOURCES_PATH, pjoin
-from gammaloop.interface.gammaloop_interface import CommandList
-from gammaloop.misc.common import GL_PATH, GammaLoopError, logger
+
+FILELOCK_AVAILABLE = True
+try:
+    from filelock import FileLock
+except:
+    FILELOCK_AVAILABLE = False
+    print("Warning: filelock not installed. Please install it with 'pip install filelock'. Runtimes saving will not be thread-safe.")
+
+COLORAMA_AVAILABLE = True
+FIRST_COLORAMA_OUTPUT = True
+try:
+    import colorama  # type: ignore
+    # Initialize colorama
+    colorama.init()
+except:
+    COLORAMA_AVAILABLE = False
+
+
+def get_terminal_width():
+    return shutil.get_terminal_size().columns
+
+
+def write_current_test_name(nodeid):
+    # Leave space for the progress marker
+    terminal_width = get_terminal_width()-8
+    test_name = f"{nodeid}"
+    max_test_name_length = min(len(test_name), terminal_width - 1)
+
+    # Truncate test name if necessary
+    if len(test_name) > max_test_name_length:
+        test_name = '...' + test_name[-(max_test_name_length - 3):]
+
+    # Move cursor to the right position and write the test name
+    output = f"\033[s\033[{terminal_width -
+                           max_test_name_length}G{test_name}\033[u"
+    sys.stderr.write(output)
+    sys.stderr.flush()
+
+
+def clear_current_test_name():
+    terminal_width = get_terminal_width()
+    # Clear the area where the test name was displayed
+    blank_space = ' ' * (terminal_width // 2)
+    output = f"\033[s\033[{terminal_width -
+                           len(blank_space)}G{blank_space}\033[u"
+    sys.stderr.write(output)
+    sys.stderr.flush()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_logstart(nodeid, location):
+    global FIRST_COLORAMA_OUTPUT
+    if COLORAMA_AVAILABLE:
+        if FIRST_COLORAMA_OUTPUT:
+            FIRST_COLORAMA_OUTPUT = False
+        else:
+            write_current_test_name(nodeid)
+    yield
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_logfinish(nodeid, location):
+    if COLORAMA_AVAILABLE:
+        clear_current_test_name()
+    yield
 
 # Was intended to run with pytest --mypy but stupidly it won't read any mypy config file so it's unworkable.
 # We will use pyright instead.
@@ -59,14 +125,24 @@ def pytest_runtest_makereport(item, call):
         if duration is not None:
             # Use a file lock to ensure thread-safe cache access
             cache_dir = item.config.cache._cachedir
-            lock_file = os.path.join(cache_dir, "test_runtimes.lock")
-            with FileLock(lock_file):
-                # Get the existing runtimes from the cache
-                runtimes = item.config.cache.get("test_runtimes", {})
+            if FILELOCK_AVAILABLE:
+                lock_file = os.path.join(cache_dir, "test_runtimes.lock")
+                with FileLock(lock_file):  # type: ignore
+                    # Get the existing runtimes from the cache
+                    runtimes = item.config.cache.get("test_runtimes", {})
+                    update_runtime = item.config.getoption("--update-runtime")
+                    runtime_exists = item.nodeid in runtimes
+                    # Update the runtime if --update-runtime is set OR there is no existing runtime
+                    if update_runtime or not runtime_exists:
+                        # Update the runtime for this test
+                        runtimes[item.nodeid] = duration
+                        # Save the updated runtimes back to the cache
+                        item.config.cache.set("test_runtimes", runtimes)
+            else:
                 update_runtime = item.config.getoption("--update-runtime")
-                runtime_exists = item.nodeid in runtimes
-                # Update the runtime if --update-runtime is set OR there is no existing runtime
-                if update_runtime or not runtime_exists:
+                if update_runtime:
+                    # Get the existing runtimes from the cache
+                    runtimes = item.config.cache.get("test_runtimes", {})
                     # Update the runtime for this test
                     runtimes[item.nodeid] = duration
                     # Save the updated runtimes back to the cache

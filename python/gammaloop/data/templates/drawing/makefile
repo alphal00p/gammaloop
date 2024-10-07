@@ -16,6 +16,7 @@ all: $(OUTPUT)
 	mpost diagram_$* 2>&1 >> $(COMPILE_LOG)
 	latex $*.tex 2>&1 >> $(COMPILE_LOG)
 	dvips $*.dvi &> /dev/null
+	sleep 0.1
 	ps2pdf $*.ps 2>&1 >> $(COMPILE_LOG)
 	pdfcrop $*.pdf $*.pdf 2>&1 >> $(COMPILE_LOG)
 

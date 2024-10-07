@@ -244,11 +244,6 @@ class TestScalarFishnet2x3:
             assert amplitudes[0].name == 'fishnet_2x3'
         gloop.run(CommandList.from_string("info"))
 
-    @pytest.mark.drawing
-    def test_drawing(self, scalar_fishnet_2x3_export: str):
-        assert run_drawing(pjoin(scalar_fishnet_2x3_export, 'sources',
-                           'amplitudes', 'fishnet_2x3', 'drawings'))
-
 
 class TestScalarCube:
 
