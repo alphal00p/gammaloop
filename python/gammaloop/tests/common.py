@@ -15,9 +15,11 @@ RESOURCES_PATH = os.path.join(os.path.dirname(
 
 def get_gamma_loop_interpreter() -> gl_interface.GammaLoop:
     gloop = gl_interface.GammaLoop()
-    gloop.run(gl_interface.CommandList.from_string("set compile_cff False"))
-    gloop.run(gl_interface.CommandList.from_string(
-        "set load_compiled_cff False"))
+    # gloop.run(gl_interface.CommandList.from_string("set compile_cff False"))
+    # gloop.run(gl_interface.CommandList.from_string("set load_compiled_cff False"))
+    # gloop.run(gl_interface.CommandList.from_string("set export_settings.numerator_settings.eval_settings.compile_options.subtype 'NotCompiled'"))
+    # gloop.run(gl_interface.CommandList.from_string("set export_settings.gammaloop_compile_options.inline_asm False"))
+
     gammaloop.misc.common.GL_DEBUG = True
     gammaloop.misc.common.GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
     return gloop
@@ -51,7 +53,7 @@ def run_rust_test(rust_tests_binary: Path | None, output_path: Path, test_name: 
                         GL_PATH, os.path.pardir, os.path.pardir, 'rust_test_binaries')),
                     '--', '--test-threads=1', '--nocapture']
     else:
-        cmd_list = [rust_tests_binary, f'pytest_{test_name}',
+        cmd_list = [f'{rust_tests_binary}', f'pytest_{test_name}',
                     '--test-threads=1', '--nocapture']
     logger.debug("Running rust test with command: %s", " ".join(cmd_list))
     process = Popen(cmd_list, cwd=GL_PATH, stdout=PIPE,

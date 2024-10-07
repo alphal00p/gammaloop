@@ -2592,14 +2592,14 @@ impl DerivedGraphData<Evaluators> {
                     panic!("Empty iterator in sum");
                 }
             }
-            RepeatingIteratorTensorOrScalar::Tensors(mut num_iter) => {
-                if let Some(i) = num_iter.next() {
+            RepeatingIteratorTensorOrScalar::Tensors(mut s) => {
+                if let Some(i) = s.next() {
                     let c = Complex::new_re(cff.next().unwrap());
                     let mut sum = i.map_data_ref(|n| n * &c);
 
                     for j in cff {
                         let c = Complex::new_re(j);
-                        sum += num_iter.next().unwrap().map_data_ref(|n| n * &c);
+                        sum += s.next().unwrap().map_data_ref(|n| n * &c);
                     }
                     sum.scalar_mul(&prefactor).unwrap()
                 } else {

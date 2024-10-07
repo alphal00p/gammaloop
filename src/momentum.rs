@@ -1616,11 +1616,12 @@ impl<T> FourMomentum<T, T> {
             zero
         };
         let factor = gamma2 * &bp + gamma.clone() * &self.temporal.value;
+
         FourMomentum::from_args(
             (bp + &self.temporal.value) * &gamma,
-            boost_vector.spatial.px.mul_add(&factor, &self.spatial.px),
-            boost_vector.spatial.py.mul_add(&factor, &self.spatial.py),
-            boost_vector.spatial.pz.mul_add(&factor, &self.spatial.pz),
+            self.spatial.px.mul_add(&factor, &boost_vector.spatial.px),
+            self.spatial.py.mul_add(&factor, &boost_vector.spatial.py),
+            self.spatial.pz.mul_add(&factor, &boost_vector.spatial.pz),
         )
     }
 }
