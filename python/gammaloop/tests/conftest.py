@@ -11,7 +11,7 @@ import os
 
 FILELOCK_AVAILABLE = True
 try:
-    from filelock import FileLock
+    from filelock import FileLock  # type: ignore
 except:
     FILELOCK_AVAILABLE = False
     print("Warning: filelock not installed. Please install it with 'pip install filelock'. Runtimes saving will not be thread-safe.")

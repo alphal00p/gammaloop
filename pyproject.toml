@@ -60,6 +60,22 @@ features = ["python_api"]
 python-source = "python"
 module-name = "gammaloop._gammaloop"
 sdist-include = ["LICENSE.md", "README.md"]
+exclude = [
+  "gammaloop/dependencies/LOCK",
+  "gammaloop/dependencies/INSTALLED",
+  "gammaloop/dependencies/dependency_build.log",
+  "gammaloop/dependencies/venv",
+  "gammaloop/dependencies/venv/**",
+  "gammaloop/dependencies/symbolica/symbolica_path.txt",
+  "gammaloop/dependencies/test_quad_math/test_quad_math"
+]
+include = [
+  "gammaloop/.pytest_cache/v/test_runtimes",
+  "gammaloop/tests/test_data/graph_inputs",
+  "gammaloop/tests/test_data/graph_inputs/*",
+  "gammaloop/examples/cards",
+  "gammaloop/examples/cards/*",
+]
 
 [project.scripts]
 gammaloop_rust_cli = "gammaloop._gammaloop:rust_cli"
