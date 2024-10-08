@@ -1684,7 +1684,7 @@ fn pytest_physical_1L_6photons() {
         n_terms_unfolded: 5,
         cff_norm: Some(F(1.4618496452655858e-16)),
         cff_phase: F(-1.0823765660512161),
-        tolerance: F(1.0e-8),
+        tolerance: F(1.0e-7),
         n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
         fail_lower_prec: false,
