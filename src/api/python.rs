@@ -8,10 +8,12 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
+    numerator::{AppliedFeynmanRule, PythonState, UnInit},
     utils::F,
-    HasIntegrand, Settings,
+    ExportSettings, HasIntegrand, Settings,
 };
 use ahash::HashMap;
+
 use colored::Colorize;
 use git_version::git_version;
 use itertools::{self, Itertools};
@@ -78,7 +80,7 @@ pub struct OutputOptions {}
 pub struct PythonWorker {
     pub model: Model,
     pub cross_sections: CrossSectionList,
-    pub amplitudes: AmplitudeList,
+    pub amplitudes: AmplitudeList<PythonState>,
     pub integrands: HashMap<String, Integrand>,
     pub master_node: Option<MasterNode>,
 }
@@ -190,7 +192,8 @@ impl PythonWorker {
         }
         match Amplitude::from_yaml_str(&self.model, String::from(yaml_str)) {
             Ok(amp) => {
-                self.amplitudes.add_amplitude(amp);
+                self.amplitudes
+                    .add_amplitude(amp.map(|a| a.map(|ag| ag.forget_type())));
                 Ok(())
             }
             Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
@@ -205,7 +208,7 @@ impl PythonWorker {
         }
         AmplitudeList::from_file(&self.model, String::from(file_path))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| self.amplitudes = a)
+            .map(|a| self.amplitudes = a.map(|a| a.map(|ag| ag.map(|g| g.forget_type()))))
     }
 
     pub fn load_amplitudes_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
@@ -216,7 +219,7 @@ impl PythonWorker {
         }
         AmplitudeList::from_yaml_str(&self.model, String::from(yaml_str))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| self.amplitudes = a)
+            .map(|a| self.amplitudes = a.map(|a| a.map(|ag| ag.map(|g| g.forget_type()))))
     }
 
     pub fn load_amplitudes_derived_data(&mut self, path: &str) -> PyResult<()> {
@@ -230,12 +233,25 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         self.amplitudes
-            .load_derived_data(&path_to_amplitudes, &settings)
+            .load_derived_data_mut(&self.model, &path_to_amplitudes, &settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
-    pub fn generate_numerators(&mut self) {
-        self.amplitudes.generate_numerator(&self.model);
+    pub fn apply_feynman_rules(&mut self, export_yaml_str: &str) {
+        let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+            .unwrap();
+        self.amplitudes.map_mut_graphs(|g| {
+            g.statefull_apply::<_, UnInit, AppliedFeynmanRule>(|d, b| {
+                d.map_numerator(|n| {
+                    n.from_graph(
+                        b,
+                        export_settings.numerator_settings.global_prefactor.as_ref(),
+                    )
+                })
+            })
+            .expect("could not apply Feynman rules")
+        });
     }
 
     // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,
@@ -329,8 +345,13 @@ impl PythonWorker {
         ))
     }
 
-    pub fn export_expressions(&mut self, export_root: &str, format: &str) -> PyResult<String> {
-        self.generate_numerators();
+    pub fn export_expressions(
+        &mut self,
+        export_root: &str,
+        format: &str,
+        export_yaml_str: &str,
+    ) -> PyResult<String> {
+        self.apply_feynman_rules(export_yaml_str);
 
         for amplitude in self.amplitudes.container.iter_mut() {
             amplitude
@@ -364,7 +385,9 @@ impl PythonWorker {
         match self.integrands.get_mut(integrand) {
             Some(integrand) => {
                 let settings = match integrand {
-                    Integrand::GammaLoopIntegrand(integrand) => integrand.settings.clone(),
+                    Integrand::GammaLoopIntegrand(integrand) => {
+                        integrand.global_data.settings.clone()
+                    }
                     _ => todo!(),
                 };
 
@@ -397,7 +420,7 @@ impl PythonWorker {
             Some(integrand_struct) => {
                 let new_settings = match integrand_struct {
                     Integrand::GammaLoopIntegrand(integrand_struct) => {
-                        integrand_struct.settings.clone()
+                        integrand_struct.global_data.settings.clone()
                     }
                     _ => todo!(),
                 };
@@ -408,8 +431,12 @@ impl PythonWorker {
                 match fs::read(path_to_state) {
                     Ok(state_bytes) => {
                         let serializable_state: SerializableIntegrationState =
-                            bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
-                                .unwrap();
+                            bincode::decode_from_slice::<SerializableIntegrationState, _>(
+                                &state_bytes,
+                                bincode::config::standard(),
+                            )
+                            .expect("failed to obtain state")
+                            .0;
                         let path_to_workspace_settings = workspace_path.join("settings.yaml");
                         let workspace_settings_string =
                             fs::read_to_string(path_to_workspace_settings)
@@ -427,9 +454,15 @@ impl PythonWorker {
                         let max_weight_sample = if integration_state.integral.max_eval_positive
                             > integration_state.integral.max_eval_negative.abs()
                         {
-                            integration_state.integral.max_eval_positive_xs.unwrap()
+                            integration_state
+                                .integral
+                                .max_eval_positive_xs
+                                .expect("no max eval found")
                         } else {
-                            integration_state.integral.max_eval_negative_xs.unwrap()
+                            integration_state
+                                .integral
+                                .max_eval_negative_xs
+                                .expect("no max eval found")
                         };
 
                         // bypass inspect function as it does not take a symbolica sample as input
@@ -500,8 +533,12 @@ impl PythonWorker {
                             info!("");
 
                             let serializable_state: SerializableIntegrationState =
-                                bincode::deserialize::<SerializableIntegrationState>(&state_bytes)
-                                    .unwrap();
+                                bincode::decode_from_slice::<SerializableIntegrationState, _>(
+                                    &state_bytes,
+                                    bincode::config::standard(),
+                                )
+                                .expect("Could not deserialize state")
+                                .0;
 
                             let path_to_workspace_settings = workspace_path.join("settings.yaml");
                             let workspace_settings_string =
@@ -513,7 +550,7 @@ impl PythonWorker {
                                     .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
                             // force the settings to be the same as the ones used in the previous integration
-                            gloop_integrand.settings = workspace_settings.clone();
+                            gloop_integrand.global_data.settings = workspace_settings.clone();
 
                             let state =
                                 serializable_state.into_integration_state(&workspace_settings);
@@ -546,7 +583,7 @@ impl PythonWorker {
                         }
                     };
 
-                    let settings = gloop_integrand.settings.clone();
+                    let settings = gloop_integrand.global_data.settings.clone();
                     let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),
@@ -605,7 +642,10 @@ impl PythonWorker {
         workspace_path: &str,
         job_id: usize,
     ) -> PyResult<String> {
-        let master_node = self.master_node.as_mut().unwrap();
+        let master_node = self
+            .master_node
+            .as_mut()
+            .expect("Could not get master node");
 
         // extract the integrated phase in a hacky way
         match master_node
@@ -629,13 +669,19 @@ impl PythonWorker {
         workspace_path: &str,
         job_id: usize,
     ) -> PyResult<String> {
-        let master_node = self.master_node.as_mut().unwrap();
+        let master_node = self
+            .master_node
+            .as_mut()
+            .expect("could not get master node");
 
         let job_out_name = format!("job_{}_out", job_id);
         let job_out_path = Path::new(workspace_path).join(job_out_name);
 
         let output_file = std::fs::read(job_out_path)?;
-        let batch_result: BatchResult = bincode::deserialize(&output_file).unwrap();
+        let batch_result: BatchResult =
+            bincode::decode_from_slice(&output_file, bincode::config::standard())
+                .expect("Could not deserialize batch")
+                .0;
 
         master_node
             .process_batch_output(batch_result)
@@ -654,6 +700,11 @@ impl PythonWorker {
         if let Some(master_node) = &mut self.master_node {
             master_node.update_iter();
         }
+    }
+
+    pub fn sync(&mut self) {
+        self.amplitudes.sync(&self.model);
+        self.cross_sections.sync(&self.model);
     }
 }
 

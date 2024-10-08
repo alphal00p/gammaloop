@@ -4,6 +4,7 @@ drawing:
   mode: "feynmp"
   combined_graphs_pdf_grid_shape: [3, 2]
   feynmp:
+    reverse_outgoing_edges_order: true
     show_edge_labels: true
     show_particle_names: true
     show_edge_names: true
@@ -31,14 +32,23 @@ drawing:
     caption_size: "40pt"
 export_settings:
   compile_cff: true
-  compile_separate_orientations: false
+  numerator_settings:
+    eval_settings:
+      type: Joint
+      cpe_rounds: 1
+      compile_options:
+        subtype: Compiled
+    global_numerator: null
+    global_prefactor: null
+    gamma_algebra: Concrete
   cpe_rounds_cff: 1
-  gammaloop_compile_options: 
-    inline_asm: false
-    optimization_level: 3 
+  compile_separate_orientations: false
+  gammaloop_compile_options:
+    inline_asm: true
+    optimization_level: 3
     fast_math: true
-    unsafe_math: true 
-    compiler: "g++"
+    unsafe_math: true
+    compiler: g++
     custom: []
   tropical_subgraph_table_settings:
     panic_on_fail: false

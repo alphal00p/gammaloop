@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gammaloop"
-version = "0.1.1"
+version = "0.2.0"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 authors = [
   "Valentin Hirschi <valentin.hirschi@gmail.com>",
@@ -9,7 +9,7 @@ authors = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 pytest = "^7.4.2"
 autopep8 = "^2.0.4"
 pyaml = "^23.12.0"
@@ -17,10 +17,11 @@ pyright = "^1.1.367"
 pymupdf = "^1.24.5"
 pytest-profiling = "^1.7.0"
 pyyaml = "^6.0.1"
+pydot = "^3.0.1"
 
 [tool.poetry.dev-dependencies]
 PyYAML = "^6.0.1"
-symbolica = "^0.1.0"
+symbolica = "^0.12.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.12.1"
@@ -42,7 +43,7 @@ authors = [
   { name = "Lucien Huber", email = "mail@lcnbr.ch" },
 ]
 
-dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4"]
+dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4", "pydot>=3.0.1"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -59,6 +60,22 @@ features = ["python_api"]
 python-source = "python"
 module-name = "gammaloop._gammaloop"
 sdist-include = ["LICENSE.md", "README.md"]
+exclude = [
+  "gammaloop/dependencies/LOCK",
+  "gammaloop/dependencies/INSTALLED",
+  "gammaloop/dependencies/dependency_build.log",
+  "gammaloop/dependencies/venv",
+  "gammaloop/dependencies/venv/**",
+  "gammaloop/dependencies/symbolica/symbolica_path.txt",
+  "gammaloop/dependencies/test_quad_math/test_quad_math"
+]
+include = [
+  "gammaloop/.pytest_cache/v/test_runtimes",
+  "gammaloop/tests/test_data/graph_inputs",
+  "gammaloop/tests/test_data/graph_inputs/*",
+  "gammaloop/examples/cards",
+  "gammaloop/examples/cards/*",
+]
 
 [project.scripts]
 gammaloop_rust_cli = "gammaloop._gammaloop:rust_cli"
@@ -79,6 +96,14 @@ exclude = [
   'python/gammaloop/data/templates/drawing/combine_pages.py',
   'python/gammaloop/data/models/*',
 ]
+
+[[tool.mypy.overrides]]
+module = "yaml.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pydot.*"
+ignore_missing_imports = true
 
 [tool.pyright]
 include = ["python/gammaloop"]

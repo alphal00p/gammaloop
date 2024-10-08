@@ -1,0 +1,37 @@
+import_model scalars-full
+import_graphs ./python/gammaloop/tests/test_data/graph_inputs/boxes_3L4P.dot
+!rm -rf examples/cards/boxes_3L4P
+output examples/cards/boxes_3L4P
+launch examples/cards/boxes_3L4P
+# Tropical sampling
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+# Regular sampling with cartesian product of spherical parameterisation
+#set sampling {'type':'default'}
+# K1 point below
+set externals.data.momenta [\
+[2.50925,0.,0.,2.30138],\
+[2.55075,0.,0.,-2.30138],\
+[2.5053,0.487891,1.95655,-0.877716],\
+]
+# K2 point below
+#set externals.data.momenta [\
+#[6.,0.,0.,5.91607978309962],\
+#[6.,0.,0.,-5.91607978309962],\
+#[6., 1.3124738333059,5.26330888118183,-2.36114210884473],\
+#]
+# K3 point below
+#set externals.data.momenta [\
+#[14.95,0.,0.,14.9165176901313)],\
+#[15.05,0.,0.,-14.9165176901313],\
+#[14.8833333333333,3.23407440276709,12.9693500125724,-5.81810399699641],\
+#]
+set n_start 10000
+set n_max 50000000000
+#set use_ltd false
+set integrated_phase 'real'
+# K1 target below
+integrate boxes_3L4P -c 8 -r -t (-2.4242e-9,-3.4003e-9)
+# K2 target below
+#integrate boxes_3L4P -c 8 -r -t (-5.3031e-11,-1.0780e-11)
+# K3 target below
+#integrate boxes_3L4P -c 8 -r -t (-4.4705e-14,-6.6383e-15)

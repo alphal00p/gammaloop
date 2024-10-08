@@ -7,6 +7,7 @@ use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
+use crate::Settings;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -14,27 +15,29 @@ use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
 use itertools::Itertools;
+use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
 use spenso::complex::Complex;
 
-#[derive(Debug, Clone, Serialize)]
+use crate::graph::LoopExtSignature;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub center: Vec<ThreeMomentum<F<f64>>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
 }
 
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {
-    propagator_id: usize,            // index into the graph's edges
-    mass_pointer: Option<usize>,     // pointer to value of unique mass
-    loop_signature: &'a [isize],     // loop signature of the propagator
-    external_signature: &'a [isize], // external signature of the propagator
+    propagator_id: usize,        // index into the graph's edges
+    mass_pointer: Option<usize>, // pointer to value of unique mass
+    signature: &'a LoopExtSignature,
 }
 
 impl<'a> PropagatorConstraint<'a> {
@@ -102,13 +105,12 @@ fn construct_solver(
                     }
                 });
 
-                let (loop_signature, external_signature) = &lmb.edge_signatures[edge_id];
+                let signature = &lmb.edge_signatures[edge_id];
 
                 let propagator_constraint = PropagatorConstraint {
                     propagator_id,
                     mass_pointer,
-                    loop_signature,
-                    external_signature,
+                    signature,
                 };
 
                 propagator_constraints.push(propagator_constraint);
@@ -180,22 +182,22 @@ fn construct_solver(
         vertical_offset += 1;
 
         let spatial_shift =
-            compute_shift_part(propagator_constraint.external_signature, external_momenta);
+            compute_shift_part(&propagator_constraint.signature.external, external_momenta);
 
         b_vector[vertical_offset] = spatial_shift.spatial.px.0;
         b_vector[vertical_offset + 1] = spatial_shift.spatial.py.0;
         b_vector[vertical_offset + 2] = spatial_shift.spatial.pz.0;
 
         for (loop_index, individual_loop_signature) in
-            propagator_constraint.loop_signature.iter().enumerate()
+            propagator_constraint.signature.internal.iter().enumerate()
         {
-            if *individual_loop_signature != 0 {
+            if individual_loop_signature.is_sign() {
                 a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index] =
-                    -*individual_loop_signature as f64;
+                    -(*individual_loop_signature as i8) as f64;
                 a_matrix[vertical_offset + 1][loop_momentum_offset + 3 * loop_index + 1] =
-                    -*individual_loop_signature as f64;
+                    -(*individual_loop_signature as i8) as f64;
                 a_matrix[vertical_offset + 2][loop_momentum_offset + 3 * loop_index + 2] =
-                    -*individual_loop_signature as f64;
+                    -(*individual_loop_signature as i8) as f64;
             }
         }
 
@@ -293,7 +295,7 @@ pub fn find_maximal_overlap(
     esurfaces: &EsurfaceCollection,
     edge_masses: &[Option<Complex<F<f64>>>],
     external_momenta: &[FourMomentum<F<f64>>],
-    debug: usize,
+    settings: &Settings,
 ) -> OverlapStructure {
     let mut res = OverlapStructure {
         overlap_groups: vec![],
@@ -303,6 +305,56 @@ pub fn find_maximal_overlap(
         .iter_enumerated()
         .map(|a| a.0)
         .collect_vec();
+
+    if let Some(global_center) = &settings.subtraction.overlap_settings.force_global_center {
+        let real_mass_vector = edge_masses
+            .iter()
+            .map(|option_mass| match option_mass {
+                Some(complex_mass) => complex_mass.re,
+                None => F::from_f64(0.0),
+            })
+            .collect_vec();
+
+        let global_center_f = global_center
+            .iter()
+            .map(|coordinates| ThreeMomentum {
+                px: F(coordinates[0]),
+                py: F(coordinates[1]),
+                pz: F(coordinates[2]),
+            })
+            .collect_vec();
+
+        if settings.subtraction.overlap_settings.check_global_center {
+            let is_valid = existing_esurfaces.iter().all(|existing_esurface_id| {
+                let esurface = &esurfaces[*existing_esurface_id];
+                let esurface_val = esurface.compute_from_momenta(
+                    lmb,
+                    &real_mass_vector,
+                    &global_center_f,
+                    external_momenta,
+                );
+
+                esurface_val < F(0.0)
+            });
+
+            if !is_valid {
+                panic!("Center provided is not inside all existing esurfaces")
+            }
+        }
+
+        let single_group = OverlapGroup {
+            existing_esurfaces: all_existing_esurfaces,
+            center: global_center_f,
+        };
+        res.overlap_groups.push(single_group);
+        return res;
+    }
+
+    if settings.subtraction.overlap_settings.try_origin
+        || settings.subtraction.overlap_settings.try_origin_all_lmbs
+    {
+        todo!("Not all heuristics implemented")
+    }
 
     // first try if all esurfaces have a single center, we explitely seach a center instead of trying the
     // origin. This is because the origin might not be optimal.
@@ -334,7 +386,7 @@ pub fn find_maximal_overlap(
         external_momenta,
     );
 
-    if debug > 3 {
+    if settings.general.debug > 3 {
         DEBUG_LOGGER.write("overlap_pairs", &esurface_pairs);
     }
 
@@ -383,7 +435,7 @@ pub fn find_maximal_overlap(
         }
     }
 
-    if debug > 3 {
+    if settings.general.debug > 3 {
         DEBUG_LOGGER.write("num_disconnected_surfaces", &num_disconnected_surfaces);
     }
 
@@ -421,7 +473,7 @@ pub fn find_maximal_overlap(
             }
         }
 
-        if debug > 3 {
+        if settings.general.debug > 3 {
             DEBUG_LOGGER.write(
                 "subset_size_and_num_possible_subsets_and_res",
                 &(subset_size, possible_subsets.len(), &res),
@@ -472,8 +524,14 @@ impl EsurfacePairs {
     }
 
     fn new_empty(num_existing_esurfaces: usize) -> Self {
+        let capacity = match num_existing_esurfaces {
+            0 => 0,
+            1 => 0,
+            _ => num_existing_esurfaces * (num_existing_esurfaces - 1) / 2,
+        };
+
         Self {
-            data: HashMap::with_capacity(num_existing_esurfaces * (num_existing_esurfaces - 1) / 2),
+            data: HashMap::with_capacity(capacity),
             has_pair_with: vec![Vec::with_capacity(num_existing_esurfaces); num_existing_esurfaces],
         }
     }
@@ -629,7 +687,8 @@ mod tests {
             cff_graph::VertexSet,
             esurface::{Esurface, EsurfaceID},
         },
-        graph::LoopMomentumBasis,
+        graph::{LoopExtSignature, LoopMomentumBasis},
+        Settings,
     };
 
     struct HelperBoxStructure {
@@ -658,14 +717,14 @@ mod tests {
 
             let box_basis = vec![4];
             let box_signatures = vec![
-                (vec![0], vec![1, 0, 0]),
-                (vec![0], vec![0, 1, 0]),
-                (vec![0], vec![0, 0, 1]),
-                (vec![0], vec![-1, -1, -1]),
-                (vec![1], vec![0, 0, 0]),
-                (vec![1], vec![1, 0, 0]),
-                (vec![1], vec![1, 1, 0]),
-                (vec![1], vec![1, 1, 1]),
+                (vec![0], vec![1, 0, 0]).into(),
+                (vec![0], vec![0, 1, 0]).into(),
+                (vec![0], vec![0, 0, 1]).into(),
+                (vec![0], vec![-1, -1, -1]).into(),
+                (vec![1], vec![0, 0, 0]).into(),
+                (vec![1], vec![1, 0, 0]).into(),
+                (vec![1], vec![1, 1, 0]).into(),
+                (vec![1], vec![1, 1, 1]).into(),
             ];
 
             let box_lmb = LoopMomentumBasis {
@@ -740,11 +799,26 @@ mod tests {
             )];
             let banana_basis = vec![2, 3];
             let banana_edge_sigs = vec![
-                (vec![0, 0], vec![1]),
-                (vec![0, 0], vec![-1]),
-                (vec![1, 0], vec![0]),
-                (vec![0, 1], vec![0]),
-                (vec![1, 1], vec![-1]),
+                LoopExtSignature {
+                    internal: vec![0, 0].into(),
+                    external: vec![1].into(),
+                },
+                LoopExtSignature {
+                    internal: vec![0, 0].into(),
+                    external: vec![-1].into(),
+                },
+                LoopExtSignature {
+                    internal: vec![1, 0].into(),
+                    external: vec![0].into(),
+                },
+                LoopExtSignature {
+                    internal: vec![0, 1].into(),
+                    external: vec![0].into(),
+                },
+                LoopExtSignature {
+                    internal: vec![1, 1].into(),
+                    external: vec![-1].into(),
+                },
             ];
 
             let banana_lmb = LoopMomentumBasis {
@@ -890,7 +964,7 @@ mod tests {
             &box4e.esurfaces,
             &box4e.edge_masses,
             &box4e.external_momenta,
-            0,
+            &Settings::default(),
         );
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 4);
@@ -926,7 +1000,7 @@ mod tests {
             &box4e.esurfaces,
             &box4e.edge_masses,
             &box4e.external_momenta,
-            0,
+            &Settings::default(),
         );
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 4);
@@ -966,7 +1040,7 @@ mod tests {
             &banana.esurfaces,
             &banana.edge_masses,
             &banana.external_momenta,
-            0,
+            &Settings::default(),
         );
 
         println!("center: {:#?}", maximal_overlap);

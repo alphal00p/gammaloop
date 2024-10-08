@@ -9,7 +9,7 @@ from typing import Any, Callable
 from enum import StrEnum
 import yaml
 import cmath
-from symbolica import Expression as SBE, AtomType  # pylint: disable=import-error # type: ignore
+from symbolica import Expression as SBE, AtomType  # type: ignore
 from gammaloop.misc.common import pjoin, DATA_PATH, GammaLoopError, logger, GL_WARNINGS_ISSUED, GammaLoopWarning
 import gammaloop.misc.utils as utils
 from gammaloop.base_objects.param_card import ParamCard
@@ -668,7 +668,7 @@ class Model(object):
 
     @classmethod
     def set_model_functions(cls):
-        cls.model_functions: dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]] = {
+        cls.model_functions: dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]] = {  # type: ignore
             SBE.symbol('Theta'): lambda xs: 0. if xs[0].real < 0. else 1.,
             SBE.symbol('tan'): lambda xs: cmath.tan(xs[0]),
             SBE.symbol('acos'): lambda xs: cmath.acos(xs[0]),
@@ -687,11 +687,11 @@ class Model(object):
     def get_model_functions(cls) -> dict[Callable[[SBE], SBE], Callable[[list[complex]], complex]]:
         if not hasattr(cls, 'model_functions'):
             cls.set_model_functions()
-        return dict(cls.model_functions)
+        return dict(cls.model_functions)  # type: ignore
 
     @classmethod
     def set_model_variables(cls):
-        cls.model_variables: dict[SBE, complex] = {
+        cls.model_variables: dict[SBE, complex] = {  # type: ignore
             SBE.symbol('I'): complex(0, 1),
             SBE.symbol('pi'): cmath.pi
         }
@@ -700,7 +700,7 @@ class Model(object):
     def get_model_variables(cls) -> dict[SBE, complex]:
         if not hasattr(cls, 'model_variables'):
             cls.set_model_variables()
-        return dict(cls.model_variables)
+        return dict(cls.model_variables)  # type: ignore
 
     def is_empty(self) -> bool:
         return self.name == 'NotLoaded' or len(self.particles) == 0
@@ -991,7 +991,7 @@ class Model(object):
                     #       for f in self.get_model_functions()])
                     # print(parameter.expression)
                     if evaluation_round == Model.MAX_ALLOWED_RECURSION_IN_PARAMETER_EVALUATION:
-                        eval_result = utils.evaluate_symbolica_expression_safe(
+                        eval_result: complex | None = utils.evaluate_symbolica_expression_safe(
                             parameter.expression, evaluation_variables, self.get_model_functions())
                     else:
                         eval_result = utils.evaluate_symbolica_expression(
@@ -1019,7 +1019,7 @@ class Model(object):
                 raise GammaLoopError(
                     "Maximum number of allowed recursions in parameter evaluation reached.")
 
-    def apply_input_param_card(self, input_card: InputParamCard, simplify: bool = False) -> None:
+    def apply_input_param_card(self, input_card: InputParamCard, simplify: bool = False, update: bool = True) -> None:
 
         external_parameters = self.get_external_parameters()
         zero_parameters: list[str] = []
@@ -1045,19 +1045,20 @@ class Model(object):
             logger.debug("The following %d external parameters were forced to zero by the restriction card:\n%s", len(
                 zero_parameters), ', '.join(zero_parameters))
 
-        self.update_internal_parameters(input_card)
+        if update:
+            self.update_internal_parameters(input_card)
 
-        self.update_coupling_values()
+            self.update_coupling_values()
 
-        if simplify:
-            removed_couplings, removed_vertices = self.remove_zero_couplings()
-            if len(removed_couplings) > 0:
-                logger.debug("A total of %d couplings have been removed due restriction card specification.", len(
-                    removed_couplings))
-            if len(removed_vertices) > 0:
-                logger.debug("A total of %d vertices have been removed due restriction card specification:\n%s",
-                             len(removed_vertices),
-                             ', '.join(f"{v_r.name}->({'|'.join(p.name for p in v_r.particles)})" for v_r in removed_vertices))
+            if simplify:
+                removed_couplings, removed_vertices = self.remove_zero_couplings()
+                if len(removed_couplings) > 0:
+                    logger.debug("A total of %d couplings have been removed due restriction card specification.", len(
+                        removed_couplings))
+                if len(removed_vertices) > 0:
+                    logger.debug("A total of %d vertices have been removed due restriction card specification:\n%s",
+                                 len(removed_vertices),
+                                 ', '.join(f"{v_r.name}->({'|'.join(p.name for p in v_r.particles)})" for v_r in removed_vertices))
 
 
 class InputParamCard(dict[str, complex]):

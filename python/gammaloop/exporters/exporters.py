@@ -37,8 +37,11 @@ def update_run_card_in_output(process_dir: Path, settings: gammaloop_interface.G
 
     run_config = copy.deepcopy(settings.get_setting('run_settings'))
     # Do not update settings meant to be automatically adjusted if not explicitly set
-    if run_config['Kinematics']['externals']['type'] == 'constant' and run_config['Kinematics']['externals']['momenta'] is None:
-        del run_config['Kinematics']
+    if run_config['Kinematics']['externals']['type'] == 'constant':
+        if run_config['Kinematics']['externals']['data']['momenta'] is None:
+            del run_config['Kinematics']['externals']['data']['momenta']
+        if run_config['Kinematics']['externals']['data']['helicities'] is None:
+            del run_config['Kinematics']['externals']['data']['helicities']
     process_config.update({'run_settings': run_config})
 
     with open(pjoin(process_dir, 'cards', 'run_card.yaml'), 'w', encoding='utf-8') as file:
@@ -52,9 +55,10 @@ def split_str_args(str_args: str) -> list[str]:
 
 class GammaLoopExporter(object):
 
-    def __init__(self, gammaloop_interface: GammaLoop, _args: argparse.Namespace):
+    def __init__(self, gammaloop_interface: GammaLoop, args: argparse.Namespace):
         self.gammaloop: GammaLoop = gammaloop_interface
         self.configuration_for_process = copy.deepcopy(self.gammaloop.config)
+        self.output_options = args
         # Process args argument further here if needed
 
     def generic_export(self, export_root: Path):
@@ -83,7 +87,7 @@ class GammaLoopExporter(object):
             'model_name': self.gammaloop.model.name,
         })
 
-    def finalize_drawing(self, drawings_path: Path, drawing_file_paths: list[Path]):
+    def finalize_drawing(self, drawings_path: Path, drawing_file_paths: list[Path | None]):
 
         shutil.copy(
             pjoin(DATA_PATH, 'templates', 'drawing', 'combine_pages.py'),
@@ -93,6 +97,8 @@ class GammaLoopExporter(object):
             with open(pjoin(drawings_path, 'makefile'), 'w', encoding='utf-8') as makefile_out:
                 all_targets: list[str] = []
                 for drawing_file_path in drawing_file_paths:
+                    if drawing_file_path is None:
+                        continue
                     if drawing_file_path.suffix != '.tex':
                         raise GammaLoopError(
                             "Finalization of diagram drawings only supports latex format.")
@@ -106,10 +112,11 @@ class GammaLoopExporter(object):
                     n_columns=self.gammaloop.config['drawing']['combined_graphs_pdf_grid_shape'][1]
                 ))
 
-    def build_external_momenta_from_connections(self, external_connections: list[tuple[Vertex | None, Vertex | None]], e_cm: float) -> tuple[float, list[list[float]]]:
+    def build_external_momenta_from_connections(self, external_connections: list[tuple[Vertex | None, Vertex | None]], e_cm: float) -> tuple[float, list[list[float]], list[int]]:
 
         # (orientation_sign, mass, direction [in/out] )
         conf: list[tuple[int, float, int]] = []
+        helicities: list[int] = []
         for conn in external_connections:
             match conn:
                 case (None, v2) if v2 is not None:
@@ -127,6 +134,12 @@ class GammaLoopExporter(object):
                                 "Invalid external connection.")
                     mass = self.gammaloop.model.get_parameter(
                         v2.vertex_info.get_particles()[0].mass.name).value
+
+                    spin = v2.vertex_info.get_particles()[0].spin
+                    if spin == 1:
+                        helicities.append(0)
+                    else:
+                        helicities.append(1)
                     if mass is None:
                         raise GammaLoopError(
                             "Explicit default value of the mass of external particle not defined.")
@@ -146,6 +159,11 @@ class GammaLoopExporter(object):
                                 "Invalid external connection.")
                     mass = self.gammaloop.model.get_parameter(
                         v1.vertex_info.get_particles()[0].mass.name).value
+                    spin = v1.vertex_info.get_particles()[0].spin
+                    if spin == 1:
+                        helicities.append(0)
+                    else:
+                        helicities.append(1)
                     if mass is None:
                         raise GammaLoopError(
                             "Explicit default value of the mass of external particle not defined.")
@@ -217,7 +235,7 @@ class GammaLoopExporter(object):
             externals.insert(0,
                              [conf[0][0]*conf[0][2] * pi for pi in first_leg_momentum])
 
-        return (e_cm, externals)
+        return (e_cm, externals[:-1], helicities)
 
 
 class AmplitudesExporter(GammaLoopExporter):
@@ -229,27 +247,33 @@ class AmplitudesExporter(GammaLoopExporter):
     def adjust_run_settings(self, amplitudes: AmplitudeList):
 
         if self.configuration_for_process.get_setting('run_settings.Kinematics.externals.type') == 'constant' and \
-                self.configuration_for_process.get_setting('run_settings.Kinematics.externals.momenta') is None:
+                (self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.momenta') is None or
+                 self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.helicities') is None):
             if len(amplitudes) == 0 or len(amplitudes[0].amplitude_graphs) == 0:
                 logger.warning(
                     "Could not identify external momenta structure.")
                 return
-            e_cm, external_momenta = self.build_external_momenta_from_connections(
+            e_cm, external_momenta, helicities = self.build_external_momenta_from_connections(
                 amplitudes[0].amplitude_graphs[0].graph.external_connections,
                 self.configuration_for_process.get_setting(
                     'run_settings.Kinematics.e_cm')
             )
-            self.configuration_for_process.set_setting(
-                'run_settings.Kinematics.externals.momenta', external_momenta)
-            self.configuration_for_process.set_setting(
-                'run_settings.Kinematics.e_cm', e_cm)
+            if self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.momenta') is None:
+                self.configuration_for_process.set_setting(
+                    'run_settings.Kinematics.externals.data.momenta', external_momenta)
+                self.configuration_for_process.set_setting(
+                    'run_settings.Kinematics.e_cm', e_cm)
+            if self.configuration_for_process.get_setting('run_settings.Kinematics.externals.data.helicities') is None:
+                self.configuration_for_process.set_setting(
+                    'run_settings.Kinematics.externals.data.helicities', helicities)
 
     def export_expression(self, export_root: Path, amplitudes: AmplitudeList, format: str):
         for amplitude in amplitudes:
             os.makedirs(pjoin(export_root, 'sources',
                         'amplitudes', f'{amplitude.name}', 'expressions'))
 
-        self.gammaloop.rust_worker.export_expressions(str(export_root), format)
+        self.gammaloop.rust_worker.export_expressions(
+            str(export_root), format, yaml.dump(self.gammaloop.config['export_settings']))
 
     def export(self, export_root: Path, amplitudes: AmplitudeList):
 
@@ -273,19 +297,21 @@ class AmplitudesExporter(GammaLoopExporter):
             # Already writing the file below is not necessary as it will be overwritten by the rust export, but it is useful for debugging
             with open(pjoin(export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'amplitude.yaml'), 'w', encoding='utf-8') as file:
                 file.write(amplitude_yaml)
-            drawings_path = pjoin(
-                export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
-            os.makedirs(drawings_path)
-            drawing_file_paths = amplitude.draw(
-                self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
-            self.finalize_drawing(Path(drawings_path), drawing_file_paths)
-
-            self.gammaloop.rust_worker.add_amplitude_from_yaml_str(
-                amplitude_yaml)
-
-        # Now address the rust export aspect
-        self.gammaloop.rust_worker.export_amplitudes(
-            str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']))
+            if self.configuration_for_process.get_setting('drawing.mode') != None:
+                drawings_path = pjoin(
+                    export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
+                os.makedirs(drawings_path)
+                drawing_file_paths = amplitude.draw(
+                    self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
+                self.finalize_drawing(
+                    Path(drawings_path), drawing_file_paths)
+            if not self.output_options.yaml_only:
+                self.gammaloop.rust_worker.add_amplitude_from_yaml_str(
+                    amplitude_yaml)
+        if not self.output_options.yaml_only:
+            # Now address the rust export aspect
+            self.gammaloop.rust_worker.export_amplitudes(
+                str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']))
 
 
 class CrossSectionsExporter(GammaLoopExporter):
@@ -320,9 +346,11 @@ class CrossSectionsExporter(GammaLoopExporter):
             drawing_file_paths = one_cross_section.draw(
                 self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
             self.finalize_drawing(Path(drawings_path), drawing_file_paths)
+            if not self.output_options.yaml_only:
+                self.gammaloop.rust_worker.add_cross_section_from_yaml_str(
+                    yaml_xs)
 
-            self.gammaloop.rust_worker.add_cross_section_from_yaml_str(yaml_xs)
-
-        # Now address the rust export aspect
-        self.gammaloop.rust_worker.export_cross_sections(
-            str(export_root), [cs.name for cs in cross_sections])
+        if not self.output_options.yaml_only:
+            # Now address the rust export aspect
+            self.gammaloop.rust_worker.export_cross_sections(
+                str(export_root), [cs.name for cs in cross_sections])

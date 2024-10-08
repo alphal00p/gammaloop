@@ -110,3 +110,49 @@ class TestRust:
     def test_rust_physical_3L_6photons_topology_A_inspect(self,  sm_model_yaml_file: Path, physical_3L_6photons_topology_A_export: Path, compile_rust_tests: Path):
         assert run_rust_test(compile_rust_tests, physical_3L_6photons_topology_A_export,
                              'physical_3L_6photons_topology_A_inspect')
+        
+    def test_generate_physical_2L_6photons(self, physical_2L_6photons_export: Path):
+        assert True
+
+    def test_rust_physical_2L_6photons(self, compile_rust_tests: Path,      scalars_model_yaml_file: Path, physical_2L_6photons_export: Path):
+        assert run_rust_test(compile_rust_tests, physical_2L_6photons_export, 'physical_2L_6photons')
+
+    def test_generate_physical_1L_6photons(self, physical_1L_6photons_export: Path):
+        assert True
+
+    def test_rust_physical_1L_6photons(self, compile_rust_tests: Path,      scalars_model_yaml_file: Path, physical_1L_6photons_export: Path):
+        assert run_rust_test(compile_rust_tests, physical_1L_6photons_export, 'physical_1L_6photons')
+
+    def test_generate_physical_1L_2A_final_4H_top_internal(self, physical_1L_2A_final_4H_top_internal_export: Path):
+        assert True
+
+    def test_generate_top_bubble(self, top_bubble_export: Path):
+        assert True
+
+    def test_generate_hairy_glue_box(self, hairy_glue_box_export: Path):
+        assert True
+        
+    def test_rust_top_bubble(self, compile_rust_tests: Path, scalars_model_yaml_file: Path, top_bubble_export: Path):
+        assert run_rust_test(compile_rust_tests, top_bubble_export, 'top_bubble')
+
+    def test_generate_ta_ta_tree(self, ta_ta_tree_export: Path):
+        assert True
+
+    def test_generate_scalar_raised_triangle(self, scalar_raised_triangle_export: Path):
+        assert True
+
+    def test_generate_t_ta_tree(self, t_ta_tree_export: Path):
+        assert True
+
+    def test_generate_th_th_tree(self, th_th_tree_export: Path):
+        assert True
+
+    def test_generate_hh_ttxaa_tree(self, hh_ttxaa_tree_export: Path):
+        assert True
+
+    def test_generate_h_ttxaah_tree(self, h_ttxaah_tree_export: Path):
+        assert True
+
+    def test_generate_aa_aahhttx_tree(self, aa_aahhttx_tree_export: Path):
+        assert True
+

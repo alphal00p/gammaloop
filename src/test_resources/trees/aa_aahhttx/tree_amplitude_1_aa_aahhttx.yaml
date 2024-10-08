@@ -1,0 +1,265 @@
+graphs:
+  - edges:
+      1:
+        name: p1
+        PDG: 22
+        momentum: p1
+        type: in
+        indices: []
+        vertices:
+          - 1
+          - 9
+      2:
+        name: p2
+        PDG: 22
+        momentum: p2
+        type: in
+        indices: []
+        vertices:
+          - 2
+          - 11
+      3:
+        name: p3
+        PDG: 22
+        momentum: p3
+        type: out
+        indices: []
+        vertices:
+          - 10
+          - 3
+      4:
+        name: p4
+        PDG: 22
+        momentum: p4
+        type: out
+        indices: []
+        vertices:
+          - 12
+          - 4
+      5:
+        name: p5
+        PDG: 25
+        momentum: p5
+        type: out
+        indices: []
+        vertices:
+          - 13
+          - 5
+      6:
+        name: p6
+        PDG: 25
+        momentum: p6
+        type: out
+        indices: []
+        vertices:
+          - 14
+          - 6
+      7:
+        name: p7
+        PDG: 6
+        momentum: p7
+        type: out
+        indices: []
+        vertices:
+          - 9
+          - 7
+      8:
+        name: p8
+        PDG: -6
+        momentum: p8
+        type: out
+        indices: []
+        vertices:
+          - 10
+          - 8
+      9:
+        name: q9
+        PDG: -6
+        momentum: null
+        type: virtual
+        indices: []
+        vertices:
+          - 9
+          - 11
+      10:
+        name: q10
+        PDG: 6
+        momentum: null
+        type: virtual
+        indices: []
+        vertices:
+          - 10
+          - 12
+      11:
+        name: q11
+        PDG: -6
+        momentum: null
+        type: virtual
+        indices: []
+        vertices:
+          - 11
+          - 13
+      12:
+        name: q12
+        PDG: 6
+        momentum: null
+        type: virtual
+        indices: []
+        vertices:
+          - 12
+          - 14
+      13:
+        name: q13
+        PDG: -6
+        momentum: null
+        type: virtual
+        indices: []
+        vertices:
+          - 13
+          - 14
+    nodes:
+      1:
+        PDGs:
+          - 22
+        momenta:
+          - p1
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 1
+      2:
+        PDGs:
+          - 22
+        momenta:
+          - p2
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 2
+      3:
+        PDGs:
+          - 22
+        momenta:
+          - p3
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 3
+      4:
+        PDGs:
+          - 22
+        momenta:
+          - p4
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 4
+      5:
+        PDGs:
+          - 25
+        momenta:
+          - p5
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 5
+      6:
+        PDGs:
+          - 25
+        momenta:
+          - p6
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 6
+      7:
+        PDGs:
+          - 6
+        momenta:
+          - p7
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 7
+      8:
+        PDGs:
+          - -6
+        momenta:
+          - p8
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 8
+      9:
+        PDGs:
+          - 22
+          - 6
+          - -6
+        momenta: []
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 1
+          - 7
+          - 9
+      10:
+        PDGs:
+          - 22
+          - -6
+          - 6
+        momenta: []
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 3
+          - 8
+          - 10
+      11:
+        PDGs:
+          - -6
+          - 22
+          - -6
+        momenta: []
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 9
+          - 2
+          - 11
+      12:
+        PDGs:
+          - 6
+          - 22
+          - 6
+        momenta: []
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 10
+          - 4
+          - 12
+      13:
+        PDGs:
+          - -6
+          - 25
+          - -6
+        momenta: []
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 11
+          - 5
+          - 13
+      14:
+        PDGs:
+          - 6
+          - 25
+          - -6
+        momenta: []
+        indices: []
+        vertex_id: -1
+        edge_ids:
+          - 12
+          - 6
+          - 13
+    overall_factor: 1

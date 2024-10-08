@@ -1,0 +1,329 @@
+name: hairy_glue_box
+amplitude_graphs:
+- sg_id: 0
+  sg_cut_id: 0
+  fs_cut_id: 0
+  amplitude_side: LEFT
+  graph:
+    name: hairy_glue_box
+    vertices:
+    - name: v10
+      vertex_info:
+        type: external_vertex_info
+        particle: g
+        direction: in
+      edges:
+      - p1
+    - name: v1
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_37
+      edges:
+      - p1
+      - p2
+      - q1
+      - q4
+    - name: v11
+      vertex_info:
+        type: external_vertex_info
+        particle: g
+        direction: in
+      edges:
+      - p2
+    - name: v20
+      vertex_info:
+        type: external_vertex_info
+        particle: g
+        direction: in
+      edges:
+      - p3
+    - name: v2
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_37
+      edges:
+      - p3
+      - p4
+      - q1
+      - q2
+    - name: v21
+      vertex_info:
+        type: external_vertex_info
+        particle: g
+        direction: in
+      edges:
+      - p4
+    - name: v30
+      vertex_info:
+        type: external_vertex_info
+        particle: g
+        direction: in
+      edges:
+      - p5
+    - name: v3
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_37
+      edges:
+      - p5
+      - p6
+      - q2
+      - q3
+    - name: v31
+      vertex_info:
+        type: external_vertex_info
+        particle: g
+        direction: in
+      edges:
+      - p6
+    - name: v40
+      vertex_info:
+        type: external_vertex_info
+        particle: g
+        direction: in
+      edges:
+      - p7
+    - name: v4
+      vertex_info:
+        type: interacton_vertex_info
+        vertex_rule: V_37
+      edges:
+      - p7
+      - p8
+      - q3
+      - q4
+    - name: v41
+      vertex_info:
+        type: external_vertex_info
+        particle: g
+        direction: in
+      edges:
+      - p8
+    edges:
+    - name: p1
+      edge_type: in
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v10
+      - v1
+    - name: p2
+      edge_type: in
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v11
+      - v1
+    - name: p3
+      edge_type: in
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v20
+      - v2
+    - name: p4
+      edge_type: in
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v21
+      - v2
+    - name: p5
+      edge_type: in
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v30
+      - v3
+    - name: p6
+      edge_type: in
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v31
+      - v3
+    - name: p7
+      edge_type: in
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v40
+      - v4
+    - name: p8
+      edge_type: in
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v41
+      - v4
+    - name: q1
+      edge_type: virtual
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v1
+      - v2
+    - name: q2
+      edge_type: virtual
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v2
+      - v3
+    - name: q3
+      edge_type: virtual
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v3
+      - v4
+    - name: q4
+      edge_type: virtual
+      particle: g
+      propagator: g_propFeynman
+      vertices:
+      - v4
+      - v1
+    external_connections:
+    - - v10
+      - null
+    - - v11
+      - null
+    - - v20
+      - null
+    - - v21
+      - null
+    - - v30
+      - null
+    - - v31
+      - null
+    - - v40
+      - null
+    - - v41
+      - null
+    overall_factor: '1'
+    loop_momentum_basis:
+    - q3
+    edge_signatures:
+    - - p1
+      - - - 0
+        - - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p2
+      - - - 0
+        - - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p3
+      - - - 0
+        - - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p4
+      - - - 0
+        - - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+          - 0
+    - - p5
+      - - - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+          - 0
+    - - p6
+      - - - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 0
+    - - p7
+      - - - 0
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+    - - p8
+      - - - 0
+        - - -1
+          - -1
+          - -1
+          - -1
+          - -1
+          - -1
+          - -1
+          - 0
+    - - q1
+      - - - 1
+        - - 0
+          - 0
+          - -1
+          - -1
+          - -1
+          - -1
+          - 0
+          - 0
+    - - q2
+      - - - 1
+        - - 0
+          - 0
+          - 0
+          - 0
+          - -1
+          - -1
+          - 0
+          - 0
+    - - q3
+      - - - 1
+        - - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+    - - q4
+      - - - 1
+        - - -1
+          - -1
+          - -1
+          - -1
+          - -1
+          - -1
+          - 0
+          - 0
+  multiplicity: '1'
+  multi_channeling_channels: []

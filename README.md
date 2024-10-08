@@ -11,12 +11,18 @@ See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
 We salute the eagerness of our users.
 
-If you want to jump right in, run the following to immediately start integrating the scalar three-loop mercedes diagram!
+If you want to jump right in, run the following to immediately start integrating the scalar three-loop mercedes diagram,
 
 ```
 git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
 ./bin/compile.sh
 ./bin/gammaloop example/cards/scalar_mercedes.gL
+```
+
+or a one-loop hexagon diagram from the scattering process $\gamma \gamma \rightarrow \gamma \gamma \gamma \gamma$ (through a top-quark loop) with:
+
+```
+./bin/gammaloop examples/cards/physical_1L_AA_AAAA.gL
 ```
 
 ## Installation
@@ -25,7 +31,7 @@ git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
 
 * `Rust`: v1.77+ You can easily install Rust with this [one-liner](https://www.rust-lang.org/tools/install)
 
-* `Python3`: v3.11+ (equipped with `pip`, and the `python-devel`)
+* `Python3`: v3.11+ (equipped with `pip`, and the `python-devel` dependency)
 
 * `GNU gcc`: v10+ (*not* `clang`!)
 
@@ -54,27 +60,29 @@ The relevant binaries will then be in `./bin/` and the gammaloop python module i
 ```
 ./bin/build_dependencies.sh clean
 ./bin/build_dependencies.sh with_venv
+# From within a `bash` shell, use the command below
 source `./bin/gammaloop -venv`
+# From within a `fish` shell, use the command below
+. (./bin/gammaloop -venv).fish
 ```
-
-and when using the `fish` shell, the last command should be replaced by: `. (./bin/gammaloop -venv).fish`
 
 ## Tests
 
 ### > Testing an installation from `pip`
 
-Testing your installation can be done by running
-```
-python -m pytest
-```
-from within the installation directory of the gammaloop module, which you can `cd` into with e.g.:
+From within the installation directory of the gammaloop module, which you can `cd` into with e.g.:
 ```
 bash -c 'cd `python -c "import os; import gammaloop; print(os.path.dirname(gammaloop.__file__))"`; pwd'
 ```
 
+You can test your `gammaLoop` installation by running (incl. only tests with a maximum runtime of 15 seconds):
+```
+python -m pytest --max-runtime 15.0
+```
+
 ### > Testing an installation from sources
 
-Run:
+From within the installation directory, run:
 ```
 /bin/run_tests.sh python
 /bin/run_tests.sh rust
@@ -91,7 +99,7 @@ There are three entry points to the `GammaLoop` functionalities:
 3. Finally, expert users may also find it useful to steer some of functionalities directly from the rust binary `gammaloop_rust_cli`.
 
 Both executables `gammaloop` and `gammaloop_rust_cli` are made available as scripts in the `bin` directory.
-The `gammaloop` Python module is also exposed after installation and ready to be imported in user custom Python scripts.
+The `gammaloop` Python module is also exposed after installation and ready to be imported by custom Python scripts.
 
 ### 1. Usage from the Python command-line interface: ./gammaloop
 
@@ -105,11 +113,11 @@ export_model ./sm.yaml --format yaml
 ```
 and run it with:
 ```
-./gammaloop cmd.gL
+./bin/gammaloop cmd.gL
 ```
 You can find more information on the syntax of the available commands in the [wiki](https://wiki.alphaloop.ch/) and by running:
 ```
-./gammaloop --help
+./bin/gammaloop --help
 ```
 to get an overview of available commands and:
 ```

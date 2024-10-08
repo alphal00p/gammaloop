@@ -268,7 +268,7 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
             format!("{}", settings.hard_coded_integrand).green(),
             format!("{}", n_samples).blue()
         );
-        let integrand = integrand_factory(&settings);
+        let mut integrand = integrand_factory(&settings);
         let now = Instant::now();
         for _i in 1..n_samples {
             integrand.evaluate_sample(
@@ -355,34 +355,38 @@ fn batch_branch(
     let path_to_amplitude_yaml_as_string = path_to_amplitude_yaml.to_str().unwrap().to_string();
 
     // this is all very amplitude focused, will be generalized later when the structure is clearer
-    let amplitude = {
-        let mut amp = Amplitude::from_file(&model, path_to_amplitude_yaml_as_string)?;
+    let amplitude: Amplitude<_> = {
+        let amp = Amplitude::from_file(&model, path_to_amplitude_yaml_as_string)?;
 
         let derived_data_path = process_output_file
             .join("sources")
             .join("amplitudes")
             .join(amplitude_name);
 
-        amp.load_derived_data(&derived_data_path, &settings)?;
-        amp
+        amp.load_derived_data(&model, &derived_data_path, &settings)?
     };
 
     // load input data
 
     let batch_input_bytes = std::fs::read(batch_input_file)?;
     let serializable_batch_input =
-        bincode::deserialize::<SerializableBatchIntegrateInput>(&batch_input_bytes)?;
+        bincode::decode_from_slice::<SerializableBatchIntegrateInput, _>(
+            &batch_input_bytes,
+            bincode::config::standard(),
+        )?
+        .0;
     let batch_integrate_input = serializable_batch_input.into_batch_integrate_input(&settings);
 
     // construct integrand
-    let integrand = Integrand::GammaLoopIntegrand(amplitude.generate_integrand(&path_to_settings)?);
+    let mut integrand =
+        Integrand::GammaLoopIntegrand(amplitude.generate_integrand(&path_to_settings)?);
 
     // integrate
-    let batch_result = integrate::batch_integrate(&integrand, batch_integrate_input);
+    let batch_result = integrate::batch_integrate(&mut integrand, batch_integrate_input);
 
     // save result
 
-    let batch_result_bytes = bincode::serialize(&batch_result)?;
+    let batch_result_bytes = bincode::encode_to_vec(&batch_result, bincode::config::standard())?;
     fs::write(output_name, batch_result_bytes)?;
 
     Ok(())

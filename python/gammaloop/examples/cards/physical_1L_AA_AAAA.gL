@@ -1,0 +1,57 @@
+import_model sm-full
+import_graphs python/gammaloop/tests/test_data/graph_inputs/physical_1L_6photons.dot
+#set numerator_settings {'eval_settings':{'type':'Joint','cpe_rounds':1,'compile_options':{'subtype':'Compiled'}},'global_numerator':None,'gamma_algebra':'Concrete'}
+#set eval_settings.compile_options.subtype "Compiled"
+#set eval_settings.type "Joint"
+set compile_cff True
+set compile_separate_orientations False
+set load_compiled_cff True
+set load_compiled_separate_orientations False
+set inline_asm True
+#set load_compiled_numerator False
+#set joint_numerator_eval False
+!rm -rf GL_OUTPUT_1L_AA_AAAA
+output GL_OUTPUT_1L_AA_AAAA
+launch GL_OUTPUT_1L_AA_AAAA
+set_model_param mz 91.188 -nu
+set_model_param gf 1.19874983504616246e-5 -nu
+set_model_param mt 173.0 -nu
+set_model_param ymt 173.0 -nu
+set_model_param aewm1 128.93 -nu
+set_model_param update_only 0.
+set externals.data.momenta [\
+[500.0,0.,-300.,400.],\
+[500.0,0.,300.,-400.],\
+[88.551333054502976,-22.100690287689979,40.080353191685333,-75.805430956936632],\
+[328.32941922709853,-103.84961188345630,-301.93375538954012,76.494921387165888],\
+[152.35810946743061,-105.88095966659220,-97.709638326975707,49.548385226792817],\
+"dependent",\
+]
+set integrated_phase 'imag'
+set use_ltd False
+set rotation_axis [{"type":"x"}]
+set rotate_numerator True
+set externals.data.helicities [-1,-1,-1,-1,-1,-1]
+# With set_model_param ymt 1500.0 -nu
+#3*MP_AMPL(*,          20 )=   (1.22898408452706e-13,3.94362534040412e-13)
+#3*MP_AMPL(*,          20 )=   (1.22898408452706e-13,3.94362534040412e-13)
+# With set_model_param ymt 173.0 -nu
+#3*MP_AMPL(*,          20 )=   (9.27759500687454717E-011,3.68394576249870544E-011)
+#3*MP_AMPL(*,          20 )=   (9.27759500686271202E-011,3.68394576251472043E-011)
+#set externals.data.helicities [-1,1,-1,1,-1,1]
+# With set_model_param ymt 1500.0 -nu
+#3*MP_AMPL(*,          20 )= (-2.4692090140949e-14,-3.51087121656e-15)
+#3*MP_AMPL(*,          20 )= (-2.4692090140949e-14,-3.51087121656e-15)
+# With set_model_param ymt 173.0 -nu
+#3*MP_AMPL(*,          20 )= (-4.33681645839370799E-014,-5.91469876571509264E-012)
+#3*MP_AMPL(*,          20 )= (-4.33681673828354573E-014,-5.91469876522058322E-012)
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+#set sampling {'type':'default'}
+set n_start 1000000
+set n_max 1000000000000
+set continuous_dim_learning_rate 0.0
+set seed 1
+# With set_model_param ymt 1500.0 -nu
+#integrate physical_1L_6photons -r -c 8 -t (1.22898408452706e-13,3.94362534040412e-13)
+# With set_model_param ymt 173.0 -nu
+integrate physical_1L_6photons -r -c 30 -t (9.27759500687454717e-11,3.68394576249870544e-11)

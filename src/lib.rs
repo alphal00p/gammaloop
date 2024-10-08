@@ -29,19 +29,34 @@ pub mod tests;
 pub mod tests_from_pytest;
 pub mod utils;
 
-use color_eyre::{Help, Report};
+use crate::utils::f128;
+use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
+use cross_section::Amplitude;
 use eyre::WrapErr;
-
 use integrands::*;
+use log::debug;
+use model::Particle;
+use momentum::Dep;
+use momentum::ExternalMomenta;
 use momentum::FourMomentum;
+use momentum::Helicity;
+use momentum::Polarization;
+use momentum::Rotatable;
+use momentum::RotationMethod;
+use momentum::SignOrZero;
+use momentum::Signature;
 use momentum::ThreeMomentum;
+use numerator::NumeratorSettings;
 use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
+
+use spenso::complex::Complex;
 use std::fmt::Display;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use utils::FloatLike;
@@ -141,6 +156,9 @@ pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
     pub load_compiled_cff: bool,
+    pub load_compiled_numerator: bool,
+    pub joint_numerator_eval: bool,
+    pub amplitude_prefactor: Option<Complex<F<f64>>>,
     pub load_compiled_separate_orientations: bool,
     pub force_orientations: Option<Vec<usize>>,
 }
@@ -151,8 +169,11 @@ impl Default for GeneralSettings {
         Self {
             debug: 0,
             use_ltd: false,
+            load_compiled_numerator: true,
+            joint_numerator_eval: true,
             load_compiled_cff: false,
             load_compiled_separate_orientations: false,
+            amplitude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
             force_orientations: None,
         }
     }
@@ -246,6 +267,7 @@ impl Default for ParameterizationSettings {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Settings {
+    // Runtime settings
     #[serde(rename = "General")]
     pub general: GeneralSettings,
     #[serde(rename = "Integrand")]
@@ -270,6 +292,21 @@ pub struct Settings {
 }
 
 impl Settings {
+    pub fn sync_with_amplitude(&mut self, amplitude: &Amplitude) -> Result<()> {
+        let external_signature = amplitude.external_signature();
+        let external_particle_spin = amplitude.external_particle_spin_and_masslessness();
+
+        self.kinematics
+            .externals
+            .set_dependent_at_end(&external_signature)?;
+
+        self.kinematics
+            .externals
+            .validate_helicities(&external_particle_spin)?;
+
+        Ok(())
+    }
+
     pub fn from_file(filename: &str) -> Result<Settings, Report> {
         let f = File::open(filename)
             .wrap_err_with(|| format!("Could not open settings file {}", filename))
@@ -291,18 +328,20 @@ pub struct IntegrationResult {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StabilitySettings {
-    rotation_axis: Vec<RotationMethod>,
+    rotation_axis: Vec<RotationSetting>,
+    rotate_numerator: bool,
     levels: Vec<StabilityLevelSetting>,
 }
 
 impl Default for StabilitySettings {
     fn default() -> Self {
         Self {
-            rotation_axis: vec![RotationMethod::default()],
+            rotation_axis: vec![RotationSetting::default()],
             levels: vec![
                 StabilityLevelSetting::default_double(),
                 StabilityLevelSetting::default_quad(),
             ],
+            rotate_numerator: false,
         }
     }
 }
@@ -335,8 +374,9 @@ impl StabilityLevelSetting {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, Hash, Eq, PartialEq)]
-pub enum RotationMethod {
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, PartialEq)]
+#[serde(tag = "type")]
+pub enum RotationSetting {
     #[serde(rename = "x")]
     #[default]
     Pi2X,
@@ -346,26 +386,52 @@ pub enum RotationMethod {
     Pi2Z,
     #[serde(rename = "none")]
     None,
+    #[serde(rename = "euler_angles")]
+    EulerAngles { alpha: f64, beta: f64, gamma: f64 },
 }
 
-impl RotationMethod {
-    fn rotation_function<T: FloatLike>(
-        &self,
-    ) -> impl Fn(&ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> {
+impl RotationSetting {
+    pub fn rotation_method(&self) -> RotationMethod {
         match self {
-            RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x,
-            RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y,
-            RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z,
-            RotationMethod::None => |vector: &ThreeMomentum<F<T>>| vector.clone(),
+            Self::Pi2X => RotationMethod::Pi2X,
+            Self::Pi2Y => RotationMethod::Pi2Y,
+            Self::Pi2Z => RotationMethod::Pi2Z,
+            Self::None => RotationMethod::Identity,
+            Self::EulerAngles { alpha, beta, gamma } => {
+                RotationMethod::EulerAngles(*alpha, *beta, *gamma)
+            }
         }
     }
 
-    fn as_str(&self) -> &str {
+    #[allow(clippy::type_complexity)]
+    pub fn rotation_function<'a, T: FloatLike + 'a>(
+        &'a self,
+    ) -> Box<dyn Fn(&'a ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> + 'a> {
         match self {
-            Self::Pi2X => "x",
-            Self::Pi2Y => "y",
-            Self::Pi2Z => "z",
-            Self::None => "none",
+            Self::Pi2X => Box::new(ThreeMomentum::perform_pi2_rotation_x),
+            Self::Pi2Y => Box::new(ThreeMomentum::perform_pi2_rotation_y),
+            Self::Pi2Z => Box::new(ThreeMomentum::perform_pi2_rotation_z),
+            Self::None => Box::new(|vector: &ThreeMomentum<F<T>>| vector.clone()),
+            Self::EulerAngles { alpha, beta, gamma } => Box::new(|vector: &ThreeMomentum<F<T>>| {
+                let mut cloned_vector = vector.clone();
+                let alpha_t = F::<T>::from_f64(*alpha);
+                let beta_t = F::<T>::from_f64(*beta);
+                let gamma_t = F::<T>::from_f64(*gamma);
+                cloned_vector.rotate_mut(&alpha_t, &beta_t, &gamma_t);
+                cloned_vector
+            }),
+        }
+    }
+
+    fn as_str(&self) -> String {
+        match self {
+            Self::Pi2X => "x".to_owned(),
+            Self::Pi2Y => "y".to_owned(),
+            Self::Pi2Z => "z".to_owned(),
+            Self::None => "none".to_owned(),
+            Self::EulerAngles { alpha, beta, gamma } => {
+                format!("euler {} {} {}", alpha, beta, gamma)
+            }
         }
     }
 }
@@ -396,36 +462,296 @@ impl Display for Precision {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "type", content = "momenta")]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(tag = "type", content = "data")]
 pub enum Externals {
     #[serde(rename = "constant")]
-    Constant(Vec<[F<f64>; 4]>),
+    Constant {
+        momenta: Vec<ExternalMomenta<F<f64>>>,
+        helicities: Vec<Helicity>,
+    },
     // add different type of pdfs here when needed
 }
 
-impl Externals {
-    #[allow(unused_variables)]
-    #[inline]
-    pub fn get_externals(&self, x_space_point: &[F<f64>]) -> (Vec<FourMomentum<F<f64>>>, F<f64>) {
+impl Rotatable for Externals {
+    fn rotate(&self, rotation: &momentum::Rotation) -> Self {
         match self {
-            Externals::Constant(externals) => (
-                externals
-                    .iter()
-                    .map(|[e0, e1, e2, e3]| FourMomentum::from_args(*e0, *e1, *e2, *e3))
-                    .collect(),
-                F(1.0),
-            ),
+            Externals::Constant {
+                momenta,
+                helicities,
+            } => {
+                let momenta = momenta.iter().map(|m| m.rotate(rotation)).collect();
+                Externals::Constant {
+                    momenta,
+                    helicities: helicities.clone(),
+                }
+            }
         }
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Polarizations {
+    Constant {
+        polarizations: Vec<Polarization<Complex<F<f64>>>>,
+    },
+    None,
+}
+
+impl Rotatable for Polarizations {
+    fn rotate(&self, rotation: &momentum::Rotation) -> Self {
+        match self {
+            Polarizations::Constant { polarizations } => {
+                let polarizations = polarizations.iter().map(|p| p.rotate(rotation)).collect();
+                Polarizations::Constant { polarizations }
+            }
+            Polarizations::None => Polarizations::None,
+        }
+    }
+}
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ExternalsValidationError {
+    #[error("There should be exactly one dependent external momentum")]
+    WrongNumberOfDependentMomenta,
+    #[error("Found {0} momenta, expected {1}")]
+    WrongNumberOfMomentaExpected(usize, usize),
+    #[error("Found {0} helicities, expected {1}")]
+    WrongNumberOfHelicities(usize, usize),
+    #[error("Massless vector cannot have zero helicity: pos {0}")]
+    MasslessVectorZeroHelicity(usize),
+    #[error("Spinors cannot have zero helicity at pos {0}")]
+    SpinorZeroHelicity(usize),
+    #[error("Scalars cannot have non-zero helicity at pos {0}")]
+    ScalarNonZeroHelicity(usize),
+    #[error("{0} is an Unsuported external spin for pos {0}")]
+    UnsupportedSpin(isize, usize),
+}
+
+impl Externals {
+    pub fn validate_helicities(
+        &self,
+        spins: &[(isize, bool)],
+    ) -> Result<(), ExternalsValidationError> {
+        match self {
+            Externals::Constant { helicities, .. } => {
+                if helicities.len() == spins.len() {
+                    for (i, (h, (s, is_massless))) in
+                        helicities.iter().zip(spins.iter()).enumerate()
+                    {
+                        match *s {
+                            1 => {
+                                if !h.is_zero() {
+                                    return Err(ExternalsValidationError::ScalarNonZeroHelicity(i));
+                                }
+                            }
+                            2 => {
+                                if h.is_zero() {
+                                    return Err(ExternalsValidationError::SpinorZeroHelicity(i));
+                                }
+                            }
+                            3 => {
+                                if h.is_zero() && *is_massless {
+                                    return Err(
+                                        ExternalsValidationError::MasslessVectorZeroHelicity(i),
+                                    );
+                                }
+                            }
+                            s => return Err(ExternalsValidationError::UnsupportedSpin(s, i)),
+                        }
+                    }
+                    Ok(())
+                } else {
+                    Err(ExternalsValidationError::WrongNumberOfHelicities(
+                        helicities.len(),
+                        spins.len(),
+                    ))
+                }
+            }
+        }
+    }
+
+    pub fn generate_polarizations(
+        &self,
+        external_particles: &[Arc<Particle>],
+        external_signature: &Signature,
+    ) -> Polarizations {
+        let mut polarizations = vec![];
+
+        let dep_ext = self.get_dependent_externals(external_signature);
+        let helicities = self.get_helicities();
+        for (((ext_mom, hel), p), s) in dep_ext
+            .iter()
+            .zip(helicities.iter())
+            .zip(external_particles.iter())
+            .zip(external_signature.iter())
+        {
+            match s {
+                SignOrZero::Minus => {
+                    polarizations.push(p.incoming_polarization(ext_mom, *hel));
+                }
+                SignOrZero::Plus => {
+                    polarizations.push(p.outgoing_polarization(ext_mom, *hel));
+                }
+                _ => {
+                    panic!("Edge type should not be virtual")
+                }
+            }
+        }
+
+        Polarizations::Constant { polarizations }
+    }
+
+    pub fn set_dependent_at_end(
+        &mut self,
+        signature: &Signature,
+    ) -> Result<(), ExternalsValidationError> {
+        match self {
+            Externals::Constant { momenta, .. } => {
+                let mut sum: FourMomentum<F<f128>> = FourMomentum::from([F(0.0); 4]).higher();
+                let mut pos_dep = 0;
+                let mut n_dep = 0;
+
+                let mut dependent_sign = SignOrZero::Plus;
+
+                for ((i, m), s) in momenta.iter().enumerate().zip(signature.iter()) {
+                    if let Ok(a) = FourMomentum::try_from(*m) {
+                        sum -= *s * a.higher();
+                    } else {
+                        pos_dep = i;
+                        n_dep += 1;
+                        dependent_sign = *s;
+                    }
+                }
+                if n_dep == 1 {
+                    momenta[pos_dep] = (dependent_sign * sum.lower()).into();
+                    let len = momenta.len();
+                    momenta[len - 1] = ExternalMomenta::Dependent(Dep::Dep);
+                } else if n_dep == 0 {
+                    debug!("No dependent momentum found, adding the sum at the end");
+                    momenta.push(ExternalMomenta::Dependent(Dep::Dep));
+                } else {
+                    return Err(ExternalsValidationError::WrongNumberOfDependentMomenta);
+                }
+
+                let len = momenta.len();
+                if len == signature.len() {
+                    Ok(())
+                } else {
+                    Err(ExternalsValidationError::WrongNumberOfMomentaExpected(
+                        len - 1,
+                        signature.len() - 1,
+                    ))
+                }
+            }
+        }
+    }
+
+    pub fn get_dependent_externals<T: FloatLike>(
+        &self,
+        external_signature: &Signature,
+    ) -> Vec<FourMomentum<F<T>>>
+// where
+    //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
+    {
+        match self {
+            Externals::Constant { momenta, .. } => {
+                let mut sum: FourMomentum<F<T>> = FourMomentum::from([
+                    F::<T>::from_f64(0.0),
+                    F::from_f64(0.0),
+                    F::from_f64(0.0),
+                    F::from_f64(0.0),
+                ]);
+                // .higher();
+                let mut pos_dep = 0;
+
+                let mut dependent_sign = SignOrZero::Plus;
+
+                let mut dependent_momenta = vec![];
+
+                for ((i, m), s) in momenta.iter().enumerate().zip(external_signature.iter()) {
+                    if let Ok(a) = FourMomentum::try_from(*m) {
+                        // println!("external{i}: {}", a);
+                        let a = FourMomentum::<F<T>>::from_ff64(&a);
+                        sum -= *s * a.clone(); //.higher();
+                        dependent_momenta.push(a);
+                    } else {
+                        pos_dep = i;
+                        dependent_sign = *s;
+                        dependent_momenta.push(sum.clone()); //.lower());
+                    }
+                }
+
+                dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
+                dependent_momenta
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    #[inline]
+    pub fn get_indep_externals(&self) -> Vec<FourMomentum<F<f64>>> {
+        match self {
+            Externals::Constant {
+                momenta,
+                helicities,
+            } => {
+                let momenta: Vec<FourMomentum<_>> = momenta
+                    .iter()
+                    .flat_map(|e| FourMomentum::try_from(*e))
+                    .collect();
+                momenta
+            }
+        }
+    }
+
+    pub fn get_helicities(&self) -> &[Helicity] {
+        match self {
+            Externals::Constant { helicities, .. } => helicities,
+        }
+    }
+
+    pub fn pdf(&self, _x_space_point: &[F<f64>]) -> F<f64> {
+        match self {
+            Externals::Constant { .. } => F(1.0),
+        }
+    }
+}
+
+#[test]
+fn external_inv() {
+    let mut ext = Externals::Constant {
+        momenta: vec![[F(1.), F(2.), F(3.), F(4.)].into(); 3],
+        helicities: vec![Helicity::Plus; 4],
+    };
+
+    let signs: Signature = [1i8, 1, 1, 1].into_iter().collect();
+    ext.set_dependent_at_end(&signs).unwrap();
+
+    let momenta = vec![
+        ExternalMomenta::Dependent(Dep::Dep),
+        [F(1.), F(2.), F(3.), F(4.)].into(),
+        [F(1.), F(2.), F(3.), F(4.)].into(),
+        [F(-3.), F(-6.), F(-9.), F(-12.)].into(),
+    ];
+    let mut ext2 = Externals::Constant {
+        momenta,
+        helicities: vec![Helicity::Plus; 4],
+    };
+
+    ext2.set_dependent_at_end(&signs).unwrap();
+
+    assert_eq!(ext, ext2);
+}
+
 impl Default for Externals {
     fn default() -> Self {
-        Externals::Constant(vec![
-            [F(2.0), F(2.0), F(3.0), F(4.0)],
-            [F(1.0), F(2.0), F(9.0), F(3.0)],
-        ])
+        Externals::Constant {
+            momenta: vec![],
+            helicities: vec![],
+        }
     }
 }
 
@@ -476,6 +802,7 @@ impl GammaloopTropicalSamplingSettings {
             upcast_on_failure: self.upcast_on_failure,
             matrix_stability_test: self.matrix_stability_test,
             print_debug_info: debug > 0,
+            return_metadata: false,
         }
     }
 }
@@ -495,27 +822,58 @@ pub enum DiscreteGraphSamplingSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SubtractionSettings {
+pub struct CounterTermSettings {
     pub sliver_width: f64,
     pub dampen_integrable_singularity: bool,
     pub dynamic_sliver: bool,
     pub integrated_ct_hfunction: HFunctionSettings,
+    pub integrated_ct_sigma: Option<f64>,
+    pub local_ct_width: f64,
 }
 
-impl Default for SubtractionSettings {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OverlapSettings {
+    pub force_global_center: Option<Vec<[f64; 3]>>,
+    pub check_global_center: bool,
+    pub try_origin: bool,
+    pub try_origin_all_lmbs: bool,
+}
+
+impl Default for OverlapSettings {
+    fn default() -> Self {
+        Self {
+            force_global_center: None,
+            check_global_center: true,
+            try_origin: false,
+            try_origin_all_lmbs: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct SubtractionSettings {
+    pub ct_settings: CounterTermSettings,
+    pub overlap_settings: OverlapSettings,
+}
+
+impl Default for CounterTermSettings {
     fn default() -> Self {
         Self {
             sliver_width: 10.0,
             dampen_integrable_singularity: false,
             dynamic_sliver: false,
             integrated_ct_hfunction: HFunctionSettings::default(),
+            integrated_ct_sigma: None,
+            local_ct_width: 1.0,
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {
+    // Generation Time settings
     pub compile_cff: bool,
+    pub numerator_settings: NumeratorSettings,
     pub cpe_rounds_cff: Option<usize>,
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,

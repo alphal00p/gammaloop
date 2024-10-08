@@ -52,7 +52,7 @@ pub trait HasIntegrand {
     fn create_grid(&self) -> Grid<F<f64>>;
 
     fn evaluate_sample(
-        &self,
+        &mut self,
         sample: &Sample<F<f64>>,
         wgt: F<f64>,
         iter: usize,
@@ -78,13 +78,74 @@ pub trait HasIntegrand {
     }
 }
 
-#[enum_dispatch(HasIntegrand)]
 #[derive(Clone)]
 pub enum Integrand {
     UnitSurface(UnitSurfaceIntegrand),
     UnitVolume(UnitVolumeIntegrand),
     HFunctionTest(HFunctionTestIntegrand),
     GammaLoopIntegrand(GammaLoopIntegrand),
+}
+
+impl HasIntegrand for Integrand {
+    fn create_grid(&self) -> Grid<F<f64>> {
+        match self {
+            Integrand::UnitSurface(integrand) => integrand.create_grid(),
+            Integrand::UnitVolume(integrand) => integrand.create_grid(),
+            Integrand::HFunctionTest(integrand) => integrand.create_grid(),
+            Integrand::GammaLoopIntegrand(integrand) => integrand.create_grid(),
+        }
+    }
+
+    fn evaluate_sample(
+        &mut self,
+        sample: &Sample<F<f64>>,
+        wgt: F<f64>,
+        iter: usize,
+        use_f128: bool,
+        max_eval: F<f64>,
+    ) -> EvaluationResult {
+        match self {
+            Integrand::UnitSurface(integrand) => {
+                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+            }
+            Integrand::UnitVolume(integrand) => {
+                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+            }
+            Integrand::HFunctionTest(integrand) => {
+                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+            }
+            Integrand::GammaLoopIntegrand(integrand) => {
+                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+            }
+        }
+    }
+
+    fn get_n_dim(&self) -> usize {
+        match self {
+            Integrand::UnitSurface(integrand) => integrand.get_n_dim(),
+            Integrand::UnitVolume(integrand) => integrand.get_n_dim(),
+            Integrand::HFunctionTest(integrand) => integrand.get_n_dim(),
+            Integrand::GammaLoopIntegrand(integrand) => integrand.get_n_dim(),
+        }
+    }
+
+    fn get_integrator_settings(&self) -> IntegratorSettings {
+        match self {
+            Integrand::UnitSurface(integrand) => integrand.get_integrator_settings(),
+            Integrand::UnitVolume(integrand) => integrand.get_integrator_settings(),
+            Integrand::HFunctionTest(integrand) => integrand.get_integrator_settings(),
+            Integrand::GammaLoopIntegrand(integrand) => integrand.get_integrator_settings(),
+        }
+    }
+
+    fn merge_results<I: HasIntegrand>(&mut self, other: &mut I, iter: usize) {
+        match self {
+            Integrand::UnitSurface(integrand) => integrand.merge_results(other, iter),
+            Integrand::UnitVolume(integrand) => integrand.merge_results(other, iter),
+            Integrand::HFunctionTest(integrand) => integrand.merge_results(other, iter),
+            Integrand::GammaLoopIntegrand(integrand) => integrand.merge_results(other, iter),
+        }
+    }
 }
 
 pub fn integrand_factory(settings: &Settings) -> Integrand {
@@ -174,7 +235,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
     }
 
     fn evaluate_sample(
-        &self,
+        &mut self,
         sample: &Sample<F<f64>>,
         wgt: F<f64>,
         iter: usize,
@@ -320,7 +381,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
     }
 
     fn evaluate_sample(
-        &self,
+        &mut self,
         sample: &Sample<F<f64>>,
         wgt: F<f64>,
         iter: usize,

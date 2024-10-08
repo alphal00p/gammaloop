@@ -38,7 +38,7 @@
       inherit (pkgs) lib;
 
       craneLib =
-        crane.lib.${system}.overrideToolchain
+        (crane.mkLib nixpkgs.legacyPackages.${system}).overrideToolchain
         fenix.packages.${system}.stable.toolchain;
       src = craneLib.cleanCargoSource (craneLib.path ./.);
 
@@ -148,13 +148,17 @@
         # Additional dev-shell environment variables can be set directly
         # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+        RUSTFLAGS = "-C target-cpu=native";
 
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
           # pkgs.ripgrep
+          cargo-udeps
+          cargo-insta
           openssl
+          pyright
           gnum4
           gmp.dev
           mpfr.dev

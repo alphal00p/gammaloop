@@ -52,6 +52,7 @@ def patch_build_rs():
                 """fn main() {
     if cfg!(target_os = "macos") {
         pyo3_build_config::add_extension_module_link_args();
+        println!("cargo:rustc-link-lib=gcc_s");
     }"""))
 
 
@@ -73,6 +74,8 @@ def patch_build_linking():
 
 def get_symbolica_version_in_gammaloop_cargo_toml():
     try:
+        if not os.path.isfile(os.path.join(GL_PATH, 'Cargo.toml')):
+            return None
         with open(os.path.join(GL_PATH, 'Cargo.toml'), 'r') as f_in:
             symbolica_version = re.findall(
                 r'symbolica\s*=\s*\{\s*version\s*=\s*\"(?P<version>.*)\"\s*\}', f_in.read())[0]
@@ -104,7 +107,7 @@ def patch_cargo_toml():
                 try:
                     current_version_number = re.findall(
                         r'version\s*=\s*\"(?P<version>.*)\"', line)[0]
-                    if current_version_number != requested_symbolica_version:
+                    if requested_symbolica_version is not None and current_version_number != requested_symbolica_version:
                         symbolica_version_modified = True
                         modified_cargo_toml.append(
                             f'version = "{requested_symbolica_version}"')
