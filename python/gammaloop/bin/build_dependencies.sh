@@ -183,7 +183,7 @@ build_dependencies () {
     fi
 
     if ! test -d symbolica; then
-        CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone https://github.com/alphal00p/symbolica}"
+        CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone -b main https://github.com/benruijl/symbolica}"
         echo "Cloning symbolica with '"$CMD_TO_ACCESS_SYMBOLICA"' ...";
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
         RETCODE=$RETCODE+$?

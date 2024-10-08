@@ -66,8 +66,7 @@ exclude = [
   "gammaloop/dependencies/dependency_build.log",
   "gammaloop/dependencies/venv",
   "gammaloop/dependencies/venv/**",
-  "gammaloop/dependencies/symbolica/symbolica_path.txt",
-  "gammaloop/dependencies/test_quad_math/test_quad_math"
+  "gammaloop/dependencies/symbolica/symbolica_path.txt",  
 ]
 include = [
   "gammaloop/.pytest_cache/v/test_runtimes",
@@ -75,6 +74,8 @@ include = [
   "gammaloop/tests/test_data/graph_inputs/*",
   "gammaloop/examples/cards",
   "gammaloop/examples/cards/*",
+  "gammaloop/dependencies/test_quad_math",
+  "gammaloop/dependencies/test_quad_math/test_quad_math.c"
 ]
 
 [project.scripts]
