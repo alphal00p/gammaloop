@@ -167,22 +167,27 @@ def pytest_runtest_makereport(item, call):
 
             # Collect all fixtures used by the test, including indirect dependencies
             used_fixtures = get_all_fixtures(item)
+            for fix in used_fixtures:
+                if fix in ['tmpdir_factory', 'request']:
+                    continue
+                if fix not in fixture_setup_times:
+                    print(f"WARNING: setup time for fixture '{
+                          fix}' is not recorded. Make sure you decorated it with 'measure_fixture_setup_time'.")
             fixtures_duration = sum(fixture_setup_times.get(fix, 0)
                                     for fix in used_fixtures)
             test_runtime = duration + fixtures_duration
 
-            update_runtime = item.config.getoption("--update-runtime")
             cache_dir = item.config.cache._cachedir
 
+            # Get the existing runtimes from the cache
+            runtimes = item.config.cache.get("test_runtimes", {})
+            update_runtime = item.config.getoption("--update-runtime")
+            runtime_exists = item.nodeid in runtimes
+
             # Use a file lock to ensure thread-safe cache access
-            cache_dir = item.config.cache._cachedir
             if FILELOCK_AVAILABLE:
                 lock_file = os.path.join(cache_dir, "test_runtimes.lock")
                 with FileLock(lock_file):  # type: ignore
-                    # Get the existing runtimes from the cache
-                    runtimes = item.config.cache.get("test_runtimes", {})
-                    update_runtime = item.config.getoption("--update-runtime")
-                    runtime_exists = item.nodeid in runtimes
                     # Update the runtime if --update-runtime is set OR there is no existing runtime
                     if update_runtime or not runtime_exists:
                         # Update the runtime for this test
@@ -191,7 +196,7 @@ def pytest_runtest_makereport(item, call):
                         item.config.cache.set("test_runtimes", runtimes)
             else:
                 update_runtime = item.config.getoption("--update-runtime")
-                if update_runtime:
+                if update_runtime or not runtime_exists:
                     # Get the existing runtimes from the cache
                     runtimes = item.config.cache.get("test_runtimes", {})
                     # Update the runtime for this test
