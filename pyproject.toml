@@ -32,7 +32,7 @@ build-backend = "maturin"
 
 [project]
 name = "gammaloop"
-version = "0.1.1"
+version = "0.2.0"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 readme = "README.md"
 license = { file = "LICENSE.md" }
