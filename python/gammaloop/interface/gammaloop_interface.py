@@ -253,7 +253,7 @@ class GammaLoopConfiguration(object):
                 self.update_shorthands(
                     cur_path=cur_path + [key,], root_dict=value)
 
-    def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any], updater: Any) -> None:
+    def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any] | None, updater: Any) -> None:
         for key, value in updater.items():
             if root_path == '':
                 setting_path = key
@@ -262,6 +262,9 @@ class GammaLoopConfiguration(object):
             if not isinstance(key, str):
                 raise GammaLoopError(
                     f"Invalid path for setting {setting_path}")
+            if config_chunk is None:
+                raise GammaLoopError(
+                    f"Settting key '{key}' not found in parameters. You can force the setting of that key by wrapping the value to be set within quotes.")
             if key not in config_chunk:
                 # Allow to create new keys for the rust run settings configuration
                 if 'run_settings' in root_path.split('.'):
@@ -291,9 +294,11 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -502,7 +507,7 @@ class GammaLoop(object):
     set_parser.add_argument('path', metavar='path', type=str,
                             help='Setting path to set value to')
     set_parser.add_argument(
-        'value', metavar='value', type=str, help='value to set as valid python syntax')
+        'value', metavar='value', type=str, nargs="*", help='value to set as valid python syntax')
     set_parser.add_argument(
         '--no_update_run_card', '-n', default=False, action='store_true',
         help='Do not update the run card of the current launched output. This is useful for batching changes.')
@@ -514,7 +519,7 @@ class GammaLoop(object):
         args = self.set_parser.parse_args(split_str_args(str_args))
 
         try:
-            config_value = eval(args.value)  # pylint: disable=eval-used
+            config_value = eval(''.join(args.value))  # nopep8 # pylint: disable=eval-used
         except Exception as exc:
             raise GammaLoopError(
                 f"Invalid value '{args.value}' for setting '{args.path}'. Error:\n{exc}") from exc
