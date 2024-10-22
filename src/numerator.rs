@@ -1413,12 +1413,12 @@ impl GammaSimplified {
         while let Some(a) = it.next() {
             for (_, v) in a.match_stack {
                 match v {
-                    Match::Single(s) => {
+                    Match::Single(_) => {
                         if max_nargs < 1 {
                             max_nargs = 1;
                         }
                     }
-                    Match::Multiple(s, v) => {
+                    Match::Multiple(_, v) => {
                         if max_nargs < v.len() {
                             max_nargs = v.len();
                         }

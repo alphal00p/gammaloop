@@ -573,19 +573,16 @@ impl Edge {
         match self.edge_type {
             EdgeType::Incoming => {
                 let [lorentz, spin, color] = in_slots.dual().kroneker(&out_slots);
-                println!("Incoming color: {}", color);
+
                 [lorentz * spin, color]
             }
             EdgeType::Outgoing => {
                 let [lorentz, spin, color] = out_slots.dual().kroneker(&in_slots);
-                // println!("Outgoing color: {}", color);
-                println!("Outgoing color: {}", color);
+
                 [lorentz * spin, color]
             }
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
-
-                println!("in prop:{atom}");
 
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 if self.particle.is_antiparticle() {
@@ -666,9 +663,6 @@ impl Edge {
                     atom.replace_all_multiple(&reps),
                     color_atom.replace_all_multiple(&reps),
                 ];
-
-                println!("out prop:{}", out[0]);
-                println!("out color:{}", out[1]);
 
                 out
             }
