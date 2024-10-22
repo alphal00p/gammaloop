@@ -23,7 +23,7 @@
           }
         },
         "cargo": {
-          "features": "all"
+          // "features": "all"
         },
         "diagnostics": {
           "experimental": {
@@ -35,7 +35,8 @@
         "checkOnSave": true,
         "check": {
           "onSave": true,
-          "features": ["all"]
+          "features": [],
+          "command": "clippy"
         }
       }
     }

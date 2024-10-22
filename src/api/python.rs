@@ -8,7 +8,7 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
-    numerator::{AppliedFeynmanRule, PythonState, UnInit},
+    numerator::{Numerator, PythonState},
     utils::F,
     ExportSettings, HasIntegrand, Settings,
 };
@@ -242,15 +242,14 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
         self.amplitudes.map_mut_graphs(|g| {
-            g.statefull_apply::<_, UnInit, AppliedFeynmanRule>(|d, b| {
-                d.map_numerator(|n| {
-                    n.from_graph(
-                        b,
-                        export_settings.numerator_settings.global_prefactor.as_ref(),
-                    )
-                })
-            })
-            .expect("could not apply Feynman rules")
+            let a = Numerator::default()
+                .from_graph(
+                    &g.bare_graph,
+                    export_settings.numerator_settings.global_prefactor.as_ref(),
+                )
+                .forget_type();
+
+            g.derived_data.as_mut().unwrap().numerator = a;
         });
     }
 
@@ -351,11 +350,12 @@ impl PythonWorker {
         format: &str,
         export_yaml_str: &str,
     ) -> PyResult<String> {
-        self.apply_feynman_rules(export_yaml_str);
-
+        let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+            .unwrap();
         for amplitude in self.amplitudes.container.iter_mut() {
             amplitude
-                .export_expressions(export_root, Self::printer_options(format))
+                .export_expressions(export_root, Self::printer_options(format), &export_settings)
                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         }
         Ok("Exported expressions".to_string())

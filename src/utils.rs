@@ -19,16 +19,19 @@ use spenso::{
     contraction::{RefOne, RefZero},
     upgrading_arithmetic::TrySmallestUpgrade,
 };
+use symbolica::atom::Symbol;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
 use symbolica::evaluate::CompiledEvaluatorFloat;
+use symbolica::symb;
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
+use std::sync::LazyLock;
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
@@ -477,6 +480,10 @@ impl<const N: u32> RealNumberLike for VarFloat<N> {
         self.float.to_f64()
     }
 
+    fn round_to_nearest_integer(&self) -> Integer {
+        self.float.clone().round().to_integer().unwrap().into()
+    }
+
     fn to_usize_clamped(&self) -> usize {
         self.float
             .to_integer()
@@ -487,6 +494,25 @@ impl<const N: u32> RealNumberLike for VarFloat<N> {
 }
 
 impl<const N: u32> Real for VarFloat<N> {
+    #[inline(always)]
+    fn pi(&self) -> Self {
+        Float::with_val(N, rug::float::Constant::Pi).into()
+    }
+
+    #[inline(always)]
+    fn e(&self) -> Self {
+        self.one().exp()
+    }
+
+    #[inline(always)]
+    fn euler(&self) -> Self {
+        Float::with_val(N, rug::float::Constant::Euler).into()
+    }
+
+    #[inline(always)]
+    fn phi(&self) -> Self {
+        (self.one() + self.from_i64(5).sqrt()) / Self::from_f64(2.)
+    }
     fn atan2(&self, x: &Self) -> Self {
         self.float.clone().atan2(&x.float).into()
     }
@@ -801,6 +827,7 @@ impl<T: FloatLike> RealNumberLike for F<T> {
         to self.0{
             fn to_usize_clamped(&self)->usize;
             fn to_f64(&self)->f64;
+            fn round_to_nearest_integer(&self)->Integer;
         }
     }
 }
@@ -957,6 +984,10 @@ impl<T: FloatLike> Real for F<T> {
     delegate! {
         #[into]
         to self.0{
+            fn e(&self)->Self;
+            fn phi(&self)->Self;
+            fn euler(&self)->Self;
+            fn pi(&self)->Self;
             fn sqrt(&self) -> Self;
             fn log(&self) -> Self;
             fn exp(&self) -> Self;
@@ -2978,13 +3009,13 @@ pub fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
 pub fn print_banner() {
     info!(
         "\n{}{}\n",
-        r"                                        _                       
-                                       | |                      
-   __ _  __ _ _ __ ___  _ __ ___   __ _| |     ___   ___  _ __  
-  / _` |/ _` | '_ ` _ \| '_ ` _ \ / _` | |    / _ \ / _ \| '_ \ 
+        r"                                        _
+                                       | |
+   __ _  __ _ _ __ ___  _ __ ___   __ _| |     ___   ___  _ __
+  / _` |/ _` | '_ ` _ \| '_ ` _ \ / _` | |    / _ \ / _ \| '_ \
  | (_| | (_| | | | | | | | | | | | (_| | |___| (_) | (_) | |_) |
-  \__, |\__,_|_| |_| |_|_| |_| |_|\__,_|______\___/ \___/| .__/ 
-   __/ |                                                 | |    
+  \__, |\__,_|_| |_| |_|_| |_| |_|\__,_|______\___/ \___/| .__/
+   __/ |                                                 | |
 "
         .to_string()
         .bold()
@@ -3112,6 +3143,24 @@ fn complex_compare() {
 
     ltd.approx_eq_res(&cff, &F(0.00000001)).unwrap();
 }
+
+pub struct GammaloopSymbols {
+    pub ubar: Symbol,
+    pub vbar: Symbol,
+    pub v: Symbol,
+    pub u: Symbol,
+    pub epsilon: Symbol,
+    pub epsilonbar: Symbol,
+}
+
+pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
+    ubar: symb!("ubar"),
+    vbar: symb!("vbar"),
+    v: symb!("v"),
+    u: symb!("u"),
+    epsilon: symb!("ϵ"),
+    epsilonbar: symb!("ϵbar"),
+});
 
 /// Checks if two lists are permutations of eachother, and establish a map between indices
 pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<PermutationMap> {

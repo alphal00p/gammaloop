@@ -393,11 +393,8 @@ impl Heaviside {
     }
 
     fn invert_sign(&mut self) {
-        for arg in self.arguments.iter_mut() {
-            match arg {
-                Some(value) => *value *= -1.,
-                None => {}
-            }
+        for arg in self.arguments.iter_mut().flatten() {
+            *arg = arg.neg();
         }
     }
 
