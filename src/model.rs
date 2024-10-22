@@ -1,5 +1,6 @@
 use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
+use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F};
 
 use ahash::{AHashMap, RandomState};
@@ -11,15 +12,26 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
-use spenso::parametric::{ExpandedCoefficent, TensorCoefficient};
+use spenso::parametric::ExpandedCoefficent;
+use spenso::structure::representation::Minkowski;
 use spenso::structure::{
-    AbstractIndex, Dimension, Euclidean, ExpandedIndex, FlatIndex, VecStructure, CONCRETEIND,
+    abstract_index::AbstractIndex, concrete_index::CONCRETEIND, representation::Euclidean,
+    VecStructure,
 };
+use spenso::structure::{TensorStructure, ToSymbolic};
 use spenso::{
     contraction::IsZero,
     structure::{
-        BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Dual, DualSlotTo,
-        IsAbstractSlot, Lorentz, PhysReps, RepName, Representation, Slot, ABSTRACTIND,
+        representation::Lorentz,
+        representation::PhysReps,
+        representation::RepName,
+        representation::Representation,
+        representation::{
+            BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Dual,
+        },
+        slot::DualSlotTo,
+        slot::IsAbstractSlot,
+        slot::Slot,
     },
 };
 use std::fmt::{Display, Formatter};
@@ -35,9 +47,10 @@ use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
 use symbolica::atom::{Atom, AtomView, FunctionBuilder, Symbol};
 
+use crate::utils::GS;
 use spenso::complex::Complex;
+use spenso::shadowing::ETS;
 use symbolica::domains::float::NumericalFloatLike;
-
 use symbolica::fun;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::State;
@@ -185,7 +198,7 @@ pub struct VertexRule {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VertexSlots {
-    edge_slots: Vec<EdgeSlots<Dual<Lorentz>>>,
+    edge_slots: Vec<EdgeSlots<Minkowski>>,
     pub coupling_indices: Option<[Slot<Euclidean>; 2]>, //None for external vertices
     pub internal_dummy: DummyIndices,
 }
@@ -227,14 +240,14 @@ impl std::fmt::Display for VertexSlots {
 }
 
 impl Index<usize> for VertexSlots {
-    type Output = EdgeSlots<Dual<Lorentz>>;
+    type Output = EdgeSlots<Minkowski>;
     fn index(&self, index: usize) -> &Self::Output {
         &self.edge_slots[index]
     }
 }
 
-impl From<EdgeSlots<Dual<Lorentz>>> for VertexSlots {
-    fn from(value: EdgeSlots<Dual<Lorentz>>) -> Self {
+impl From<EdgeSlots<Minkowski>> for VertexSlots {
+    fn from(value: EdgeSlots<Minkowski>) -> Self {
         VertexSlots {
             edge_slots: vec![value],
             coupling_indices: None,
@@ -308,8 +321,8 @@ impl VertexRule {
         let j_dim = self.couplings[0].len();
 
         let coupling_indices = Some([
-            Euclidean::new_slot_selfless(i_dim, coupling_shift),
-            Euclidean::new_slot_selfless(j_dim, coupling_shift + 1),
+            Euclidean::slot(i_dim, coupling_shift),
+            Euclidean::slot(j_dim, coupling_shift + 1),
         ]);
 
         (
@@ -597,9 +610,23 @@ pub struct InOutIndex {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EdgeSlots<LorRep: RepName> {
-    lorentz: Vec<Slot<LorRep>>,
+    pub lorentz: Vec<Slot<LorRep>>,
     spin: Vec<Slot<Bispinor>>,
     pub color: Vec<Slot<PhysReps>>,
+}
+
+impl From<EdgeSlots<Minkowski>> for VecStructure {
+    fn from(value: EdgeSlots<Minkowski>) -> Self {
+        VecStructure {
+            structure: value
+                .lorentz
+                .into_iter()
+                .map(|x| x.into())
+                .chain(value.spin.into_iter().map(|x| x.into()))
+                .chain(value.color.into_iter().map(|x| x.into()))
+                .collect(),
+        }
+    }
 }
 
 impl<LorRep: BaseRepName> Display for EdgeSlots<LorRep> {
@@ -661,55 +688,6 @@ where
         [lorentz, spin, color]
     }
 
-    pub fn expanded_index(&self, flat_index: FlatIndex) -> Result<ExpandedIndex> {
-        let mut indices = vec![];
-        let mut index: usize = flat_index.into();
-        for &stride in &self.strides_row_major()? {
-            indices.push(index / stride);
-            index %= stride;
-        }
-        if usize::from(flat_index) < self.size() {
-            Ok(indices.into())
-        } else {
-            Err(eyre!("Index {flat_index} out of bounds"))
-        }
-    }
-
-    fn order(&self) -> usize {
-        self.color.len() + self.lorentz.len() + self.spin.len()
-    }
-
-    fn shape(&self) -> Vec<Dimension> {
-        let mut dims = vec![];
-        dims.extend(self.lorentz.iter().map(|s| s.dim()));
-        dims.extend(self.spin.iter().map(|s| s.dim()));
-        dims.extend(self.color.iter().map(|s| s.dim()));
-        dims
-    }
-
-    fn strides_row_major(&self) -> Result<Vec<usize>> {
-        let mut strides = vec![1; self.order()];
-        if self.order() == 0 {
-            return Ok(strides);
-        }
-
-        for i in (0..self.order() - 1).rev() {
-            strides[i] = strides[i + 1] * usize::try_from(self.shape()[i + 1])?;
-        }
-
-        Ok(strides)
-    }
-    pub fn to_dense_labels<T>(&self, index_to_atom: impl Fn(&Self, FlatIndex) -> T) -> Vec<Atom>
-    where
-        Self: Sized,
-        T: TensorCoefficient,
-    {
-        let mut data = vec![];
-        for index in 0..self.size() {
-            data.push(index_to_atom(self, index.into()).to_atom().unwrap());
-        }
-        data
-    }
     pub fn size(&self) -> usize {
         if self.spin.is_empty() && self.lorentz.is_empty() && self.color.is_empty() {
             0
@@ -747,64 +725,60 @@ where
         }
     }
     pub fn replacements(&self, id: usize) -> Vec<(Pattern, PatternOrMap)> {
-        let rhs_lor = LorRep::new_slot_selfless(4, id)
-            .to_symbolic_wrapped()
-            .into_pattern();
+        let rhs_lor = LorRep::slot(4, id).to_symbolic_wrapped().into_pattern();
 
-        let rhs_spin = Bispinor::new_slot_selfless(4, id);
+        let rhs_spin = Bispinor::slot(4, id);
 
         let rhs_spin = rhs_spin.to_symbolic_wrapped().into_pattern();
 
         let mut reps = vec![];
         for l in &self.lorentz {
-            reps.push((rhs_lor.clone(), l.to_symbolic().into_pattern().into()));
+            reps.push((rhs_lor.clone(), l.to_atom().into_pattern().into()));
         }
 
         for s in &self.spin {
-            reps.push((rhs_spin.clone(), s.to_symbolic().into_pattern().into()));
+            reps.push((rhs_spin.clone(), s.to_atom().into_pattern().into()));
         }
 
         for c in &self.color {
             let mut rhs_color = *c;
             rhs_color.aind = id.into();
+            println!("rhs color pattern :{}", rhs_color.to_symbolic_wrapped());
             let rhs_color = rhs_color.to_symbolic_wrapped().into_pattern();
-
-            reps.push((rhs_color.clone(), c.to_symbolic().into_pattern().into()));
+            reps.push((rhs_color.clone(), c.to_atom().into_pattern().into()));
         }
 
         reps
     }
-    pub fn to_aind_atom(&self) -> Atom {
-        let mut builder = FunctionBuilder::new(State::get_symbol(ABSTRACTIND));
-
+    pub fn complete_fn_builder(&self, mut fn_builder: FunctionBuilder) -> Atom {
         for l in &self.lorentz {
-            builder = builder.add_arg(l.to_symbolic().as_view());
+            fn_builder = fn_builder.add_arg(l.to_atom().as_view());
         }
 
         for s in &self.spin {
-            builder = builder.add_arg(s.to_symbolic().as_view());
+            fn_builder = fn_builder.add_arg(s.to_atom().as_view());
         }
 
         for c in &self.color {
-            builder = builder.add_arg(c.to_symbolic().as_view());
+            fn_builder = fn_builder.add_arg(c.to_atom().as_view());
         }
 
-        builder.finish()
+        fn_builder.finish()
     }
 
     pub fn to_cind_atom(&self) -> Atom {
         let mut builder = FunctionBuilder::new(State::get_symbol(CONCRETEIND));
 
         for l in &self.lorentz {
-            builder = builder.add_arg(l.to_symbolic().as_view());
+            builder = builder.add_arg(l.to_atom().as_view());
         }
 
         for s in &self.spin {
-            builder = builder.add_arg(s.to_symbolic().as_view());
+            builder = builder.add_arg(s.to_atom().as_view());
         }
 
         for c in &self.color {
-            builder = builder.add_arg(c.to_symbolic().as_view());
+            builder = builder.add_arg(c.to_atom().as_view());
         }
 
         builder.finish()
@@ -821,7 +795,7 @@ impl Particle {
     }
 
     fn lorentz_slots<LR: BaseRepName>(&self, shift: usize) -> (Vec<Slot<LR>>, usize) {
-        let fourd_lor = LR::new_dimed_rep_selfless(4);
+        let fourd_lor = LR::rep(4);
 
         match self.spin {
             3 => (vec![Representation::new_slot(&fourd_lor, shift)], shift + 1),
@@ -830,7 +804,7 @@ impl Particle {
     }
 
     fn spin_slots(&self, shift: usize) -> (Vec<Slot<Bispinor>>, usize) {
-        let fourd_bis: Representation<_> = Bispinor::new_dimed_rep_selfless(4);
+        let fourd_bis: Representation<_> = Bispinor::rep(4);
 
         match self.spin {
             2 => (vec![fourd_bis.new_slot(shift)], shift + 1),
@@ -840,11 +814,11 @@ impl Particle {
 
     fn color_slots(&self, shift: usize) -> (Vec<Slot<PhysReps>>, usize) {
         let rep: Representation<PhysReps> = match self.color {
-            3 => ColorFundamental::new_dimed_rep_selfless(3).cast(),
-            -3 => Dual::<ColorFundamental>::new_dimed_rep_selfless(3).cast(),
-            6 => ColorSextet::new_dimed_rep_selfless(6).cast(),
-            -6 => Dual::<ColorSextet>::new_dimed_rep_selfless(6).cast(),
-            8 => ColorAdjoint::new_dimed_rep_selfless(8).cast(),
+            3 => ColorFundamental::rep(3).cast(),
+            -3 => Dual::<ColorFundamental>::rep(3).cast(),
+            6 => ColorSextet::rep(6).cast(),
+            -6 => Dual::<ColorSextet>::rep(6).cast(),
+            8 => ColorAdjoint::rep(8).cast(),
             _ => return (vec![], shift),
         };
 
@@ -891,31 +865,18 @@ impl Particle {
         }
     }
 
-    pub fn incoming_polarization_atom(&self, edge_slots: &EdgeSlots<Lorentz>, num: usize) -> Atom {
+    pub fn incoming_polarization_atom(
+        &self,
+        edge_slots: &EdgeSlots<Minkowski>,
+        num: usize,
+    ) -> Atom {
         let mut colorless = edge_slots.clone();
         colorless.color = vec![];
-        match self.spin {
-            1 => Atom::parse("1").unwrap(),
-            2 => {
-                if self.pdg_code > 0 {
-                    let mut u = FunctionBuilder::new(State::get_symbol("u"));
-                    u = u.add_arg(&Atom::new_num(num as i64));
-                    u = u.add_arg(&colorless.to_aind_atom());
-                    u.finish()
-                } else {
-                    let mut vbar = FunctionBuilder::new(State::get_symbol("vbar"));
-                    vbar = vbar.add_arg(&Atom::new_num(num as i64));
-                    vbar = vbar.add_arg(&colorless.to_aind_atom());
-                    vbar.finish()
-                }
-            }
-            3 => {
-                let mut e = FunctionBuilder::new(State::get_symbol("ϵ"));
-                e = e.add_arg(&Atom::new_num(num as i64));
-                e = e.add_arg(&colorless.to_aind_atom());
-                e.finish()
-            }
-            _ => panic!("higher spin not supported"), //Atom::parse("1").unwrap(),
+        if let Some(name) = self.in_pol_symbol() {
+            colorless
+                .complete_fn_builder(FunctionBuilder::new(name).add_arg(&Atom::new_num(num as i64)))
+        } else {
+            Atom::new_num(1)
         }
     }
 
@@ -923,12 +884,12 @@ impl Particle {
         match self.spin {
             2 => {
                 if self.pdg_code > 0 {
-                    Some(State::get_symbol("u"))
+                    Some(GS.u)
                 } else {
-                    Some(State::get_symbol("vbar"))
+                    Some(GS.vbar)
                 }
             }
-            3 => Some(State::get_symbol("ϵ")),
+            3 => Some(GS.epsilon),
             _ => None,
         }
     }
@@ -937,42 +898,57 @@ impl Particle {
         match self.spin {
             2 => {
                 if self.pdg_code > 0 {
-                    Some(State::get_symbol("ubar"))
+                    Some(GS.ubar)
                 } else {
-                    Some(State::get_symbol("v"))
+                    Some(GS.v)
                 }
             }
-            3 => Some(State::get_symbol("ϵbar")),
+            3 => Some(GS.epsilonbar),
             _ => None,
         }
     }
 
     pub fn incoming_polarization_atom_concrete(
         &self,
-        edge_slots: &EdgeSlots<Lorentz>,
+        edge_slots: &EdgeSlots<Minkowski>,
         num: usize,
     ) -> Vec<Atom> {
         let mut colorless = edge_slots.clone();
         colorless.color = vec![];
-        colorless.to_dense_labels(|v, i| ExpandedCoefficent::<usize> {
-            index: v.expanded_index(i).unwrap(),
-            name: self.in_pol_symbol(),
-            args: Some(num),
-        })
+        if let Some(name) = self.in_pol_symbol() {
+            VecStructure::from(colorless)
+                .to_dense_labeled(|v, i| ExpandedCoefficent::<usize> {
+                    index: v.co_expanded_index(i).unwrap(),
+                    name: Some(name),
+                    args: Some(num),
+                })
+                .unwrap()
+                .data
+        } else {
+            vec![]
+        }
     }
 
     pub fn outgoing_polarization_atom_concrete(
         &self,
-        edge_slots: &EdgeSlots<Lorentz>,
+        edge_slots: &EdgeSlots<Minkowski>,
         num: usize,
     ) -> Vec<Atom> {
         let mut colorless = edge_slots.clone();
         colorless.color = vec![];
-        colorless.to_dense_labels(|v, i| ExpandedCoefficent::<usize> {
-            index: v.expanded_index(i).unwrap(),
-            name: self.out_pol_symbol(),
-            args: Some(num),
-        })
+
+        if let Some(name) = self.out_pol_symbol() {
+            VecStructure::from(colorless)
+                .to_dense_labeled(|v, i| ExpandedCoefficent::<usize> {
+                    index: v.co_expanded_index(i).unwrap(),
+                    name: Some(name),
+                    args: Some(num),
+                })
+                .unwrap()
+                .data
+        } else {
+            vec![]
+        }
     }
 
     pub fn incoming_polarization_match<T: FloatLike>(
@@ -1065,31 +1041,18 @@ impl Particle {
         }
     }
 
-    pub fn outgoing_polarization_atom(&self, edge_slots: &EdgeSlots<Lorentz>, num: usize) -> Atom {
+    pub fn outgoing_polarization_atom(
+        &self,
+        edge_slots: &EdgeSlots<Minkowski>,
+        num: usize,
+    ) -> Atom {
         let mut colorless = edge_slots.clone();
         colorless.color = vec![];
-        match self.spin {
-            1 => Atom::parse("1").unwrap(),
-            2 => {
-                if self.pdg_code > 0 {
-                    let mut ubar = FunctionBuilder::new(State::get_symbol("ubar"));
-                    ubar = ubar.add_arg(&Atom::new_num(num as i64));
-                    ubar = ubar.add_arg(&colorless.to_aind_atom());
-                    ubar.finish()
-                } else {
-                    let mut v = FunctionBuilder::new(State::get_symbol("v"));
-                    v = v.add_arg(&Atom::new_num(num as i64));
-                    v = v.add_arg(&colorless.to_aind_atom());
-                    v.finish()
-                }
-            }
-            3 => {
-                let mut ebar = FunctionBuilder::new(State::get_symbol("ϵbar"));
-                ebar = ebar.add_arg(&Atom::new_num(num as i64));
-                ebar = ebar.add_arg(&colorless.to_aind_atom());
-                ebar.finish()
-            }
-            _ => Atom::parse("1").unwrap(),
+        if let Some(name) = self.out_pol_symbol() {
+            colorless
+                .complete_fn_builder(FunctionBuilder::new(name).add_arg(&Atom::new_num(num as i64)))
+        } else {
+            Atom::new_num(1)
         }
     }
 
@@ -1784,6 +1747,8 @@ impl Model {
     }
 
     pub fn from_serializable_model(serializable_model: SerializableModel) -> Model {
+        UFO.t;
+        ETS.id;
         let mut model: Model = Model::default();
         model.name = serializable_model.name;
         model.restriction = serializable_model.restriction;

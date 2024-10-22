@@ -12,6 +12,7 @@ use crate::{
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     numerator::{
+        ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
         AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
         GammaAlgebraMode, Numerator, NumeratorState, NumeratorStateError, PythonState,
         RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
@@ -45,12 +46,15 @@ use spenso::{
     contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     scalar::Scalar,
+    shadowing::{Shadowable, ETS},
     structure::{
-        AbstractIndex, CastStructure, HasStructure, Lorentz, NamedStructure, ScalarTensor,
-        Shadowable, ToSymbolic, VecStructure, COLORADJ, COLORANTIFUND, COLORANTISEXT, COLORFUND,
-        COLORSEXT, EUCLIDEAN,
+        abstract_index::AbstractIndex,
+        representation::{
+            BaseRepName, ColorAdjoint, ColorFundamental, ColorSextet, Euclidean, Minkowski,
+        },
+        slot::{DualSlotTo, IsAbstractSlot},
+        CastStructure, HasStructure, NamedStructure, ScalarTensor, ToSymbolic, VecStructure,
     },
-    ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped},
 };
 use uuid::Uuid;
 
@@ -69,12 +73,12 @@ use std::{
 use symbolica::{
     atom::{Atom, Symbol},
     domains::{float::NumericalFloatLike, rational::Rational},
+    fun,
     id::{Pattern, Replacement},
     state::State,
+    symb,
 };
 //use symbolica::{atom::Symbol,state::State};
-
-use constcat::concat;
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
@@ -265,15 +269,17 @@ impl HasVertexInfo for InteractionVertexInfo {
             .map(|ls| {
                 let mut atom = ls.structure.clone();
 
+                println!("in vertex{atom}");
+
                 for (i, e) in edges.iter().enumerate() {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern = if e < &0 {
-                        Pattern::parse(&format!("-Q({},aind(lord(4,indexid(x_))))", -e))
+                        Pattern::parse(&format!("-Q({},mink(4,x_))", -e))
                             .unwrap()
                             .into() //TODO flip based on flow
                     } else {
-                        Pattern::parse(&format!("Q({},aind(loru(4,indexid(x_))))", e))
+                        Pattern::parse(&format!("Q({},mink(4,x_))", e))
                             .unwrap()
                             .into() //TODO flip based on flow
                     };
@@ -286,7 +292,8 @@ impl HasVertexInfo for InteractionVertexInfo {
                     );
                 }
 
-                atom = preprocess_ufo_spin_wrapped(atom, true);
+                atom = preprocess_ufo_spin_wrapped(atom);
+                println!("preprocessed vertex{atom}");
 
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
@@ -298,7 +305,7 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                     atom = atom.replace_all_multiple(&reps);
                 }
-
+                println!("out vertex{atom}");
                 atom
             })
             .collect_vec();
@@ -311,50 +318,40 @@ impl HasVertexInfo for InteractionVertexInfo {
             .map(|cs| {
                 let n_dummies = ColorStructure::number_of_dummies_in_atom(cs.as_view());
                 let mut atom = cs.clone();
-                //a is adjoint index, i is fundamental index, ia is antifundamental index, s is sextet ,sa is antisextet
 
                 atom = preprocess_ufo_color_wrapped(atom);
-                //T(1,2,3) Fundamental representation matrix (T a1 )ı  ̄3 i2
-                // f(1,2,3) Antisymmetric structure constant f a1a2a3
-                // d(1,2,3) Symmetric structure constant da1 a2 a3
-                // Epsilon(1,2,3) Fundamental Levi-Civita tensor εi1 i2 i3 EpsilonBar(1,2,3) Antifundamental Levi-Civita tensor εı  ̄1 ı  ̄2 ı  ̄3
-                // T6(1,2,3) Sextet representation matrix (T a1 6 ) ̄ α3 α2
-                // K6(1,2,3) Sextet Clebsch-Gordan coefficient (K6)ı  ̄2 ı  ̄3 α1 K6Bar(1,2,3) Antisextet Clebsch-Gordan coefficient (K6) ̄ α1 i2i3
-
-                // First process kronkers, with respect to spin:
 
                 let spins: Vec<isize> =
                     self.vertex_rule.particles.iter().map(|s| s.color).collect();
 
                 for (i, s) in spins.iter().enumerate() {
-                    let id1 = Pattern::parse(&format!("Identity({},x_)", i + 1)).unwrap();
-
-                    let id2 = Pattern::parse(&format!("id(aind(x_,{}))", i + 1)).unwrap();
+                    let id1 = fun!(UFO.identity, Atom::new_num((i + 1) as i32), symb!("x_"))
+                        .into_pattern();
+                    let id2 =
+                        fun!(ETS.id, symb!("x_"), Atom::new_num((i + 1) as i32)).into_pattern();
 
                     let ind = match s {
-                        1 => concat!(EUCLIDEAN, "(1,"),
-                        3 => concat!(COLORFUND, "(3,"),
-                        -3 => concat!(COLORANTIFUND, "(3,"),
-                        6 => concat!(COLORSEXT, "(6,"),
-                        -6 => concat!(COLORANTISEXT, "(6,"),
-                        8 => concat!(COLORADJ, "(8,"),
+                        1 => Euclidean::slot(1, i + 1).to_symbolic_wrapped(),
+                        3 => ColorFundamental::slot(3, i + 1).to_symbolic_wrapped(),
+                        -3 => ColorFundamental::slot(3, i + 1)
+                            .dual()
+                            .to_symbolic_wrapped(),
+                        6 => ColorSextet::slot(6, i + 1).to_symbolic_wrapped(),
+                        -6 => ColorSextet::slot(6, i + 1).dual().to_symbolic_wrapped(),
+                        8 => ColorAdjoint::slot(8, i + 1).to_symbolic_wrapped(),
                         i => panic!("Color {i}not supported "),
                     };
 
                     atom = id1.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("id(aind({}indexid({})),x_))", ind, i + 1))
-                            .unwrap()
-                            .into(),
+                        &fun!(ETS.id, ind, symb!("x_")).into_pattern().into(),
                         None,
                         None,
                     );
 
                     atom = id2.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("id(aind(x_,{}indexid({}))))", ind, i + 1))
-                            .unwrap()
-                            .into(),
+                        &fun!(ETS.id, symb!("x_"), ind).into_pattern().into(),
                         None,
                         None,
                     );
@@ -548,14 +545,14 @@ impl Edge {
     //     State::get_symbol(format!("Q{num}"))
     // }
 
-    pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Lorentz> {
+    pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
         let local_pos_in_sink_vertex =
             graph.vertices[self.vertices[0]].get_local_edge_position(self, graph);
 
         graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Lorentz> {
+    pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
         let local_pos_in_sink_vertex =
             graph.vertices[self.vertices[1]].get_local_edge_position(self, graph);
 
@@ -576,22 +573,25 @@ impl Edge {
         match self.edge_type {
             EdgeType::Incoming => {
                 let [lorentz, spin, color] = in_slots.dual().kroneker(&out_slots);
-                // println!("Incoming color: {}", color);
+                println!("Incoming color: {}", color);
                 [lorentz * spin, color]
             }
             EdgeType::Outgoing => {
                 let [lorentz, spin, color] = out_slots.dual().kroneker(&in_slots);
                 // println!("Outgoing color: {}", color);
+                println!("Outgoing color: {}", color);
                 [lorentz * spin, color]
             }
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
+                println!("in prop:{atom}");
+
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 if self.particle.is_antiparticle() {
                     atom = pfun.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("-Q({},aind(loru(4,x_)))", num))
+                        &Pattern::parse(&format!("-Q({},mink(4,x_))", num))
                             .unwrap()
                             .into(),
                         None,
@@ -600,7 +600,7 @@ impl Edge {
                 } else {
                     atom = pfun.replace_all(
                         atom.as_view(),
-                        &Pattern::parse(&format!("Q({},aind(loru(4,x_)))", num))
+                        &Pattern::parse(&format!("Q({},mink(4,x_))", num))
                             .unwrap()
                             .into(),
                         None,
@@ -614,7 +614,7 @@ impl Edge {
                     atom = pslashfun.replace_all(
                         atom.as_view(),
                         &Pattern::parse(&format!(
-                            "-Q({},aind(lord(4,{})))*Gamma({},i_,j_)",
+                            "-Q({},mink(4,{}))*Gamma({},i_,j_)",
                             num, pindex_num, pindex_num
                         ))
                         .unwrap()
@@ -626,7 +626,7 @@ impl Edge {
                     atom = pslashfun.replace_all(
                         atom.as_view(),
                         &Pattern::parse(&format!(
-                            "Q({},aind(lord(4,{})))*Gamma({},i_,j_)",
+                            "Q({},mink(4,{}))*Gamma({},i_,j_)",
                             num, pindex_num, pindex_num
                         ))
                         .unwrap()
@@ -636,7 +636,7 @@ impl Edge {
                     );
                 }
 
-                atom = preprocess_ufo_spin_wrapped(atom, false);
+                atom = preprocess_ufo_spin_wrapped(atom);
 
                 let (replacements_in, mut replacements_out) = if self.particle.is_antiparticle() {
                     (in_slots.replacements(2), out_slots.replacements(1))
@@ -662,10 +662,15 @@ impl Edge {
                     .map(|(pat, rhs)| Replacement::new(pat, rhs))
                     .collect();
 
-                [
+                let out = [
                     atom.replace_all_multiple(&reps),
                     color_atom.replace_all_multiple(&reps),
-                ]
+                ];
+
+                println!("out prop:{}", out[0]);
+                println!("out color:{}", out[1]);
+
+                out
             }
         }
     }
@@ -755,7 +760,7 @@ impl Vertex {
             .into_iter()
             .reduce(|acc, tensor| acc.contract(&tensor).unwrap())
             .unwrap()
-            .get(&[])
+            .get_owned(&[])
             .unwrap()
             .clone();
 
@@ -933,7 +938,7 @@ pub struct Shifts {
 }
 
 impl BareGraph {
-    pub fn external_slots(&self) -> Vec<EdgeSlots<Lorentz>> {
+    pub fn external_slots(&self) -> Vec<EdgeSlots<Minkowski>> {
         self.vertices
             .iter()
             .enumerate()

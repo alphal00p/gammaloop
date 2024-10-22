@@ -33,23 +33,35 @@ use spenso::data::DataTensor;
 
 use spenso::network::Levels;
 use spenso::parametric::{
-    EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, ParamTensorSet, SerializableAtom,
+    EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, ParamTensorSet,
     SerializableCompiledEvaluator, TensorSet,
 };
-use spenso::structure::{HasStructure, ScalarTensor, SerializableSymbol, SmartShadowStructure};
+use spenso::shadowing::ETS;
+use spenso::structure::representation::{BaseRepName, ColorAdjoint, ColorFundamental};
+use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
+use spenso::symbolica_utils::SerializableAtom;
+use spenso::symbolica_utils::SerializableSymbol;
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
     parametric::{ParamTensor, PatternReplacement},
-    structure::{Lorentz, NamedStructure, PhysReps, RepName, Shadowable, TensorStructure},
+    shadowing::Shadowable,
+    structure::{
+        representation::{Lorentz, PhysReps, RepName},
+        NamedStructure, TensorStructure,
+    },
 };
 
+use crate::numerator::ufo::UFO;
 use symbolica::atom::AtomView;
 use symbolica::evaluate::ExpressionEvaluator;
 use symbolica::id::{Condition, Match, MatchSettings, PatternOrMap};
+
 use symbolica::{
     atom::{Atom, FunctionBuilder},
+    fun,
     state::State,
+    symb,
 };
 use symbolica::{
     domains::{float::NumericalFloatLike, rational::Rational},
@@ -57,6 +69,7 @@ use symbolica::{
     id::{Pattern, Replacement},
 };
 
+pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NumeratorSettings {
     pub eval_settings: NumeratorEvaluatorOptions,
@@ -488,6 +501,8 @@ pub struct UnInit;
 
 impl Default for UnInit {
     fn default() -> Self {
+        UFO.f;
+        ETS.gamma;
         UnInit
     }
 }
@@ -615,7 +630,9 @@ impl Numerator<UnInit> {
 
 impl Default for Numerator<UnInit> {
     fn default() -> Self {
-        Numerator { state: UnInit }
+        Numerator {
+            state: UnInit::default(),
+        }
     }
 }
 
@@ -796,14 +813,26 @@ impl Numerator<Global> {
 
     fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
         ColorSimplified::isolate_color(&mut expression);
+        println!("{}", expression);
         let (mut coefs, rem) = expression.0.coefficient_list(State::get_symbol("color"));
         let mut atom = Atom::new_num(0);
         for (key, coef) in coefs.iter_mut() {
-            let color_simplified = ColorSimplified::color_symplify_impl(key.clone().into())
-                .0
-                .factor();
+            if let AtomView::Fun(f) = key.as_view() {
+                let mut key = Atom::new();
 
-            atom = atom + coef.factor() * color_simplified;
+                key.set_from_view(&f.iter().next().unwrap());
+
+                println!("{key}");
+                let color_simplified = ColorSimplified::color_symplify_impl(key.clone().into())
+                    .0
+                    .factor();
+
+                println!("{coef}");
+
+                atom = atom + coef.factor() * color_simplified;
+            } else {
+                panic!("not a color fun");
+            }
             // println!("coef {i}:{}\n", coef.factor());
         }
         atom = atom + rem;
@@ -1008,20 +1037,20 @@ impl ColorSimplified {
         expression.0 = &expression.0 * color_fn;
         let replacements = vec![
             (
-                Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,aind(y___,cof(i__),z___)))")
+                Pattern::parse("f_(x___,cof(3,i_),z___)*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,cof(3,i_),z___))")
                     .unwrap()
                     .into(),
             ),
             (
-                Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,aind(y___,coaf(i__),z___)))")
+                Pattern::parse("f_(x___,dind(cof(3,i_)),z___)*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,dind(cof(3,i_)),z___))")
                     .unwrap()
                     .into(),
             ),
             (
-                Pattern::parse("f_(x___,aind(y___,coad(i__),z___))*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,aind(y___,coad(i__),z___)))")
+                Pattern::parse("f_(x___,coad(i__),z___)*color(a___)").unwrap(),
+                Pattern::parse("color(a___*f_(x___,coad(i__),z___))")
                     .unwrap()
                     .into(),
             ),
@@ -1061,46 +1090,137 @@ impl ColorSimplified {
     }
 
     pub fn color_symplify_impl(mut expression: SerializableAtom) -> SerializableAtom {
-        let replacements = vec![
-            (Pattern::parse("color(a___)").unwrap(),Pattern::parse("a___").unwrap().into()),
-            (Pattern::parse("f_(x___,aind(y___,cof(i__),z___))*id(aind(coaf(i__),cof(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(j__),z___))").unwrap().into()),
-            (Pattern::parse("f_(x___,aind(y___,cof(j__),z___))*id(aind(cof(i__),coaf(j__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,cof(i__),z___))").unwrap().into()),
-            (Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*id(aind(cof(j__),coaf(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coaf(j__),z___))").unwrap().into()),
-            (Pattern::parse("f_(x___,aind(y___,coaf(i__),z___))*id(aind(coaf(j__),cof(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coaf(j__),z___))").unwrap().into()),
-            (Pattern::parse("f_(x___,aind(y___,coad(i__),z___))*id(aind(coad(j__),coad(i__)))").unwrap(),Pattern::parse("f_(x___,aind(y___,coad(j__),z___))").unwrap().into()),
+        let f_ = symb!("f_");
+        let cof = ColorFundamental::rep(3);
+        let coaf = ColorFundamental::rep(3).dual();
+        let coad = ColorAdjoint::rep(8);
+        let a___ = Atom::new_var(symb!("a___"));
+        let a_ = Atom::new_var(symb!("a_"));
+        let b_ = Atom::new_var(symb!("b_"));
+        let c___ = Atom::new_var(symb!("c___"));
+        let c_ = Atom::new_var(symb!("c_"));
+        let d_ = Atom::new_var(symb!("d_"));
+        let e_ = Atom::new_var(symb!("e_"));
+        let i_ = Atom::new_var(symb!("i_"));
+        let i = symb!("i");
+        let j = symb!("j");
+        let k = symb!("k");
+
+        let tr = Atom::new_var(symb!("TR"));
+        let nc = Atom::new_var(symb!("Nc"));
+        let reps = vec![
             (
-                Pattern::parse("id(aind(coaf(3,a_),cof(3,a_)))").unwrap(),
-                Pattern::parse("Nc").unwrap().into(),
+                fun!(f_, a___, cof.pattern(&b_), c___)
+                    * fun!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
+                fun!(f_, a___, cof.pattern(&c_), c___),
+            ),
+            // (
+            //     fun!(f_, a___, cof.pattern(&c_), c___)
+            //         * fun!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
+            //     fun!(f_, a___, cof.pattern(&b_), c___),
+            // ),
+            (
+                fun!(f_, a___, coaf.pattern(&b_), c___)
+                    * fun!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
+                fun!(f_, a___, coaf.pattern(&c_), c___),
+            ),
+            // (
+            //     fun!(f_, a___, coaf.pattern(&c_), c___)
+            //         * fun!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
+            //     fun!(f_, a___, coaf.pattern(&b_), c___),
+            // ),
+            (
+                fun!(f_, a___, coad.pattern(&b_), c___)
+                    * fun!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
+                fun!(f_, a___, coad.pattern(&a_), c___),
             ),
             (
-                Pattern::parse("id(aind(cof(3,a_),coaf(3,a_)))").unwrap(),
-                Pattern::parse("Nc").unwrap().into(),
+                fun!(f_, a___, coad.pattern(&a_), c___)
+                    * fun!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
+                fun!(f_, a___, coad.pattern(&b_), c___),
             ),
             (
-                Pattern::parse("id(aind(coad(8,a_),coad(8,a_)))").unwrap(),
-                Pattern::parse("Nc*Nc -1").unwrap().into(),
+                fun!(ETS.id, coaf.pattern(&a_), cof.pattern(&a_)),
+                nc.clone(),
             ),
             (
-                Pattern::parse("T(aind(coad(8,b_),cof(3,a_),coaf(3,a_)))").unwrap(),
-                Pattern::parse("0").unwrap().into(),
+                fun!(ETS.id, cof.pattern(&a_), coaf.pattern(&a_)),
+                nc.clone(),
             ),
             (
-                Pattern::parse("T(aind(coad(8,c_),cof(3,a_),coaf(3,b_)))T(aind(coad(8,d_),cof(3,b_),coaf(3,a_)))").unwrap(),
-                Pattern::parse("TR* id(aind(coad(8,c_),coad(8,d_)))").unwrap().into(),
+                fun!(ETS.id, coad.pattern(&a_), coad.pattern(&a_)),
+                (&nc * &nc) - 1,
             ),
             (
-                Pattern::parse("T(aind(coad(8,g_),cof(3,a_),coaf(3,b_)))*T(aind(coad(8,g_),cof(3,c_),coaf(3,d_)))").unwrap(),
-                Pattern::parse("TR* (id(aind(cof(3,a_),coaf(3,d_)))* id(aind(cof(3,c_),coaf(3,b_)))-1/Nc id(aind(cof(3,a_),coaf(3,b_)))* id(aind(cof(3,c_),coaf(3,d_))))").unwrap().into(),
+                fun!(UFO.t, a_, cof.pattern(&b_), coaf.pattern(&b_)),
+                Atom::new_num(0),
             ),
             (
-                Pattern::parse("T(aind(coad(8,g_),cof(3,a_),coaf(3,b_)))*T(aind(coad(8,e_),cof(3,b_),coaf(3,c_)))*T(aind(coad(8,g_),cof(3,c_),coaf(3,d_)))").unwrap(),
-                Pattern::parse("-TR/Nc T(aind(coad(8,e_),cof(3,a_),coaf(3,d_)))").unwrap().into(),
+                fun!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_))
+                    * fun!(UFO.t, b_, cof.pattern(&e_), coaf.pattern(&c_)),
+                &tr * fun!(ETS.id, a_, b_),
             ),
             (
-                Pattern::parse("f(aind(coad(8,a_),coad(8,b_),coad(8,c_)))").unwrap(),
-                Pattern::parse("1/TR *(T(aind(coad(8,a_),cof(3,i(a_,b_,c_)),coaf(3,j(a_,b_,c_))))*T(aind(coad(8,b_),cof(3,j(a_,b_,c_)),coaf(3,k(a_,b_,c_))))*T(aind(coad(8,c_),cof(3,k(a_,b_,c_)),coaf(3,i(a_,b_,c_))))-T(aind(coad(8,a_),cof(3,j(a_,b_,c_)),coaf(3,k(a_,b_,c_))))*T(aind(coad(8,b_),cof(3,i(a_,b_,c_)),coaf(3,j(a_,b_,c_))))*T(aind(coad(8,c_),cof(3,k(a_,b_,c_)),coaf(3,i(a_,b_,c_)))))").unwrap().into(),
-            )
+                fun!(UFO.t, &e_, a_, b_) * fun!(UFO.t, &e_, c_, d_),
+                &tr * (fun!(ETS.id, a_, d_) * fun!(ETS.id, c_, b_)
+                    - (fun!(ETS.id, a_, b_) * fun!(ETS.id, c_, d_) / &nc)),
+            ),
+            (
+                fun!(UFO.t, i_, a_, coaf.pattern(&b_))
+                    * fun!(UFO.t, e_, cof.pattern(&b_), coaf.pattern(&c_))
+                    * fun!(UFO.t, i_, cof.pattern(&c_), d_),
+                -(&tr / &nc) * fun!(UFO.t, e_, a_, d_),
+            ),
+            (
+                fun!(
+                    UFO.f,
+                    coad.pattern(&a_),
+                    coad.pattern(&b_),
+                    coad.pattern(&c_)
+                ),
+                (fun!(
+                    UFO.t,
+                    coad.pattern(&a_),
+                    cof.pattern(&fun!(i, a_, b_, c_)),
+                    coaf.pattern(&fun!(j, a_, b_, c_))
+                ) * fun!(
+                    UFO.t,
+                    coad.pattern(&b_),
+                    cof.pattern(&fun!(j, a_, b_, c_)),
+                    coaf.pattern(&fun!(k, a_, b_, c_))
+                ) * fun!(
+                    UFO.t,
+                    coad.pattern(&c_),
+                    cof.pattern(&fun!(k, a_, b_, c_)),
+                    coaf.pattern(&fun!(i, a_, b_, c_))
+                ) - fun!(
+                    UFO.t,
+                    coad.pattern(&a_),
+                    cof.pattern(&fun!(j, a_, b_, c_)),
+                    coaf.pattern(&fun!(k, a_, b_, c_))
+                ) * fun!(
+                    UFO.t,
+                    coad.pattern(&b_),
+                    cof.pattern(&fun!(i, a_, b_, c_)),
+                    coaf.pattern(&fun!(j, a_, b_, c_))
+                ) * fun!(
+                    UFO.t,
+                    coad.pattern(&c_),
+                    cof.pattern(&fun!(k, a_, b_, c_)),
+                    coaf.pattern(&fun!(i, a_, b_, c_))
+                )) / &tr,
+            ),
         ];
+
+        for (a, b) in &reps {
+            println!("{a}->{b}");
+        }
+
+        let replacements: Vec<(Pattern, PatternOrMap)> = reps
+            .into_iter()
+            .map(|(a, b)| (a.into_pattern(), b.into_pattern().into()))
+            .collect();
+
         let settings = MatchSettings {
             rhs_cache_size: 0,
             ..Default::default()
@@ -1220,8 +1340,8 @@ impl GammaSimplified {
     pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> SerializableAtom {
         expr.0 = expr.0.expand();
         let pats = [(
-            Pattern::parse("id(aind(a_,b_))*t_(aind(d___,b_,c___))").unwrap(),
-            Pattern::parse("t_(aind(d___,a_,c___))").unwrap().into(),
+            Pattern::parse("id(a_,b_)*t_(d___,b_,c___)").unwrap(),
+            Pattern::parse("t_(d___,a_,c___)").unwrap().into(),
         )];
 
         let reps: Vec<Replacement> = pats
@@ -1231,57 +1351,46 @@ impl GammaSimplified {
         expr.replace_repeat_multiple(&reps);
         let pats = vec![
             (
-                Pattern::parse("ProjP(aind(a_,b_))").unwrap(),
-                Pattern::parse("1/2*id(aind(a_,b_))-1/2*gamma5(aind(a_,b_))")
+                Pattern::parse("ProjP(a_,b_)").unwrap(),
+                Pattern::parse("1/2*id(a_,b_)-1/2*gamma5(a_,b_)")
                     .unwrap()
                     .into(),
             ),
             (
-                Pattern::parse("ProjM(aind(a_,b_))").unwrap(),
-                Pattern::parse("1/2*id(aind(a_,b_))+1/2*gamma5(aind(a_,b_))")
+                Pattern::parse("ProjM(a_,b_)").unwrap(),
+                Pattern::parse("1/2*id(a_,b_)+1/2*gamma5(a_,b_)")
                     .unwrap()
                     .into(),
             ),
             (
-                Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,b_,e___))").unwrap(),
-                Pattern::parse("f_(c___,aind(d___,a_,e___))")
-                    .unwrap()
-                    .into(),
+                Pattern::parse("id(a_,b_)*f_(d___,b_,e___)").unwrap(),
+                Pattern::parse("f_(c___,a_,e___)").unwrap().into(),
+            ),
+            // (
+            //     Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap(),
+            //     Pattern::parse("f_(c___,aind(d___,b_,e___))")
+            //         .unwrap()
+            //         .into(),
+            // ),
+            (
+                Pattern::parse("γ(a_,b_,c_)*γ(d_,c_,e_)").unwrap(),
+                Pattern::parse("gamma_chain(a_,d_,b_,e_)").unwrap().into(),
             ),
             (
-                Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap(),
-                Pattern::parse("f_(c___,aind(d___,b_,e___))")
-                    .unwrap()
-                    .into(),
+                Pattern::parse("gamma_chain(a__,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
+                Pattern::parse("gamma_chain(a__,d__,b_,e_)").unwrap().into(),
             ),
             (
-                Pattern::parse("γ(aind(a_,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-                Pattern::parse("gamma_chain(aind(a_,d_,b_,e_))")
-                    .unwrap()
-                    .into(),
+                Pattern::parse("γ(a_,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
+                Pattern::parse("gamma_chain(a_,d__,b_,e_)").unwrap().into(),
             ),
             (
-                Pattern::parse("gamma_chain(aind(a__,b_,c_))*gamma_chain(aind(d__,c_,e_))")
-                    .unwrap(),
-                Pattern::parse("gamma_chain(aind(a__,d__,b_,e_))")
-                    .unwrap()
-                    .into(),
+                Pattern::parse("gamma_chain(a__,b_,c_)*γ(d_,c_,e_)").unwrap(),
+                Pattern::parse("gamma_chain(a__,d_,b_,e_)").unwrap().into(),
             ),
             (
-                Pattern::parse("γ(aind(a_,b_,c_))*gamma_chain(aind(d__,c_,e_))").unwrap(),
-                Pattern::parse("gamma_chain(aind(a_,d__,b_,e_))")
-                    .unwrap()
-                    .into(),
-            ),
-            (
-                Pattern::parse("gamma_chain(aind(a__,b_,c_))*γ(aind(d_,c_,e_))").unwrap(),
-                Pattern::parse("gamma_chain(aind(a__,d_,b_,e_))")
-                    .unwrap()
-                    .into(),
-            ),
-            (
-                Pattern::parse("gamma_chain(aind(a__,b_,b_))").unwrap(),
-                Pattern::parse("gamma_trace(aind(a__))").unwrap().into(),
+                Pattern::parse("gamma_chain(a__,b_,b_)").unwrap(),
+                Pattern::parse("gamma_trace(a__)").unwrap().into(),
             ),
         ];
         let reps: Vec<Replacement> = pats
@@ -1305,18 +1414,14 @@ impl GammaSimplified {
             for (_, v) in a.match_stack {
                 match v {
                     Match::Single(s) => {
-                        match s {
-                            AtomView::Fun(f) => {
-                                let a = f.get_nargs();
-                                if a > max_nargs {
-                                    max_nargs = a;
-                                }
-                            }
-                            _ => {
-                                panic!("should be a function")
-                            }
+                        if max_nargs < 1 {
+                            max_nargs = 1;
                         }
-                        // print!("{}", s)
+                    }
+                    Match::Multiple(s, v) => {
+                        if max_nargs < v.len() {
+                            max_nargs = v.len();
+                        }
                     }
                     _ => panic!("should be a single match"),
                 }
@@ -1331,15 +1436,10 @@ impl GammaSimplified {
 
                 // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
                 for j in 1..n {
-                    let gamma_chain_builder =
+                    let mut gamma_chain_builder_slots =
                         FunctionBuilder::new(State::get_symbol("gamma_trace"));
 
-                    let mut gamma_chain_builder_slots =
-                        FunctionBuilder::new(State::get_symbol("aind"));
-
-                    let metric_builder = FunctionBuilder::new(State::get_symbol("g"));
-
-                    let metric_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+                    let metric_builder_slots = FunctionBuilder::new(State::get_symbol("Metric"));
 
                     for k in 1..j {
                         let mu = Atom::parse(&format!("a{}_", k)).unwrap();
@@ -1351,21 +1451,14 @@ impl GammaSimplified {
                         gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
                     }
 
-                    let metric = metric_builder
-                        .add_arg(
-                            &metric_builder_slots
-                                .add_args(&[
-                                    &Atom::parse(&format!("a{}_", 0)).unwrap(),
-                                    &Atom::parse(&format!("a{}_", j)).unwrap(),
-                                ])
-                                .finish(),
-                        )
+                    let metric = metric_builder_slots
+                        .add_args(&[
+                            &Atom::parse(&format!("a{}_", 0)).unwrap(),
+                            &Atom::parse(&format!("a{}_", j)).unwrap(),
+                        ])
                         .finish();
 
-                    let gamma = &gamma_chain_builder
-                        .add_arg(&gamma_chain_builder_slots.finish())
-                        .finish()
-                        * &metric;
+                    let gamma = gamma_chain_builder_slots.finish() * &metric;
 
                     if j % 2 == 0 {
                         sum = &sum - &gamma;
@@ -1374,93 +1467,89 @@ impl GammaSimplified {
                     }
                 }
 
-                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+                let mut gamma_chain_builder_slots =
+                    FunctionBuilder::new(State::get_symbol("gamma_trace"));
                 for k in 0..n {
                     let mu = Atom::parse(&format!("a{}_", k)).unwrap();
                     gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
                 }
-                let a = gamma_chain_builder
-                    .add_arg(&gamma_chain_builder_slots.finish())
-                    .finish();
+                let a = gamma_chain_builder_slots.finish();
 
                 reps.push((a.into_pattern(), sum.into_pattern().into()));
             } else {
-                let gamma_chain_builder = FunctionBuilder::new(State::get_symbol("gamma_trace"));
-                let mut gamma_chain_builder_slots = FunctionBuilder::new(State::get_symbol("aind"));
+                let mut gamma_chain_builder_slots =
+                    FunctionBuilder::new(State::get_symbol("gamma_trace"));
                 for k in 0..n {
                     let mu = Atom::parse(&format!("a{}_", k)).unwrap();
                     gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
                 }
-                let a = gamma_chain_builder
-                    .add_arg(&gamma_chain_builder_slots.finish())
-                    .finish();
+                let a = gamma_chain_builder_slots.finish();
                 // println!("{}", a);
                 reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
             }
         }
 
         reps.push((
-            Pattern::parse("gamma_trace(aind())").unwrap(),
+            Pattern::parse("gamma_trace()").unwrap(),
             Pattern::parse("4").unwrap().into(),
         ));
 
         // Dd
         reps.push((
-            Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),lord(b__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+            Pattern::parse("f_(i_,a_)*Metric(a_,b_)").unwrap(),
+            Pattern::parse("f_(i_,b_)").unwrap().into(),
         ));
         // Du
+        // reps.push((
+        //     Pattern::parse("f_(i_,a_)*Metric(a_,b_)").unwrap(),
+        //     Pattern::parse("f_(i_,b_)").unwrap().into(),
+        // ));
         reps.push((
-            Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(a__),loru(b__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-        ));
-        reps.push((
-            Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+            Pattern::parse("f_(i_,a_)*id(a_,b_)").unwrap(),
+            Pattern::parse("f_(i_,b_)").unwrap().into(),
         ));
         // Uu
-        reps.push((
-            Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),loru(b__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-        ));
-        // Ud
-        reps.push((
-            Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(a__),lord(b__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-        ));
-        reps.push((
-            Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-        ));
-        // dD
-        reps.push((
-            Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(lord(b__),lord(a__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-        ));
-        // uD
-        reps.push((
-            Pattern::parse("f_(i_,aind(loru(a__)))*g(aind(loru(b__),lord(a__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-        ));
-        reps.push((
-            Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-        ));
-        // uU
-        reps.push((
-            Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(loru(b__),loru(a__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
-        ));
+        // reps.push((
+        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(a__),mink(b__)))").unwrap(),
+        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
+        // // Ud
+        // reps.push((
+        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(a__),mink(b__)))").unwrap(),
+        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
+        // reps.push((
+        //     Pattern::parse("f_(i_,mink(a__)))*id(mink(a__),mink(b__)))").unwrap(),
+        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
+        // // dD
+        // reps.push((
+        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
+        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
+        // // uD
+        // reps.push((
+        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
+        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
+        // reps.push((
+        //     Pattern::parse("f_(i_,mink(a__)))*id(mink(b__),mink(a__)))").unwrap(),
+        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
+        // // uU
+        // reps.push((
+        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
+        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
         // dU
-        reps.push((
-            Pattern::parse("f_(i_,aind(lord(a__)))*g(aind(lord(b__),loru(a__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-        ));
-        reps.push((
-            Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))").unwrap(),
-            Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
-        ));
+        // reps.push((
+        // Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
+        // Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
+        // reps.push((
+        // Pattern::parse("f_(i_,mink(a__)))*id(mink(b__),mink(a__)))").unwrap(),
+        // Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
+        // ));
 
         let reps = reps
             .iter()
@@ -1469,7 +1558,6 @@ impl GammaSimplified {
         expr.replace_repeat_multiple(&reps);
         expr.0 = expr.0.expand();
         expr.replace_repeat_multiple(&reps);
-
         expr
     }
 
@@ -1847,6 +1935,10 @@ impl Contracted {
         params.extend(model.generate_params());
 
         let quad_values = param_values.iter().map(|c| c.map(|f| f.higher())).collect();
+
+        // for p in params.iter() {
+        //     println!("Param: {}", p);
+        // }
 
         (params, param_values, quad_values, model_params_start)
     }
