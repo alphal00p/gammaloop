@@ -623,7 +623,7 @@ impl From<EdgeSlots<Minkowski>> for VecStructure {
                 .into_iter()
                 .map(|x| x.into())
                 .chain(value.spin.into_iter().map(|x| x.into()))
-                .chain(value.color.into_iter().map(|x| x.into()))
+                .chain(value.color)
                 .collect(),
         }
     }
@@ -1747,8 +1747,11 @@ impl Model {
     }
 
     pub fn from_serializable_model(serializable_model: SerializableModel) -> Model {
-        UFO.t;
-        ETS.id;
+        //initialize the UFO and EFT symbols
+
+        let _ = *UFO;
+        let _ = *ETS;
+
         let mut model: Model = Model::default();
         model.name = serializable_model.name;
         model.restriction = serializable_model.restriction;

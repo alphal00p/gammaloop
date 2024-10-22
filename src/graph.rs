@@ -659,12 +659,10 @@ impl Edge {
                     .map(|(pat, rhs)| Replacement::new(pat, rhs))
                     .collect();
 
-                let out = [
+                [
                     atom.replace_all_multiple(&reps),
                     color_atom.replace_all_multiple(&reps),
-                ];
-
-                out
+                ]
             }
         }
     }

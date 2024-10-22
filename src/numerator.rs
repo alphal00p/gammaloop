@@ -501,8 +501,8 @@ pub struct UnInit;
 
 impl Default for UnInit {
     fn default() -> Self {
-        UFO.f;
-        ETS.gamma;
+        // UFO.f;
+        // ETS.gamma;
         UnInit
     }
 }
@@ -628,6 +628,7 @@ impl Numerator<UnInit> {
     }
 }
 
+#[allow(clippy::default_constructed_unit_structs)]
 impl Default for Numerator<UnInit> {
     fn default() -> Self {
         Numerator {
