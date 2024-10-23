@@ -1,6 +1,8 @@
 use crate::{
     cli_functions::cli,
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
+    feyngen::{self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions},
+    graph::SerializableGraph,
     inspect,
     integrands::Integrand,
     integrate::{
@@ -13,8 +15,8 @@ use crate::{
     ExportSettings, HasIntegrand, Settings,
 };
 use ahash::HashMap;
-
 use colored::Colorize;
+use feyngen::{FeynGenFilter, GenerationType};
 use git_version::git_version;
 use itertools::{self, Itertools};
 use log::{info, warn};
@@ -22,6 +24,7 @@ use spenso::complex::Complex;
 use std::{
     fs,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use symbolica::printer::PrintOptions;
 const GIT_VERSION: &str = git_version!();
@@ -69,6 +72,8 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_log::init();
     crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
+    m.add_class::<PyFeynGenFilters>()?;
+    m.add_class::<PyFeynGenOptions>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
     Ok(())
@@ -97,11 +102,111 @@ impl Clone for PythonWorker {
     }
 }
 
+#[pyclass(name = "FeynGenFilters")]
+pub struct PyFeynGenFilters {
+    pub filters: Vec<FeynGenFilter>,
+}
+impl<'a> FromPyObject<'a> for PyFeynGenFilters {
+    fn extract(ob: &'a pyo3::PyAny) -> PyResult<Self> {
+        if let Ok(a) = ob.extract::<PyFeynGenFilters>() {
+            Ok(PyFeynGenFilters { filters: a.filters })
+        } else {
+            Err(exceptions::PyValueError::new_err(
+                "Not a valid Feynman generation filter",
+            ))
+        }
+    }
+}
+
+#[pymethods]
+impl PyFeynGenFilters {
+    pub fn __str__(&self) -> PyResult<String> {
+        Ok(self.filters.iter().map(|f| format!(" > {}", f)).join("\n"))
+    }
+
+    #[new]
+    pub fn __new__(
+        no_1pi: Option<bool>,
+        particle_veto: Option<Vec<i64>>,
+        max_number_of_bridges: Option<usize>,
+        no_tadpoles: Option<bool>,
+        coupling_orders: Option<HashMap<String, usize>>,
+    ) -> PyResult<PyFeynGenFilters> {
+        let mut filters = Vec::new();
+        if let Some(no1pi) = no_1pi {
+            if no1pi {
+                filters.push(FeynGenFilter::No1PI);
+            }
+        }
+        if let Some(particle_veto) = particle_veto {
+            filters.push(FeynGenFilter::ParticleVeto(particle_veto));
+        }
+        if let Some(max_number_of_bridges) = max_number_of_bridges {
+            filters.push(FeynGenFilter::MaxNumberOfBridges(max_number_of_bridges));
+        }
+        if let Some(no_tadpoles) = no_tadpoles {
+            if no_tadpoles {
+                filters.push(FeynGenFilter::NoTadpoles);
+            }
+        }
+        if let Some(coupling_orders) = coupling_orders {
+            filters.push(FeynGenFilter::CouplingOrders(coupling_orders));
+        }
+        Ok(PyFeynGenFilters { filters })
+    }
+}
+
+#[pyclass(name = "FeynGenOptions")]
+pub struct PyFeynGenOptions {
+    pub options: FeynGenOptions,
+}
+impl<'a> FromPyObject<'a> for PyFeynGenOptions {
+    fn extract(ob: &'a pyo3::PyAny) -> PyResult<Self> {
+        if let Ok(a) = ob.extract::<PyFeynGenOptions>() {
+            Ok(PyFeynGenOptions { options: a.options })
+        } else {
+            Err(exceptions::PyValueError::new_err(
+                "Not a valid Feynman generation option structure",
+            ))
+        }
+    }
+}
+
+fn feyngen_to_python_error(error: FeynGenError) -> PyErr {
+    exceptions::PyValueError::new_err(format!("Feynam diagram generator error | {error}"))
+}
+
+#[pymethods]
+impl PyFeynGenOptions {
+    pub fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{}", self.options))
+    }
+    #[new]
+    pub fn __new__(
+        generation_type: String,
+        initial_particles: Vec<i64>,
+        final_particles: Vec<i64>,
+        loop_count_range: (usize, usize),
+        filters: Option<PyRef<PyFeynGenFilters>>,
+    ) -> PyResult<PyFeynGenOptions> {
+        Ok(PyFeynGenOptions {
+            options: FeynGenOptions {
+                generation_type: GenerationType::from_str(&generation_type)
+                    .map_err(feyngen_to_python_error)?,
+                initial_pdgs: initial_particles,
+                final_pdgs: final_particles,
+                loop_count_range,
+                filters: FeynGenFilters(filters.map(|f| f.filters.clone()).unwrap_or_default()),
+            },
+        })
+    }
+}
+
 // TODO: Improve error broadcasting to Python so as to show rust backtrace
 #[pymethods]
 impl PythonWorker {
-    #[classmethod]
-    pub fn new(_cls: &Bound<PyType>) -> PyResult<PythonWorker> {
+    #[new]
+    pub fn new() -> PyResult<PythonWorker> {
         crate::set_interrupt_handler();
         Ok(PythonWorker {
             model: Model::default(),
@@ -182,6 +287,29 @@ impl PythonWorker {
     pub fn reset_cross_sections(&mut self) -> PyResult<()> {
         self.cross_sections = CrossSectionList::default();
         Ok(())
+    }
+
+    pub fn generate_diagrams(
+        &mut self,
+        generation_options: PyRef<PyFeynGenOptions>,
+    ) -> PyResult<Vec<String>> {
+        if self.model.is_empty() {
+            return Err(exceptions::PyException::new_err(
+                "A physics model must be loaded before generating diagrams",
+            ));
+        }
+        let feyngen_options = generation_options.options.clone();
+
+        let diagram_generator = FeynGen::new(feyngen_options);
+
+        let diagrams = diagram_generator
+            .generate(&self.model)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        Ok(diagrams
+            .iter()
+            .map(|d| serde_yaml::to_string(&SerializableGraph::from_graph(d)).unwrap())
+            .collect())
     }
 
     pub fn add_amplitude_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {

@@ -18,6 +18,7 @@ from gammaloop.misc.utils import Colour, verbose_yaml_dump
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
 from gammaloop.base_objects.graph import Graph
+from gammaloop.base_objects.process import Process
 import gammaloop.cross_section.cross_section as cross_section
 import gammaloop.cross_section.supergraph as supergraph
 from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExporter, OutputMetaData, update_run_card_in_output
@@ -56,7 +57,8 @@ AVAILABLE_COMMANDS = [
     'set',
     'set_model_param',
     'reset',
-    'generate_graph',
+    'define_graph',
+    'generate',
     'display_debug_log'
 ]
 
@@ -420,7 +422,7 @@ class GammaLoop(object):
         self.model_directory: Path = Path('NotLoaded')
 
         # Initialize a gammaloop rust engine worker which will be used throughout the session
-        self.rust_worker: gl_rust.Worker = gl_rust.Worker.new()
+        self.rust_worker: gl_rust.Worker = gl_rust.Worker()
         logger.debug('Starting interface of GammaLoop v%s%s',
                      __version__,
                      (f' (git rev.: {GIT_REVISION})' if GIT_REVISION is not None else ''))
@@ -434,6 +436,7 @@ class GammaLoop(object):
         self.default_config: GammaLoopConfiguration = copy.deepcopy(
             self.config)
         self.launched_output: Path | None = None
+        self.process: Process | None = None
         self.command_history: CommandList = CommandList()
 
         if gl_is_symbolica_registered is False:
@@ -726,6 +729,80 @@ class GammaLoop(object):
         logger.info("Successfully exported model '%s' to '%s'.",
                     self.model.get_full_name(), args.model_file_path)
 
+    # generate command
+    generate_parser = ArgumentParser(prog='generate')
+    generate_parser.add_argument(
+        'process', metavar='process', type=str, nargs="+", help='Process to generate.')
+    generate_parser.add_argument('--amplitude', '-a', default=False,
+                                 action='store_true', help='Generate an amplitude to this contribution')
+    generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
+                                 help='Specify the maximum number of bridges for the graphs to generate.')
+    generate_parser.add_argument('--no_tadpoles', '-nt', default=False,
+                                 action='store_true', help='Forbid tadpole diagrams.')
+    generate_parser.add_argument('--no_1pi', '-n1', default=False,
+                                 action='store_true', help='Forbid 1PI diagrams.')
+
+    def do_generate(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.generate_parser.print_help()
+            return
+        args = self.generate_parser.parse_args(split_str_args(str_args))
+
+        parsed_process = Process.from_input_args(self.model, args)
+
+        if args.amplitude and parsed_process.cross_section_orders is not None:
+            logger.warning(
+                "Amplitude generation requested but cross section orders are also specified. Ignoring cross section orders.")
+            parsed_process.cross_section_orders = None
+
+        if not args.amplitude and parsed_process.amplitude_orders is not None:
+            raise GammaLoopError(
+                "Cross section generation requested but amplitude orders are also specified. This option is not yet supported.")
+
+        if not args.amplitude and parsed_process.amplitude_loop_count is not None:
+            raise GammaLoopError(
+                "Cross section generation requested but amplitude loop count is also specified. This option is not yet supported.")
+
+        if parsed_process.perturbative_orders is not None:
+            logger.warning(
+                f"The nature of the specific perturbative orders specified ({' '.join('%s=%s' % (k, v) for k, v in parsed_process.perturbative_orders.items())}) is not yet supported. Only the loop count will be derived from them.")
+
+        if args.amplitude:
+            coupling_orders = parsed_process.amplitude_orders
+            loop_count_range = parsed_process.amplitude_loop_count
+        else:
+            coupling_orders = parsed_process.cross_section_orders
+            loop_count_range = parsed_process.cross_section_loop_count
+
+        if loop_count_range is None:
+            if parsed_process.perturbative_orders is not None:
+                loop_count = sum(parsed_process.perturbative_orders.values())
+                loop_count_range = (loop_count, loop_count)
+            else:
+                loop_count_range = (0, 0)
+
+        particle_veto = None if parsed_process.particle_vetos is None else [
+            p.get_pdg_code() for p in parsed_process.particle_vetos]
+
+        self.process = parsed_process
+        all_graphs: list[str] = self.rust_worker.generate_diagrams(
+            gl_rust.FeynGenOptions(
+                "amplitude",
+                [p.get_pdg_code() for p in parsed_process.initial_states],
+                [p.get_pdg_code() for p in parsed_process.final_states],
+                loop_count_range,
+                filters=gl_rust.FeynGenFilters(
+                    no_1pi=args.no_1pi,
+                    particle_veto=particle_veto,
+                    no_tadpoles=args.no_tadpoles,
+                    max_number_of_bridges=args.max_n_bridges,
+                    coupling_orders=coupling_orders,
+                )
+            )
+        )
+        logger.debug("A total of %s graphs have been generated.",
+                     len(all_graphs))
+
     # export_graph command
     export_graphs_parser = ArgumentParser(prog='export_graph')
     export_graphs_parser.add_argument(
@@ -937,24 +1014,24 @@ class GammaLoop(object):
                     for i, (g, attributes) in enumerate(graphs)]
             )])
 
-    generate_graph_parser = ArgumentParser(prog='generate_graph')
-    generate_graph_parser.add_argument(
+    define_graph_parser = ArgumentParser(prog='define_graph')
+    define_graph_parser.add_argument(
         '--name', '-n', type=str, default='graph', help='Name of the graph')
-    generate_graph_parser.add_argument(
+    define_graph_parser.add_argument(
         '--virtual-edges', '-ve', type=str, help='List of virtual edges to generate the graph from')
-    generate_graph_parser.add_argument(
+    define_graph_parser.add_argument(
         '--external-edges', '-ee', type=str, help='List of external edges to generate the graph from')
-    generate_graph_parser.add_argument(
+    define_graph_parser.add_argument(
         '--multiplicity_factor', '-mf', type=str, default="1", help="Multiplicity factor of the graph (default: '%(default)s')")
-    generate_graph_parser.add_argument(
+    define_graph_parser.add_argument(
         '--overall_factor', '-of', type=str, default="1", help="Overall factor of the graph (default: '%(default)s')")
 
-    def do_generate_graph(self, str_args: str) -> None:
+    def do_define_graph(self, str_args: str) -> None:
         if str_args == 'help':
-            self.generate_graph_parser.print_help()
+            self.define_graph_parser.print_help()
             return
 
-        args = self.generate_graph_parser.parse_args(split_str_args(str_args))
+        args = self.define_graph_parser.parse_args(split_str_args(str_args))
 
         try:
             virtual_edges = eval(args.virtual_edges)

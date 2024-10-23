@@ -3,13 +3,42 @@ Gammaloop Python API.
 """
 
 
+from typing import Optional
+
+
 def cli_wrapper() -> None:
     """ Starts a CLI interface for GammaLoop exposing rust functionalities. """
 
 
+class FeynGenFilters:
+
+    @classmethod
+    def __new__(_cls,
+                no_1pi: Optional[bool] = False,
+                particle_veto: Optional[list[int]] = [],
+                max_number_of_bridges: Optional[int] = 0,
+                no_tadpoles: Optional[bool] = False,
+                coupling_orders: Optional[dict[str, int]] = {},
+                ) -> FeynGenFilters:
+        """ Creates a new set of diagram generation filters. """
+
+
+class FeynGenOptions:
+
+    @classmethod
+    def __new__(_cls,
+                generation_type: str,
+                initial_particles: list[int],
+                final_particles: list[int],
+                loop_count_range: tuple[int, int],
+                filters: Optional[FeynGenFilters] = None,
+                ) -> FeynGenOptions:
+        """ Creates options for steering diagram generation.  """
+
+
 class Worker:
     @classmethod
-    def new(_cls) -> Worker:
+    def __new__(_cls) -> Worker:
         """ Creates a new worker. """
 
     def load_model(self, file_path: str) -> None:
@@ -20,6 +49,9 @@ class Worker:
 
     def get_model(self) -> str:
         """ Returns the yaml string representation of the model currently active. """
+
+    def generate_diagrams(self, generation_options: FeynGenOptions) -> list[str]:
+        """ Generates diagrams according to the options given in argument and returns their yaml string representation. """
 
     def add_cross_section_from_yaml_str(self, yaml_str: str) -> None:
         """ Adds a cross section to the internal list of the worker given its yaml string representation. """
@@ -60,7 +92,7 @@ class Worker:
     def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str) -> None:
         """ Exports the amplitudes given in argument to the export root given in argument, parse export settings as yaml str"""
 
-    def export_expressions(self, export_root: str, format: str,export_yaml_str: str) -> None:
+    def export_expressions(self, export_root: str, format: str, export_yaml_str: str) -> None:
         """Exports the numerator and denominator to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
 
     def export_coupling_replacement_rules(self, export_root: str, format: str) -> None:
