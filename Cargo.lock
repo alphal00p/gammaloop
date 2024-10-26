@@ -2416,6 +2416,8 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d28438aeaa225b5e068668b67ddaed4592a1bc7dfac6cba1fddf207de857e38c"
 dependencies = [
  "ahash",
  "ambassador",
