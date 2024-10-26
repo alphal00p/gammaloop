@@ -43,7 +43,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [dependencies]
 # These will be patched
 symbolica = { version = "0.13.0" }
-spenso = { version = "0.2.0", features = ["shadowing"] }
+spenso = { version = "0.4.0", features = ["shadowing"] }
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -100,6 +100,8 @@ compensated-summation = "0.3.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 serde_with = "3.9.0"
 insta = { version = "1.40.0", features = ["ron", "toml"] }
+bitvec = { version = "1.0.1", features = ["serde"] }
+pathfinding = "4.11.0"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -130,5 +132,5 @@ fail-on-warnings = []
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-# spenso = { path = "../../alphal00p/spenso" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+spenso = { path = "../../alphal00p/spenso" }
+# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }

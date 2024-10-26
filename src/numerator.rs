@@ -33,7 +33,7 @@ use spenso::data::DataTensor;
 
 use spenso::network::Levels;
 use spenso::parametric::{
-    EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, ParamTensorSet,
+    EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, MixedTensor, ParamTensorSet,
     SerializableCompiledEvaluator, TensorSet,
 };
 use spenso::shadowing::ETS;
@@ -501,8 +501,8 @@ pub struct UnInit;
 
 impl Default for UnInit {
     fn default() -> Self {
-        // UFO.f;
-        // ETS.gamma;
+        let _ = *UFO;
+        let _ = *ETS;
         UnInit
     }
 }
@@ -814,7 +814,7 @@ impl Numerator<Global> {
 
     fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
         ColorSimplified::isolate_color(&mut expression);
-        println!("{}", expression);
+        // println!("{}", expression);
         let (mut coefs, rem) = expression.0.coefficient_list(State::get_symbol("color"));
         let mut atom = Atom::new_num(0);
         for (key, coef) in coefs.iter_mut() {
@@ -823,12 +823,12 @@ impl Numerator<Global> {
 
                 key.set_from_view(&f.iter().next().unwrap());
 
-                println!("{key}");
+                // println!("{key}");
                 let color_simplified = ColorSimplified::color_symplify_impl(key.clone().into())
                     .0
                     .factor();
 
-                println!("{coef}");
+                // println!("{coef}");
 
                 atom = atom + coef.factor() * color_simplified;
             } else {
@@ -1213,10 +1213,6 @@ impl ColorSimplified {
             ),
         ];
 
-        for (a, b) in &reps {
-            println!("{a}->{b}");
-        }
-
         let replacements: Vec<(Pattern, PatternOrMap)> = reps
             .into_iter()
             .map(|(a, b)| (a.into_pattern(), b.into_pattern().into()))
@@ -1245,10 +1241,12 @@ impl ColorSimplified {
     }
 
     pub fn parse(self) -> Network {
-        let net = TensorNetwork::try_from(self.get_single_atom().unwrap().0.as_view())
-            .unwrap()
-            .to_fully_parametric()
-            .cast();
+        let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
+            self.get_single_atom().unwrap().0.as_view(),
+        )
+        .unwrap()
+        .to_fully_parametric()
+        .cast();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
@@ -1567,17 +1565,19 @@ impl GammaSimplified {
     // }
 
     pub fn parse(self) -> Network {
-        let net = TensorNetwork::try_from(self.get_single_atom().unwrap().0.as_view())
-            .unwrap()
-            .to_fully_parametric()
-            .cast();
+        let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
+            self.get_single_atom().unwrap().0.as_view(),
+        )
+        .unwrap()
+        .to_fully_parametric()
+        .cast();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
     }
 
     pub fn parse_only_colorless(self) -> Network {
-        let net = TensorNetwork::try_from(
+        let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
             self.colorless
                 .clone()
                 .scalar()
@@ -1642,10 +1642,11 @@ pub enum ContractionSettings<'a, 'b, R> {
 
 impl Network {
     pub fn parse_impl(expr: AtomView) -> Self {
-        let net = TensorNetwork::try_from(expr)
-            .unwrap()
-            .to_fully_parametric()
-            .cast();
+        let net =
+            TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(expr)
+                .unwrap()
+                .to_fully_parametric()
+                .cast();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }

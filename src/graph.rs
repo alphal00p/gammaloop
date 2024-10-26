@@ -79,7 +79,7 @@ use symbolica::{
     symb,
 };
 //use symbolica::{atom::Symbol,state::State};
-
+pub mod half_edge;
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
     #[serde(rename = "in")]
