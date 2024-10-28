@@ -51,7 +51,7 @@ use rayon::vec;
 use serde::{self, Deserialize, Serialize};
 use spenso::complex::{Complex, SymbolicaComplex};
 use spenso::network::TensorNetwork;
-use spenso::structure::{IsAbstractSlot, Lorentz, RepName};
+use spenso::structure::{representation::Lorentz, representation::RepName, slot::IsAbstractSlot};
 use statrs::function::evaluate;
 use std::collections::HashMap;
 use std::f32::consts::E;

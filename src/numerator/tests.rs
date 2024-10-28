@@ -45,7 +45,7 @@ fn hairy_glue_box() {
         println!("{i}:{}", s);
     }
 
-    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,Some(&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))").unwrap(),colorless:Atom::new_num(1)})).color_simplify().state.color.to_dense().map_data(|a|a.to_string());
+    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,Some(&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))").unwrap(),colorless:Atom::new_num(1)})).color_simplify().state.color.to_bare_dense().map_data(|a|a.to_string());
 
     insta::assert_ron_snapshot!(color);
 }
@@ -119,7 +119,7 @@ fn trees() {
         println!("{i}:{}", s);
     }
     export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
-        color: Atom::parse("id(aind(cof(3,2),coaf(3,0)))/Nc").unwrap(),
+        color: Atom::parse("id(cof(3,2),dind(cof(3,0)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });
 
@@ -189,7 +189,7 @@ fn tree_ta_ta_1() {
 
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
-        color: Atom::parse("id(aind(coaf(3,0),cof(3,2)))/Nc").unwrap(),
+        color: Atom::parse("id(dind(cof(3,0)),cof(3,2))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });
 
@@ -404,7 +404,7 @@ fn tree_h_ttxaah_1() {
     // }
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
-        color: Atom::parse("id(aind(cof(3,1),coaf(3,2)))/Nc").unwrap(),
+        color: Atom::parse("id(cof(3,1),dind(cof(3,2)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });
 
@@ -456,7 +456,7 @@ fn tree_hh_ttxaa_1() {
     }
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
-        color: Atom::parse("id(aind(cof(3,2),coaf(3,3)))/Nc").unwrap(),
+        color: Atom::parse("id(cof(3,2),dind(cof(3,3)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
     });
 
@@ -625,15 +625,16 @@ fn load_tree(tree_name: &str, amp_num: usize) -> (Model, Amplitude<UnInit>, Path
 #[test]
 fn tree_h_ttxaah_0() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let expr = Atom::parse("-8/3*𝑖*ee^2*vev*lam*yt*(MT*id(aind(bis(4,3),bis(4,4)))+Q(6,aind(lord(4,5)))*γ(aind(loru(4,5),bis(4,3),bis(4,4))))*(MT*id(aind(bis(4,5),bis(4,6)))+Q(7,aind(lord(4,11)))*γ(aind(loru(4,11),bis(4,5),bis(4,6))))*(ProjM(aind(bis(4,7),bis(4,6)))+ProjP(aind(bis(4,7),bis(4,6))))*sqrt(2)^-1*id(aind(coaf(3,5),cof(3,6)))*id(aind(coaf(3,6),cof(3,7)))*id(aind(coaf(3,7),cof(3,8)))*id(aind(coaf(3,8),cof(3,9)))*id(aind(coaf(3,9),cof(3,10)))*γ(aind(lord(4,2),bis(4,3),bis(4,2)))*γ(aind(lord(4,3),bis(4,5),bis(4,4)))*ubar(1,aind(bis(4,2)))*v(2,aind(bis(4,7)))*ϵbar(3,aind(loru(4,2)))*ϵbar(4,aind(loru(4,3)))").unwrap();
+
+    let num = Numerator::default();
+    let expr = Atom::parse("-8/3*𝑖*ee^2*vev*lam*yt*(MT*id(bis(4,3),bis(4,4))+Q(6,mink(4,5))*γ(mink(4,5),bis(4,3),bis(4,4)))*(MT*id(bis(4,5),bis(4,6))+Q(7,mink(4,11))*γ(mink(4,11),bis(4,5),bis(4,6)))*(ProjM(bis(4,7),bis(4,6))+ProjP(bis(4,7),bis(4,6)))*sqrt(2)^-1*id(dind(cof(3,5)),cof(3,6))*id(dind(cof(3,6)),cof(3,7))*id(dind(cof(3,7)),cof(3,8))*id(dind(cof(3,8)),cof(3,9))*id(dind(cof(3,9)),cof(3,10))*γ(mink(4,2),bis(4,3),bis(4,2))*γ(mink(4,3),bis(4,5),bis(4,4))*ubar(1,bis(4,2))*v(2,bis(4,7))*ϵbar(3,mink(4,2))*ϵbar(4,mink(4,3))").unwrap();
 
     let prefactor = GlobalPrefactor {
-        color: Atom::parse("id(aind(cof(3,5),coaf(3,10)))").unwrap(),
+        color: Atom::parse("id(cof(3,5),dind(cof(3,10)))").unwrap(),
         colorless: Atom::new_num(1),
     };
 
-    Numerator::default()
-        .from_global(expr, Some(&prefactor))
+    num.from_global(expr, Some(&prefactor))
         .color_simplify()
         // .color_project()
         // .gamma_symplify()
@@ -645,5 +646,19 @@ fn tree_h_ttxaah_0() {
 
 #[test]
 fn color() {
-    insta::assert_snapshot!("Single color string",Numerator::default().from_global(Atom::parse("f(aind(coad(8,1),coad(8,11),coad(8,21)))*f(aind(coad(8,21),coad(8,2),coad(8,12)))*f(aind(coad(8,3),coad(8,12),coad(8,22)))*f(aind(coad(8,22),coad(8,4),coad(8,13)))*f(aind(coad(8,5),coad(8,13),coad(8,23)))*f(aind(coad(8,23),coad(8,6),coad(8,14)))*f(aind(coad(8,7),coad(8,14),coad(8,24)))*f(aind(coad(8,24),coad(8,8),coad(8,11)))*f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,8)))").unwrap(), None).color_simplify().export());
+    insta::assert_snapshot!("Single color string",Numerator::default().from_global(Atom::parse("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))").unwrap(), None).color_simplify().export());
+}
+
+#[test]
+fn prefactor() {
+    let mut test_export_settings = test_export_settings();
+    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
+        color: Atom::parse("id(cof(3,2),dind(cof(3,3)))/Nc").unwrap(),
+        colorless: Atom::new_num(1),
+    });
+
+    println!(
+        "{}",
+        serde_yaml::to_string(&test_export_settings.numerator_settings).unwrap()
+    );
 }
