@@ -648,3 +648,17 @@ fn tree_h_ttxaah_0() {
 fn color() {
     insta::assert_snapshot!("Single color string",Numerator::default().from_global(Atom::parse("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))").unwrap(), None).color_simplify().export());
 }
+
+#[test]
+fn prefactor() {
+    let mut test_export_settings = test_export_settings();
+    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
+        color: Atom::parse("id(cof(3,2),dind(cof(3,3)))/Nc").unwrap(),
+        colorless: Atom::new_num(1),
+    });
+
+    println!(
+        "{}",
+        serde_yaml::to_string(&test_export_settings.numerator_settings).unwrap()
+    );
+}

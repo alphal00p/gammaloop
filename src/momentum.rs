@@ -2585,7 +2585,7 @@ impl Rotation {
         let mud = mu.dual();
 
         let shadow: NamedStructure<String, ()> =
-            VecStructure::from_iter([mu]).to_named("eps".to_string(), None);
+            VecStructure::<PhysReps>::from_iter([mu.into()]).to_named("eps".to_string(), None);
         let shadow_t: MixedTensor<_, VecStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
