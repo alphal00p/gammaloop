@@ -14,17 +14,18 @@ use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Serialize};
 use spenso::complex::SymbolicaComplex;
+use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use spenso::{
     complex::{Complex, R},
     contraction::{RefOne, RefZero},
     upgrading_arithmetic::TrySmallestUpgrade,
 };
-use symbolica::atom::Symbol;
+use symbolica::atom::{AtomView, Symbol};
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
-use symbolica::evaluate::CompiledEvaluatorFloat;
+use symbolica::evaluate::{CompiledEvaluatorFloat, FunctionMap};
 use symbolica::symb;
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
@@ -1382,6 +1383,12 @@ impl FloatLike for f64 {
 impl From<F<f64>> for f64 {
     fn from(value: F<f64>) -> Self {
         value.0
+    }
+}
+
+impl From<F<f64>> for Rational {
+    fn from(value: F<f64>) -> Self {
+        value.0.into()
     }
 }
 
@@ -3193,6 +3200,132 @@ pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<Permutati
         left_to_right,
         right_to_left,
     })
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Serialize, Deserialize, Debug)]
+enum OwnedAtomOrTaggedFunction {
+    Atom(SerializableAtom),
+    TaggedFunction(SerializableSymbol, Vec<SerializableAtom>),
+}
+
+use ahash::AHashMap;
+use symbolica::atom::AtomOrView;
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct OwnedFunctionMap<T = Rational> {
+    map: AHashMap<OwnedAtomOrTaggedFunction, OwnedConstOrExpr<T>>,
+    tag: AHashMap<SerializableSymbol, usize>,
+}
+
+impl<T> OwnedFunctionMap<T> {
+    pub fn new() -> Self {
+        OwnedFunctionMap {
+            map: AHashMap::default(),
+            tag: AHashMap::default(),
+        }
+    }
+
+    pub fn add_constant<A: Into<Atom>>(&mut self, key: A, value: T) {
+        self.map.insert(
+            OwnedAtomOrTaggedFunction::Atom(<A as Into<Atom>>::into(key).into()),
+            OwnedConstOrExpr::Const(value),
+        );
+    }
+
+    pub fn add_function(
+        &mut self,
+        name: Symbol,
+        rename: String,
+        args: Vec<Symbol>,
+        body: Atom,
+    ) -> Result<(), &str> {
+        if let Some(t) = self.tag.insert(name.into(), 0) {
+            if t != 0 {
+                return Err("Cannot add the same function with a different number of parameters");
+            }
+        }
+
+        self.map.insert(
+            OwnedAtomOrTaggedFunction::Atom(Atom::new_var(name).into()),
+            OwnedConstOrExpr::Expr(
+                rename,
+                0,
+                args.into_iter().map(SerializableSymbol::from).collect(),
+                body.into(),
+            ),
+        );
+
+        Ok(())
+    }
+
+    pub fn add_tagged_function(
+        &mut self,
+        name: Symbol,
+        tags: Vec<Atom>,
+        rename: String,
+        args: Vec<Symbol>,
+        body: Atom,
+    ) -> Result<(), &str> {
+        if let Some(t) = self.tag.insert(name.into(), tags.len()) {
+            if t != tags.len() {
+                return Err("Cannot add the same function with a different number of parameters");
+            }
+        }
+
+        self.map.insert(
+            OwnedAtomOrTaggedFunction::Atom(Atom::new_var(name).into()),
+            OwnedConstOrExpr::Expr(
+                rename,
+                tags.len(),
+                args.into_iter().map(SerializableSymbol::from).collect(),
+                body.into(),
+            ),
+        );
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+enum OwnedConstOrExpr<T> {
+    Const(T),
+    Expr(String, usize, Vec<SerializableSymbol>, SerializableAtom),
+}
+
+impl<'a, T: Clone, U: From<T>> From<&'a OwnedFunctionMap<T>> for FunctionMap<'a, U> {
+    fn from(owned: &'a OwnedFunctionMap<T>) -> Self {
+        let mut fn_map = FunctionMap::new();
+
+        for (k, v) in owned.map.iter() {
+            match v {
+                OwnedConstOrExpr::Const(v) => {
+                    if let OwnedAtomOrTaggedFunction::Atom(a) = k {
+                        fn_map.add_constant(a.0.as_view(), v.clone().into());
+                    }
+                }
+                OwnedConstOrExpr::Expr(rename, tag_len, args, body) => {
+                    if let OwnedAtomOrTaggedFunction::Atom(a) = k {
+                        if let AtomView::Var(v) = a.0.as_view() {
+                            let name = v.get_symbol();
+                            let one: AtomOrView = Atom::new_num(1).into();
+                            let tags = vec![one; *tag_len];
+                            fn_map
+                                .add_tagged_function(
+                                    name,
+                                    tags,
+                                    rename.clone(),
+                                    args.iter().map(|a| a.clone().into()).collect(),
+                                    body.0.as_view(),
+                                )
+                                .unwrap();
+                        }
+                    }
+                }
+            }
+        }
+
+        fn_map
+    }
 }
 
 #[derive(Clone, Debug)]

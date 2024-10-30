@@ -13,8 +13,8 @@ use crate::{
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     numerator::{
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
-        AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
-        GammaAlgebraMode, Numerator, NumeratorState, NumeratorStateError, PythonState,
+        AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo, GammaAlgebraMode,
+        Numerator, NumeratorParseMode, NumeratorState, NumeratorStateError, PythonState,
         RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
     subtraction::{
@@ -2203,7 +2203,7 @@ impl Graph<Evaluators> {
         external_mom: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         self.derived_data.as_mut().unwrap().evaluate_fourd_expr(
             loop_mom,
             external_mom,
@@ -2262,7 +2262,7 @@ impl Graph<Evaluators> {
         &mut self,
         sample: &DefaultSample<T>,
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         self.derived_data
             .as_mut()
             .unwrap()
@@ -2455,7 +2455,7 @@ impl DerivedGraphData<Evaluators> {
         polarizations: &[Polarization<Complex<F<T>>>],
         settings: &Settings,
         bare_graph: &BareGraph,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let emr = bare_graph
             .loop_momentum_basis
             .edge_signatures
@@ -2491,7 +2491,7 @@ impl DerivedGraphData<Evaluators> {
         sample: &DefaultSample<T>,
         settings: &Settings,
         bare_graph: &BareGraph,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
@@ -2515,7 +2515,7 @@ impl DerivedGraphData<Evaluators> {
         settings: &Settings,
         lmb: &LoopMomentumBasis,
         bare_graph: &BareGraph,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
@@ -2540,7 +2540,7 @@ impl DerivedGraphData<Evaluators> {
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let one = sample.one();
         let zero = one.zero();
         let ni = Complex::new(zero.clone(), -one.clone());
@@ -2612,7 +2612,7 @@ impl DerivedGraphData<Evaluators> {
         sample: &BareSample<T>,
         tag: Option<Uuid>,
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let emr = graph.cff_emr_from_lmb(sample, &graph.loop_momentum_basis);
 
         let rep = self
@@ -2678,7 +2678,7 @@ impl DerivedGraphData<Evaluators> {
         tag: Option<Uuid>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
-    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>> {
+    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>>> {
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.cff_emr_from_lmb(sample, lmb);
 
@@ -2693,7 +2693,7 @@ impl DerivedGraphData<Evaluators> {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, settings)
     }
@@ -2747,23 +2747,34 @@ impl DerivedGraphData<UnInit> {
                 //.color_project())
             };
 
-        let parsed = match &export_settings.numerator_settings.gamma_algebra {
-            GammaAlgebraMode::Symbolic => {
-                color_simplified.map_numerator(|n| n.gamma_simplify().parse())
-            }
-            GammaAlgebraMode::Concrete => color_simplified.map_numerator(|n| n.parse()),
+        let parsed: Result<DerivedGraphData<Evaluators>> = match &export_settings
+            .numerator_settings
+            .gamma_algebra
+        {
+            GammaAlgebraMode::Symbolic => color_simplified.map_numerator_res(|n| {
+                Ok(n.gamma_simplify()
+                    .parse()
+                    .contract(contraction_settings)?
+                    .generate_evaluators(model, base_graph, &extra_info, export_settings))
+            }),
+            GammaAlgebraMode::Concrete => match &export_settings.numerator_settings.parse_mode {
+                NumeratorParseMode::Polynomial => color_simplified.map_numerator_res(|n| {
+                    Ok(n.parse_poly(base_graph).contract().generate_evaluators(
+                        model,
+                        base_graph,
+                        &extra_info,
+                        export_settings,
+                    ))
+                }),
+                NumeratorParseMode::Direct => color_simplified.map_numerator_res(|n| {
+                    Ok(n.parse()
+                        .contract(contraction_settings)?
+                        .generate_evaluators(model, base_graph, &extra_info, export_settings))
+                }),
+            },
         };
 
-        parsed
-            .map_numerator_res(|n| {
-                Result::<_, Report>::Ok(n.contract(contraction_settings)?.generate_evaluators(
-                    model,
-                    base_graph,
-                    &extra_info,
-                    export_settings,
-                ))
-            })
-            .unwrap()
+        parsed.unwrap()
     }
 
     fn apply_feynman_rules(

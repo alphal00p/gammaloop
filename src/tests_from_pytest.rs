@@ -17,9 +17,10 @@ use crate::momentum::{
     Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, Signature, ThreeMomentum,
 };
 use crate::numerator::{
-    ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, IterativeOptions,
-    Numerator, NumeratorCompileOptions, NumeratorEvaluateFloat, NumeratorEvaluatorOptions,
-    NumeratorSettings, NumeratorState, PythonState, UnInit,
+    ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, Gloopoly,
+    IterativeOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluateFloat,
+    NumeratorEvaluatorOptions, NumeratorParseMode, NumeratorSettings, NumeratorState, PolySplit,
+    PythonState, UnInit,
 };
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::subtraction::static_counterterm;
@@ -33,6 +34,7 @@ use crate::{
 };
 use ahash::AHashMap;
 use bincode::{Decode, Encode};
+use brotli::CompressorWriter;
 use clarabel::solver::default;
 use colored::Colorize;
 use indexmap::set::Iter;
@@ -40,7 +42,10 @@ use itertools::{FormatWith, Itertools};
 use nalgebra::Point;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
-use symbolica::domains::rational::Rational;
+use ref_ops::RefNeg;
+use spenso::data::GetTensorData;
+use symbolica::domains::rational::{Rational, Q};
+use symbolica::poly::Variable;
 //use libc::__c_anonymous_ptrace_syscall_info_exit;
 use core::f64;
 use lorentz_vector::LorentzVector;
@@ -56,11 +61,11 @@ use statrs::function::evaluate;
 use std::collections::HashMap;
 use std::f32::consts::E;
 use std::fs::{self, File};
-use std::io::Cursor;
+use std::io::{BufReader, BufWriter, Cursor};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use std::{clone, env};
-use symbolica;
 use symbolica::atom::{Atom, AtomView, FunctionBuilder};
 use symbolica::domains::float::{Complex as SymComplex, NumericalFloatLike, Real};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, FunctionMap, OptimizationSettings};
@@ -68,7 +73,8 @@ use symbolica::id::{
     AtomMatchIterator, Condition, Match, MatchSettings, MatchStack, Pattern, PatternOrMap,
     Replacement,
 };
-use symbolica::state::State;
+use symbolica::state::{State, Workspace};
+use symbolica::{self, fun, symb};
 use typed_index_collections::TiVec;
 
 #[allow(unused)]
@@ -96,6 +102,7 @@ pub fn test_export_settings() -> ExportSettings {
             }),
             global_numerator: None,
             global_prefactor: None,
+            parse_mode: NumeratorParseMode::Direct,
             gamma_algebra: GammaAlgebraMode::Concrete,
         },
         cpe_rounds_cff: Some(1),
@@ -1690,6 +1697,98 @@ fn pytest_physical_1L_6photons() {
         fail_lower_prec: false,
     };
     check_amplitude(amp_check);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn physical_1L_6photons_play() {
+    init();
+
+    let amp_check = AmplitudeCheck {
+        name: "physical_1L_6photons",
+        model_name: "sm",
+        n_edges: 12,
+        n_vertices: 12,
+        sample: SampleType::Random(3),
+        n_external_connections: 6,
+        n_prop_groups: 6,
+        n_lmb: 6,
+        n_cff_trees: 62,
+        n_esurfaces: 30,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 252,
+        n_terms_unfolded: 5,
+        cff_norm: Some(F(1.4618496452655858e-16)),
+        cff_phase: F(-1.0823765660512161),
+        tolerance: F(1.0e-7),
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    let (model, amplitude, path) = check_load(&amp_check);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+    let extra_info = graph
+        .derived_data
+        .as_ref()
+        .unwrap()
+        .generate_extra_info(path);
+
+    let export_settings = test_export_settings();
+    Numerator::default()
+        .from_graph(&graph.bare_graph, None)
+        .color_simplify()
+        .parse_poly(&graph.bare_graph)
+        .contract()
+        .generate_evaluators(&model, &graph.bare_graph, &extra_info, &export_settings);
+}
+
+#[test]
+#[ignore]
+#[allow(non_snake_case)]
+fn physical_1L_6photons_play_two() {
+    init();
+
+    let amp_check = AmplitudeCheck {
+        name: "physical_1L_6photons",
+        model_name: "sm",
+        n_edges: 12,
+        n_vertices: 12,
+        sample: SampleType::Random(3),
+        n_external_connections: 6,
+        n_prop_groups: 6,
+        n_lmb: 6,
+        n_cff_trees: 62,
+        n_esurfaces: 30,
+        n_existing_esurfaces: 0,
+        n_expanded_terms: 252,
+        n_terms_unfolded: 5,
+        cff_norm: Some(F(1.4618496452655858e-16)),
+        cff_phase: F(-1.0823765660512161),
+        tolerance: F(1.0e-7),
+        n_existing_per_overlap: Some(1),
+        n_overlap_groups: 0,
+        fail_lower_prec: false,
+    };
+    let (_model, amplitude, _path) = check_load(&amp_check);
+
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    // let export_settings = test_export_settings();
+    let a = PolySplit::from_color_out(
+        Numerator::default()
+            .from_graph(&graph.bare_graph, None)
+            .color_simplify(),
+    )
+    .get_owned_linear(0.into())
+    .unwrap();
+
+    let f = File::create("6photons_1L.dat").unwrap();
+    let mut writer = CompressorWriter::new(BufWriter::new(f), 4096, 3, 22);
+
+    a.as_view().export(&mut writer).unwrap();
 }
 
 #[test]
