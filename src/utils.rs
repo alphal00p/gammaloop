@@ -3158,6 +3158,7 @@ pub struct GammaloopSymbols {
     pub u: Symbol,
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
+    pub coeff: Symbol,
 }
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
@@ -3167,6 +3168,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     u: symb!("u"),
     epsilon: symb!("ϵ"),
     epsilonbar: symb!("ϵbar"),
+    coeff: symb!("coef"),
 });
 
 /// Checks if two lists are permutations of eachother, and establish a map between indices
@@ -3246,7 +3248,7 @@ impl<T> OwnedFunctionMap<T> {
         }
 
         self.map.insert(
-            OwnedAtomOrTaggedFunction::Atom(Atom::new_var(name).into()),
+            OwnedAtomOrTaggedFunction::TaggedFunction(name.into(), vec![]),
             OwnedConstOrExpr::Expr(
                 rename,
                 0,
@@ -3272,11 +3274,16 @@ impl<T> OwnedFunctionMap<T> {
             }
         }
 
+        let tag_len = tags.len();
+
         self.map.insert(
-            OwnedAtomOrTaggedFunction::Atom(Atom::new_var(name).into()),
+            OwnedAtomOrTaggedFunction::TaggedFunction(
+                name.into(),
+                tags.into_iter().map(SerializableAtom::from).collect(),
+            ),
             OwnedConstOrExpr::Expr(
                 rename,
-                tags.len(),
+                tag_len,
                 args.into_iter().map(SerializableSymbol::from).collect(),
                 body.into(),
             ),
@@ -3304,21 +3311,16 @@ impl<'a, T: Clone, U: From<T>> From<&'a OwnedFunctionMap<T>> for FunctionMap<'a,
                     }
                 }
                 OwnedConstOrExpr::Expr(rename, tag_len, args, body) => {
-                    if let OwnedAtomOrTaggedFunction::Atom(a) = k {
-                        if let AtomView::Var(v) = a.0.as_view() {
-                            let name = v.get_symbol();
-                            let one: AtomOrView = Atom::new_num(1).into();
-                            let tags = vec![one; *tag_len];
-                            fn_map
-                                .add_tagged_function(
-                                    name,
-                                    tags,
-                                    rename.clone(),
-                                    args.iter().map(|a| a.clone().into()).collect(),
-                                    body.0.as_view(),
-                                )
-                                .unwrap();
-                        }
+                    if let OwnedAtomOrTaggedFunction::TaggedFunction(name, tags) = k {
+                        fn_map
+                            .add_tagged_function(
+                                (*name).into(),
+                                tags.iter().map(|a| a.0.as_view().into()).collect(),
+                                rename.clone(),
+                                args.iter().map(|&a| a.into()).collect(),
+                                body.0.as_view(),
+                            )
+                            .unwrap();
                     }
                 }
             }

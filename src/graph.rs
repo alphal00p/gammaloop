@@ -269,8 +269,6 @@ impl HasVertexInfo for InteractionVertexInfo {
             .map(|ls| {
                 let mut atom = ls.structure.clone();
 
-                println!("in vertex{atom}");
-
                 for (i, e) in edges.iter().enumerate() {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
@@ -293,7 +291,6 @@ impl HasVertexInfo for InteractionVertexInfo {
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom);
-                println!("preprocessed vertex{atom}");
 
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
@@ -305,7 +302,6 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                     atom = atom.replace_all_multiple(&reps);
                 }
-                println!("out vertex{atom}");
                 atom
             })
             .collect_vec();
@@ -2759,7 +2755,7 @@ impl DerivedGraphData<UnInit> {
             }),
             GammaAlgebraMode::Concrete => match &export_settings.numerator_settings.parse_mode {
                 NumeratorParseMode::Polynomial => color_simplified.map_numerator_res(|n| {
-                    Ok(n.parse_poly(base_graph).contract().generate_evaluators(
+                    Ok(n.parse_poly(base_graph).contract()?.generate_evaluators(
                         model,
                         base_graph,
                         &extra_info,

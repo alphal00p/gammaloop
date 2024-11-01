@@ -1,11 +1,19 @@
-use spenso::{complex::Complex, iterators::IteratableTensor, structure::HasStructure};
-use std::path::{Path, PathBuf};
+use brotli::CompressorWriter;
+use spenso::{
+    complex::Complex, data::DenseTensor, iterators::IteratableTensor, parametric::ParamTensor,
+    structure::HasStructure, upgrading_arithmetic::FallibleSub,
+};
+use std::{
+    fs::File,
+    io::BufWriter,
+    path::{Path, PathBuf},
+};
 use symbolica::{atom::Atom, domains::rational::Rational};
 
 use crate::{
     cross_section::Amplitude,
     gammaloop_integrand::DefaultSample,
-    graph::Graph,
+    graph::{BareGraph, Graph},
     model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
     numerator::{ContractionSettings, ExtraInfo, GlobalPrefactor},
@@ -173,6 +181,74 @@ fn trees() {
     println!("CFF: {}", valcff);
 }
 
+fn compare_poly_to_direct(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>) -> bool {
+    let color_simplified = Numerator::default()
+        .from_graph(graph, prefactor)
+        .color_simplify();
+
+    let poly = color_simplified
+        .clone()
+        .parse_poly(graph)
+        .contract()
+        .unwrap()
+        .to_contracted()
+        .state
+        .tensor;
+
+    let direct = color_simplified
+        .parse()
+        .contract(ContractionSettings::<Rational>::Normal)
+        .unwrap()
+        .state
+        .tensor;
+
+    let zero = ParamTensor::from(DenseTensor::fill(
+        poly.structure().clone(),
+        Atom::new_num(0),
+    ));
+
+    zero == poly.sub_fallible(&direct).unwrap().map_data(|a| a.expand())
+}
+
+fn save_expr(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>, name: &str) {
+    let color_simplified = Numerator::default()
+        .from_graph(graph, prefactor)
+        .color_simplify();
+    let direct = color_simplified
+        .parse()
+        .contract(ContractionSettings::<Rational>::Normal)
+        .unwrap()
+        .state
+        .tensor
+        .scalar()
+        .unwrap();
+    let f = File::create(name).unwrap();
+    let mut writer = CompressorWriter::new(BufWriter::new(f), 4096, 3, 22);
+
+    direct.as_view().export(&mut writer).unwrap();
+}
+
+#[test]
+fn t_ta() {
+    let (model, amplitude, path) = load_tree("t_ta", 1);
+
+    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    graph.generate_cff();
+
+    graph.bare_graph.verify_external_edge_order().unwrap();
+
+    let global_prefactor = GlobalPrefactor {
+        color: Atom::parse("id(dind(cof(3,0)),cof(3,1))/Nc").unwrap(),
+        colorless: Atom::new_num(1),
+    };
+    assert!(
+        compare_poly_to_direct(&graph.bare_graph, Some(&global_prefactor)),
+        "Poly and direct are not equal"
+    );
+    save_expr(&graph.bare_graph, Some(&global_prefactor), "t_ta.dat");
+}
+
 #[test]
 fn tree_ta_ta_1() {
     let (model, amplitude, path) = load_tree("ta_ta", 1);
@@ -187,11 +263,19 @@ fn tree_ta_ta_1() {
         println!("{i}:{}", s);
     }
 
-    let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
+    let global_prefactor = GlobalPrefactor {
         color: Atom::parse("id(dind(cof(3,0)),cof(3,2))/Nc").unwrap(),
         colorless: Atom::new_num(1),
-    });
+    };
+    assert!(
+        compare_poly_to_direct(&graph.bare_graph, Some(&global_prefactor)),
+        "Poly and direct are not equal"
+    );
+
+    save_expr(&graph.bare_graph, Some(&global_prefactor), "ta_ta.dat");
+
+    let mut test_export_settings = test_export_settings();
+    test_export_settings.numerator_settings.global_prefactor = Some(global_prefactor);
 
     let mut graph = graph.process_numerator(
         &model,

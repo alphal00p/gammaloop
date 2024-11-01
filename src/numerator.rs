@@ -7,7 +7,7 @@ use crate::debug_info::DEBUG_LOGGER;
 use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
 use crate::momentum::Polarization;
-use crate::utils::{f128, OwnedFunctionMap};
+use crate::utils::{f128, OwnedFunctionMap, GS};
 use crate::{
     graph::EdgeType,
     model::Model,
@@ -38,6 +38,7 @@ use spenso::parametric::{
     SerializableCompiledEvaluator, TensorSet,
 };
 use spenso::shadowing::ETS;
+use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::structure::representation::{BaseRepName, ColorAdjoint, ColorFundamental};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
@@ -52,6 +53,7 @@ use spenso::{
         NamedStructure, TensorStructure,
     },
 };
+use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
 use symbolica::state::Workspace;
 
@@ -1277,104 +1279,6 @@ impl Numerator<ColorSimplified> {
         }
     }
 
-    // pub fn parse_poly(self, bare_graph: &BareGraph) -> PolySplit {
-    //     fn generate_variables(bare_graph: &BareGraph) -> Vec<Variable> {
-    //         let mut vars: Vec<Variable> = vec![];
-
-    //         for (i, _) in bare_graph.edges.iter().enumerate() {
-    //             let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-    //                 [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-    //                 "Q".into(),
-    //                 Some(i),
-    //             );
-
-    //             vars.push(
-    //                 named_structure
-    //                     .to_shell()
-    //                     .expanded_shadow()
-    //                     .unwrap()
-    //                     .get_owned_linear(0.into())
-    //                     .unwrap()
-    //                     .into(),
-    //             );
-    //         }
-
-    //         vars
-    //     }
-    //     fn mul_to_poly_tensor(
-    //         a: SerializableAtom,
-    //         var_map: Arc<Vec<Variable>>,
-    //     ) -> DataTensor<Gloopoly, AtomStructure> {
-    //         let mut net: TensorNetwork<DataTensor<Gloopoly, _>, Gloopoly> = TensorNetwork::new();
-    //         let field = AtomField::new();
-
-    //         if let AtomView::Mul(m) = a.0.as_view() {
-    //             for a in m.iter() {
-    //                 let mut term_net = TensorNetwork::<
-    //                     MixedTensor<f64, AtomStructure>,
-    //                     SerializableAtom,
-    //                 >::try_from(a)
-    //                 .unwrap();
-
-    //                 term_net.contract();
-    //                 let res = term_net
-    //                     .to_fully_parametric()
-    //                     .result_tensor_smart()
-    //                     .unwrap();
-
-    //                 let coef = symb!("coef");
-
-    //                 let tensor: DataTensor<
-    //                     Gloopoly,
-    //                     SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>,
-    //                 > = res.tensor.map_data(|a| {
-    //                     println!("to polynomial of {a}");
-    //                     let poly = a.to_polynomial::<_, u8>(&Q, Some(var_map.clone()));
-
-    //                     // let atom_poly = poly.map_coeff(|a|Atom::new_num(a), field);
-
-    //                     // let split = poly.to_multivariate_polynomial_list(&energies, true);
-
-    //                     // for (i, (pows, v)) in split.iter().enumerate() {
-    //                     //     let mut mul = Atom::new_num(1);
-    //                     //     for (i, &p) in pows.iter().enumerate() {
-    //                     //         mul = mul * Atom::npow(&var_map[i].to_atom(), p);
-    //                     //     }
-
-    //                     //     let c = fun!(coef, Atom::new_num(i));
-
-    //                     //     poly.rep
-    //                     // }
-
-    //                     poly
-    //                 });
-
-    //                 net.push(tensor);
-    //             }
-    //         }
-    //         println!("contracting :{}", net.rich_graph().dot());
-    //         net.contract();
-    //         println!("finished contracting");
-    //         net.result_tensor_smart().unwrap()
-    //     }
-
-    //     let var_map = Arc::new(generate_variables(bare_graph));
-
-    //     let energies = vec![0; var_map.len()];
-    //     let zero = Gloopoly::new_zero(&Q);
-    //     let out: DataTensor<DataTensor<Gloopoly>> = self.state.colorless.map_data(|a| {
-    //         mul_to_poly_tensor(a, var_map.clone()).map_structure(|s| VecStructure::from(s))
-    //     });
-    //     println!("finished mul_to_poly_tensor");
-
-    //     PolySplit {
-    //         colorless: out.flatten(&zero).unwrap(),
-    //         var_map,
-    //         energies,
-    //         color: self.state.color,
-    //     }
-    // }
-
     pub fn parse(self) -> Numerator<Network> {
         debug!(
             "ColorSymplified numerator: color:{}\n,colorless:{}\n",
@@ -1398,22 +1302,24 @@ impl PolySplit {
     fn generate_variables(bare_graph: &BareGraph) -> Vec<Variable> {
         let mut vars: Vec<Variable> = vec![];
 
-        for (i, _) in bare_graph.edges.iter().enumerate() {
-            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-                [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                "Q".into(),
-                Some(i),
-            );
+        for (i, e) in bare_graph.edges.iter().enumerate() {
+            if let EdgeType::Virtual = e.edge_type {
+                let named_structure: NamedStructure<String> = NamedStructure::from_iter(
+                    [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
+                    "Q".into(),
+                    Some(i),
+                );
 
-            vars.push(
-                named_structure
-                    .to_shell()
-                    .expanded_shadow()
-                    .unwrap()
-                    .get_owned_linear(0.into())
-                    .unwrap()
-                    .into(),
-            );
+                vars.push(
+                    named_structure
+                        .to_shell()
+                        .expanded_shadow()
+                        .unwrap()
+                        .get_owned_linear(0.into())
+                        .unwrap()
+                        .into(),
+                );
+            }
         }
 
         vars
@@ -1490,12 +1396,13 @@ impl PolySplit {
         let coef = symb!("coef");
         let shift = reps.as_ref().lock().unwrap().len();
 
-        let mut mul_h = workspace.new_atom().into_inner();
+        let mut mul_h = Atom::new_num(1);
         let mut var_h = workspace.new_atom();
         let mut num_h = workspace.new_atom();
         let mut pow_h = workspace.new_atom();
 
         for (i, monomial) in poly.into_iter().enumerate() {
+            mul_h = Atom::new_num(1);
             for (var_id, &pow) in poly.variables.iter().zip(monomial.exponents) {
                 if pow > 0 {
                     match var_id {
@@ -1556,10 +1463,35 @@ impl PolySplit {
 }
 
 impl Numerator<PolySplit> {
-    pub fn contract(self) -> Numerator<PolyContracted> {
-        Numerator {
-            state: self.state.optimize(),
+    pub fn contract(self) -> Result<Numerator<PolyContracted>> {
+        match self.validate_squared_energies_impl() {
+            Err(_) => {
+                let state = self.state.optimize();
+                debug!("PolyContracted {}", state.tensor);
+                Ok(Numerator { state })
+            }
+            Ok(r) => Err(eyre!("has higher powers here: {}", r)),
         }
+    }
+
+    fn validate_squared_energies_impl(&self) -> Result<DataTensor<ExpandedIndex>, ()> {
+        self.state.colorless.map_data_ref_result(|p| {
+            let mut square: Result<Vec<usize>, ()> = Err(());
+            for (i, &e) in p.exponents.iter().enumerate() {
+                if e > 1 {
+                    if let Ok(sq) = &mut square {
+                        sq.push(i);
+                    } else {
+                        square = Ok(vec![i]);
+                    }
+                }
+            }
+            square.map(ExpandedIndex::from)
+        })
+    }
+
+    pub fn validate_squared_energies(&self) -> bool {
+        self.validate_squared_energies_impl().is_err()
     }
 }
 
@@ -1569,13 +1501,38 @@ pub struct PolyContracted {
 }
 
 impl Numerator<PolyContracted> {
+    pub fn to_contracted(self) -> Numerator<Contracted> {
+        let coefs: Vec<_> = (0..self.state.coef_map.len())
+            .map(|i| fun!(GS.coeff, Atom::new_num(i as i64)).into_pattern())
+            .collect();
+
+        let coefs_reps: Vec<_> = self
+            .state
+            .coef_map
+            .iter()
+            .map(|a| a.into_pattern().into())
+            .collect();
+
+        let reps: Vec<_> = coefs
+            .iter()
+            .zip(coefs_reps.iter())
+            .map(|(p, rhs)| Replacement::new(p, rhs))
+            .collect();
+
+        Numerator {
+            state: Contracted {
+                tensor: self.state.tensor.replace_all_multiple(&reps),
+            },
+        }
+    }
+
     fn generate_fn_map(&self) -> OwnedFunctionMap<F<f64>> {
         let mut fn_map = OwnedFunctionMap::new();
 
         for (v, k) in self.state.coef_map.clone().iter().enumerate() {
             fn_map
                 .add_tagged_function(
-                    symb!("coef"),
+                    GS.coeff,
                     vec![Atom::new_num(v as i64)],
                     format!("coef{v}"),
                     vec![],
@@ -2074,7 +2031,7 @@ impl TryFrom<PythonState> for Network {
         }
     }
 }
-pub enum ContractionSettings<'a, 'b, R> {
+pub enum ContractionSettings<'a, 'b, R = Rational> {
     Levelled((usize, &'a mut FunctionMap<'b, R>)),
     Normal,
 }

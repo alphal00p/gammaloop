@@ -1,17 +1,22 @@
 use itertools::Itertools;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use ref_ops::RefNeg;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::{Atom, AtomView};
-use symbolica::evaluate::FunctionMap;
-use symbolica::id::Replacement;
+use symbolica::domains::float::{Complex, Real};
+use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, FunctionMap};
+use symbolica::id::{Pattern, Replacement};
 use symbolica::poly::Variable;
 use symbolica::state::{State, Workspace};
 use symbolica::{self, fun, symb};
 
 fn main() {
+    let name = "sixphotons_1L";
+
     fn to_shadowed_poly_impl(
         poly: &symbolica::poly::polynomial::MultivariatePolynomial<
             symbolica::domains::atom::AtomField,
@@ -34,6 +39,7 @@ fn main() {
         let mut pow_h = workspace.new_atom();
 
         for (i, monomial) in poly.into_iter().enumerate() {
+            mul_h = Atom::new_num(1);
             for (var_id, &pow) in poly.variables.iter().zip(monomial.exponents) {
                 if pow > 0 {
                     match var_id {
@@ -78,10 +84,12 @@ fn main() {
     ) -> Atom {
         Workspace::get_local().with(|ws| to_shadowed_poly_impl(&poly, ws, reps))
     }
-    let f = File::open("examples/data/6photons_1L.dat").unwrap();
+    let f = File::open(&format!("examples/data/{}.dat", name)).unwrap();
     let mut reader = brotli::Decompressor::new(BufReader::new(f), 4096);
 
     let a = Atom::import(&mut reader, None).unwrap();
+
+    println!("{}", a);
 
     let var_map: Arc<Vec<Variable>> = Arc::new(
         [
@@ -107,17 +115,19 @@ fn main() {
     let reps = Arc::new(Mutex::new(Vec::new()));
 
     let shadowed = shadow_poly(poly, reps.clone());
+
+    println!("{shadowed}");
     let mut fn_map_shadowed = FunctionMap::new();
     let mut fn_map = FunctionMap::new();
 
-    let reps = Arc::try_unwrap(reps).unwrap().into_inner().unwrap();
+    let coefs = Arc::try_unwrap(reps).unwrap().into_inner().unwrap();
 
     fn_map.add_constant(Atom::parse("MT").unwrap(), 1.into());
 
     fn_map_shadowed.add_constant(Atom::parse("MT").unwrap(), 1.into());
     fn_map.add_constant(Atom::parse("ee").unwrap(), 2.into());
     fn_map_shadowed.add_constant(Atom::parse("ee").unwrap(), 2.into());
-    for (v, k) in reps.iter().enumerate() {
+    for (v, k) in coefs.iter().enumerate() {
         fn_map_shadowed
             .add_tagged_function(
                 symb!("coef"),
@@ -139,7 +149,15 @@ fn main() {
     ];
 
     let eps = symb!("ϵ");
+    let eps_inds: Vec<i32> = vec![0, 2];
     let epsb = symb!("ϵbar");
+
+    let epsb_inds: Vec<i32> = vec![5, 7, 9, 11];
+    let u = symb!("u");
+
+    let u_inds: Vec<i32> = vec![];
+    let ubar = symb!("ubar");
+    let ubar_inds: Vec<i32> = vec![];
 
     let mut params = (0..12)
         .map(|i| {
@@ -151,14 +169,26 @@ fn main() {
         .collect_vec();
 
     params.extend(
-        [0, 2]
+        eps_inds
             .iter()
             .map(|&i| cinds.iter().map(move |c| fun!(eps, Atom::new_num(i), c)))
             .flatten()
             .chain(
-                [5, 7, 9, 11]
+                epsb_inds
                     .iter()
                     .map(|&i| cinds.iter().map(move |c| fun!(epsb, Atom::new_num(i), c)))
+                    .flatten(),
+            )
+            .chain(
+                u_inds
+                    .iter()
+                    .map(|&i| cinds.iter().map(move |c| fun!(u, Atom::new_num(i), c)))
+                    .flatten(),
+            )
+            .chain(
+                ubar_inds
+                    .iter()
+                    .map(|&i| cinds.iter().map(move |c| fun!(ubar, Atom::new_num(i), c)))
                     .flatten(),
             ),
     );
@@ -305,9 +335,40 @@ fn main() {
     println!("horner {elapsed:?}");
 
     let time = Instant::now();
-    atom_eval.linearize(Some(2));
+    let mut lin_eval: ExpressionEvaluator<symbolica::domains::float::Complex<f64>> = atom_eval
+        .clone()
+        .linearize(Some(2))
+        .map_coeff(&|a| a.into());
 
     let elapsed = time.elapsed();
+
+    let mut lin_eval_comp = atom_eval
+        .clone()
+        .linearize(Some(2))
+        .export_cpp(
+            &format!("{}.cpp", name),
+            name,
+            true,
+            symbolica::evaluate::InlineASM::None,
+        )
+        .unwrap()
+        .compile(&format!("{}.so", name), CompileOptions::default())
+        .unwrap()
+        .load()
+        .unwrap();
+    let mut lin_eval_comp_asm = atom_eval
+        .linearize(Some(2))
+        .export_cpp(
+            &format!("{}_asm.cpp", name),
+            name,
+            true,
+            symbolica::evaluate::InlineASM::X64,
+        )
+        .unwrap()
+        .compile(&format!("{}_asm.so", name), CompileOptions::default())
+        .unwrap()
+        .load()
+        .unwrap();
     println!("Linearized {elapsed:?}");
     let time = Instant::now();
 
@@ -325,8 +386,208 @@ fn main() {
     let elapsed = time.elapsed();
     println!("Poly: horner {elapsed:?}");
     let time = Instant::now();
-    poly_eval.linearize(Some(2));
+    let mut lin_poly_eval: ExpressionEvaluator<symbolica::domains::float::Complex<f64>> = poly_eval
+        .clone()
+        .linearize(Some(2))
+        .map_coeff(&|a| a.into());
 
     let elapsed = time.elapsed();
+
+    let mut lin_poly_eval_comp = poly_eval
+        .clone()
+        .linearize(Some(2))
+        .export_cpp(
+            &format!("{}-poly.cpp", name),
+            name,
+            true,
+            symbolica::evaluate::InlineASM::None,
+        )
+        .unwrap()
+        .compile(&format!("{}-poly.so", name), CompileOptions::default())
+        .unwrap()
+        .load()
+        .unwrap();
+
+    let mut lin_poly_eval_comp_asm = poly_eval
+        .clone()
+        .linearize(Some(2))
+        .export_cpp(
+            &format!("{}-poly_asm.cpp", name),
+            name,
+            true,
+            symbolica::evaluate::InlineASM::X64,
+        )
+        .unwrap()
+        .compile(&format!("{}-poly_asm.so", name), CompileOptions::default())
+        .unwrap()
+        .load()
+        .unwrap();
+
     println!("Poly: Linearized {elapsed:?}");
+
+    let mut out_poly = vec![Complex::new(0.0, 0.0); poly_views.len()];
+    let mut rng = SmallRng::seed_from_u64(4);
+    let params = (0..params.len())
+        .map(|i| Complex::new(rng.gen::<f64>(), rng.gen::<f64>()))
+        .collect::<Vec<_>>();
+
+    let time = Instant::now();
+    lin_poly_eval.evaluate(&params, &mut out_poly);
+    let elapsed = time.elapsed();
+
+    println!("Poly: eval {elapsed:?}");
+
+    let mut out_poly_comp = out_poly.clone();
+    let time = Instant::now();
+    lin_poly_eval_comp.evaluate(&params, &mut out_poly_comp);
+    let elapsed = time.elapsed();
+
+    println!("Poly: compiled eval {elapsed:?}");
+
+    let mut out_poly_comp_asm = out_poly.clone();
+    let time = Instant::now();
+    lin_poly_eval_comp_asm.evaluate(&params, &mut out_poly_comp_asm);
+    let elapsed = time.elapsed();
+
+    println!("Poly: compiled eval {elapsed:?}");
+
+    let mut out = vec![Complex::new(0.0, 0.0); poly_views.len()];
+    let time = Instant::now();
+    lin_eval.evaluate(&params, &mut out);
+    let elapsed = time.elapsed();
+
+    println!("eval {elapsed:?}");
+
+    let mut out_comp = out_poly.clone();
+    let time = Instant::now();
+    lin_eval_comp.evaluate(&params, &mut out_comp);
+    let elapsed = time.elapsed();
+
+    println!("compiled eval {elapsed:?}");
+
+    let mut out_comp_asm = out_poly.clone();
+    let time = Instant::now();
+    lin_eval_comp_asm.evaluate(&params, &mut out_comp_asm);
+    let elapsed = time.elapsed();
+
+    println!("compiled eval {elapsed:?}");
+
+    let coef = symb!("coef");
+
+    let coefs_syms: Vec<_> = (0..coefs.len())
+        .map(|i| fun!(coef, Atom::new_num(i as i64)).into_pattern())
+        .collect();
+
+    let coefs_reps: Vec<_> = coefs.iter().map(|a| a.into_pattern().into()).collect();
+
+    let mut reps: Vec<_> = coefs_syms
+        .iter()
+        .zip(coefs_reps.iter())
+        .map(|(p, rhs)| Replacement::new(p, rhs))
+        .collect();
+
+    let pats = [
+        (
+            &Pattern::parse("ϵbar(n_, cind(x_))").unwrap(),
+            &Pattern::parse("n_+4+x_").unwrap().into(),
+        ),
+        (
+            &Pattern::parse("ϵ(n_, cind(x_))").unwrap(),
+            &Pattern::parse("n_+4+x_").unwrap().into(),
+        ),
+        (
+            &Pattern::parse("Q(n_, cind(x_))").unwrap(),
+            &Pattern::parse("n_*x_").unwrap().into(),
+        ),
+    ];
+
+    let other_reps: Vec<_> = pats
+        .iter()
+        .map(|(p, rhs)| Replacement::new(p, rhs))
+        .collect();
+
+    assert_eq!(
+        Atom::new_num(0),
+        (&atoms[0] - &polys[0].replace_all_multiple(&reps)).replace_all_multiple(&other_reps)
+    );
+
+    for (a, b) in out.iter().zip(out_poly.iter()) {
+        assert!((a - b).norm().re < 1e-10, "{:?} {:?}", a, b);
+    }
+
+    for (a, b) in out_comp.iter().zip(out_poly_comp.iter()) {
+        assert!((a - b).norm().re < 1e-10, "{:?} {:?}", a, b);
+    }
+
+    for (a, b) in out_comp_asm.iter().zip(out_poly_comp_asm.iter()) {
+        assert!((a - b).norm().re < 1e-10, "{:?} {:?}", a, b);
+    }
 }
+
+fn time_step<F, R>(label: &str, func: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let start = Instant::now();
+    let result = func();
+    println!("{} took {:?}", label, start.elapsed());
+    result
+}
+
+// fn optimize_view(
+//     view: AtomView,
+//     fn_map: &FunctionMap,
+//     params: &[Atom],
+//     label: &str,
+// ) -> ExpressionEvaluator<Complex<f64>> {
+
+// }
+
+// fn optimize_and_linearize_with_steps(
+//     views: &[AtomView],
+//     fn_map: &FunctionMap,
+//     params: &[Atom],
+//     label: &str,
+// ) -> ExpressionEvaluator<Complex<f64>> {
+//     let mut iter = views.iter();
+
+//     // Initialize with the first item
+//     let mut eval_tree = time_step(&format!("{} eval tree single", label), || {
+//         iter.next()
+//             .unwrap()
+//             .to_evaluation_tree(fn_map, params)
+//             .unwrap()
+//     });
+//     time_step(&format!("{} cse single", label), || {
+//         eval_tree.common_subexpression_elimination()
+//     });
+//     time_step(&format!("{} horner single", label), || {
+//         eval_tree.horner_scheme()
+//     });
+
+//     let mut lin_eval: ExpressionEvaluator<Complex<f64>> =
+//         time_step(&format!("{} linearize single", label), || {
+//             eval_tree.linearize(Some(2)).map_coeff(&Complex::from)
+//         });
+
+//     // Merge remaining items with granular timing
+//     for (index, view) in iter.enumerate() {
+//         let mut eval = time_step(&format!("to_evaluation_tree for view {}", index), || {
+//             view.to_evaluation_tree(fn_map, params).unwrap()
+//         });
+//         time_step(&format!("CSE for view {}", index), || {
+//             eval.common_subexpression_elimination()
+//         });
+//         time_step(&format!("Horner scheme for view {}", index), || {
+//             eval.horner_scheme()
+//         });
+//         let lin = time_step(&format!("linearize view {}", index), || {
+//             eval.linearize(Some(2)).map_coeff(Into::into)
+//         });
+//         time_step(&format!("merge view {}", index), || {
+//             lin_eval.merge(lin, Some(2)).unwrap()
+//         });
+//     }
+
+//     lin_eval
+// }

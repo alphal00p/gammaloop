@@ -102,7 +102,7 @@ pub fn test_export_settings() -> ExportSettings {
             }),
             global_numerator: None,
             global_prefactor: None,
-            parse_mode: NumeratorParseMode::Direct,
+            parse_mode: NumeratorParseMode::Polynomial,
             gamma_algebra: GammaAlgebraMode::Concrete,
         },
         cpe_rounds_cff: Some(1),
@@ -513,10 +513,7 @@ fn compare_cff_to_ltd<T: FloatLike>(
     let default_settings = load_default_settings();
     let lmb_specification =
         LoopMomentumBasisSpecification::Literal(&graph.bare_graph.loop_momentum_basis);
-    // let cff_res = graph.evaluate_cff_orientations(sample, &lmb_specification, &default_settings);
-    // // for o in cff_res.iter() {
-    // //     println!("cff: {}", o);
-    // // }
+
     let cff_res: Complex<F<T>> = graph.evaluate_cff_expression(sample, &default_settings);
     graph.generate_ltd();
     let ltd_res = graph.evaluate_ltd_expression(sample, &default_settings);
@@ -1694,7 +1691,7 @@ fn pytest_physical_1L_6photons() {
         tolerance: F(1.0e-7),
         n_existing_per_overlap: Some(1),
         n_overlap_groups: 0,
-        fail_lower_prec: false,
+        fail_lower_prec: true,
     };
     check_amplitude(amp_check);
 }
@@ -1742,6 +1739,7 @@ fn physical_1L_6photons_play() {
         .color_simplify()
         .parse_poly(&graph.bare_graph)
         .contract()
+        .unwrap()
         .generate_evaluators(&model, &graph.bare_graph, &extra_info, &export_settings);
 }
 
@@ -1804,7 +1802,7 @@ fn pytest_physical_2L_6photons() {
     //     model_name: "sm",
     //     n_edges: 15,
     //     n_vertices: 14,
-    //     sample: SampleType::Random(2),
+    //     sample: SampleType::Random(13),
     //     n_external_connections: 6,
     //     n_prop_groups: 9,
     //     n_lmb: 24,
@@ -1818,7 +1816,7 @@ fn pytest_physical_2L_6photons() {
     //     tolerance: F(1.0e-8),
     //     n_existing_per_overlap: Some(1),
     //     n_overlap_groups: 0,
-    //     fail_lower_prec: false,
+    //     fail_lower_prec: true,
     // };
     // check_amplitude(amp_check);
 }
@@ -2095,6 +2093,15 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
             verbose: false,
         });
 
+    let mut graph_iterative_compiled_poly = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+
+    export_settings.numerator_settings.parse_mode = NumeratorParseMode::Direct;
+
     let mut graph_iterative_compiled = graph.clone().process_numerator(
         &model,
         ContractionSettings::Normal,
@@ -2114,11 +2121,29 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
         path.clone(),
         &export_settings,
     );
+
+    export_settings.numerator_settings.parse_mode = NumeratorParseMode::Polynomial;
+
+    let mut graph_joint_compiled_poly = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
     export_settings.numerator_settings.eval_settings =
         NumeratorEvaluatorOptions::Single(EvaluatorOptions {
             cpe_rounds: Some(1),
             compile_options: NumeratorCompileOptions::Compiled,
         });
+
+    let mut graph_single_compiled_poly = graph.clone().process_numerator(
+        &model,
+        ContractionSettings::Normal,
+        path.clone(),
+        &export_settings,
+    );
+
+    export_settings.numerator_settings.parse_mode = NumeratorParseMode::Direct;
 
     let mut graph_single_compiled = graph.clone().process_numerator(
         &model,
@@ -2126,6 +2151,7 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
         path.clone(),
         &export_settings,
     );
+
     export_settings.numerator_settings.eval_settings =
         NumeratorEvaluatorOptions::Iterative(IterativeOptions {
             eval_options: EvaluatorOptions {
@@ -2144,8 +2170,24 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
         .numerator
         .disable_compiled();
 
+    let mut graph_iterative_poly = graph_iterative_compiled_poly.clone();
+    graph_iterative_poly
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
     let mut graph_joint = graph_joint_compiled.clone();
     graph_joint
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
+    let mut graph_joint_poly = graph_joint_compiled_poly.clone();
+    graph_joint_poly
         .derived_data
         .as_mut()
         .unwrap()
@@ -2160,14 +2202,31 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
         .numerator
         .disable_compiled();
 
+    let mut graph_single_poly = graph_single_compiled_poly.clone();
+    graph_single_poly
+        .derived_data
+        .as_mut()
+        .unwrap()
+        .numerator
+        .disable_compiled();
+
     let eval_single = graph_single.evaluate_cff_expression(&sample, &default_settings);
+    let eval_single_poly = graph_single_poly.evaluate_cff_expression(&sample, &default_settings);
     let eval_joint = graph_joint.evaluate_cff_expression(&sample, &default_settings);
+    let eval_joint_poly = graph_joint_poly.evaluate_cff_expression(&sample, &default_settings);
     let eval_iter = graph_iterative.evaluate_cff_expression(&sample, &default_settings);
+    let eval_iter_poly = graph_iterative_poly.evaluate_cff_expression(&sample, &default_settings);
     let eval_single_comp =
         graph_single_compiled.evaluate_cff_expression(&sample, &default_settings);
+    let eval_single_comp_poly =
+        graph_single_compiled_poly.evaluate_cff_expression(&sample, &default_settings);
     let eval_joint_comp = graph_joint_compiled.evaluate_cff_expression(&sample, &default_settings);
+    let eval_joint_comp_poly =
+        graph_joint_compiled_poly.evaluate_cff_expression(&sample, &default_settings);
     let eval_iter_comp =
         graph_iterative_compiled.evaluate_cff_expression(&sample, &default_settings);
+    let eval_iter_comp_poly =
+        graph_iterative_compiled_poly.evaluate_cff_expression(&sample, &default_settings);
 
     Complex::approx_eq_res(&eval_single, &eval_joint, &F(1e-10))
         .wrap_err("Single and joint evaluation differ in norm")?;
@@ -2184,6 +2243,24 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
     Complex::approx_eq_res(&eval_single, &eval_single_comp, &F(1e-10))
         .wrap_err("Single and Single compiled evaluation differ in norm")?;
 
+    Complex::approx_eq_res(&eval_single, &eval_single_comp_poly, &F(1e-10))
+        .wrap_err("Single and Single poly compiled evaluation differ in norm")?;
+
+    Complex::approx_eq_res(&eval_single, &eval_single_poly, &F(1e-10))
+        .wrap_err("Single and Single poly evaluation differ in norm")?;
+
+    Complex::approx_eq_res(&eval_single, &eval_iter_comp_poly, &F(1e-10))
+        .wrap_err("Single and iterative poly compiled evaluation differ in norm")?;
+
+    Complex::approx_eq_res(&eval_single, &eval_iter_poly, &F(1e-10))
+        .wrap_err("Single and iterative poly evaluation differ in norm")?;
+
+    Complex::approx_eq_res(&eval_single, &eval_joint_poly, &F(1e-10))
+        .wrap_err("Single and joint poly evaluation differ in norm")?;
+
+    Complex::approx_eq_res(&eval_single, &eval_joint_comp_poly, &F(1e-10))
+        .wrap_err("Single and joint poly compiled evaluation differ in norm")?;
+
     Ok(())
 }
 
@@ -2198,7 +2275,7 @@ fn pytest_top_bubble() {
 
 #[test]
 #[allow(non_snake_case)]
-fn pytest_physical_1L_6photons_generate() {
+fn pytest_physical_1L_6photons_compare_numerator_evals() {
     init();
 
     compare_numerator_evals("physical_1L_6photons")
