@@ -99,10 +99,15 @@ serde_repr = "0.1.19"
 compensated-summation = "0.3.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 serde_with = "3.9.0"
-insta = { version = "1.40.0", features = ["ron", "toml"] }
+
 bitvec = { version = "1.0.1", features = ["serde"] }
 pathfinding = "4.11.0"
+insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
+slotmap = { version = "1.0.7", features = ["serde"] }
+base62 = "2.0.2"
+trie-rs = { version = "0.4.2", features = ["serde"] }
 brotli = "7.0.0"
+
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

@@ -233,15 +233,29 @@ pub fn kinematics_builder(
     )
 }
 
-pub fn load_amplitude_output(
-    output_path: &str,
-    load_generic_model: bool,
-) -> (Model, Amplitude<UnInit>, PathBuf) {
-    let output_dir = if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
+pub fn load_generic_model(name: &str) -> Model {
+    Model::from_file(String::from(
+        Path::new(&output_dir())
+            .join(format!("gammaloop_models/{}.yaml", name))
+            .to_str()
+            .unwrap(),
+    ))
+    .unwrap()
+}
+
+fn output_dir() -> String {
+    if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
         pytest_output_path
     } else {
         String::from("./src/test_resources")
-    };
+    }
+}
+
+pub fn load_amplitude_output(
+    output_path: &str,
+    generic_model: bool,
+) -> (Model, Amplitude<UnInit>, PathBuf) {
+    let output_dir = output_dir();
     let path = Path::new(&output_dir).join(output_path);
     let output_meta_data: OutputMetaData = serde_yaml::from_reader(
         File::open(path.join("output_metadata.yaml")).unwrap_or_else(|e| {
@@ -256,17 +270,8 @@ pub fn load_amplitude_output(
     assert_eq!(output_meta_data.output_type, OutputType::Amplitudes);
     assert_eq!(output_meta_data.contents.len(), 1);
 
-    let model = if load_generic_model {
-        Model::from_file(String::from(
-            Path::new(&output_dir)
-                .join(format!(
-                    "gammaloop_models/{}.yaml",
-                    output_meta_data.model_name.as_str()
-                ))
-                .to_str()
-                .unwrap(),
-        ))
-        .unwrap()
+    let model = if generic_model {
+        load_generic_model(&output_meta_data.model_name)
     } else {
         Model::from_file(String::from(
             path.join(format!(

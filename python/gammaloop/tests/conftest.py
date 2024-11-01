@@ -710,7 +710,9 @@ output {output_path.joinpath("GL_OUTPUT")} --overwrite_output --yaml_only -exp -
     return output_path
 
 
+
 @measure_fixture_setup_time(scope="session")
+@pytest.fixture(scope="session")
 def compile_rust_tests() -> Path | None:
 
     # If you want to bypass the "manual" compilation of the rust tests, then uncomment the line below
