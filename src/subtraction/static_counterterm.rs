@@ -5,9 +5,10 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
+use typed_index_collections::TiVec;
 
 const MAX_ITERATIONS: usize = 20;
-const TOLERANCE: f64 = 10.0;
+const TOLERANCE: f64 = 5.0;
 
 use crate::graph::BareGraph;
 use crate::momentum::{Rotatable, Rotation};
@@ -362,7 +363,13 @@ impl CounterTerm {
                     }
                 };
 
-                let ((r_plus_eval, r_plus_energy_cache), (r_minus_eval, r_minus_energy_cache)) = (
+                let (
+                    (r_plus_eval, (r_plus_energy_cache, r_plus_ose_product, r_plus_esurface_cache)),
+                    (
+                        r_minus_eval,
+                        (r_minus_energy_cache, r_minus_ose_product, r_minus_esurface_cache),
+                    ),
+                ) = (
                     CounterTerm::radius_star_eval(
                         &rplus_sample,
                         graph,
@@ -450,19 +457,21 @@ impl CounterTerm {
 
                 let minus_half = -const_builder.one() / (const_builder.one() + const_builder.one());
 
-                let integrated_ct_plus = &i * const_builder.PI() * &minus_half * r_plus_eval
+                let h_plus = utils::h(
+                    &positive_result.solution / &hemispherical_radius,
+                    None,
+                    settings
+                        .subtraction
+                        .ct_settings
+                        .integrated_ct_sigma
+                        .map(F::<T>::from_f64),
+                    &settings.subtraction.ct_settings.integrated_ct_hfunction,
+                );
+
+                let integrated_ct_plus = &i * const_builder.PI() * &minus_half * &r_plus_eval
                     / &positive_result.derivative_at_solution
                     / &positive_result.solution
-                    * utils::h(
-                        &positive_result.solution / &hemispherical_radius,
-                        None,
-                        settings
-                            .subtraction
-                            .ct_settings
-                            .integrated_ct_sigma
-                            .map(F::<T>::from_f64),
-                        &settings.subtraction.ct_settings.integrated_ct_hfunction,
-                    )
+                    * &h_plus
                     * &jacobian_ratio_plus
                     * &radius_sign_plus;
 
@@ -474,19 +483,21 @@ impl CounterTerm {
                     * &singularity_damper_minus
                     * &jacobian_ratio_minus;
 
-                let integrated_ct_minus = &i * const_builder.PI() * r_minus_eval * &minus_half
+                let h_minus = utils::h(
+                    &negative_result.solution / &hemispherical_radius,
+                    None,
+                    settings
+                        .subtraction
+                        .ct_settings
+                        .integrated_ct_sigma
+                        .map(F::<T>::from_f64),
+                    &settings.subtraction.ct_settings.integrated_ct_hfunction,
+                );
+
+                let integrated_ct_minus = &i * const_builder.PI() * &r_minus_eval * &minus_half
                     / &negative_result.derivative_at_solution
                     / &negative_result.solution
-                    * utils::h(
-                        &negative_result.solution / &hemispherical_radius,
-                        None,
-                        settings
-                            .subtraction
-                            .ct_settings
-                            .integrated_ct_sigma
-                            .map(F::<T>::from_f64),
-                        &settings.subtraction.ct_settings.integrated_ct_hfunction,
-                    )
+                    * &h_minus
                     * &jacobian_ratio_minus
                     * &radius_sign_minus;
 
@@ -499,6 +510,7 @@ impl CounterTerm {
                     ));
                     let debug_helper = DebugHelper {
                         esurface_id,
+                        edges: esurface.energies.clone(),
                         initial_radius: radius_guess_plus.into_ff64(),
                         plus_solution: positive_result.as_f64(),
                         minus_solution: negative_result.as_f64(),
@@ -520,6 +532,24 @@ impl CounterTerm {
                             .iter()
                             .map(|x| x.into_ff64())
                             .collect_vec(),
+                        r_plus_energy_product: r_plus_ose_product.into_ff64(),
+                        r_minus_energy_product: r_minus_ose_product.into_ff64(),
+                        r_plus_eval: into_complex_ff64(&r_plus_eval)
+                            * r_plus_ose_product.into_ff64(),
+                        r_minus_eval: into_complex_ff64(&r_minus_eval)
+                            * r_minus_ose_product.into_ff64(),
+                        h_plus: h_plus.into_ff64(),
+                        h_minus: h_minus.into_ff64(),
+                        r_plus_esurface_cache: r_plus_esurface_cache
+                            .iter()
+                            .enumerate()
+                            .map(|(id, x)| (id, x.into_ff64()))
+                            .collect_vec(),
+                        r_minus_esurface_cache: r_minus_esurface_cache
+                            .iter()
+                            .enumerate()
+                            .map(|(id, x)| (id, x.into_ff64()))
+                            .collect_vec(),
                     };
 
                     DEBUG_LOGGER.write("esurface_subtraction", &debug_helper);
@@ -538,6 +568,7 @@ impl CounterTerm {
 
     // evaluate radius independent part
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
     fn radius_star_eval<T: FloatLike>(
         rstar_sample: &DefaultSample<T>,
         graph: &BareGraph,
@@ -547,7 +578,7 @@ impl CounterTerm {
         overlap_complement: &[ExistingEsurfaceId],
         existing_esurface_id: ExistingEsurfaceId,
         settings: &Settings,
-    ) -> (Complex<F<T>>, Vec<F<T>>) {
+    ) -> (Complex<F<T>>, (Vec<F<T>>, F<T>, TiVec<EsurfaceID, F<T>>)) {
         let energy_cache =
             graph.compute_onshell_energies(rstar_sample.loop_moms(), rstar_sample.external_moms());
 
@@ -582,8 +613,8 @@ impl CounterTerm {
         );
 
         (
-            eval_terms * &multichanneling_factor / rstar_energy_product,
-            energy_cache,
+            eval_terms * &multichanneling_factor / &rstar_energy_product,
+            (energy_cache, rstar_energy_product, esurface_cache),
         )
     }
 }
@@ -703,12 +734,17 @@ fn singularity_dampener<T: FloatLike>(radius: &F<T>, radius_star: &F<T>) -> F<T>
     let delta_r_sq = &delta_r * &delta_r;
 
     (radius.one() - radius_star_4 / (radius_star_sq - delta_r_sq).pow(2)).exp()
+
+    //(radius.one() - (radius / radius_star - radius.one()).abs())
+    //    .abs()
+    //    .pow(5)
 }
 
 /// Helper struct to group together all debug data related to the subtraction of a single esurface
 #[derive(Serialize)]
 struct DebugHelper {
     esurface_id: EsurfaceID,
+    edges: Vec<usize>,
     initial_radius: F<f64>,
     plus_solution: NewtonIterationResult<f64>,
     minus_solution: NewtonIterationResult<f64>,
@@ -724,4 +760,12 @@ struct DebugHelper {
     integrated_ct_minus: Complex<F<f64>>,
     r_plus_energy_cache: Vec<F<f64>>,
     r_minus_energy_cache: Vec<F<f64>>,
+    r_plus_energy_product: F<f64>,
+    r_minus_energy_product: F<f64>,
+    r_plus_eval: Complex<F<f64>>,
+    r_minus_eval: Complex<F<f64>>,
+    h_plus: F<f64>,
+    h_minus: F<f64>,
+    r_plus_esurface_cache: Vec<(usize, F<f64>)>,
+    r_minus_esurface_cache: Vec<(usize, F<f64>)>,
 }
