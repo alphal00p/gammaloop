@@ -277,7 +277,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
                 "graph",
                 &SerializableGraph::from_graph(&self.get_graph().bare_graph),
             );
-            DEBUG_LOGGER.write("rep3d", &rep3d);
+            DEBUG_LOGGER.write("rep3d", &(&rep3d / &energy_product));
             DEBUG_LOGGER.write("ose_product", &energy_product);
             DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
         }
@@ -1188,9 +1188,9 @@ impl GammaLoopIntegrand {
                     }
 
                     if !existing_esurfaces.is_empty() {
-                        if settings.general.force_orientations.is_some() {
-                            panic!("force orientations not supported with thresholds")
-                        }
+                        // if settings.general.force_orientations.is_some() {
+                        //     panic!("force orientations not supported with thresholds")
+                        // }
 
                         match &settings.sampling {
                             SamplingSettings::Default => {}

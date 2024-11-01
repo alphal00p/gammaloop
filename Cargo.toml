@@ -102,6 +102,7 @@ serde_with = "3.9.0"
 insta = { version = "1.40.0", features = ["ron", "toml"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
 pathfinding = "4.11.0"
+brotli = "7.0.0"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -114,11 +115,11 @@ pyo3-build-config = "*"
 [lib]
 crate-type = ["cdylib", "lib"]
 name = "_gammaloop"
-required-features = ["python_api"]
+# required-features = ["python_api"]
 bench = false
 [[bin]]
 name = "cli"
-required-features = ["binary"]
+# required-features = ["binary"]
 bench = false
 [features]
 extension-module = ["pyo3/extension-module"]
@@ -132,5 +133,5 @@ fail-on-warnings = []
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-# spenso = { path = "../../alphal00p/spenso" }
+spenso = { path = "../../alphal00p/spenso" }
 # spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
