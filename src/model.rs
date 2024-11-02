@@ -743,7 +743,6 @@ where
         for c in &self.color {
             let mut rhs_color = *c;
             rhs_color.aind = id.into();
-            println!("rhs color pattern :{}", rhs_color.to_symbolic_wrapped());
             let rhs_color = rhs_color.to_symbolic_wrapped().into_pattern();
             reps.push((rhs_color.clone(), c.to_atom().into_pattern().into()));
         }
