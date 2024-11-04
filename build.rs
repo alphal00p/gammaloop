@@ -6,6 +6,7 @@ fn main() {
     println!("cargo:rustc-link-lib=stdc++");
     #[cfg(target_os = "macos")]
     {
+        println!("cargo:rustc-link-lib=gcc_s");
         println!("cargo:rustc-link-lib=gcc");
         println!("cargo:rustc-link-lib=gfortran");
     }

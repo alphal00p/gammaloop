@@ -3,7 +3,7 @@ use crate::graph::{BareGraph, Graph, SerializableGraph};
 use crate::model::{Model, Particle};
 use crate::momentum::Signature;
 use crate::numerator::{
-    AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, NumeratorState,
+    AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, Numerator, NumeratorState,
     PythonState, TypedNumeratorState, UnInit,
 };
 use crate::{utils::*, ExportSettings, Externals, Polarizations, Settings};
@@ -918,6 +918,7 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
         &self,
         export_root: &str,
         printer_ops: PrintOptions,
+        export_settings: &ExportSettings,
     ) -> Result<(), Report> {
         let path = Path::new(export_root)
             .join("sources")
@@ -925,13 +926,13 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
             .join(self.name.as_str())
             .join("expressions");
         for amplitude_graph in self.amplitude_graphs.iter() {
-            let num = &amplitude_graph
-                .graph
-                .derived_data
-                .as_ref()
-                .unwrap()
-                .numerator
+            let num = Numerator::default()
+                .from_graph(
+                    &amplitude_graph.graph.bare_graph,
+                    export_settings.numerator_settings.global_prefactor.as_ref(),
+                )
                 .get_single_atom();
+
             let dens: Vec<(String, String)> = amplitude_graph
                 .graph
                 .bare_graph

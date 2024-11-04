@@ -48,7 +48,7 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
               shell=True, cwd=gammaloop_root_path).wait()
         if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'INSTALLED')):
             print("%sCould not build the dependencies. Find more information in '%s'.%s" % (
-                CLIColour.RED, os.path.join(gammaloop_root_path, 'dependencies', 'dependency_build.log.log'), CLIColour.END))
+                CLIColour.RED, os.path.join(gammaloop_root_path, 'dependencies', 'dependency_build.log'), CLIColour.END))
             sys.exit(1)
         else:
             print("%sDependencies built successfully.%s" %
@@ -157,8 +157,8 @@ def cli():
         if not os.path.isfile(venv_path):
             print("%sCould not find the gammaloop Python virtual environment activate script at '%s'.%s" % (
                 CLIColour.RED, venv_path, CLIColour.END))
-            print("Make sur to first run %sgammaloop --build_dependencies%s%s" %
-                  (CLIColour.GREEN, venv_path, CLIColour.END))
+            print("Make sur to first run %sgammaloop --install_dependencies_with_venv%s" %
+                  (CLIColour.GREEN, CLIColour.END))
             sys.exit(1)
         else:
             print(venv_path)

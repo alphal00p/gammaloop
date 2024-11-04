@@ -277,12 +277,12 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
                 "graph",
                 &SerializableGraph::from_graph(&self.get_graph().bare_graph),
             );
-            DEBUG_LOGGER.write("rep3d", &rep3d);
+            DEBUG_LOGGER.write("rep3d", &(&rep3d / &energy_product));
             DEBUG_LOGGER.write("ose_product", &energy_product);
             DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
         }
 
-        prefactor * (rep3d / energy_product - counter_term_eval)
+        prefactor * (rep3d / energy_product + counter_term_eval)
     }
 
     #[inline]
@@ -358,7 +358,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             );
         }
 
-        (rep3d - counterterm) * final_energy_product * prefactor
+        (rep3d + counterterm) * final_energy_product * prefactor
     }
 }
 
@@ -718,7 +718,7 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         let mut integrand_result = *res;
 
-        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan();
+        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan() || !stable;
 
         if is_nan {
             integrand_result = Complex::new_zero();
@@ -1097,7 +1097,7 @@ impl GammaLoopIntegrand {
                 || error.im > stability_settings.required_precision_for_im
         });
 
-        if self.global_data.settings.general.debug > 0 {
+        if self.global_data.settings.general.debug > 1 {
             if let Some(unstable_index) = unstable_sample {
                 let unstable_point = results[unstable_index];
                 let rotation_axis = format!(
@@ -1188,6 +1188,25 @@ impl GammaLoopIntegrand {
                     }
 
                     if !existing_esurfaces.is_empty() {
+                        // if settings.general.force_orientations.is_some() {
+                        //     panic!("force orientations not supported with thresholds")
+                        // }
+
+                        match &settings.sampling {
+                            SamplingSettings::Default => {}
+                            SamplingSettings::MultiChanneling(_) => panic!(),
+                            SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
+                                match discrete_graph_settings {
+                                    DiscreteGraphSamplingSettings::Default => {}
+                                    DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
+                                        panic!()
+                                    }
+                                    DiscreteGraphSamplingSettings::MultiChanneling(_) => panic!(),
+                                    DiscreteGraphSamplingSettings::TropicalSampling(_) => {}
+                                }
+                            }
+                        }
+
                         let maximal_overlap = graph.get_maximal_overlap(
                             &external_moms,
                             settings.kinematics.e_cm,

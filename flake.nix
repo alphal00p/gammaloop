@@ -6,7 +6,7 @@
 
     crane = {
       url = "github:ipetkov/crane";
-      inputs.nixpkgs.follows = "nixpkgs";
+      # inputs.nixpkgs.follows = "nixpkgs";
     };
 
     fenix = {
@@ -49,6 +49,8 @@
 
         buildInputs =
           [
+            pkgs.mold
+            pkgs.clang
             # Add additional build inputs here
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
@@ -148,7 +150,7 @@
         # Additional dev-shell environment variables can be set directly
         # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
-        RUSTFLAGS = "-C target-cpu=native";
+        RUSTFLAGS = "-C codegen-units=16 -C target-cpu=native -Clink-arg=-fuse-ld=${pkgs.mold}/bin/mold";
 
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
@@ -159,6 +161,7 @@
           cargo-udeps
           cargo-insta
           openssl
+          pyright
           gnum4
           gmp.dev
           mpfr.dev

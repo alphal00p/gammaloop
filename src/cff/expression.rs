@@ -147,8 +147,29 @@ impl CFFExpression {
     ) -> Vec<F<f64>> {
         let res = self.compiled.evaluate_orientations(energy_cache, settings);
 
-        if settings.general.debug > 0 {
+        if settings.general.debug > 2 {
             DEBUG_LOGGER.write("orientations", &res);
+
+            let esurfaces_per_orientation = (0..self.get_num_trees())
+                .map(TermId)
+                .map(|orientation_id: TermId| {
+                    self.esurfaces
+                        .iter_enumerated()
+                        .map(|(esurface_id, _)| esurface_id)
+                        .filter(|esurface_id| self.term_has_esurface(orientation_id, *esurface_id))
+                        .collect_vec()
+                })
+                .collect_vec();
+
+            println!();
+            for (orientation_id, esurfaces) in esurfaces_per_orientation.iter().enumerate() {
+                println!("orientation: {}", orientation_id);
+                let orientaation = &self.orientations[TermId(orientation_id)];
+                let or = &orientaation.orientation;
+                println!("esurfaces: {:?}", esurfaces);
+                println!("or: {:?}", or);
+                println!();
+            }
         }
 
         res
@@ -793,18 +814,25 @@ impl CFFLimit {
         match num_iter {
             RepeatingIteratorTensorOrScalar::Scalars(mut num) => {
                 let mut term = 0;
-                let mut terms_evaluated = 0;
+                let mut _terms_evaluated = 0;
                 let mut sum = Complex::new_re(energy_cache[0].zero());
 
                 while let Some(num) = num.next() {
-                    if self.orientations_in_limit.1.contains(&TermId(term)) {
+                    let term_in_residue = self.orientations_in_limit.1.contains(&TermId(term));
+                    let term_in_force_orientation = settings
+                        .general
+                        .force_orientations
+                        .as_ref()
+                        .map(|forced_orientations| forced_orientations.contains(&term))
+                        .unwrap_or(true);
+
+                    if term_in_residue && term_in_force_orientation {
                         let cff_term = Complex::new_re(cff.next().unwrap());
                         sum += num * cff_term;
-                        terms_evaluated += 1;
+                        _terms_evaluated += 1;
                     }
                     term += 1;
                 }
-                assert_eq!(terms_evaluated, self.orientations_in_limit.1.len());
                 sum
             }
             RepeatingIteratorTensorOrScalar::Tensors(mut _num_iter) => {

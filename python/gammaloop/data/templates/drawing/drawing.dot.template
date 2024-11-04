@@ -1,0 +1,8 @@
+digraph dot_{graph_name:s} {{
+label="{label:s}";
+noverlap="scale"; layout="{layout:s}";
+graph [ {graph_options:s} ];
+node [ {node_options:s} ];
+edge [ {edge_options:s} ];
+{edges:s}
+}}

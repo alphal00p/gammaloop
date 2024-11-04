@@ -105,6 +105,8 @@ def display_largest_and_smallest_orientation(eval_debug_dict: Dict[str, Any]) ->
     logger.info("smallest orientation: {}, value: {}".format(
         min_or_ind, min_or))
 
+    logger.info("number of orientations: %s", len(orientation))
+
     logger.info("")
 
 
@@ -175,15 +177,15 @@ def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
             esurface_subtraction_data = debug_dict["esurface_subtraction"][counter + index]
             logger.info("subtracting esurface %s",
                         esurface_subtraction_data['esurface_id'])
-            logger.info("initial guess: r_0 = '%s'",
-                        esurface_subtraction_data['initial_radius'])
+            logger.info("edges: %s", esurface_subtraction_data['edges'])
+
             plus_solution, minus_solution = esurface_subtraction_data[
                 'plus_solution'], esurface_subtraction_data['minus_solution']
 
             logger.info("r*+  = %s, r*-  = %s",
                         plus_solution['solution'], minus_solution['solution'])
 
-            logger.info("∇η*+ = %s, ∇η*+ = %s",
+            logger.info("∇η*+ = %s, ∇η*- = %s",
                         plus_solution['derivative_at_solution'], minus_solution['derivative_at_solution'])
 
             logger.info("j*+/j = %s, j*-/j = %s",
@@ -194,6 +196,9 @@ def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
 
             logger.info("ir_d+ = %s, ir_d = %s",
                         esurface_subtraction_data['singularity_dampener_plus'], esurface_subtraction_data['singularity_dampener_minus'])
+
+            logger.info("r*+ res = %s, r*- res = %s",
+                        esurface_subtraction_data['r_plus_eval'], esurface_subtraction_data['r_minus_eval'])
 
             ct_plus_dict = esurface_subtraction_data['ct_plus']
             ct_minus_dict = esurface_subtraction_data['ct_minus']
@@ -212,14 +217,28 @@ def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
             logger.info("ict+ = %s, ict- = %s",
                         ict_plus, ict_minus)
 
+            logger.info("h_plus = %s, h_minus = %s",
+                        esurface_subtraction_data['h_plus'], esurface_subtraction_data['h_minus'])
+
             r_plus_energy_cache = esurface_subtraction_data['r_plus_energy_cache']
+            r_plus_energy_product = esurface_subtraction_data['r_plus_energy_product']
             r_minus_energy_cache = esurface_subtraction_data['r_minus_energy_cache']
+            r_minus_energy_product = esurface_subtraction_data['r_minus_energy_product']
+
+            logger.info("Π2E*+  = %s, Π2E*-= %s",
+                        r_plus_energy_product, r_minus_energy_product)
 
             logger.info("r*+ energy cache")
             logger.info(r_plus_energy_cache)
 
             logger.info("r*- energy cache")
             logger.info(r_minus_energy_cache)
+
+            logger.info("r*+ esurface_cache:")
+            logger.info(esurface_subtraction_data['r_plus_esurface_cache'])
+
+            logger.info("r*- esurface_cache:")
+            logger.info(esurface_subtraction_data['r_minus_esurface_cache'])
 
             logger.info("")
 

@@ -3,12 +3,14 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
 use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 
-const MAX_ITERATIONS: usize = 20;
-const TOLERANCE: f64 = 10.0;
+const MAX_ITERATIONS: usize = 40;
+const TOLERANCE: f64 = 1.0;
 
+use crate::cff::esurface::Esurface;
 use crate::graph::BareGraph;
 use crate::momentum::{Rotatable, Rotation};
 
@@ -26,11 +28,15 @@ use crate::{
     graph::{Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
     numerator::NumeratorState,
-    utils::{self, into_complex_ff64, FloatLike, F},
+    utils::{FloatLike, F},
     Settings,
 };
+use crate::{
+    utils, IntegrableSingularityDampener, IntegratedCounterTermRange,
+    IntegratedCounterTermSettings, UVLocalisationSettings,
+};
 
-use super::overlap::OverlapStructure;
+use super::overlap::{OverlapGroup, OverlapStructure};
 
 #[allow(clippy::type_complexity)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -169,408 +175,47 @@ impl CounterTerm {
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
-        let real_mass_vector = graph
-            .get_real_mass_vector()
-            .into_iter()
-            .map(F::from_ff64)
-            .collect_vec();
+        let counterterm_builder = CounterTermBuilder::new(
+            graph,
+            esurfaces,
+            counterterm,
+            rotation_for_overlap,
+            settings,
+            sample,
+        );
 
-        let e_cm = F::from_ff64(settings.kinematics.e_cm);
-        let const_builder = sample.zero();
-        let mut res = Complex::new(const_builder.zero(), const_builder.zero());
-
-        for (overlap_group, overlap_complement) in counterterm
+        let res = counterterm
             .maximal_overlap
             .overlap_groups
             .iter()
             .zip(counterterm.complements_of_overlap.iter())
-        {
-            let overlap = &overlap_group.existing_esurfaces;
-            let center = &overlap_group.center;
+            .map(|(overlap_group, overlap_complement)| {
+                let overlap_builder =
+                    counterterm_builder.new_overlap_builder(overlap_group, overlap_complement);
 
-            if settings.general.debug > 0 {
-                DEBUG_LOGGER.write(
-                    "overlap_structure",
-                    &(
-                        overlap
-                            .iter()
-                            .map(|id| counterterm.existing_esurfaces[*id])
-                            .collect_vec(),
-                        center,
-                    ),
-                );
-            }
-
-            let (unrotated_center, rotated_center): (Vec<ThreeMomentum<F<T>>>, _) = (
-                center
+                overlap_group
+                    .existing_esurfaces
                     .iter()
-                    .map(|c_vec| c_vec.map(&|x| F::from_ff64(x)))
-                    .collect_vec(),
-                center
-                    .iter()
-                    .map(|c_vec| c_vec.rotate(rotation_for_overlap).map(&|x| F::from_ff64(x)))
-                    .collect_vec(),
-            );
+                    .map(|existing_esurface_id| {
+                        let counterterm_result = overlap_builder
+                            .new_esurface_ct_builder(*existing_esurface_id)
+                            .solve_rstar()
+                            .new_rstar_samples()
+                            .compute_residues(numerator)
+                            .compute_counterterm();
 
-            if settings.general.debug > 0 {
-                DEBUG_LOGGER.write("center", &rotated_center);
-            }
+                        if settings.general.debug > 0 {
+                            let debug_helper: DebugHelper<T> = (&counterterm_result).into();
+                            DEBUG_LOGGER.write("esurface_subtraction", &debug_helper);
+                        }
 
-            let shifted_momenta = sample
-                .loop_moms()
-                .iter()
-                .zip(rotated_center.iter())
-                .map(|(momentum, center)| momentum.clone() - center.clone())
-                .collect_vec();
+                        counterterm_result.to_number()
+                    })
+                    .fold(Complex::new_re(sample.zero()), |acc, x| acc + x)
+            })
+            .fold(Complex::new_re(sample.zero()), |acc, x| acc + x);
 
-            let (hemispherical_unit_shifted_momenta, hemispherical_radius) =
-                normalize_momenta(&shifted_momenta);
-
-            if settings.general.debug > 0 {
-                DEBUG_LOGGER.write("shifted_momenta", &shifted_momenta);
-                DEBUG_LOGGER.write("hemispherical_radius", &hemispherical_radius);
-            }
-
-            for existing_esurface_id in overlap.iter() {
-                let esurface_id = counterterm.existing_esurfaces[*existing_esurface_id];
-                let esurface = &esurfaces[esurface_id];
-
-                // solve the radius
-                let (radius_guess_plus, radius_guess_negative) = esurface.get_radius_guess(
-                    &hemispherical_unit_shifted_momenta,
-                    sample.external_moms(),
-                    &graph.loop_momentum_basis,
-                    &real_mass_vector,
-                );
-
-                let function = |r: &_| {
-                    esurface.compute_self_and_r_derivative(
-                        r,
-                        &hemispherical_unit_shifted_momenta,
-                        &rotated_center,
-                        sample.external_moms(),
-                        &graph.loop_momentum_basis,
-                        &real_mass_vector,
-                    )
-                };
-
-                let positive_result = newton_iteration_and_derivative(
-                    &radius_guess_plus,
-                    function,
-                    &F::from_f64(TOLERANCE),
-                    MAX_ITERATIONS,
-                    &e_cm,
-                );
-
-                let negative_result = newton_iteration_and_derivative(
-                    &radius_guess_negative,
-                    function,
-                    &F::from_f64(TOLERANCE),
-                    MAX_ITERATIONS,
-                    &e_cm,
-                );
-
-                assert!(positive_result.solution > const_builder.zero());
-                assert!(negative_result.solution < const_builder.zero());
-
-                if settings.general.debug > 1 {
-                    println!("Positive solution: ");
-                    positive_result.debug_print(&e_cm);
-
-                    println!("Negative solution: ");
-                    negative_result.debug_print(&e_cm);
-                }
-
-                let loop_momenta_at_rstar_plus = hemispherical_unit_shifted_momenta
-                    .iter()
-                    .zip(&rotated_center)
-                    .map(|(k, center)| k * &positive_result.solution + center)
-                    .collect_vec();
-
-                let loop_momenta_at_rstar_minus = hemispherical_unit_shifted_momenta
-                    .iter()
-                    .zip(&rotated_center)
-                    .map(|(k, center)| k * &negative_result.solution + center)
-                    .collect_vec();
-
-                // tedious gymnastics to get the sample right, hopefully correct.
-                let rplus_sample = match sample.rotated_sample {
-                    None => {
-                        let mut sample_to_modify = sample.clone();
-                        sample_to_modify.sample.loop_moms = loop_momenta_at_rstar_plus;
-                        sample_to_modify
-                    }
-                    Some(_) => {
-                        let mut sample_to_modify = sample.clone();
-                        sample_to_modify.rotated_sample.as_mut().unwrap().loop_moms =
-                            loop_momenta_at_rstar_plus;
-
-                        let new_unrotated_momenta = sample
-                            .sample
-                            .loop_moms
-                            .iter()
-                            .zip(&unrotated_center)
-                            .map(|(k, center)| {
-                                (k.clone() - center.clone())
-                                    * hemispherical_radius.inv()
-                                    * &positive_result.solution
-                                    + center
-                            })
-                            .collect_vec();
-
-                        sample_to_modify.sample.loop_moms = new_unrotated_momenta;
-                        sample_to_modify
-                    }
-                };
-
-                let rminus_sample = match sample.rotated_sample {
-                    None => {
-                        let mut sample_to_modify = sample.clone();
-                        sample_to_modify.sample.loop_moms = loop_momenta_at_rstar_minus;
-                        sample_to_modify
-                    }
-                    Some(_) => {
-                        let mut sample_to_modify = sample.clone();
-                        sample_to_modify.rotated_sample.as_mut().unwrap().loop_moms =
-                            loop_momenta_at_rstar_minus;
-
-                        let new_unrotated_momenta = sample
-                            .sample
-                            .loop_moms
-                            .iter()
-                            .zip(&unrotated_center)
-                            .map(|(k, center)| {
-                                (k.clone() - center.clone())
-                                    * hemispherical_radius.inv()
-                                    * &negative_result.solution
-                                    + center
-                            })
-                            .collect_vec();
-
-                        sample_to_modify.sample.loop_moms = new_unrotated_momenta;
-                        sample_to_modify
-                    }
-                };
-
-                let ((r_plus_eval, r_plus_energy_cache), (r_minus_eval, r_minus_energy_cache)) = (
-                    CounterTerm::radius_star_eval(
-                        &rplus_sample,
-                        graph,
-                        esurfaces,
-                        counterterm,
-                        numerator,
-                        overlap_complement,
-                        *existing_esurface_id,
-                        settings,
-                    ),
-                    CounterTerm::radius_star_eval(
-                        &rminus_sample,
-                        graph,
-                        esurfaces,
-                        counterterm,
-                        numerator,
-                        overlap_complement,
-                        *existing_esurface_id,
-                        settings,
-                    ),
-                );
-
-                let loop_number = sample.loop_moms().len();
-                let (jacobian_ratio_plus, jacobian_ratio_minus) = (
-                    (&positive_result.solution / &hemispherical_radius)
-                        .abs()
-                        .pow(3 * loop_number as u64 - 1),
-                    (&negative_result.solution / &hemispherical_radius)
-                        .abs()
-                        .pow(3 * loop_number as u64 - 1),
-                );
-
-                let local_ct_width =
-                    F::<T>::from_f64(settings.subtraction.ct_settings.local_ct_width);
-
-                let (uv_damper_plus, uv_damper_minus) = (
-                    unnormalized_gaussian(
-                        &hemispherical_radius,
-                        &positive_result.solution,
-                        &e_cm,
-                        &local_ct_width,
-                    ),
-                    unnormalized_gaussian(
-                        &hemispherical_radius,
-                        &negative_result.solution,
-                        &e_cm,
-                        &local_ct_width,
-                    ),
-                );
-
-                let (singularity_dampener_plus, singularity_damper_minus) = if settings
-                    .subtraction
-                    .ct_settings
-                    .dampen_integrable_singularity
-                {
-                    (
-                        singularity_dampener(&hemispherical_radius, &positive_result.solution),
-                        singularity_dampener(&hemispherical_radius, &negative_result.solution),
-                    )
-                } else {
-                    (hemispherical_radius.one(), hemispherical_radius.one())
-                };
-
-                let i = Complex::new(const_builder.zero(), const_builder.one());
-
-                let radius_sign_plus = if positive_result.solution > hemispherical_radius.zero() {
-                    const_builder.one()
-                } else {
-                    -const_builder.one()
-                };
-
-                let radius_sign_minus = if positive_result.solution > hemispherical_radius.zero() {
-                    const_builder.one()
-                } else {
-                    -const_builder.one()
-                };
-
-                let ct_plus = &r_plus_eval
-                    * ((&hemispherical_radius - &positive_result.solution)
-                        * &positive_result.derivative_at_solution)
-                        .inv()
-                    * &uv_damper_plus
-                    * &singularity_dampener_plus
-                    * &jacobian_ratio_plus;
-
-                let minus_half = -const_builder.one() / (const_builder.one() + const_builder.one());
-
-                let integrated_ct_plus = &i * const_builder.PI() * &minus_half * r_plus_eval
-                    / &positive_result.derivative_at_solution
-                    / &positive_result.solution
-                    * utils::h(
-                        &positive_result.solution / &hemispherical_radius,
-                        None,
-                        settings
-                            .subtraction
-                            .ct_settings
-                            .integrated_ct_sigma
-                            .map(F::<T>::from_f64),
-                        &settings.subtraction.ct_settings.integrated_ct_hfunction,
-                    )
-                    * &jacobian_ratio_plus
-                    * &radius_sign_plus;
-
-                let ct_minus = &r_minus_eval
-                    * ((&hemispherical_radius - &negative_result.solution)
-                        * &negative_result.derivative_at_solution)
-                        .inv()
-                    * &uv_damper_minus
-                    * &singularity_damper_minus
-                    * &jacobian_ratio_minus;
-
-                let integrated_ct_minus = &i * const_builder.PI() * r_minus_eval * &minus_half
-                    / &negative_result.derivative_at_solution
-                    / &negative_result.solution
-                    * utils::h(
-                        &negative_result.solution / &hemispherical_radius,
-                        None,
-                        settings
-                            .subtraction
-                            .ct_settings
-                            .integrated_ct_sigma
-                            .map(F::<T>::from_f64),
-                        &settings.subtraction.ct_settings.integrated_ct_hfunction,
-                    )
-                    * &jacobian_ratio_minus
-                    * &radius_sign_minus;
-
-                res += &ct_plus + &integrated_ct_plus + &ct_minus + &integrated_ct_minus;
-
-                if settings.general.debug > 0 {
-                    let debug_helper = DebugHelper {
-                        esurface_id,
-                        initial_radius: radius_guess_plus.into_ff64(),
-                        plus_solution: positive_result.as_f64(),
-                        minus_solution: negative_result.as_f64(),
-                        jacobian_ratio_plus: jacobian_ratio_plus.into_ff64(),
-                        jacobian_ratio_minus: jacobian_ratio_minus.into_ff64(),
-                        uv_damper_plus: uv_damper_plus.into_ff64(),
-                        uv_damper_minus: uv_damper_minus.into_ff64(),
-                        singularity_dampener_plus: singularity_dampener_plus.into_ff64(),
-                        singularity_dampener_minus: singularity_damper_minus.into_ff64(),
-                        ct_plus: into_complex_ff64(&ct_plus),
-                        ct_minus: into_complex_ff64(&ct_minus),
-                        integrated_ct_plus: into_complex_ff64(&integrated_ct_plus),
-                        integrated_ct_minus: into_complex_ff64(&integrated_ct_minus),
-                        r_plus_energy_cache: r_plus_energy_cache
-                            .iter()
-                            .map(|x| x.into_ff64())
-                            .collect_vec(),
-                        r_minus_energy_cache: r_minus_energy_cache
-                            .iter()
-                            .map(|x| x.into_ff64())
-                            .collect_vec(),
-                    };
-
-                    DEBUG_LOGGER.write("esurface_subtraction", &debug_helper);
-                }
-            }
-        }
-
-        // match the complex prefactor off cff
-        let loop_number = graph.loop_momentum_basis.basis.len();
-
-        let prefactor =
-            Complex::new(const_builder.zero(), -const_builder.one()).pow(loop_number as u64);
-
-        res * prefactor
-    }
-
-    // evaluate radius independent part
-    #[allow(clippy::too_many_arguments)]
-    fn radius_star_eval<T: FloatLike>(
-        rstar_sample: &DefaultSample<T>,
-        graph: &BareGraph,
-        esurfaces: &EsurfaceCollection,
-        counterterm: &CounterTerm,
-        numerator: &mut Numerator<Evaluators>,
-        overlap_complement: &[ExistingEsurfaceId],
-        existing_esurface_id: ExistingEsurfaceId,
-        settings: &Settings,
-    ) -> (Complex<F<T>>, Vec<F<T>>) {
-        let energy_cache =
-            graph.compute_onshell_energies(rstar_sample.loop_moms(), rstar_sample.external_moms());
-
-        let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
-        let rstar_energy_product = graph
-            .get_virtual_edges_iterator()
-            .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
-            .fold(energy_cache[0].one(), |acc, e| acc * e);
-
-        let multichanneling_denominator =
-            counterterm.evaluate_multichanneling_denominator(&esurface_cache);
-
-        let multichanneling_numerator_root = overlap_complement
-            .iter()
-            .fold(energy_cache[0].one(), |acc, id| {
-                acc * &esurface_cache[counterterm.existing_esurfaces[*id]]
-            });
-
-        let multichanneling_factor = &multichanneling_numerator_root
-            * &multichanneling_numerator_root
-            / multichanneling_denominator;
-
-        let terms = &counterterm.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
-
-        let eval_terms = terms.evaluate_from_esurface_cache(
-            graph,
-            numerator,
-            rstar_sample,
-            &esurface_cache,
-            &energy_cache,
-            settings,
-        );
-
-        (
-            eval_terms * &multichanneling_factor / rstar_energy_product,
-            energy_cache,
-        )
+        res
     }
 }
 
@@ -618,7 +263,6 @@ fn newton_iteration_and_derivative<T: FloatLike>(
     while iteration < max_iterations && val_f_x.abs() > guess.epsilon() * tolerance * e_cm {
         x -= val_f_x / val_df_x;
         (val_f_x, val_df_x) = f_x_and_df_x(&x);
-
         iteration += 1;
     }
 
@@ -630,7 +274,7 @@ fn newton_iteration_and_derivative<T: FloatLike>(
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct NewtonIterationResult<T: FloatLike> {
     solution: F<T>,
     derivative_at_solution: F<T>,
@@ -639,7 +283,7 @@ struct NewtonIterationResult<T: FloatLike> {
 }
 
 impl<T: FloatLike> NewtonIterationResult<T> {
-    fn debug_print(&self, e_cm: &F<T>) {
+    fn _debug_print(&self, e_cm: &F<T>) {
         println!("r*: {}", &self.solution);
         println!("Derivative at r* {}", &self.derivative_at_solution);
         println!(
@@ -661,54 +305,689 @@ impl<T: FloatLike> NewtonIterationResult<T> {
             }
         )
     }
+}
 
-    fn as_f64(&self) -> NewtonIterationResult<f64> {
-        NewtonIterationResult {
-            solution: self.solution.into_ff64(),
-            derivative_at_solution: self.derivative_at_solution.into_ff64(),
-            error_of_function: self.error_of_function.into_ff64(),
-            num_iterations_used: self.num_iterations_used,
+struct CounterTermBuilder<'a, T: FloatLike> {
+    real_mass_vector: Vec<F<T>>,
+    e_cm: F<T>,
+    graph: &'a BareGraph,
+    counterterm: &'a CounterTerm,
+    rotation_for_overlap: &'a Rotation,
+    settings: &'a Settings,
+    esurface_collection: &'a EsurfaceCollection,
+    sample: &'a DefaultSample<T>,
+    prefactor: Complex<F<T>>,
+}
+
+impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
+    fn new(
+        graph: &'a BareGraph,
+        esurface_collection: &'a EsurfaceCollection,
+        counterterm: &'a CounterTerm,
+        rotation_for_overlap: &'a Rotation,
+        settings: &'a Settings,
+        sample: &'a DefaultSample<T>,
+    ) -> Self {
+        let real_mass_vector = graph
+            .get_real_mass_vector()
+            .into_iter()
+            .map(F::from_ff64)
+            .collect_vec();
+
+        let e_cm = F::from_ff64(settings.kinematics.e_cm);
+        let loop_number = graph.loop_momentum_basis.basis.len();
+        let prefactor = -Complex::new(sample.zero(), -sample.one()).pow(loop_number as u64);
+
+        Self {
+            real_mass_vector,
+            e_cm,
+            graph,
+            esurface_collection,
+            counterterm,
+            rotation_for_overlap,
+            settings,
+            sample,
+            prefactor,
+        }
+    }
+
+    fn new_overlap_builder(
+        &'a self,
+        overlap_group: &'a OverlapGroup,
+        overlap_complement: &'a [ExistingEsurfaceId],
+    ) -> OverlapBuilder<'a, T> {
+        let overlap = &overlap_group.existing_esurfaces;
+        let center = &overlap_group.center;
+
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write(
+                "overlap_structure",
+                &(
+                    overlap
+                        .iter()
+                        .map(|id| self.counterterm.existing_esurfaces[*id])
+                        .collect_vec(),
+                    center,
+                ),
+            );
+        }
+
+        let (unrotated_center, rotated_center): (Vec<ThreeMomentum<F<T>>>, _) = (
+            center
+                .iter()
+                .map(|c_vec| c_vec.map(&|x| F::from_ff64(x)))
+                .collect_vec(),
+            center
+                .iter()
+                .map(|c_vec| {
+                    c_vec
+                        .rotate(self.rotation_for_overlap)
+                        .map(&|x| F::from_ff64(x))
+                })
+                .collect_vec(),
+        );
+
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write("center", &rotated_center);
+        }
+
+        let shifted_momenta = self
+            .sample
+            .loop_moms()
+            .iter()
+            .zip(rotated_center.iter())
+            .map(|(momentum, center)| momentum.clone() - center.clone())
+            .collect_vec();
+
+        let (hemispherical_unit_shifted_momenta, hemispherical_radius) =
+            normalize_momenta(&shifted_momenta);
+
+        if self.settings.general.debug > 0 {
+            DEBUG_LOGGER.write("hemispherical_radius", &hemispherical_radius);
+        }
+
+        OverlapBuilder {
+            counterterm_builder: self,
+            overlap_complement,
+            rotated_center,
+            unrotated_center,
+            hemispherical_unit_shifted_momenta,
+            hemispherical_radius,
         }
     }
 }
 
-fn unnormalized_gaussian<T: FloatLike>(
+struct OverlapBuilder<'a, T: FloatLike> {
+    counterterm_builder: &'a CounterTermBuilder<'a, T>,
+    overlap_complement: &'a [ExistingEsurfaceId],
+    rotated_center: Vec<ThreeMomentum<F<T>>>,
+    unrotated_center: Vec<ThreeMomentum<F<T>>>,
+    hemispherical_unit_shifted_momenta: Vec<ThreeMomentum<F<T>>>,
+    hemispherical_radius: F<T>,
+}
+
+impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
+    fn new_esurface_ct_builder(
+        &'a self,
+        existing_esurface_id: ExistingEsurfaceId,
+    ) -> EsurfaceCTBuilder<'_, T> {
+        let esurface_id =
+            self.counterterm_builder.counterterm.existing_esurfaces[existing_esurface_id];
+        let esurface = &self.counterterm_builder.esurface_collection[esurface_id];
+
+        EsurfaceCTBuilder {
+            overlap_builder: self,
+            existing_esurface_id,
+            esurface,
+        }
+    }
+}
+
+struct EsurfaceCTBuilder<'a, T: FloatLike> {
+    overlap_builder: &'a OverlapBuilder<'a, T>,
+    existing_esurface_id: ExistingEsurfaceId,
+    esurface: &'a Esurface,
+}
+
+impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
+    fn solve_rstar(self) -> RstarSolution<'a, T> {
+        let settings = self.overlap_builder.counterterm_builder.settings;
+
+        let (radius_guess_plus, radius_guess_negative) = self.esurface.get_radius_guess(
+            &self.overlap_builder.hemispherical_unit_shifted_momenta,
+            self.overlap_builder
+                .counterterm_builder
+                .sample
+                .external_moms(),
+            &self
+                .overlap_builder
+                .counterterm_builder
+                .graph
+                .loop_momentum_basis,
+        );
+
+        if settings.general.debug > 0 {
+            DEBUG_LOGGER.write("radius_guess", &radius_guess_plus);
+        }
+
+        let function = |r: &_| {
+            self.esurface.compute_self_and_r_derivative(
+                r,
+                &self.overlap_builder.hemispherical_unit_shifted_momenta,
+                &self.overlap_builder.rotated_center,
+                self.overlap_builder
+                    .counterterm_builder
+                    .sample
+                    .external_moms(),
+                &self
+                    .overlap_builder
+                    .counterterm_builder
+                    .graph
+                    .loop_momentum_basis,
+                &self.overlap_builder.counterterm_builder.real_mass_vector,
+            )
+        };
+
+        let solutions = [radius_guess_plus, radius_guess_negative].map(|guess| {
+            newton_iteration_and_derivative(
+                &guess,
+                function,
+                &F::from_f64(TOLERANCE),
+                MAX_ITERATIONS,
+                &self.overlap_builder.counterterm_builder.e_cm,
+            )
+        });
+
+        // todo: do this check but return Err instead of panicking.
+        assert!(
+            solutions[0].solution > solutions[0].solution.zero() || solutions[0].solution.is_nan(),
+            "positive result has wrong sign: ({}, {})",
+            solutions[0].solution,
+            solutions[1].solution
+        );
+        assert!(
+            solutions[1].solution < solutions[1].solution.zero() || solutions[1].solution.is_nan(),
+            "negative result has wrong sign: ({}, {})",
+            solutions[0].solution,
+            solutions[1].solution
+        );
+
+        RstarSolution {
+            solutions,
+            esurface_ct_builder: self,
+        }
+    }
+}
+
+struct RstarSolution<'a, T: FloatLike> {
+    solutions: [NewtonIterationResult<T>; 2],
+    esurface_ct_builder: EsurfaceCTBuilder<'a, T>,
+}
+
+impl<'a, T: FloatLike> RstarSolution<'a, T> {
+    fn new_rstar_samples(self) -> RstarSamples<'a, T> {
+        let rstar_samples = self.solutions.each_ref().map(|solution| {
+            let rstar_loop_momenta = self
+                .esurface_ct_builder
+                .overlap_builder
+                .hemispherical_unit_shifted_momenta
+                .iter()
+                .zip(&self.esurface_ct_builder.overlap_builder.rotated_center)
+                .map(|(k, center)| k * &solution.solution + center)
+                .collect_vec();
+
+            // some gymnastics to get the sample right
+            // do not touch!
+            let mut sample_to_modify = self
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .sample
+                .clone();
+
+            match self
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .sample
+                .rotated_sample
+            {
+                None => {
+                    sample_to_modify.sample.loop_moms = rstar_loop_momenta;
+                    sample_to_modify
+                }
+                Some(_) => {
+                    sample_to_modify.rotated_sample.as_mut().unwrap().loop_moms =
+                        rstar_loop_momenta;
+
+                    let new_unrotated_momenta = self
+                        .esurface_ct_builder
+                        .overlap_builder
+                        .counterterm_builder
+                        .sample
+                        .loop_moms()
+                        .iter()
+                        .zip(&self.esurface_ct_builder.overlap_builder.unrotated_center)
+                        .map(|(k, center)| {
+                            (k.clone() - center.clone())
+                                * self
+                                    .esurface_ct_builder
+                                    .overlap_builder
+                                    .hemispherical_radius
+                                    .inv()
+                                * &solution.solution
+                                + center
+                        })
+                        .collect_vec();
+
+                    sample_to_modify.sample.loop_moms = new_unrotated_momenta;
+                    sample_to_modify
+                }
+            }
+        });
+
+        RstarSamples {
+            rstar_samples,
+            rstar_solutions: self,
+        }
+    }
+}
+
+struct RstarSamples<'a, T: FloatLike> {
+    rstar_samples: [DefaultSample<T>; 2],
+    rstar_solutions: RstarSolution<'a, T>,
+}
+
+impl<'a, T: FloatLike> RstarSamples<'a, T> {
+    fn compute_residues(self, numerator: &mut Numerator<Evaluators>) -> ResiudeEval<'a, T> {
+        let esurface_ct_builder = &self.rstar_solutions.esurface_ct_builder;
+        let overlap_builder = esurface_ct_builder.overlap_builder;
+        let ct_builder = overlap_builder.counterterm_builder;
+
+        let settings = ct_builder.settings;
+        let graph = ct_builder.graph;
+        let esurfaces = ct_builder.esurface_collection;
+        let counterterm = ct_builder.counterterm;
+        let overlap_complement = overlap_builder.overlap_complement;
+        let existing_esurface_id = esurface_ct_builder.existing_esurface_id;
+
+        let residues = self.rstar_samples.each_ref().map(|rstar_sample| {
+            let energy_cache = graph
+                .compute_onshell_energies(rstar_sample.loop_moms(), rstar_sample.external_moms());
+            let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
+
+            let rstar_energy_product = graph
+                .get_virtual_edges_iterator()
+                .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
+                .fold(energy_cache[0].one(), |acc, e| acc * e);
+
+            let multichanneling_denominator =
+                counterterm.evaluate_multichanneling_denominator(&esurface_cache);
+
+            let multichanneling_numerator_root = overlap_complement
+                .iter()
+                .fold(energy_cache[0].one(), |acc, id| {
+                    acc * &esurface_cache[counterterm.existing_esurfaces[*id]]
+                });
+
+            let multichanneling_factor = &multichanneling_numerator_root
+                * &multichanneling_numerator_root
+                / multichanneling_denominator;
+
+            let terms =
+                &counterterm.terms_in_counterterms[Into::<usize>::into(existing_esurface_id)];
+
+            let eval_terms = terms.evaluate_from_esurface_cache(
+                graph,
+                numerator,
+                rstar_sample,
+                &esurface_cache,
+                &energy_cache,
+                settings,
+            );
+
+            let res = eval_terms * &multichanneling_factor / &rstar_energy_product;
+
+            SingleResidueEvalResult {
+                residue: res,
+                rstar_energy_cache: energy_cache,
+                rstar_energy_product,
+                rstar_esurface_cache: esurface_cache.into(),
+            }
+        });
+
+        ResiudeEval {
+            rstar_samples: self,
+            residues,
+        }
+    }
+}
+
+struct SingleResidueEvalResult<T: FloatLike> {
+    residue: Complex<F<T>>,
+    rstar_energy_product: F<T>,
+    rstar_energy_cache: Vec<F<T>>,
+    rstar_esurface_cache: Vec<F<T>>,
+}
+
+struct ResiudeEval<'a, T: FloatLike> {
+    rstar_samples: RstarSamples<'a, T>,
+    residues: [SingleResidueEvalResult<T>; 2],
+}
+
+impl<'a, T: FloatLike> ResiudeEval<'a, T> {
+    fn compute_counterterm(self) -> CounterTermResult<'a, T> {
+        let r = &self
+            .rstar_samples
+            .rstar_solutions
+            .esurface_ct_builder
+            .overlap_builder
+            .hemispherical_radius;
+
+        let e_cm = &self
+            .rstar_samples
+            .rstar_solutions
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .e_cm;
+
+        let prefactor = &self
+            .rstar_samples
+            .rstar_solutions
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .prefactor;
+
+        let settings = self
+            .rstar_samples
+            .rstar_solutions
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .settings;
+
+        let (cts_plus, cts_minus): (SingleCTData<T>, SingleCTData<T>) = self
+            .residues
+            .iter()
+            .enumerate()
+            .map(|(sign_index, residue)| {
+                let rstar = &self.rstar_samples.rstar_solutions.solutions[sign_index].solution;
+                let rstar_derivative = &self.rstar_samples.rstar_solutions.solutions[sign_index]
+                    .derivative_at_solution;
+                let loop_number = self.rstar_samples.rstar_samples[sign_index]
+                    .loop_moms()
+                    .len();
+
+                let jacobian_ratio = (rstar / r).abs().pow(3 * loop_number as u64 - 1);
+
+                let uv_localisation = evaluate_uv_localisation(
+                    r,
+                    rstar,
+                    e_cm,
+                    &settings.subtraction.local_ct_settings.uv_localisation,
+                );
+
+                let singularity_dampener = evaluate_singularity_dampener(
+                    r,
+                    rstar,
+                    &settings
+                        .subtraction
+                        .local_ct_settings
+                        .dampen_integrable_singularity,
+                );
+
+                let local_counterterm = &residue.residue
+                    * rstar_derivative.inv()
+                    * (r - rstar).inv()
+                    * &uv_localisation
+                    * &jacobian_ratio
+                    * &singularity_dampener
+                    * prefactor;
+
+                let h_function = evaluate_integrated_ct_normalisation(
+                    r,
+                    rstar,
+                    e_cm,
+                    &settings.subtraction.integrated_ct_settings,
+                );
+
+                let i = Complex::new_im(r.one());
+
+                let integrated_counterterm = &i * r.PI() * &residue.residue / -rstar_derivative
+                    * &h_function
+                    * &jacobian_ratio
+                    * prefactor;
+
+                SingleCTData {
+                    jacobian_ratio,
+                    integrated_counterterm,
+                    local_counterterm,
+                    uv_localisation,
+                    singularity_dampener,
+                    h_function,
+                }
+            })
+            .collect_tuple()
+            .unwrap_or_else(|| unreachable!());
+
+        CounterTermResult {
+            residue_eval: self,
+            counterterms: [cts_plus, cts_minus],
+        }
+    }
+}
+
+fn evaluate_uv_localisation<T: FloatLike>(
     radius: &F<T>,
     radius_star: &F<T>,
     e_cm: &F<T>,
-    width: &F<T>,
+    settings: &UVLocalisationSettings,
 ) -> F<T> {
-    let delta_r = radius - radius_star;
-    let sigma = e_cm * width;
-    (-&delta_r * &delta_r / (&sigma * &sigma)).exp()
-}
+    let normalizing_scale = match settings.dynamic_width {
+        true => radius_star,
+        false => e_cm,
+    };
 
-fn singularity_dampener<T: FloatLike>(radius: &F<T>, radius_star: &F<T>) -> F<T> {
     let delta_r = radius - radius_star;
-    let radius_star_sq = radius_star * radius_star;
-    let radius_star_4 = &radius_star_sq * &radius_star_sq;
+
+    if delta_r.abs() > F::from_f64(settings.sliver_width) * normalizing_scale {
+        return radius.zero();
+    }
+
     let delta_r_sq = &delta_r * &delta_r;
+    let width = F::from_f64(settings.gaussian_width) * normalizing_scale;
+    let width_sq = &width * &width;
 
-    (radius.one() - radius_star_4 / (radius_star_sq - delta_r_sq).pow(2)).exp()
+    (-delta_r_sq / width_sq).exp()
 }
 
-/// Helper struct to group together all debug data related to the subtraction of a single esurface
+fn evaluate_singularity_dampener<T: FloatLike>(
+    radius: &F<T>,
+    radius_star: &F<T>,
+    settings: &IntegrableSingularityDampener,
+) -> F<T> {
+    match settings {
+        IntegrableSingularityDampener::None => radius.one(),
+        IntegrableSingularityDampener::Exponential => {
+            let pow_obj = radius.one()
+                - (radius / radius_star - radius.one()) * (radius / radius_star - radius.one());
+
+            (radius.one() - (&pow_obj * &pow_obj).inv()).exp()
+        }
+        IntegrableSingularityDampener::Powerlike { power } => {
+            // perhaps this should be removed again, doesn't seem to work that well.
+
+            let pow_obj = radius.one()
+                - (radius / radius_star - radius.one()) * (radius / radius_star - radius.one());
+
+            pow_obj.abs().powf(&F::from_f64(*power))
+        }
+    }
+}
+
+fn evaluate_integrated_ct_normalisation<T: FloatLike>(
+    radius: &F<T>,
+    radius_star: &F<T>,
+    _e_cm: &F<T>,
+    settings: &IntegratedCounterTermSettings,
+) -> F<T> {
+    match &settings.range {
+        IntegratedCounterTermRange::Infinite {
+            h_function_settings,
+        } => {
+            let h = utils::h(radius_star / radius, None, None, h_function_settings);
+            let two = radius.one() + radius.one();
+            h * (radius_star * two).inv()
+        }
+        IntegratedCounterTermRange::Compact => {
+            todo!();
+        }
+    }
+}
+
+struct CounterTermResult<'a, T: FloatLike> {
+    residue_eval: ResiudeEval<'a, T>,
+    counterterms: [SingleCTData<T>; 2],
+}
+
+impl<'a, T: FloatLike> CounterTermResult<'a, T> {
+    fn to_number(&self) -> Complex<F<T>> {
+        let ct_plus = &self.counterterms[0];
+        let ct_minus = &self.counterterms[1];
+
+        &ct_plus.local_counterterm
+            + &ct_plus.integrated_counterterm
+            + &ct_minus.local_counterterm
+            + &ct_minus.integrated_counterterm
+    }
+}
+
+struct SingleCTData<T: FloatLike> {
+    jacobian_ratio: F<T>,
+    h_function: F<T>,
+    uv_localisation: F<T>,
+    singularity_dampener: F<T>,
+    local_counterterm: Complex<F<T>>,
+    integrated_counterterm: Complex<F<T>>,
+}
+
 #[derive(Serialize)]
-struct DebugHelper {
-    esurface_id: EsurfaceID,
-    initial_radius: F<f64>,
-    plus_solution: NewtonIterationResult<f64>,
-    minus_solution: NewtonIterationResult<f64>,
-    jacobian_ratio_plus: F<f64>,
-    jacobian_ratio_minus: F<f64>,
-    uv_damper_plus: F<f64>,
-    uv_damper_minus: F<f64>,
-    singularity_dampener_plus: F<f64>,
-    singularity_dampener_minus: F<f64>,
-    ct_plus: Complex<F<f64>>,
-    ct_minus: Complex<F<f64>>,
-    integrated_ct_plus: Complex<F<f64>>,
-    integrated_ct_minus: Complex<F<f64>>,
-    r_plus_energy_cache: Vec<F<f64>>,
-    r_minus_energy_cache: Vec<F<f64>>,
+struct DebugHelper<T: FloatLike> {
+    esurface_id: usize,
+    edges: Vec<SmartString<LazyCompact>>,
+    plus_solution: NewtonIterationResult<T>,
+    minus_solution: NewtonIterationResult<T>,
+    delta_r_plus: F<T>,
+    delta_r_minus: F<T>,
+    jacobian_ratio_plus: F<T>,
+    jacobian_ratio_minus: F<T>,
+    uv_damper_plus: F<T>,
+    uv_damper_minus: F<T>,
+    singularity_dampener_plus: F<T>,
+    singularity_dampener_minus: F<T>,
+    ct_plus: Complex<F<T>>,
+    ct_minus: Complex<F<T>>,
+    integrated_ct_plus: Complex<F<T>>,
+    integrated_ct_minus: Complex<F<T>>,
+    r_plus_energy_cache: Vec<F<T>>,
+    r_minus_energy_cache: Vec<F<T>>,
+    r_plus_energy_product: F<T>,
+    r_minus_energy_product: F<T>,
+    r_plus_eval: Complex<F<T>>,
+    r_minus_eval: Complex<F<T>>,
+    h_plus: F<T>,
+    h_minus: F<T>,
+    r_plus_esurface_cache: Vec<F<T>>,
+    r_minus_esurface_cache: Vec<F<T>>,
+}
+
+impl<'a, T: FloatLike> From<&CounterTermResult<'a, T>> for DebugHelper<T> {
+    fn from(value: &CounterTermResult<'a, T>) -> Self {
+        let residue_eval = &value.residue_eval;
+        let rstar_samples = &residue_eval.rstar_samples;
+        let rstar_solution = &rstar_samples.rstar_solutions;
+        let esurface_ct_builder = &rstar_solution.esurface_ct_builder;
+        let overlap_builder = esurface_ct_builder.overlap_builder;
+        let ct_builder = overlap_builder.counterterm_builder;
+
+        let radius = &overlap_builder.hemispherical_radius;
+
+        let graph = ct_builder.graph;
+        let esurface_id =
+            ct_builder.counterterm.existing_esurfaces[esurface_ct_builder.existing_esurface_id];
+
+        let edges = esurface_ct_builder
+            .esurface
+            .energies
+            .iter()
+            .map(|edge_id| graph.edges[*edge_id].name.clone())
+            .collect();
+
+        let plus_solution = rstar_solution.solutions[0].clone();
+        let minus_solution = rstar_solution.solutions[1].clone();
+
+        let delta_r_plus = radius - &plus_solution.solution;
+        let delta_r_minus = radius - &minus_solution.solution;
+
+        let jacobian_ratio_plus = value.counterterms[0].jacobian_ratio.clone();
+        let jacobian_ratio_minus = value.counterterms[1].jacobian_ratio.clone();
+
+        let uv_damper_plus = value.counterterms[0].uv_localisation.clone();
+        let uv_damper_minus = value.counterterms[1].uv_localisation.clone();
+
+        let singularity_dampener_plus = value.counterterms[0].singularity_dampener.clone();
+        let singularity_dampener_minus = value.counterterms[1].singularity_dampener.clone();
+
+        let ct_plus = value.counterterms[0].local_counterterm.clone();
+        let ct_minus = value.counterterms[1].local_counterterm.clone();
+
+        let integrated_ct_plus = value.counterterms[0].integrated_counterterm.clone();
+        let integrated_ct_minus = value.counterterms[1].integrated_counterterm.clone();
+
+        let r_plus_energy_cache = residue_eval.residues[0].rstar_energy_cache.clone();
+        let r_minus_energy_cache = residue_eval.residues[1].rstar_energy_cache.clone();
+
+        let r_plus_energy_product = residue_eval.residues[0].rstar_energy_product.clone();
+        let r_minus_energy_product = residue_eval.residues[1].rstar_energy_product.clone();
+
+        let r_plus_eval = residue_eval.residues[0].residue.clone();
+        let r_minus_eval = residue_eval.residues[1].residue.clone();
+
+        let h_plus = value.counterterms[0].h_function.clone();
+        let h_minus = value.counterterms[1].h_function.clone();
+
+        let r_plus_esurface_cache = residue_eval.residues[0].rstar_esurface_cache.clone();
+        let r_minus_esurface_cache = residue_eval.residues[1].rstar_esurface_cache.clone();
+
+        DebugHelper {
+            esurface_id: esurface_id.into(),
+            edges,
+            plus_solution,
+            minus_solution,
+            ct_minus,
+            ct_plus,
+            integrated_ct_plus,
+            integrated_ct_minus,
+            h_minus,
+            h_plus,
+            jacobian_ratio_minus,
+            jacobian_ratio_plus,
+            r_minus_energy_cache,
+            r_plus_energy_cache,
+            r_plus_esurface_cache,
+            r_minus_esurface_cache,
+            r_minus_energy_product,
+            r_plus_energy_product,
+            r_minus_eval,
+            r_plus_eval,
+            uv_damper_minus,
+            uv_damper_plus,
+            singularity_dampener_minus,
+            singularity_dampener_plus,
+            delta_r_plus,
+            delta_r_minus,
+        }
+    }
 }

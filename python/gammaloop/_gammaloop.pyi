@@ -3,13 +3,78 @@ Gammaloop Python API.
 """
 
 
+from typing import Optional
+
+
 def cli_wrapper() -> None:
     """ Starts a CLI interface for GammaLoop exposing rust functionalities. """
 
 
+class SnailFilterOptions:
+
+    @classmethod
+    def __new__(_cls,
+                veto_snails_attached_to_massive_lines: Optional[bool] = False,
+                veto_snails_attached_to_massless_lines: Optional[bool] = True,
+                veto_only_scaleless_snails: Optional[bool] = False,
+                ) -> SnailFilterOptions:
+        """ Creates options for vetoing snail diagrams. """
+
+
+class SelfEnergyFilterOptions:
+    @classmethod
+    def __new__(_cls,
+                veto_self_energy_of_massive_lines: Optional[bool] = True,
+                veto_self_energy_of_massless_lines: Optional[bool] = True,
+                veto_only_scaleless_self_energy: Optional[bool] = False,
+                ) -> SelfEnergyFilterOptions:
+        """ Creates options for vetoing self-energy diagrams. """
+
+
+class TadpolesFilterOptions:
+    @classmethod
+    def __new__(_cls,
+                veto_tadpoles_attached_to_massive_lines: Optional[bool] = True,
+                veto_tadpoles_attached_to_massless_lines: Optional[bool] = True,
+                veto_only_scaleless_tadpoles: Optional[bool] = False,
+                ) -> TadpolesFilterOptions:
+        """ Creates options for vetoing tadpole diagrams. """
+
+
+class FeynGenFilters:
+
+    @classmethod
+    def __new__(_cls,
+                include_external_self_energy: Optional[bool] = False,
+                particle_veto: Optional[list[int]] = [],
+                max_number_of_bridges: Optional[int] = 0,
+                self_energy_filter: Optional[SelfEnergyFilterOptions] = None,
+                tadpoles_filter: Optional[TadpolesFilterOptions] = None,
+                zero_snails_filter: Optional[SnailFilterOptions] = None,
+                coupling_orders: Optional[dict[str, int]] = {},
+                ) -> FeynGenFilters:
+        """ Creates a new set of diagram generation filters. """
+
+
+class FeynGenOptions:
+
+    @classmethod
+    def __new__(_cls,
+                generation_type: str,
+                initial_particles: list[int],
+                final_particles: list[int],
+                loop_count_range: tuple[int, int],
+                symmetrize_initial_states: bool,
+                symmetrize_final_states: bool,
+                symmetrize_left_right_states: bool,
+                filters: Optional[FeynGenFilters] = None,
+                ) -> FeynGenOptions:
+        """ Creates options for steering diagram generation.  """
+
+
 class Worker:
     @classmethod
-    def new(_cls) -> Worker:
+    def __new__(_cls) -> Worker:
         """ Creates a new worker. """
 
     def load_model(self, file_path: str) -> None:
@@ -20,6 +85,17 @@ class Worker:
 
     def get_model(self) -> str:
         """ Returns the yaml string representation of the model currently active. """
+
+    def generate_diagrams(self, generation_options: FeynGenOptions,
+                          numerator_aware_isomorphism_grouping: Optional[bool] = True,
+                          filter_self_loop: Optional[bool] = False,
+                          graph_prefix: Optional[str] = "GL",
+                          selected_graphs: Optional[list[str]] = None,
+                          vetoed_graphs: Optional[list[str]] = None,
+                          loop_momentum_bases: Optional[dict[str,
+                                                             list[str]]] = None,
+                          ) -> list[str]:
+        """ Generates diagrams according to the options given in argument and returns their yaml string representation. """
 
     def add_cross_section_from_yaml_str(self, yaml_str: str) -> None:
         """ Adds a cross section to the internal list of the worker given its yaml string representation. """
@@ -60,7 +136,7 @@ class Worker:
     def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str) -> None:
         """ Exports the amplitudes given in argument to the export root given in argument, parse export settings as yaml str"""
 
-    def export_expressions(self, export_root: str, format: str,export_yaml_str: str) -> None:
+    def export_expressions(self, export_root: str, format: str, export_yaml_str: str) -> None:
         """Exports the numerator and denominator to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
 
     def export_coupling_replacement_rules(self, export_root: str, format: str) -> None:

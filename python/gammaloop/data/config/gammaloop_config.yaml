@@ -1,8 +1,23 @@
 symbolica:
   license: "GAMMALOOP_USER"
 drawing:
-  mode: "feynmp"
+  modes: ["feynmp", "dot"]
   combined_graphs_pdf_grid_shape: [3, 2]
+  dot:
+    layout: "neato"
+    graph_options:
+      "fontsize": 10
+      "ratio": 1.5 # aspect-ratio
+    node_options:
+      "fontsize": 7
+      "shape": "circle"
+      "margin": 0
+      "height": 0.01
+      "penwidth": 0.6
+    edge_options:
+      "fontsize": 7
+      "arrowsize": 0.3
+      "penwidth": 0.6
   feynmp:
     reverse_outgoing_edges_order: true
     show_edge_labels: true
@@ -39,7 +54,9 @@ export_settings:
       compile_options:
         subtype: Compiled
     global_numerator: null
+    global_prefactor: null
     gamma_algebra: Concrete
+    parse_mode: Direct
   cpe_rounds_cff: 1
   compile_separate_orientations: false
   gammaloop_compile_options:

@@ -9,26 +9,31 @@ use colored::Colorize;
 use itertools::{izip, Itertools};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::float::Constant;
+use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use spenso::complex::SymbolicaComplex;
+use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use spenso::{
     complex::{Complex, R},
     contraction::{RefOne, RefZero},
     upgrading_arithmetic::TrySmallestUpgrade,
 };
+use symbolica::atom::Symbol;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
-use symbolica::evaluate::CompiledEvaluatorFloat;
+use symbolica::evaluate::{CompiledEvaluatorFloat, FunctionMap};
+use symbolica::symb;
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
+use std::str::FromStr;
+use std::sync::LazyLock;
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
@@ -114,10 +119,44 @@ pub trait FloatConvertFrom<U> {
 //     }
 // }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
 pub struct VarFloat<const N: u32> {
     #[bincode(with_serde)]
     float: rug::Float,
+}
+
+impl<const N: u32> Serialize for VarFloat<N> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let string = self.float.to_string();
+        string.serialize(serializer)
+    }
+}
+
+impl<'de, const N: u32> Deserialize<'de> for VarFloat<N> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string: String = serde::Deserialize::deserialize(deserializer)?;
+        let val: Self = string
+            .parse()
+            .unwrap_or_else(|_| panic!("failed to parse arb prec from string: {}", string));
+
+        Ok(val)
+    }
+}
+
+impl<const N: u32> FromStr for VarFloat<N> {
+    type Err = ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let float = rug::Float::parse(s)?;
+        Ok(Self {
+            float: rug::Float::with_val(N, float),
+        })
+    }
 }
 
 impl<'a, const N: u32> Rem<&VarFloat<N>> for &'a VarFloat<N> {
@@ -467,10 +506,18 @@ impl<const N: u32> SingleFloat for VarFloat<N> {
     fn is_zero(&self) -> bool {
         self.float == 0.
     }
+
+    fn from_rational(&self, rat: &Rational) -> Self {
+        rat.into()
+    }
 }
 impl<const N: u32> RealNumberLike for VarFloat<N> {
     fn to_f64(&self) -> f64 {
         self.float.to_f64()
+    }
+
+    fn round_to_nearest_integer(&self) -> Integer {
+        self.float.clone().round().to_integer().unwrap().into()
     }
 
     fn to_usize_clamped(&self) -> usize {
@@ -483,6 +530,25 @@ impl<const N: u32> RealNumberLike for VarFloat<N> {
 }
 
 impl<const N: u32> Real for VarFloat<N> {
+    #[inline(always)]
+    fn pi(&self) -> Self {
+        Float::with_val(N, rug::float::Constant::Pi).into()
+    }
+
+    #[inline(always)]
+    fn e(&self) -> Self {
+        self.one().exp()
+    }
+
+    #[inline(always)]
+    fn euler(&self) -> Self {
+        Float::with_val(N, rug::float::Constant::Euler).into()
+    }
+
+    #[inline(always)]
+    fn phi(&self) -> Self {
+        (self.one() + self.from_i64(5).sqrt()) / Self::from_f64(2.)
+    }
     fn atan2(&self, x: &Self) -> Self {
         self.float.clone().atan2(&x.float).into()
     }
@@ -797,6 +863,7 @@ impl<T: FloatLike> RealNumberLike for F<T> {
         to self.0{
             fn to_usize_clamped(&self)->usize;
             fn to_f64(&self)->f64;
+            fn round_to_nearest_integer(&self)->Integer;
         }
     }
 }
@@ -808,6 +875,9 @@ impl<T: FloatLike> SingleFloat for F<T> {
             fn is_one(&self)->bool;
             fn is_finite(&self)->bool;
         }
+    }
+    fn from_rational(&self, rat: &Rational) -> Self {
+        F(self.0.from_rational(rat))
     }
 }
 
@@ -950,6 +1020,10 @@ impl<T: FloatLike> Real for F<T> {
     delegate! {
         #[into]
         to self.0{
+            fn e(&self)->Self;
+            fn phi(&self)->Self;
+            fn euler(&self)->Self;
+            fn pi(&self)->Self;
             fn sqrt(&self) -> Self;
             fn log(&self) -> Self;
             fn exp(&self) -> Self;
@@ -1347,6 +1421,12 @@ impl From<F<f64>> for f64 {
     }
 }
 
+impl From<F<f64>> for Rational {
+    fn from(value: F<f64>) -> Self {
+        value.0.into()
+    }
+}
+
 #[allow(non_camel_case_types)]
 pub type f128 = VarFloat<113>;
 
@@ -1446,7 +1526,8 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
                 latex: false,
-                double_star_for_exponentiation: false
+                double_star_for_exponentiation: false,
+                precision: None
             },
         )
     )
@@ -2971,13 +3052,13 @@ pub fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
 pub fn print_banner() {
     info!(
         "\n{}{}\n",
-        r"                                        _                       
-                                       | |                      
-   __ _  __ _ _ __ ___  _ __ ___   __ _| |     ___   ___  _ __  
-  / _` |/ _` | '_ ` _ \| '_ ` _ \ / _` | |    / _ \ / _ \| '_ \ 
+        r"                                        _
+                                       | |
+   __ _  __ _ _ __ ___  _ __ ___   __ _| |     ___   ___  _ __
+  / _` |/ _` | '_ ` _ \| '_ ` _ \ / _` | |    / _ \ / _ \| '_ \
  | (_| | (_| | | | | | | | | | | | (_| | |___| (_) | (_) | |_) |
-  \__, |\__,_|_| |_| |_|_| |_| |_|\__,_|______\___/ \___/| .__/ 
-   __/ |                                                 | |    
+  \__, |\__,_|_| |_| |_|_| |_| |_|\__,_|______\___/ \___/| .__/
+   __/ |                                                 | |
 "
         .to_string()
         .bold()
@@ -3106,6 +3187,34 @@ fn complex_compare() {
     ltd.approx_eq_res(&cff, &F(0.00000001)).unwrap();
 }
 
+pub struct GammaloopSymbols {
+    pub ubar: Symbol,
+    pub vbar: Symbol,
+    pub v: Symbol,
+    pub u: Symbol,
+    pub epsilon: Symbol,
+    pub epsilonbar: Symbol,
+    pub coeff: Symbol,
+    pub top: Symbol,
+    pub num: Symbol,
+    pub den: Symbol,
+}
+
+use symbolica::state::{FunctionAttribute, State};
+
+pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
+    ubar: symb!("ubar"),
+    vbar: symb!("vbar"),
+    v: symb!("v"),
+    u: symb!("u"),
+    epsilon: symb!("ϵ"),
+    epsilonbar: symb!("ϵbar"),
+    coeff: symb!("coef"),
+    top: State::get_symbol_with_attributes("Top", &[]).unwrap(),
+    num: symb!("num"),
+    den: symb!("den"),
+});
+
 /// Checks if two lists are permutations of eachother, and establish a map between indices
 pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<PermutationMap> {
     if left.len() != right.len() {
@@ -3137,6 +3246,139 @@ pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<Permutati
         left_to_right,
         right_to_left,
     })
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Serialize, Deserialize, Debug)]
+enum OwnedAtomOrTaggedFunction {
+    Atom(SerializableAtom),
+    TaggedFunction(SerializableSymbol, Vec<SerializableAtom>),
+}
+
+use ahash::AHashMap;
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct OwnedFunctionMap<T = Rational> {
+    map: AHashMap<OwnedAtomOrTaggedFunction, OwnedConstOrExpr<T>>,
+    tag: AHashMap<SerializableSymbol, usize>,
+}
+
+impl<T> Default for OwnedFunctionMap<T> {
+    fn default() -> Self {
+        OwnedFunctionMap::new()
+    }
+}
+
+impl<T> OwnedFunctionMap<T> {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        OwnedFunctionMap {
+            map: AHashMap::default(),
+            tag: AHashMap::default(),
+        }
+    }
+
+    pub fn add_constant<A: Into<Atom>>(&mut self, key: A, value: T) {
+        self.map.insert(
+            OwnedAtomOrTaggedFunction::Atom(<A as Into<Atom>>::into(key).into()),
+            OwnedConstOrExpr::Const(value),
+        );
+    }
+
+    pub fn add_function(
+        &mut self,
+        name: Symbol,
+        rename: String,
+        args: Vec<Symbol>,
+        body: Atom,
+    ) -> Result<(), &str> {
+        if let Some(t) = self.tag.insert(name.into(), 0) {
+            if t != 0 {
+                return Err("Cannot add the same function with a different number of parameters");
+            }
+        }
+
+        self.map.insert(
+            OwnedAtomOrTaggedFunction::TaggedFunction(name.into(), vec![]),
+            OwnedConstOrExpr::Expr(
+                rename,
+                0,
+                args.into_iter().map(SerializableSymbol::from).collect(),
+                body.into(),
+            ),
+        );
+
+        Ok(())
+    }
+
+    pub fn add_tagged_function(
+        &mut self,
+        name: Symbol,
+        tags: Vec<Atom>,
+        rename: String,
+        args: Vec<Symbol>,
+        body: Atom,
+    ) -> Result<(), &str> {
+        if let Some(t) = self.tag.insert(name.into(), tags.len()) {
+            if t != tags.len() {
+                return Err("Cannot add the same function with a different number of parameters");
+            }
+        }
+
+        let tag_len = tags.len();
+
+        self.map.insert(
+            OwnedAtomOrTaggedFunction::TaggedFunction(
+                name.into(),
+                tags.into_iter().map(SerializableAtom::from).collect(),
+            ),
+            OwnedConstOrExpr::Expr(
+                rename,
+                tag_len,
+                args.into_iter().map(SerializableSymbol::from).collect(),
+                body.into(),
+            ),
+        );
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+enum OwnedConstOrExpr<T> {
+    Const(T),
+    Expr(String, usize, Vec<SerializableSymbol>, SerializableAtom),
+}
+
+impl<'a, T: Clone, U: From<T>> From<&'a OwnedFunctionMap<T>> for FunctionMap<'a, U> {
+    fn from(owned: &'a OwnedFunctionMap<T>) -> Self {
+        let mut fn_map = FunctionMap::new();
+
+        for (k, v) in owned.map.iter() {
+            match v {
+                OwnedConstOrExpr::Const(v) => {
+                    if let OwnedAtomOrTaggedFunction::Atom(a) = k {
+                        fn_map.add_constant(a.0.as_view(), v.clone().into());
+                    }
+                }
+
+                OwnedConstOrExpr::Expr(rename, _, args, body) => {
+                    if let OwnedAtomOrTaggedFunction::TaggedFunction(name, tags) = k {
+                        fn_map
+                            .add_tagged_function(
+                                (*name).into(),
+                                tags.iter().map(|a| a.0.as_view().into()).collect(),
+                                rename.clone(),
+                                args.iter().map(|&a| a.into()).collect(),
+                                body.0.as_view(),
+                            )
+                            .unwrap();
+                    }
+                }
+            }
+        }
+
+        fn_map
+    }
 }
 
 #[derive(Clone, Debug)]

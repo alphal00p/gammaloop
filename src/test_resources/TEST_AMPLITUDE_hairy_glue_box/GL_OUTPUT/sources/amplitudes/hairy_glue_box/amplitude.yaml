@@ -13,14 +13,14 @@ amplitude_graphs:
         particle: g
         direction: in
       edges:
-      - p1_IN
+      - p1
     - name: v1
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_37
       edges:
-      - p1_IN
-      - p2_IN
+      - p1
+      - p2
       - q1
       - q4
     - name: v11
@@ -29,21 +29,21 @@ amplitude_graphs:
         particle: g
         direction: in
       edges:
-      - p2_IN
+      - p2
     - name: v20
       vertex_info:
         type: external_vertex_info
         particle: g
         direction: in
       edges:
-      - p3_IN
+      - p3
     - name: v2
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_37
       edges:
-      - p3_IN
-      - p4_IN
+      - p3
+      - p4
       - q1
       - q2
     - name: v21
@@ -52,21 +52,21 @@ amplitude_graphs:
         particle: g
         direction: in
       edges:
-      - p4_IN
+      - p4
     - name: v30
       vertex_info:
         type: external_vertex_info
         particle: g
         direction: in
       edges:
-      - p5_IN
+      - p5
     - name: v3
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_37
       edges:
-      - p5_IN
-      - p6_IN
+      - p5
+      - p6
       - q2
       - q3
     - name: v31
@@ -75,21 +75,21 @@ amplitude_graphs:
         particle: g
         direction: in
       edges:
-      - p6_IN
+      - p6
     - name: v40
       vertex_info:
         type: external_vertex_info
         particle: g
         direction: in
       edges:
-      - p7_IN
+      - p7
     - name: v4
       vertex_info:
         type: interacton_vertex_info
         vertex_rule: V_37
       edges:
-      - p7_IN
-      - p8_IN
+      - p7
+      - p8
       - q3
       - q4
     - name: v41
@@ -98,58 +98,58 @@ amplitude_graphs:
         particle: g
         direction: in
       edges:
-      - p8_IN
+      - p8
     edges:
-    - name: p1_IN
+    - name: p1
       edge_type: in
       particle: g
       propagator: g_propFeynman
       vertices:
       - v10
       - v1
-    - name: p2_IN
+    - name: p2
       edge_type: in
       particle: g
       propagator: g_propFeynman
       vertices:
       - v11
       - v1
-    - name: p3_IN
+    - name: p3
       edge_type: in
       particle: g
       propagator: g_propFeynman
       vertices:
       - v20
       - v2
-    - name: p4_IN
+    - name: p4
       edge_type: in
       particle: g
       propagator: g_propFeynman
       vertices:
       - v21
       - v2
-    - name: p5_IN
+    - name: p5
       edge_type: in
       particle: g
       propagator: g_propFeynman
       vertices:
       - v30
       - v3
-    - name: p6_IN
+    - name: p6
       edge_type: in
       particle: g
       propagator: g_propFeynman
       vertices:
       - v31
       - v3
-    - name: p7_IN
+    - name: p7
       edge_type: in
       particle: g
       propagator: g_propFeynman
       vertices:
       - v40
       - v4
-    - name: p8_IN
+    - name: p8
       edge_type: in
       particle: g
       propagator: g_propFeynman
@@ -205,7 +205,7 @@ amplitude_graphs:
     loop_momentum_basis:
     - q3
     edge_signatures:
-    - - p1_IN
+    - - p1
       - - - 0
         - - 1
           - 0
@@ -215,7 +215,7 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - p2_IN
+    - - p2
       - - - 0
         - - 0
           - 1
@@ -225,7 +225,7 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - p3_IN
+    - - p3
       - - - 0
         - - 0
           - 0
@@ -235,7 +235,7 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - p4_IN
+    - - p4
       - - - 0
         - - 0
           - 0
@@ -245,7 +245,7 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - p5_IN
+    - - p5
       - - - 0
         - - 0
           - 0
@@ -255,7 +255,7 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - p6_IN
+    - - p6
       - - - 0
         - - 0
           - 0
@@ -265,7 +265,7 @@ amplitude_graphs:
           - 1
           - 0
           - 0
-    - - p7_IN
+    - - p7
       - - - 0
         - - 0
           - 0
@@ -275,7 +275,7 @@ amplitude_graphs:
           - 0
           - 1
           - 0
-    - - p8_IN
+    - - p8
       - - - 0
         - - -1
           - -1

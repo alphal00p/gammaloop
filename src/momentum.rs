@@ -15,11 +15,14 @@ use spenso::{
     data::{DataIterator, DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor},
     iterators::IteratableTensor,
     parametric::{EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete},
+    shadowing::Shadowable,
     structure::{
-        AbstractIndex, BaseRepName, Bispinor, CastStructure, Dual, DualSlotTo, Euclidean,
-        IndexLess, Lorentz, NamedStructure, NoArgs, PhysReps, RepName, Shadowable, Slot,
-        TensorStructure, ToSymbolic, VecStructure,
+        abstract_index::AbstractIndex,
+        representation::{BaseRepName, Bispinor, Euclidean, Minkowski, PhysReps, RepName},
+        slot::{DualSlotTo, Slot},
+        CastStructure, IndexLess, NamedStructure, TensorStructure, ToSymbolic, VecStructure,
     },
+    symbolica_utils::NoArgs,
     upgrading_arithmetic::FallibleAdd,
 };
 use symbolica::{
@@ -1267,7 +1270,7 @@ impl<T: Clone> Polarization<T> {
     }
 
     pub fn lorentz(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Lorentz::new_dimed_rep_selfless(4).cast()]);
+        let structure = IndexLess::new(vec![Minkowski::rep(4).cast()]);
         Polarization {
             tensor: DenseTensor {
                 data: value.to_vec(),
@@ -1278,7 +1281,7 @@ impl<T: Clone> Polarization<T> {
     }
 
     pub fn bispinor_u(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Bispinor::new_dimed_rep_selfless(4).cast()]);
+        let structure = IndexLess::new(vec![Bispinor::rep(4).cast()]);
 
         Polarization {
             tensor: DenseTensor {
@@ -1290,7 +1293,7 @@ impl<T: Clone> Polarization<T> {
     }
 
     pub fn bispinor_v(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Bispinor::new_dimed_rep_selfless(4).cast()]);
+        let structure = IndexLess::new(vec![Bispinor::rep(4).cast()]);
 
         Polarization {
             tensor: DenseTensor {
@@ -1554,7 +1557,8 @@ impl<T> FourMomentum<T, T> {
     where
         T: Clone,
     {
-        let structure = VecStructure::from_iter([PhysReps::new_slot(Lorentz {}.into(), 4, index)]);
+        let structure =
+            VecStructure::from_iter([PhysReps::new_slot(Minkowski {}.into(), 4, index)]);
         DenseTensor::from_data(
             vec![
                 self.temporal.value,
@@ -1576,8 +1580,9 @@ impl<T> FourMomentum<T, T> {
     where
         T: Clone,
     {
-        let structure = VecStructure::from_iter([PhysReps::new_slot(Lorentz {}.into(), 4, index)])
-            .to_named(name, Some(num));
+        let structure =
+            VecStructure::from_iter([PhysReps::new_slot(Minkowski {}.into(), 4, index)])
+                .to_named(name, Some(num));
         DenseTensor::from_data(
             vec![
                 self.temporal.value,
@@ -1616,11 +1621,12 @@ impl<T> FourMomentum<T, T> {
             zero
         };
         let factor = gamma2 * &bp + gamma.clone() * &self.temporal.value;
+
         FourMomentum::from_args(
             (bp + &self.temporal.value) * &gamma,
-            boost_vector.spatial.px.mul_add(&factor, &self.spatial.px),
-            boost_vector.spatial.py.mul_add(&factor, &self.spatial.py),
-            boost_vector.spatial.pz.mul_add(&factor, &self.spatial.pz),
+            self.spatial.px.mul_add(&factor, &boost_vector.spatial.px),
+            self.spatial.py.mul_add(&factor, &boost_vector.spatial.py),
+            self.spatial.pz.mul_add(&factor, &boost_vector.spatial.pz),
         )
     }
 }
@@ -1849,7 +1855,7 @@ impl<'a, T> IntoIterator for &'a Polarization<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Hash)]
 #[repr(i8)]
 pub enum Sign {
     Positive = 1,
@@ -1973,7 +1979,7 @@ pub type Helicity = SignOrZero;
 #[derive(
     Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Encode, Decode, PartialOrd, Ord, Hash,
 )]
-pub struct Signature(Vec<SignOrZero>);
+pub struct Signature(pub Vec<SignOrZero>);
 
 impl Display for Signature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -2350,7 +2356,8 @@ impl<T> FourMomentum<T, Atom> {
     where
         T: Clone + Into<Coefficient> + Exponent,
     {
-        let structure = VecStructure::from_iter([PhysReps::new_slot(Lorentz {}.into(), 4, index)]);
+        let structure =
+            VecStructure::from_iter([PhysReps::new_slot(Minkowski {}.into(), 4, index)]);
         let energy = self
             .temporal
             .value
@@ -2572,13 +2579,13 @@ impl Rotation {
         }
     }
     pub fn new(method: RotationMethod) -> Self {
-        let mu = Lorentz::new_slot_selfless(4, 1);
+        let mu = Minkowski::slot(4, 1);
 
-        let al = Lorentz::new_slot_selfless(4, 3);
+        let al = Minkowski::slot(4, 3);
         let mud = mu.dual();
 
         let shadow: NamedStructure<String, ()> =
-            VecStructure::from_iter([mu]).to_named("eps".to_string(), None);
+            VecStructure::<PhysReps>::from_iter([mu.into()]).to_named("eps".to_string(), None);
         let shadow_t: MixedTensor<_, VecStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
@@ -2603,9 +2610,9 @@ impl Rotation {
             .unwrap()
             .linearize(Some(1));
 
-        let i = Bispinor::new_slot_selfless(4, 1);
+        let i = Bispinor::slot(4, 1);
 
-        let j = Bispinor::new_slot_selfless(4, 3);
+        let j = Bispinor::slot(4, 3);
 
         let shadow: NamedStructure<String, ()> =
             VecStructure::from_iter([i.cast::<PhysReps>()]).to_named("u".to_string(), None);
@@ -2640,8 +2647,8 @@ impl Rotation {
 impl RotationMethod {
     pub fn generator(&self, i: AbstractIndex, j: AbstractIndex) -> DataTensor<f64, VecStructure> {
         let structure = VecStructure::from_iter([
-            PhysReps::new_slot(Lorentz {}.into(), 4, i),
-            PhysReps::new_slot(Lorentz {}.into(), 4, j),
+            PhysReps::new_slot(Minkowski {}.into(), 4, i),
+            PhysReps::new_slot(Minkowski {}.into(), 4, j),
         ]);
         let zero = 0.;
         match self {
@@ -2684,8 +2691,8 @@ impl RotationMethod {
 
     pub fn lorentz_tensor(
         &self,
-        i: Slot<Dual<Lorentz>>,
-        j: Slot<Lorentz>,
+        i: Slot<Minkowski>,
+        j: Slot<Minkowski>,
     ) -> DataTensor<f64, VecStructure> {
         let structure = VecStructure::from_iter([i.cast::<PhysReps>(), j.cast()]);
 
@@ -2977,7 +2984,7 @@ mod tests {
         arithmetic::ScalarMul,
         contraction::Contract,
         iterators::IteratableTensor,
-        structure::{DualSlotTo, TensorStructure},
+        structure::{slot::DualSlotTo, TensorStructure},
         ufo,
         upgrading_arithmetic::{FallibleAdd, FallibleSub},
     };
@@ -3501,9 +3508,9 @@ mod tests {
 
     #[test]
     fn omega() {
-        let mu = PhysReps::new_slot(Lorentz {}.into(), 4, 0);
+        let mu = PhysReps::new_slot(Minkowski {}.into(), 4, 0);
 
-        let nu = PhysReps::new_slot(Lorentz {}.into(), 4, 1);
+        let nu = PhysReps::new_slot(Minkowski {}.into(), 4, 1);
 
         let mud = mu.dual();
 

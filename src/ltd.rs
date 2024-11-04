@@ -4,7 +4,7 @@ use crate::{
     gammaloop_integrand::DefaultSample,
     graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
-    numerator::{AtomStructure, Evaluate, Evaluators, Numerator, NumeratorState},
+    numerator::{Evaluate, Evaluators, Numerator, NumeratorState},
     utils::{FloatLike, F},
     Settings,
 };
@@ -393,11 +393,8 @@ impl Heaviside {
     }
 
     fn invert_sign(&mut self) {
-        for arg in self.arguments.iter_mut() {
-            match arg {
-                Some(value) => *value *= -1.,
-                None => {}
-            }
+        for arg in self.arguments.iter_mut().flatten() {
+            *arg = arg.neg();
         }
     }
 
@@ -437,7 +434,7 @@ impl LTDTerm {
         graph: &BareGraph,
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         // compute on shell energies of the momenta in associated_lmb
 
         let zero = emr.0.iter().next().unwrap().px.zero();
@@ -571,7 +568,7 @@ impl LTDExpression {
         graph: &BareGraph,
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let zero = sample.zero();
         let possibly_rotated_emr = sample
             .rotated_sample
@@ -605,7 +602,7 @@ impl LTDExpression {
         lmb: &LoopMomentumBasis,
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let zero = sample.zero();
         let possibly_rotated_emr = sample
             .rotated_sample

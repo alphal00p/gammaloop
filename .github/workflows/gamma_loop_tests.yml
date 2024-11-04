@@ -18,10 +18,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python 3.11
+    - name: Set up Python 3.12
       uses: actions/setup-python@v3
       with:
-        python-version: "3.11"
+        python-version: "3.12"
 #    - name: Install TeXlive
 #      run: sudo apt-get update && sudo apt-get install texlive-full texlive-publishers texlive-science latexmk cm-super feynmf
     - name: Install dependencies

@@ -1,15 +1,16 @@
 [tool.poetry]
 name = "gammaloop"
-version = "0.1.1"
+version = "0.2.0"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 authors = [
   "Valentin Hirschi <valentin.hirschi@gmail.com>",
   "Mathijs Fraaije <mathijsfraaije@gmail.com>",
   "Lucien Huber <mail@lcnbr.ch>",
 ]
+package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 pytest = "^7.4.2"
 autopep8 = "^2.0.4"
 pyaml = "^23.12.0"
@@ -21,7 +22,7 @@ pydot = "^3.0.1"
 
 [tool.poetry.dev-dependencies]
 PyYAML = "^6.0.1"
-symbolica = "^0.1.0"
+symbolica = "^0.12.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.12.1"
@@ -32,7 +33,7 @@ build-backend = "maturin"
 
 [project]
 name = "gammaloop"
-version = "0.1.1"
+version = "0.2.0"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 readme = "README.md"
 license = { file = "LICENSE.md" }
@@ -60,6 +61,23 @@ features = ["python_api"]
 python-source = "python"
 module-name = "gammaloop._gammaloop"
 sdist-include = ["LICENSE.md", "README.md"]
+exclude = [
+  "gammaloop/dependencies/LOCK",
+  "gammaloop/dependencies/INSTALLED",
+  "gammaloop/dependencies/dependency_build.log",
+  "gammaloop/dependencies/venv",
+  "gammaloop/dependencies/venv/**",
+  "gammaloop/dependencies/symbolica/symbolica_path.txt",
+]
+include = [
+  "gammaloop/.pytest_cache/v/test_runtimes",
+  "gammaloop/tests/test_data/graph_inputs",
+  "gammaloop/tests/test_data/graph_inputs/*",
+  "gammaloop/examples/cards",
+  "gammaloop/examples/cards/*",
+  "gammaloop/dependencies/test_quad_math",
+  "gammaloop/dependencies/test_quad_math/test_quad_math.c"
+]
 
 [project.scripts]
 gammaloop_rust_cli = "gammaloop._gammaloop:rust_cli"

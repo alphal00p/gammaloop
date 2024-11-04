@@ -10,10 +10,10 @@ amplitude_graphs:
     - name: v1
       vertex_info:
         type: external_vertex_info
-        particle: a
         direction: in
+        particle: a
       edges:
-      - p1_IN
+      - p1
     - name: v7
       vertex_info:
         type: interacton_vertex_info
@@ -21,14 +21,14 @@ amplitude_graphs:
       edges:
       - q1
       - q6
-      - p1_IN
+      - p1
     - name: v2
       vertex_info:
         type: external_vertex_info
-        particle: a
         direction: in
+        particle: a
       edges:
-      - p2_IN
+      - p2
     - name: v8
       vertex_info:
         type: interacton_vertex_info
@@ -36,7 +36,7 @@ amplitude_graphs:
       edges:
       - q2
       - q1
-      - p2_IN
+      - p2
     - name: v9
       vertex_info:
         type: interacton_vertex_info
@@ -44,14 +44,14 @@ amplitude_graphs:
       edges:
       - q3
       - q2
-      - p3_OUT
+      - p3
     - name: v3
       vertex_info:
         type: external_vertex_info
-        particle: a
         direction: out
+        particle: a
       edges:
-      - p3_OUT
+      - p3
     - name: v10
       vertex_info:
         type: interacton_vertex_info
@@ -59,14 +59,14 @@ amplitude_graphs:
       edges:
       - q4
       - q3
-      - p4_OUT
+      - p4
     - name: v4
       vertex_info:
         type: external_vertex_info
-        particle: a
         direction: out
+        particle: a
       edges:
-      - p4_OUT
+      - p4
     - name: v11
       vertex_info:
         type: interacton_vertex_info
@@ -74,14 +74,14 @@ amplitude_graphs:
       edges:
       - q5
       - q4
-      - p5_OUT
+      - p5
     - name: v5
       vertex_info:
         type: external_vertex_info
-        particle: a
         direction: out
+        particle: a
       edges:
-      - p5_OUT
+      - p5
     - name: v12
       vertex_info:
         type: interacton_vertex_info
@@ -89,51 +89,51 @@ amplitude_graphs:
       edges:
       - q6
       - q5
-      - p6_OUT
+      - p6
     - name: v6
       vertex_info:
         type: external_vertex_info
-        particle: a
         direction: out
+        particle: a
       edges:
-      - p6_OUT
+      - p6
     edges:
-    - name: p1_IN
+    - name: p1
       edge_type: in
       particle: a
       propagator: a_propFeynman
       vertices:
       - v1
       - v7
-    - name: p2_IN
+    - name: p2
       edge_type: in
       particle: a
       propagator: a_propFeynman
       vertices:
       - v2
       - v8
-    - name: p3_OUT
+    - name: p3
       edge_type: out
       particle: a
       propagator: a_propFeynman
       vertices:
       - v9
       - v3
-    - name: p4_OUT
+    - name: p4
       edge_type: out
       particle: a
       propagator: a_propFeynman
       vertices:
       - v10
       - v4
-    - name: p5_OUT
+    - name: p5
       edge_type: out
       particle: a
       propagator: a_propFeynman
       vertices:
       - v11
       - v5
-    - name: p6_OUT
+    - name: p6
       edge_type: out
       particle: a
       propagator: a_propFeynman
@@ -182,6 +182,7 @@ amplitude_graphs:
       vertices:
       - v12
       - v7
+    overall_factor: '1'
     external_connections:
     - - v1
       - null
@@ -195,11 +196,10 @@ amplitude_graphs:
       - v5
     - - null
       - v6
-    overall_factor: '1'
     loop_momentum_basis:
     - q5
     edge_signatures:
-    - - p1_IN
+    - - p1
       - - - 0
         - - 1
           - 0
@@ -207,7 +207,7 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - p2_IN
+    - - p2
       - - - 0
         - - 0
           - 1
@@ -215,7 +215,7 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - p3_OUT
+    - - p3
       - - - 0
         - - 0
           - 0
@@ -223,7 +223,7 @@ amplitude_graphs:
           - 0
           - 0
           - 0
-    - - p4_OUT
+    - - p4
       - - - 0
         - - 0
           - 0
@@ -231,7 +231,7 @@ amplitude_graphs:
           - 1
           - 0
           - 0
-    - - p5_OUT
+    - - p5
       - - - 0
         - - 0
           - 0
@@ -239,7 +239,7 @@ amplitude_graphs:
           - 0
           - 1
           - 0
-    - - p6_OUT
+    - - p6
       - - - 0
         - - 1
           - 1

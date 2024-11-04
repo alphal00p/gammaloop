@@ -76,30 +76,8 @@ impl DebugLogger {
     const fn init() -> Self {
         Self {
             logger: LazyLock::new(|| {
-                let path = PathBuf::from("log.glog");
-                let path_to_general = path.join("general.jsonl");
-
-                if path.exists() {
-                    fs::remove_dir_all(&path).expect("unable to remove older log file");
-                }
-
-                create_dir_all(&path).expect("unable to create log file");
-
-                let general_file = OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(path_to_general)
-                    .expect("unable to create log file");
-
-                let mut files = HashMap::default();
-                files.insert(EvalState::General, general_file);
-
-                Mutex::new(LogImpl {
-                    files,
-                    current: EvalState::General,
-                    path,
-                })
+                let log_impl = LogImpl::new();
+                Mutex::new(log_impl)
             }),
         }
     }
@@ -120,6 +98,10 @@ impl DebugLogger {
             .unwrap()
             .set_state(state)
             .expect("failed to change state")
+    }
+
+    pub fn reset(&self) {
+        self.logger.lock().unwrap().reset();
     }
 }
 
@@ -165,6 +147,36 @@ impl LogImpl {
         )?;
 
         Ok(())
+    }
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    fn new() -> Self {
+        let path = PathBuf::from("log.glog");
+        let path_to_general = path.join("general.jsonl");
+
+        if path.exists() {
+            fs::remove_dir_all(&path).expect("unable to remove older log file");
+        }
+
+        create_dir_all(&path).expect("unable to create log file");
+
+        let general_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(path_to_general)
+            .expect("unable to create log file");
+
+        let mut files = HashMap::default();
+        files.insert(EvalState::General, general_file);
+
+        LogImpl {
+            files,
+            current: EvalState::General,
+            path,
+        }
     }
 }
 
