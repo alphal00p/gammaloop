@@ -649,29 +649,6 @@ impl<E, V> HedgeGraph<E, V> {
             .flat_map(|i| self.involution.get_smart_data(i, subgraph))
     }
 
-    // pub fn strongly_disjoint(&self, graphs: impl IntoIterator<Item = SubGraph>) -> bool {
-    //     let mut union: SubGraph = self.empty_filter().into();
-
-    //     let mut nodes: SubGraph = self.empty_filter().into();
-
-    //     for subgraph in graphs {
-    //         if union.intersection(&subgraph).is_empty() {
-    //             return false;
-    //         }
-    //         union.union_with(&subgraph);
-
-    //         let nodes = subgraph.to_nesting_node(graph)
-    //     }
-    //     let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
-
-    //     let externals_in_self = self.internal_graph.filter.clone() & &other.;
-    //     let externals_in_other = self.externalhedges.clone() & &other.internal_graph.filter;
-
-    //     internals.count_ones() == 0
-    //         && externals_in_self.count_ones() == 0
-    //         && externals_in_other.count_ones() == 0
-    // }
-
     pub fn is_connected(&self, subgraph: &InternalSubGraph) -> bool {
         let n_hedges = subgraph.filter.count_ones();
         let start = subgraph.filter.first_one();
@@ -690,10 +667,12 @@ impl<E, V> HedgeGraph<E, V> {
     pub fn connected_components<S: SubGraph>(&self, subgraph: &S) -> Vec<BitVec> {
         let mut visited_edges = self.empty_filter();
         let mut components = vec![];
+
         // Iterate over all edges in the subgraph
         for hedge_index in subgraph.included() {
             if !visited_edges[hedge_index] {
                 // Perform DFS to find all reachable edges from this edge
+
                 //
                 let root_node = self.involution.get_node_id(hedge_index);
                 let reachable_edges = TraversalTree::dfs(self, subgraph, root_node).covers();

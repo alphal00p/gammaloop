@@ -3254,6 +3254,12 @@ pub struct OwnedFunctionMap<T = Rational> {
     tag: AHashMap<SerializableSymbol, usize>,
 }
 
+impl<T> Default for OwnedFunctionMap<T> {
+    fn default() -> Self {
+        OwnedFunctionMap::new()
+    }
+}
+
 impl<T> OwnedFunctionMap<T> {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
@@ -3346,7 +3352,8 @@ impl<'a, T: Clone, U: From<T>> From<&'a OwnedFunctionMap<T>> for FunctionMap<'a,
                         fn_map.add_constant(a.0.as_view(), v.clone().into());
                     }
                 }
-                OwnedConstOrExpr::Expr(rename, _tag_len, args, body) => {
+
+                OwnedConstOrExpr::Expr(rename, _, args, body) => {
                     if let OwnedAtomOrTaggedFunction::TaggedFunction(name, tags) = k {
                         fn_map
                             .add_tagged_function(

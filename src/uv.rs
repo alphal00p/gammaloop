@@ -25,7 +25,8 @@ use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 use crate::{
     graph::{
         half_edge::{
-            HalfEdgeNode, HedgeGraph, HedgeGraphBuilder, NodeIndex, PowersetIterator, SubGraph,
+            subgraph::HedgeNode, subgraph::InternalSubGraph, HedgeGraph, HedgeGraphBuilder,
+            NodeIndex, PowersetIterator,
         },
         BareGraph, Edge, EdgeType, LoopMomentumBasis, Vertex,
     },
@@ -426,8 +427,8 @@ impl UVGraph {
         spinneys
     }
 
-    fn wood_impl(&self) -> AHashSet<SubGraph> {
-        let mut cycles = self.0.all_cycles();
+    fn spinneys(&self) -> AHashSet<SubGraph> {
+        let cycles = self.0.all_cycles();
 
         let mut spinneys = AHashSet::new();
 
@@ -451,7 +452,7 @@ impl UVGraph {
     }
 
     fn wood(&self) -> Wood {
-        Wood::from_spinneys(self.wood_impl())
+        Wood::from_spinneys(self.spinneys(), self)
     }
 
     fn n_loops(&self, subgraph: &SubGraph) -> usize {
@@ -531,7 +532,7 @@ impl UVGraph {
 
 pub struct Wood {
     poset: Poset<SubGraph, Option<Top>>,
-    additional_unions: AHashSet<Vec<NodeRefs>>,
+    additional_unions: SecondaryMap<NodeRef, Vec<NodeRef>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -718,15 +719,43 @@ impl TryFromIterator<Top, ()> for UnfoldedWoodEl {
 }
 
 impl Wood {
-    pub fn from_spinneys<I: IntoIterator<Item = SubGraph>>(s: I) -> Self {
+    pub fn from_spinneys<I: IntoIterator<Item = SubGraph>>(s: I, graph: &UVGraph) -> Self {
         let mut poset = Poset::from_iter(s.into_iter().map(|s| (s, None)));
 
-        for (i, sg) in poset.nodes.iter() {}
         poset.invert();
         poset.compute_topological_order();
 
+        let mut unions = SecondaryMap::new();
+
+        for (i, sg) in poset.nodes.iter() {
+            let cs = graph.0.connected_components(&sg.data);
+
+            if cs.len() > 1 {
+                let mut union = vec![];
+
+                for &c in sg.children.iter() {
+                    let mut is_in = 0;
+                    for comp in &cs {
+                        if *comp == poset.nodes[c].data {
+                            union.push(c);
+                            is_in += 1;
+                        }
+                    }
+                    if is_in > 1 {
+                        panic!("is in too many components")
+                    }
+                }
+
+                unions.insert(i, union.clone());
+                // sg.children = union;
+            }
+        }
+
         // let coverset = poset.to_cover_set();
-        Wood { poset }
+        Wood {
+            poset,
+            additional_unions: unions,
+        }
     }
 
     pub fn dot(&self, graph: &UVGraph) -> String {

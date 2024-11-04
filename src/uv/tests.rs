@@ -1,15 +1,16 @@
 use std::{path::Path, time::Instant};
 
 use crate::{
+    graph::Graph,
     model::Model,
     numerator::UnInit,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::{PoSet, UVGraph},
 };
 
-fn self_energy_chain(num: usize) -> (Model, Graph<UnInit>) {
-    let model = load_generic_model("scalars");
-}
+// fn self_energy_chain(num: usize) -> (Model, Graph<UnInit>) {
+//     let model = load_generic_model("scalars");
+// }
 
 #[test]
 #[allow(unused)]
