@@ -4,7 +4,7 @@ from typing import Literal
 from gammaloop.base_objects.model import Particle
 from gammaloop.misc.common import GammaLoopError
 from gammaloop.base_objects.model import Model
-import re
+import gammaloop._gammaloop as gl_rust
 
 
 class MalformedProcessError(GammaLoopError):
@@ -21,6 +21,10 @@ class Process(object):
                  amplitude_loop_count: tuple[int, int] | None = None,
                  cross_section_loop_count: tuple[int, int] | None = None,
                  particle_vetos: list[Particle] | None = None,
+                 self_energy_filter: gl_rust.SelfEnergyFilterOptions | None = None,
+                 tadpole_filter: gl_rust.TadpolesFilterOptions | None = None,
+                 zero_snail_filter: gl_rust.SnailFilterOptions | None = None,
+                 max_n_bridges: int | None = None
                  ):
         self.initial_states = initial_particles
         self.final_states = final_particles
@@ -29,7 +33,25 @@ class Process(object):
         self.perturbative_orders = perturbative_orders
         self.amplitude_loop_count = amplitude_loop_count
         self.cross_section_loop_count = cross_section_loop_count
-        self.particle_vetos = particle_vetos
+        self.particle_vetos: list[Particle] | None = particle_vetos
+        self.amplitude_filters = gl_rust.FeynGenFilters(
+            particle_veto=(None if self.particle_vetos is None else [
+                p.get_pdg_code() for p in self.particle_vetos]),
+            self_energy_filter=self_energy_filter,
+            tadpoles_filter=tadpole_filter,
+            zero_snails_filter=zero_snail_filter,
+            max_number_of_bridges=max_n_bridges,
+            coupling_orders=self.amplitude_orders,
+        )
+        self.cross_section_filters = gl_rust.FeynGenFilters(
+            particle_veto=(None if self.particle_vetos is None else [
+                p.get_pdg_code() for p in self.particle_vetos]),
+            self_energy_filter=self_energy_filter,
+            tadpoles_filter=tadpole_filter,
+            zero_snails_filter=zero_snail_filter,
+            max_number_of_bridges=max_n_bridges,
+            coupling_orders=self.cross_section_orders,
+        )
 
     def __repr__(self) -> str:
         process_str_pieces: list[str] = []
@@ -281,19 +303,28 @@ class Process(object):
                                 initial_particles.append(model.get_particle(t))
                             except KeyError:
                                 raise MalformedProcessError(
-                                    f"Unknown particle {t} in initial state.")
+                                    f"Unknown particle '{t}' in initial state. Particle in the model are:\n{
+                                        sorted(
+                                            [p.name for p in model.particles])
+                                    }")
                         case ("final_states", False):
                             try:
                                 final_particles.append(model.get_particle(t))
                             except KeyError:
                                 raise MalformedProcessError(
-                                    f"Unknown particle {t} in final state.")
+                                    f"Unknown particle '{t}' in final state. Particle in the model are:\n{
+                                        sorted(
+                                            [p.name for p in model.particles])
+                                    }")
                         case ("vetos", False):
                             try:
                                 veto_particle = model.get_particle(t)
                             except KeyError:
                                 raise MalformedProcessError(
-                                    f"Unknown particle {t} in vetoed particles specification.")
+                                    f"Unknown particle '{t}' in vetoed particles specification. Particle in the model are:\n{
+                                        sorted(
+                                            [p.name for p in model.particles])
+                                    }")
                             particle_vetos.append(veto_particle)
                         case _:
                             if t.endswith("^2"):
@@ -308,7 +339,6 @@ class Process(object):
                             parsing_stage = "waiting_for_equal"
 
         check_process_defined()
-
         return Process(
             initial_particles,
             final_particles,
@@ -318,4 +348,20 @@ class Process(object):
             amplitude_loop_count,
             cross_section_loop_count,
             None if len(particle_vetos) == 0 else particle_vetos,
+            self_energy_filter=gl_rust.SelfEnergyFilterOptions(
+                veto_self_energy_of_massive_lines=process_args.veto_self_energy_of_massive_lines,
+                veto_self_energy_of_massless_lines=process_args.veto_self_energy_of_massless_lines,
+                veto_only_scaleless_self_energy=process_args.veto_only_scaleless_self_energy
+            ),
+            tadpole_filter=gl_rust.TadpolesFilterOptions(
+                veto_tadpoles_attached_to_massive_lines=process_args.veto_tadpoles_attached_to_massive_lines,
+                veto_tadpoles_attached_to_massless_lines=process_args.veto_tadpoles_attached_to_massless_lines,
+                veto_only_scaleless_tadpoles=process_args.veto_only_scaleless_tadpoles
+            ),
+            zero_snail_filter=gl_rust.SnailFilterOptions(
+                veto_snails_attached_to_massive_lines=process_args.veto_snails_attached_to_massive_lines,
+                veto_snails_attached_to_massless_lines=process_args.veto_snails_attached_to_massless_lines,
+                veto_only_scaleless_snails=process_args.veto_only_scaleless_snails
+            ),
+            max_n_bridges=process_args.max_n_bridges
         )

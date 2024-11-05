@@ -16,7 +16,10 @@ use crate::{
 };
 use ahash::HashMap;
 use colored::Colorize;
-use feyngen::{FeynGenFilter, GenerationType};
+use feyngen::{
+    FeynGenFilter, GenerationType, SelfEnergyFilterOptions, SnailFilterOptions,
+    TadpolesFilterOptions,
+};
 use git_version::git_version;
 use itertools::{self, Itertools};
 use log::{info, warn};
@@ -73,6 +76,9 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
     m.add_class::<PyFeynGenFilters>()?;
+    m.add_class::<PySnailFilterOptions>()?;
+    m.add_class::<PyTadpolesFilterOptions>()?;
+    m.add_class::<PySelfEnergyFilterOptions>()?;
     m.add_class::<PyFeynGenOptions>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
@@ -102,6 +108,93 @@ impl Clone for PythonWorker {
     }
 }
 
+#[pyclass(name = "SnailFilterOptions")]
+pub struct PySnailFilterOptions {
+    pub filter_options: SnailFilterOptions,
+}
+
+#[pymethods]
+impl PySnailFilterOptions {
+    #[new]
+    pub fn __new__(
+        veto_snails_attached_to_massive_lines: Option<bool>,
+        veto_snails_attached_to_massless_lines: Option<bool>,
+        veto_only_scaleless_snails: Option<bool>,
+    ) -> PyResult<PySnailFilterOptions> {
+        Ok(PySnailFilterOptions {
+            filter_options: SnailFilterOptions {
+                veto_snails_attached_to_massive_lines: veto_snails_attached_to_massive_lines
+                    .unwrap_or(false),
+                veto_snails_attached_to_massless_lines: veto_snails_attached_to_massless_lines
+                    .unwrap_or(true),
+                veto_only_scaleless_snails: veto_only_scaleless_snails.unwrap_or(false),
+            },
+        })
+    }
+
+    pub fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{}", self.filter_options))
+    }
+}
+
+#[pyclass(name = "SelfEnergyFilterOptions")]
+pub struct PySelfEnergyFilterOptions {
+    pub filter_options: SelfEnergyFilterOptions,
+}
+
+#[pymethods]
+impl PySelfEnergyFilterOptions {
+    #[new]
+    pub fn __new__(
+        veto_self_energy_of_massive_lines: Option<bool>,
+        veto_self_energy_of_massless_lines: Option<bool>,
+        veto_only_scaleless_self_energy: Option<bool>,
+    ) -> PyResult<PySelfEnergyFilterOptions> {
+        Ok(PySelfEnergyFilterOptions {
+            filter_options: SelfEnergyFilterOptions {
+                veto_self_energy_of_massive_lines: veto_self_energy_of_massive_lines
+                    .unwrap_or(true),
+                veto_self_energy_of_massless_lines: veto_self_energy_of_massless_lines
+                    .unwrap_or(true),
+                veto_only_scaleless_self_energy: veto_only_scaleless_self_energy.unwrap_or(false),
+            },
+        })
+    }
+
+    pub fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{}", self.filter_options))
+    }
+}
+
+#[pyclass(name = "TadpolesFilterOptions")]
+pub struct PyTadpolesFilterOptions {
+    pub filter_options: TadpolesFilterOptions,
+}
+
+#[pymethods]
+impl PyTadpolesFilterOptions {
+    #[new]
+    pub fn __new__(
+        veto_tadpoles_attached_to_massive_lines: Option<bool>,
+        veto_tadpoles_attached_to_massless_lines: Option<bool>,
+        veto_only_scaleless_tadpoles: Option<bool>,
+    ) -> PyResult<PyTadpolesFilterOptions> {
+        Ok(PyTadpolesFilterOptions {
+            filter_options: TadpolesFilterOptions {
+                veto_tadpoles_attached_to_massive_lines: veto_tadpoles_attached_to_massive_lines
+                    .unwrap_or(true),
+                veto_tadpoles_attached_to_massless_lines: veto_tadpoles_attached_to_massless_lines
+                    .unwrap_or(true),
+                veto_only_scaleless_tadpoles: veto_only_scaleless_tadpoles.unwrap_or(false),
+            },
+        })
+    }
+
+    pub fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{}", self.filter_options))
+    }
+}
+
 #[pyclass(name = "FeynGenFilters")]
 pub struct PyFeynGenFilters {
     pub filters: Vec<FeynGenFilter>,
@@ -126,17 +219,18 @@ impl PyFeynGenFilters {
 
     #[new]
     pub fn __new__(
-        no_1pi: Option<bool>,
         particle_veto: Option<Vec<i64>>,
         max_number_of_bridges: Option<usize>,
-        no_tadpoles: Option<bool>,
+        self_energy_filter: Option<PyRef<PySelfEnergyFilterOptions>>,
+        tadpoles_filter: Option<PyRef<PyTadpolesFilterOptions>>,
+        zero_snails_filter: Option<PyRef<PySnailFilterOptions>>,
         coupling_orders: Option<HashMap<String, usize>>,
     ) -> PyResult<PyFeynGenFilters> {
         let mut filters = Vec::new();
-        if let Some(no1pi) = no_1pi {
-            if no1pi {
-                filters.push(FeynGenFilter::No1PI);
-            }
+        if let Some(self_energy_filter) = self_energy_filter {
+            filters.push(FeynGenFilter::SelfEnergyFilter(
+                self_energy_filter.filter_options,
+            ));
         }
         if let Some(particle_veto) = particle_veto {
             filters.push(FeynGenFilter::ParticleVeto(particle_veto));
@@ -144,10 +238,15 @@ impl PyFeynGenFilters {
         if let Some(max_number_of_bridges) = max_number_of_bridges {
             filters.push(FeynGenFilter::MaxNumberOfBridges(max_number_of_bridges));
         }
-        if let Some(no_tadpoles) = no_tadpoles {
-            if no_tadpoles {
-                filters.push(FeynGenFilter::NoTadpoles);
-            }
+        if let Some(tadpoles_filter) = tadpoles_filter {
+            filters.push(FeynGenFilter::TadpolesFilter(
+                tadpoles_filter.filter_options,
+            ));
+        }
+        if let Some(zero_snails_filter) = zero_snails_filter {
+            filters.push(FeynGenFilter::ZeroSnailsFilter(
+                zero_snails_filter.filter_options,
+            ));
         }
         if let Some(coupling_orders) = coupling_orders {
             filters.push(FeynGenFilter::CouplingOrders(coupling_orders));
@@ -181,12 +280,16 @@ impl PyFeynGenOptions {
     pub fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", self.options))
     }
+    #[allow(clippy::too_many_arguments)]
     #[new]
     pub fn __new__(
         generation_type: String,
         initial_particles: Vec<i64>,
         final_particles: Vec<i64>,
         loop_count_range: (usize, usize),
+        symmetrize_initial_states: bool,
+        symmetrize_final_states: bool,
+        symmetrize_left_right_states: bool,
         filters: Option<PyRef<PyFeynGenFilters>>,
     ) -> PyResult<PyFeynGenOptions> {
         Ok(PyFeynGenOptions {
@@ -196,6 +299,9 @@ impl PyFeynGenOptions {
                 initial_pdgs: initial_particles,
                 final_pdgs: final_particles,
                 loop_count_range,
+                symmetrize_initial_states,
+                symmetrize_final_states,
+                symmetrize_left_right_states,
                 filters: FeynGenFilters(filters.map(|f| f.filters.clone()).unwrap_or_default()),
             },
         })
@@ -292,6 +398,9 @@ impl PythonWorker {
     pub fn generate_diagrams(
         &mut self,
         generation_options: PyRef<PyFeynGenOptions>,
+        selected_graphs: Option<Vec<String>>,
+        vetoed_graphs: Option<Vec<String>>,
+        loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
     ) -> PyResult<Vec<String>> {
         if self.model.is_empty() {
             return Err(exceptions::PyException::new_err(
@@ -303,9 +412,13 @@ impl PythonWorker {
         let diagram_generator = FeynGen::new(feyngen_options);
 
         let diagrams = diagram_generator
-            .generate(&self.model)
+            .generate(
+                &self.model,
+                selected_graphs,
+                vetoed_graphs,
+                loop_momentum_bases,
+            )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
         Ok(diagrams
             .iter()
             .map(|d| serde_yaml::to_string(&SerializableGraph::from_graph(d)).unwrap())

@@ -20,7 +20,7 @@ use spenso::{
     contraction::{RefOne, RefZero},
     upgrading_arithmetic::TrySmallestUpgrade,
 };
-use symbolica::atom::{AtomView, Symbol};
+use symbolica::atom::Symbol;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
@@ -3211,7 +3211,6 @@ enum OwnedAtomOrTaggedFunction {
 }
 
 use ahash::AHashMap;
-use symbolica::atom::AtomOrView;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct OwnedFunctionMap<T = Rational> {
@@ -3220,6 +3219,7 @@ pub struct OwnedFunctionMap<T = Rational> {
 }
 
 impl<T> OwnedFunctionMap<T> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         OwnedFunctionMap {
             map: AHashMap::default(),
@@ -3310,7 +3310,7 @@ impl<'a, T: Clone, U: From<T>> From<&'a OwnedFunctionMap<T>> for FunctionMap<'a,
                         fn_map.add_constant(a.0.as_view(), v.clone().into());
                     }
                 }
-                OwnedConstOrExpr::Expr(rename, tag_len, args, body) => {
+                OwnedConstOrExpr::Expr(rename, _tag_len, args, body) => {
                     if let OwnedAtomOrTaggedFunction::TaggedFunction(name, tags) = k {
                         fn_map
                             .add_tagged_function(

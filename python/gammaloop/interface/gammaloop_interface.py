@@ -3,7 +3,7 @@ import platform
 import sys
 from pathlib import Path
 import importlib
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 import subprocess
 import os
 from typing import Any
@@ -736,17 +736,56 @@ class GammaLoop(object):
     generate_parser.add_argument('--amplitude', '-a', default=False,
                                  action='store_true', help='Generate an amplitude to this contribution')
     generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
-                                 help='Specify the maximum number of bridges for the graphs to generate.')
-    generate_parser.add_argument('--no_tadpoles', '-nt', default=False,
-                                 action='store_true', help='Forbid tadpole diagrams.')
-    generate_parser.add_argument('--no_1pi', '-n1', default=False,
-                                 action='store_true', help='Forbid 1PI diagrams.')
+                                 help='Specify the maximum number of bridges for the graphs to generate. Set negative to disable. (default: 0)')
+    # Tadpole filter
+    generate_parser.add_argument('--filter_tadpoles', default=False, action=BooleanOptionalAction,
+                                 help='Filter tadpole diagrams.')
+    generate_parser.add_argument('--no_tadpole_attached_to_massive', dest='veto_tadpoles_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter tadpole diagrams attached to massive lines.')
+    generate_parser.add_argument('--no_tadpole_attached_to_massless', dest='veto_tadpoles_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter tadpole diagrams attached to massive lines.')
+    generate_parser.add_argument('--no_scaleless_tadpole', dest='veto_only_scaleless_tadpoles', default=None, action=BooleanOptionalAction,
+                                 help='Filter scalless tadpole diagrams.')
+    # Snail filter
+    generate_parser.add_argument('--filter_snails', default=False, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams.')
+    generate_parser.add_argument('--veto_snail_attached_to_massive', dest='veto_snails_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams attached to massive lines.')
+    generate_parser.add_argument('--veto_snail_attached_to_massless', dest='veto_snails_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams attached to massive lines.')
+    generate_parser.add_argument('--veto_scaleless_snail', dest='veto_only_scaleless_snails', default=None, action=BooleanOptionalAction,
+                                 help='Filter scalless snail diagrams.')
+    # Selfenergy filter
+    generate_parser.add_argument('--filter_selfenergies', default=False, action=BooleanOptionalAction,
+                                 help='Filter out (external) self energy contributions.')
+    generate_parser.add_argument('--veto_selfenergy_of_massive_lines', dest='veto_self_energy_of_massive_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams attached to massive lines.')
+    generate_parser.add_argument('--veto_selfenergy_of_massless_lines', dest='veto_self_energy_of_massless_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams attached to massive lines.')
+    generate_parser.add_argument('--veto_scaleless_selfenergy', dest='veto_only_scaleless_self_energy', default=None, action=BooleanOptionalAction,
+                                 help='Filter scalless tadpole diagrams.')
+    # Symmetrization options
+    generate_parser.add_argument('--symmetrize_initial_states', default=None, action=BooleanOptionalAction,
+                                 help='Symmetrize initial states in diagram generation. (default: Automatic)')
+    generate_parser.add_argument('--symmetrize_final_states', default=None, action=BooleanOptionalAction,
+                                 help='Symmetrize final states in diagram generation. (default: Automatic)')
+    generate_parser.add_argument('--symmetrize_left_right_states', '-slrs', default=None, action=BooleanOptionalAction,
+                                 help='Symmetrize left and right forward scattering states in cross-section diagram generation. (default: Automatic)')
+    generate_parser.add_argument('--loop_momentum_bases', '-lmbs', default=None, type=str,
+                                 help='Specify LMB to use with a string corresponding to a python dictionary with format "{graph_name: list[edge_names]}" (default: Automatic)')
+    generate_parser.add_argument('--select_graphs', '-selected_graphs', default=None, type=str, nargs="+",
+                                 help='Select only the graphs with the specified names (default: all)')
+    generate_parser.add_argument('--veto_graphs', '-veto_graphs', default=None, type=str, nargs="+",
+                                 help='Veto graphs with the specified names (default: no veto)')
 
     def do_generate(self, str_args: str) -> None:
         if str_args == 'help':
             self.generate_parser.print_help()
             return
         args = self.generate_parser.parse_args(split_str_args(str_args))
+
+        if args.max_n_bridges is not None and args.max_n_bridges < 0:
+            args.max_n_bridges = None
 
         parsed_process = Process.from_input_args(self.model, args)
 
@@ -768,37 +807,58 @@ class GammaLoop(object):
                 f"The nature of the specific perturbative orders specified ({' '.join('%s=%s' % (k, v) for k, v in parsed_process.perturbative_orders.items())}) is not yet supported. Only the loop count will be derived from them.")
 
         if args.amplitude:
-            coupling_orders = parsed_process.amplitude_orders
+            filters = parsed_process.amplitude_filters
             loop_count_range = parsed_process.amplitude_loop_count
         else:
-            coupling_orders = parsed_process.cross_section_orders
+            filters = parsed_process.cross_section_filters
             loop_count_range = parsed_process.cross_section_loop_count
 
+        # TODO: Improve automatic detection of ampltidue / cross section coupling orders and loop count
         if loop_count_range is None:
             if parsed_process.perturbative_orders is not None:
                 loop_count = sum(parsed_process.perturbative_orders.values())
-                loop_count_range = (loop_count, loop_count)
             else:
-                loop_count_range = (0, 0)
+                loop_count = 0
+            if not args.amplitude:
+                loop_count += len(parsed_process.final_states) - 1
+            loop_count_range = (loop_count, loop_count)
 
-        particle_veto = None if parsed_process.particle_vetos is None else [
-            p.get_pdg_code() for p in parsed_process.particle_vetos]
+        # Automatically adjust symmetrizations
+        if args.symmetrize_left_right_states is None:
+            args.symmetrize_left_right_states = False
+
+        if args.amplitude:
+            if args.symmetrize_initial_states is None:
+                args.symmetrize_initial_states = False
+            if args.symmetrize_final_states is None:
+                args.symmetrize_final_states = False
+        else:
+            if args.symmetrize_initial_states is None:
+                args.symmetrize_initial_states = True
+            elif (not args.symmetrize_initial_states) and args.symmetrize_left_right_states:
+                raise GammaLoopError(
+                    "Symmetrization of left and right states for cross-section generation requires also enabling initial-state symmetrization.")
+            if args.symmetrize_final_states is None:
+                args.symmetrize_final_states = True
+            elif not args.symmetrize_final_states:
+                raise GammaLoopError(
+                    "Symmetrization of final states is mandatory for cross-section generation.")
 
         self.process = parsed_process
         all_graphs: list[str] = self.rust_worker.generate_diagrams(
             gl_rust.FeynGenOptions(
-                "amplitude",
+                "amplitude" if args.amplitude else "cross_section",
                 [p.get_pdg_code() for p in parsed_process.initial_states],
                 [p.get_pdg_code() for p in parsed_process.final_states],
                 loop_count_range,
-                filters=gl_rust.FeynGenFilters(
-                    no_1pi=args.no_1pi,
-                    particle_veto=particle_veto,
-                    no_tadpoles=args.no_tadpoles,
-                    max_number_of_bridges=args.max_n_bridges,
-                    coupling_orders=coupling_orders,
-                )
-            )
+                args.symmetrize_initial_states,
+                args.symmetrize_final_states,
+                args.symmetrize_left_right_states,
+                filters=filters
+            ),
+            args.select_graphs,
+            args.veto_graphs,
+            args.loop_momentum_bases,
         )
         logger.debug("A total of %s graphs have been generated.",
                      len(all_graphs))
