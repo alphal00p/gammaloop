@@ -30,7 +30,10 @@ use crate::{
     utils::{FloatLike, F},
     Settings,
 };
-use crate::{IntegrableSingularityDampener, UVLocalisationSettings};
+use crate::{
+    utils, IntegrableSingularityDampener, IntegratedCounterTermRange,
+    IntegratedCounterTermSettings, UVLocalisationSettings,
+};
 
 use super::overlap::{OverlapGroup, OverlapStructure};
 
@@ -742,7 +745,12 @@ impl<'a, T: FloatLike> ResiudeEval<'a, T> {
                     * &singularity_dampener
                     * prefactor;
 
-                let h_function = evaluate_integrated_ct_normalisation(r, rstar, e_cm);
+                let h_function = evaluate_integrated_ct_normalisation(
+                    r,
+                    rstar,
+                    e_cm,
+                    &settings.subtraction.integrated_ct_settings,
+                );
 
                 let i = Complex::new_im(r.one());
 
@@ -819,16 +827,21 @@ fn evaluate_singularity_dampener<T: FloatLike>(
 fn evaluate_integrated_ct_normalisation<T: FloatLike>(
     radius: &F<T>,
     radius_star: &F<T>,
-    e_cm: &F<T>,
+    _e_cm: &F<T>,
+    settings: &IntegratedCounterTermSettings,
 ) -> F<T> {
-    //let delta_r = radius - radius_star;
-
-    //if delta_r.abs() < F::from_f64(0.1) * e_cm {
-    //    return radius.zero();
-    //}
-
-    //(F::from_f64(20.0) * radius_star).inv()
-    radius.zero()
+    match &settings.range {
+        IntegratedCounterTermRange::Infinite {
+            h_function_settings,
+        } => {
+            let h = utils::h(radius_star / radius, None, None, h_function_settings);
+            let two = radius.one() + radius.one();
+            h * (radius_star * two).inv()
+        }
+        IntegratedCounterTermRange::Compact => {
+            todo!();
+        }
+    }
 }
 
 struct CounterTermResult<'a, T: FloatLike> {

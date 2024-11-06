@@ -214,7 +214,18 @@ class GammaLoopConfiguration(object):
                             'type': 'exponential'
                         }
                     },
-                    'integrated_ct_settings': {},
+                    'integrated_ct_settings': {
+                        'range': {
+                            'type': 'infinite',
+                            'h_function_settings': {
+                                'function': 'poly_exponential',
+                                'sigma': 1.0,
+                                'enabled_dampening': True,
+                                'power': None,
+                            }
+
+                        }
+                    },
                     'overlap_settings': {
                         'force_global_center': None,
                         'check_global_center': True,

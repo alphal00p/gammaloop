@@ -22,7 +22,6 @@ class TestScalarTopologies:
         command_list.add_command("set rotation_axis [{'type':'x'}]")
         command_list.add_command("set n_start 1_000_000")
         command_list.add_command("set n_max 1_000_000")
-        command_list.add_command("set dampen_integrable_singularity True")
         command_list.add_command("integrate massless_box -r")
         gl.run(command_list)
 

@@ -858,7 +858,28 @@ impl Default for UVLocalisationSettings {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct IntegratedCounterTermSettings {}
+pub struct IntegratedCounterTermSettings {
+    range: IntegratedCounterTermRange,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum IntegratedCounterTermRange {
+    #[serde(rename = "infinite")]
+    Infinite {
+        h_function_settings: HFunctionSettings,
+    },
+    #[serde(rename = "compact")]
+    Compact,
+}
+
+impl Default for IntegratedCounterTermRange {
+    fn default() -> Self {
+        Self::Infinite {
+            h_function_settings: HFunctionSettings::default(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverlapSettings {
