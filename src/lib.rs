@@ -30,6 +30,7 @@ pub mod tests_from_pytest;
 pub mod utils;
 
 use crate::utils::f128;
+use clarabel::solver::default;
 use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
@@ -821,15 +822,43 @@ pub enum DiscreteGraphSamplingSettings {
     TropicalSampling(GammaloopTropicalSamplingSettings),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CounterTermSettings {
-    pub sliver_width: f64,
-    pub dampen_integrable_singularity: bool,
-    pub dynamic_sliver: bool,
-    pub integrated_ct_hfunction: HFunctionSettings,
-    pub integrated_ct_sigma: Option<f64>,
-    pub local_ct_width: f64,
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct LocalCounterTermSettings {
+    pub dampen_integrable_singularity: IntegrableSingularityDampener,
+    pub uv_localisation: UVLocalisationSettings,
 }
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum IntegrableSingularityDampener {
+    #[serde(rename = "none")]
+    None,
+    #[default]
+    #[serde(rename = "exponential")]
+    Exponential,
+    #[serde(rename = "powerlike")]
+    Powerlike(f64),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UVLocalisationSettings {
+    pub sliver_width: f64,
+    pub dynamic_width: bool,
+    pub gaussian_width: f64,
+}
+
+impl Default for UVLocalisationSettings {
+    fn default() -> Self {
+        Self {
+            sliver_width: 10.0,
+            dynamic_width: false,
+            gaussian_width: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct IntegratedCounterTermSettings {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverlapSettings {
@@ -852,21 +881,9 @@ impl Default for OverlapSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct SubtractionSettings {
-    pub ct_settings: CounterTermSettings,
+    pub local_ct_settings: LocalCounterTermSettings,
+    pub integrated_ct_settings: IntegratedCounterTermSettings,
     pub overlap_settings: OverlapSettings,
-}
-
-impl Default for CounterTermSettings {
-    fn default() -> Self {
-        Self {
-            sliver_width: 10.0,
-            dampen_integrable_singularity: false,
-            dynamic_sliver: false,
-            integrated_ct_hfunction: HFunctionSettings::default(),
-            integrated_ct_sigma: None,
-            local_ct_width: 1.0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

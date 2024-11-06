@@ -282,7 +282,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
         }
 
-        prefactor * (rep3d / energy_product - counter_term_eval)
+        prefactor * (rep3d / energy_product + counter_term_eval)
     }
 
     #[inline]
@@ -358,7 +358,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             );
         }
 
-        (rep3d - counterterm) * final_energy_product * prefactor
+        (rep3d + counterterm) * final_energy_product * prefactor
     }
 }
 

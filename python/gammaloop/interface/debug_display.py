@@ -179,8 +179,6 @@ def display_subtraction_data(debug_dict: Dict[str, Any]) -> None:
                         esurface_subtraction_data['esurface_id'])
             logger.info("edges: %s", esurface_subtraction_data['edges'])
 
-            logger.info("initial guess: r_0 = '%s'",
-                        esurface_subtraction_data['initial_radius'])
             plus_solution, minus_solution = esurface_subtraction_data[
                 'plus_solution'], esurface_subtraction_data['minus_solution']
 
