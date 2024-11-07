@@ -577,10 +577,12 @@ impl InternalSubGraph {
             return None;
         }
 
-        Some(InternalSubGraph {
+        let mut subgraph = InternalSubGraph {
             filter,
             loopcount: None,
-        })
+        };
+        // subgraph.set_loopcount(graph);
+        Some(subgraph)
     }
 
     pub fn cleaned_filter_optimist<E, V>(mut filter: BitVec, graph: &HedgeGraph<E, V>) -> Self {
@@ -599,10 +601,13 @@ impl InternalSubGraph {
                 }
             }
         }
-        InternalSubGraph {
+
+        let mut subgraph = InternalSubGraph {
             filter,
             loopcount: None,
-        }
+        };
+        // subgraph.set_loopcount(graph);
+        subgraph
     }
 
     pub fn cleaned_filter_pessimist<E, V>(mut filter: BitVec, graph: &HedgeGraph<E, V>) -> Self {
@@ -622,10 +627,12 @@ impl InternalSubGraph {
             }
         }
 
-        InternalSubGraph {
+        let mut subgraph = InternalSubGraph {
             filter,
             loopcount: None,
-        }
+        };
+        // subgraph.set_loopcount(graph);
+        subgraph
     }
 
     pub fn valid<E, V>(&self, graph: &HedgeGraph<E, V>) -> bool {
@@ -640,16 +647,13 @@ impl InternalSubGraph {
         self.loopcount = Some(graph.cyclotomatic_number(self));
     }
 
-    pub fn cycle_basis<E, V>(
-        &self,
-        graph: &HedgeGraph<E, V>,
-    ) -> (Vec<InternalSubGraph>, TraversalTree) {
+    pub fn cycle_basis<E, V>(&self, graph: &HedgeGraph<E, V>) -> Vec<InternalSubGraph> {
         let node = graph
             .nodes
             .get_index(self.filter.first_one().unwrap())
             .unwrap()
             .0;
-        graph.paton_cycle_basis(self, node).unwrap()
+        graph.paton_cycle_basis(self, node).unwrap().0
     }
 }
 
@@ -658,6 +662,51 @@ pub struct ContractedSubGraph {
     pub internal_graph: InternalSubGraph, // cannot have any external hedges (i.e. unpaired hedges)
     pub allhedges: BitVec,                // all hedges , including that are in the internal graph.
 }
+
+// impl PartialOrd for Nested<T> {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         if self == other {
+//             return Some(std::cmp::Ordering::Equal);
+//         }
+
+//         if self.internal_graph.filter.len() != other.internal_graph.filter.len() {
+//             return None;
+//         }
+
+//         if self.externalhedges.len() != other.externalhedges.len() {
+//             return None;
+//         }
+
+//         let self_all = self.all_edges();
+//         let other_all = other.all_edges();
+
+//         let all_order = if self_all == other_all {
+//             Some(std::cmp::Ordering::Equal)
+//         } else if self_all.clone() | &other_all == self_all {
+//             Some(std::cmp::Ordering::Greater)
+//         } else if self_all.clone() | &other_all == other_all {
+//             Some(std::cmp::Ordering::Less)
+//         } else {
+//             None
+//         };
+
+//         let internal_order = self.internal_graph.partial_cmp(&other.internal_graph);
+
+//         match (all_order, internal_order) {
+//             (Some(std::cmp::Ordering::Equal), Some(std::cmp::Ordering::Equal)) => {
+//                 Some(std::cmp::Ordering::Equal)
+//             }
+//             (Some(all), Some(internal)) => {
+//                 if all == internal {
+//                     Some(all)
+//                 } else {
+//                     None
+//                 }
+//             }
+//             _ => None,
+//         }
+//     }
+// }
 
 impl SubGraph for ContractedSubGraph {
     fn is_included(&self, i: usize) -> bool {
@@ -755,7 +804,7 @@ impl SubGraph for ContractedSubGraph {
                         attr.as_ref(),
                     ));
                 }
-                InvolutiveMapping::Sink(_) => {}
+                InvolutiveMapping::Sink(i) => {}
             }
         }
 
@@ -833,7 +882,7 @@ impl SubGraph for ContractedSubGraph {
 }
 
 impl ContractedSubGraph {
-    pub fn all_edges(&self) -> BitVec {
+    fn all_edges(&self) -> BitVec {
         self.internal_graph.filter.clone() | &self.allhedges
     }
 
@@ -1151,7 +1200,7 @@ impl HedgeNode {
         self.internal_graph.is_empty()
     }
 
-    pub fn valid<E, V>(&self, _graph: &HedgeGraph<E, V>) -> bool {
+    pub fn valid<E, V>(&self, graph: &HedgeGraph<E, V>) -> bool {
         true
     }
 

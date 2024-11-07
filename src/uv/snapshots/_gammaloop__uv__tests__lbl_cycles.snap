@@ -3,7 +3,7 @@ source: src/uv/tests.rs
 expression: cycles
 ---
 [
-  NestingNode(
+  HalfEdgeNode(
     internal_graph: SubGraph(
       filter: BitSeq(
         order: "bitvec::order::Lsb0",

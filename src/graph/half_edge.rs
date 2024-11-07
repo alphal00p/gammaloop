@@ -1,5 +1,7 @@
 use std::{collections::VecDeque, fmt::Display, hash::Hash, num::TryFromIntError};
 
+use std::ops::{BitAndAssign, BitOrAssign, BitXorAssign, Index};
+
 use ahash::{AHashMap, AHashSet};
 use bitvec::{slice::IterOnes, vec::BitVec};
 use indexmap::IndexMap;
@@ -162,6 +164,26 @@ impl<N, E> Display for Involution<N, E> {
     }
 }
 
+impl<N, E> Display for Involution<N, E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = "".to_string();
+        for (i, (n, e)) in self.inv.iter().enumerate() {
+            match e {
+                InvolutiveMapping::Identity(_) => {
+                    out.push_str(&format!("{}\n", i));
+                }
+                InvolutiveMapping::Source((_, s)) => {
+                    out.push_str(&format!("{}->{}\n", i, s));
+                }
+                InvolutiveMapping::Sink(s) => {
+                    out.push_str(&format!("{}<-{}\n", i, s));
+                }
+            }
+        }
+        write!(f, "{}", out)
+    }
+}
+
 #[allow(dead_code)]
 impl<N, E> Involution<N, E> {
     fn new() -> Self {
@@ -231,10 +253,10 @@ impl<N, E> Involution<N, E> {
         out
     }
 
-    fn map_data_ref<F, G, N2, E2>(&self, mut f: F, g: &G) -> Involution<N2, E2>
+    fn map_data_ref<F, G: Clone, N2, E2>(&self, mut f: F, mut g: &G) -> Involution<N2, E2>
     where
         F: FnMut(&N) -> N2,
-        G: FnMut(&E) -> E2 + Clone,
+        G: FnMut(&E) -> E2,
     {
         let inv = self
             .inv
@@ -594,6 +616,7 @@ impl<'a> From<&'a BareGraph> for HedgeGraph<usize, usize> {
 }
 
 use subgraph::{ContractedSubGraph, HedgeNode, InternalSubGraph, SubGraph};
+
 use thiserror::Error;
 
 use super::BareGraph;
@@ -666,6 +689,7 @@ impl<E, V> HedgeGraph<E, V> {
 
     pub fn connected_components<S: SubGraph>(&self, subgraph: &S) -> Vec<BitVec> {
         let mut visited_edges = self.empty_filter();
+
         let mut components = vec![];
 
         // Iterate over all edges in the subgraph
@@ -676,9 +700,11 @@ impl<E, V> HedgeGraph<E, V> {
                 //
                 let root_node = self.involution.get_node_id(hedge_index);
                 let reachable_edges = TraversalTree::dfs(self, subgraph, root_node).covers();
+
                 visited_edges.union_with(&reachable_edges);
-                // let component = self.clean_subgraph(reachable_edges);
-                components.push(reachable_edges);
+
+                let component = self.clean_subgraph(reachable_edges);
+                components.push(component);
             }
         }
         components
@@ -990,7 +1016,7 @@ impl<E, V> HedgeGraph<E, V> {
         bitvec![usize, Lsb0; 0; self.involution.len()]
     }
 
-    pub fn clean_subgraph(&self, filter: BitVec) -> InternalSubGraph {
+    pub fn clean_subgraph(&self, mut filter: BitVec) -> InternalSubGraph {
         InternalSubGraph::cleaned_filter_optimist(filter, self)
     }
 
@@ -1174,6 +1200,7 @@ impl<E, V> HedgeGraph<E, V> {
     ) -> String {
         node_as_graph.dot(self, graph_info, edge_attr, node_attr)
     }
+
     pub fn dot<S: SubGraph>(&self, node_as_graph: &S) -> String {
         self.dot_impl(node_as_graph, "".to_string(), &|_| None, &|_| None)
     }
@@ -1285,7 +1312,7 @@ impl<E, V> HedgeGraph<E, V> {
         }
 
         for (ci, cj) in cycles.iter().tuple_combinations() {
-            let union = ci.union(cj);
+            let union = ci.union(&cj);
 
             if let Some(v) = spinneys.get_mut(&union) {
                 v.push((ci.clone(), Some(cj.clone())));
@@ -1379,6 +1406,202 @@ impl<E, V> HedgeGraph<E, V> {
 
 pub struct TraversalTree {
     pub traversal: Vec<usize>,
+    inv: Involution<Parent, ()>,
+    pub tree: InternalSubGraph,
+}
+
+pub enum Parent {
+    Unset,
+    Root,
+    Hedge(usize, usize),
+}
+
+impl TraversalTree {
+    fn covers(&self) -> BitVec {
+        let mut covers = <BitVec as SubGraph>::empty(self.inv.inv.len());
+        for (i, (m, _)) in self.inv.inv.iter().enumerate() {
+            match m {
+                Parent::Unset => {}
+                _ => {
+                    covers.set(i, true);
+                }
+            }
+        }
+        covers
+    }
+
+    fn path_to_root(&self, start: usize) -> BitVec {
+        let mut path = <BitVec as SubGraph>::empty(self.inv.inv.len());
+        let mut current = start;
+        path.set(current, true);
+
+        while let Parent::Hedge(p, _) = self.inv.get_node_id(current) {
+            path.set(*p, true);
+            current = self.inv.inv(*p);
+            path.set(current, true);
+        }
+        path
+    }
+
+    pub fn cycle(&self, cut: usize) -> Option<BitVec> {
+        match self.inv.get_node_id(cut) {
+            Parent::Hedge(p, _) => {
+                if *p == cut {
+                    return None;
+                }
+            }
+            Parent::Root => {}
+            _ => return None,
+        }
+
+        let cut_pair = self.inv.inv(cut);
+        match self.inv.get_node_id(cut_pair) {
+            Parent::Hedge(p, _) => {
+                if *p == cut_pair {
+                    return None;
+                }
+            }
+            Parent::Root => {}
+            _ => return None,
+        }
+
+        let mut cycle = self.path_to_root(cut);
+        cycle.sym_diff_with(&self.path_to_root(cut_pair));
+        Some(cycle)
+    }
+
+    pub fn bfs<E, V, S: SubGraph>(
+        graph: &HedgeGraph<E, V>,
+        subgraph: &S,
+        root_node: &HedgeNode,
+        // target: Option<&HedgeNode>,
+    ) -> Self {
+        let mut queue = VecDeque::new();
+        let mut seen = subgraph.hairs(root_node);
+
+        let mut traversal: Vec<usize> = Vec::new();
+        let mut involution: Involution<Parent, ()> = graph
+            .involution
+            .forgetful_map_node_data_ref(|_| Parent::Unset);
+
+        // add all hedges from root node that are not self loops
+        // to the queue
+        // They are all potential branches
+        for i in seen.iter_ones() {
+            involution.set_id(i, Parent::Root);
+            if !seen[graph.involution.inv(i)] {
+                // if not self loop
+                queue.push_back(i)
+            }
+        }
+        while let Some(hedge) = queue.pop_front() {
+            // if the hedge is not external get the neighbors of the paired hedge
+            if let Some(cn) = graph.connected_neighbors(subgraph, hedge) {
+                let connected = involution.inv(hedge);
+
+                if !seen[connected] {
+                    // if this new hedge hasn't been seen before, it means the node it belongs to
+                    // is a new node in the traversal
+                    traversal.push(connected);
+                } else {
+                    continue;
+                }
+                // mark the new node as seen
+                seen.union_with(&cn);
+
+                // for all hedges in this new node, they have a parent, the initial hedge
+                for i in cn.iter_ones() {
+                    if let Parent::Unset = involution.inv[i].0 {
+                        involution.set_id(i, Parent::Hedge(connected, traversal.len()));
+                    }
+                    // if they lead to a new node, they are potential branches, add them to the queue
+                    if !seen[involution.inv(i)] {
+                        queue.push_back(i);
+                    }
+                }
+            }
+        }
+
+        TraversalTree::new(graph, traversal, involution)
+    }
+
+    pub fn new<E, V>(
+        graph: &HedgeGraph<E, V>,
+        traversal: Vec<usize>,
+        inv: Involution<Parent, ()>,
+    ) -> Self {
+        let mut tree = graph.empty_filter();
+
+        for (i, j) in traversal.iter().map(|x| (*x, inv.inv(*x))) {
+            tree.set(i, true);
+            tree.set(j, true);
+        }
+
+        TraversalTree {
+            traversal,
+            inv,
+            tree: InternalSubGraph::cleaned_filter_optimist(tree, graph),
+        }
+    }
+
+    pub fn dfs<E, V, S: SubGraph>(
+        graph: &HedgeGraph<E, V>,
+        subgraph: &S,
+        root_node: &HedgeNode,
+        // target: Option<&HedgeNode>,
+    ) -> Self {
+        let mut stack = Vec::new();
+        let mut seen = subgraph.hairs(root_node);
+
+        let mut traversal: Vec<usize> = Vec::new();
+        let mut involution: Involution<Parent, ()> = graph
+            .involution
+            .forgetful_map_node_data_ref(|_| Parent::Unset);
+
+        // add all hedges from root node that are not self loops
+        // to the stack
+        // They are all potential branches
+        for i in seen.iter_ones() {
+            involution.set_id(i, Parent::Root);
+            if !seen[graph.involution.inv(i)] {
+                // if not self loop
+                stack.push(i)
+            }
+        }
+        while let Some(hedge) = stack.pop() {
+            // if the hedge is not external get the neighbors of the paired hedge
+            if let Some(cn) = graph.connected_neighbors(subgraph, hedge) {
+                let connected = involution.inv(hedge);
+
+                if !seen[connected] {
+                    // if this new hedge hasn't been seen before, it means the node it belongs to
+                    // is a new node in the traversal
+                    traversal.push(connected);
+                } else {
+                    continue;
+                }
+
+                // mark the new node as seen
+                seen.union_with(&cn);
+
+                for i in cn.iter_ones() {
+                    if let Parent::Unset = involution.inv[i].0 {
+                        involution.set_id(i, Parent::Hedge(connected, traversal.len()));
+                    }
+
+                    if !seen[involution.inv(i)] {
+                        stack.push(i);
+                    }
+                }
+            }
+        }
+
+        TraversalTree::new(graph, traversal, involution)
+    }
+}
+
+pub struct TraversalTree {
+    traversal: Vec<usize>,
     inv: Involution<Parent, ()>,
     pub tree: InternalSubGraph,
 }

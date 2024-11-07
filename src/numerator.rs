@@ -923,7 +923,7 @@ impl ExpressionState for Gamma {
 
 impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
     fn export(&self) -> String {
-        self.get_single_atom().unwrap().to_string()
+        self.get_single_atom().unwrap().0.to_string()
     }
 
     fn forget_type(self) -> PythonState {
