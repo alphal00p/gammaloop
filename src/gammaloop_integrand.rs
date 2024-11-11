@@ -718,7 +718,7 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         let mut integrand_result = *res;
 
-        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan();
+        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan() || !stable;
 
         if is_nan {
             integrand_result = Complex::new_zero();
