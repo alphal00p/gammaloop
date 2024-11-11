@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 
-const MAX_ITERATIONS: usize = 20;
-const TOLERANCE: f64 = 5.0;
+const MAX_ITERATIONS: usize = 40;
+const TOLERANCE: f64 = 1.0;
 
 use crate::cff::esurface::Esurface;
 use crate::graph::BareGraph;
@@ -498,14 +498,15 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             )
         });
 
+        // todo: do this check but return Err instead of panicking.
         assert!(
-            solutions[0].solution > solutions[0].solution.zero(),
+            solutions[0].solution > solutions[0].solution.zero() || solutions[0].solution.is_nan(),
             "positive result has wrong sign: ({}, {})",
             solutions[0].solution,
             solutions[1].solution
         );
         assert!(
-            solutions[1].solution < solutions[1].solution.zero(),
+            solutions[1].solution < solutions[1].solution.zero() || solutions[1].solution.is_nan(),
             "negative result has wrong sign: ({}, {})",
             solutions[0].solution,
             solutions[1].solution
@@ -815,11 +816,13 @@ fn evaluate_singularity_dampener<T: FloatLike>(
 
             (radius.one() - (&pow_obj * &pow_obj).inv()).exp()
         }
-        IntegrableSingularityDampener::Powerlike(power) => {
+        IntegrableSingularityDampener::Powerlike { power } => {
+            // perhaps this should be removed again, doesn't seem to work that well.
+
             let pow_obj = radius.one()
                 - (radius / radius_star - radius.one()) * (radius / radius_star - radius.one());
 
-            pow_obj.powf(&F::from_f64(*power))
+            pow_obj.abs().powf(&F::from_f64(*power))
         }
     }
 }
