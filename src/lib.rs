@@ -30,7 +30,6 @@ pub mod tests_from_pytest;
 pub mod utils;
 
 use crate::utils::f128;
-use clarabel::solver::default;
 use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
@@ -837,7 +836,7 @@ pub enum IntegrableSingularityDampener {
     #[serde(rename = "exponential")]
     Exponential,
     #[serde(rename = "powerlike")]
-    Powerlike(f64),
+    Powerlike { power: f64 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
