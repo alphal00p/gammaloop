@@ -1097,7 +1097,7 @@ impl GammaLoopIntegrand {
                 || error.im > stability_settings.required_precision_for_im
         });
 
-        if self.global_data.settings.general.debug > 0 {
+        if self.global_data.settings.general.debug > 1 {
             if let Some(unstable_index) = unstable_sample {
                 let unstable_point = results[unstable_index];
                 let rotation_axis = format!(
