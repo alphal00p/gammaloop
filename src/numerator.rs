@@ -1021,7 +1021,7 @@ impl Numerator<AppliedFeynmanRule> {
             "Applied feynman rules: color:{}\n colorless:{}",
             self.state.color, self.state.colorless
         );
-        debug!("color symplifying local numerator");
+        debug!("color simplifying local numerator");
 
         Numerator {
             state: ColorSimplified::color_simplify(self.state),
@@ -1274,6 +1274,10 @@ impl Numerator<ColorSimplified> {
     }
 
     pub fn parse_poly(self, bare_graph: &BareGraph) -> Numerator<PolySplit> {
+        debug!(
+            "Color simplified: color:{}\n colorless:{}",
+            self.state.color, self.state.colorless
+        );
         Numerator {
             state: PolySplit::from_color_simplified(self, bare_graph),
         }
