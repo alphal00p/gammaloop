@@ -325,9 +325,11 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -403,9 +405,11 @@ class CommandList(list[tuple[str, str]]):
         if cmd[0] == '!':
             self.append(('shell_run', cmd[1:]))
             return
-        cmd_split: list[str] = cmd.split(' ', 1)
         if cmd.startswith('#'):
             return
+        # Allow inline comments
+        cmd_split: list[str] = cmd.split('#', 1)[0].strip().split(' ', 1)
+
         if cmd_split[0] not in AVAILABLE_COMMANDS:
             raise GammaLoopError(f"Unknown command: {cmd_split[0]}")
         if len(cmd_split) >= 2:
@@ -841,11 +845,13 @@ class GammaLoop(object):
 
         self.process = parsed_process
 
+        logger.info("Generating diagrams for process: %s%s%s",
+                    Colour.GREEN, self.process, Colour.END)
         all_graphs: list[Graph] = self.process.generate_diagrams(
             self.rust_worker, self.model, args)
         if len(all_graphs) > 0:
-            logger.debug("A total of %s graphs have been generated.",
-                         len(all_graphs))
+            logger.info("A total of %s%s graphs%s have been generated.",
+                        Colour.GREEN, len(all_graphs), Colour.END)
         else:
             raise GammaLoopError(f"No graphs were generated for process:\n{
                                  repr(self.process)}.")

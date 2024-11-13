@@ -710,6 +710,46 @@ impl Vertex {
         self.vertex_info.generate_vertex_slots(shifts, model)
     }
 
+    pub fn order_edges_following_interaction(
+        &mut self,
+        pdgs_of_current_order: Vec<Arc<Particle>>,
+    ) -> Result<(), FeynGenError> {
+        let mut new_edges_order = vec![];
+        match self.vertex_info {
+            VertexInfo::InteractonVertexInfo(ref i) => {
+                let mut pdgs_to_map = pdgs_of_current_order.iter().enumerate().collect::<Vec<_>>();
+                for p in i.vertex_rule.particles.iter() {
+                    let matched_pos = if let Some(pos) =
+                        pdgs_to_map.iter().position(|(_, x)| **x == *p)
+                    {
+                        pos
+                    } else {
+                        return Err(FeynGenError::GenericError(
+                                format!("Could not match some particles vertex ({}) were matched with the ones in the interaction info ({})",
+                                    pdgs_of_current_order.iter().map(|x| x.name.clone()).join(","),
+                                    i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
+                                ),
+                            ));
+                    };
+                    new_edges_order.push(self.edges[pdgs_to_map[matched_pos].0]);
+                    pdgs_to_map.remove(matched_pos);
+                }
+                if !pdgs_to_map.is_empty() {
+                    return Err(FeynGenError::GenericError(
+                        format!("Not all particle of vertex ({}) were matched with the ones in the interaction info ({})",
+                            pdgs_of_current_order.iter().map(|x| x.name.clone()).join(","),
+                            i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
+                        ),
+                    ));
+                }
+                self.edges = new_edges_order;
+                Ok(())
+            }
+
+            VertexInfo::ExternalVertexInfo(_) => Ok(()),
+        }
+    }
+
     pub fn from_serializable_vertex(model: &model::Model, vertex: &SerializableVertex) -> Vertex {
         Vertex {
             name: vertex.name.clone(),
@@ -1129,7 +1169,6 @@ impl BareGraph {
             g.edges.push(edge);
         }
 
-        debug!("Loaded {} edges", g.edges.len());
         debug!("Loaded graph: {}", g.dot());
         g.external_edges = g
             .edges
@@ -1194,6 +1233,7 @@ impl BareGraph {
 
         // panic!("{:?}", g.edge_name_to_position);
         g.generate_internal_indices_for_edges();
+
         g
     }
 
@@ -1405,7 +1445,6 @@ impl BareGraph {
             g.edge_name_to_position.insert(e.name.clone(), i_e);
         }
 
-        debug!("Loaded {} edges", g.edges.len());
         debug!("Loaded graph: {}", g.dot());
         g.external_edges = g
             .edges
@@ -1420,7 +1459,7 @@ impl BareGraph {
             })
             .collect();
 
-        for (vertex, node) in g.vertices.iter_mut().zip(graph_nodes.iter()) {
+        for (i_v, (vertex, node)) in g.vertices.iter_mut().zip(graph_nodes.iter()).enumerate() {
             vertex.edges = node
                 .edges
                 .iter()
@@ -1428,6 +1467,34 @@ impl BareGraph {
                     g.edge_name_to_position[symbolica_edge_position_to_edge_name.get(i_e).unwrap()]
                 })
                 .collect::<Vec<_>>();
+            // We must honour the ordering given by the UFO interaction vertex info here
+            let mut current_vertex_edge_order = vec![];
+            for e_pos in &vertex.edges {
+                let edge = &g.edges[*e_pos];
+                if edge.vertices[0] == edge.vertices[1] {
+                    if !edge.particle.is_self_antiparticle() {
+                        return Err(FeynGenError::GenericError(format!(
+                            "Self-loop of edge {} *must* be a self-antiparticle",
+                            edge.name
+                        )));
+                    } else {
+                        // For a self-loop, the particle must be counted twice.
+                        current_vertex_edge_order.push(edge.particle.clone());
+                        current_vertex_edge_order.push(edge.particle.clone());
+                    }
+                } else if edge.vertices[1] == i_v {
+                    current_vertex_edge_order.push(edge.particle.clone());
+                } else if edge.vertices[0] == i_v {
+                    current_vertex_edge_order
+                        .push(edge.particle.clone().get_anti_particle(model).clone());
+                } else {
+                    return Err(FeynGenError::GenericError(format!(
+                        "Edge {} is not connected to vertex {}",
+                        edge.name, vertex.name
+                    )));
+                }
+            }
+            vertex.order_edges_following_interaction(current_vertex_edge_order)?;
         }
 
         g.external_connections = external_connections
