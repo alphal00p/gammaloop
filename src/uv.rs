@@ -1643,10 +1643,10 @@ impl<T, R: Key, D> DAG<T, R, D> {
 
         for node in self.nodes.values() {
             let node_id = node.dot_id(shift);
-            dot.push_str(&format!("{} [{}];\n", node_id, label(node)));
+            dot.push_str(&format!("n{} [{}];\n", node_id, label(node)));
             for &child in node.children.iter() {
                 dot.push_str(&format!(
-                    "{} -> {};\n",
+                    "n{} -> n{};\n",
                     node_id,
                     self.nodes.get(child).unwrap().dot_id(shift)
                 ));

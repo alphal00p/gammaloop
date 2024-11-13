@@ -110,7 +110,7 @@ class TestRust:
     def test_rust_physical_3L_6photons_topology_A_inspect(self,  sm_model_yaml_file: Path, physical_3L_6photons_topology_A_export: Path, compile_rust_tests: Path):
         assert run_rust_test(compile_rust_tests, physical_3L_6photons_topology_A_export,
                              'physical_3L_6photons_topology_A_inspect')
-        
+
     def test_generate_physical_2L_6photons(self, physical_2L_6photons_export: Path):
         assert True
 
@@ -131,7 +131,7 @@ class TestRust:
 
     def test_generate_hairy_glue_box(self, hairy_glue_box_export: Path):
         assert True
-        
+
     def test_rust_top_bubble(self, compile_rust_tests: Path, scalars_model_yaml_file: Path, top_bubble_export: Path):
         assert run_rust_test(compile_rust_tests, top_bubble_export, 'top_bubble')
 
@@ -159,3 +159,5 @@ class TestRust:
     def test_generate_triangle_box_triangle_phys(self, triangle_box_triangle_phys_export: Path):
         assert True
 
+    def test_generate_bugblatter(self, bugblatter_export: Path):
+        assert True

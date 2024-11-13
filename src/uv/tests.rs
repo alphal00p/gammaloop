@@ -1,7 +1,11 @@
 use std::time::Instant;
 
+use ahash::HashMap;
+use smartstring::SmartString;
+
 use crate::{
-    tests_from_pytest::load_amplitude_output,
+    feyngen::diagram_generator::FeynGen,
+    tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::{PoSet, UVGraph},
 };
 
@@ -66,6 +70,112 @@ fn tbt() {
     let wood = uv_graph.wood();
 
     println!("{}", wood.dot(&uv_graph));
+
+    let mut ufold = wood.unfold_impl(&uv_graph);
+    ufold.compute(&uv_graph);
+
+    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!("graph: {}", ufold.graphs());
+
+    // let structure = wood.unfold(&uv_graph);
+
+    // println!("{}", structure.show_structure(&wood, &uv_graph));
+    // println!("{}", structure.n_elements());
+}
+
+#[test]
+#[allow(unused)]
+fn bugblatter_forest() {
+    let model = load_generic_model("sm");
+    println!("{}", model.vertex_rules[0].name);
+    let mut symbolica_graph = symbolica::graph::Graph::new();
+
+    let l1 = symbolica_graph.add_node((0, "V_137".into()));
+    let l2 = symbolica_graph.add_node((0, "V_137".into()));
+    let l3 = symbolica_graph.add_node((0, "V_137".into()));
+    let l4 = symbolica_graph.add_node((0, "V_137".into()));
+    let l5 = symbolica_graph.add_node((0, "V_137".into()));
+    let l6 = symbolica_graph.add_node((0, "V_137".into()));
+
+    symbolica_graph.add_edge(l1, l2, true, "t");
+    symbolica_graph.add_edge(l2, l3, true, "t");
+    symbolica_graph.add_edge(l3, l1, true, "t");
+
+    symbolica_graph.add_edge(l4, l5, true, "t");
+    symbolica_graph.add_edge(l5, l6, true, "t");
+    symbolica_graph.add_edge(l6, l4, true, "t");
+
+    symbolica_graph.add_edge(l1, l4, true, "g");
+    symbolica_graph.add_edge(l2, l5, true, "g");
+    symbolica_graph.add_edge(l3, l6, true, "g");
+
+    let bare_graph = BareGraph::from_symbolica_graph(
+        &model,
+        "bugblatter".into(),
+        &symbolica_graph,
+        "str".into(),
+        vec![],
+        None,
+    )
+    .unwrap();
+
+    let uv_graph = UVGraph::from_graph(&bare_graph);
+
+    println!("{}", uv_graph.0.base_dot());
+
+    let wood = uv_graph.wood();
+
+    println!("{}", wood.dot(&uv_graph));
+    println!("{}", wood.show_graphs(&uv_graph));
+
+    let mut ufold = wood.unfold_impl(&uv_graph);
+    ufold.compute(&uv_graph);
+
+    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!("graph: {}", ufold.graphs());
+
+    // let structure = wood.unfold(&uv_graph);
+
+    // println!("{}", structure.show_structure(&wood, &uv_graph));
+    // println!("{}", structure.n_elements());
+}
+
+#[test]
+#[allow(unused)]
+fn kaapo_scalar() {
+    let model = load_generic_model("scalars");
+    println!("{}", model.vertex_rules[0].name);
+    let mut symbolica_graph = symbolica::graph::Graph::new();
+
+    let l1 = symbolica_graph.add_node((0, "V_4_SCALAR_0000".into()));
+    let l2 = symbolica_graph.add_node((0, "V_4_SCALAR_0000".into()));
+    let l3 = symbolica_graph.add_node((0, "V_4_SCALAR_0000".into()));
+
+    symbolica_graph.add_edge(l1, l2, true, "scalar_0");
+    symbolica_graph.add_edge(l2, l3, true, "scalar_0");
+    symbolica_graph.add_edge(l3, l1, true, "scalar_0");
+    symbolica_graph.add_edge(l1, l2, true, "scalar_0");
+    symbolica_graph.add_edge(l2, l3, true, "scalar_0");
+    symbolica_graph.add_edge(l3, l1, true, "scalar_0");
+
+    let bare_graph = BareGraph::from_symbolica_graph(
+        &model,
+        "scalar".into(),
+        &symbolica_graph,
+        "str".into(),
+        vec![],
+        None,
+    )
+    .unwrap();
+
+    let uv_graph = UVGraph::from_graph(&bare_graph);
+
+    println!("{}", uv_graph.0.base_dot());
+
+    let wood = uv_graph.wood();
+
+    println!("{}", wood.dot(&uv_graph));
+    println!("{}", wood.show_graphs(&uv_graph));
 
     let mut ufold = wood.unfold_impl(&uv_graph);
     ufold.compute(&uv_graph);

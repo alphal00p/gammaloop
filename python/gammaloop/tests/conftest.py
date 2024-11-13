@@ -645,14 +645,14 @@ output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
 
 
 @pytest.fixture(scope="session")
-def triangle_box_triangle_phys_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
+def bugblatter_export(tmpdir_factory: pytest.TempPathFactory) -> Path:
     gloop = get_gamma_loop_interpreter()
     # Specify "True" below for a pytest designed to generate input for a rust test.
     output_path = get_test_directory(tmpdir_factory,
-                                     "TEST_AMPLITUDE_triangle_box_triangle_phys", True).joinpath("GL_OUTPUT")
+                                     "TEST_AMPLITUDE_bugblatter", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model sm-full;
-import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'triangle_box_triangle_phys.dot')} --no_compile
+import_graphs {pjoin(RESOURCES_PATH, 'graph_inputs', 'bugblatter.dot')} --no_compile
 output {output_path} --overwrite_output --yaml_only -exp -ef file"""))
     return output_path
 
