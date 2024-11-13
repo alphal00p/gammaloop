@@ -1396,7 +1396,7 @@ impl PolySplit {
         let coef = symb!("coef");
         let shift = reps.as_ref().lock().unwrap().len();
 
-        let mut mul_h = Atom::new_num(1);
+        let mut mul_h;
         let mut var_h = workspace.new_atom();
         let mut num_h = workspace.new_atom();
         let mut pow_h = workspace.new_atom();
@@ -1432,7 +1432,7 @@ impl PolySplit {
                 .unwrap()
                 .push(monomial.coefficient.clone());
 
-            mul_h = mul_h * fun!(coef, Atom::new_num((i as usize + shift) as i64));
+            mul_h = mul_h * fun!(coef, Atom::new_num((i + shift) as i64));
             add = add + mul_h.as_view();
         }
 
@@ -1647,7 +1647,7 @@ impl PolyContracted {
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = self.tensor.eval_tree(&fn_map, params).unwrap();
+        let mut eval_tree = self.tensor.eval_tree(fn_map, params).unwrap();
         debug!("Horner scheme");
 
         eval_tree.horner_scheme();
@@ -2152,7 +2152,7 @@ impl Contracted {
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = self.tensor.eval_tree(&fn_map, params).unwrap();
+        let mut eval_tree = self.tensor.eval_tree(fn_map, params).unwrap();
         debug!("Horner scheme");
 
         eval_tree.horner_scheme();
@@ -2766,7 +2766,7 @@ impl EvaluatorSingle {
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = set.eval_tree(&fn_map, params).unwrap();
+        let mut eval_tree = set.eval_tree(fn_map, params).unwrap();
 
         debug!("{} tensors in eval_tree", eval_tree.len());
         debug!("Horner scheme");
@@ -2781,7 +2781,7 @@ impl EvaluatorSingle {
         debug!("{} linearized tensors", linearized.len());
 
         for (i, t) in new_index_map.iter().enumerate() {
-            let eval_tree = t.eval_tree(&fn_map, params).unwrap();
+            let eval_tree = t.eval_tree(fn_map, params).unwrap();
             debug!("Push optimizing :{}", i + 1);
             linearized.push_optimize(eval_tree, cpe_rounds, iterations, n_cores, verbose);
         }
@@ -2964,7 +2964,7 @@ impl EvaluatorSingle {
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = set.eval_tree(&fn_map, params).unwrap();
+        let mut eval_tree = set.eval_tree(fn_map, params).unwrap();
         debug!("Horner scheme");
 
         eval_tree.horner_scheme();

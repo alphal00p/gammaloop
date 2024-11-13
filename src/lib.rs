@@ -12,6 +12,7 @@ pub mod cli_functions;
 pub mod cross_section;
 pub mod debug_info;
 pub mod evaluation_result;
+pub mod feyngen;
 pub mod gammaloop_integrand;
 pub mod graph;
 pub mod h_function_test;

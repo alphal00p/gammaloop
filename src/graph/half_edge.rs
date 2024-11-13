@@ -285,17 +285,17 @@ struct GVEdgeAttrs {
 
 impl std::fmt::Display for GVEdgeAttrs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut out = "[".to_string();
-        if let Some(label) = &self.label {
-            out.push_str(&format!("label=\"{}\",", label));
-        }
-        if let Some(color) = &self.color {
-            out.push_str(&format!("color=\"{}\",", color));
-        }
-        if let Some(other) = &self.other {
-            out.push_str(&format!("{},", other));
-        }
-        out.push(']');
+        let out = format!(
+            "[{}]",
+            [
+                ("label=", self.label.as_ref()),
+                ("color=", self.color.as_ref()),
+                ("", self.other.as_ref())
+            ]
+            .iter()
+            .filter_map(|(prefix, x)| x.map(|s| format!("{}{}", prefix, s)))
+            .join(",")
+        );
         write!(f, "{}", out)
     }
 }
@@ -309,8 +309,8 @@ pub struct HedgeGraph<E, V> {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq)]
 pub struct SubGraph {
-    filter: BitVec,
-    loopcount: Option<usize>,
+    pub filter: BitVec,
+    pub loopcount: Option<usize>,
 }
 
 impl Hash for SubGraph {
@@ -360,7 +360,8 @@ impl SubGraph {
         self.loopcount = Some(graph.cyclotomatic_number(self));
     }
 
-    pub fn cycle_basis<E, V>(&self, graph: &HedgeGraph<E, V>) -> Vec<HalfEdgeNode> {
+    // Return a cycle basis and the corresponding spanning tree
+    pub fn cycle_basis<E, V>(&self, graph: &HedgeGraph<E, V>) -> (Vec<HalfEdgeNode>, SubGraph) {
         graph
             .paton_cycle_basis(self, self.filter.first_one().unwrap())
             .unwrap()
@@ -414,7 +415,7 @@ impl SubGraph {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct HalfEdgeNode {
-    internal_graph: SubGraph,
+    pub internal_graph: SubGraph,
     externalhedges: BitVec, // essentially all hedges that are not in the internal graph, but are connected to it
 }
 
@@ -691,8 +692,8 @@ impl<N: Clone, E: Clone> From<symbolica::graph::Graph<N, E>> for HedgeGraph<E, N
     }
 }
 
-impl From<BareGraph> for HedgeGraph<usize, usize> {
-    fn from(value: BareGraph) -> Self {
+impl From<&BareGraph> for HedgeGraph<usize, usize> {
+    fn from(value: &BareGraph) -> Self {
         let mut builder = HedgeGraphBuidler::new();
         let mut map = AHashMap::new();
 
@@ -997,7 +998,7 @@ impl<E, V> HedgeGraph<E, V> {
 
     pub fn base_dot(&self) -> String {
         let mut out = "graph {\n ".to_string();
-        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
+        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n layout=\"neato\";\n");
         for (i, (n, e)) in self.involution.inv.iter().enumerate() {
             out.push_str(
                 &e.default_dot(
@@ -1014,7 +1015,7 @@ impl<E, V> HedgeGraph<E, V> {
         out
     }
 
-    fn nesting_node_from_subgraph(&self, internal_graph: SubGraph) -> HalfEdgeNode {
+    pub fn nesting_node_from_subgraph(&self, internal_graph: SubGraph) -> HalfEdgeNode {
         let mut externalhedges = bitvec![usize, Lsb0; 0; self.involution.len()];
 
         for i in internal_graph.filter.iter_ones() {
@@ -1089,7 +1090,8 @@ impl<E, V> HedgeGraph<E, V> {
         }
     }
 
-    fn cycle_basis(&self) -> Vec<HalfEdgeNode> {
+    // Return a cycle basis and the corresponding spanning tree
+    pub fn cycle_basis(&self) -> (Vec<HalfEdgeNode>, SubGraph) {
         let i = self.involution.first_internal().unwrap();
 
         self.paton_cycle_basis(&self.full_filter().into(), i)
@@ -1259,7 +1261,7 @@ impl<E, V> HedgeGraph<E, V> {
     }
 
     pub fn all_cycles(&self) -> Vec<HalfEdgeNode> {
-        self.all_composite_cycles_with_basis(&self.cycle_basis())
+        self.all_composite_cycles_with_basis(&self.cycle_basis().0)
     }
 
     pub fn all_cycle_unions(&self) -> AHashSet<SubGraph> {
@@ -1427,11 +1429,12 @@ impl<E, V> HedgeGraph<E, V> {
         degrees
     }
 
+    // Returns a cycle basis and the corresponding spanning tree
     fn paton_cycle_basis(
         &self,
         subgraph: &SubGraph,
         start: usize,
-    ) -> Result<Vec<HalfEdgeNode>, NestingNodeError> {
+    ) -> Result<(Vec<HalfEdgeNode>, SubGraph), NestingNodeError> {
         if !subgraph.filter[start] {
             return Err(NestingNodeError::InvalidStart);
         }
@@ -1490,18 +1493,20 @@ impl<E, V> HedgeGraph<E, V> {
             }
         }
 
-        Ok(cycle_basis)
+        Ok((cycle_basis, tree))
     }
 
     pub fn dot_impl(
         &self,
         node_as_graph: &HalfEdgeNode,
         graph_info: String,
-        edge_attr: &impl Fn(&E) -> String,
-        node_attr: &impl Fn(&V) -> String,
+        edge_attr: &impl Fn(&E) -> Option<String>,
+        node_attr: &impl Fn(&V) -> Option<String>,
     ) -> String {
         let mut out = "graph {\n ".to_string();
-        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
+        out.push_str(
+            "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";\n ",
+        );
 
         out.push_str(graph_info.as_str());
 
@@ -1510,7 +1515,7 @@ impl<E, V> HedgeGraph<E, V> {
                 format!(
                     "  {} [{}];\n",
                     self.nodes.get_index_of(n).unwrap(),
-                    node_attr(v)
+                    node_attr(v).map_or("".into(), |x| x).as_str()
                 )
                 .as_str(),
             );
@@ -1526,13 +1531,13 @@ impl<E, V> HedgeGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray50".to_string()),
                             label: None,
-                            other: data.as_ref().map(edge_attr),
+                            other: data.as_ref().and_then(edge_attr),
                         })
                     } else {
                         Some(GVEdgeAttrs {
                             color: Some("gray75".to_string()),
                             label: None,
-                            other: data.as_ref().map(edge_attr),
+                            other: data.as_ref().and_then(edge_attr),
                         })
                     };
                     out.push_str(&InvolutiveMapping::<()>::identity_dot(
@@ -1553,7 +1558,7 @@ impl<E, V> HedgeGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray50:gray75;0.5".to_string()),
                             label: None,
-                            other: data.as_ref().map(edge_attr),
+                            other: data.as_ref().and_then(edge_attr),
                         })
                     } else if *node_as_graph
                         .externalhedges
@@ -1564,7 +1569,7 @@ impl<E, V> HedgeGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray75:gray50;0.5".to_string()),
                             label: None,
-                            other: data.as_ref().map(edge_attr),
+                            other: data.as_ref().and_then(edge_attr),
                         })
                     } else if *node_as_graph
                         .externalhedges
@@ -1575,13 +1580,13 @@ impl<E, V> HedgeGraph<E, V> {
                         Some(GVEdgeAttrs {
                             color: Some("gray50".to_string()),
                             label: None,
-                            other: data.as_ref().map(edge_attr),
+                            other: data.as_ref().and_then(edge_attr),
                         })
                     } else {
                         Some(GVEdgeAttrs {
                             color: Some("gray75".to_string()),
                             label: None,
-                            other: data.as_ref().map(edge_attr),
+                            other: data.as_ref().and_then(edge_attr),
                         })
                     };
                     out.push_str(&InvolutiveMapping::<()>::pair_dot(
@@ -1606,9 +1611,7 @@ impl<E, V> HedgeGraph<E, V> {
         out
     }
     pub fn dot(&self, node_as_graph: &HalfEdgeNode) -> String {
-        self.dot_impl(node_as_graph, "".to_string(), &|_| "".to_string(), &|_| {
-            "".to_string()
-        })
+        self.dot_impl(node_as_graph, "".to_string(), &|_| None, &|_| None)
     }
 
     fn cut_branches(&self, subgraph: &mut HalfEdgeNode) {
@@ -1699,7 +1702,7 @@ impl<E, V> HedgeGraph<E, V> {
     }
 
     pub fn all_spinneys(&self) -> AHashMap<SubGraph, Vec<(HalfEdgeNode, Option<HalfEdgeNode>)>> {
-        let mut cycles = self.cycle_basis();
+        let mut cycles = self.cycle_basis().0;
 
         let mut all_combinations = PowersetIterator::new(cycles.len() as u8);
         all_combinations.next(); //Skip empty set
@@ -1787,11 +1790,12 @@ mod test {
                 graph
                     .paton_cycle_basis(&graph.full_filter().into(), i)
                     .unwrap()
+                    .0
                     .len()
             );
         }
 
-        let cycles = graph.cycle_basis();
+        let cycles = graph.cycle_basis().0;
 
         assert_eq!(3, cycles.len());
 
@@ -1837,11 +1841,12 @@ mod test {
                 graph
                     .paton_cycle_basis(&graph.full_filter().into(), i)
                     .unwrap()
+                    .0
                     .len()
             );
         }
 
-        let cycles = graph.cycle_basis();
+        let cycles = graph.cycle_basis().0;
 
         insta::assert_ron_snapshot!("hairy_three_loop_cycles", cycles);
     }
@@ -1908,7 +1913,7 @@ mod test {
 
         // println!("{}", rand_graph.base_dot());
 
-        // println!("loops {}", rand_graph.cycle_basis().len());
+        // println!("loops {}", rand_graph.cycle_basis().0.len());
 
         // let all_spinneys_other = rand_graph.all_spinneys();
 
@@ -1942,7 +1947,7 @@ mod test {
 
     //     println!(
     //         "{} loop graph: \n {}",
-    //         rand_graph.cycle_basis().len(),
+    //         rand_graph.cycle_basis().0.len(),
     //         rand_graph.base_dot()
     //     );
 
@@ -1990,7 +1995,7 @@ mod test {
                     .unwrap()
             );
 
-            println!("paton_cycle_basislen {}", s.cycle_basis(&graph).len());
+            println!("paton_cycle_basislen {}", s.cycle_basis(&graph).0.len());
             println!("{}", graph.dot(&s.to_nesting_node(&graph)));
         }
 
@@ -2040,7 +2045,7 @@ mod test {
 
         // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
 
-        println!("loop count {}", graph.cycle_basis().len());
+        println!("loop count {}", graph.cycle_basis().0.len());
         println!("cycle count {}", graph.all_cycles().len());
         if let Some((s, v)) = graph
             .all_spinneys()
@@ -2098,7 +2103,7 @@ mod test {
 
         // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
 
-        println!("loop count {}", graph.cycle_basis().len());
+        println!("loop count {}", graph.cycle_basis().0.len());
         println!("cycle count {}", graph.all_cycles().len());
         if let Some((s, v)) = graph
             .all_spinneys()
@@ -2194,7 +2199,7 @@ mod test {
 
         // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
 
-        println!("loop count {}", graph.cycle_basis().len());
+        println!("loop count {}", graph.cycle_basis().0.len());
         println!("cycle count {}", graph.all_cycles().len());
         println!(
             "loop count {}",

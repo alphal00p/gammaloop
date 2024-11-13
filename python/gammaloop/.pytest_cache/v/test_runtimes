@@ -86,5 +86,6 @@
   "tests/unit/test_rust.py::TestRust::test_generate_th_th_tree": 0.2405741699039936,
   "tests/unit/test_rust.py::TestRust::test_generate_hh_ttxaa_tree": 0.2658042050898075,
   "tests/unit/test_rust.py::TestRust::test_generate_h_ttxaah_tree": 0.24527085572481155,
-  "tests/unit/test_rust.py::TestRust::test_generate_aa_aahhttx_tree": 0.2517485097050667
+  "tests/unit/test_rust.py::TestRust::test_generate_aa_aahhttx_tree": 0.2517485097050667,
+  "tests/unit/test_objects.py::TestProcess::test_process_parsing": 0.012495624949224293
 }

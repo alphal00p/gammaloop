@@ -793,6 +793,10 @@ impl Particle {
         model.get_particle(&self.antiname)
     }
 
+    pub fn is_self_antiparticle(&self) -> bool {
+        self.name == self.antiname
+    }
+
     fn lorentz_slots<LR: BaseRepName>(&self, shift: usize) -> (Vec<Slot<LR>>, usize) {
         let fourd_lor = LR::rep(4);
 
@@ -808,6 +812,14 @@ impl Particle {
         match self.spin {
             2 => (vec![fourd_bis.new_slot(shift)], shift + 1),
             _ => (vec![], shift),
+        }
+    }
+
+    pub fn is_massive(&self) -> bool {
+        if let Some(v) = self.mass.value {
+            v.norm_squared().abs().positive()
+        } else {
+            true
         }
     }
 
@@ -1417,6 +1429,7 @@ pub struct Model {
     pub propagator_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub coupling_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub vertex_rule_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub particle_name_to_propagator_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
 }
 
 impl Default for Model {
@@ -1449,6 +1462,11 @@ impl Default for Model {
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             vertex_rule_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
+            particle_name_to_propagator_position: HashMap::<
+                SmartString<LazyCompact>,
+                usize,
+                RandomState,
+            >::default(),
         }
     }
 }
@@ -1875,6 +1893,16 @@ impl Model {
             })
             .collect();
 
+        // Set propagator mapping
+        model.particle_name_to_propagator_position =
+            serializable_model.propagators.iter().enumerate().fold(
+                HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
+                |mut map, (i_prop, serializable_propagator)| {
+                    map.insert(serializable_propagator.particle.clone(), i_prop);
+                    map
+                },
+            );
+
         model
     }
 
@@ -1895,11 +1923,30 @@ impl Model {
     }
 
     #[inline]
+    pub fn get_propagator_for_particle(&self, name: &SmartString<LazyCompact>) -> Arc<Propagator> {
+        if let Some(position) = self.particle_name_to_propagator_position.get(name) {
+            self.propagators[*position].clone()
+        } else {
+            panic!(
+                "Propagator for particle '{}' not found in model '{}'. Valid entries are:\n{}",
+                name,
+                self.name,
+                self.particle_name_to_propagator_position.keys().join(", ")
+            );
+        }
+    }
+
+    #[inline]
     pub fn get_particle(&self, name: &SmartString<LazyCompact>) -> Arc<Particle> {
         if let Some(position) = self.particle_name_to_position.get(name) {
             self.particles[*position].clone()
         } else {
-            panic!("Particle '{}' not found in model '{}'.", name, self.name);
+            panic!(
+                "Particle '{}' not found in model '{}'. Valid entries are:\n{}",
+                name,
+                self.name,
+                self.particle_name_to_position.keys().join(", ")
+            );
         }
     }
     #[inline]

@@ -2,8 +2,10 @@ from gammaloop.tests.common import pjoin
 from gammaloop.misc.common import GL_PATH
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
 from gammaloop.base_objects.model import InputParamCard, Model
+from gammaloop.base_objects.process import Process
 from pathlib import Path
 import pytest
+from gammaloop.interface.gammaloop_interface import GammaLoop, split_str_args
 # from gammaloop.misc.utils import expression_to_string
 # from pprint import pprint, pformat
 
@@ -91,3 +93,53 @@ class TestParamCard:
             assert len(model.couplings) == target_n_couplings
             assert not any(p.value is None for p in model.parameters)
             assert not any(c.value is None for c in model.couplings)
+
+
+class TestProcess:
+
+    def test_process_parsing(self):
+
+        model = Model.from_ufo_model('sm')
+
+        tests = [
+            ("e+ e- > d d~", "e+ e- > d d~"),
+            ("e+ e- > d d~ [ QCD ]", "e+ e- > d d~ [ QCD ]"),
+            ("e+ e- > d d~ [QCD]", "e+ e- > d d~ [ QCD ]"),
+            ("e+ e- > d d~ [ {1} ]", "e+ e- > d d~ [ {1} ]"),
+            ("e+ e- > d d~ [ { 1 } ]", "e+ e- > d d~ [ {1} ]"),
+            ("e+ e- > d d~ [ {{1}} ]", "e+ e- > d d~ [ {{1}} ]"),
+            ("e+ e- > d d~ [ {1,2} ]", "e+ e- > d d~ [ {1,2} ]"),
+            ("e+ e- > d d~ [ { 1,2 } ]", "e+ e- > d d~ [ {1,2} ]"),
+            ("e+ e- > d d~ [ {{1,2}} ]", "e+ e- > d d~ [ {{1,2}} ]"),
+            ("e+ e- > d d~ [ {{1,2 } } ]", "e+ e- > d d~ [ {{1,2}} ]"),
+            ("e+ e- > d d~ [ {1} QCD]", "e+ e- > d d~ [ {1} QCD ]"),
+            ("e+ e- > d d~ [{1} QCD]", "e+ e- > d d~ [ {1} QCD ]"),
+            ("e+ e- > d d~ [ {1} QCD]", "e+ e- > d d~ [ {1} QCD ]"),
+            ("e+ e- > d d~ [{1} QCD ]", "e+ e- > d d~ [ {1} QCD ]"),
+            ("e+ e- > d d~ [ {1}QCD ]", "e+ e- > d d~ [ {1} QCD ]"),
+            ("e+ e- > d d~ [ {1} QCD]", "e+ e- > d d~ [ {1} QCD ]"),
+            ("e+ e- > d d~ [ {1} QCD]", "e+ e- > d d~ [ {1} QCD ]"),
+            ("e+ e- > d d~ [{{1}}QCD]", "e+ e- > d d~ [ {{1}} QCD ]"),
+            ("e+ e- > d d~ [ {{1}}QCD]", "e+ e- > d d~ [ {{1}} QCD ]"),
+            ("e+ e- > d d~ [{{1}} QCD ]", "e+ e- > d d~ [ {{1}} QCD ]"),
+            ("e+ e- > d d~ [ {{1}}QCD ]", "e+ e- > d d~ [ {{1}} QCD ]"),
+            ("e+ e- > d d~ [ {{1}} QCD]", "e+ e- > d d~ [ {{1}} QCD ]"),
+            ("e+ e- > d d~ QED=2 [ {{1}} QCD ]",
+             "e+ e- > d d~ QED=2 [ {{1}} QCD ]"),
+            ("e+ e- > d d~ QED=2 [ {{1}} QCD=3 ]",
+             "e+ e- > d d~ QED=2 [ {{1}} QCD=3 ]"),
+            ("e+ e- > d d~ QED=2 [ {{1}} QCD = 3 ]",
+             "e+ e- > d d~ QED=2 [ {{1}} QCD=3 ]"),
+            ("e+ e- > d d~ QED=2 [ {{1}} QCD=3 ] QCD^2=3",
+             "e+ e- > d d~ QED=2 [ {{1}} QCD=3 ] QCD^2=3"),
+            ("e+ e- > d d~ / w+ w- QED=2 QED^2=6 [ {{1}} QCD=3 ] QCD^2=3",
+             "e+ e- > d d~ / w+ w- QED=2 [ {{1}} QCD=3 ] QCD^2=3 QED^2=6"),
+        ]
+
+        for test in tests:
+            # print("doing: ", test[0])
+            res = str(Process.from_input_args(
+                model, GammaLoop.generate_parser.parse_args(split_str_args(test[0]))))
+            # print("getting : '%s'" % res)
+            # print("expected: '%s'" % test[1])
+            assert test[1] == res

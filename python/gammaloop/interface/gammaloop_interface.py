@@ -3,7 +3,7 @@ import platform
 import sys
 from pathlib import Path
 import importlib
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 import subprocess
 import os
 from typing import Any
@@ -18,6 +18,7 @@ from gammaloop.misc.utils import Colour, verbose_yaml_dump
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
 from gammaloop.base_objects.graph import Graph
+from gammaloop.base_objects.process import Process
 import gammaloop.cross_section.cross_section as cross_section
 import gammaloop.cross_section.supergraph as supergraph
 from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExporter, OutputMetaData, update_run_card_in_output
@@ -56,7 +57,8 @@ AVAILABLE_COMMANDS = [
     'set',
     'set_model_param',
     'reset',
-    'generate_graph',
+    'define_graph',
+    'generate',
     'display_debug_log'
 ]
 
@@ -70,8 +72,27 @@ class GammaLoopConfiguration(object):
                 'license': "GAMMALOOP_USER"
             },
             'drawing': {
-                'mode': 'feynmp',
+                'modes': ['feynmp', "dot"],
                 'combined_graphs_pdf_grid_shape': [3, 2],
+                'dot': {
+                    'layout': 'neato',
+                    'graph_options': {
+                        'fontsize': 10,
+                        'ratio': 1.5
+                    },
+                    'node_options': {
+                        'fontsize': 7,
+                        'shape': 'circle',
+                        'margin': 0,
+                        'height': 0.01,
+                        'penwidth': 0.6
+                    },
+                    'edge_options': {
+                        'fontsize': 7,
+                        'arrowsize': 0.3,
+                        'penwidth': 0.6,
+                    },
+                },
                 'feynmp': {
                     'reverse_outgoing_edges_order': True,
                     'show_edge_labels': True,
@@ -430,7 +451,7 @@ class GammaLoop(object):
         self.model_directory: Path = Path('NotLoaded')
 
         # Initialize a gammaloop rust engine worker which will be used throughout the session
-        self.rust_worker: gl_rust.Worker = gl_rust.Worker.new()
+        self.rust_worker: gl_rust.Worker = gl_rust.Worker()
         logger.debug('Starting interface of GammaLoop v%s%s',
                      __version__,
                      (f' (git rev.: {GIT_REVISION})' if GIT_REVISION is not None else ''))
@@ -444,6 +465,7 @@ class GammaLoop(object):
         self.default_config: GammaLoopConfiguration = copy.deepcopy(
             self.config)
         self.launched_output: Path | None = None
+        self.process: Process | None = None
         self.command_history: CommandList = CommandList()
 
         if gl_is_symbolica_registered is False:
@@ -736,6 +758,132 @@ class GammaLoop(object):
         logger.info("Successfully exported model '%s' to '%s'.",
                     self.model.get_full_name(), args.model_file_path)
 
+    # generate command
+    generate_parser = ArgumentParser(prog='generate')
+    generate_parser.add_argument(
+        'process', metavar='process', type=str, nargs="+", help='Process to generate.')
+    generate_parser.add_argument('--amplitude', '-a', default=False,
+                                 action='store_true', help='Generate an amplitude to this contribution')
+    generate_parser.add_argument('--graph_prefix', '-gp', type=str, default="GL",
+                                 help='Graph name prefix. default: "GL"')
+    generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
+                                 help='Specify the maximum number of bridges for the graphs to generate. Set negative to disable. (default: 0)')
+    # Tadpole filter
+    generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
+                                 help='Filter tadpole diagrams.')
+    generate_parser.add_argument('--no_tadpole_attached_to_massive', dest='veto_tadpoles_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter tadpole diagrams attached to massive lines.')
+    generate_parser.add_argument('--no_tadpole_attached_to_massless', dest='veto_tadpoles_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter tadpole diagrams attached to massive lines.')
+    generate_parser.add_argument('--no_scaleless_tadpole', dest='veto_only_scaleless_tadpoles', default=None, action=BooleanOptionalAction,
+                                 help='Filter scalless tadpole diagrams.')
+    # Snail filter
+    generate_parser.add_argument('--filter_snails', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams.')
+    generate_parser.add_argument('--veto_snail_attached_to_massive', dest='veto_snails_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams attached to massive lines.')
+    generate_parser.add_argument('--veto_snail_attached_to_massless', dest='veto_snails_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams attached to massive lines.')
+    generate_parser.add_argument('--veto_scaleless_snail', dest='veto_only_scaleless_snails', default=None, action=BooleanOptionalAction,
+                                 help='Filter scalless snail diagrams.')
+    # Selfenergy filter
+    generate_parser.add_argument('--filter_selfenergies', default=None, action=BooleanOptionalAction,
+                                 help='Filter out (external) self energy contributions.')
+    generate_parser.add_argument('--veto_selfenergy_of_massive_lines', dest='veto_self_energy_of_massive_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams attached to massive lines.')
+    generate_parser.add_argument('--veto_selfenergy_of_massless_lines', dest='veto_self_energy_of_massless_lines', default=None, action=BooleanOptionalAction,
+                                 help='Filter snail diagrams attached to massive lines.')
+    generate_parser.add_argument('--veto_scaleless_selfenergy', dest='veto_only_scaleless_self_energy', default=None, action=BooleanOptionalAction,
+                                 help='Filter scalless tadpole diagrams.')
+    # Symmetrization options
+    generate_parser.add_argument('--symmetrize_initial_states', default=None, action=BooleanOptionalAction,
+                                 help='Symmetrize initial states in diagram generation. (default: Automatic)')
+    generate_parser.add_argument('--symmetrize_final_states', default=None, action=BooleanOptionalAction,
+                                 help='Symmetrize final states in diagram generation. (default: Automatic)')
+    generate_parser.add_argument('--symmetrize_left_right_states', '-slrs', default=None, action=BooleanOptionalAction,
+                                 help='Symmetrize left and right forward scattering states in cross-section diagram generation. (default: Automatic)')
+    generate_parser.add_argument('--loop_momentum_bases', '-lmbs', default=None, type=str,
+                                 help='Specify LMB to use with a string corresponding to a python dictionary with format "{graph_name: list[edge_names]}" (default: Automatic)')
+    generate_parser.add_argument('--select_graphs', '-selected_graphs', default=None, type=str, nargs="+",
+                                 help='Select only the graphs with the specified names (default: all)')
+    generate_parser.add_argument('--veto_graphs', '-veto_graphs', default=None, type=str, nargs="+",
+                                 help='Veto graphs with the specified names (default: no veto)')
+
+    def do_generate(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.generate_parser.print_help()
+            return
+        args = self.generate_parser.parse_args(split_str_args(str_args))
+
+        if args.max_n_bridges is not None and args.max_n_bridges < 0:
+            args.max_n_bridges = None
+
+        parsed_process = Process.from_input_args(self.model, args)
+
+        if args.amplitude and parsed_process.cross_section_orders is not None:
+            logger.warning(
+                "Amplitude generation requested but cross section orders are also specified. Ignoring cross section orders.")
+            parsed_process.cross_section_orders = None
+
+        if not args.amplitude and parsed_process.amplitude_orders is not None:
+            raise GammaLoopError(
+                "Cross section generation requested but amplitude orders are also specified. This option is not yet supported.")
+
+        if not args.amplitude and parsed_process.amplitude_loop_count is not None:
+            raise GammaLoopError(
+                "Cross section generation requested but amplitude loop count is also specified. This option is not yet supported.")
+
+        # if parsed_process.perturbative_orders is not None:
+        #     logger.warning(
+        #         f"The nature of the specific perturbative orders specified ({' '.join('%s=%s' % (k, v) for k, v in parsed_process.perturbative_orders.items())}) is not yet supported. Only the loop count will be derived from them.")
+
+        self.process = parsed_process
+
+        all_graphs: list[Graph] = self.process.generate_diagrams(
+            self.rust_worker, self.model, args)
+        if len(all_graphs) > 0:
+            logger.debug("A total of %s graphs have been generated.",
+                         len(all_graphs))
+        else:
+            raise GammaLoopError(f"No graphs were generated for process:\n{
+                                 repr(self.process)}.")
+
+        if args.amplitude:
+            self.amplitudes.add_amplitude(cross_section.Amplitude(
+                f"{args.graph_prefix}_{self.process.process_shell_name()}",
+                [
+                    supergraph.AmplitudeGraph(
+                        sg_id=0, sg_cut_id=0, fs_cut_id=i, amplitude_side=Side.LEFT,
+                        # This is *not* the symmetry factor, but instead what would come out of grouping similar diagrams (like flavour multiplicity)
+                        multiplicity="1",
+                        graph=g
+                    )
+                    for i, g in enumerate(all_graphs)
+                ]
+            ))
+        else:
+            logger.warning(
+                "%sProcessing of forward scattering graphs not fully implemented yet.%s", Colour.RED, Colour.END)
+            self.cross_sections.add_cross_section(cross_section.CrossSection(
+                f"{args.graph_prefix}_{self.process.process_shell_name()}",
+                # Wrap the forward scattering graphs within a dummy supergraph
+                [cross_section.supergraph.SuperGraph(
+                    sg_id=i, graph=Graph.empty_graph('DUMMY'), multiplicity="1",
+                    topology_class=[],
+                    cuts=[
+                        cross_section.supergraph.SuperGraphCut(
+                            cut_edges=[],
+                            forward_scattering_graph=cross_section.supergraph.ForwardScatteringGraph(
+                                sg_id=i,
+                                sg_cut_id=0,
+                                multiplicity="1",
+                                graph=g,
+                                cuts=[]  # Will be filled in later
+                            )
+                        )]
+                ) for i, g in enumerate(all_graphs)]
+            ))
+
     # export_graph command
     export_graphs_parser = ArgumentParser(prog='export_graph')
     export_graphs_parser.add_argument(
@@ -947,24 +1095,24 @@ class GammaLoop(object):
                     for i, (g, attributes) in enumerate(graphs)]
             )])
 
-    generate_graph_parser = ArgumentParser(prog='generate_graph')
-    generate_graph_parser.add_argument(
+    define_graph_parser = ArgumentParser(prog='define_graph')
+    define_graph_parser.add_argument(
         '--name', '-n', type=str, default='graph', help='Name of the graph')
-    generate_graph_parser.add_argument(
+    define_graph_parser.add_argument(
         '--virtual-edges', '-ve', type=str, help='List of virtual edges to generate the graph from')
-    generate_graph_parser.add_argument(
+    define_graph_parser.add_argument(
         '--external-edges', '-ee', type=str, help='List of external edges to generate the graph from')
-    generate_graph_parser.add_argument(
+    define_graph_parser.add_argument(
         '--multiplicity_factor', '-mf', type=str, default="1", help="Multiplicity factor of the graph (default: '%(default)s')")
-    generate_graph_parser.add_argument(
+    define_graph_parser.add_argument(
         '--overall_factor', '-of', type=str, default="1", help="Overall factor of the graph (default: '%(default)s')")
 
-    def do_generate_graph(self, str_args: str) -> None:
+    def do_define_graph(self, str_args: str) -> None:
         if str_args == 'help':
-            self.generate_graph_parser.print_help()
+            self.define_graph_parser.print_help()
             return
 
-        args = self.generate_graph_parser.parse_args(split_str_args(str_args))
+        args = self.define_graph_parser.parse_args(split_str_args(str_args))
 
         try:
             virtual_edges = eval(args.virtual_edges)
