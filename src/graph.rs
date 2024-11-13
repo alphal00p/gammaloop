@@ -1224,7 +1224,7 @@ impl BareGraph {
         // Fix external edge directions, as for now *particle* fermion flow is observed, but we instead want:
         // > incoming antiparticles to be actually incoming (*particle* fermion flow would be outgoing)
         // > outgoing antiparticles to be actually outgoing (*particle* fermion flow would be incoming)
-        let mut external_nodes: HashMap<usize, (EdgeType, SmartString<LazyCompact>)> =
+        let mut external_nodes: HashMap<usize, (usize, EdgeType, SmartString<LazyCompact>)> =
             HashMap::default();
         let mut external_edges: HashMap<usize, (EdgeType, SmartString<LazyCompact>)> =
             HashMap::default();
@@ -1237,7 +1237,7 @@ impl BareGraph {
                 external_directions.insert(leg_id, EdgeType::Outgoing);
             }
         }
-        for n in graph_nodes.iter() {
+        for (i_n, n) in graph_nodes.iter().enumerate() {
             if n.edges.len() == 1 {
                 let external_edge = &mut graph_edges[n.edges[0]];
                 let mut particle = model.get_particle(&external_edge.data.into());
@@ -1269,7 +1269,7 @@ impl BareGraph {
                     particle = particle.get_anti_particle(model);
                 }
 
-                external_nodes.insert(n.data.0, (physical_edge_type, particle.name.clone()));
+                external_nodes.insert(n.data.0, (i_n, physical_edge_type, particle.name.clone()));
                 external_edges.insert(n.edges[0], (physical_edge_type, particle.name.clone()));
             }
         }
@@ -1296,10 +1296,11 @@ impl BareGraph {
         // );
         for (i_n, node) in graph_nodes.iter().enumerate() {
             let vertex_info = if node.data.1 == "external" {
-                let external_node = external_nodes.get(&node.data.0).unwrap();
+                let (_external_node_position, external_direction, external_particle_name) =
+                    external_nodes.get(&node.data.0).unwrap();
                 SerializableVertexInfo::ExternalVertexInfo(SerializableExternalVertexInfo {
-                    direction: external_node.0,
-                    particle: external_node.1.clone(),
+                    direction: *external_direction,
+                    particle: external_particle_name.clone(),
                 })
             } else {
                 if node.data.0 != 0 {
@@ -1429,7 +1430,15 @@ impl BareGraph {
                 .collect::<Vec<_>>();
         }
 
-        g.external_connections = external_connections;
+        g.external_connections = external_connections
+            .iter()
+            .map(|(v1, v2)| {
+                (
+                    v1.map(|leg_id| external_nodes.get(&leg_id).unwrap().0),
+                    v2.map(|leg_id| external_nodes.get(&leg_id).unwrap().0),
+                )
+            })
+            .collect::<Vec<_>>();
 
         // Set the half-edge graph representation
         g.hedge_representation = HedgeGraph::from(&g);
@@ -1983,7 +1992,12 @@ impl BareGraph {
                     .is_positive()
                     .not()
             })
-            .unwrap_or_else(|| panic!("could not determine dependent momenta"));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Could not determine dependent momenta for this graph routing signature:\n {:?}",
+                    self.loop_momentum_basis.edge_signatures
+                )
+            });
 
         let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].external;
 
@@ -3377,11 +3391,7 @@ impl LoopMomentumBasis {
         self.edge_signatures = vec![
             LoopExtSignature {
                 internal: Signature(vec![SignOrZero::Zero; self.basis.len()]),
-                external: if graph.external_edges.len() > 1 {
-                    Signature(vec![SignOrZero::Zero; graph.external_edges.len() - 1])
-                } else {
-                    Signature(vec![])
-                },
+                external: Signature(vec![SignOrZero::Zero; graph.external_edges.len()])
             };
             graph.edges.len()
         ];
@@ -3445,48 +3455,50 @@ impl LoopMomentumBasis {
         };
 
         // Route external momenta
-        // println!("External edges: {:?}", graph.external_edges);
-        for i_ext in 0..=graph.external_edges.len() - 2 {
-            let external_edge_index = graph.external_edges[i_ext];
-            let external_edge = &graph.edges[external_edge_index];
-            let (u, v) = match external_edge.edge_type {
-                EdgeType::Outgoing => (sink_node, external_edge.vertices[1]),
-                EdgeType::Incoming => (external_edge.vertices[0], sink_node),
-                _ => {
-                    return Err(eyre!(
-                        "External edge {} is not incoming or outgoing.",
-                        external_edge.name
-                    ))
-                }
-            };
-
-            if let Some(path) = self.find_shortest_path(&adj_list, u, v) {
-                //println!("External path from {}->{}: {} {:?}", u, v, i_ext, path);
-                for (edge_index, is_flipped) in path {
-                    if self.edge_signatures[edge_index].external.0[i_ext] != SignOrZero::Zero {
-                        return Err(eyre!("Inconsitency in edge momentum signature assignment."));
+        if graph.external_edges.len() >= 2 {
+            for i_ext in 0..=(graph.external_edges.len() - 2) {
+                let external_edge_index = graph.external_edges[i_ext];
+                let external_edge = &graph.edges[external_edge_index];
+                let (u, v) = match external_edge.edge_type {
+                    EdgeType::Outgoing => (sink_node, external_edge.vertices[1]),
+                    EdgeType::Incoming => (external_edge.vertices[0], sink_node),
+                    _ => {
+                        return Err(eyre!(
+                            "External edge {} is not incoming or outgoing.",
+                            external_edge.name
+                        ))
                     }
-                    self.edge_signatures[edge_index].external.0[i_ext] = if is_flipped {
-                        SignOrZero::Minus
-                    } else {
-                        SignOrZero::Plus
-                    };
+                };
+
+                if let Some(path) = self.find_shortest_path(&adj_list, u, v) {
+                    //println!("External path from {}->{}: {} {:?}", u, v, i_ext, path);
+                    for (edge_index, is_flipped) in path {
+                        if self.edge_signatures[edge_index].external.0[i_ext] != SignOrZero::Zero {
+                            return Err(eyre!(
+                                "Inconsitency in edge momentum signature assignment."
+                            ));
+                        }
+                        self.edge_signatures[edge_index].external.0[i_ext] = if is_flipped {
+                            SignOrZero::Minus
+                        } else {
+                            SignOrZero::Plus
+                        };
+                    }
+                } else {
+                    return Err(eyre!(
+                        "No path found between vertices {} and {} for LMB: {:?}",
+                        u,
+                        v,
+                        self.basis
+                    ));
                 }
-            } else {
-                return Err(eyre!(
-                    "No path found between vertices {} and {} for LMB: {:?}",
-                    u,
-                    v,
-                    self.basis
-                ));
-            }
-            if self.edge_signatures[external_edge_index].external.0[i_ext] != SignOrZero::Plus {
-                return Err(eyre!(
-                    "Inconsitency in edge momentum external signature assignment."
-                ));
+                if self.edge_signatures[external_edge_index].external.0[i_ext] != SignOrZero::Plus {
+                    return Err(eyre!(
+                        "Inconsitency in edge momentum external signature assignment."
+                    ));
+                }
             }
         }
-
         Ok(())
     }
 

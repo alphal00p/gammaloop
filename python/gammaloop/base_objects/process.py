@@ -4,6 +4,8 @@ from typing import Literal
 from gammaloop.base_objects.model import Particle
 from gammaloop.misc.common import GammaLoopError
 from gammaloop.base_objects.model import Model
+from gammaloop.base_objects.graph import Graph
+import yaml
 import gammaloop._gammaloop as gl_rust
 
 
@@ -53,13 +55,42 @@ class Process(object):
             coupling_orders=self.cross_section_orders,
         )
 
+    def process_shell_name(self, short=True) -> str:
+        res = []
+        res.append(
+            (''.join([p.name.lower() for p in self.initial_states]) if len(
+                self.initial_states) > 0 else "empty") + '_' +
+            (''.join([p.name.lower() for p in self.final_states]
+                     ) if len(self.initial_states) > 0 else "empty")
+        )
+        if not short:
+            if self.particle_vetos is not None:
+                res.append(f"no__{'_'.join([p.name.lower()
+                                            for p in self.particle_vetos])}")
+            if self.amplitude_orders is not None:
+                res.append(
+                    '__'.join([f"{k}_eq_{v}" for k, v in self.amplitude_orders.items()]))
+            if self.cross_section_orders is not None:
+                res.append(
+                    '__'.join([f"{k}sq_eq_{v}" for k, v in self.cross_section_orders.items()]))
+            if self.perturbative_orders is not None:
+                res.append(
+                    '__'.join([f"{k}loop_eq_{v}" for k, v in self.perturbative_orders.items()]))
+        return '-'.join(s.replace('~', 'x').replace('+', 'p').replace('-', 'm') for s in res)
+
     def __repr__(self) -> str:
         process_str_pieces: list[str] = []
-        for p in self.initial_states:
-            process_str_pieces.append(p.name.lower())
+        if len(self.initial_states) == 0:
+            process_str_pieces.append("{}")
+        else:
+            for p in self.initial_states:
+                process_str_pieces.append(p.name.lower())
         process_str_pieces.append(">")
-        for p in self.final_states:
-            process_str_pieces.append(p.name.lower())
+        if len(self.final_states) == 0:
+            process_str_pieces.append("{}")
+        else:
+            for p in self.final_states:
+                process_str_pieces.append(p.name.lower())
         if self.particle_vetos is not None:
             process_str_pieces.append("/")
             for p in self.particle_vetos:
@@ -96,6 +127,65 @@ class Process(object):
                 process_str_pieces.append(f"{k}^2={v}")
 
         return ' '.join(process_str_pieces)
+
+    def generate_diagrams(self, gl_worker: gl_rust.Worker, model: Model, generation_args: Namespace) -> list[Graph]:
+
+        if generation_args.amplitude:
+            filters = self.amplitude_filters
+            loop_count_range = self.amplitude_loop_count
+        else:
+            filters = self.cross_section_filters
+            loop_count_range = self.cross_section_loop_count
+
+        # TODO: Improve automatic detection of ampltidue / cross section coupling orders and loop count
+        if loop_count_range is None:
+            if self.perturbative_orders is not None:
+                loop_count = sum(self.perturbative_orders.values())
+            else:
+                loop_count = 0
+            if not generation_args.amplitude:
+                loop_count += len(self.final_states) - 1
+            loop_count_range = (loop_count, loop_count)
+
+        # Automatically adjust symmetrizations
+        if generation_args.symmetrize_left_right_states is None:
+            generation_args.symmetrize_left_right_states = False
+
+        if generation_args.amplitude:
+            if generation_args.symmetrize_initial_states is None:
+                generation_args.symmetrize_initial_states = False
+            if generation_args.symmetrize_final_states is None:
+                generation_args.symmetrize_final_states = False
+        else:
+            if generation_args.symmetrize_initial_states is None:
+                generation_args.symmetrize_initial_states = True
+            elif (not generation_args.symmetrize_initial_states) and generation_args.symmetrize_left_right_states:
+                raise GammaLoopError(
+                    "Symmetrization of left and right states for cross-section generation requires also enabling initial-state symmetrization.")
+            if generation_args.symmetrize_final_states is None:
+                generation_args.symmetrize_final_states = True
+            elif not generation_args.symmetrize_final_states:
+                raise GammaLoopError(
+                    "Symmetrization of final states is mandatory for cross-section generation.")
+
+        all_graphs: list[str] = gl_worker.generate_diagrams(
+            gl_rust.FeynGenOptions(
+                "amplitude" if generation_args.amplitude else "cross_section",
+                [p.get_pdg_code() for p in self.initial_states],
+                [p.get_pdg_code() for p in self.final_states],
+                loop_count_range,
+                generation_args.symmetrize_initial_states,
+                generation_args.symmetrize_final_states,
+                generation_args.symmetrize_left_right_states,
+                filters=filters
+            ),
+            generation_args.graph_prefix,
+            generation_args.select_graphs,
+            generation_args.veto_graphs,
+            generation_args.loop_momentum_bases,
+        )
+
+        return [Graph.from_serializable_dict(model, yaml.safe_load(graph_str)) for graph_str in all_graphs]
 
     @classmethod
     def process_perturbative_orders(cls,
@@ -228,11 +318,14 @@ class Process(object):
 
         model_coupling_orders = model.get_coupling_orders()
 
+        accept_empty_initial_state = False
+        accept_empty_final_state = False
+
         def check_process_defined(check_final=True):
-            if len(initial_particles) == 0:
+            if len(initial_particles) == 0 and not accept_empty_initial_state:
                 raise MalformedProcessError(
                     "No initial state specified.")
-            if check_final and len(final_particles) == 0:
+            if check_final and len(final_particles) == 0 and not accept_empty_final_state:
                 raise MalformedProcessError(
                     "No final state specified.")
 
@@ -241,7 +334,7 @@ class Process(object):
         is_coupling_order_for_xsec = False
         current_perturbative_order_str: str = ""
         process_string = ' '.join(process_args.process)
-        for l in ['=', '[', ']', '>', '/']:
+        for l in ['=', '[', ']', '>', '/', '|']:
             process_string = process_string.replace(l, ' '+l+' ')
 
         tokens = [token.strip()
@@ -257,7 +350,13 @@ class Process(object):
                     parsing_stage = "final_states"
                 case "/":
                     check_process_defined()
+                    particle_vetos = []
                     parsing_stage = "vetos"
+                case "|":
+                    check_process_defined()
+                    particle_vetos.extend(
+                        [p for p in model.particles if p.pdg_code >= 0])
+                    parsing_stage = "vetos_complement"
                 case "[":
                     check_process_defined()
                     if t.endswith("]"):
@@ -299,33 +398,47 @@ class Process(object):
                             else:
                                 current_perturbative_order_str += t
                         case ("initial_states", _):
-                            try:
-                                initial_particles.append(model.get_particle(t))
-                            except KeyError:
-                                raise MalformedProcessError(
-                                    f"Unknown particle '{t}' in initial state. Particle in the model are:\n{
-                                        sorted(
-                                            [p.name for p in model.particles])
-                                    }")
+                            if t == "{}":
+                                accept_empty_initial_state = True
+                            else:
+                                try:
+                                    initial_particles.append(
+                                        model.get_particle(t))
+                                except KeyError:
+                                    raise MalformedProcessError(
+                                        f"Unknown particle '{t}' in initial state. Particle in the model are:\n{
+                                            sorted(
+                                                [p.name for p in model.particles])
+                                        }")
                         case ("final_states", False):
-                            try:
-                                final_particles.append(model.get_particle(t))
-                            except KeyError:
-                                raise MalformedProcessError(
-                                    f"Unknown particle '{t}' in final state. Particle in the model are:\n{
-                                        sorted(
-                                            [p.name for p in model.particles])
-                                    }")
-                        case ("vetos", False):
+                            if t == "{}":
+                                accept_empty_final_state = True
+                            else:
+                                try:
+                                    final_particles.append(
+                                        model.get_particle(t))
+                                except KeyError:
+                                    raise MalformedProcessError(
+                                        f"Unknown particle '{t}' in final state. Particle in the model are:\n{
+                                            sorted(
+                                                [p.name for p in model.particles])
+                                        }")
+                        case ("vetos", False) | ("vetos_complement", False):
                             try:
                                 veto_particle = model.get_particle(t)
+                                if veto_particle.pdg_code < 0:
+                                    veto_particle = veto_particle.get_anti_particle(
+                                        model)
                             except KeyError:
                                 raise MalformedProcessError(
                                     f"Unknown particle '{t}' in vetoed particles specification. Particle in the model are:\n{
                                         sorted(
                                             [p.name for p in model.particles])
                                     }")
-                            particle_vetos.append(veto_particle)
+                            if parsing_stage == "vetos":
+                                particle_vetos.append(veto_particle)
+                            else:
+                                particle_vetos.remove(veto_particle)
                         case _:
                             if t.endswith("^2"):
                                 current_coupling_order = t[:-2]
@@ -339,6 +452,36 @@ class Process(object):
                             parsing_stage = "waiting_for_equal"
 
         check_process_defined()
+
+        # Adjust amplitude and cross-section orders given the perturbative orders
+        for k, v in perturbative_orders.items():
+            if k in amplitude_orders:
+                amplitude_orders[k] += 2*v
+            if k in cross_section_orders:
+                cross_section_orders[k] += 2*v
+
+        # Adjust filter default values
+        # Disable these filter for vacuum generation
+        enable_filters = True
+        if len(initial_particles) <= 0:
+            if not process_args.amplitude:
+                enable_filters = False
+            else:
+                if len(final_particles) <= 0:
+                    enable_filters = False
+        if process_args.filter_tadpoles is None:
+            process_args.filter_tadpoles = enable_filters
+        if process_args.filter_snails is None:
+            process_args.filter_tadpoles = enable_filters
+        if process_args.filter_selfenergies is None:
+            process_args.filter_selfenergies = enable_filters
+
+        # Automatically remove bridges if considering a vacuum graph:
+        if process_args.max_n_bridges is None and len(initial_particles) == 0 and len(final_particles) == 0:
+            max_n_bridges = 0
+        else:
+            max_n_bridges = process_args.max_n_bridges
+
         return Process(
             initial_particles,
             final_particles,
@@ -348,20 +491,20 @@ class Process(object):
             amplitude_loop_count,
             cross_section_loop_count,
             None if len(particle_vetos) == 0 else particle_vetos,
-            self_energy_filter=gl_rust.SelfEnergyFilterOptions(
+            self_energy_filter=None if not process_args.filter_selfenergies else gl_rust.SelfEnergyFilterOptions(
                 veto_self_energy_of_massive_lines=process_args.veto_self_energy_of_massive_lines,
                 veto_self_energy_of_massless_lines=process_args.veto_self_energy_of_massless_lines,
                 veto_only_scaleless_self_energy=process_args.veto_only_scaleless_self_energy
             ),
-            tadpole_filter=gl_rust.TadpolesFilterOptions(
+            tadpole_filter=None if not process_args.filter_tadpoles else gl_rust.TadpolesFilterOptions(
                 veto_tadpoles_attached_to_massive_lines=process_args.veto_tadpoles_attached_to_massive_lines,
                 veto_tadpoles_attached_to_massless_lines=process_args.veto_tadpoles_attached_to_massless_lines,
                 veto_only_scaleless_tadpoles=process_args.veto_only_scaleless_tadpoles
             ),
-            zero_snail_filter=gl_rust.SnailFilterOptions(
+            zero_snail_filter=None if not process_args.filter_snails else gl_rust.SnailFilterOptions(
                 veto_snails_attached_to_massive_lines=process_args.veto_snails_attached_to_massive_lines,
                 veto_snails_attached_to_massless_lines=process_args.veto_snails_attached_to_massless_lines,
                 veto_only_scaleless_snails=process_args.veto_only_scaleless_snails
             ),
-            max_n_bridges=process_args.max_n_bridges
+            max_n_bridges=max_n_bridges
         )

@@ -10,6 +10,7 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 use crate::model::Particle;
+use crate::numerator::Numerator;
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     graph::BareGraph,
@@ -188,22 +189,8 @@ impl FeynGen {
         if veto_self_energy.is_none() && veto_tadpole.is_none() && veto_snails.is_none() {
             return false;
         }
-        let mut external_partices: HashMap<usize, Arc<Particle>> = HashMap::default();
         let graph_nodes: &[symbolica::graph::Node<usize>] = graph.nodes();
         let graph_edges: &[symbolica::graph::Edge<&str>] = graph.edges();
-        for e in graph_edges {
-            if graph_nodes[e.vertices.0].data != 0 {
-                external_partices.insert(
-                    graph_nodes[e.vertices.0].data,
-                    model.get_particle(&SmartString::<LazyCompact>::from(e.data)),
-                );
-            } else if graph_nodes[e.vertices.1].data != 0 {
-                external_partices.insert(
-                    graph_nodes[e.vertices.1].data,
-                    model.get_particle(&SmartString::<LazyCompact>::from(e.data)),
-                );
-            }
-        }
 
         let max_external = graph
             .nodes()
@@ -211,7 +198,11 @@ impl FeynGen {
             .filter(|n| n.data > 0)
             .map(|n| n.data)
             .max()
-            .unwrap();
+            .unwrap_or(0);
+        if max_external == 0 {
+            // Do not implement any veto for vacuum graphs
+            return false;
+        }
         let max_external_node_position = graph
             .nodes()
             .iter()
@@ -223,6 +214,19 @@ impl FeynGen {
                 max_external, max_external_node_position
             );
         }
+
+        let mut external_partices: Vec<Arc<Particle>> =
+            vec![model.particles[0].clone(); max_external];
+        for e in graph_edges {
+            if graph_nodes[e.vertices.0].data != 0 {
+                external_partices[graph_nodes[e.vertices.0].data - 1] =
+                    model.get_particle(&SmartString::<LazyCompact>::from(e.data));
+            } else if graph_nodes[e.vertices.1].data != 0 {
+                external_partices[graph_nodes[e.vertices.1].data - 1] =
+                    model.get_particle(&SmartString::<LazyCompact>::from(e.data));
+            }
+        }
+
         let mut spanning_tree = graph.get_spanning_tree(max_external_node_position);
         spanning_tree.chain_decomposition();
 
@@ -241,38 +245,31 @@ impl FeynGen {
                     .join("\n")
             );
         }
-        let mut node_children: HashMap<usize, Vec<usize>> =
-            HashMap::from_iter((0..spanning_tree.nodes.len()).map(|i| (i, vec![])));
+        let mut node_children: Vec<Vec<usize>> = vec![vec![]; spanning_tree.nodes.len()];
         for (i_n, node) in spanning_tree.nodes.iter().enumerate() {
-            node_children.get_mut(&node.parent).unwrap().push(i_n);
+            node_children[node.parent].push(i_n);
         }
         if debug {
             debug!("node_children={:?}", node_children);
         }
-        let mut external_momenta_routing: HashMap<usize, Vec<usize>> = HashMap::default();
+        let mut external_momenta_routing: Vec<Vec<usize>> = vec![vec![]; spanning_tree.nodes.len()];
         for (i_n, node) in graph.nodes().iter().enumerate() {
             if (node.edges.len() != 1) || node.data == max_external_node_position {
                 continue;
             }
             let external_index = node.data;
-            external_momenta_routing
-                .entry(i_n)
-                .or_default()
-                .push(external_index);
+            external_momenta_routing[i_n].push(external_index);
             let mut next_node = spanning_tree.nodes[i_n].parent;
             // println!("max_external={},max_external_node_position={},sink_node_position_in_spanning_tree={}", max_external, max_external_node_position, sink_node_position_in_spanning_tree);
             // println!("external_momenta_routing={:?}", external_momenta_routing);
             // println!("spanning_tree={:?}", spanning_tree);
             // println!("Starting from node #{} = {:?}", i_n, node);
             while next_node != max_external_node_position {
-                external_momenta_routing
-                    .entry(next_node)
-                    .or_default()
-                    .push(external_index);
+                external_momenta_routing[next_node].push(external_index);
                 next_node = spanning_tree.nodes[next_node].parent;
             }
         }
-        for route in external_momenta_routing.values_mut() {
+        for route in external_momenta_routing.iter_mut() {
             if route.len() == max_external - 1 {
                 *route = vec![max_external];
             }
@@ -304,27 +301,26 @@ impl FeynGen {
                     if curr_chain_node == i_n {
                         break 'follow_chain;
                     }
-                    if let Some(moms) = external_momenta_routing.get(&curr_chain_node) {
-                        if moms.len() == 1 {
-                            if let Some(se_leg) = self_energy_external_leg_id {
-                                if se_leg != moms[0] {
-                                    is_valid_chain = false;
-                                    break 'follow_chain;
-                                }
+                    let moms = &external_momenta_routing[curr_chain_node];
+                    if moms.len() == 1 {
+                        if let Some(se_leg) = self_energy_external_leg_id {
+                            if se_leg != moms[0] {
+                                is_valid_chain = false;
+                                break 'follow_chain;
                             }
-                            self_energy_external_leg_id = Some(moms[0]);
-                            for child in node_children.get(&curr_chain_node).unwrap() {
-                                if let Some(child_moms) = external_momenta_routing.get(child) {
-                                    if !child_moms.is_empty() && child_moms[0] != moms[0] {
-                                        is_valid_chain = false;
-                                        break 'follow_chain;
-                                    }
-                                }
-                            }
-                        } else {
-                            is_valid_chain = false;
-                            break 'follow_chain;
                         }
+                        self_energy_external_leg_id = Some(moms[0]);
+                        for child in node_children[curr_chain_node].iter() {
+                            if (!external_momenta_routing[*child].is_empty())
+                                && external_momenta_routing[*child][0] != moms[0]
+                            {
+                                is_valid_chain = false;
+                                break 'follow_chain;
+                            }
+                        }
+                    } else if !moms.is_empty() {
+                        is_valid_chain = false;
+                        break 'follow_chain;
                     }
                     if let Some(chain_id) = spanning_tree.nodes[curr_chain_node].chain_id {
                         if chain_id != i_chain {
@@ -340,10 +336,13 @@ impl FeynGen {
                 if is_valid_chain {
                     if let Some(leg_id) = self_energy_external_leg_id {
                         // Make sure the attachment point of the self-energy does not receive any other external momenta
-                        if let Some(attachment_node_leg_id) = external_momenta_routing.get(&i_n) {
-                            if attachment_node_leg_id.len() == 1
-                                && attachment_node_leg_id[0] == leg_id
-                            {
+                        if external_momenta_routing[i_n].len() == 1
+                            && external_momenta_routing[i_n][0] == leg_id
+                        {
+                            // Also For 1 -> 1 processes, we must also verify that it is not the whole graph
+                            if spanning_tree.nodes.iter().any(|n| {
+                                !n.external && n.chain_id.is_none() && n.back_edges.is_empty()
+                            }) {
                                 self_energy_attachments.insert((leg_id, i_n, i_back_edge, i_chain));
                             }
                         }
@@ -362,7 +361,7 @@ impl FeynGen {
         for (i_n, node) in spanning_tree.nodes.iter().enumerate() {
             if node.chain_id.is_none()
                 && !node.external
-                && external_momenta_routing.contains_key(&i_n)
+                && !external_momenta_routing[i_n].is_empty()
                 && !spanning_tree.nodes[node.parent]
                     .back_edges
                     .iter()
@@ -393,7 +392,7 @@ impl FeynGen {
                         );
                     } else {
                         #[allow(clippy::unnecessary_unwrap)]
-                        if external_partices.get(leg_id).unwrap().is_massive() {
+                        if external_partices[leg_id - 1].is_massive() {
                             if veto_self_energy_options.veto_self_energy_of_massive_lines {
                                 return true;
                             }
@@ -412,7 +411,7 @@ impl FeynGen {
             vacuum_attachments.iter().chain(self_loops.iter())
         {
             let mut first_tree_attachment_node_index = *back_edge_start_node_index;
-            while !external_momenta_routing.contains_key(&first_tree_attachment_node_index) {
+            while external_momenta_routing[first_tree_attachment_node_index].is_empty() {
                 first_tree_attachment_node_index =
                     spanning_tree.nodes[first_tree_attachment_node_index].parent;
             }
@@ -617,6 +616,7 @@ impl FeynGen {
     pub fn generate(
         &self,
         model: &Model,
+        graph_prefix: String,
         selected_graphs: Option<Vec<String>>,
         vetoed_graphs: Option<Vec<String>>,
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
@@ -783,13 +783,15 @@ impl FeynGen {
             });
 
             // Make sure that there can be a valid Cutkosky cut in each graph retained
-            graphs.retain(|g, _symmetry_factor| {
-                FeynGen::contains_cut(
-                    g,
-                    self.options.initial_pdgs.len(),
-                    final_state_particles.as_slice(),
-                )
-            });
+            if !final_state_particles.is_empty() {
+                graphs.retain(|g, _symmetry_factor| {
+                    FeynGen::contains_cut(
+                        g,
+                        self.options.initial_pdgs.len(),
+                        final_state_particles.as_slice(),
+                    )
+                });
+            }
         }
 
         let tadpole_filter = self
@@ -933,7 +935,7 @@ impl FeynGen {
 
         for (i_g, (g, symmetry_factor)) in processed_graphs.iter().enumerate() {
             // Now generate multiple copies of the graph for each vertex and
-            let graph_name = format!("GL_{}", i_g + 1);
+            let graph_name = format!("{}{}", graph_prefix, i_g);
             if let Some(selected_graphs) = &selected_graphs {
                 if !selected_graphs.contains(&graph_name) {
                     continue;
@@ -965,6 +967,11 @@ impl FeynGen {
             "Total number of graphs generated by gammaLoop: {}",
             bare_graphs.len()
         );
+        for (i_g, g) in bare_graphs.iter().enumerate() {
+            let num = Numerator::default().from_graph(g, None);
+            let num2 = num.color_simplify().get_single_atom().unwrap().0;
+            println!("Num for g{} = {}", i_g, num2);
+        }
 
         Ok(bare_graphs)
     }

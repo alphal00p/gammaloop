@@ -398,6 +398,7 @@ impl PythonWorker {
     pub fn generate_diagrams(
         &mut self,
         generation_options: PyRef<PyFeynGenOptions>,
+        graph_prefix: Option<String>,
         selected_graphs: Option<Vec<String>>,
         vetoed_graphs: Option<Vec<String>>,
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
@@ -414,6 +415,7 @@ impl PythonWorker {
         let diagrams = diagram_generator
             .generate(
                 &self.model,
+                graph_prefix.unwrap_or("GL".to_string()),
                 selected_graphs,
                 vetoed_graphs,
                 loop_momentum_bases,
