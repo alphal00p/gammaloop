@@ -9,10 +9,10 @@ use colored::Colorize;
 use itertools::{izip, Itertools};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::float::Constant;
+use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use spenso::complex::SymbolicaComplex;
 use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use spenso::{
@@ -32,6 +32,7 @@ use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
+use std::str::FromStr;
 use std::sync::LazyLock;
 use std::time::Duration;
 use symbolica::domains::float::Real;
@@ -118,10 +119,44 @@ pub trait FloatConvertFrom<U> {
 //     }
 // }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
 pub struct VarFloat<const N: u32> {
     #[bincode(with_serde)]
     float: rug::Float,
+}
+
+impl<const N: u32> Serialize for VarFloat<N> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let string = self.float.to_string();
+        string.serialize(serializer)
+    }
+}
+
+impl<'de, const N: u32> Deserialize<'de> for VarFloat<N> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string: String = serde::Deserialize::deserialize(deserializer)?;
+        let val: Self = string
+            .parse()
+            .expect(&format!("failed to parse arb prec from string: {}", string));
+
+        Ok(val)
+    }
+}
+
+impl<const N: u32> FromStr for VarFloat<N> {
+    type Err = ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let float = rug::Float::parse(s)?;
+        Ok(Self {
+            float: rug::Float::with_val(N, float),
+        })
+    }
 }
 
 impl<'a, const N: u32> Rem<&VarFloat<N>> for &'a VarFloat<N> {

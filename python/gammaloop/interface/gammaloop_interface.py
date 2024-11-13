@@ -135,7 +135,7 @@ class GammaLoopConfiguration(object):
                     'global_numerator': None,
                     'global_prefactor': None,
                     'gamma_algebra': 'Concrete',
-                    'parse_mode': 'Direct'
+                    'parse_mode': 'Polynomial'
                 },
                 'cpe_rounds_cff': 1,
                 'compile_separate_orientations': False,
@@ -225,18 +225,27 @@ class GammaLoopConfiguration(object):
                     'upcast_on_failure': True
                 },
                 'subtraction': {
-                    'ct_settings':  {
-                        'sliver_width': 1.0,
-                        'dampen_integrable_singularity': True,
-                        'dynamic_sliver': False,
-                        'integrated_ct_hfunction': {
-                            'function': 'poly_exponential',
-                            'sigma': 1.0,
-                            'enabled_dampening': True,
-                            'power': None,
+                    'local_ct_settings': {
+                        'uv_localisation': {
+                            'sliver_width': 10.0,
+                            'dynamic_width': False,
+                            'gaussian_width': 1.0
                         },
-                        'integrated_ct_sigma': None,
-                        'local_ct_width': 1.0,
+                        'dampen_integrable_singularity': {
+                            'type': 'exponential'
+                        }
+                    },
+                    'integrated_ct_settings': {
+                        'range': {
+                            'type': 'infinite',
+                            'h_function_settings': {
+                                'function': 'poly_exponential',
+                                'sigma': 1.0,
+                                'enabled_dampening': True,
+                                'power': None,
+                            }
+
+                        }
                     },
                     'overlap_settings': {
                         'force_global_center': None,

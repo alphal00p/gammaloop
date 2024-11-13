@@ -282,7 +282,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
         }
 
-        prefactor * (rep3d / energy_product - counter_term_eval)
+        prefactor * (rep3d / energy_product + counter_term_eval)
     }
 
     #[inline]
@@ -358,7 +358,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             );
         }
 
-        (rep3d - counterterm) * final_energy_product * prefactor
+        (rep3d + counterterm) * final_energy_product * prefactor
     }
 }
 
@@ -718,7 +718,7 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         let mut integrand_result = *res;
 
-        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan();
+        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan() || !stable;
 
         if is_nan {
             integrand_result = Complex::new_zero();
@@ -1097,7 +1097,7 @@ impl GammaLoopIntegrand {
                 || error.im > stability_settings.required_precision_for_im
         });
 
-        if self.global_data.settings.general.debug > 0 {
+        if self.global_data.settings.general.debug > 1 {
             if let Some(unstable_index) = unstable_sample {
                 let unstable_point = results[unstable_index];
                 let rotation_axis = format!(

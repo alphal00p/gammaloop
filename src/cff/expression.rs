@@ -147,7 +147,7 @@ impl CFFExpression {
     ) -> Vec<F<f64>> {
         let res = self.compiled.evaluate_orientations(energy_cache, settings);
 
-        if settings.general.debug > 0 {
+        if settings.general.debug > 2 {
             DEBUG_LOGGER.write("orientations", &res);
 
             let esurfaces_per_orientation = (0..self.get_num_trees())
@@ -161,9 +161,14 @@ impl CFFExpression {
                 })
                 .collect_vec();
 
+            println!();
             for (orientation_id, esurfaces) in esurfaces_per_orientation.iter().enumerate() {
                 println!("orientation: {}", orientation_id);
+                let orientaation = &self.orientations[TermId(orientation_id)];
+                let or = &orientaation.orientation;
                 println!("esurfaces: {:?}", esurfaces);
+                println!("or: {:?}", or);
+                println!();
             }
         }
 
