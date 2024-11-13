@@ -766,6 +766,10 @@ class GammaLoop(object):
                                  help='Graph name prefix. default: "GL"')
     generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
                                  help='Specify the maximum number of bridges for the graphs to generate. Set negative to disable. (default: 0)')
+    generate_parser.add_argument('--filter_self_loop', default=False, action=BooleanOptionalAction,
+                                 help='Filter all self-loops directly during generation.')
+    generate_parser.add_argument('--numerator_aware_isomorphism_grouping', default=True, action=BooleanOptionalAction,
+                                 help='Group identical diagrams (in absolute value) after generation and including numerator')
     # Tadpole filter
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')

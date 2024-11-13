@@ -179,6 +179,8 @@ class Process(object):
                 generation_args.symmetrize_left_right_states,
                 filters=filters
             ),
+            generation_args.numerator_aware_isomorphism_grouping,
+            generation_args.filter_self_loop,
             generation_args.graph_prefix,
             generation_args.select_graphs,
             generation_args.veto_graphs,
@@ -472,7 +474,7 @@ class Process(object):
         if process_args.filter_tadpoles is None:
             process_args.filter_tadpoles = enable_filters
         if process_args.filter_snails is None:
-            process_args.filter_tadpoles = enable_filters
+            process_args.filter_snails = enable_filters
         if process_args.filter_selfenergies is None:
             process_args.filter_selfenergies = enable_filters
 

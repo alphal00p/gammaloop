@@ -87,6 +87,8 @@ class Worker:
         """ Returns the yaml string representation of the model currently active. """
 
     def generate_diagrams(self, generation_options: FeynGenOptions,
+                          numerator_aware_isomorphism_grouping: Optional[bool] = True,
+                          filter_self_loop: Optional[bool] = False,
                           graph_prefix: Optional[str] = "GL",
                           selected_graphs: Optional[list[str]] = None,
                           vetoed_graphs: Optional[list[str]] = None,

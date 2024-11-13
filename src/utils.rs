@@ -143,7 +143,7 @@ impl<'de, const N: u32> Deserialize<'de> for VarFloat<N> {
         let string: String = serde::Deserialize::deserialize(deserializer)?;
         let val: Self = string
             .parse()
-            .expect(&format!("failed to parse arb prec from string: {}", string));
+            .unwrap_or_else(|_| panic!("failed to parse arb prec from string: {}", string));
 
         Ok(val)
     }
