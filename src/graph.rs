@@ -724,7 +724,6 @@ impl Vertex {
                     let matched_pos = if let Some(pos) =
                         pdgs_to_position_map.iter().position(|(_, x)| *x == *p)
                     {
-                        println!("Found match for {} at {}", p.name.clone(), pos);
                         pos
                     } else {
                         return Err(FeynGenError::GenericError(
