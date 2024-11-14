@@ -154,7 +154,7 @@ impl FeynGen {
         veto_tadpole: Option<&TadpolesFilterOptions>,
         veto_snails: Option<&SnailFilterOptions>,
     ) -> bool {
-        let debug = true;
+        let debug = false;
         if debug {
             debug!(
                 "\n\n>> Vetoing special topologies for the following {}-loop graph:\n{}",

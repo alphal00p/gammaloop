@@ -713,32 +713,34 @@ impl Vertex {
 
     pub fn order_edges_following_interaction(
         &mut self,
-        pdgs_of_current_order: Vec<Arc<Particle>>,
+        edge_id_and_pdgs_of_current_order: Vec<(usize, Arc<Particle>)>,
     ) -> Result<(), FeynGenError> {
         let mut new_edges_order = vec![];
         match self.vertex_info {
             VertexInfo::InteractonVertexInfo(ref i) => {
-                let mut pdgs_to_map = pdgs_of_current_order.iter().enumerate().collect::<Vec<_>>();
+                let mut pdgs_to_position_map =
+                    edge_id_and_pdgs_of_current_order.iter().collect::<Vec<_>>();
                 for p in i.vertex_rule.particles.iter() {
                     let matched_pos = if let Some(pos) =
-                        pdgs_to_map.iter().position(|(_, x)| **x == *p)
+                        pdgs_to_position_map.iter().position(|(_, x)| *x == *p)
                     {
+                        println!("Found match for {} at {}", p.name.clone(), pos);
                         pos
                     } else {
                         return Err(FeynGenError::GenericError(
                                 format!("Could not match some particles vertex ({}) were matched with the ones in the interaction info ({})",
-                                    pdgs_of_current_order.iter().map(|x| x.name.clone()).join(","),
+                                    edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.name.clone()).join(","),
                                     i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
                                 ),
                             ));
                     };
-                    new_edges_order.push(self.edges[pdgs_to_map[matched_pos].0]);
-                    pdgs_to_map.remove(matched_pos);
+                    new_edges_order.push(pdgs_to_position_map[matched_pos].0);
+                    pdgs_to_position_map.remove(matched_pos);
                 }
-                if !pdgs_to_map.is_empty() {
+                if !pdgs_to_position_map.is_empty() {
                     return Err(FeynGenError::GenericError(
                         format!("Not all particle of vertex ({}) were matched with the ones in the interaction info ({})",
-                            pdgs_of_current_order.iter().map(|x| x.name.clone()).join(","),
+                            edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.name.clone()).join(","),
                             i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
                         ),
                     ));
@@ -1480,14 +1482,16 @@ impl BareGraph {
                         )));
                     } else {
                         // For a self-loop, the particle must be counted twice.
-                        current_vertex_edge_order.push(edge.particle.clone());
-                        current_vertex_edge_order.push(edge.particle.clone());
+                        current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
+                        current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
                     }
                 } else if edge.vertices[1] == i_v {
-                    current_vertex_edge_order.push(edge.particle.clone());
+                    current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
                 } else if edge.vertices[0] == i_v {
-                    current_vertex_edge_order
-                        .push(edge.particle.clone().get_anti_particle(model).clone());
+                    current_vertex_edge_order.push((
+                        *e_pos,
+                        edge.particle.clone().get_anti_particle(model).clone(),
+                    ));
                 } else {
                     return Err(FeynGenError::GenericError(format!(
                         "Edge {} is not connected to vertex {}",
