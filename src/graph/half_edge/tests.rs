@@ -23,7 +23,7 @@ fn threeloop() {
         assert_eq!(
             3,
             graph
-                .paton_cycle_basis(&graph.full_graph(), graph.get_incident_node_id(i))
+                .paton_cycle_basis(&graph.full_graph(), graph.node_id(Hedge(i)), None)
                 .unwrap()
                 .0
                 .len()
@@ -52,9 +52,9 @@ fn hairythreeloop() {
     builder.add_edge(a, b, (), false);
     builder.add_edge(b, a, (), false);
     builder.add_edge(a, b, (), false);
-    builder.add_external_edge(a, (), false);
-    builder.add_external_edge(b, (), false);
-    builder.add_external_edge(b, (), false);
+    builder.add_external_edge(a, (), false, Flow::Sink);
+    builder.add_external_edge(b, (), false, Flow::Sink);
+    builder.add_external_edge(b, (), false, Flow::Sink);
 
     builder.add_edge(b, c, (), false);
     builder.add_edge(c, d, (), false);
@@ -70,11 +70,11 @@ fn hairythreeloop() {
         graph.dot(&graph.full_node())
     );
 
-    for i in graph.full_node().internal_graph.filter.iter_ones() {
+    for i in graph.full_node().internal_graph.filter.included_iter() {
         assert_eq!(
             3,
             graph
-                .paton_cycle_basis(&graph.full_graph(), graph.get_incident_node_id(i))
+                .paton_cycle_basis(&graph.full_graph(), graph.node_id(i), None)
                 .unwrap()
                 .0
                 .len()
@@ -123,14 +123,54 @@ fn three_loop_fly() {
 
     let mut sum = 0;
     for c in fly.non_cut_edges() {
-        // println!("{c:?}");
+        println!("{c:?}");
         //
-        sum += 2 ^ (c.count_ones() / 2) / 2;
+        sum += (2 ^ (c.count_ones() / 2)) / 2;
 
         println!("{}", fly.dot(&c));
     }
-    assert_eq!(21, fly.non_cut_edges().len());
+    assert_eq!(37, fly.non_cut_edges().len());
     println!("{sum}");
+    // println!("{}", SignedCut::all_initial_state_cuts(&fly).len());
+
+    // for c in SignedCut::all_initial_state_cuts(&fly) {
+    //     println!("//{}", c.bare_signature(&fly));
+    //     println!("{}", fly.dot(&c.cut_content));
+    // }
+}
+
+#[test]
+fn doubletriangle() {
+    let mut builder: HedgeGraphBuilder<(), ()> = HedgeGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+    builder.add_edge(a, b, (), true);
+    builder.add_edge(b, c, (), true);
+    builder.add_edge(d, a, (), true);
+
+    builder.add_edge(c, d, (), true);
+    builder.add_edge(a, c, (), true);
+
+    let fly = builder.clone().build();
+
+    let mut sum = 0;
+    for c in fly.non_cut_edges() {
+        println!("{c:?}");
+        //
+        sum += (2 ^ (c.count_ones() / 2)) / 2;
+
+        println!("{}", fly.dot(&c));
+    }
+    assert_eq!(37, fly.non_cut_edges().len());
+    println!("{sum}");
+    // println!("{}", SignedCut::all_initial_state_cuts(&fly).len());
+
+    // for c in SignedCut::all_initial_state_cuts(&fly) {
+    //     println!("//{}", c.bare_signature(&fly));
+    //     println!("{}", fly.dot(&c.cut_content));
+    // }
 }
 
 #[test]
@@ -274,6 +314,7 @@ fn K33() {
         &graph,
         &graph.full_filter(),
         graph.nodes.get_index(4).unwrap().0,
+        None,
     );
 
     println!(
@@ -288,7 +329,13 @@ fn K33() {
             &graph.full_filter(),
             &|a| match a {
                 Parent::Root => Some("Root       \t |     \t|".to_string()),
-                Parent::Hedge(p, q) => Some(format!("parent {} \t | rank {} \t|", p, q)),
+                Parent::Hedge {
+                    hedge_to_root,
+                    traversal_order,
+                } => Some(format!(
+                    "parent {} \t | rank {} \t|",
+                    hedge_to_root, traversal_order
+                )),
                 Parent::Unset => None,
             },
             &|_| None
@@ -298,19 +345,26 @@ fn K33() {
     println!(
         "{}",
         graph
-            .paton_count_loops(&graph.full_graph(), graph.get_incident_node_id(0))
+            .paton_count_loops(&graph.full_graph(), graph.node_id(Hedge(0)))
             .unwrap()
     );
 
     println!("{}", graph.cyclotomatic_number(&graph.full_graph()));
 
     let cycles = graph
-        .paton_cycle_basis(&graph.full_graph(), graph.nodes.get_index(4).unwrap().0)
+        .paton_cycle_basis(
+            &graph.full_graph(),
+            graph.nodes.get_index(4).unwrap().0,
+            None,
+        )
         .unwrap()
         .0;
 
     for c in cycles {
-        println!("{}", graph.dot(&graph.nesting_node_from_subgraph(c)));
+        println!(
+            "{}",
+            graph.dot(&graph.nesting_node_from_subgraph(c.internal_graph(&graph)))
+        );
     }
 
     // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
@@ -531,7 +585,7 @@ fn flower_snark() {
     println!(
         "loop count {}",
         graph
-            .paton_count_loops(&graph.full_graph(), graph.get_incident_node_id(0))
+            .paton_count_loops(&graph.full_graph(), graph.node_id(Hedge(0)))
             .unwrap()
     );
     if let Some((s, v)) = graph

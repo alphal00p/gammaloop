@@ -1,3 +1,4 @@
+use crate::graph::half_edge::drawing::Decoration;
 use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::ufo::UFO;
@@ -524,6 +525,24 @@ pub struct Particle {
     pub ghost_number: isize,
     pub lepton_number: isize,
     pub y_charge: isize,
+}
+
+impl Particle {
+    pub fn decoration(&self) -> Decoration {
+        match self.spin {
+            0 => Decoration::Dashed,
+            1 => Decoration::None,
+            2 => Decoration::Arrow,
+            3 => {
+                if self.pdg_code.abs() == 9 || self.pdg_code.abs() == 21 {
+                    Decoration::Coil
+                } else {
+                    Decoration::Wave
+                }
+            }
+            _ => Decoration::None,
+        }
+    }
 }
 
 impl PartialEq for Particle {

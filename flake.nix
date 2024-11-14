@@ -160,8 +160,10 @@
           cargo-udeps
           cargo-insta
           openssl
+          diffedit3
           pyright
           gnum4
+          typst
           gmp.dev
           mpfr.dev
           gcc_debug.out
@@ -177,6 +179,7 @@
           mupdf
           poppler_utils
           rust-analyzer
+          graphviz
           maturin
         ];
       };

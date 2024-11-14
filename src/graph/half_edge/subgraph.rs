@@ -1,17 +1,13 @@
 use std::{
     hash::Hash,
     num::TryFromIntError,
-    ops::{Add, BitAndAssign, BitOrAssign, BitXorAssign, Index},
+    ops::{BitAndAssign, BitOrAssign, BitXorAssign},
 };
 
 use ahash::AHashSet;
-use bitvec::{bitvec, order::Lsb0, vec::BitVec};
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use bitvec::{bitvec, order::Lsb0, slice::BitSlice, vec::BitVec};
 
-use super::{
-    GVEdgeAttrs, HedgeGraph, HedgeNodeBuilder, InvolutiveMapping, PowersetIterator, TraversalTree,
-};
+use super::{GVEdgeAttrs, Hedge, HedgeGraph, InvolutiveMapping, PowersetIterator};
 
 const BASE62_ALPHABET: &[u8; 62] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -157,10 +153,42 @@ pub trait SubGraphOps: SubGraph {
     fn complement<E, V>(&self, graph: &HedgeGraph<E, V>) -> Self;
 }
 
-pub trait SubGraph: Clone + Eq + Hash {
+pub trait Inclusion<T> {
+    fn includes(&self, other: &T) -> bool;
+    fn intersects(&self, other: &T) -> bool;
+}
+
+pub struct SubGraphHedgeIter<'a> {
+    iter: std::iter::Map<bitvec::slice::IterOnes<'a, usize, Lsb0>, fn(usize) -> Hedge>,
+}
+
+impl<'a> Iterator for SubGraphHedgeIter<'a> {
+    type Item = Hedge;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+pub trait SubGraph:
+    Clone + Eq + Hash + Inclusion<Self> + Inclusion<BitVec> + Inclusion<Hedge>
+{
+    fn covers<E, V>(&self, graph: &HedgeGraph<E, V>) -> BitVec {
+        let mut covering = graph.empty_filter();
+        for i in self.included_iter() {
+            covering.union_with(&graph.node_id(i).hairs)
+        }
+        covering
+    }
+
     fn string_label(&self) -> String;
-    fn included(&self) -> impl Iterator<Item = usize>;
-    fn includes(&self, i: usize) -> bool;
+    fn included_iter<'a>(&'a self) -> SubGraphHedgeIter<'a> {
+        SubGraphHedgeIter {
+            iter: self.included().iter_ones().map(Hedge),
+        }
+    }
+    fn included(&self) -> &BitSlice;
+    // fn includes(&self, i: InvolutionIdx) -> bool;
+    fn nhedges(&self) -> usize;
+    fn nedges<E, V>(&self, graph: &HedgeGraph<E, V>) -> usize; //not counting unpaired hedges
 
     fn dot<E, V>(
         &self,
@@ -175,9 +203,42 @@ pub trait SubGraph: Clone + Eq + Hash {
     fn is_empty(&self) -> bool;
 }
 
+impl Inclusion<BitVec> for BitVec {
+    fn includes(&self, other: &BitVec) -> bool {
+        &self.intersection(other) == other
+    }
+
+    fn intersects(&self, other: &BitVec) -> bool {
+        self.intersection(other).count_ones() > 0
+    }
+}
+
+impl Inclusion<Hedge> for BitVec {
+    fn includes(&self, other: &Hedge) -> bool {
+        self[other.0]
+    }
+
+    fn intersects(&self, other: &Hedge) -> bool {
+        self[other.0]
+    }
+}
+
 impl SubGraph for BitVec {
-    fn includes(&self, i: usize) -> bool {
-        self[i]
+    fn included(&self) -> &BitSlice {
+        self.as_bitslice()
+    }
+    fn nedges<E, V>(&self, graph: &HedgeGraph<E, V>) -> usize {
+        let mut count = 0;
+        for i in self.included_iter() {
+            if i != graph.involution.inv(i) && self.includes(&graph.involution.inv(i)) {
+                count += 1;
+            }
+        }
+        count / 2
+    }
+
+    fn nhedges(&self) -> usize {
+        self.count_ones()
     }
 
     fn dot<E, V>(
@@ -187,7 +248,7 @@ impl SubGraph for BitVec {
         edge_attr: &impl Fn(&E) -> Option<String>,
         node_attr: &impl Fn(&V) -> Option<String>,
     ) -> String {
-        let mut out = "graph {\n ".to_string();
+        let mut out = "digraph {\n ".to_string();
         out.push_str(
             "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";\n ",
         );
@@ -205,19 +266,16 @@ impl SubGraph for BitVec {
             );
         }
 
-        for (hedge_id, (incident_node, edge)) in graph
-            .involution
-            .hedge_data
-            .iter()
-            .zip_eq(graph.involution.inv.iter())
-            .enumerate()
-        {
+        for (hedge_id, (edge, incident_node)) in graph.involution.iter() {
             match &edge {
-                //Internal graphs never have unpaired edges
-                InvolutiveMapping::Identity(data) => {
-                    let attr = if *self.get(hedge_id).unwrap() {
+                InvolutiveMapping::Identity { data, underlying } => {
+                    let attr = if self.includes(&hedge_id) {
+                        let color = match underlying {
+                            super::Flow::Sink => "\"blue\"",
+                            super::Flow::Source => "\"red\"",
+                        };
                         Some(GVEdgeAttrs {
-                            color: Some("\"green\"".to_string()),
+                            color: Some(color.to_string()),
                             label: None,
                             other: data.as_ref().data.and_then(edge_attr),
                         })
@@ -232,27 +290,29 @@ impl SubGraph for BitVec {
                         hedge_id,
                         graph.nodes.get_index_of(incident_node).unwrap(),
                         attr.as_ref(),
+                        data.orientation,
+                        *underlying,
                     ));
                 }
-                InvolutiveMapping::Source((data, _)) => {
-                    let attr = if *self.get(hedge_id).unwrap()
-                        && !*self.get(graph.involution.inv(hedge_id)).unwrap()
+                InvolutiveMapping::Source { data, .. } => {
+                    let attr = if self.includes(&hedge_id)
+                        && !self.includes(&graph.involution.inv(hedge_id))
                     {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray75:blue;0.5\"".to_string()),
                             label: None,
                             other: data.as_ref().data.and_then(edge_attr),
                         })
-                    } else if *self.get(graph.involution.inv(hedge_id)).unwrap()
-                        && !*self.get(hedge_id).unwrap()
+                    } else if self.includes(&graph.involution.inv(hedge_id))
+                        && !self.includes(&hedge_id)
                     {
                         Some(GVEdgeAttrs {
                             color: Some("\"red:gray75;0.5\"".to_string()),
                             label: None,
                             other: data.as_ref().data.and_then(edge_attr),
                         })
-                    } else if !*self.get(graph.involution.inv(hedge_id)).unwrap()
-                        && !*self.get(hedge_id).unwrap()
+                    } else if !self.includes(&graph.involution.inv(hedge_id))
+                        && !self.includes(&hedge_id)
                     {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray75\"".to_string()),
@@ -260,18 +320,23 @@ impl SubGraph for BitVec {
                             other: data.as_ref().data.and_then(edge_attr),
                         })
                     } else {
-                        None
+                        Some(GVEdgeAttrs {
+                            color: Some("\"red:blue;0.5\"".to_string()),
+                            label: None,
+                            other: data.as_ref().data.and_then(edge_attr),
+                        })
                     };
                     out.push_str(&InvolutiveMapping::<()>::pair_dot(
                         graph.nodes.get_index_of(incident_node).unwrap(),
                         graph
                             .nodes
-                            .get_index_of(graph.involution.get_connected_node_id(hedge_id).unwrap())
+                            .get_index_of(graph.involved_node_id(hedge_id).unwrap())
                             .unwrap(),
                         attr.as_ref(),
+                        data.orientation,
                     ));
                 }
-                InvolutiveMapping::Sink(_) => {}
+                InvolutiveMapping::Sink { .. } => {}
             }
         }
 
@@ -283,9 +348,6 @@ impl SubGraph for BitVec {
         node.hairs.intersection(self)
     }
 
-    fn included(&self) -> impl Iterator<Item = usize> {
-        self.iter_ones()
-    }
     fn empty(size: usize) -> Self {
         bitvec![usize, Lsb0; 0; size]
     }

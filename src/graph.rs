@@ -1551,7 +1551,7 @@ impl BareGraph {
             // );
             g.hedge_representation
                 .iter_internal_edge_data(&spanning_tree.tree.complement(&g.hedge_representation))
-                .cloned()
+                .map(|e| *e.data.unwrap())
                 .collect::<Vec<_>>()
         };
         debug!(
@@ -1592,6 +1592,9 @@ impl BareGraph {
     }
 
     pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
+        if self.external_edges.len() == 0 {
+            return Ok(vec![]);
+        }
         let last = self.external_edges.len() - 1;
         let mut external_vertices_in_external_edge_order = vec![];
         for (i, ext) in self.external_edges.iter().enumerate() {

@@ -1,9 +1,9 @@
 use core::f64;
-use std::fmt::Display;
+use std::{fmt::Display, mem};
 
-use cgmath::{
-    Angle, Basis2, InnerSpace, Matrix3, Rad, RelativeEq, Rotation, SquareMatrix, Vector2, Zero,
-};
+use cgmath::{Angle, Basis2, InnerSpace, Matrix3, Rad, Rotation, SquareMatrix, Vector2, Zero};
+
+use super::{layout::FancySettings, Flow};
 
 #[derive(Clone, Debug)]
 pub enum CetzArc {
@@ -11,7 +11,7 @@ pub enum CetzArc {
         center: Vector2<f64>,
         radius: f64,
         start_angle: Rad<f64>,
-        end_angle: Rad<f64>,
+        arc_angle_relative_to_start: Rad<f64>,
     },
     Line {
         start: Vector2<f64>,
@@ -26,28 +26,28 @@ impl CetzArc {
                 center,
                 radius,
                 start_angle,
-                end_angle,
+                arc_angle_relative_to_start,
             } => {
                 let start =
                     center + Vector2::new(radius * start_angle.cos(), radius * start_angle.sin());
 
+                let end_angle = start_angle + arc_angle_relative_to_start;
+
                 let end = center + Vector2::new(radius * end_angle.cos(), radius * end_angle.sin());
 
-                let middle = center
-                    + Vector2::new(
-                        radius * ((start_angle + end_angle) / 2.).cos(),
-                        radius * ((start_angle + end_angle) / 2.).sin(),
-                    );
-
                 format!(
-                    "cetz.angle.angle(({},{}),({},{}), ({},{}), label: $ alpha $, radius: {})",
-                    center.x, center.y, start.x, start.y, end.x, end.y, radius
+                    "cetz.angle.angle({},{},{}, label: $ alpha $, radius: {})",
+                    center.to_cetz(),
+                    start.to_cetz(),
+                    end.to_cetz(),
+                    radius
                 )
             }
             CetzArc::Line { start, end } => {
                 format!(
-                    "hobby(({:.4},{:.4}),({:.4},{:.4}),stroke:stroke,mark: (end: \">\"))",
-                    start.x, start.y, end.x, end.y
+                    "hobby({},{},stroke:stroke,mark: (end: \">\"))",
+                    start.to_cetz(),
+                    end.to_cetz()
                 )
             }
         }
@@ -59,31 +59,33 @@ impl CetzArc {
                 center,
                 radius,
                 start_angle,
-                end_angle,
+                arc_angle_relative_to_start,
             } => {
                 let start =
                     center + Vector2::new(radius * start_angle.cos(), radius * start_angle.sin());
-
+                let end_angle = start_angle + arc_angle_relative_to_start;
                 let end = center + Vector2::new(radius * end_angle.cos(), radius * end_angle.sin());
 
-                println!("start: {:?}, end: {:?}", start_angle, end_angle);
-                println!("middle: {:?}", ((start_angle + end_angle) / 2.));
+                // println!("start: {:?}, end: {:?}", start_angle, end_angle);
+                // println!("middle: {:?}", ((start_angle + end_angle) / 2.));
+
+                let middle_angle = start_angle + arc_angle_relative_to_start / 2.;
 
                 let middle = center
-                    + Vector2::new(
-                        radius * ((start_angle + end_angle) / 2.).cos(),
-                        radius * ((start_angle + end_angle) / 2.).sin(),
-                    );
+                    + Vector2::new(radius * (middle_angle).cos(), radius * (middle_angle).sin());
 
                 format!(
-                    "hobby(({:.4},{:.4}),({:.4},{:.4}),({:.4},{:.4}),stroke:stroke,mark: (end: \">\"))",
-                    start.x, start.y, middle.x, middle.y, end.x, end.y
+                    "cetz.draw.hobby({},{},{},stroke:stroke,mark: (end: \">\"))",
+                    start.to_cetz(),
+                    middle.to_cetz(),
+                    end.to_cetz()
                 )
             }
             CetzArc::Line { start, end } => {
                 format!(
-                    "hobby(({:.4},{:.4}),({:.4},{:.4}),stroke:stroke,mark: (end: \">\"))",
-                    start.x, start.y, end.x, end.y
+                    "cetz.draw.hobby({},{},stroke:stroke,mark: (end: \">\"))",
+                    start.to_cetz(),
+                    end.to_cetz()
                 )
             }
         }
@@ -99,6 +101,7 @@ pub enum EdgeGeometry {
     },
     Simple {
         pos: Vector2<f64>,
+        angle: Rad<f64>,
     },
     FancyArrow {
         pos: Vector2<f64>,
@@ -108,27 +111,20 @@ pub enum EdgeGeometry {
     },
 }
 
-#[test]
-fn circum() {
-    let a = Vector2::new(1., 0.);
-    let b = Vector2::new(0., 1.);
-    let c = Vector2::new(0., -1.);
-
-    let (center, radius) = EdgeGeometry::circumcircle([&b, &c, &a]);
-
-    assert!(center.relative_eq(&Vector2::zero(), 0.1, 1.));
-}
-
 pub trait CetzString {
     fn to_cetz(&self) -> String;
 }
 
 impl<F: Display> CetzString for Vector2<F> {
     fn to_cetz(&self) -> String {
-        format!("({}, {})", self.x, self.y)
+        format!("({:.2}, {:.2})", self.x, self.y)
     }
 }
-
+impl<F: Display> CetzString for Rad<F> {
+    fn to_cetz(&self) -> String {
+        format!("{:.2}rad", self.0)
+    }
+}
 #[test]
 fn fancyness() {
     let sink = Vector2::new(10., 0.);
@@ -142,9 +138,21 @@ fn fancyness() {
 
     println!("circle({},radius:{})", center.to_cetz(), radius);
 
-    let simple = EdgeGeometry::Simple { pos: middle };
+    let simple = EdgeGeometry::Simple {
+        pos: middle,
+        angle: Rad(0.),
+    };
 
-    let fancy = simple.clone().to_fancy(source, None, 0., None);
+    let fancy = simple.clone().to_fancy(
+        source,
+        None,
+        Flow::Sink,
+        &FancySettings {
+            label_shift: 0.0,
+            arrow_angle_percentage: None,
+            arrow_shift: 0.1,
+        },
+    );
 
     if let EdgeGeometry::Fancy {
         pos,
@@ -160,7 +168,16 @@ fn fancyness() {
         );
     }
 
-    let fancy = simple.clone().to_fancy(source, Some(sink), 0.1, None);
+    let fancy = simple.clone().to_fancy(
+        source,
+        Some(sink),
+        Flow::Sink,
+        &FancySettings {
+            label_shift: 0.1,
+            arrow_angle_percentage: None,
+            arrow_shift: 0.1,
+        },
+    );
     if let EdgeGeometry::Fancy {
         pos,
         label_pos,
@@ -180,7 +197,16 @@ fn fancyness() {
         );
     }
 
-    let fancy = simple.to_fancy(source, Some(sink), 0.1, Some((0.1, 0.8)));
+    let fancy = simple.to_fancy(
+        source,
+        Some(sink),
+        Flow::Source,
+        &FancySettings {
+            label_shift: 0.1,
+            arrow_angle_percentage: Some(0.8),
+            arrow_shift: 0.1,
+        },
+    );
 
     if let EdgeGeometry::FancyArrow {
         pos,
@@ -233,71 +259,68 @@ impl EdgeGeometry {
         self,
         source: Vector2<f64>,
         sink: Option<Vector2<f64>>,
-        mut label: f64,            //label shift
-        arrow: Option<(f64, f64)>, //arrow shift and arc percentage
+        flow: Flow,
+        settings: &FancySettings, //arrow shift and arc percentage
     ) -> Self {
         match self {
-            EdgeGeometry::Simple { pos } => {
+            EdgeGeometry::Simple { pos, angle } => {
                 if let Some(sink) = sink {
                     if sink != source {
                         let (center, radius) = Self::circumcircle([&source, &pos, &sink]);
 
-                        // println!("{:?}{:?}{:?}", source, pos, sink);
-
-                        // println!("{:?} {:?}", center, radius);
-
-                        let mut angle_between =
-                            (source - center).angle((sink - center)).normalize();
-
-                        if angle_between > Rad::full_turn() / 2. {
-                            angle_between = Rad::full_turn() - angle_between;
-                        }
-
-                        let end_angle = Vector2::unit_x().angle(sink - center);
-
                         let start_angle = Vector2::unit_x().angle(source - center);
 
-                        let arrow_arc = arrow.map(|(shift, length)| {
-                            let angle_shift =
-                                ((angle_between - angle_between * length) / 2.).normalize();
+                        let arrow_arc = settings.arrow_angle_percentage.map(|length| {
+                            let angle_between = (source - center).angle(sink - center).normalize();
 
-                            println!("shift:{:?}", angle_shift);
-                            // println!("angle between {:?}", angle_between);
+                            let source_to_middle =
+                                (source - center).angle(pos - center).normalize();
 
-                            let (start, end) = if start_angle > end_angle {
-                                (start_angle - angle_shift, end_angle + angle_shift)
+                            let (start, arc_angle) = if angle_between > source_to_middle {
+                                //trig_dir
+                                let angle_shift =
+                                    ((angle_between - angle_between * length) / 2.).normalize();
+
+                                let start = start_angle + angle_shift;
+                                (start, angle_between - angle_shift * 2.)
                             } else {
-                                (start_angle + angle_shift, end_angle - angle_shift)
+                                //clockwise
+                                let true_angle_between = Rad::full_turn() - angle_between;
+                                let angle_shift =
+                                    ((true_angle_between - true_angle_between * length) / 2.)
+                                        .normalize();
+
+                                let arc_angle = -true_angle_between + angle_shift * 2.;
+
+                                let start = start_angle - angle_shift;
+                                (start, arc_angle)
                             };
 
-                            label += shift;
-
-                            let arc = CetzArc::CenterRadius {
+                            CetzArc::CenterRadius {
                                 center,
-                                radius: radius + shift,
+                                radius: radius + settings.arrow_shift,
                                 start_angle: start,
-                                end_angle: end,
-                            };
-                            arc
+                                arc_angle_relative_to_start: arc_angle,
+                            }
                         });
 
                         let center_to_center = pos - center;
                         let center_to_center_norm = center_to_center.normalize();
-                        let label_angle = Vector2::unit_x().angle(center_to_center_norm)
-                            - <Rad<f64> as Angle>::turn_div_4();
-                        let label_pos = center + center_to_center + center_to_center_norm * label;
+                        let label_pos = center
+                            + center_to_center
+                            + center_to_center_norm * settings.label_shift();
                         if let Some(arrow) = arrow_arc {
                             EdgeGeometry::FancyArrow {
                                 pos,
                                 arrow_arc: arrow,
                                 label_pos,
-                                label_angle,
+                                label_angle: angle,
                             }
                         } else {
                             EdgeGeometry::Fancy {
                                 pos,
                                 label_pos,
-                                label_angle,
+                                label_angle: angle,
                             }
                         }
                     } else {
@@ -305,36 +328,36 @@ impl EdgeGeometry {
 
                         let radius = (source - center).magnitude();
                         let angle = Vector2::unit_y().angle(pos - center);
-                        let arrow_arc = arrow.map(|(shift, length)| {
+                        let arrow_arc = settings.arrow_angle_percentage.map(|length| {
                             let start = Rad::zero() + Rad::turn_div_2() * length + angle;
-                            let end = Rad::turn_div_2() - Rad::turn_div_2() * length + angle;
-                            label += shift;
+                            let end = Rad::turn_div_2() * length;
 
                             CetzArc::CenterRadius {
                                 center,
-                                radius: radius + shift,
+                                radius: radius + settings.arrow_shift,
                                 start_angle: start.normalize(),
-                                end_angle: end.normalize(),
+                                arc_angle_relative_to_start: end,
                             }
                         });
 
                         let center_to_center = pos - center;
                         let center_to_center_norm = center_to_center.normalize();
-                        let label_angle = Vector2::unit_x().angle(center_to_center_norm)
-                            - <Rad<f64> as Angle>::turn_div_4();
-                        let label_pos = center + center_to_center + center_to_center_norm * label;
+
+                        let label_pos = center
+                            + center_to_center
+                            + center_to_center_norm * settings.label_shift();
                         if let Some(arrow) = arrow_arc {
                             EdgeGeometry::FancyArrow {
                                 pos,
                                 arrow_arc: arrow,
                                 label_pos,
-                                label_angle,
+                                label_angle: angle,
                             }
                         } else {
                             EdgeGeometry::Fancy {
                                 pos,
                                 label_pos,
-                                label_angle,
+                                label_angle: angle,
                             }
                         }
                     }
@@ -345,32 +368,37 @@ impl EdgeGeometry {
                         cgmath::Rotation2::from_angle(Rad(0.5f64 * f64::consts::PI));
                     let shift_norm = right_angle.rotate_vector(edge).normalize();
 
-                    let label_angle = edge.angle(Vector2::unit_x());
+                    // let label_angle = edge.angle(Vector2::unit_x());
 
-                    if let Some((arrow_shift, length_proportion)) = arrow {
-                        let label_pos = source + (label + arrow_shift) * shift_norm + 0.5 * edge;
+                    if let Some(length_proportion) = settings.arrow_angle_percentage {
+                        let label_pos = source + (settings.label_shift()) * shift_norm + 0.5 * edge;
                         let edge_norm = edge.normalize();
 
-                        let arrow_arc = CetzArc::Line {
-                            start: source
-                                + edge_norm * (1. - length_proportion) / 2.
-                                + shift_norm * arrow_shift,
-                            end: pos - edge_norm * (1. - length_proportion) / 2.
-                                + shift_norm * arrow_shift,
-                        };
+                        let mut start = source
+                            + edge_norm * (1. - length_proportion) / 2.
+                            + shift_norm * settings.arrow_shift;
+
+                        let mut end = pos - edge_norm * (1. - length_proportion) / 2.
+                            + shift_norm * settings.arrow_shift;
+
+                        if let Flow::Sink = flow {
+                            mem::swap(&mut start, &mut end)
+                        }
+
+                        let arrow_arc = CetzArc::Line { start, end };
 
                         EdgeGeometry::FancyArrow {
                             pos,
                             arrow_arc,
                             label_pos,
-                            label_angle,
+                            label_angle: angle,
                         }
                     } else {
-                        let label_pos = source + label * shift_norm + 0.5 * edge;
+                        let label_pos = source + settings.label_shift() * shift_norm + 0.5 * edge;
                         EdgeGeometry::Fancy {
                             pos,
                             label_pos,
-                            label_angle,
+                            label_angle: angle,
                         }
                     }
                 }
@@ -379,23 +407,25 @@ impl EdgeGeometry {
         }
     }
 }
-
+#[derive(Debug, Clone, Copy)]
 pub enum Decoration {
     Coil,
     Wave,
     Zigzag,
     Dashed,
+    Arrow,
     None,
 }
 
 impl Decoration {
     pub fn to_cetz(&self) -> String {
         match self {
-            Decoration::Coil => "coil",
-            Decoration::Wave => "wave",
-            Decoration::Zigzag => "zigzag",
-            Decoration::Dashed => "dashed",
-            Decoration::None => "none",
+            Decoration::Coil => "\"coil\"",
+            Decoration::Wave => "\"wave\"",
+            Decoration::Zigzag => "\"zigzag\"",
+            Decoration::Dashed => "\"dashed\"",
+            Decoration::Arrow => "\"arrow\"",
+            Decoration::None => "\"none\"",
         }
         .to_string()
     }

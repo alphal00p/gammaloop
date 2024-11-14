@@ -2,83 +2,210 @@ use ahash::AHashMap;
 use bitvec::vec::BitVec;
 use by_address::ByAddress;
 use indexmap::IndexMap;
-use std::hash::Hash;
-
-use crate::graph::half_edge::{
-    layout::{LayoutEdge, LayoutParams, LayoutSettings, LayoutVertex},
-    EdgeData, HedgeGraph, HedgeGraphBuilder, InvolutiveMapping, Orientation,
+use std::{
+    fmt::{Display, Formatter},
+    hash::Hash,
 };
 
-use super::{SubGraph, SubGraphOps};
+use crate::{
+    graph::half_edge::{
+        layout::{LayoutEdge, LayoutParams, LayoutSettings, LayoutVertex},
+        EdgeData, Flow, Hedge, HedgeGraph, HedgeGraphBuilder, InvolutiveMapping, Orientation,
+        PowersetIterator,
+    },
+    momentum::SignOrZero,
+};
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+use super::{Cycle, Inclusion, SubGraph, SubGraphOps};
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OrientedCut {
-    reference: BitVec,
-    cut: BitVec,
+    pub reference: BitVec,
+    pub sign: BitVec,
+}
+
+impl Display for OrientedCut {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for (i, c) in self.reference.iter().enumerate() {
+            if *c {
+                if self.sign[i] {
+                    write!(f, "+{}", i)?;
+                } else {
+                    write!(f, "-{}", i)?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl OrientedCut {
+    pub fn all_initial_state_cuts<E, V>(graph: &HedgeGraph<E, V>) -> Vec<Self> {
+        let mut all_cuts = Vec::new();
+
+        for c in graph.non_cut_edges() {
+            if c.count_ones() == 0 {
+                continue;
+            }
+            let mut all_sources = graph.empty_filter();
+
+            for h in c.iter_ones() {
+                match graph.involution.inv[h] {
+                    InvolutiveMapping::Identity { .. } => {
+                        panic!("cut edge is identity")
+                    }
+                    InvolutiveMapping::Source { .. } => {
+                        all_sources.set(h, true);
+                    }
+                    InvolutiveMapping::Sink { .. } => {}
+                }
+            }
+
+            let n_cut_edges: u8 = all_sources.count_ones().try_into().unwrap();
+
+            let pset = PowersetIterator::new(n_cut_edges); //.unchecked_sub(1)
+
+            for i in pset {
+                let mut cut_content = graph.empty_filter();
+                for (j, h) in all_sources.included_iter().enumerate() {
+                    // if let Some(j) = j.checked_sub(1) {
+                    if i[j] {
+                        cut_content.set(graph.involution.inv(h).0, true);
+                    } else {
+                        cut_content.set(h.0, true);
+                    }
+                    // } else {
+                    // cut_content.set(h, true);
+                    // }
+                }
+                all_cuts.push(Self {
+                    sign: cut_content,
+                    reference: all_sources.clone(),
+                });
+            }
+        }
+
+        all_cuts
+    }
+
+    pub fn winding_number(&self, cycle: &Cycle) -> i32 {
+        let mut winding_number = 0;
+
+        for h in cycle.filter.included_iter() {
+            winding_number += SignOrZero::from(self.relative_orientation(h)) * 1;
+        }
+
+        winding_number
+    }
     pub fn iter_edges<'a, E, V>(
         &'a self,
         graph: &'a HedgeGraph<E, V>,
-    ) -> impl Iterator<Item = (Orientation, EdgeData<&'a E>)> {
-        self.cut
-            .iter_ones()
-            .map(|i| (self.orientation(i, graph), graph.involution.get_data(i)))
+    ) -> impl Iterator<Item = (Orientation, &'a EdgeData<E>)> {
+        self.reference
+            .included_iter()
+            .map(|i| (self.orientation(i, graph), graph.involution.edge_data(i)))
     }
 
-    pub fn orientation<E, V>(&self, i: usize, graph: &HedgeGraph<E, V>) -> Orientation {
-        let orientation = match graph.involution.get_data(i).orientation {
+    pub fn iter_edges_relative<'a, E, V>(
+        &'a self,
+        graph: &'a HedgeGraph<E, V>,
+    ) -> impl Iterator<Item = (Orientation, &'a EdgeData<E>)> {
+        self.reference
+            .included_iter()
+            .map(|i| (self.relative_orientation(i), graph.involution.edge_data(i)))
+    }
+
+    pub fn relative_orientation(&self, i: Hedge) -> Orientation {
+        match (self.sign.includes(&i), self.reference.includes(&i)) {
+            (true, true) => Orientation::Default,
+            (false, false) => Orientation::Undirected,
+            (true, false) => Orientation::Undirected,
+            (false, true) => Orientation::Reversed,
+        }
+    }
+
+    pub fn orientation<E, V>(&self, i: Hedge, graph: &HedgeGraph<E, V>) -> Orientation {
+        let orientation = match graph.involution.edge_data(i).orientation {
             Orientation::Undirected => Orientation::Default,
             o => o,
         };
 
-        match (self.cut[i], self.reference[i]) {
+        match (self.sign.includes(&i), self.reference.includes(&i)) {
             (true, true) => orientation,
-            (true, false) => orientation.reverse(),
+            (false, true) => orientation.reverse(),
             _ => Orientation::Undirected,
         }
     }
 }
 
+impl Inclusion<Hedge> for OrientedCut {
+    fn includes(&self, other: &Hedge) -> bool {
+        self.reference.includes(other)
+    }
+    fn intersects(&self, other: &Hedge) -> bool {
+        self.reference.intersects(other)
+    }
+}
+
+impl Inclusion<BitVec> for OrientedCut {
+    fn includes(&self, other: &BitVec) -> bool {
+        self.reference.includes(other)
+    }
+
+    fn intersects(&self, other: &BitVec) -> bool {
+        self.reference.intersects(other)
+    }
+}
+
+impl Inclusion<OrientedCut> for OrientedCut {
+    fn includes(&self, other: &OrientedCut) -> bool {
+        self.reference.includes(&other.reference)
+    }
+
+    fn intersects(&self, other: &OrientedCut) -> bool {
+        self.reference.intersects(&other.reference)
+    }
+}
+
 impl SubGraph for OrientedCut {
+    fn nedges<E, V>(&self, _graph: &HedgeGraph<E, V>) -> usize {
+        self.nhedges()
+    }
+
+    fn included(&self) -> &bitvec::prelude::BitSlice {
+        self.reference.included()
+    }
+
+    fn nhedges(&self) -> usize {
+        self.reference.nhedges()
+    }
     fn empty(size: usize) -> Self {
         OrientedCut {
             reference: BitVec::empty(size),
-            cut: BitVec::empty(size),
+            sign: BitVec::empty(size),
         }
     }
 
     fn dot<E, V>(
         &self,
-        graph: &crate::graph::half_edge::HedgeGraph<E, V>,
-        graph_info: String,
-        edge_attr: &impl Fn(&E) -> Option<String>,
-        node_attr: &impl Fn(&V) -> Option<String>,
+        _graph: &crate::graph::half_edge::HedgeGraph<E, V>,
+        _graph_info: String,
+        _edge_attr: &impl Fn(&E) -> Option<String>,
+        _node_attr: &impl Fn(&V) -> Option<String>,
     ) -> String {
-        let mut out = String::new();
-
-        out
+        String::new()
     }
 
     fn hairs(&self, node: &super::HedgeNode) -> BitVec {
-        self.cut.hairs(node)
-    }
-
-    fn included(&self) -> impl Iterator<Item = usize> {
-        self.cut.included()
-    }
-
-    fn includes(&self, i: usize) -> bool {
-        self.cut.includes(i)
+        self.reference.hairs(node)
     }
 
     fn is_empty(&self) -> bool {
-        self.cut.count_ones() == 0
+        self.sign.count_ones() == 0
     }
 
     fn string_label(&self) -> String {
-        self.cut.string_label()
+        self.sign.string_label()
     }
 }
 
@@ -88,22 +215,29 @@ impl OrientedCut {
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
+        iters: usize,
         temperature: f64,
         edge: f64,
-    ) -> HedgeGraph<LayoutEdge<&E>, LayoutVertex<&V>> {
+    ) -> HedgeGraph<LayoutEdge<(&E, Orientation)>, LayoutVertex<&V>> {
         let mut left = vec![];
         let mut leftright_map = IndexMap::new();
         let mut right = vec![];
 
+        let graph = self.to_owned_graph(graph);
+
         for (j, i) in graph.involution.inv.iter().enumerate() {
-            if let InvolutiveMapping::Identity(e) = i {
-                let data = ByAddress(e.as_ref().data.unwrap());
-                match e.orientation {
-                    Orientation::Default => {
-                        leftright_map.entry(data).or_insert_with(|| [Some(j), None])[0] = Some(j)
+            if let InvolutiveMapping::Identity { data, underlying } = i {
+                let d = ByAddress(data.as_ref().data.unwrap());
+                match underlying {
+                    Flow::Sink => {
+                        leftright_map
+                            .entry(d)
+                            .or_insert_with(|| [Some(Hedge(j)), None])[0] = Some(Hedge(j))
                     }
-                    Orientation::Reversed => {
-                        leftright_map.entry(data).or_insert_with(|| [None, Some(j)])[1] = Some(j)
+                    Flow::Source => {
+                        leftright_map
+                            .entry(d)
+                            .or_insert_with(|| [None, Some(Hedge(j))])[1] = Some(Hedge(j))
                     }
                     _ => {}
                 }
@@ -119,12 +253,25 @@ impl OrientedCut {
             }
         }
 
-        let settings =
-            LayoutSettings::left_right_square(graph, params, seed, temperature, edge, left, right);
-        self.to_owned_graph(graph).layout(settings)
+        let settings = LayoutSettings::left_right_square(
+            &graph,
+            params,
+            seed,
+            iters,
+            temperature,
+            edge,
+            left,
+            right,
+        );
+
+        // println!("{:?}", settings);
+        graph.layout(settings)
     }
 
-    fn to_owned_graph<E, V>(self, graph: &HedgeGraph<E, V>) -> HedgeGraph<&E, &V> {
+    pub fn to_owned_graph<E, V>(
+        self,
+        graph: &HedgeGraph<E, V>,
+    ) -> HedgeGraph<(&E, Orientation), &V> {
         let mut builder = HedgeGraphBuilder::new();
 
         let mut nodeidmap = AHashMap::new();
@@ -132,58 +279,69 @@ impl OrientedCut {
             nodeidmap.insert(n, builder.add_node(v));
         }
 
-        let complement = self.cut.complement(graph);
-        for i in complement.included() {
-            let source = graph.get_incident_node_id(i);
-            match &graph.involution.inv[i] {
-                InvolutiveMapping::Identity(e) => builder.add_external_edge(
+        let complement = self.reference.complement(graph);
+
+        for i in complement.included_iter() {
+            if self.reference.includes(&graph.involution.inv(i)) {
+                continue;
+            }
+            let source = graph.node_id(i);
+            match &graph.involution[i] {
+                InvolutiveMapping::Identity { data, underlying } => builder.add_external_edge(
                     nodeidmap[source],
-                    e.as_ref().data.unwrap(),
-                    e.orientation,
+                    (data.as_ref().data.unwrap(), Orientation::Default),
+                    data.orientation,
+                    *underlying,
                 ),
-                InvolutiveMapping::Source((e, h)) => {
-                    let sink = graph.get_incident_node_id(*h);
-                    if complement.includes(*h) {
-                    } else {
-                        let orientation = match e.orientation {
-                            Orientation::Undirected => Orientation::Default,
-                            o => o,
-                        };
-                        builder.add_external_edge(
-                            nodeidmap[source],
-                            e.as_ref().data.unwrap(),
-                            orientation,
-                        );
-                        builder.add_external_edge(
-                            nodeidmap[sink],
-                            e.as_ref().data.unwrap(),
-                            orientation.reverse(),
-                        );
-                    }
+                InvolutiveMapping::Source { data, sink_idx } => {
+                    let sink = graph.node_id(*sink_idx);
+
+                    builder.add_edge(
+                        nodeidmap[source],
+                        nodeidmap[sink],
+                        (data.data.as_ref().unwrap(), Orientation::Default),
+                        data.orientation,
+                    );
                 }
-                InvolutiveMapping::Sink(h) => {
-                    let sink = graph.get_incident_node_id(*h);
-                    let e = graph.involution.get_data(*h);
-                    if !complement.includes(*h) {
-                        let orientation = match e.orientation {
-                            Orientation::Undirected => Orientation::Reversed,
-                            o => o.reverse(),
-                        };
-                        builder.add_external_edge(
-                            nodeidmap[source],
-                            e.as_ref().data.unwrap(),
-                            orientation,
-                        );
-                        builder.add_external_edge(
-                            nodeidmap[sink],
-                            e.as_ref().data.unwrap(),
-                            orientation.reverse(),
-                        );
-                    }
-                }
+                _ => {}
             }
         }
 
-        builder.build()
+        for i in self.reference.included_iter() {
+            // if !graph.involution[i].is_source() {
+            //     panic!("should be source");
+            // }
+            let source = graph.node_id(i);
+            let data = graph.involution.edge_data(i).as_ref();
+
+            let (flow, underlying) = if self.sign.includes(&i) {
+                (Flow::Source, Orientation::Default)
+            } else {
+                (Flow::Sink, Orientation::Reversed)
+            };
+
+            // Flow::try_from(self.relative_orientation(i)).unwrap();
+            let orientation = data.orientation.relative_to(flow);
+
+            builder.add_external_edge(
+                nodeidmap[source],
+                (data.data.unwrap(), underlying),
+                orientation,
+                flow,
+            );
+            let h = graph.involution.inv(i);
+            let sink = graph.node_id(h);
+            builder.add_external_edge(
+                nodeidmap[sink],
+                (data.data.unwrap(), underlying),
+                orientation,
+                -flow,
+            );
+        }
+
+        let graph = builder.build();
+
+        // println!("{}", &self);
+        graph
     }
 }

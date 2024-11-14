@@ -2,19 +2,17 @@ use std::sync::{Arc, Mutex};
 
 // use crate::half_edge::drawing::Decoration;
 use argmin::{
-    core::{CostFunction, Executor, Gradient, State},
+    core::{CostFunction, Executor, State},
     solver::simulatedannealing::{Anneal, SimulatedAnnealing},
 };
-use cgmath::{Angle, Rad, Vector2};
+use cgmath::{Angle, InnerSpace, Rad, Vector2, Zero};
 use indexmap::IndexMap;
-use itertools::Itertools;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use statrs::statistics::Statistics;
 
 use super::{
-    drawing::{CetzEdge, Decoration, EdgeGeometry},
-    subgraph::node::HedgeNode,
-    HedgeGraph, Involution, InvolutiveMapping,
+    drawing::{CetzEdge, CetzString, Decoration, EdgeGeometry},
+    subgraph::{node::HedgeNode, SubGraph},
+    Flow, Hedge, HedgeGraph, Involution, InvolutiveMapping, Orientation,
 };
 
 pub struct LayoutVertex<V> {
@@ -32,16 +30,70 @@ impl<V> LayoutVertex<V> {
 }
 
 pub struct LayoutEdge<E> {
-    data: E,
+    pub data: E,
     geometry: EdgeGeometry,
 }
 
 impl<E> LayoutEdge<E> {
-    pub fn new(data: E, x: f64, y: f64) -> Self {
+    pub fn map<E2>(self, f: impl FnOnce(E) -> E2) -> LayoutEdge<E2> {
+        LayoutEdge {
+            data: f(self.data),
+            geometry: self.geometry,
+        }
+    }
+
+    pub fn new_internal(
+        data: E,
+        source: &Vector2<f64>,
+        sink: &Vector2<f64>,
+        x: f64,
+        y: f64,
+    ) -> Self {
+        let pos = Vector2::new(x, y);
+        let (center, _) = EdgeGeometry::circumcircle([source, sink, &pos]);
+
+        let center_to_pos = pos - center;
+        let center_to_source = source - center;
+        let center_to_sink = sink - center;
+
+        let sink_angle = center_to_source.angle(center_to_sink).normalize();
+        let pos_angle = center_to_source.angle(center_to_pos).normalize();
+
+        let angle = Vector2::unit_y().angle(center_to_pos)
+            + if sink_angle < pos_angle {
+                Rad::turn_div_2()
+            } else {
+                Rad::zero()
+            };
+
         LayoutEdge {
             data,
             geometry: EdgeGeometry::Simple {
                 pos: Vector2::new(x, y),
+                angle,
+            },
+        }
+    }
+
+    pub fn new_external(
+        data: E,
+        source: &Vector2<f64>,
+        x: f64,
+        y: f64,
+        orientation: Orientation,
+    ) -> Self {
+        let pos = Vector2::new(x, y);
+        let mut pos_angle = Vector2::unit_x().angle(pos - source);
+
+        if let Orientation::Reversed = orientation {
+        } else {
+            pos_angle += Rad::turn_div_2()
+        }
+        LayoutEdge {
+            data,
+            geometry: EdgeGeometry::Simple {
+                pos: Vector2::new(x, y),
+                angle: pos_angle,
             },
         }
     }
@@ -50,8 +102,8 @@ impl<E> LayoutEdge<E> {
         &mut self,
         source: Vector2<f64>,
         sink: Option<Vector2<f64>>,
-        label: f64, //label shift
-        arrow: Option<(f64, f64)>,
+        flow: Flow,
+        settings: &FancySettings,
     ) {
         match self.geometry {
             EdgeGeometry::Simple { .. } => {}
@@ -59,16 +111,22 @@ impl<E> LayoutEdge<E> {
                 return;
             }
         };
-        self.geometry = self.geometry.clone().to_fancy(source, sink, label, arrow);
+        self.geometry = self.geometry.clone().to_fancy(source, sink, flow, settings);
     }
 }
 
 impl<E> LayoutEdge<E> {
-    pub fn cetz(&self, source: usize, sink: Option<usize>) -> String
+    pub fn cetz(&self, source: usize, orientation: Orientation, sink: Option<usize>) -> String
     where
         E: CetzEdge,
     {
-        self.cetz_impl(&|e| e.label(), &|e| e.decoration(), source, sink)
+        self.cetz_impl(
+            &|e| e.label(),
+            &|e| e.decoration(),
+            source,
+            orientation,
+            sink,
+        )
     }
 
     pub fn cetz_impl(
@@ -76,26 +134,31 @@ impl<E> LayoutEdge<E> {
         label: &impl Fn(&E) -> String,
         decoration: &impl Fn(&E) -> Decoration,
         source: usize,
+        orientation: Orientation,
         sink: Option<usize>,
     ) -> String {
         match &self.geometry {
-            EdgeGeometry::Simple { pos } => {
+            EdgeGeometry::Simple { pos, mut angle } => {
+                // if let Orientation::Reversed = orientation {
+                //     angle += Rad::turn_div_2();
+                //     println!("reversed")
+                // }
                 if let Some(sink) = sink {
                     format!(
-                        "edge(node{}.pos,({:.4},{:.4}),node{}.pos,decoration:{})\n",
+                        "edge(node{}.pos,{},node{}.pos,decoration:{},angle:{})\n",
                         source,
-                        pos.x,
-                        pos.y,
+                        pos.to_cetz(),
                         sink,
-                        decoration(&self.data).to_cetz()
+                        decoration(&self.data).to_cetz(),
+                        angle.to_cetz()
                     )
                 } else {
                     format!(
-                        "edge(node{}.pos,({:.4},{:.4}),decoration:{})\n",
+                        "edge(node{}.pos,{},decoration:{},angle:{})\n",
                         source,
-                        pos.x,
-                        pos.y,
-                        decoration(&self.data).to_cetz()
+                        pos.to_cetz(),
+                        decoration(&self.data).to_cetz(),
+                        angle.to_cetz(),
                     )
                 }
             }
@@ -104,29 +167,28 @@ impl<E> LayoutEdge<E> {
                 label_pos,
                 label_angle,
             } => {
+                println!("fancy");
                 if let Some(sink) = sink {
                     format!(
-                    "edge(node{}.pos,({:.4},{:.4}),node{}.pos,decoration:{})\ncontent({:.4},{:.4},angle:{:.2}rad,[{}])\n",
+                    "edge(node{}.pos,{},node{}.pos,decoration:{},angle:{})\ncetz.draw.content({},angle:{},[{}])\n",
                     source,
-                    pos.x,
-                    pos.y,
+                    pos.to_cetz(),
                     sink,
                     decoration(&self.data).to_cetz(),
-                    label_pos.x,
-                    label_pos.y,
-                    label_angle.0,
+                    label_angle.to_cetz(),
+                    label_pos.to_cetz(),
+                    label_angle.to_cetz(),
                     label(&self.data)
                 )
                 } else {
                     format!(
-                    "edge(node{}.pos,({:.4},{:.4}),decoration:{})\ncontent({:.4},{:.4},angle:{:.2}rad,[{}])\n",
+                    "edge(node{}.pos,{},decoration:{},angle:{})\ncetz.draw.content({},angle:{},[{}])\n",
                     source,
-                    pos.x,
-                    pos.y,
+                    pos.to_cetz(),
                     decoration(&self.data).to_cetz(),
-                    label_pos.x,
-                    label_pos.y,
-                    label_angle.0,
+                    label_angle.to_cetz(),
+                    label_pos.to_cetz(),
+                    label_angle.to_cetz(),
                     label(&self.data)
                 )
                 }
@@ -137,30 +199,29 @@ impl<E> LayoutEdge<E> {
                 label_pos,
                 label_angle,
             } => {
+                println!("super fancy");
                 if let Some(sink) = sink {
                     format!(
-                "edge(node{}.pos,({:.4},{:.4}),node{}.pos,decoration:{})\ncontent(({:.4},{:.4}),angle:{:.2}rad,[{}])\n{}\n",
+                "edge(node{}.pos,{},node{}.pos,decoration:{},angle:{})\ncetz.draw.content({},angle:{},[{}])\n{}\n",
                 source,
-                pos.x,
-                pos.y,
+                pos.to_cetz(),
                 sink,
                 decoration(&self.data).to_cetz(),
-                label_pos.x,
-                label_pos.y,
-                label_angle.0,
+                label_angle.to_cetz(),
+                label_pos.to_cetz(),
+                label_angle.to_cetz(),
                 label(&self.data),
                 arrow_arc.hobby_arrow(),
             )
                 } else {
                     format!(
-                "edge(node{}.pos,({:.4},{:.4}),decoration:{})\ncontent(({:.4},{:.4}),angle:{:.2}rad,[{}])\n{}\n",
+                "edge(node{}.pos,{},decoration:{},angle:{})\ncetz.draw.content({},angle:{},[{}])\n{}\n",
                 source,
-                pos.x,
-                pos.y,
+                pos.to_cetz(),
                 decoration(&self.data).to_cetz(),
-                label_pos.x,
-                label_pos.y,
-                label_angle.0,
+                label_angle.to_cetz(),
+                label_pos.to_cetz(),
+                label_angle.to_cetz(),
                 label(&self.data),
                 arrow_arc.hobby_arrow(),
                 )
@@ -172,24 +233,81 @@ impl<E> LayoutEdge<E> {
 
 pub type PositionalHedgeGraph<E, V> = HedgeGraph<LayoutEdge<E>, LayoutVertex<V>>;
 
+const CETZ_PREAMBLE: &str = r#"
+let node(pos)=cetz.draw.circle(pos,radius:0.02,fill: black)
+let stroke = 0.7pt
+let amplitude = 0.051
+let arrow-scale = 0.8
+let segment-length = 0.0521
+let edge(..points,decoration:"",angle:0deg)={
+    if decoration == "coil"{
+    cetz.decorations.coil(cetz.draw.hobby(..points),amplitude:amplitude,stroke:stroke,align:"MID")
+    } else if decoration == "wave" {
+        cetz.decorations.wave(cetz.draw.hobby(..points),amplitude:amplitude,stroke:stroke)
+    }  else if decoration == "arrow"{
+        let points = points.pos()
+        if points.len()==2{
+          let center = (0.5*(points.at(0).at(0)+points.at(1).at(0)),0.5*(points.at(0).at(1)+points.at(1).at(1)))
+          cetz.draw.hobby(..points,stroke:stroke)
+          cetz.draw.mark(center,angle,symbol: ">", fill: black,anchor: "center",scale:arrow-scale)
+        } else {
+          let (first,center,..other)=points
+          cetz.draw.hobby(first,center,..other,stroke:stroke)
+            cetz.draw.mark(center,angle,symbol: ">", fill: black,anchor: "center",scale:arrow-scale)
+        }
+
+    }else {
+            cetz.draw.hobby(..points,stroke:stroke)
+    }
+}
+"#;
+
+pub struct FancySettings {
+    pub label_shift: f64,
+    pub arrow_angle_percentage: Option<f64>,
+    pub arrow_shift: f64,
+}
+
+impl Default for FancySettings {
+    fn default() -> Self {
+        Self {
+            label_shift: 0.1,
+            arrow_angle_percentage: None,
+            arrow_shift: 0.1,
+        }
+    }
+}
+
+impl FancySettings {
+    pub fn label_shift(&self) -> f64 {
+        self.label_shift
+            + if self.arrow_angle_percentage.is_some() {
+                self.arrow_shift
+            } else {
+                0.0
+            }
+    }
+}
+
 impl<E, V> PositionalHedgeGraph<E, V> {
-    pub fn to_fancy(&mut self) {
+    pub fn to_fancy(&mut self, settings: &FancySettings) {
         for (eid, nid) in self.involution.hedge_data.iter().enumerate() {
             let i = self.nodes.get(nid).unwrap().pos;
 
-            if let InvolutiveMapping::Identity(d) = &mut self.involution.inv[eid] {
-                if let Some(d) = &mut d.data {
-                    d.to_fancy(i, None, 0.2, Some((0.2, 0.4)));
+            if let InvolutiveMapping::Identity { data, underlying } = &mut self.involution.inv[eid]
+            {
+                if let Some(d) = &mut data.data {
+                    d.to_fancy(i, None, underlying.clone(), settings);
                 }
             }
 
-            if let Some(cn) = self.involution.get_connected_node_id(eid) {
+            if let Some(cn) = self.involved_node_id(super::Hedge(eid)) {
                 let j = self.nodes.get(cn).unwrap().pos;
 
                 match &mut self.involution.inv[eid] {
-                    InvolutiveMapping::Source((d, _)) => {
-                        if let Some(d) = &mut d.data {
-                            d.to_fancy(i, Some(j), 0.2, Some((0.2, 0.4)));
+                    InvolutiveMapping::Source { data, .. } => {
+                        if let Some(d) = &mut data.data {
+                            d.to_fancy(i, Some(j), Flow::Source, settings);
                         }
                     }
                     _ => {}
@@ -202,36 +320,38 @@ impl<E, V> PositionalHedgeGraph<E, V> {
         let mut out = String::new();
 
         out.push_str(
-            "#import \"@preview/cetz:0.3.0\"\n
-            #set page(width: auto,height:auto)\n
-          ",
+            r#"#import "@preview/cetz:0.3.0"
+"#,
         );
         out
     }
 
     pub fn cetz_impl_collection(
-        graphs: &[Self],
-        col_name: &str,
+        graphs: &[(String, String, Vec<Self>)],
         edge_label: &impl Fn(&E) -> String,
         edge_decoration: &impl Fn(&E) -> Decoration,
     ) -> String {
         let mut out = Self::cetz_preamble();
-        for (i, g) in graphs.iter().enumerate() {
-            out.push_str(&format!(
-                "#let {col_name}{i}={}",
-                g.cetz_bare(edge_label, edge_decoration)
-            ))
+        out.push_str("#{\nlet cols = (30%,30%,30%)\n");
+
+        out.push_str(CETZ_PREAMBLE);
+        for (col_name, _, gs) in graphs.iter() {
+            for (j, g) in gs.iter().enumerate() {
+                out.push_str(&format!(
+                    "let {col_name}{j}={}",
+                    g.cetz_bare(edge_label, edge_decoration)
+                ))
+            }
         }
-        out.push_str(
-            "#grid(
-          columns: 3,
-          gutter: 20pt,
-        ",
-        );
-        for i in 0..graphs.len() {
-            out.push_str(&format!("{col_name}{i},"));
+        for (col_name, label, gs) in graphs.iter() {
+            out.push_str(&format!("[{}]\n", label));
+            out.push_str("grid(columns: cols,gutter: 20pt,");
+            for i in 0..gs.len() {
+                out.push_str(&format!("{col_name}{i},"));
+            }
+            out.push_str(")\n");
         }
-        out.push_str(")/n");
+        out.push('}');
         out
     }
 
@@ -240,55 +360,44 @@ impl<E, V> PositionalHedgeGraph<E, V> {
         edge_label: &impl Fn(&E) -> String,
         edge_decoration: &impl Fn(&E) -> Decoration,
     ) -> String {
-        let mut out = String::from(
-            "cetz.canvas({ \n
-          import cetz.draw: * \n
-          let node(pos)=circle(pos,radius:0.12,fill: black)\n
-            let stroke = 1.2pt\n
-          let edge(..points,decoration:\"\")={\n
-            if decoration == \"coil\"{\n
-              cetz.decorations.coil(hobby(..points),amplitude:0.23,segment-length:0.2,stroke:stroke,align:\"MID\")\n
-            } else if decoration == \"wave\" {\n
-               cetz.decorations.wave(hobby(..points),amplitude:0.24,segment-length:0.3,stroke:stroke)\n
-            } else {\n
-               hobby(..points,stroke:stroke)\n
-            }\n
-          }\n",
-        );
+        let mut out = String::from("cetz.canvas(length:50%,{\n");
         for a in 0..self.base_nodes {
             out.push_str(&format!(
-                "let node{}= (pos:({:.6},{:.6}))\n",
-                a, self.nodes[a].pos.x, self.nodes[a].pos.y
+                "let node{}= (pos:{})\n",
+                a,
+                self.nodes[a].pos.to_cetz()
             ));
             out.push_str(&format!("node(node{}.pos)\n", a));
         }
 
-        for (eid, (nid, e)) in self
-            .involution
-            .hedge_data
-            .iter()
-            .zip_eq(self.involution.inv.iter())
-            .enumerate()
-        {
+        for (eid, (e, nid)) in self.involution.iter() {
             let i = self.get_node_pos(&nid);
 
-            if let Some(cn) = self.involution.get_connected_node_id(eid) {
+            if let Some(cn) = self.involved_node_id(eid) {
                 let j = self.get_node_pos(&cn);
 
-                match e {
-                    InvolutiveMapping::Source((d, _)) => {
-                        if let Some(d) = &d.data {
-                            out.push_str(&d.cetz_impl(edge_label, edge_decoration, i, Some(j)));
-                        }
+                if let InvolutiveMapping::Source { data, .. } = e {
+                    if let Some(l) = &data.data {
+                        out.push_str(&l.cetz_impl(
+                            edge_label,
+                            edge_decoration,
+                            i,
+                            data.orientation,
+                            Some(j),
+                        ));
                     }
-                    _ => {}
                 }
             }
 
-            if let InvolutiveMapping::Identity(d) = e {
-                if let Some(d) = &d.data {
-                    println!("{:?}", d.geometry);
-                    out.push_str(&d.cetz_impl(edge_label, edge_decoration, i, None));
+            if let InvolutiveMapping::Identity { data, .. } = e {
+                if let Some(l) = &data.data {
+                    out.push_str(&l.cetz_impl(
+                        edge_label,
+                        edge_decoration,
+                        i,
+                        data.orientation,
+                        None,
+                    ));
                 }
             }
         }
@@ -302,68 +411,11 @@ impl<E, V> PositionalHedgeGraph<E, V> {
         edge_label: &impl Fn(&E) -> String,
         edge_decoration: &impl Fn(&E) -> Decoration,
     ) -> String {
-        let mut out = String::new();
-
-        out.push_str(
-            "#import \"@preview/cetz:0.3.0\"\n
-        #set page(width: auto,height:auto)\n
-        #cetz.canvas({\n
-          import cetz.draw: *\n",
-        );
-
-        out.push_str(
-            "let node(pos)=circle(pos,radius:0.12,fill: black)\n
-              let stroke = 1.2pt\n
-            let edge(..points,decoration:\"\")={\n
-              if decoration == \"coil\"{\n
-                cetz.decorations.coil(hobby(..points),amplitude:0.23,segment-length:0.2,stroke:stroke,align:\"MID\")\n
-              } else if decoration == \"wave\" {\n
-                 cetz.decorations.wave(hobby(..points),amplitude:0.24,segment-length:0.3,stroke:stroke)\n
-              } else {\n
-                 hobby(..points,stroke:stroke)\n
-              }\n
-            }\n",
-        );
-
-        for a in 0..self.base_nodes {
-            out.push_str(&format!(
-                "let node{}= (pos:({:.6},{:.6}))\n",
-                a, self.nodes[a].pos.x, self.nodes[a].pos.y
-            ));
-            out.push_str(&format!("node(node{}.pos)\n", a));
-        }
-
-        for (eid, (nid, e)) in self
-            .involution
-            .hedge_data
-            .iter()
-            .zip_eq(self.involution.inv.iter())
-            .enumerate()
-        {
-            let i = self.get_node_pos(&nid);
-
-            if let Some(cn) = self.involution.get_connected_node_id(eid) {
-                let j = self.get_node_pos(&cn);
-
-                match e {
-                    InvolutiveMapping::Source((d, _)) => {
-                        if let Some(d) = &d.data {
-                            out.push_str(&d.cetz_impl(edge_label, edge_decoration, i, Some(j)));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            if let InvolutiveMapping::Identity(d) = e {
-                if let Some(d) = &d.data {
-                    println!("{:?}", d.geometry);
-                    out.push_str(&d.cetz_impl(edge_label, edge_decoration, i, None));
-                }
-            }
-        }
-
-        out.push_str("})\n");
+        let mut out = Self::cetz_preamble();
+        out.push_str("#{\n");
+        out.push_str(CETZ_PREAMBLE);
+        out.push_str(&self.cetz_bare(edge_label, edge_decoration));
+        out.push_str("}\n");
         out
     }
 }
@@ -375,9 +427,12 @@ pub struct GraphLayout<'a, E, V> {
     pub rng: Arc<Mutex<SmallRng>>,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct LayoutParams {
     pub spring_constant: f64,
     pub spring_length: f64,
+    pub global_edge_repulsion: f64,
+    pub edge_vertex_repulsion: f64,
     pub charge_constant_e: f64,
     pub charge_constant_v: f64,
     pub external_constant: f64,
@@ -387,15 +442,28 @@ pub struct LayoutParams {
 impl Default for LayoutParams {
     fn default() -> Self {
         LayoutParams {
-            spring_length: 0.2,
-            spring_constant: 0.2,
-            charge_constant_e: 0.6,
-            charge_constant_v: 0.5,
+            spring_length: 1.,
+            spring_constant: 0.5,
+            global_edge_repulsion: 0.15,
+            edge_vertex_repulsion: 1.5,
+            charge_constant_e: 0.7,
+            charge_constant_v: 13.2,
             external_constant: 0.0,
             central_force_constant: 0.0,
         }
     }
 }
+
+// LayoutParams {
+//     spring_length: 1.,
+//     spring_constant: 0.5,
+//     global_edge_repulsion: 0.15,
+//     edge_vertex_repulsion: 0.015,
+//     charge_constant_e: 0.4,
+//     charge_constant_v: 13.2,
+//     external_constant: 0.0,
+//     central_force_constant: 0.0,
+// }
 
 #[derive(Debug, Clone)]
 pub struct Positions {
@@ -404,6 +472,72 @@ pub struct Positions {
 }
 
 impl Positions {
+    pub fn scale(&mut self, scale: f64) {
+        self.vertex_positions.iter_mut().for_each(|(_, (a, _, _))| {
+            if let Some(pos) = a {
+                pos.0 /= scale;
+                pos.1 /= scale;
+            }
+        });
+
+        for i in 0..self.edge_positions.inv.len() {
+            match &mut self.edge_positions.inv[i] {
+                InvolutiveMapping::Identity { data, .. } => data.data.as_mut().map(|(a, _, _)| {
+                    a.as_mut().map(|pos| {
+                        pos.0 /= scale;
+                        pos.1 /= scale;
+                    })
+                }),
+                InvolutiveMapping::Source { data, .. } => data.data.as_mut().map(|(a, _, _)| {
+                    a.as_mut().map(|pos| {
+                        pos.0 /= scale;
+                        pos.1 /= scale;
+                    })
+                }),
+                _ => None,
+            };
+        }
+    }
+    pub fn max(&self, params: &[f64]) -> Option<f64> {
+        let vertex_max = self
+            .vertex_positions
+            .iter()
+            .map(|(_, (v, i, j))| {
+                if let Some((x, y)) = v {
+                    x.abs().max(y.abs())
+                } else {
+                    params[*i].abs().max(params[*j].abs())
+                }
+            })
+            .reduce(f64::max);
+
+        let mut max_edges = None;
+        for i in self.edge_positions.iter_idx() {
+            let data = self.edge_positions.edge_data(i).data.map(|(a, i, j)| {
+                if let Some((x, y)) = a {
+                    x.abs().max(y.abs())
+                } else {
+                    params[i].abs().max(params[j].abs())
+                }
+            });
+            if let Some(data) = data {
+                if let Some(max) = max_edges {
+                    if max < data {
+                        max_edges = Some(data);
+                    }
+                } else {
+                    max_edges = Some(data);
+                }
+            }
+        }
+
+        match (vertex_max, max_edges) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        }
+    }
     pub fn to_graph<E, V>(
         self,
         graph: HedgeGraph<E, V>,
@@ -419,21 +553,47 @@ impl Positions {
             })
             .collect();
 
+        let hedge_data = graph.involution.hedge_data;
+
         let inv: Vec<_> = graph
             .involution
             .inv
             .into_iter()
             .enumerate()
             .map(|(i, m)| {
-                let pos = &self.get_edge_position(i, params);
+                let pos = &self.get_edge_position(super::Hedge(i), params);
 
+                let mut source = nodes[hedge_data.get(i).unwrap()].pos;
                 let m = match m {
-                    InvolutiveMapping::Sink(s) => InvolutiveMapping::Sink(s),
-                    InvolutiveMapping::Source((s, i)) => {
-                        InvolutiveMapping::Source((s.map(|s| LayoutEdge::new(s, pos.0, pos.1)), i))
+                    InvolutiveMapping::Sink { source_idx } => {
+                        InvolutiveMapping::Sink { source_idx }
                     }
-                    InvolutiveMapping::Identity(s) => {
-                        InvolutiveMapping::Identity(s.map(|s| LayoutEdge::new(s, pos.0, pos.1)))
+                    InvolutiveMapping::Source { data, sink_idx } => {
+                        let mut sink = nodes[hedge_data.get(sink_idx.0).unwrap()].pos;
+
+                        if let Orientation::Reversed = data.orientation {
+                            std::mem::swap(&mut sink, &mut source);
+                        }
+                        InvolutiveMapping::Source {
+                            data: data
+                                .map(|s| LayoutEdge::new_internal(s, &source, &sink, pos.0, pos.1)),
+                            sink_idx,
+                        }
+                    }
+                    InvolutiveMapping::Identity { data, underlying } => {
+                        let orientation = data.orientation;
+                        InvolutiveMapping::Identity {
+                            data: data.map(|s| {
+                                LayoutEdge::new_external(
+                                    s,
+                                    &source,
+                                    pos.0,
+                                    pos.1,
+                                    orientation.relative_to(underlying),
+                                )
+                            }),
+                            underlying,
+                        }
                     }
                 };
 
@@ -443,10 +603,7 @@ impl Positions {
 
         HedgeGraph {
             nodes,
-            involution: Involution {
-                inv,
-                hedge_data: graph.involution.hedge_data,
-            },
+            involution: Involution { inv, hedge_data },
             base_nodes: graph.base_nodes,
         }
     }
@@ -456,17 +613,23 @@ impl Positions {
         let mut edge_positions = graph.involution.forgetful_map_node_data_ref(|_| ());
 
         let range = -1.0..1.0;
+        let ext_range = 2.0..4.0;
 
         let mut params = Vec::new();
 
-        for i in 0..graph.involution.inv.len() {
+        for (i, h) in graph.involution.inv.iter().enumerate() {
             let j = params.len();
-            params.push(rng.gen_range(range.clone()));
-            params.push(rng.gen_range(range.clone()));
-            edge_positions.set_data(i, (None, j, j + 1));
+            if h.is_identity() {
+                params.push(rng.gen_range(ext_range.clone()));
+                params.push(rng.gen_range(ext_range.clone()));
+            } else {
+                params.push(rng.gen_range(range.clone()));
+                params.push(rng.gen_range(range.clone()));
+            }
+            edge_positions.set_edge_data(super::Hedge(i), (None, j, j + 1));
         }
 
-        for (node, data) in graph.nodes.iter() {
+        for (node, _) in graph.nodes.iter() {
             let j = params.len();
             params.push(rng.gen_range(range.clone()));
             params.push(rng.gen_range(range.clone()));
@@ -492,23 +655,22 @@ impl Positions {
 
         let mut angle = 0.;
         let angle_step = 2. * std::f64::consts::PI / f64::from(graph.n_externals() as u32);
-        let mut ext = 0.;
 
-        for i in 0..graph.involution.inv.len() {
+        for i in graph.involution.iter_idx() {
             let j = params.len();
             params.push(rng.gen_range(range.clone()));
             params.push(rng.gen_range(range.clone()));
             if i == graph.involution.inv(i) {
                 let x = radius * f64::cos(angle);
                 let y = radius * f64::sin(angle);
-                edge_positions.set_data(i, (Some((x, y)), j, j + 1));
+                edge_positions.set_edge_data(i, (Some((x, y)), j, j + 1));
                 angle += angle_step;
             } else {
-                edge_positions.set_data(i, (None, j, j + 1));
+                edge_positions.set_edge_data(i, (None, j, j + 1));
             }
         }
 
-        for (node, data) in graph.nodes.iter() {
+        for (node, _) in graph.nodes.iter() {
             let j = params.len();
             params.push(rng.gen_range(range.clone()));
             params.push(rng.gen_range(range.clone()));
@@ -537,12 +699,29 @@ impl Positions {
         })
     }
 
-    pub fn get_edge_position(&self, edge: usize, params: &[f64]) -> (f64, f64) {
-        let (p, ix, iy) = self.edge_positions.get_data(edge).data.unwrap();
+    pub fn iter_edge_positions<'a>(
+        &'a self,
+        params: &'a [f64],
+    ) -> impl Iterator<Item = (f64, f64)> + 'a {
+        self.edge_positions.iter_edge_data().filter_map(|e| {
+            if let Some((p, x, y)) = e.data {
+                if let Some(p) = p {
+                    Some((p.0, p.1))
+                } else {
+                    Some((params[x], params[y]))
+                }
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn get_edge_position(&self, edge: super::Hedge, params: &[f64]) -> (f64, f64) {
+        let (p, ix, iy) = self.edge_positions.edge_data(edge).data.unwrap();
         if let Some(p) = p {
             (p.0, p.1)
         } else {
-            (params[*ix], params[*iy])
+            (params[ix], params[iy])
         }
     }
 }
@@ -554,8 +733,30 @@ impl<'a, E, V> CostFunction for GraphLayout<'a, E, V> {
     fn cost(&self, param: &Self::Param) -> Result<Self::Output, argmin::core::Error> {
         let mut cost = 0.0;
 
+        // global edge repulsion:
+        //
+
+        for (x, y) in self.positions.iter_edge_positions(param) {
+            for (ex, ey) in self.positions.iter_edge_positions(param) {
+                if ex == x && ey == y {
+                    continue;
+                }
+                let dx = x - ex;
+                let dy = y - ey;
+
+                cost += self.params.global_edge_repulsion / (dx * dx + dy * dy).sqrt();
+            }
+        }
+
         for (node, (x, y)) in self.positions.iter_vertex_positions(param) {
-            for e in node.hairs.iter_ones() {
+            for (ex, ey) in self.positions.iter_edge_positions(param) {
+                let dx = x - ex;
+                let dy = y - ey;
+
+                let dist = (dx * dx + dy * dy).sqrt();
+                cost += self.params.edge_vertex_repulsion / dist;
+            }
+            for e in node.hairs.included_iter() {
                 let (ex, ey) = self.positions.get_edge_position(e, param);
 
                 let dx = x - ex;
@@ -565,9 +766,9 @@ impl<'a, E, V> CostFunction for GraphLayout<'a, E, V> {
 
                 cost +=
                     0.5 * self.params.spring_constant * (self.params.spring_length - dist).powi(2);
-                cost += self.params.charge_constant_e / dist;
+                // cost += self.params.charge_constant_e / dist;
 
-                for othere in node.hairs.iter_ones() {
+                for othere in node.hairs.included_iter() {
                     let a = self.positions.edge_positions.inv(othere);
                     if e > othere && a != e {
                         let (ox, oy) = self.positions.get_edge_position(othere, param);
@@ -659,12 +860,14 @@ impl<'a, E, V> Anneal for GraphLayout<'a, E, V> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct LayoutSettings {
     params: LayoutParams,
     temperature: f64,
-    // iters: usize,
+    iters: usize,
     positions: Positions,
-    // seed: u64,
+    seed: u64,
+
     init_params: Vec<f64>,
 }
 
@@ -673,6 +876,7 @@ impl LayoutSettings {
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
+        iters: usize,
         temperature: f64,
     ) -> Self {
         let (init_params, positions) = Positions::new(graph, seed);
@@ -680,7 +884,9 @@ impl LayoutSettings {
         LayoutSettings {
             params,
             temperature,
+            seed,
             positions,
+            iters,
             init_params,
         }
     }
@@ -689,10 +895,11 @@ impl LayoutSettings {
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
+        iters: usize,
         temperature: f64,
         edge: f64,
-        left: Vec<usize>,
-        right: Vec<usize>,
+        left: Vec<Hedge>,
+        right: Vec<Hedge>,
     ) -> Self {
         let mut rng = SmallRng::seed_from_u64(seed);
         let mut vertex_positions = IndexMap::new();
@@ -702,31 +909,52 @@ impl LayoutSettings {
 
         let mut init_params = Vec::new();
 
-        let left_step = edge / (left.len() as f64);
-        let mut left_bot_corner = (-edge / 2., -edge / 2.);
-        let right_step = edge / (right.len() as f64);
-        let mut right_bot_corner = (edge / 2., -edge / 2.);
+        let left_step = unsafe {
+            if left.len() > 1 {
+                edge / (left.len().unchecked_sub(1) as f64)
+            } else {
+                edge
+            }
+        };
+        let mut left_bot_corner = if left.len() <= 1 {
+            (-edge / 2., 0.)
+        } else {
+            (-edge / 2., -edge / 2.)
+        };
 
-        for i in 0..graph.involution.inv.len() {
+        let right_step = unsafe {
+            if right.len() > 1 {
+                edge / (right.len().unchecked_sub(1) as f64)
+            } else {
+                edge
+            }
+        };
+        let mut right_bot_corner = if right.len() <= 1 {
+            (edge / 2., 0.)
+        } else {
+            (edge / 2., -edge / 2.)
+        };
+
+        for i in graph.involution.iter_idx() {
             let j = init_params.len();
             init_params.push(rng.gen_range(range.clone()));
             init_params.push(rng.gen_range(range.clone()));
-            edge_positions.set_data(i, (None, j, j + 1));
+            edge_positions.set_edge_data(i, (None, j, j + 1));
         }
 
         for i in left {
-            let (_, a, b) = *edge_positions.get_data(i).data.unwrap();
-            edge_positions.set_data(i, (Some(left_bot_corner), a, b));
+            let (_, a, b) = edge_positions.edge_data(i).data.unwrap();
+            edge_positions.set_edge_data(i, (Some(left_bot_corner), a, b));
             left_bot_corner.1 += left_step;
         }
 
         for i in right {
-            let (_, a, b) = *edge_positions.get_data(i).data.unwrap();
-            edge_positions.set_data(i, (Some(right_bot_corner), a, b));
+            let (_, a, b) = edge_positions.edge_data(i).data.unwrap();
+            edge_positions.set_edge_data(i, (Some(right_bot_corner), a, b));
             right_bot_corner.1 += right_step;
         }
 
-        for (node, data) in graph.nodes.iter() {
+        for (node, _) in graph.nodes.iter() {
             let j = init_params.len();
             init_params.push(rng.gen_range(range.clone()));
             init_params.push(rng.gen_range(range.clone()));
@@ -736,6 +964,8 @@ impl LayoutSettings {
         LayoutSettings {
             params,
             temperature,
+            iters,
+            seed,
             positions: Positions {
                 vertex_positions,
                 edge_positions,
@@ -748,6 +978,7 @@ impl LayoutSettings {
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
+        iters: usize,
         temperature: f64,
         angle_factors: Vec<u32>,
         n_div: usize,
@@ -766,7 +997,7 @@ impl LayoutSettings {
 
         let mut exti = 0;
 
-        for i in 0..graph.involution.inv.len() {
+        for i in graph.involution.iter_idx() {
             let j = init_params.len();
             init_params.push(rng.gen_range(range.clone()));
             init_params.push(rng.gen_range(range.clone()));
@@ -775,13 +1006,13 @@ impl LayoutSettings {
                 exti += 1;
                 let x = radius * angle.cos();
                 let y = radius * angle.sin();
-                edge_positions.set_data(i, (Some((x, y)), j, j + 1));
+                edge_positions.set_edge_data(i, (Some((x, y)), j, j + 1));
             } else {
-                edge_positions.set_data(i, (None, j, j + 1));
+                edge_positions.set_edge_data(i, (None, j, j + 1));
             }
         }
 
-        for (node, data) in graph.nodes.iter() {
+        for (node, _) in graph.nodes.iter() {
             let j = init_params.len();
             init_params.push(rng.gen_range(range.clone()));
             init_params.push(rng.gen_range(range.clone()));
@@ -791,6 +1022,8 @@ impl LayoutSettings {
         LayoutSettings {
             params,
             temperature,
+            iters,
+            seed,
             positions: Positions {
                 vertex_positions,
                 edge_positions,
@@ -801,7 +1034,10 @@ impl LayoutSettings {
 }
 
 impl<E, V> HedgeGraph<E, V> {
-    pub fn layout(self, settings: LayoutSettings) -> HedgeGraph<LayoutEdge<E>, LayoutVertex<V>> {
+    pub fn layout(
+        self,
+        mut settings: LayoutSettings,
+    ) -> HedgeGraph<LayoutEdge<E>, LayoutVertex<V>> {
         let layout = GraphLayout {
             rng: Arc::new(Mutex::new(SmallRng::seed_from_u64(0))),
             positions: settings.positions.clone(),
@@ -820,9 +1056,10 @@ impl<E, V> HedgeGraph<E, V> {
             res.state().get_best_param().unwrap().clone()
         };
 
-        let max = best.iter().map(|a| a.abs()).reduce(f64::min).unwrap();
+        let max = settings.positions.max(&best).unwrap();
 
         let best: Vec<_> = best.into_iter().map(|a| a / max).collect();
+        settings.positions.scale(max);
 
         settings.positions.to_graph(self, &best)
     }

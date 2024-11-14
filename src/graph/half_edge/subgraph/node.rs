@@ -1,11 +1,14 @@
+use bitvec::slice::BitSlice;
 use bitvec::vec::BitVec;
 use bitvec::{bitvec, order::Lsb0};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::graph::half_edge::{GVEdgeAttrs, HedgeGraph, HedgeNodeBuilder, InvolutiveMapping};
+use crate::graph::half_edge::{
+    GVEdgeAttrs, Hedge, HedgeGraph, HedgeNodeBuilder, InvolutiveMapping,
+};
 
 use super::contracted::ContractedSubGraph;
+use super::Inclusion;
 use super::{internal::InternalSubGraph, SubGraph, SubGraphOps};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -14,9 +17,43 @@ pub struct HedgeNode {
     pub hairs: BitVec,
 }
 
+impl Inclusion<Hedge> for HedgeNode {
+    fn includes(&self, hedge_id: &Hedge) -> bool {
+        self.internal_graph.includes(hedge_id) || self.hairs.includes(hedge_id)
+    }
+
+    fn intersects(&self, other: &Hedge) -> bool {
+        self.includes(other)
+    }
+}
+
+impl Inclusion<HedgeNode> for HedgeNode {
+    fn includes(&self, other: &HedgeNode) -> bool {
+        self.internal_graph.includes(&other.internal_graph)
+    }
+
+    fn intersects(&self, other: &HedgeNode) -> bool {
+        self.hairs.intersects(&other.hairs)
+    }
+}
+
+impl Inclusion<BitVec> for HedgeNode {
+    fn includes(&self, other: &BitVec) -> bool {
+        self.internal_graph.includes(other) || self.hairs.includes(other)
+    }
+
+    fn intersects(&self, other: &BitVec) -> bool {
+        self.hairs.intersects(other)
+    }
+}
+
 impl SubGraph for HedgeNode {
-    fn includes(&self, i: usize) -> bool {
-        self.hairs[i] || !self.internal_graph.filter[i]
+    fn nedges<E, V>(&self, graph: &HedgeGraph<E, V>) -> usize {
+        self.internal_graph.nedges(graph)
+    }
+
+    fn nhedges(&self) -> usize {
+        self.hairs.nhedges()
     }
 
     fn dot<E, V>(
@@ -26,7 +63,7 @@ impl SubGraph for HedgeNode {
         edge_attr: &impl Fn(&E) -> Option<String>,
         node_attr: &impl Fn(&V) -> Option<String>,
     ) -> String {
-        let mut out = "graph {\n ".to_string();
+        let mut out = "digraph {\n ".to_string();
         out.push_str(
             "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";\n ",
         );
@@ -44,19 +81,13 @@ impl SubGraph for HedgeNode {
             );
         }
 
-        for (hedge_id, (incident_node, edge)) in graph
-            .involution
-            .hedge_data
-            .iter()
-            .zip_eq(graph.involution.inv.iter())
-            .enumerate()
-        {
+        for (hedge_id, (edge, incident_node)) in graph.involution.iter() {
             match &edge {
                 //Internal graphs never have unpaired edges
-                InvolutiveMapping::Identity(data) => {
-                    let attr = if *self.internal_graph.filter.get(hedge_id).unwrap() {
+                InvolutiveMapping::Identity { data, underlying } => {
+                    let attr = if self.internal_graph.filter.includes(&hedge_id) {
                         None
-                    } else if *self.hairs.get(hedge_id).unwrap() {
+                    } else if self.hairs.includes(&hedge_id) {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray50\"".to_string()),
                             label: None,
@@ -73,29 +104,31 @@ impl SubGraph for HedgeNode {
                         hedge_id,
                         graph.nodes.get_index_of(incident_node).unwrap(),
                         attr.as_ref(),
+                        data.orientation,
+                        *underlying,
                     ));
                 }
-                InvolutiveMapping::Source((data, _)) => {
-                    let attr = if *self.internal_graph.filter.get(hedge_id).unwrap() {
+                InvolutiveMapping::Source { data, .. } => {
+                    let attr = if self.internal_graph.filter.includes(&hedge_id) {
                         None
-                    } else if *self.hairs.get(hedge_id).unwrap()
-                        && !*self.hairs.get(graph.involution.inv(hedge_id)).unwrap()
+                    } else if self.hairs.includes(&hedge_id)
+                        && !self.hairs.includes(&graph.involution.inv(hedge_id))
                     {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray50:gray75;0.5\"".to_string()),
                             label: None,
                             other: data.as_ref().data.and_then(edge_attr),
                         })
-                    } else if *self.hairs.get(graph.involution.inv(hedge_id)).unwrap()
-                        && !*self.hairs.get(hedge_id).unwrap()
+                    } else if self.hairs.includes(&graph.involution.inv(hedge_id))
+                        && !self.hairs.includes(&hedge_id)
                     {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray75:gray50;0.5\"".to_string()),
                             label: None,
                             other: data.as_ref().data.and_then(edge_attr),
                         })
-                    } else if *self.hairs.get(graph.involution.inv(hedge_id)).unwrap()
-                        && *self.hairs.get(hedge_id).unwrap()
+                    } else if self.hairs.includes(&graph.involution.inv(hedge_id))
+                        && self.hairs.includes(&hedge_id)
                     {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray50\"".to_string()),
@@ -113,14 +146,15 @@ impl SubGraph for HedgeNode {
                         graph.nodes.get_index_of(incident_node).unwrap(),
                         graph
                             .nodes
-                            .get_index_of(graph.involution.get_connected_node_id(hedge_id).unwrap())
+                            .get_index_of(graph.involved_node_id(hedge_id).unwrap())
                             .unwrap(),
                         attr.as_ref(),
+                        data.orientation,
                     ));
                 }
-                InvolutiveMapping::Sink(i) => {
-                    if *self.internal_graph.filter.get(hedge_id).unwrap()
-                        && !*self.internal_graph.filter.get(*i).unwrap()
+                InvolutiveMapping::Sink { source_idx } => {
+                    if self.internal_graph.filter.includes(&hedge_id)
+                        && !self.internal_graph.filter.includes(source_idx)
                     {
                         panic!("Internal graph has a dangling sink edge")
                     }
@@ -138,8 +172,8 @@ impl SubGraph for HedgeNode {
         hairs
     }
 
-    fn included(&self) -> impl Iterator<Item = usize> {
-        self.hairs.iter_ones().chain(self.internal_graph.included())
+    fn included(&self) -> &BitSlice {
+        self.hairs.included()
     }
 
     fn string_label(&self) -> String {
@@ -160,12 +194,7 @@ impl SubGraph for HedgeNode {
 
 impl SubGraphOps for HedgeNode {
     fn complement<E, V>(&self, graph: &HedgeGraph<E, V>) -> Self {
-        let externalhedges = !self.hairs.clone() & !self.internal_graph.filter.clone();
-
-        Self {
-            internal_graph: InternalSubGraph::empty(graph.n_hedges()),
-            hairs: externalhedges,
-        }
+        Self::from_internal_graph(self.internal_graph.complement(graph), graph)
     }
 
     fn union_with(&mut self, other: &Self) {
@@ -203,6 +232,10 @@ impl SubGraphOps for HedgeNode {
 impl HedgeNode {
     fn all_edges(&self) -> BitVec {
         self.internal_graph.filter.clone() | &self.hairs
+    }
+
+    pub fn from_internal_graph<E, V>(subgraph: InternalSubGraph, graph: &HedgeGraph<E, V>) -> Self {
+        graph.nesting_node_from_subgraph(subgraph)
     }
 
     pub fn weakly_disjoint(&self, other: &HedgeNode) -> bool {
@@ -251,7 +284,7 @@ impl HedgeNode {
         let mut externalhedges = bitvec![usize, Lsb0; 0; len];
 
         for hedge in &builder.hedges {
-            let mut bit = externalhedges.get_mut(*hedge).unwrap();
+            let mut bit = externalhedges.get_mut(hedge.0).unwrap();
             *bit = true;
         }
 

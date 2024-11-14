@@ -1,12 +1,12 @@
+use bitvec::slice::BitSlice;
 use bitvec::vec::BitVec;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::ops::Index;
 
-use crate::graph::half_edge::{GVEdgeAttrs, HedgeGraph, InvolutiveMapping, TraversalTree};
+use crate::graph::half_edge::{GVEdgeAttrs, Hedge, HedgeGraph, InvolutiveMapping, TraversalTree};
 
-use super::{node::HedgeNode, SubGraph, SubGraphOps};
+use super::{node::HedgeNode, Cycle, Inclusion, SubGraph, SubGraphOps};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq)]
 pub struct InternalSubGraph {
@@ -50,7 +50,45 @@ impl PartialOrd for InternalSubGraph {
     }
 }
 
+impl Inclusion<Hedge> for InternalSubGraph {
+    fn includes(&self, hedge_id: &Hedge) -> bool {
+        self.filter[hedge_id.0]
+    }
+
+    fn intersects(&self, other: &Hedge) -> bool {
+        self.includes(other)
+    }
+}
+
+impl Inclusion<InternalSubGraph> for InternalSubGraph {
+    fn includes(&self, other: &InternalSubGraph) -> bool {
+        self.filter.intersection(&other.filter) == other.filter
+    }
+
+    fn intersects(&self, other: &InternalSubGraph) -> bool {
+        self.filter.intersection(&other.filter).count_ones() > 0
+    }
+}
+
+impl Inclusion<BitVec> for InternalSubGraph {
+    fn includes(&self, other: &BitVec) -> bool {
+        &self.filter.intersection(&other) == other
+    }
+
+    fn intersects(&self, other: &BitVec) -> bool {
+        self.filter.intersection(&other).count_ones() > 0
+    }
+}
+
 impl SubGraph for InternalSubGraph {
+    fn nedges<E, V>(&self, _graph: &HedgeGraph<E, V>) -> usize {
+        self.nhedges() / 2
+    }
+
+    fn nhedges(&self) -> usize {
+        self.filter.count_ones()
+    }
+
     fn empty(size: usize) -> Self {
         InternalSubGraph {
             filter: BitVec::empty(size),
@@ -64,7 +102,7 @@ impl SubGraph for InternalSubGraph {
         edge_attr: &impl Fn(&E) -> Option<String>,
         node_attr: &impl Fn(&V) -> Option<String>,
     ) -> String {
-        let mut out = "graph {\n ".to_string();
+        let mut out = "digraph {\n ".to_string();
         out.push_str(
             "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";\n ",
         );
@@ -82,17 +120,11 @@ impl SubGraph for InternalSubGraph {
             );
         }
 
-        for (hedge_id, (incident_node, edge)) in graph
-            .involution
-            .hedge_data
-            .iter()
-            .zip_eq(graph.involution.inv.iter())
-            .enumerate()
-        {
+        for (hedge_id, (edge, incident_node)) in graph.involution.iter() {
             match &edge {
                 //Internal graphs never have unpaired edges
-                InvolutiveMapping::Identity(data) => {
-                    let attr = if *self.filter.get(hedge_id).unwrap() {
+                InvolutiveMapping::Identity { data, underlying } => {
+                    let attr = if self.filter.includes(&hedge_id) {
                         panic!("Internal subgraphs should never have unpaired edges")
                     } else {
                         Some(GVEdgeAttrs {
@@ -105,17 +137,19 @@ impl SubGraph for InternalSubGraph {
                         hedge_id,
                         graph.nodes.get_index_of(incident_node).unwrap(),
                         attr.as_ref(),
+                        data.orientation,
+                        *underlying,
                     ));
                 }
-                InvolutiveMapping::Source((data, _)) => {
-                    let attr = if *self.filter.get(hedge_id).unwrap()
-                        && !*self.filter.get(graph.involution.inv(hedge_id)).unwrap()
-                        || *self.filter.get(graph.involution.inv(hedge_id)).unwrap()
-                            && !*self.filter.get(hedge_id).unwrap()
+                InvolutiveMapping::Source { data, .. } => {
+                    let attr = if self.filter.includes(&hedge_id)
+                        && !self.filter.includes(&graph.involution.inv(hedge_id))
+                        || self.filter.includes(&graph.involution.inv(hedge_id))
+                            && !self.filter.includes(&hedge_id)
                     {
                         panic!("Internal subgraphs should never have unpaired edges")
-                    } else if !*self.filter.get(graph.involution.inv(hedge_id)).unwrap()
-                        && !*self.filter.get(hedge_id).unwrap()
+                    } else if !self.filter.includes(&graph.involution.inv(hedge_id))
+                        && !self.filter.includes(&hedge_id)
                     {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray75\"".to_string()),
@@ -129,12 +163,13 @@ impl SubGraph for InternalSubGraph {
                         graph.nodes.get_index_of(incident_node).unwrap(),
                         graph
                             .nodes
-                            .get_index_of(graph.involution.get_connected_node_id(hedge_id).unwrap())
+                            .get_index_of(graph.involved_node_id(hedge_id).unwrap())
                             .unwrap(),
                         attr.as_ref(),
+                        data.orientation,
                     ));
                 }
-                InvolutiveMapping::Sink(_) => {}
+                InvolutiveMapping::Sink { .. } => {}
             }
         }
 
@@ -146,11 +181,8 @@ impl SubGraph for InternalSubGraph {
         node.hairs.intersection(&self.filter)
     }
 
-    fn includes(&self, i: usize) -> bool {
-        self.filter[i]
-    }
-    fn included(&self) -> impl Iterator<Item = usize> {
-        self.filter.iter_ones()
+    fn included(&self) -> &BitSlice {
+        self.filter.included()
     }
 
     fn string_label(&self) -> String {
@@ -200,25 +232,25 @@ impl SubGraphOps for InternalSubGraph {
 
 impl InternalSubGraph {
     fn valid_filter<E, V>(filter: &BitVec, graph: &HedgeGraph<E, V>) -> bool {
-        for i in filter.iter_ones() {
-            if !filter[graph.involution.inv(i)] {
+        for i in filter.included_iter() {
+            if !filter.includes(&graph.involution.inv(i)) {
                 return false;
             }
         }
         true
     }
 
-    pub fn add_edge<E, V>(&mut self, hedge: usize, graph: &HedgeGraph<E, V>) {
+    pub fn add_edge<E, V>(&mut self, hedge: Hedge, graph: &HedgeGraph<E, V>) {
         if !graph.involution.is_identity(hedge) {
-            self.filter.set(hedge, true);
-            self.filter.set(graph.involution.inv(hedge), true);
+            self.filter.set(hedge.0, true);
+            self.filter.set(graph.involution.inv(hedge).0, true);
         }
     }
 
-    pub fn remove_edge<E, V>(&mut self, hedge: usize, graph: &HedgeGraph<E, V>) {
+    pub fn remove_edge<E, V>(&mut self, hedge: Hedge, graph: &HedgeGraph<E, V>) {
         if !graph.involution.is_identity(hedge) {
-            self.filter.set(hedge, false);
-            self.filter.set(graph.involution.inv(hedge), false);
+            self.filter.set(hedge.0, false);
+            self.filter.set(graph.involution.inv(hedge).0, false);
         }
     }
 
@@ -239,15 +271,15 @@ impl InternalSubGraph {
     pub fn cleaned_filter_optimist<E, V>(mut filter: BitVec, graph: &HedgeGraph<E, V>) -> Self {
         for (i, m) in graph.involution.inv.iter().enumerate() {
             match m {
-                InvolutiveMapping::Identity(_) => filter.set(i, false),
-                InvolutiveMapping::Sink(j) => {
-                    if filter[i] {
-                        filter.set(*j, true);
+                InvolutiveMapping::Identity { .. } => filter.set(i, false),
+                InvolutiveMapping::Sink { source_idx } => {
+                    if filter.includes(&Hedge(i)) {
+                        filter.set(source_idx.0, true);
                     }
                 }
-                InvolutiveMapping::Source((_, j)) => {
-                    if filter[i] {
-                        filter.set(*j, true);
+                InvolutiveMapping::Source { sink_idx, .. } => {
+                    if filter.includes(&Hedge(i)) {
+                        filter.set(sink_idx.0, true);
                     }
                 }
             }
@@ -261,15 +293,15 @@ impl InternalSubGraph {
     pub fn cleaned_filter_pessimist<E, V>(mut filter: BitVec, graph: &HedgeGraph<E, V>) -> Self {
         for (i, m) in graph.involution.inv.iter().enumerate() {
             match m {
-                InvolutiveMapping::Identity(_) => filter.set(i, false),
-                InvolutiveMapping::Sink(j) => {
-                    if !filter[i] {
-                        filter.set(*j, false);
+                InvolutiveMapping::Identity { .. } => filter.set(i, false),
+                InvolutiveMapping::Sink { source_idx } => {
+                    if !filter.includes(&Hedge(i)) {
+                        filter.set(source_idx.0, false);
                     }
                 }
-                InvolutiveMapping::Source((_, j)) => {
-                    if !filter[i] {
-                        filter.set(*j, false);
+                InvolutiveMapping::Source { sink_idx, .. } => {
+                    if !filter.includes(&Hedge(i)) {
+                        filter.set(sink_idx.0, false);
                     }
                 }
             }
@@ -293,15 +325,12 @@ impl InternalSubGraph {
         self.loopcount = Some(graph.cyclotomatic_number(self));
     }
 
-    pub fn cycle_basis<E, V>(
-        &self,
-        graph: &HedgeGraph<E, V>,
-    ) -> (Vec<InternalSubGraph>, TraversalTree) {
+    pub fn cycle_basis<E, V>(&self, graph: &HedgeGraph<E, V>) -> (Vec<Cycle>, TraversalTree) {
         let node = graph
             .nodes
             .get_index(self.filter.first_one().unwrap())
             .unwrap()
             .0;
-        graph.paton_cycle_basis(self, node).unwrap()
+        graph.paton_cycle_basis(self, node, None).unwrap()
     }
 }

@@ -232,7 +232,23 @@ pub fn kinematics_builder(
         &external_signature,
     )
 }
+pub fn load_generic_model(name: &str) -> Model {
+    Model::from_file(String::from(
+        Path::new(&output_dir())
+            .join(format!("gammaloop_models/{}.yaml", name))
+            .to_str()
+            .unwrap(),
+    ))
+    .unwrap()
+}
 
+fn output_dir() -> String {
+    if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
+        pytest_output_path
+    } else {
+        String::from("./src/test_resources")
+    }
+}
 pub fn load_amplitude_output(
     output_path: &str,
     load_generic_model: bool,

@@ -1,10 +1,14 @@
+use bitvec::slice::BitSlice;
 use bitvec::vec::BitVec;
 use bitvec::{bitvec, order::Lsb0};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::graph::half_edge::{GVEdgeAttrs, HedgeGraph, HedgeNodeBuilder, InvolutiveMapping};
+use crate::graph::half_edge::{
+    GVEdgeAttrs, Hedge, HedgeGraph, HedgeNodeBuilder, InvolutiveMapping,
+};
 
+use super::Inclusion;
 use super::{internal::InternalSubGraph, node::HedgeNode, SubGraph, SubGraphOps};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -13,9 +17,47 @@ pub struct ContractedSubGraph {
     pub allhedges: BitVec,                // all hedges , including that are in the internal graph.
 }
 
+impl Inclusion<Hedge> for ContractedSubGraph {
+    fn includes(&self, hedge_id: &Hedge) -> bool {
+        self.internal_graph.includes(hedge_id) || self.allhedges.includes(hedge_id)
+    }
+
+    fn intersects(&self, other: &Hedge) -> bool {
+        self.includes(other)
+    }
+}
+
+impl Inclusion<ContractedSubGraph> for ContractedSubGraph {
+    fn includes(&self, other: &ContractedSubGraph) -> bool {
+        self.internal_graph.includes(&other.internal_graph)
+    }
+
+    fn intersects(&self, other: &ContractedSubGraph) -> bool {
+        self.allhedges.intersects(&other.allhedges)
+    }
+}
+
+impl Inclusion<BitVec> for ContractedSubGraph {
+    fn includes(&self, other: &BitVec) -> bool {
+        self.internal_graph.includes(other) || self.allhedges.includes(other)
+    }
+
+    fn intersects(&self, other: &BitVec) -> bool {
+        self.allhedges.intersects(other)
+    }
+}
+
 impl SubGraph for ContractedSubGraph {
-    fn includes(&self, i: usize) -> bool {
-        self.allhedges[i] && !self.internal_graph.filter[i]
+    fn nhedges(&self) -> usize {
+        self.allhedges.nhedges()
+    }
+
+    fn included(&self) -> &BitSlice {
+        self.allhedges.included()
+    }
+
+    fn nedges<E, V>(&self, graph: &HedgeGraph<E, V>) -> usize {
+        self.allhedges.nedges(graph)
     }
 
     fn dot<E, V>(
@@ -25,7 +67,7 @@ impl SubGraph for ContractedSubGraph {
         edge_attr: &impl Fn(&E) -> Option<String>,
         node_attr: &impl Fn(&V) -> Option<String>,
     ) -> String {
-        let mut out = "graph {\n ".to_string();
+        let mut out = "digraph {\n ".to_string();
         out.push_str(
             "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";\n ",
         );
@@ -43,17 +85,11 @@ impl SubGraph for ContractedSubGraph {
             );
         }
 
-        for (hedge_id, (incident_node, edge)) in graph
-            .involution
-            .hedge_data
-            .iter()
-            .zip_eq(graph.involution.inv.iter())
-            .enumerate()
-        {
+        for (hedge_id, (edge, incident_node)) in graph.involution.iter() {
             match &edge {
                 //External edges cannot be in the contracted subgraph
-                InvolutiveMapping::Identity(data) => {
-                    let attr = if *self.allhedges.get(hedge_id).unwrap() {
+                InvolutiveMapping::Identity { data, underlying } => {
+                    let attr = if self.allhedges.includes(&hedge_id) {
                         Some(GVEdgeAttrs {
                             color: Some("\"green\"".to_string()),
                             label: None,
@@ -70,28 +106,35 @@ impl SubGraph for ContractedSubGraph {
                         hedge_id,
                         graph.nodes.get_index_of(incident_node).unwrap(),
                         attr.as_ref(),
+                        data.orientation,
+                        *underlying,
                     ));
                 }
-                InvolutiveMapping::Source((data, sink)) => {
-                    let attr = if self.internal_graph.includes(hedge_id) {
+                InvolutiveMapping::Source { data, sink_idx } => {
+                    let attr = if self.internal_graph.includes(&hedge_id) {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray5\"".to_string()),
                             label: None,
                             other: data.as_ref().data.and_then(edge_attr),
                         })
-                    } else if self.allhedges.includes(hedge_id) && !self.allhedges.includes(*sink) {
+                    } else if self.allhedges.includes(&hedge_id)
+                        && !self.allhedges.includes(sink_idx)
+                    {
                         Some(GVEdgeAttrs {
                             color: Some("\"red:gray75;0.5\"".to_string()),
                             label: None,
                             other: data.as_ref().data.and_then(edge_attr),
                         })
-                    } else if !self.allhedges.includes(hedge_id) && self.allhedges.includes(*sink) {
+                    } else if !self.allhedges.includes(&hedge_id)
+                        && self.allhedges.includes(sink_idx)
+                    {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray75:blue;0.5\"".to_string()),
                             label: None,
                             other: data.as_ref().data.and_then(edge_attr),
                         })
-                    } else if !self.allhedges.includes(hedge_id) && !self.allhedges.includes(*sink)
+                    } else if !self.allhedges.includes(&hedge_id)
+                        && !self.allhedges.includes(sink_idx)
                     {
                         Some(GVEdgeAttrs {
                             color: Some("\"gray75\"".to_string()),
@@ -105,12 +148,13 @@ impl SubGraph for ContractedSubGraph {
                         graph.nodes.get_index_of(incident_node).unwrap(),
                         graph
                             .nodes
-                            .get_index_of(graph.involution.get_connected_node_id(hedge_id).unwrap())
+                            .get_index_of(graph.involved_node_id(hedge_id).unwrap())
                             .unwrap(),
                         attr.as_ref(),
+                        data.orientation,
                     ));
                 }
-                InvolutiveMapping::Sink(_) => {}
+                InvolutiveMapping::Sink { .. } => {}
             }
         }
 
@@ -122,12 +166,6 @@ impl SubGraph for ContractedSubGraph {
         let mut hairs = self.allhedges.intersection(&node.hairs);
         hairs.subtract_with(&self.internal_graph.filter);
         hairs
-    }
-
-    fn included(&self) -> impl Iterator<Item = usize> {
-        self.allhedges
-            .iter_ones()
-            .filter(move |&i| self.includes(i))
     }
 
     fn string_label(&self) -> String {
@@ -239,7 +277,7 @@ impl ContractedSubGraph {
         let mut externalhedges = bitvec![usize, Lsb0; 0; len];
 
         for hedge in &builder.hedges {
-            let mut bit = externalhedges.get_mut(*hedge).unwrap();
+            let mut bit = externalhedges.get_mut(hedge.0).unwrap();
             *bit = true;
         }
 
