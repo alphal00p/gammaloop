@@ -1287,9 +1287,7 @@ impl Numerator<ColorSimplified> {
     pub fn parse_poly(self, bare_graph: &BareGraph) -> Numerator<PolySplit> {
         debug!("Parsing color simplified numerator into polynomial");
         let state = PolySplit::from_color_simplified(self, bare_graph);
-        Numerator {
-            state: PolySplit::from_color_simplified(self, bare_graph),
-        }
+        Numerator { state }
     }
 
     pub fn parse(self) -> Numerator<Network> {
