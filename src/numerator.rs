@@ -599,10 +599,13 @@ impl Numerator<UnInit> {
         graph: &BareGraph,
         prefactor: Option<&GlobalPrefactor>,
     ) -> Numerator<AppliedFeynmanRule> {
-        debug!("applying feynman rules ");
-        Numerator {
-            state: AppliedFeynmanRule::from_graph(graph, prefactor),
-        }
+        debug!("Applying feynman rules");
+        let state = AppliedFeynmanRule::from_graph(graph, prefactor);
+        debug!(
+            "Applied feynman rules:\n\tcolor:{}\n\tcolorless:{}",
+            state.color, state.colorless
+        );
+        Numerator { state }
     }
 
     pub fn from_global(
@@ -611,19 +614,20 @@ impl Numerator<UnInit> {
         // _graph: &BareGraph,
         prefactor: Option<&GlobalPrefactor>,
     ) -> Numerator<Global> {
-        debug!("setting global numerator");
-
-        if let Some(prefactor) = prefactor {
+        debug!("Setting global numerator");
+        let state = if let Some(prefactor) = prefactor {
             let mut global = global;
             global = global * &prefactor.color * &prefactor.colorless;
-            Numerator {
-                state: Global::new(global.into()),
-            }
+
+            Global::new(global.into())
         } else {
-            Numerator {
-                state: Global::new(global.into()),
-            }
-        }
+            Global::new(global.into())
+        };
+        debug!(
+            "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
+            state.color, state.colorless
+        );
+        Numerator { state }
     }
 }
 
@@ -799,7 +803,8 @@ impl ExpressionState for NonLocal {
 
 impl Numerator<Global> {
     pub fn color_simplify(self) -> Numerator<ColorSimplified> {
-        let new_state = ColorSimplified {
+        debug!("Color simplifying global numerator");
+        let state = ColorSimplified {
             colorless: self
                 .state
                 .colorless
@@ -807,8 +812,11 @@ impl Numerator<Global> {
             color: self.state.color,
             state: Default::default(),
         };
-        debug!("color simplifying global numerator");
-        Numerator { state: new_state }
+        debug!(
+            "Color simplified numerator: color:{}\n colorless:{}",
+            state.color, state.colorless
+        );
+        Numerator { state }
     }
 
     fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
@@ -860,7 +868,7 @@ impl ExpressionState for Color {
                 Err(NumeratorStateError::NoneVariant)
             }
         } else {
-            Err(NumeratorStateError::NotColorSymplified)
+            Err(NumeratorStateError::NotColorSimplified)
         }
     }
 }
@@ -962,7 +970,7 @@ impl AppliedFeynmanRule {
             .map_data_mut(|a| a.replace_repeat_multiple(&reps));
     }
     pub fn from_graph(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>) -> Self {
-        debug!("generating numerator for graph: {}", graph.name);
+        debug!("Generating numerator for graph: {}", graph.name);
         debug!("momentum: {}", graph.dot_lmb());
 
         let vatoms: Vec<_> = graph
@@ -1017,15 +1025,16 @@ impl AppliedFeynmanRule {
 
 impl Numerator<AppliedFeynmanRule> {
     pub fn color_simplify(self) -> Numerator<ColorSimplified> {
-        debug!(
-            "Applied feynman rules: color:{}\n colorless:{}",
-            self.state.color, self.state.colorless
-        );
-        debug!("color simplifying local numerator");
+        debug!("Color simplifying local numerator");
 
-        Numerator {
-            state: ColorSimplified::color_simplify(self.state),
-        }
+        let state = ColorSimplified::color_simplify(self.state);
+
+        debug!(
+            "Color simplified numerator: color:{}\n colorless:{}",
+            state.color, state.colorless
+        );
+
+        Numerator { state }
     }
 }
 
@@ -1232,9 +1241,12 @@ impl ColorSimplified {
     }
 
     pub fn color_simplify<T: ExpressionState>(expr: SymbolicExpression<T>) -> ColorSimplified {
+        let colorless = expr.colorless;
+        let color = expr.color.map_data(Self::color_symplify_impl);
+
         ColorSimplified {
-            colorless: expr.colorless,
-            color: expr.color.map_data(Self::color_symplify_impl),
+            colorless,
+            color,
             state: Default::default(),
         }
     }
@@ -1256,8 +1268,7 @@ pub type Gloopoly =
     symbolica::poly::polynomial::MultivariatePolynomial<symbolica::domains::atom::AtomField, u8>;
 impl Numerator<ColorSimplified> {
     pub fn gamma_simplify(self) -> Numerator<GammaSimplified> {
-        debug!("ColorSimplified numerator: {}", self.export());
-        debug!("gamma simplifying color symplified numerator");
+        debug!("Gamma simplifying color symplified numerator");
 
         let gamma_simplified = self
             .state
@@ -1274,23 +1285,18 @@ impl Numerator<ColorSimplified> {
     }
 
     pub fn parse_poly(self, bare_graph: &BareGraph) -> Numerator<PolySplit> {
-        debug!(
-            "Color simplified: color:{}\n colorless:{}",
-            self.state.color, self.state.colorless
-        );
+        debug!("Parsing color simplified numerator into polynomial");
+        let state = PolySplit::from_color_simplified(self, bare_graph);
         Numerator {
             state: PolySplit::from_color_simplified(self, bare_graph),
         }
     }
 
     pub fn parse(self) -> Numerator<Network> {
-        debug!(
-            "ColorSymplified numerator: color:{}\n,colorless:{}\n",
-            self.state.color, self.state.colorless
-        );
-        Numerator {
-            state: self.state.parse(),
-        }
+        debug!("Parsing color simplified numerator into network");
+        let state = self.state.parse();
+        // debug!("");
+        Numerator { state }
     }
 }
 
@@ -1470,8 +1476,9 @@ impl Numerator<PolySplit> {
     pub fn contract(self) -> Result<Numerator<PolyContracted>> {
         match self.validate_squared_energies_impl() {
             Err(_) => {
+                debug!("Trying to contract polynomial");
                 let state = self.state.optimize();
-                debug!("PolyContracted {}", state.tensor);
+                debug!("PolyContracted: {}", state.tensor);
                 Ok(Numerator { state })
             }
             Ok(r) => Err(eyre!("has higher powers here: {}", r)),
@@ -1646,7 +1653,7 @@ impl PolyContracted {
         params: &[Atom],
         fn_map: &FunctionMap,
     ) -> EvaluatorSingle {
-        debug!("generating single evaluator");
+        debug!("Generating single evaluator");
         //
 
         debug!("Generate eval tree set with {} params", params.len());
@@ -1686,7 +1693,7 @@ impl PolyContracted {
             .compile_options()
             .compile()
         {
-            debug!("compiling iterative evaluator");
+            debug!("Compiling iterative evaluator");
             let path = path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
             match std::fs::create_dir(&path) {
@@ -1998,15 +2005,14 @@ impl GammaSimplified {
 impl Numerator<GammaSimplified> {
     pub fn parse(self) -> Numerator<Network> {
         // debug!("GammaSymplified numerator: {}", self.export());
-        debug!("parsing numerator into tensor network");
+        debug!("Parsing gamma simplified numerator into tensor network");
         Numerator {
             state: self.state.parse(),
         }
     }
 
     pub fn parse_only_colorless(self) -> Numerator<Network> {
-        // debug!("GammaSymplified numerator: {}", self.export());
-        debug!("parsing numerator into tensor network");
+        debug!("Parsing only colorless gamma simplified numerator into tensor network");
         Numerator {
             state: self.state.parse_only_colorless(),
         }
@@ -3000,7 +3006,7 @@ impl EvaluatorSingle {
             .compile_options()
             .compile()
         {
-            debug!("compiling joint evaluator");
+            debug!("Compiling joint evaluator");
             let path = extra_info.path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
             match std::fs::create_dir(&path) {
@@ -3055,7 +3061,7 @@ impl EvaluatorSingle {
         export_settings: &ExportSettings,
         fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
-        debug!("generate joint evaluator");
+        debug!("Generate joint evaluator");
         self.orientated_joint_impl(
             graph.edges.len(),
             &graph.name,
@@ -3275,8 +3281,8 @@ pub enum NumeratorStateError {
     NotColorProjected,
     #[error("Not Global")]
     NotGlobal,
-    #[error("Not ColorSymplified")]
-    NotColorSymplified,
+    #[error("Not ColorSimplified")]
+    NotColorSimplified,
     #[error("Not GammaSymplified")]
     NotGammaSymplified,
     #[error("Not Network")]
