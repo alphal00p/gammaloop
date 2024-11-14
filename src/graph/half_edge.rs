@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{collections::VecDeque, fmt::Display, hash::Hash};
 
 use ahash::{AHashMap, AHashSet};
 use bitvec::{slice::IterOnes, vec::BitVec};
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use bitvec::prelude::*;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct NodeIndex(usize);
+pub struct NodeIndex(pub usize);
 
 impl std::fmt::Display for NodeIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -17,7 +17,7 @@ impl std::fmt::Display for NodeIndex {
     }
 }
 
-struct PowersetIterator {
+pub struct PowersetIterator {
     size: usize,
     current: usize,
 }
@@ -58,6 +58,22 @@ enum InvolutiveMapping<E> {
 impl<E> InvolutiveMapping<E> {
     pub fn is_identity(&self) -> bool {
         matches!(self, InvolutiveMapping::Identity(_))
+    }
+
+    pub fn map_data_ref<E2, F: FnMut(&E) -> E2>(&self, f: F) -> InvolutiveMapping<E2> {
+        match self {
+            InvolutiveMapping::Identity(d) => InvolutiveMapping::Identity(d.as_ref().map(f)),
+            InvolutiveMapping::Source((d, s)) => InvolutiveMapping::Source((d.as_ref().map(f), *s)),
+            InvolutiveMapping::Sink(s) => InvolutiveMapping::Sink(*s),
+        }
+    }
+
+    pub fn map_data_none<E2>(&self) -> InvolutiveMapping<E2> {
+        match self {
+            InvolutiveMapping::Identity(_) => InvolutiveMapping::Identity(None),
+            InvolutiveMapping::Source((_, s)) => InvolutiveMapping::Source((None, *s)),
+            InvolutiveMapping::Sink(s) => InvolutiveMapping::Sink(*s),
+        }
     }
 
     pub fn is_internal(&self) -> bool {
@@ -122,8 +138,28 @@ impl<E> InvolutiveMapping<E> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Involution<N, E> {
+pub struct Involution<N, E> {
     inv: Vec<(N, InvolutiveMapping<E>)>,
+}
+
+impl<N, E> Display for Involution<N, E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = "".to_string();
+        for (i, (_, e)) in self.inv.iter().enumerate() {
+            match e {
+                InvolutiveMapping::Identity(_) => {
+                    out.push_str(&format!("{}\n", i));
+                }
+                InvolutiveMapping::Source((_, s)) => {
+                    out.push_str(&format!("{}->{}\n", i, s));
+                }
+                InvolutiveMapping::Sink(s) => {
+                    out.push_str(&format!("{}<-{}\n", i, s));
+                }
+            }
+        }
+        write!(f, "{}", out)
+    }
 }
 
 #[allow(dead_code)]
@@ -132,10 +168,99 @@ impl<N, E> Involution<N, E> {
         Involution { inv: Vec::new() }
     }
 
-    fn n_internals(&self, subgraph: &SubGraph) -> usize {
+    pub fn flip(&mut self, hedge: usize) {
+        let pair = self.inv(hedge);
+
+        self.inv.swap(hedge, pair);
+
+        match &mut self.inv[hedge].1 {
+            InvolutiveMapping::Identity(_) => {}
+            InvolutiveMapping::Source((_, s)) => {
+                *s = pair;
+            }
+            InvolutiveMapping::Sink(s) => {
+                *s = pair;
+            }
+        }
+
+        match &mut self.inv[pair].1 {
+            InvolutiveMapping::Identity(_) => {}
+            InvolutiveMapping::Source((_, s)) => {
+                *s = hedge;
+            }
+            InvolutiveMapping::Sink(s) => {
+                *s = hedge;
+            }
+        }
+    }
+
+    fn print<S: SubGraph>(
+        &self,
+        subgraph: &S,
+        n_label: &impl Fn(&N) -> Option<String>,
+        h_label: &impl Fn(&E) -> Option<String>,
+    ) -> String {
+        let mut out = "".to_string();
+        for (i, (n, e)) in self.inv.iter().enumerate() {
+            if !subgraph.is_included(i) {
+                continue;
+            }
+            if let Some(l) = n_label(n) {
+                out.push_str(&format!("{}:", l));
+            }
+            match e {
+                InvolutiveMapping::Identity(_) => {
+                    out.push_str(&format!("{}\n", i));
+                }
+                InvolutiveMapping::Source((d, s)) => {
+                    if let Some(d) = d {
+                        if let Some(l) = h_label(d) {
+                            out.push_str(&format!("{}-{}->{}\n", i, s, l));
+                        } else {
+                            out.push_str(&format!("{}->{}\n", i, s));
+                        }
+                    } else {
+                        out.push_str(&format!("{}->{}\n", i, s));
+                    }
+                }
+                InvolutiveMapping::Sink(s) => {
+                    out.push_str(&format!("{}<-{}\n", i, s));
+                }
+            }
+        }
+        out
+    }
+
+    fn map_data_ref<F, G, N2, E2>(&self, mut f: F, g: &G) -> Involution<N2, E2>
+    where
+        F: FnMut(&N) -> N2,
+        G: FnMut(&E) -> E2 + Clone,
+    {
+        let inv = self
+            .inv
+            .iter()
+            .map(|(n, e)| (f(n), e.map_data_ref(g.clone())))
+            .collect_vec();
+
+        Involution { inv }
+    }
+
+    fn forgetful_map_node_data_ref<N2, E2>(
+        &self,
+        mut f: impl FnMut(&N) -> N2,
+    ) -> Involution<N2, E2> {
+        let inv = self
+            .inv
+            .iter()
+            .map(|(n, e)| (f(n), e.map_data_none()))
+            .collect_vec();
+
+        Involution { inv }
+    }
+
+    fn n_internals<S: SubGraph>(&self, subgraph: &S) -> usize {
         subgraph
-            .filter
-            .iter_ones()
+            .included()
             .filter(|i| self.is_internal(*i, subgraph))
             .count()
             / 2
@@ -182,25 +307,45 @@ impl<N, E> Involution<N, E> {
         }
     }
 
-    fn is_internal(&self, index: usize, subgraph: &SubGraph) -> bool {
-        if !subgraph.filter[index] {
+    fn set_data(&mut self, index: usize, data: E) -> Option<E> {
+        if let InvolutiveMapping::Sink(i) = &self.inv[index].1 {
+            return self.set_data(*i, data);
+        }
+
+        match &mut self.inv[index].1 {
+            InvolutiveMapping::Identity(old_data) => {
+                let old = old_data.take();
+                *old_data = Some(data);
+                old
+            }
+            InvolutiveMapping::Source((old_data, _)) => {
+                let old = old_data.take();
+                *old_data = Some(data);
+                old
+            }
+            InvolutiveMapping::Sink(_) => unreachable!(),
+        }
+    }
+
+    fn is_internal<S: SubGraph>(&self, index: usize, subgraph: &S) -> bool {
+        if !subgraph.is_included(index) {
             return false;
         }
         match &self.inv[index].1 {
             InvolutiveMapping::Identity(_) => false,
-            InvolutiveMapping::Source((_, i)) => subgraph.filter[*i],
-            InvolutiveMapping::Sink(i) => subgraph.filter[*i],
+            InvolutiveMapping::Source((_, i)) => subgraph.is_included(*i),
+            InvolutiveMapping::Sink(i) => subgraph.is_included(*i),
         }
     }
 
-    fn get_smart_data(&self, index: usize, subgraph: &SubGraph) -> Option<&E> {
+    fn get_smart_data<S: SubGraph>(&self, index: usize, subgraph: &S) -> Option<&E> {
         //should be a better enum (none,internal,external)
-        if subgraph.filter[index] {
+        if subgraph.is_included(index) {
             match &self.inv[index].1 {
                 InvolutiveMapping::Identity(data) => Some(data.as_ref().unwrap()),
                 InvolutiveMapping::Source((data, _)) => Some(data.as_ref().unwrap()),
                 InvolutiveMapping::Sink(i) => {
-                    if subgraph.filter[*i] {
+                    if subgraph.is_included(*i) {
                         None
                     } else {
                         Some(self.get_data(*i))
@@ -299,276 +444,13 @@ impl std::fmt::Display for GVEdgeAttrs {
         write!(f, "{}", out)
     }
 }
+pub mod subgraph;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HedgeGraph<E, V> {
-    nodes: IndexMap<HalfEdgeNode, V>, // Forest of nodes, that contain half-edges, with data E
+    nodes: IndexMap<HedgeNode, V>, // Forest of nodes, that contain half-edges, with data E
     base_nodes: usize,
-    involution: Involution<HalfEdgeNode, E>, // Involution of half-edges
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq)]
-pub struct SubGraph {
-    pub filter: BitVec,
-    pub loopcount: Option<usize>,
-}
-
-impl Hash for SubGraph {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.filter.hash(state);
-    }
-}
-
-impl PartialEq for SubGraph {
-    fn eq(&self, other: &Self) -> bool {
-        self.filter == other.filter
-    }
-}
-
-impl From<BitVec> for SubGraph {
-    fn from(filter: BitVec) -> Self {
-        SubGraph {
-            filter,
-            loopcount: None,
-        }
-    }
-}
-
-impl PartialOrd for SubGraph {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self == other {
-            Some(std::cmp::Ordering::Equal)
-        } else if self.filter.clone() | &other.filter == self.filter {
-            Some(std::cmp::Ordering::Greater)
-        } else if self.filter.clone() | &other.filter == other.filter {
-            Some(std::cmp::Ordering::Less)
-        } else {
-            None
-        }
-    }
-}
-
-impl SubGraph {
-    pub fn to_nesting_node<E, V>(&self, graph: &HedgeGraph<E, V>) -> HalfEdgeNode {
-        graph.nesting_node_from_subgraph(self.clone())
-    }
-    pub fn is_empty(&self) -> bool {
-        self.filter.count_ones() == 0
-    }
-
-    pub fn set_loopcount<E, V>(&mut self, graph: &HedgeGraph<E, V>) {
-        self.loopcount = Some(graph.cyclotomatic_number(self));
-    }
-
-    // Return a cycle basis and the corresponding spanning tree
-    pub fn cycle_basis<E, V>(&self, graph: &HedgeGraph<E, V>) -> (Vec<HalfEdgeNode>, SubGraph) {
-        graph
-            .paton_cycle_basis(self, self.filter.first_one().unwrap())
-            .unwrap()
-    }
-
-    pub fn intersect_with(&mut self, other: &SubGraph) {
-        self.filter &= &other.filter;
-    }
-
-    pub fn union_with(&mut self, other: &SubGraph) {
-        self.filter |= &other.filter;
-    }
-
-    pub fn sym_diff_with(&mut self, other: &SubGraph) {
-        self.filter ^= &other.filter;
-    }
-
-    pub fn intersection(&self, other: &SubGraph) -> SubGraph {
-        let mut new = self.clone();
-        new.intersect_with(other);
-        new
-    }
-
-    pub fn union(&self, other: &SubGraph) -> SubGraph {
-        let mut new = self.clone();
-        new.union_with(other);
-        new
-    }
-
-    pub fn sym_diff(&self, other: &SubGraph) -> SubGraph {
-        let mut new = self.clone();
-        new.sym_diff_with(other);
-        new
-    }
-
-    pub fn empty_intersection(&self, other: &SubGraph) -> bool {
-        (self.filter.clone() & &other.filter).count_ones() == 0
-    }
-
-    pub fn empty_union(&self, other: &SubGraph) -> bool {
-        (self.filter.clone() | &other.filter).count_ones() == 0
-    }
-
-    pub fn complement(&self) -> SubGraph {
-        SubGraph {
-            filter: !self.filter.clone(),
-            loopcount: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct HalfEdgeNode {
-    pub internal_graph: SubGraph,
-    externalhedges: BitVec, // essentially all hedges that are not in the internal graph, but are connected to it
-}
-
-impl PartialOrd for HalfEdgeNode {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self == other {
-            return Some(std::cmp::Ordering::Equal);
-        }
-
-        if self.internal_graph.filter.len() != other.internal_graph.filter.len() {
-            return None;
-        }
-
-        if self.externalhedges.len() != other.externalhedges.len() {
-            return None;
-        }
-
-        let self_all = self.all_edges();
-        let other_all = other.all_edges();
-
-        let all_order = if self_all == other_all {
-            Some(std::cmp::Ordering::Equal)
-        } else if self_all.clone() | &other_all == self_all {
-            Some(std::cmp::Ordering::Greater)
-        } else if self_all.clone() | &other_all == other_all {
-            Some(std::cmp::Ordering::Less)
-        } else {
-            None
-        };
-
-        let internal_order = self.internal_graph.partial_cmp(&other.internal_graph);
-
-        match (all_order, internal_order) {
-            (Some(std::cmp::Ordering::Equal), Some(std::cmp::Ordering::Equal)) => {
-                Some(std::cmp::Ordering::Equal)
-            }
-            (Some(all), Some(internal)) => {
-                if all == internal {
-                    Some(all)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-}
-
-impl HalfEdgeNode {
-    pub fn new(len: usize) -> Self {
-        HalfEdgeNode {
-            internal_graph: bitvec![usize, Lsb0; 0; len].into(),
-            externalhedges: bitvec![usize, Lsb0; 0; len],
-        }
-    }
-
-    fn all_edges(&self) -> BitVec {
-        self.internal_graph.filter.clone() | &self.externalhedges
-    }
-
-    pub fn union_with(&mut self, other: &HalfEdgeNode) {
-        self.internal_graph.filter |= &other.internal_graph.filter;
-        self.externalhedges |= &other.externalhedges;
-        self.externalhedges &= !self.internal_graph.filter.clone();
-    }
-
-    pub fn intersect_with(&mut self, other: &HalfEdgeNode) {
-        self.internal_graph.filter &= &other.internal_graph.filter;
-        self.externalhedges &= &other.externalhedges;
-    }
-
-    #[must_use]
-    pub fn intersection(&self, other: &HalfEdgeNode) -> HalfEdgeNode {
-        let mut new = self.clone();
-        new.intersect_with(other);
-        new
-    }
-
-    #[must_use]
-    pub fn union(&self, other: &HalfEdgeNode) -> HalfEdgeNode {
-        let mut new = self.clone();
-        new.union_with(other);
-        new
-    }
-
-    pub fn empty_intersection(&self, other: &HalfEdgeNode) -> bool {
-        let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
-
-        let externals = self.externalhedges.clone() & &other.externalhedges;
-
-        internals.count_ones() == 0 && externals.count_ones() == 0
-    }
-
-    pub fn weakly_disjoint(&self, other: &HalfEdgeNode) -> bool {
-        let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
-
-        internals.count_ones() == 0
-    }
-
-    pub fn strongly_disjoint(&self, other: &HalfEdgeNode) -> bool {
-        let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
-
-        let externals = self.externalhedges.clone() & &other.externalhedges;
-
-        internals.count_ones() == 0 && externals.count_ones() == 0
-    }
-
-    pub fn node_from_pos(pos: &[usize], len: usize) -> HalfEdgeNode {
-        HalfEdgeNode {
-            externalhedges: HalfEdgeNode::filter_from_pos(pos, len),
-            internal_graph: bitvec![usize, Lsb0; 0; len].into(),
-        }
-    }
-
-    pub fn filter_from_pos(pos: &[usize], len: usize) -> BitVec {
-        let mut filter = bitvec![usize, Lsb0; 0; len];
-
-        for &i in pos {
-            filter.set(i, true);
-        }
-
-        filter
-    }
-
-    pub fn internal_graph_union(&self, other: &HalfEdgeNode) -> SubGraph {
-        SubGraph {
-            filter: self.internal_graph.filter.clone() | &other.internal_graph.filter,
-            loopcount: None,
-        }
-    }
-
-    pub fn from_builder<V>(builder: &HedgeNodeBuilder<V>, len: usize) -> Self {
-        let internal_graph = bitvec![usize, Lsb0; 0; len].into();
-        let mut externalhedges = bitvec![usize, Lsb0; 0; len];
-
-        for hedge in &builder.hedges {
-            let mut bit = externalhedges.get_mut(*hedge).unwrap();
-            *bit = true;
-        }
-
-        HalfEdgeNode {
-            internal_graph,
-            externalhedges,
-        }
-    }
-
-    pub fn is_node(&self) -> bool {
-        self.internal_graph.is_empty()
-    }
-
-    pub fn is_subgraph(&self) -> bool {
-        !self.is_node()
-    }
+    pub involution: Involution<HedgeNode, E>, // Involution of half-edges
 }
 
 #[derive(Clone, Debug)]
@@ -577,19 +459,19 @@ pub struct HedgeNodeBuilder<V> {
     hedges: Vec<usize>,
 }
 
-pub struct HedgeGraphBuidler<E, V> {
+pub struct HedgeGraphBuilder<E, V> {
     nodes: Vec<HedgeNodeBuilder<V>>,
     involution: Involution<NodeIndex, E>,
 }
 
-pub struct NodeIterator<'a, E, V> {
+pub struct NodeIterator<'a, E, V, I = IterOnes<'a, usize, Lsb0>> {
     graph: &'a HedgeGraph<E, V>,
-    edges: IterOnes<'a, usize, Lsb0>,
+    edges: I,
     seen: BitVec,
 }
 
-impl<'a, E, V> Iterator for NodeIterator<'a, E, V> {
-    type Item = (&'a HalfEdgeNode, &'a V);
+impl<'a, E, V, I: Iterator<Item = usize>> Iterator for NodeIterator<'a, E, V, I> {
+    type Item = (&'a HedgeNode, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(next) = self.edges.next() {
@@ -608,9 +490,9 @@ impl<'a, E, V> Iterator for NodeIterator<'a, E, V> {
     }
 }
 
-impl<E, V> HedgeGraphBuidler<E, V> {
+impl<E, V> HedgeGraphBuilder<E, V> {
     pub fn new() -> Self {
-        HedgeGraphBuidler {
+        HedgeGraphBuilder {
             nodes: Vec::new(),
             involution: Involution::new(),
         }
@@ -642,27 +524,27 @@ impl<E, V> HedgeGraphBuidler<E, V> {
     }
 }
 
-impl<E, V> Default for HedgeGraphBuidler<E, V> {
+impl<E, V> Default for HedgeGraphBuilder<E, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<E, V> From<HedgeGraphBuidler<E, V>> for HedgeGraph<E, V> {
-    fn from(builder: HedgeGraphBuidler<E, V>) -> Self {
+impl<E, V> From<HedgeGraphBuilder<E, V>> for HedgeGraph<E, V> {
+    fn from(builder: HedgeGraphBuilder<E, V>) -> Self {
         let len = builder.involution.len();
         let involution = Involution {
             inv: builder
                 .involution
                 .inv
                 .into_iter()
-                .map(|(n, i)| (HalfEdgeNode::from_builder(&builder.nodes[n.0], len), i))
+                .map(|(n, i)| (HedgeNode::from_builder(&builder.nodes[n.0], len), i))
                 .collect(),
         };
-        let nodes: IndexMap<HalfEdgeNode, V> = builder
+        let nodes: IndexMap<HedgeNode, V> = builder
             .nodes
             .into_iter()
-            .map(|x| (HalfEdgeNode::from_builder(&x, len), x.data))
+            .map(|x| (HedgeNode::from_builder(&x, len), x.data))
             .collect();
         HedgeGraph {
             base_nodes: nodes.len(),
@@ -674,7 +556,7 @@ impl<E, V> From<HedgeGraphBuidler<E, V>> for HedgeGraph<E, V> {
 
 impl<N: Clone, E: Clone> From<symbolica::graph::Graph<N, E>> for HedgeGraph<E, N> {
     fn from(graph: symbolica::graph::Graph<N, E>) -> Self {
-        let mut builder = HedgeGraphBuidler::new();
+        let mut builder = HedgeGraphBuilder::new();
         let mut map = AHashMap::new();
 
         for (i, node) in graph.nodes().iter().enumerate() {
@@ -692,9 +574,9 @@ impl<N: Clone, E: Clone> From<symbolica::graph::Graph<N, E>> for HedgeGraph<E, N
     }
 }
 
-impl From<&BareGraph> for HedgeGraph<usize, usize> {
+impl<'a> From<&'a BareGraph> for HedgeGraph<usize, usize> {
     fn from(value: &BareGraph) -> Self {
-        let mut builder = HedgeGraphBuidler::new();
+        let mut builder = HedgeGraphBuilder::new();
         let mut map = AHashMap::new();
 
         for (i, _) in value.vertices.iter().enumerate() {
@@ -711,13 +593,14 @@ impl From<&BareGraph> for HedgeGraph<usize, usize> {
     }
 }
 
+use subgraph::{HedgeNode, InternalSubGraph, SubGraph};
 use thiserror::Error;
 
 use super::BareGraph;
 
 #[derive(Error, Debug)]
 
-pub enum NestingNodeError {
+pub enum HedgeError {
     #[error("Invalid start node")]
     InvalidStart,
 }
@@ -746,7 +629,10 @@ impl<E, V> HedgeGraph<E, V> {
     //     self.node_out_edges(node_index).len()
     // }
 
-    pub fn iter_egde_data<'a>(&'a self, subgraph: &'a SubGraph) -> impl Iterator<Item = &E> + '_ {
+    pub fn iter_egde_data<'a>(
+        &'a self,
+        subgraph: &'a InternalSubGraph,
+    ) -> impl Iterator<Item = &E> + '_ {
         subgraph
             .filter
             .iter_ones()
@@ -755,7 +641,7 @@ impl<E, V> HedgeGraph<E, V> {
 
     pub fn iter_internal_edge_data<'a>(
         &'a self,
-        subgraph: &'a SubGraph,
+        subgraph: &'a InternalSubGraph,
     ) -> impl Iterator<Item = &E> + '_ {
         subgraph
             .filter
@@ -763,49 +649,74 @@ impl<E, V> HedgeGraph<E, V> {
             .flat_map(|i| self.involution.get_smart_data(i, subgraph))
     }
 
-    pub fn is_connected(&self, subgraph: &SubGraph) -> bool {
+    // pub fn strongly_disjoint(&self, graphs: impl IntoIterator<Item = SubGraph>) -> bool {
+    //     let mut union: SubGraph = self.empty_filter().into();
+
+    //     let mut nodes: SubGraph = self.empty_filter().into();
+
+    //     for subgraph in graphs {
+    //         if union.intersection(&subgraph).is_empty() {
+    //             return false;
+    //         }
+    //         union.union_with(&subgraph);
+
+    //         let nodes = subgraph.to_nesting_node(graph)
+    //     }
+    //     let internals = self.internal_graph.filter.clone() & &other.internal_graph.filter;
+
+    //     let externals_in_self = self.internal_graph.filter.clone() & &other.;
+    //     let externals_in_other = self.externalhedges.clone() & &other.internal_graph.filter;
+
+    //     internals.count_ones() == 0
+    //         && externals_in_self.count_ones() == 0
+    //         && externals_in_other.count_ones() == 0
+    // }
+
+    pub fn is_connected(&self, subgraph: &InternalSubGraph) -> bool {
         let n_hedges = subgraph.filter.count_ones();
         let start = subgraph.filter.first_one();
 
         if let Some(start) = start {
-            self.dfs_reach(subgraph, start).len() == n_hedges
+            self.dfs_reach(subgraph, start).filter.count_ones() == n_hedges
         } else {
             true
         }
     }
 
-    pub fn count_connected_components(&self, subgraph: &SubGraph) -> usize {
-        let mut visited_edges = bitvec![usize, Lsb0; 0; self.n_hedges()];
-        let mut component_count = 0;
+    pub fn count_connected_components(&self, subgraph: &InternalSubGraph) -> usize {
+        self.connected_components(subgraph).len()
+    }
 
+    pub fn connected_components(&self, subgraph: &InternalSubGraph) -> Vec<InternalSubGraph> {
+        let mut visited_edges = self.empty_filter();
+        let mut components = vec![];
         // Iterate over all edges in the subgraph
         for hedge_index in subgraph.filter.iter_ones() {
             if !visited_edges[hedge_index] {
-                // Start a new component
-                component_count += 1;
-
                 // Perform DFS to find all reachable edges from this edge
-                let reachable_edges = self.dfs_reach(subgraph, hedge_index);
-
-                // Mark all reachable edges as visited
-                for edge in reachable_edges {
-                    visited_edges.set(edge, true);
-                }
+                //
+                let root_node = self.involution.get_node_id(hedge_index);
+                let reachable_edges = TraversalTree::dfs(self, subgraph, root_node).covers();
+                visited_edges.union_with(&reachable_edges);
+                let component = self.clean_subgraph(reachable_edges);
+                components.push(component);
             }
         }
-
-        component_count
+        components
     }
 
-    pub fn cyclotomatic_number(&self, subgraph: &SubGraph) -> usize {
+    pub fn cyclotomatic_number(&self, subgraph: &InternalSubGraph) -> usize {
         let n_hedges = self.count_internal_edges(subgraph);
+        // println!("n_hedges: {}", n_hedges);
         let n_nodes = self.number_of_nodes_in_subgraph(subgraph);
+        // println!("n_nodes: {}", n_nodes);
         let n_components = self.count_connected_components(subgraph);
+        // println!("n_components: {}", n_components);
 
         n_hedges - n_nodes + n_components
     }
 
-    pub fn count_internal_edges(&self, subgraph: &SubGraph) -> usize {
+    pub fn count_internal_edges(&self, subgraph: &InternalSubGraph) -> usize {
         let mut internal_edge_count = 0;
 
         // Iterate over all half-edges in the subgraph
@@ -824,19 +735,21 @@ impl<E, V> HedgeGraph<E, V> {
         internal_edge_count
     }
 
-    pub fn dfs_reach(&self, subgraph: &SubGraph, start: usize) -> Vec<usize> {
-        pathfinding::directed::dfs::dfs_reach(start, |i| self.succesors(subgraph, *i).into_iter())
-            .collect()
+    pub fn dfs_reach(&self, subgraph: &InternalSubGraph, start: usize) -> InternalSubGraph {
+        let mut dfs_reach = self.empty_filter();
+        for i in pathfinding::directed::dfs::dfs_reach(start, |i| {
+            self.succesors(subgraph, *i).into_iter()
+        }) {
+            dfs_reach.set(i, true);
+        }
+
+        InternalSubGraph::try_new(dfs_reach, self).unwrap()
     }
 
-    pub fn succesors(&self, subgraph: &SubGraph, start: usize) -> Vec<usize> {
+    pub fn succesors(&self, subgraph: &InternalSubGraph, start: usize) -> Vec<usize> {
         let mut succesors = Vec::new();
         if let Some(connected) = self.involution.get_connected_node_id(start) {
-            for i in connected
-                .externalhedges
-                .iter_ones()
-                .filter(|x| subgraph.filter[*x])
-            {
+            for i in connected.hairs.iter_ones().filter(|x| subgraph.filter[*x]) {
                 {
                     succesors.push(i);
                 }
@@ -845,29 +758,40 @@ impl<E, V> HedgeGraph<E, V> {
         succesors
     }
 
+    pub fn neighbors<S: SubGraph>(&self, subgraph: &S, pos: usize) -> BitVec {
+        subgraph.hairs(self.involution.get_node_id(pos))
+    }
+
+    pub fn connected_neighbors<S: SubGraph>(&self, subgraph: &S, pos: usize) -> Option<BitVec> {
+        Some(subgraph.hairs(self.involution.get_connected_node_id(pos)?))
+    }
+
     pub fn iter_egde_node<'a>(
         &'a self,
-        subgraph: &'a SubGraph,
-    ) -> impl Iterator<Item = &HalfEdgeNode> + '_ {
+        subgraph: &'a InternalSubGraph,
+    ) -> impl Iterator<Item = &HedgeNode> + '_ {
         subgraph
             .filter
             .iter_ones()
             .map(|i| self.involution.get_node_id(i))
     }
 
-    pub fn iter_node_data<'a>(&'a self, subgraph: &'a SubGraph) -> NodeIterator<'a, E, V> {
+    pub fn iter_node_data<'a, S: SubGraph>(
+        &'a self,
+        subgraph: &'a S,
+    ) -> impl Iterator<Item = (&'a HedgeNode, &'a V)> {
         NodeIterator {
             graph: self,
-            edges: subgraph.filter.iter_ones(),
+            edges: subgraph.included(),
             seen: bitvec![usize, Lsb0; 0; self.base_nodes],
         }
     }
 
-    pub fn get_node_pos(&self, node: &HalfEdgeNode) -> usize {
+    pub fn get_node_pos(&self, node: &HedgeNode) -> usize {
         self.nodes.get_index_of(node).unwrap()
     }
 
-    pub fn get_incident_node_id(&self, edge: usize) -> &HalfEdgeNode {
+    pub fn get_incident_node_id(&self, edge: usize) -> &HedgeNode {
         self.involution.get_node_id(edge)
     }
 
@@ -901,8 +825,8 @@ impl<E, V> HedgeGraph<E, V> {
     }
 
     pub fn random(nodes: usize, edges: usize, seed: u64) -> HedgeGraph<(), ()> {
-        let mut inv: Involution<Option<HalfEdgeNode>, ()> =
-            Involution::<HalfEdgeNode, ()>::random(edges, seed);
+        let mut inv: Involution<Option<HedgeNode>, ()> =
+            Involution::<HedgeNode, ()>::random(edges, seed);
 
         let mut rng = SmallRng::seed_from_u64(seed);
 
@@ -911,7 +835,7 @@ impl<E, V> HedgeGraph<E, V> {
         let mut sinks = Vec::new();
 
         for (i, e) in inv.inv.iter().enumerate() {
-            let nodeid = HalfEdgeNode::node_from_pos(&[i], inv.inv.len());
+            let nodeid = HedgeNode::node_from_pos(&[i], inv.inv.len());
             match e.1 {
                 InvolutiveMapping::Identity(_) => externals.push(nodeid),
                 InvolutiveMapping::Source((_, _)) => sources.push(nodeid),
@@ -964,13 +888,13 @@ impl<E, V> HedgeGraph<E, V> {
         }
 
         for sink in &sinks {
-            for i in sink.externalhedges.iter_ones() {
+            for i in sink.hairs.iter_ones() {
                 inv.set_id(i, Some(sink.clone()));
             }
         }
 
         for source in &sources {
-            for i in source.externalhedges.iter_ones() {
+            for i in source.hairs.iter_ones() {
                 inv.set_id(i, Some(source.clone()));
             }
         }
@@ -998,7 +922,7 @@ impl<E, V> HedgeGraph<E, V> {
 
     pub fn base_dot(&self) -> String {
         let mut out = "graph {\n ".to_string();
-        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n layout=\"neato\";\n");
+        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
         for (i, (n, e)) in self.involution.inv.iter().enumerate() {
             out.push_str(
                 &e.default_dot(
@@ -1015,27 +939,31 @@ impl<E, V> HedgeGraph<E, V> {
         out
     }
 
-    pub fn nesting_node_from_subgraph(&self, internal_graph: SubGraph) -> HalfEdgeNode {
-        let mut externalhedges = bitvec![usize, Lsb0; 0; self.involution.len()];
+    pub fn nesting_node_from_subgraph(&self, internal_graph: InternalSubGraph) -> HedgeNode {
+        let mut hairs = bitvec![usize, Lsb0; 0; self.involution.len()];
 
-        for i in internal_graph.filter.iter_ones() {
-            externalhedges |= &self.involution.inv[i].0.externalhedges;
+        if !internal_graph.valid::<E, V>(self) {
+            panic!("Invalid subgraph")
         }
 
-        HalfEdgeNode {
-            externalhedges: !(!externalhedges | &internal_graph.filter),
+        for i in internal_graph.included() {
+            hairs |= &self.involution.inv[i].0.hairs;
+        }
+
+        HedgeNode {
+            hairs: !(!hairs | &internal_graph.filter),
             internal_graph,
         }
     }
 
-    fn nesting_node_fix(&self, node: &mut HalfEdgeNode) {
+    fn nesting_node_fix(&self, node: &mut HedgeNode) {
         let mut externalhedges = bitvec![usize, Lsb0; 0; self.involution.len()];
 
         for i in node.internal_graph.filter.iter_ones() {
-            externalhedges |= &self.involution.inv[i].0.externalhedges;
+            externalhedges |= &self.involution.inv[i].0.hairs;
         }
 
-        node.externalhedges = !(!externalhedges | &node.internal_graph.filter);
+        node.hairs = !(!externalhedges | &node.internal_graph.filter);
     }
 
     pub fn paired_filter_from_pos(&self, pos: &[usize]) -> BitVec {
@@ -1049,15 +977,15 @@ impl<E, V> HedgeGraph<E, V> {
         filter
     }
 
-    pub fn filter_from_pos(&self, pos: &[usize]) -> BitVec {
-        HalfEdgeNode::filter_from_pos(pos, self.involution.len())
-    }
+    // pub fn filter_from_pos(&self, pos: &[usize]) -> BitVec {
+    //     Nested<T>::filter_from_pos(pos, self.involution.len())
+    // }
 
-    pub fn nesting_node_from_pos(&self, pos: &[usize]) -> HalfEdgeNode {
-        self.nesting_node_from_subgraph(SubGraph::from(self.filter_from_pos(pos)))
-    }
+    // pub fn nesting_node_from_pos(&self, pos: &[usize]) -> Nested<T> {
+    //     self.nesting_node_from_subgraph(SubGraph::from(self.filter_from_pos(pos)))
+    // }
 
-    fn remove_externals(&self, subgraph: &mut HalfEdgeNode) {
+    fn remove_externals(&self, subgraph: &mut HedgeNode) {
         let externals = self.external_filter();
 
         subgraph.internal_graph.filter &= !externals;
@@ -1075,32 +1003,30 @@ impl<E, V> HedgeGraph<E, V> {
         filter
     }
 
-    fn full_filter(&self) -> BitVec {
+    pub fn full_filter(&self) -> BitVec {
         bitvec![usize, Lsb0; 1; self.involution.len()]
     }
 
-    fn empty_filter(&self) -> BitVec {
+    pub fn empty_filter(&self) -> BitVec {
         bitvec![usize, Lsb0; 0; self.involution.len()]
     }
 
-    fn full_node(&self) -> HalfEdgeNode {
-        HalfEdgeNode {
-            internal_graph: (self.full_filter() & !self.external_filter()).into(),
-            externalhedges: self.external_filter(),
-        }
+    pub fn clean_subgraph(&self, filter: BitVec) -> InternalSubGraph {
+        InternalSubGraph::cleaned_filter_optimist(filter, self)
     }
 
-    // Return a cycle basis and the corresponding spanning tree
-    pub fn cycle_basis(&self) -> (Vec<HalfEdgeNode>, SubGraph) {
-        let i = self.involution.first_internal().unwrap();
+    pub fn full_node(&self) -> HedgeNode {
+        self.nesting_node_from_subgraph(self.full_graph())
+    }
 
-        self.paton_cycle_basis(&self.full_filter().into(), i)
+    pub fn cycle_basis(&self) -> (Vec<InternalSubGraph>, TraversalTree) {
+        self.paton_cycle_basis(&self.full_graph(), self.involution.get_node_id(0))
             .unwrap()
     }
 
     ///Read, R.C. and Tarjan, R.E. (1975), Bounds on Backtrack Algorithms for Listing Cycles, Paths, and Spanning Trees. Networks, 5: 237-252. https://doi.org/10.1002/net.1975.5.3.237
 
-    pub fn read_tarjan(&self) -> Vec<HalfEdgeNode> {
+    pub fn read_tarjan(&self) -> Vec<HedgeNode> {
         let mut cycles = Vec::new();
         for (i, (_, e)) in self.involution.inv.iter().enumerate() {
             if matches!(e, InvolutiveMapping::Source(_)) {
@@ -1112,14 +1038,14 @@ impl<E, V> HedgeGraph<E, V> {
 
     pub fn backtrack(
         &self,
-        options: &mut SubGraph,
-        tree: &mut SubGraph,
+        options: &mut InternalSubGraph,
+        tree: &mut InternalSubGraph,
         current: usize,
     ) -> Option<usize> {
         tree.filter.set(self.involution.inv(current), false);
         tree.filter.set(current, false);
 
-        let current_node = &self.involution.get_node_id(current).externalhedges;
+        let current_node = &self.involution.get_node_id(current).hairs;
 
         let current = current_node.iter_ones().find(|&i| options.filter[i]);
 
@@ -1139,12 +1065,11 @@ impl<E, V> HedgeGraph<E, V> {
         }
     }
 
-    pub fn increasing_cycles_from(&self, start: usize) -> Vec<HalfEdgeNode> {
-        let mut cycles = Vec::new();
+    pub fn increasing_cycles_from(&self, start: usize) -> Vec<HedgeNode> {
+        let cycles = Vec::new();
 
-        let mut tree: SubGraph = self.empty_filter().into();
-        let mut options: SubGraph = SubGraph::from(self.external_filter()).complement();
-
+        let mut tree: InternalSubGraph = self.empty_subgraph();
+        let mut options: InternalSubGraph = self.full_graph();
         for i in 0..=start {
             options.filter.set(i, false);
         }
@@ -1152,70 +1077,70 @@ impl<E, V> HedgeGraph<E, V> {
         tree.filter.set(start, true);
         options.filter.set(start, false);
 
-        let mut current = start;
+        // let current = start;
 
-        loop {
-            let next_possible = SubGraph::from(
-                self.involution
-                    .get_connected_node_id(current)
-                    .unwrap()
-                    .externalhedges
-                    .clone(),
-            );
+        // loop {
+        //     let next_possible = InternalSubGraph::from(
+        //         self.involution
+        //             .get_connected_node_id(current)
+        //             .unwrap()
+        //             .hairs
+        //             .clone(),
+        //     );
 
-            if next_possible.empty_intersection(&tree) {
-                tree.filter.set(self.involution.inv(current), true);
-                options.filter.set(self.involution.inv(current), false);
+        //     if next_possible.empty_intersection(&tree) {
+        //         tree.filter.set(self.involution.inv(current), true);
+        //         options.filter.set(self.involution.inv(current), false);
 
-                if let Some(i) = next_possible
-                    .filter
-                    .iter_ones()
-                    .find(|&i| i != self.involution.inv(start) && options.filter[i])
-                {
-                    tree.filter.set(i, true);
-                    options.filter.set(i, false);
+        //         if let Some(i) = next_possible
+        //             .filter
+        //             .iter_ones()
+        //             .find(|&i| i != self.involution.inv(start) && options.filter[i])
+        //         {
+        //             tree.filter.set(i, true);
+        //             options.filter.set(i, false);
 
-                    current = i;
-                } else if current == start {
-                    //No edges greater than start-> abort
-                    break;
-                } else {
-                    current = self
-                        .backtrack(&mut options, &mut tree, current)
-                        .unwrap_or(start);
+        //             current = i;
+        //         } else if current == start {
+        //             //No edges greater than start-> abort
+        //             break;
+        //         } else {
+        //             current = self
+        //                 .backtrack(&mut options, &mut tree, current)
+        //                 .unwrap_or(start);
 
-                    if current == start {
-                        break;
-                    }
-                }
-            } else {
-                let int = next_possible.intersection(&tree);
-                if int.filter[start] {
-                    tree.filter.set(self.involution.inv(current), true);
-                    options.filter.set(self.involution.inv(current), false);
+        //             if current == start {
+        //                 break;
+        //             }
+        //         }
+        //     } else {
+        //         let int = next_possible.intersection(&tree);
+        //         if int.filter[start] {
+        //             tree.filter.set(self.involution.inv(current), true);
+        //             options.filter.set(self.involution.inv(current), false);
 
-                    let mut cycle = self.nesting_node_from_subgraph(tree.clone());
+        //             let mut cycle = self.nesting_node_from_subgraph(tree.clone());
 
-                    self.cut_branches(&mut cycle);
+        //             self.cut_branches(&mut cycle);
 
-                    cycle.internal_graph.loopcount = Some(1);
+        //             cycle.internal_graph.loopcount = Some(1);
 
-                    cycles.push(cycle);
-                }
-                current = self
-                    .backtrack(&mut options, &mut tree, current)
-                    .unwrap_or(start);
+        //             cycles.push(cycle);
+        //         }
+        //         current = self
+        //             .backtrack(&mut options, &mut tree, current)
+        //             .unwrap_or(start);
 
-                if current == start {
-                    break;
-                }
-            }
-        }
+        //         if current == start {
+        //             break;
+        //         }
+        //     }
+        // }
 
         cycles
     }
 
-    pub fn order_basis(&self, basis: &[HalfEdgeNode]) -> Vec<Vec<SubGraph>> {
+    pub fn order_basis(&self, basis: &[HedgeNode]) -> Vec<Vec<InternalSubGraph>> {
         let mut seen = vec![basis[0].internal_graph.clone()];
         let mut partitions = vec![seen.clone()];
 
@@ -1239,7 +1164,7 @@ impl<E, V> HedgeGraph<E, V> {
         partitions
     }
 
-    pub fn welchs_violating(partitions: &[Vec<SubGraph>]) -> Vec<SubGraph> {
+    pub fn welchs_violating(partitions: &[Vec<InternalSubGraph>]) -> Vec<InternalSubGraph> {
         let mut violations = Vec::new();
 
         for (b1, b2) in partitions.iter().tuple_windows() {
@@ -1260,11 +1185,11 @@ impl<E, V> HedgeGraph<E, V> {
         violations
     }
 
-    pub fn all_cycles(&self) -> Vec<HalfEdgeNode> {
+    pub fn all_cycles(&self) -> Vec<InternalSubGraph> {
         self.all_composite_cycles_with_basis(&self.cycle_basis().0)
     }
 
-    pub fn all_cycle_unions(&self) -> AHashSet<SubGraph> {
+    pub fn all_cycle_unions(&self) -> AHashSet<InternalSubGraph> {
         let cycles = self.read_tarjan();
         let mut spinneys = AHashSet::new();
 
@@ -1279,7 +1204,7 @@ impl<E, V> HedgeGraph<E, V> {
             // if let Some(union) = union {
             //     spinneys.push(union);
             // }
-            let mut union: Option<SubGraph> = None;
+            let mut union: Option<InternalSubGraph> = None;
 
             for i in p.iter_ones() {
                 if let Some(union) = &mut union {
@@ -1297,7 +1222,7 @@ impl<E, V> HedgeGraph<E, V> {
         spinneys
     }
 
-    pub fn all_basis_sym_diffs(&self, basis: &[HalfEdgeNode]) -> Vec<HalfEdgeNode> {
+    pub fn all_basis_sym_diffs(&self, basis: &[HedgeNode]) -> Vec<HedgeNode> {
         let mut diffs = Vec::new();
 
         let mut pset = PowersetIterator::new(basis.len() as u8);
@@ -1305,7 +1230,7 @@ impl<E, V> HedgeGraph<E, V> {
         pset.next(); //Skip empty set
 
         for p in pset {
-            let mut cycle: SubGraph = self.empty_filter().into();
+            let mut cycle: InternalSubGraph = self.empty_subgraph();
             for c in p.iter_ones().map(|i| &basis[i]) {
                 cycle.sym_diff_with(&c.internal_graph);
             }
@@ -1317,7 +1242,10 @@ impl<E, V> HedgeGraph<E, V> {
         diffs
     }
 
-    pub fn all_composite_cycles_with_basis(&self, basis: &[HalfEdgeNode]) -> Vec<HalfEdgeNode> {
+    pub fn all_composite_cycles_with_basis(
+        &self,
+        basis: &[InternalSubGraph],
+    ) -> Vec<InternalSubGraph> {
         let mut cycles = Vec::new();
 
         // println!("loops: {}", basis.len());
@@ -1327,13 +1255,14 @@ impl<E, V> HedgeGraph<E, V> {
         pset.next(); //Skip empty set
 
         for p in pset {
-            let mut cycle: SubGraph = self.empty_filter().into();
+            let mut cycle: InternalSubGraph = self.empty_subgraph();
             for c in p.iter_ones().map(|i| &basis[i]) {
-                cycle.sym_diff_with(&c.internal_graph);
+                cycle.sym_diff_with(c);
             }
 
             if self.is_cycle(&cycle) {
-                let cycle = self.nesting_node_from_subgraph(cycle);
+                // let cycle = self.nesting_node_from_subgraph(cycle);
+                cycle.loopcount = Some(1);
                 cycles.push(cycle);
             }
         }
@@ -1341,10 +1270,10 @@ impl<E, V> HedgeGraph<E, V> {
         cycles
     }
 
-    fn is_cycle(&self, subgraph: &SubGraph) -> bool {
+    fn is_cycle(&self, subgraph: &InternalSubGraph) -> bool {
         let mut is = true;
         for e in self.iter_egde_node(subgraph) {
-            let adgacent = subgraph.filter.clone() & &e.externalhedges;
+            let adgacent = subgraph.filter.clone() & &e.hairs;
             if adgacent.count_ones() != 2 {
                 is = false;
                 break;
@@ -1353,74 +1282,37 @@ impl<E, V> HedgeGraph<E, V> {
         is
     }
 
-    pub fn full_graph(&self) -> SubGraph {
-        self.full_node().internal_graph
+    pub fn full_graph(&self) -> InternalSubGraph {
+        InternalSubGraph::cleaned_filter_optimist(self.full_filter(), self)
+    }
+
+    pub fn empty_subgraph<S: SubGraph>(&self) -> S {
+        S::empty(self.n_hedges())
     }
 
     pub fn paton_count_loops(
         &self,
-        subgraph: &SubGraph,
-        start: usize,
-    ) -> Result<usize, NestingNodeError> {
-        if !subgraph.filter[start] {
-            return Err(NestingNodeError::InvalidStart);
-        }
-        let mut loopcount = 0;
+        subgraph: &InternalSubGraph,
+        start: &HedgeNode,
+    ) -> Result<usize, HedgeError> {
+        let tree = TraversalTree::dfs(self, subgraph, start);
 
-        let n = self.involution.get_node_id(start);
-
-        let mut tree: SubGraph = n.clone().externalhedges.into();
-
-        let mut left: SubGraph = (self.full_filter() & !self.external_filter()).into();
-
-        loop {
-            let z = tree
-                .filter
-                .iter()
-                .enumerate()
-                .find(|(i, x)| *x.as_ref() & left.filter[*i])
-                .map(|(i, _)| i);
-
-            if let Some(z) = z {
-                left.filter.set(z, false); // has been visited
-                left.filter.set(self.involution.inv(z), false);
-
-                let w: SubGraph = self
-                    .involution
-                    .get_connected_node_id(z)
-                    .unwrap()
-                    .externalhedges
-                    .clone()
-                    .into();
-
-                if w.empty_intersection(&tree) {
-                    // w is not yet in the tree
-                    tree.union_with(&w);
-                } else {
-                    loopcount += 1;
-                    tree.filter.set(self.involution.inv(z), false);
-                    tree.filter.set(z, false);
-                }
-            } else {
-                break;
-            }
-        }
-
-        Ok(loopcount)
+        let cuts = subgraph.subtract(&tree.tree);
+        Ok(self.involution.n_internals(&cuts))
     }
 
-    pub fn number_of_nodes_in_subgraph(&self, subgraph: &SubGraph) -> usize {
+    pub fn number_of_nodes_in_subgraph(&self, subgraph: &InternalSubGraph) -> usize {
         self.iter_node_data(subgraph).count()
     }
 
-    pub fn node_degrees_in_subgraph(&self, subgraph: &SubGraph) -> AHashMap<usize, usize> {
+    pub fn node_degrees_in_subgraph(&self, subgraph: &InternalSubGraph) -> AHashMap<usize, usize> {
         let mut degrees = AHashMap::new();
 
         for (node, _) in self.iter_node_data(subgraph) {
             let node_pos = self.get_node_pos(node);
 
             // Count the number of edges in the subgraph incident to this node
-            let incident_edges = node.externalhedges.clone() & &subgraph.filter;
+            let incident_edges = node.hairs.clone() & &subgraph.filter;
             let degree = incident_edges.count_ones();
 
             degrees.insert(node_pos, degree);
@@ -1429,193 +1321,51 @@ impl<E, V> HedgeGraph<E, V> {
         degrees
     }
 
-    // Returns a cycle basis and the corresponding spanning tree
+    pub fn hairy_from_filter(&self, filter: BitVec) -> HedgeNode {
+        self.nesting_node_from_subgraph(InternalSubGraph::cleaned_filter_pessimist(filter, self))
+    }
+
     fn paton_cycle_basis(
         &self,
-        subgraph: &SubGraph,
-        start: usize,
-    ) -> Result<(Vec<HalfEdgeNode>, SubGraph), NestingNodeError> {
-        if !subgraph.filter[start] {
-            return Err(NestingNodeError::InvalidStart);
+        subgraph: &InternalSubGraph,
+        start: &HedgeNode,
+    ) -> Result<(Vec<InternalSubGraph>, TraversalTree), HedgeError> {
+        if subgraph.filter.empty_intersection(&start.hairs) {
+            return Err(HedgeError::InvalidStart);
         }
+
+        let tree = TraversalTree::dfs(self, subgraph, start);
+
+        let cuts = subgraph.subtract(&tree.tree);
+
         let mut cycle_basis = Vec::new();
 
-        let n = self.involution.get_node_id(start);
+        for c in cuts.included() {
+            if c > self.involution.inv(c) {
+                cycle_basis.push(InternalSubGraph::try_new(tree.cycle(c).unwrap(), self).unwrap());
 
-        let mut tree: SubGraph = n.clone().externalhedges.into();
-
-        let mut left: SubGraph = (self.full_filter() & !self.external_filter()).into();
-
-        loop {
-            let z = tree
-                .filter
-                .iter()
-                .enumerate()
-                .find(|(i, x)| *x.as_ref() & left.filter[*i])
-                .map(|(i, _)| i);
-
-            if let Some(z) = z {
-                left.filter.set(z, false); // has been visited
-                left.filter.set(self.involution.inv(z), false);
-
-                let w: SubGraph = self
-                    .involution
-                    .get_connected_node_id(z)
-                    .unwrap()
-                    .externalhedges
-                    .clone()
-                    .into();
-
-                if w.empty_intersection(&tree) {
-                    // w is not yet in the tree
-                    tree.union_with(&w);
-                } else {
-                    let mut cycle = left.complement();
-                    cycle.intersect_with(&tree);
-                    let mut cycle = self.nesting_node_from_subgraph(cycle);
-                    cycle.internal_graph.filter.set(z, true);
-                    cycle
-                        .internal_graph
-                        .filter
-                        .set(self.involution.inv(z), true);
-
-                    cycle.internal_graph.loopcount = Some(1);
-
-                    self.cut_branches(&mut cycle);
-
-                    cycle_basis.push(cycle);
-
-                    tree.filter.set(self.involution.inv(z), false);
-                    tree.filter.set(z, false);
-                }
-            } else {
-                break;
+                cycle_basis.last_mut().unwrap().loopcount = Some(1);
             }
         }
 
         Ok((cycle_basis, tree))
     }
 
-    pub fn dot_impl(
+    pub fn dot_impl<S: SubGraph>(
         &self,
-        node_as_graph: &HalfEdgeNode,
+        node_as_graph: &S,
         graph_info: String,
         edge_attr: &impl Fn(&E) -> Option<String>,
         node_attr: &impl Fn(&V) -> Option<String>,
     ) -> String {
-        let mut out = "graph {\n ".to_string();
-        out.push_str(
-            "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";\n ",
-        );
-
-        out.push_str(graph_info.as_str());
-
-        for (n, v) in self.iter_node_data(&node_as_graph.internal_graph) {
-            out.push_str(
-                format!(
-                    "  {} [{}];\n",
-                    self.nodes.get_index_of(n).unwrap(),
-                    node_attr(v).map_or("".into(), |x| x).as_str()
-                )
-                .as_str(),
-            );
-        }
-
-        for (hedge_id, (incident_node, edge)) in self.involution.inv.iter().enumerate() {
-            match &edge {
-                //Internal graphs never have unpaired edges
-                InvolutiveMapping::Identity(data) => {
-                    let attr = if *node_as_graph.internal_graph.filter.get(hedge_id).unwrap() {
-                        None
-                    } else if *node_as_graph.externalhedges.get(hedge_id).unwrap() {
-                        Some(GVEdgeAttrs {
-                            color: Some("gray50".to_string()),
-                            label: None,
-                            other: data.as_ref().and_then(edge_attr),
-                        })
-                    } else {
-                        Some(GVEdgeAttrs {
-                            color: Some("gray75".to_string()),
-                            label: None,
-                            other: data.as_ref().and_then(edge_attr),
-                        })
-                    };
-                    out.push_str(&InvolutiveMapping::<()>::identity_dot(
-                        hedge_id,
-                        self.nodes.get_index_of(incident_node).unwrap(),
-                        attr.as_ref(),
-                    ));
-                }
-                InvolutiveMapping::Source((data, _)) => {
-                    let attr = if *node_as_graph.internal_graph.filter.get(hedge_id).unwrap() {
-                        None
-                    } else if *node_as_graph.externalhedges.get(hedge_id).unwrap()
-                        && !*node_as_graph
-                            .externalhedges
-                            .get(self.involution.inv(hedge_id))
-                            .unwrap()
-                    {
-                        Some(GVEdgeAttrs {
-                            color: Some("gray50:gray75;0.5".to_string()),
-                            label: None,
-                            other: data.as_ref().and_then(edge_attr),
-                        })
-                    } else if *node_as_graph
-                        .externalhedges
-                        .get(self.involution.inv(hedge_id))
-                        .unwrap()
-                        && !*node_as_graph.externalhedges.get(hedge_id).unwrap()
-                    {
-                        Some(GVEdgeAttrs {
-                            color: Some("gray75:gray50;0.5".to_string()),
-                            label: None,
-                            other: data.as_ref().and_then(edge_attr),
-                        })
-                    } else if *node_as_graph
-                        .externalhedges
-                        .get(self.involution.inv(hedge_id))
-                        .unwrap()
-                        && *node_as_graph.externalhedges.get(hedge_id).unwrap()
-                    {
-                        Some(GVEdgeAttrs {
-                            color: Some("gray50".to_string()),
-                            label: None,
-                            other: data.as_ref().and_then(edge_attr),
-                        })
-                    } else {
-                        Some(GVEdgeAttrs {
-                            color: Some("gray75".to_string()),
-                            label: None,
-                            other: data.as_ref().and_then(edge_attr),
-                        })
-                    };
-                    out.push_str(&InvolutiveMapping::<()>::pair_dot(
-                        self.nodes.get_index_of(incident_node).unwrap(),
-                        self.nodes
-                            .get_index_of(self.involution.get_connected_node_id(hedge_id).unwrap())
-                            .unwrap(),
-                        attr.as_ref(),
-                    ));
-                }
-                InvolutiveMapping::Sink(i) => {
-                    if *node_as_graph.internal_graph.filter.get(hedge_id).unwrap()
-                        && !*node_as_graph.internal_graph.filter.get(*i).unwrap()
-                    {
-                        panic!("Internal graph has a dangling sink edge")
-                    }
-                }
-            }
-        }
-
-        out += "}";
-        out
+        node_as_graph.dot(self, graph_info, edge_attr, node_attr)
     }
-    pub fn dot(&self, node_as_graph: &HalfEdgeNode) -> String {
+    pub fn dot<S: SubGraph>(&self, node_as_graph: &S) -> String {
         self.dot_impl(node_as_graph, "".to_string(), &|_| None, &|_| None)
     }
 
-    fn cut_branches(&self, subgraph: &mut HalfEdgeNode) {
-        let nodes = AHashSet::<&HalfEdgeNode>::from_iter(
+    pub fn cut_branches(&self, subgraph: &mut HedgeNode) {
+        let nodes = AHashSet::<&HedgeNode>::from_iter(
             subgraph
                 .internal_graph
                 .filter
@@ -1629,7 +1379,7 @@ impl<E, V> HedgeGraph<E, V> {
             has_branch = false;
 
             for n in &nodes {
-                let int = n.externalhedges.clone() & &subgraph.internal_graph.filter;
+                let int = n.hairs.clone() & &subgraph.internal_graph.filter;
 
                 if int.count_ones() == 1 {
                     subgraph
@@ -1652,9 +1402,9 @@ impl<E, V> HedgeGraph<E, V> {
         self.involution.get_data(edge)
     }
 
-    pub fn all_spinneys_with_basis(&self, basis: &[&SubGraph]) -> AHashSet<HalfEdgeNode> {
+    pub fn all_spinneys_with_basis(&self, basis: &[&InternalSubGraph]) -> AHashSet<HedgeNode> {
         let mut spinneys = AHashSet::new();
-        let mut base_cycle: SubGraph = self.empty_filter().into();
+        let mut base_cycle: InternalSubGraph = self.empty_subgraph();
 
         for cycle in basis {
             base_cycle.sym_diff_with(cycle);
@@ -1683,11 +1433,7 @@ impl<E, V> HedgeGraph<E, V> {
         spinneys
     }
 
-    pub fn all_spinneys_rec(
-        &self,
-        spinneys: &mut AHashSet<HalfEdgeNode>,
-        cycle_sums: Vec<HalfEdgeNode>,
-    ) {
+    pub fn all_spinneys_rec(&self, spinneys: &mut AHashSet<HedgeNode>, cycle_sums: Vec<HedgeNode>) {
         let _len = spinneys.len();
 
         let mut pset = PowersetIterator::new(cycle_sums.len() as u8);
@@ -1701,27 +1447,31 @@ impl<E, V> HedgeGraph<E, V> {
         }
     }
 
-    pub fn all_spinneys(&self) -> AHashMap<SubGraph, Vec<(HalfEdgeNode, Option<HalfEdgeNode>)>> {
+    pub fn all_spinneys(
+        &self,
+    ) -> AHashMap<InternalSubGraph, Vec<(InternalSubGraph, Option<InternalSubGraph>)>> {
         let mut cycles = self.cycle_basis().0;
 
         let mut all_combinations = PowersetIterator::new(cycles.len() as u8);
         all_combinations.next(); //Skip empty set
 
-        let mut spinneys: AHashMap<SubGraph, Vec<(HalfEdgeNode, Option<HalfEdgeNode>)>> =
-            AHashMap::new();
+        let mut spinneys: AHashMap<
+            InternalSubGraph,
+            Vec<(InternalSubGraph, Option<InternalSubGraph>)>,
+        > = AHashMap::new();
 
         for p in all_combinations {
-            let mut base_cycle: SubGraph = self.empty_filter().into();
+            let mut base_cycle: InternalSubGraph = self.empty_subgraph();
 
             for i in p.iter_ones() {
-                base_cycle.sym_diff_with(&cycles[i].internal_graph);
+                base_cycle.sym_diff_with(&cycles[i]);
             }
 
-            cycles.push(self.nesting_node_from_subgraph(base_cycle.clone()));
+            cycles.push(base_cycle);
         }
 
         for (ci, cj) in cycles.iter().tuple_combinations() {
-            let union = ci.internal_graph.union(&cj.internal_graph);
+            let union = ci.union(cj);
 
             if let Some(v) = spinneys.get_mut(&union) {
                 v.push((ci.clone(), Some(cj.clone())));
@@ -1731,12 +1481,12 @@ impl<E, V> HedgeGraph<E, V> {
         }
 
         for c in cycles {
-            spinneys.insert(c.internal_graph.clone(), vec![(c.clone(), None)]);
+            spinneys.insert(c.clone(), vec![(c.clone(), None)]);
         }
         spinneys
     }
 
-    pub fn all_spinneys_alt(&self) -> AHashSet<SubGraph> {
+    pub fn all_spinneys_alt(&self) -> AHashSet<InternalSubGraph> {
         let mut spinneys = AHashSet::new();
         let cycles = self.all_cycles();
 
@@ -1744,486 +1494,217 @@ impl<E, V> HedgeGraph<E, V> {
         pset.next(); //Skip empty set
 
         for p in pset {
-            let mut union: SubGraph = self.empty_filter().into();
+            let mut union: InternalSubGraph = self.empty_subgraph();
 
             for i in p.iter_ones() {
-                union.union_with(&cycles[i].internal_graph);
+                union.union_with(&cycles[i]);
             }
 
             spinneys.insert(union);
         }
 
         for c in cycles {
-            spinneys.insert(c.internal_graph);
+            spinneys.insert(c);
         }
         spinneys
     }
 }
 
-#[cfg(test)]
-mod test {
-
-    #[test]
-    fn threeloop() {
-        let mut builder: HedgeGraphBuidler<(), ()> = HedgeGraphBuidler::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        let d = builder.add_node(());
-
-        builder.add_edge(a, b, ());
-        builder.add_edge(b, a, ());
-        builder.add_edge(a, b, ());
-
-        builder.add_edge(b, c, ());
-        builder.add_edge(c, d, ());
-        builder.add_edge(d, a, ());
-
-        let graph = builder.build();
-
-        insta::assert_snapshot!("three_loop_dot", graph.base_dot());
-        insta::assert_ron_snapshot!("three_loop", graph);
-
-        for i in 0..graph.n_hedges() {
-            assert_eq!(
-                3,
-                graph
-                    .paton_cycle_basis(&graph.full_filter().into(), i)
-                    .unwrap()
-                    .0
-                    .len()
-            );
-        }
-
-        let cycles = graph.cycle_basis().0;
-
-        assert_eq!(3, cycles.len());
-
-        let all_cycles = graph.read_tarjan();
-
-        assert_eq!(6, all_cycles.len());
-
-        insta::assert_ron_snapshot!("three_loop_cycles", cycles);
-    }
-
-    #[test]
-    fn hairythreeloop() {
-        let mut builder: HedgeGraphBuidler<(), ()> = HedgeGraphBuidler::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        let d = builder.add_node(());
-
-        builder.add_edge(a, b, ());
-        builder.add_edge(b, a, ());
-        builder.add_edge(a, b, ());
-        builder.add_external_edge(a, ());
-        builder.add_external_edge(b, ());
-        builder.add_external_edge(b, ());
-
-        builder.add_edge(b, c, ());
-        builder.add_edge(c, d, ());
-        builder.add_edge(d, a, ());
-
-        assert_eq!(builder.involution.len(), 15);
-        let graph = builder.build();
-
-        insta::assert_snapshot!("hairy_three_loop_dot", graph.base_dot());
-        insta::assert_ron_snapshot!("hairy_three_loop", graph);
-        insta::assert_snapshot!(
-            "hairy_three_loop_dot_internal",
-            graph.dot(&graph.full_node())
-        );
-
-        for i in graph.full_node().internal_graph.filter.iter_ones() {
-            assert_eq!(
-                3,
-                graph
-                    .paton_cycle_basis(&graph.full_filter().into(), i)
-                    .unwrap()
-                    .0
-                    .len()
-            );
-        }
-
-        let cycles = graph.cycle_basis().0;
-
-        insta::assert_ron_snapshot!("hairy_three_loop_cycles", cycles);
-    }
-
-    #[test]
-    fn cube() {
-        let mut builder: HedgeGraphBuidler<(), ()> = HedgeGraphBuidler::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        let d = builder.add_node(());
-        let e = builder.add_node(());
-        let f = builder.add_node(());
-        let g = builder.add_node(());
-        let h = builder.add_node(());
-
-        builder.add_edge(a, b, ());
-        builder.add_edge(b, c, ());
-        builder.add_edge(c, d, ());
-        builder.add_edge(d, a, ());
-
-        builder.add_edge(e, f, ());
-        builder.add_edge(f, g, ());
-        builder.add_edge(g, h, ());
-        builder.add_edge(h, e, ());
-
-        builder.add_edge(a, e, ());
-        builder.add_edge(b, f, ());
-        builder.add_edge(c, g, ());
-        builder.add_edge(d, h, ());
-
-        let graph = builder.build();
-
-        insta::assert_snapshot!("cube_dot", graph.base_dot());
-
-        // let mut all_spinneys = graph.all_spinneys().into_iter().collect_vec();
-        // all_spinneys.sort_by(|a, b| a.filter.cmp(&b.filter));
-
-        // assert_eq!(162, all_spinneys.len());
-    }
-
-    #[test]
-    #[ignore]
-    fn alt_vs_pair() {
-        for s in 0..100 {
-            let rand_graph = HedgeGraph::<(), ()>::random(10, 14, s);
-
-            let before = Instant::now();
-            let all_spinneys = rand_graph.all_spinneys();
-            let after = before.elapsed();
-            let before = Instant::now();
-            let all_spinneys_alt = rand_graph.all_spinneys_alt();
-            let after_alt = before.elapsed();
-            println!("{s} {after:?} {after_alt:?}");
-
-            assert_eq!(
-                all_spinneys.len(),
-                all_spinneys_alt.len(),
-                "{}",
-                rand_graph.base_dot()
-            );
-        }
-        // let rand_graph = NestingGraph::<(), ()>::random(6, 9, 8);
-
-        // println!("{}", rand_graph.base_dot());
-
-        // println!("loops {}", rand_graph.cycle_basis().0.len());
-
-        // let all_spinneys_other = rand_graph.all_spinneys();
-
-        // // println!("all spinneys read tarjan {}", all_spinneys.len());
-
-        // println!("all spinneys {}", all_spinneys_other.len());
-        // println!("all spinneys alt{}", rand_graph.all_spinneys_alt().len());
-    }
-
-    #[test]
-    #[should_panic]
-    fn read_tarjan_vs_cycle_space() {
-        for s in 0..100 {
-            let rand_graph = HedgeGraph::<(), ()>::random(6, 9, s);
-
-            let all_cycles = rand_graph.read_tarjan();
-            let all_cycles_alt = rand_graph.all_cycles();
-
-            assert_eq!(
-                all_cycles.len(),
-                all_cycles_alt.len(),
-                "{} with seed {s}",
-                rand_graph.base_dot()
-            );
-        }
-    }
-
-    // #[test]
-    // fn random_graph() {
-    //     let rand_graph = NestingGraph::<(), ()>::random(6, 9, 3);
-
-    //     println!(
-    //         "{} loop graph: \n {}",
-    //         rand_graph.cycle_basis().0.len(),
-    //         rand_graph.base_dot()
-    //     );
-
-    //     for c in rand_graph.all_cycles() {
-    //         println!(" {}", rand_graph.dot(&c));
-    //     }
-
-    //     for c in rand_graph.read_tarjan() {
-    //         println!("{}", rand_graph.dot(&c));
-    //     }
-    // }
-    #[allow(non_snake_case)]
-    #[test]
-    fn K33() {
-        let mut builder: HedgeGraphBuidler<(), ()> = HedgeGraphBuidler::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        let d = builder.add_node(());
-        let e = builder.add_node(());
-        let f = builder.add_node(());
-
-        builder.add_edge(a, d, ());
-        builder.add_edge(a, e, ());
-        builder.add_edge(a, f, ());
-
-        builder.add_edge(b, d, ());
-        builder.add_edge(b, e, ());
-        builder.add_edge(b, f, ());
-
-        builder.add_edge(c, d, ());
-        builder.add_edge(c, e, ());
-        builder.add_edge(c, f, ());
-
-        let graph = builder.build();
-
-        println!("{}", graph.dot(&graph.full_node()));
-
-        for (s, _) in graph.all_spinneys() {
-            println!("cyclotomatic_number: {}", graph.cyclotomatic_number(&s));
-            println!(
-                "paton_count_loops {}",
-                graph
-                    .paton_count_loops(&s, s.filter.iter_ones().next().unwrap())
-                    .unwrap()
-            );
-
-            println!("paton_cycle_basislen {}", s.cycle_basis(&graph).0.len());
-            println!("{}", graph.dot(&s.to_nesting_node(&graph)));
-        }
-
-        assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
-    }
-
-    #[test]
-    fn petersen() {
-        let mut builder: HedgeGraphBuidler<(), ()> = HedgeGraphBuidler::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        let d = builder.add_node(());
-        let e = builder.add_node(());
-        let f = builder.add_node(());
-        let g = builder.add_node(());
-        let h = builder.add_node(());
-        let i = builder.add_node(());
-        let j = builder.add_node(());
-
-        builder.add_edge(a, b, ());
-        builder.add_edge(a, f, ());
-        builder.add_edge(a, e, ());
-
-        builder.add_edge(b, c, ());
-        builder.add_edge(b, g, ());
-
-        builder.add_edge(c, d, ());
-        builder.add_edge(c, h, ());
-
-        builder.add_edge(d, e, ());
-        builder.add_edge(d, i, ());
-
-        builder.add_edge(e, j, ());
-
-        builder.add_edge(f, h, ());
-        builder.add_edge(f, i, ());
-
-        builder.add_edge(g, i, ());
-        builder.add_edge(g, j, ());
-
-        builder.add_edge(h, j, ());
-
-        let graph = builder.build();
-
-        println!("{}", graph.base_dot());
-
-        // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
-
-        println!("loop count {}", graph.cycle_basis().0.len());
-        println!("cycle count {}", graph.all_cycles().len());
-        if let Some((s, v)) = graph
-            .all_spinneys()
-            .iter()
-            .find(|(s, _)| graph.full_filter() == s.filter)
-        {
-            println!(
-                "{}",
-                graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
-            );
-            for (ci, cj) in v {
-                println!("{}", graph.dot(ci));
-                println!("{}", graph.dot(cj.as_ref().unwrap()));
-            }
-        } else {
-            println!("not found");
-        }
-    }
-
-    #[test]
-    fn wagner_graph() {
-        let mut builder: HedgeGraphBuidler<(), ()> = HedgeGraphBuidler::new();
-        let n1 = builder.add_node(());
-        let n2 = builder.add_node(());
-        let n3 = builder.add_node(());
-        let n4 = builder.add_node(());
-        let n5 = builder.add_node(());
-        let n6 = builder.add_node(());
-        let n7 = builder.add_node(());
-        let n8 = builder.add_node(());
-
-        builder.add_edge(n1, n2, ());
-        builder.add_edge(n1, n5, ());
-
-        builder.add_edge(n2, n3, ());
-        builder.add_edge(n2, n6, ());
-
-        builder.add_edge(n3, n4, ());
-        builder.add_edge(n3, n7, ());
-
-        builder.add_edge(n4, n5, ());
-        builder.add_edge(n4, n8, ());
-
-        builder.add_edge(n5, n6, ());
-
-        builder.add_edge(n6, n7, ());
-
-        builder.add_edge(n7, n8, ());
-
-        builder.add_edge(n8, n1, ());
-
-        let graph = builder.build();
-
-        println!("{}", graph.base_dot());
-
-        // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
-
-        println!("loop count {}", graph.cycle_basis().0.len());
-        println!("cycle count {}", graph.all_cycles().len());
-        if let Some((s, v)) = graph
-            .all_spinneys()
-            .iter()
-            .find(|(s, _)| graph.full_filter() == s.filter)
-        {
-            println!(
-                "{}",
-                graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
-            );
-            for (ci, cj) in v {
-                println!("{}", graph.dot(ci));
-                println!("{}", graph.dot(cj.as_ref().unwrap()));
-            }
-        } else {
-            println!("not found");
-        }
-    }
-
-    #[test]
-    fn flower_snark() {
-        let mut builder: HedgeGraphBuidler<(), ()> = HedgeGraphBuidler::new();
-        let n1 = builder.add_node(());
-        let n2 = builder.add_node(());
-        let n3 = builder.add_node(());
-        let n4 = builder.add_node(());
-        let n5 = builder.add_node(());
-        let n6 = builder.add_node(());
-        let n7 = builder.add_node(());
-        let n8 = builder.add_node(());
-        let n9 = builder.add_node(());
-        let n10 = builder.add_node(());
-        let n11 = builder.add_node(());
-        let n12 = builder.add_node(());
-        let n13 = builder.add_node(());
-        let n14 = builder.add_node(());
-        let n15 = builder.add_node(());
-        let n16 = builder.add_node(());
-        let n17 = builder.add_node(());
-        let n18 = builder.add_node(());
-        let n19 = builder.add_node(());
-        let n20 = builder.add_node(());
-
-        builder.add_edge(n1, n2, ());
-        builder.add_edge(n2, n3, ());
-        builder.add_edge(n3, n4, ());
-        builder.add_edge(n4, n5, ());
-        builder.add_edge(n5, n1, ());
-
-        builder.add_edge(n6, n1, ()); // center
-        builder.add_edge(n6, n7, ()); //next
-
-        builder.add_edge(n7, n17, ()); //+10
-        builder.add_edge(n7, n8, ()); //next
-
-        builder.add_edge(n8, n13, ()); //+5
-        builder.add_edge(n8, n9, ()); //next
-
-        builder.add_edge(n9, n2, ()); //center
-        builder.add_edge(n9, n10, ()); //next
-
-        builder.add_edge(n10, n20, ()); //+10
-        builder.add_edge(n10, n11, ()); //next
-
-        builder.add_edge(n11, n16, ()); //+5
-        builder.add_edge(n11, n12, ()); //next
-
-        builder.add_edge(n12, n3, ()); //center
-        builder.add_edge(n12, n13, ()); //next
-
-        builder.add_edge(n13, n14, ()); //next
-
-        builder.add_edge(n14, n19, ()); //+5
-        builder.add_edge(n14, n15, ()); //next
-
-        builder.add_edge(n15, n4, ()); //center
-        builder.add_edge(n15, n16, ()); //next
-
-        builder.add_edge(n16, n17, ()); //next
-
-        builder.add_edge(n17, n18, ()); //next
-
-        builder.add_edge(n18, n5, ()); //center
-        builder.add_edge(n18, n19, ()); //next
-
-        builder.add_edge(n19, n20, ()); //next
-
-        builder.add_edge(n20, n6, ()); //next
-
-        let graph = builder.build();
-
-        println!("{}", graph.base_dot());
-
-        // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
-
-        println!("loop count {}", graph.cycle_basis().0.len());
-        println!("cycle count {}", graph.all_cycles().len());
-        println!(
-            "loop count {}",
-            graph.paton_count_loops(&graph.full_graph(), 0).unwrap()
-        );
-        if let Some((s, v)) = graph
-            .all_spinneys()
-            .iter()
-            .find(|(s, _)| graph.full_filter() == s.filter)
-        {
-            println!(
-                "{}",
-                graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
-            );
-            for (ci, cj) in v {
-                println!("{}", graph.dot(ci));
-                println!("{}", graph.dot(cj.as_ref().unwrap()));
-            }
-        } else {
-            println!("not found");
-        }
-    }
-
-    use std::time::Instant;
-
-    use super::*;
+pub struct TraversalTree {
+    pub traversal: Vec<usize>,
+    inv: Involution<Parent, ()>,
+    pub tree: InternalSubGraph,
 }
+
+pub enum Parent {
+    Unset,
+    Root,
+    Hedge(usize, usize),
+}
+
+impl TraversalTree {
+    fn covers(&self) -> BitVec {
+        let mut covers = <BitVec as SubGraph>::empty(self.inv.inv.len());
+        for (i, (m, _)) in self.inv.inv.iter().enumerate() {
+            match m {
+                Parent::Unset => {}
+                _ => {
+                    covers.set(i, true);
+                }
+            }
+        }
+        covers
+    }
+
+    fn path_to_root(&self, start: usize) -> BitVec {
+        let mut path = <BitVec as SubGraph>::empty(self.inv.inv.len());
+        let mut current = start;
+        path.set(current, true);
+
+        while let Parent::Hedge(p, _) = self.inv.get_node_id(current) {
+            path.set(*p, true);
+            current = self.inv.inv(*p);
+            path.set(current, true);
+        }
+        path
+    }
+
+    pub fn cycle(&self, cut: usize) -> Option<BitVec> {
+        match self.inv.get_node_id(cut) {
+            Parent::Hedge(p, _) => {
+                if *p == cut {
+                    return None;
+                }
+            }
+            Parent::Root => {}
+            _ => return None,
+        }
+
+        let cut_pair = self.inv.inv(cut);
+        match self.inv.get_node_id(cut_pair) {
+            Parent::Hedge(p, _) => {
+                if *p == cut_pair {
+                    return None;
+                }
+            }
+            Parent::Root => {}
+            _ => return None,
+        }
+
+        let mut cycle = self.path_to_root(cut);
+        cycle.sym_diff_with(&self.path_to_root(cut_pair));
+        Some(cycle)
+    }
+
+    pub fn bfs<E, V, S: SubGraph>(
+        graph: &HedgeGraph<E, V>,
+        subgraph: &S,
+        root_node: &HedgeNode,
+        // target: Option<&HedgeNode>,
+    ) -> Self {
+        let mut queue = VecDeque::new();
+        let mut seen = subgraph.hairs(root_node);
+
+        let mut traversal: Vec<usize> = Vec::new();
+        let mut involution: Involution<Parent, ()> = graph
+            .involution
+            .forgetful_map_node_data_ref(|_| Parent::Unset);
+
+        // add all hedges from root node that are not self loops
+        // to the queue
+        // They are all potential branches
+        for i in seen.iter_ones() {
+            involution.set_id(i, Parent::Root);
+            if !seen[graph.involution.inv(i)] {
+                // if not self loop
+                queue.push_back(i)
+            }
+        }
+        while let Some(hedge) = queue.pop_front() {
+            // if the hedge is not external get the neighbors of the paired hedge
+            if let Some(cn) = graph.connected_neighbors(subgraph, hedge) {
+                let connected = involution.inv(hedge);
+
+                if !seen[connected] {
+                    // if this new hedge hasn't been seen before, it means the node it belongs to
+                    // is a new node in the traversal
+                    traversal.push(connected);
+                } else {
+                    continue;
+                }
+                // mark the new node as seen
+                seen.union_with(&cn);
+
+                // for all hedges in this new node, they have a parent, the initial hedge
+                for i in cn.iter_ones() {
+                    if let Parent::Unset = involution.inv[i].0 {
+                        involution.set_id(i, Parent::Hedge(connected, traversal.len()));
+                    }
+                    // if they lead to a new node, they are potential branches, add them to the queue
+                    if !seen[involution.inv(i)] {
+                        queue.push_back(i);
+                    }
+                }
+            }
+        }
+
+        TraversalTree::new(graph, traversal, involution)
+    }
+
+    pub fn new<E, V>(
+        graph: &HedgeGraph<E, V>,
+        traversal: Vec<usize>,
+        inv: Involution<Parent, ()>,
+    ) -> Self {
+        let mut tree = graph.empty_filter();
+
+        for (i, j) in traversal.iter().map(|x| (*x, inv.inv(*x))) {
+            tree.set(i, true);
+            tree.set(j, true);
+        }
+
+        TraversalTree {
+            traversal,
+            inv,
+            tree: InternalSubGraph::cleaned_filter_optimist(tree, graph),
+        }
+    }
+
+    pub fn dfs<E, V, S: SubGraph>(
+        graph: &HedgeGraph<E, V>,
+        subgraph: &S,
+        root_node: &HedgeNode,
+        // target: Option<&HedgeNode>,
+    ) -> Self {
+        let mut stack = Vec::new();
+        let mut seen = subgraph.hairs(root_node);
+
+        let mut traversal: Vec<usize> = Vec::new();
+        let mut involution: Involution<Parent, ()> = graph
+            .involution
+            .forgetful_map_node_data_ref(|_| Parent::Unset);
+
+        // add all hedges from root node that are not self loops
+        // to the stack
+        // They are all potential branches
+        for i in seen.iter_ones() {
+            involution.set_id(i, Parent::Root);
+            if !seen[graph.involution.inv(i)] {
+                // if not self loop
+                stack.push(i)
+            }
+        }
+        while let Some(hedge) = stack.pop() {
+            // if the hedge is not external get the neighbors of the paired hedge
+            if let Some(cn) = graph.connected_neighbors(subgraph, hedge) {
+                let connected = involution.inv(hedge);
+
+                if !seen[connected] {
+                    // if this new hedge hasn't been seen before, it means the node it belongs to
+                    // is a new node in the traversal
+                    traversal.push(connected);
+                } else {
+                    continue;
+                }
+
+                // mark the new node as seen
+                seen.union_with(&cn);
+
+                for i in cn.iter_ones() {
+                    if let Parent::Unset = involution.inv[i].0 {
+                        involution.set_id(i, Parent::Hedge(connected, traversal.len()));
+                    }
+
+                    if !seen[involution.inv(i)] {
+                        stack.push(i);
+                    }
+                }
+            }
+        }
+
+        TraversalTree::new(graph, traversal, involution)
+    }
+}
+
+#[cfg(test)]
+mod tests;

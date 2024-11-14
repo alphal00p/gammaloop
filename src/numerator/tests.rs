@@ -210,7 +210,8 @@ fn compare_poly_to_direct(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>
     zero == poly.sub_fallible(&direct).unwrap().map_data(|a| a.expand())
 }
 
-fn save_expr(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>, name: &str) {
+#[allow(dead_code)]
+pub fn save_expr(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>, name: &str) {
     let color_simplified = Numerator::default()
         .from_graph(graph, prefactor)
         .color_simplify();
@@ -229,8 +230,9 @@ fn save_expr(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>, name: &str)
 }
 
 #[test]
+
 fn t_ta() {
-    let (model, amplitude, path) = load_tree("t_ta", 1);
+    let (_model, amplitude, _path) = load_tree("t_ta", 1);
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
@@ -246,7 +248,7 @@ fn t_ta() {
         compare_poly_to_direct(&graph.bare_graph, Some(&global_prefactor)),
         "Poly and direct are not equal"
     );
-    save_expr(&graph.bare_graph, Some(&global_prefactor), "t_ta.dat");
+    // save_expr(&graph.bare_graph, Some(&global_prefactor), "t_ta.dat");
 }
 
 #[test]
@@ -272,7 +274,7 @@ fn tree_ta_ta_1() {
         "Poly and direct are not equal"
     );
 
-    save_expr(&graph.bare_graph, Some(&global_prefactor), "ta_ta.dat");
+    // save_expr(&graph.bare_graph, Some(&global_prefactor), "ta_ta.dat");
 
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.global_prefactor = Some(global_prefactor);

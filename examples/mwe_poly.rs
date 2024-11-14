@@ -33,7 +33,7 @@ fn main() {
         let coef = symb!("coef");
         let shift = reps.as_ref().lock().unwrap().len();
 
-        let mut mul_h = workspace.new_atom().into_inner();
+        let mut mul_h;
         let mut var_h = workspace.new_atom();
         let mut num_h = workspace.new_atom();
         let mut pow_h = workspace.new_atom();
@@ -69,7 +69,7 @@ fn main() {
                 .unwrap()
                 .push(monomial.coefficient.clone());
 
-            mul_h = mul_h * fun!(coef, Atom::new_num((i as usize + shift) as i64));
+            mul_h = mul_h * fun!(coef, Atom::new_num((i + shift) as i64));
             add = add + mul_h.as_view();
         }
 
@@ -84,7 +84,7 @@ fn main() {
     ) -> Atom {
         Workspace::get_local().with(|ws| to_shadowed_poly_impl(&poly, ws, reps))
     }
-    let f = File::open(&format!("examples/data/{}.dat", name)).unwrap();
+    let f = File::open(format!("examples/data/{}.dat", name)).unwrap();
     let mut reader = brotli::Decompressor::new(BufReader::new(f), 4096);
 
     let a = Atom::import(&mut reader, None).unwrap();
@@ -160,36 +160,31 @@ fn main() {
     let ubar_inds: Vec<i32> = vec![];
 
     let mut params = (0..12)
-        .map(|i| {
+        .flat_map(|i| {
             cinds
                 .iter()
                 .map(move |c| fun!(q, Atom::new_num(i), c.as_view()))
         })
-        .flatten()
         .collect_vec();
 
     params.extend(
         eps_inds
             .iter()
-            .map(|&i| cinds.iter().map(move |c| fun!(eps, Atom::new_num(i), c)))
-            .flatten()
+            .flat_map(|&i| cinds.iter().map(move |c| fun!(eps, Atom::new_num(i), c)))
             .chain(
                 epsb_inds
                     .iter()
-                    .map(|&i| cinds.iter().map(move |c| fun!(epsb, Atom::new_num(i), c)))
-                    .flatten(),
+                    .flat_map(|&i| cinds.iter().map(move |c| fun!(epsb, Atom::new_num(i), c))),
             )
             .chain(
                 u_inds
                     .iter()
-                    .map(|&i| cinds.iter().map(move |c| fun!(u, Atom::new_num(i), c)))
-                    .flatten(),
+                    .flat_map(|&i| cinds.iter().map(move |c| fun!(u, Atom::new_num(i), c))),
             )
             .chain(
                 ubar_inds
                     .iter()
-                    .map(|&i| cinds.iter().map(move |c| fun!(ubar, Atom::new_num(i), c)))
-                    .flatten(),
+                    .flat_map(|&i| cinds.iter().map(move |c| fun!(ubar, Atom::new_num(i), c))),
             ),
     );
 
@@ -428,7 +423,7 @@ fn main() {
     let mut out_poly = vec![Complex::new(0.0, 0.0); poly_views.len()];
     let mut rng = SmallRng::seed_from_u64(4);
     let params = (0..params.len())
-        .map(|i| Complex::new(rng.gen::<f64>(), rng.gen::<f64>()))
+        .map(|_| Complex::new(rng.gen::<f64>(), rng.gen::<f64>()))
         .collect::<Vec<_>>();
 
     let time = Instant::now();
@@ -480,7 +475,7 @@ fn main() {
 
     let coefs_reps: Vec<_> = coefs.iter().map(|a| a.into_pattern().into()).collect();
 
-    let mut reps: Vec<_> = coefs_syms
+    let reps: Vec<_> = coefs_syms
         .iter()
         .zip(coefs_reps.iter())
         .map(|(p, rhs)| Replacement::new(p, rhs))
@@ -524,6 +519,7 @@ fn main() {
     }
 }
 
+#[allow(unused)]
 fn time_step<F, R>(label: &str, func: F) -> R
 where
     F: FnOnce() -> R,

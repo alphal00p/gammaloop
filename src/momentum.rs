@@ -1855,7 +1855,7 @@ impl<'a, T> IntoIterator for &'a Polarization<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Hash)]
 #[repr(i8)]
 pub enum Sign {
     Positive = 1,

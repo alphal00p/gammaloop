@@ -1,5 +1,5 @@
 ---
-source: src/graph/half_edge.rs
+source: src/graph/half_edge/tests.rs
 expression: graph.base_dot()
 ---
 graph {

@@ -1,114 +1,114 @@
 ---
-source: src/graph/half_edge.rs
+source: src/graph/half_edge/tests.rs
 expression: graph
 ---
 HedgeGraph(
   nodes: {
-    HalfEdgeNode(
-      internal_graph: SubGraph(
+    HedgeNode(
+      internal_graph: InternalSubGraph(
         filter: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
             0,
           ],
         ),
-        loopcount: None,
+        loopcount: Some(0),
       ),
-      externalhedges: BitSeq(
+      hairs: BitSeq(
         order: "bitvec::order::Lsb0",
         head: BitIdx(
           width: 64,
           index: 0,
         ),
-        bits: 12,
+        bits: 15,
         data: [
-          2073,
+          16473,
         ],
       ),
     ): (),
-    HalfEdgeNode(
-      internal_graph: SubGraph(
+    HedgeNode(
+      internal_graph: InternalSubGraph(
         filter: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
             0,
           ],
         ),
-        loopcount: None,
+        loopcount: Some(0),
       ),
-      externalhedges: BitSeq(
+      hairs: BitSeq(
         order: "bitvec::order::Lsb0",
         head: BitIdx(
           width: 64,
           index: 0,
         ),
-        bits: 12,
+        bits: 15,
         data: [
-          102,
+          934,
         ],
       ),
     ): (),
-    HalfEdgeNode(
-      internal_graph: SubGraph(
+    HedgeNode(
+      internal_graph: InternalSubGraph(
         filter: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
             0,
           ],
         ),
-        loopcount: None,
+        loopcount: Some(0),
       ),
-      externalhedges: BitSeq(
+      hairs: BitSeq(
         order: "bitvec::order::Lsb0",
         head: BitIdx(
           width: 64,
           index: 0,
         ),
-        bits: 12,
+        bits: 15,
         data: [
-          384,
+          3072,
         ],
       ),
     ): (),
-    HalfEdgeNode(
-      internal_graph: SubGraph(
+    HedgeNode(
+      internal_graph: InternalSubGraph(
         filter: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
             0,
           ],
         ),
-        loopcount: None,
+        loopcount: Some(0),
       ),
-      externalhedges: BitSeq(
+      hairs: BitSeq(
         order: "bitvec::order::Lsb0",
         head: BitIdx(
           width: 64,
           index: 0,
         ),
-        bits: 12,
+        bits: 15,
         data: [
-          1536,
+          12288,
         ],
       ),
     ): (),
@@ -116,330 +116,411 @@ HedgeGraph(
   base_nodes: 4,
   involution: Involution(
     inv: [
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            2073,
+            16473,
           ],
         ),
       ), Source((Some(()), 1))),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            102,
+            934,
           ],
         ),
       ), Sink(0)),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            102,
+            934,
           ],
         ),
       ), Source((Some(()), 3))),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            2073,
+            16473,
           ],
         ),
       ), Sink(2)),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            2073,
+            16473,
           ],
         ),
       ), Source((Some(()), 5))),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            102,
+            934,
           ],
         ),
       ), Sink(4)),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            102,
+            16473,
           ],
         ),
-      ), Source((Some(()), 7))),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      ), Identity(Some(()))),
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            384,
+            934,
           ],
         ),
-      ), Sink(6)),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      ), Identity(Some(()))),
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            384,
+            934,
           ],
         ),
-      ), Source((Some(()), 9))),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      ), Identity(Some(()))),
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            1536,
+            934,
           ],
         ),
-      ), Sink(8)),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      ), Source((Some(()), 10))),
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            1536,
+            3072,
           ],
         ),
-      ), Source((Some(()), 11))),
-      (HalfEdgeNode(
-        internal_graph: SubGraph(
+      ), Sink(9)),
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
             head: BitIdx(
               width: 64,
               index: 0,
             ),
-            bits: 12,
+            bits: 15,
             data: [
               0,
             ],
           ),
-          loopcount: None,
+          loopcount: Some(0),
         ),
-        externalhedges: BitSeq(
+        hairs: BitSeq(
           order: "bitvec::order::Lsb0",
           head: BitIdx(
             width: 64,
             index: 0,
           ),
-          bits: 12,
+          bits: 15,
           data: [
-            2073,
+            3072,
           ],
         ),
-      ), Sink(10)),
+      ), Source((Some(()), 12))),
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 15,
+            data: [
+              0,
+            ],
+          ),
+          loopcount: Some(0),
+        ),
+        hairs: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 15,
+          data: [
+            12288,
+          ],
+        ),
+      ), Sink(11)),
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 15,
+            data: [
+              0,
+            ],
+          ),
+          loopcount: Some(0),
+        ),
+        hairs: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 15,
+          data: [
+            12288,
+          ],
+        ),
+      ), Source((Some(()), 14))),
+      (HedgeNode(
+        internal_graph: InternalSubGraph(
+          filter: BitSeq(
+            order: "bitvec::order::Lsb0",
+            head: BitIdx(
+              width: 64,
+              index: 0,
+            ),
+            bits: 15,
+            data: [
+              0,
+            ],
+          ),
+          loopcount: Some(0),
+        ),
+        hairs: BitSeq(
+          order: "bitvec::order::Lsb0",
+          head: BitIdx(
+            width: 64,
+            index: 0,
+          ),
+          bits: 15,
+          data: [
+            16473,
+          ],
+        ),
+      ), Sink(13)),
     ],
   ),
 )

@@ -9,7 +9,7 @@ use crate::{
     },
     feyngen::FeynGenError,
     gammaloop_integrand::{BareSample, DefaultSample},
-    graph::half_edge::{HedgeGraph, HedgeGraphBuidler},
+    graph::half_edge::{HedgeGraph, HedgeGraphBuilder},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
@@ -34,6 +34,7 @@ use color_eyre::Result;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
+use half_edge::subgraph::SubGraph;
 use itertools::Itertools;
 use log::{debug, warn};
 use momtrop::SampleGenerator;
@@ -1157,7 +1158,7 @@ impl BareGraph {
             edge_name_to_position: HashMap::default(),
             vertex_slots: vec![],
             shifts: Shifts::default(),
-            hedge_representation: HedgeGraphBuidler::new().build(),
+            hedge_representation: HedgeGraphBuilder::new().build(),
         };
 
         // let mut edges: Vec<Edge> = vec![];
@@ -1377,7 +1378,7 @@ impl BareGraph {
             edge_name_to_position: HashMap::default(),
             vertex_slots: vec![],
             shifts: Shifts::default(),
-            hedge_representation: HedgeGraphBuidler::new().build(),
+            hedge_representation: HedgeGraphBuilder::new().build(),
         };
 
         let mut i_edge_internal = 0;
@@ -1544,7 +1545,7 @@ impl BareGraph {
             //     g.hedge_representation.dot(&spanning_tree_half_edge_node)
             // );
             g.hedge_representation
-                .iter_internal_edge_data(&spanning_tree.complement())
+                .iter_internal_edge_data(&spanning_tree.tree.complement(&g.hedge_representation))
                 .cloned()
                 .collect::<Vec<_>>()
         };
