@@ -1,4 +1,5 @@
 pub mod diagram_generator;
+pub mod dis;
 
 use ahash::HashMap;
 use smartstring::{LazyCompact, SmartString};
