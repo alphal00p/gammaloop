@@ -47,7 +47,7 @@ impl Iterator for PowersetIterator {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-enum InvolutiveMapping<E> {
+pub enum InvolutiveMapping<E> {
     Identity(Option<E>),
     Source((Option<E>, usize)),
     Sink(usize),
@@ -139,7 +139,7 @@ impl<E> InvolutiveMapping<E> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Involution<N, E> {
-    inv: Vec<(N, InvolutiveMapping<E>)>,
+    pub inv: Vec<(N, InvolutiveMapping<E>)>,
 }
 
 impl<N, E> Display for Involution<N, E> {
@@ -593,7 +593,7 @@ impl<'a> From<&'a BareGraph> for HedgeGraph<usize, usize> {
     }
 }
 
-use subgraph::{HedgeNode, InternalSubGraph, SubGraph};
+use subgraph::{ContractedSubGraph, HedgeNode, InternalSubGraph, SubGraph};
 use thiserror::Error;
 
 use super::BareGraph;
@@ -683,23 +683,23 @@ impl<E, V> HedgeGraph<E, V> {
         }
     }
 
-    pub fn count_connected_components(&self, subgraph: &InternalSubGraph) -> usize {
+    pub fn count_connected_components<S: SubGraph>(&self, subgraph: &S) -> usize {
         self.connected_components(subgraph).len()
     }
 
-    pub fn connected_components(&self, subgraph: &InternalSubGraph) -> Vec<InternalSubGraph> {
+    pub fn connected_components<S: SubGraph>(&self, subgraph: &S) -> Vec<BitVec> {
         let mut visited_edges = self.empty_filter();
         let mut components = vec![];
         // Iterate over all edges in the subgraph
-        for hedge_index in subgraph.filter.iter_ones() {
+        for hedge_index in subgraph.included() {
             if !visited_edges[hedge_index] {
                 // Perform DFS to find all reachable edges from this edge
                 //
                 let root_node = self.involution.get_node_id(hedge_index);
                 let reachable_edges = TraversalTree::dfs(self, subgraph, root_node).covers();
                 visited_edges.union_with(&reachable_edges);
-                let component = self.clean_subgraph(reachable_edges);
-                components.push(component);
+                // let component = self.clean_subgraph(reachable_edges);
+                components.push(reachable_edges);
             }
         }
         components
@@ -1507,6 +1507,59 @@ impl<E, V> HedgeGraph<E, V> {
             spinneys.insert(c);
         }
         spinneys
+    }
+
+    pub fn all_s_t_cuts(
+        &self,
+        s: &HedgeNode,
+        t: &HedgeNode,
+        regions: &mut AHashSet<InternalSubGraph>,
+    ) {
+        let mut new_internals = vec![];
+        for h in s.hairs.iter_ones() {
+            let invh = self.involution.inv(h);
+
+            if h > invh && s.hairs[self.involution.inv(h)] {
+                new_internals.push(h);
+            }
+        }
+
+        let mut new_node = s.clone();
+
+        for h in new_internals {
+            new_node.hairs.set(h, false);
+            new_node.hairs.set(self.involution.inv(h), false);
+            new_node.internal_graph.filter.set(h, true);
+            new_node
+                .internal_graph
+                .filter
+                .set(self.involution.inv(h), true);
+        }
+
+        let complement = new_node.complement(self).hairs;
+
+        let count = self.count_connected_components(&complement);
+
+        if count == 1 && !regions.insert(new_node.internal_graph) {
+            return;
+        }
+
+        for h in new_node.hairs.iter_ones() {
+            let invh = self.involution.inv(h);
+
+            if invh != h && !t.hairs[invh] {
+                let mut new_node = s.clone();
+                new_node
+                    .hairs
+                    .union_with(&self.get_incident_node_id(invh).hairs);
+
+                new_node.hairs.set(h, false);
+                new_node.hairs.set(invh, false);
+                new_node.internal_graph.filter.set(h, true);
+                new_node.internal_graph.filter.set(invh, true);
+                self.all_s_t_cuts(&new_node, t, regions);
+            }
+        }
     }
 }
 
