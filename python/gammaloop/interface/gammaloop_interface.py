@@ -6,7 +6,7 @@ import importlib
 from argparse import ArgumentParser, BooleanOptionalAction
 import subprocess
 import os
-from typing import Any
+from typing import Any, Dict
 from pprint import pformat
 import yaml  # type: ignore
 import shutil
@@ -1478,10 +1478,11 @@ class GammaLoop(object):
     inspect_parser.add_argument('--last_max_weight', '-lmw', action='store_true',
                                 default=False, help='Inspect the max weight point of the previous run')
 
-    def do_inspect(self, str_args: str) -> complex:
+    def do_inspect(self, str_args: str) -> Dict[str, Any]:
         if str_args == 'help':
             self.inspect_parser.print_help()
-            return 0
+            return {}
+
         args = self.inspect_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
@@ -1498,7 +1499,15 @@ class GammaLoop(object):
             res: tuple[float, float] = self.rust_worker.inspect_integrand(
                 args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
 
-        return complex(res[0], res[1])
+        log_res = {}
+        log_res['final_result'] = complex(res[0], res[1])
+
+        for file in os.listdir('log.glog'):
+            file_location = pjoin('log.glog', file)
+            file_dict = debug_display.parse_log_impl(file_location)
+            log_res[file] = file_dict
+
+        return log_res
 
         # raise GammaLoopError("Command not implemented yet")
 
