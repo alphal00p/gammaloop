@@ -3,7 +3,7 @@ import platform
 import sys
 from pathlib import Path
 import importlib
-from argparse import ArgumentParser, BooleanOptionalAction
+from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 import subprocess
 import os
 from typing import Any, Dict
@@ -59,6 +59,7 @@ AVAILABLE_COMMANDS = [
     'reset',
     'define_graph',
     'generate',
+    'generate_amplitude',
     'display_debug_log'
 ]
 
@@ -325,9 +326,11 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -762,8 +765,6 @@ class GammaLoop(object):
     generate_parser = ArgumentParser(prog='generate')
     generate_parser.add_argument(
         'process', metavar='process', type=str, nargs="+", help='Process to generate.')
-    generate_parser.add_argument('--amplitude', '-a', default=False,
-                                 action='store_true', help='Generate an amplitude to this contribution')
     generate_parser.add_argument('--graph_prefix', '-gp', type=str, default="GL",
                                  help='Graph name prefix. default: "GL"')
     generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
@@ -813,11 +814,22 @@ class GammaLoop(object):
     generate_parser.add_argument('--veto_graphs', '-veto_graphs', default=None, type=str, nargs="+",
                                  help='Veto graphs with the specified names (default: no veto)')
 
-    def do_generate(self, str_args: str) -> None:
-        if str_args == 'help':
-            self.generate_parser.print_help()
-            return
-        args = self.generate_parser.parse_args(split_str_args(str_args))
+    # generate_amplitude command, without the --amplitude option
+    generate_amplitude_parser = copy.deepcopy(generate_parser)
+    generate_amplitude_parser.prog = 'generate_amplitude'
+
+    generate_parser.add_argument('--amplitude', '-a', default=False,
+                                 action='store_true', help='Generate an amplitude to this contribution')
+
+    def do_generate(self, input_args: str | Namespace) -> None:
+
+        if isinstance(input_args, str):
+            if input_args == 'help':
+                self.generate_parser.print_help()
+                return
+            args = self.generate_parser.parse_args(split_str_args(input_args))
+        else:
+            args = input_args
 
         if args.max_n_bridges is not None and args.max_n_bridges < 0:
             args.max_n_bridges = None
@@ -889,6 +901,15 @@ class GammaLoop(object):
                         )]
                 ) for i, g in enumerate(all_graphs)]
             ))
+
+    def do_generate_amplitude(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.generate_amplitude_parser.print_help()
+            return
+        args = self.generate_parser.parse_args(
+            split_str_args(str_args))
+        args.amplitude = True
+        self.do_generate(args)
 
     # export_graph command
     export_graphs_parser = ArgumentParser(prog='export_graph')
@@ -1499,7 +1520,7 @@ class GammaLoop(object):
             res: tuple[float, float] = self.rust_worker.inspect_integrand(
                 args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
 
-        log_res = {}
+        log_res: dict[str, Any] = {}
         log_res['final_result'] = complex(res[0], res[1])
 
         for file in os.listdir('log.glog'):
