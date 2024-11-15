@@ -478,12 +478,6 @@ class Process(object):
         if process_args.filter_selfenergies is None:
             process_args.filter_selfenergies = enable_filters
 
-        # Automatically remove bridges if considering a vacuum graph:
-        if process_args.max_n_bridges is None and len(initial_particles) == 0 and len(final_particles) == 0:
-            max_n_bridges = 0
-        else:
-            max_n_bridges = process_args.max_n_bridges
-
         return Process(
             initial_particles,
             final_particles,
@@ -508,5 +502,5 @@ class Process(object):
                 veto_snails_attached_to_massless_lines=process_args.veto_snails_attached_to_massless_lines,
                 veto_only_scaleless_snails=process_args.veto_only_scaleless_snails
             ),
-            max_n_bridges=max_n_bridges
+            max_n_bridges=process_args.max_n_bridges
         )

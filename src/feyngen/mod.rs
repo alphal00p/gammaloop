@@ -1,8 +1,9 @@
 pub mod diagram_generator;
 
 use ahash::HashMap;
+use diagram_generator::FeynGen;
 use smartstring::{LazyCompact, SmartString};
-use std::{fmt, str::FromStr};
+use std::{fmt, path::Path, str::FromStr};
 use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 

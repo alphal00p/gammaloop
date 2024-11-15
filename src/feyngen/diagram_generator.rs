@@ -31,7 +31,10 @@ impl FeynGen {
     #[allow(clippy::type_complexity)]
     pub fn assign_node_colors<'a>(
         graph: &SymbolicaGraph<usize, &'a str>,
-        node_colors: &HashMap<Vec<SmartString<LazyCompact>>, Vec<SmartString<LazyCompact>>>,
+        node_colors: &HashMap<
+            Vec<(Option<bool>, SmartString<LazyCompact>)>,
+            Vec<SmartString<LazyCompact>>,
+        >,
     ) -> Result<
         Vec<(
             SymbolicaGraph<(usize, SmartString<LazyCompact>), &'a str>,
@@ -42,13 +45,18 @@ impl FeynGen {
         // println!("graph = {}", graph.to_dot());
         let mut colored_nodes: Vec<Vec<(usize, SmartString<LazyCompact>)>> = vec![vec![]];
         let edges = graph.edges();
-        for node in graph.nodes().iter() {
+        for (i_n, node) in graph.nodes().iter().enumerate() {
             let mut node_edges = vec![];
             for e in node.edges.iter() {
-                node_edges.push(edges[*e].data.into());
+                let orientation = if edges[*e].directed {
+                    Some(edges[*e].vertices.0 == i_n)
+                } else {
+                    None
+                };
+                node_edges.push((orientation, edges[*e].data.into()));
                 // self-loop edge must be counted twice
                 if edges[*e].vertices.0 == edges[*e].vertices.1 {
-                    node_edges.push(edges[*e].data.into());
+                    node_edges.push((orientation.map(|o| !o), edges[*e].data.into()));
                 }
             }
             node_edges.sort();
@@ -898,11 +906,13 @@ impl FeynGen {
         }
 
         debug!("Number of graphs retained: {}", graphs.len());
-
-        let mut node_colors: HashMap<Vec<SmartString<LazyCompact>>, Vec<SmartString<LazyCompact>>> =
-            HashMap::default();
+        #[allow(clippy::type_complexity)]
+        let mut node_colors: HashMap<
+            Vec<(Option<bool>, SmartString<LazyCompact>)>,
+            Vec<SmartString<LazyCompact>>,
+        > = HashMap::default();
         for (v_legs, v_colors) in vertex_signatures.iter() {
-            let mut sorted_ps = v_legs.iter().map(|(_, p)| p.clone()).collect::<Vec<_>>();
+            let mut sorted_ps = v_legs.clone();
             sorted_ps.sort();
             node_colors.insert(sorted_ps, v_colors.clone());
         }

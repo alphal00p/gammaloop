@@ -157,12 +157,25 @@ class Vertex(object):
             return
         sorted_edges: list[Edge] = []
         vertex_particles_per_edge: list[tuple[Particle, Edge]] = []
+        self_loops = []
         for e in self.edges:
-            if e.vertices[1] is self:
+            if e.vertices[0] == e.vertices[1]:
+                # self-loop treatment
+                if e in self_loops:
+                    continue
+                self_loops.append(e)
                 vertex_particles_per_edge.append((e.particle, e))
-            if e.vertices[0] is self:
                 vertex_particles_per_edge.append(
                     (e.particle.get_anti_particle(model), e))
+            else:
+                if e.vertices[1] is self:
+                    vertex_particles_per_edge.append((e.particle, e))
+                elif e.vertices[0] is self:
+                    vertex_particles_per_edge.append(
+                        (e.particle.get_anti_particle(model), e))
+                else:
+                    raise GammaLoopError(
+                        f"Vertex {self.name} is not connected to edge {e.name}.")
         for part in vertex_particles:
             for i, (e_p, _edge) in enumerate(vertex_particles_per_edge):
                 if e_p == part:

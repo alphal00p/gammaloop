@@ -1487,10 +1487,8 @@ impl BareGraph {
                 } else if edge.vertices[1] == i_v {
                     current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
                 } else if edge.vertices[0] == i_v {
-                    current_vertex_edge_order.push((
-                        *e_pos,
-                        edge.particle.clone().get_anti_particle(model).clone(),
-                    ));
+                    current_vertex_edge_order
+                        .push((*e_pos, edge.particle.get_anti_particle(model).clone()));
                 } else {
                     return Err(FeynGenError::GenericError(format!(
                         "Edge {} is not connected to vertex {}",
