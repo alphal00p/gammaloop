@@ -762,6 +762,7 @@ impl FeynGen {
             "generation_vertex_signatures = {:?}",
             vertex_signatures_for_generation
         );
+        debug!("Starting graph generation with Symbolica");
         let mut graphs = SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
@@ -982,6 +983,7 @@ impl FeynGen {
         );
         let previous_length = bare_graphs.len();
         if numerator_aware_isomorphism_grouping {
+            debug!("Now performing numerator-aware isomorphic grouping of skeleton graphs.");
             bare_graphs.retain(|g| {
                 let numerator = Numerator::default().from_graph(g, None);
                 let numerator_color_simplified =

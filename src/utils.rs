@@ -1526,7 +1526,8 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
                 latex: false,
-                double_star_for_exponentiation: false
+                double_star_for_exponentiation: false,
+                precision: None
             },
         )
     )
