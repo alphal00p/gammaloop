@@ -13,6 +13,7 @@ use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Deserializer, Serialize};
+use smallvec::SmallVec;
 use spenso::complex::SymbolicaComplex;
 use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use spenso::{
@@ -3398,4 +3399,9 @@ fn test_is_permutation() {
         assert_eq!(a[ind], b[permutation_map.left_to_right[ind]]);
         assert_eq!(b[ind], a[permutation_map.right_to_left[ind]]);
     }
+}
+
+pub struct SmallSquareMatrix<T> {
+    pub data: SmallVec<[T; 36]>,
+    pub dim: usize,
 }
