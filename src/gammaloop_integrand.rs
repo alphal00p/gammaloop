@@ -74,6 +74,7 @@ trait GraphIntegrand {
     fn evaluate_tropical<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
+        metadata: &TropicalSamplingMetadata<T>,
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>>;
@@ -289,6 +290,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
     fn evaluate_tropical<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
+        metadata: &TropicalSamplingMetadata<T>,
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> where {
@@ -415,6 +417,7 @@ impl GraphIntegrand for SuperGraph {
     fn evaluate_tropical<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
+        metadata: &TropicalSamplingMetadata<T>,
         rotate_overlap_centers: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
@@ -481,8 +484,8 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
                 DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                     graph.evaluate_channel_sum(sample, *alpha, settings)
                 }
-                DiscreteGraphSample::Tropical { sample, .. } => {
-                    graph.evaluate_tropical(sample, rotation_for_overlap, settings)
+                DiscreteGraphSample::Tropical { sample, metadata } => {
+                    graph.evaluate_tropical(sample, metadata, rotation_for_overlap, settings)
                 }
                 DiscreteGraphSample::DiscreteMultiChanneling {
                     alpha,
