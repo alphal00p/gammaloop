@@ -3,6 +3,7 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
 use spenso::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 
@@ -875,9 +876,11 @@ struct SingleCTData<T: FloatLike> {
 #[derive(Serialize)]
 struct DebugHelper<T: FloatLike> {
     esurface_id: usize,
-    edges: Vec<usize>,
+    edges: Vec<SmartString<LazyCompact>>,
     plus_solution: NewtonIterationResult<T>,
     minus_solution: NewtonIterationResult<T>,
+    delta_r_plus: F<T>,
+    delta_r_minus: F<T>,
     jacobian_ratio_plus: F<T>,
     jacobian_ratio_minus: F<T>,
     uv_damper_plus: F<T>,
@@ -909,13 +912,24 @@ impl<'a, T: FloatLike> From<&CounterTermResult<'a, T>> for DebugHelper<T> {
         let overlap_builder = esurface_ct_builder.overlap_builder;
         let ct_builder = overlap_builder.counterterm_builder;
 
+        let radius = &overlap_builder.hemispherical_radius;
+
+        let graph = ct_builder.graph;
         let esurface_id =
             ct_builder.counterterm.existing_esurfaces[esurface_ct_builder.existing_esurface_id];
 
-        let edges = esurface_ct_builder.esurface.energies.clone();
+        let edges = esurface_ct_builder
+            .esurface
+            .energies
+            .iter()
+            .map(|edge_id| graph.edges[*edge_id].name.clone())
+            .collect();
 
         let plus_solution = rstar_solution.solutions[0].clone();
         let minus_solution = rstar_solution.solutions[1].clone();
+
+        let delta_r_plus = radius - &plus_solution.solution;
+        let delta_r_minus = radius - &minus_solution.solution;
 
         let jacobian_ratio_plus = value.counterterms[0].jacobian_ratio.clone();
         let jacobian_ratio_minus = value.counterterms[1].jacobian_ratio.clone();
@@ -972,6 +986,8 @@ impl<'a, T: FloatLike> From<&CounterTermResult<'a, T>> for DebugHelper<T> {
             uv_damper_plus,
             singularity_dampener_minus,
             singularity_dampener_plus,
+            delta_r_plus,
+            delta_r_minus,
         }
     }
 }
