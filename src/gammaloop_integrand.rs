@@ -18,7 +18,7 @@ use crate::numerator::Evaluators;
 use crate::subtraction::static_counterterm::CounterTerm;
 use crate::utils::{
     self, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
-    PrecisionUpgradable, F,
+    PrecisionUpgradable, SmallSquareMatrix, F,
 };
 use crate::{
     DiscreteGraphSamplingSettings, Externals, IntegratedPhase, Polarizations, SamplingSettings,
@@ -481,7 +481,7 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
                 DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                     graph.evaluate_channel_sum(sample, *alpha, settings)
                 }
-                DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical { sample } => {
                     graph.evaluate_tropical(sample, rotation_for_overlap, settings)
                 }
                 DiscreteGraphSample::DiscreteMultiChanneling {
@@ -999,7 +999,9 @@ impl GammaLoopIntegrand {
                         );
                         Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
-                            sample: DiscreteGraphSample::Tropical(default_sample),
+                            sample: DiscreteGraphSample::Tropical {
+                                sample: default_sample,
+                            },
                         })
                     }
                     DiscreteGraphSamplingSettings::DiscreteMultiChanneling(
@@ -1849,7 +1851,9 @@ pub enum DiscreteGraphSample<T: FloatLike> {
         sample: DefaultSample<T>,
     },
     /// This variant is equivalent to Default, but needs to be handled differently in the evaluation.
-    Tropical(DefaultSample<T>),
+    Tropical {
+        sample: DefaultSample<T>,
+    },
     DiscreteMultiChanneling {
         alpha: f64,
         channel_id: usize,
@@ -1862,7 +1866,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample.zero(),
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample.zero(),
-            DiscreteGraphSample::Tropical(sample) => sample.zero(),
+            DiscreteGraphSample::Tropical { sample, .. } => sample.zero(),
             DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample.zero(),
         }
     }
@@ -1871,7 +1875,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample.one(),
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample.one(),
-            DiscreteGraphSample::Tropical(sample) => sample.one(),
+            DiscreteGraphSample::Tropical { sample, .. } => sample.one(),
             DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample.one(),
         }
     }
@@ -1901,13 +1905,13 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     ),
                 }
             }
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.get_rotated_sample_cached(
+            DiscreteGraphSample::Tropical { sample } => DiscreteGraphSample::Tropical {
+                sample: sample.get_rotated_sample_cached(
                     rotation,
                     rotated_externals,
                     rotated_polarizations,
-                ))
-            }
+                ),
+            },
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -1940,9 +1944,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     sample: sample.cast_sample(),
                 }
             }
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.cast_sample())
-            }
+            DiscreteGraphSample::Tropical { sample } => DiscreteGraphSample::Tropical {
+                sample: sample.cast_sample(),
+            },
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -1969,9 +1973,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     sample: sample.higher_precision(),
                 }
             }
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.higher_precision())
-            }
+            DiscreteGraphSample::Tropical { sample } => DiscreteGraphSample::Tropical {
+                sample: sample.higher_precision(),
+            },
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -1998,9 +2002,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     sample: sample.lower_precision(),
                 }
             }
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.lower_precision())
-            }
+            DiscreteGraphSample::Tropical { sample } => DiscreteGraphSample::Tropical {
+                sample: sample.lower_precision(),
+            },
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -2019,7 +2023,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample,
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample,
-            DiscreteGraphSample::Tropical(sample) => sample,
+            DiscreteGraphSample::Tropical { sample } => sample,
             DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample,
         }
     }
@@ -2051,4 +2055,14 @@ fn unwrap_double_discrete_sample(sample: &Sample<F<f64>>) -> (usize, (usize, &[F
     } else {
         panic!("Invalid sample structure")
     }
+}
+
+pub struct TropicalSamplingMetadata<T: FloatLike> {
+    pub q_vectors: Vec<ThreeMomentum<F<T>>>,
+    pub lambda: F<T>,
+    pub l_matrix: SmallSquareMatrix<F<T>>,
+    pub l_matrix_inverse: SmallSquareMatrix<F<T>>,
+    pub q_transposed_inverse: SmallSquareMatrix<F<T>>,
+    pub u_vectors: Vec<ThreeMomentum<F<T>>>,
+    pub shift: Vec<ThreeMomentum<F<T>>>,
 }
