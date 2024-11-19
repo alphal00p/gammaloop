@@ -803,7 +803,7 @@ impl GammaloopTropicalSamplingSettings {
             upcast_on_failure: self.upcast_on_failure,
             matrix_stability_test: self.matrix_stability_test,
             print_debug_info: debug > 0,
-            return_metadata: false,
+            return_metadata: true,
         }
     }
 }
