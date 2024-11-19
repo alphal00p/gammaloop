@@ -3401,7 +3401,51 @@ fn test_is_permutation() {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SmallSquareMatrix<T> {
     pub data: SmallVec<[T; 36]>,
     pub dim: usize,
+}
+
+impl From<momtrop::matrix::SquareMatrix<f64>> for SmallSquareMatrix<F<f64>> {
+    fn from(value: momtrop::matrix::SquareMatrix<f64>) -> Self {
+        let dim = value.get_dim();
+        let data = value.get_raw_data().into_iter().map(F::from_f64).collect();
+
+        Self { dim, data }
+    }
+}
+
+impl<T: FloatLike> SmallSquareMatrix<F<T>> {
+    pub fn higher_precision(&self) -> SmallSquareMatrix<F<T::Higher>>
+    where
+        T::Higher: FloatLike,
+    {
+        SmallSquareMatrix {
+            dim: self.dim,
+            data: self.data.iter().map(|x| x.higher()).collect(),
+        }
+    }
+
+    pub fn lower_precision(&self) -> SmallSquareMatrix<F<T::Lower>>
+    where
+        T::Lower: FloatLike,
+    {
+        SmallSquareMatrix {
+            dim: self.dim,
+            data: self.data.iter().map(|x| x.lower()).collect(),
+        }
+    }
+}
+
+impl<T: Clone> SmallSquareMatrix<T> {
+    pub fn cast<T2>(&self) -> SmallSquareMatrix<T2>
+    where
+        T2: From<T>,
+    {
+        SmallSquareMatrix {
+            dim: self.dim,
+            data: self.data.iter().cloned().map(|x| x.into()).collect(),
+        }
+    }
 }

@@ -481,7 +481,7 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
                 DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                     graph.evaluate_channel_sum(sample, *alpha, settings)
                 }
-                DiscreteGraphSample::Tropical { sample } => {
+                DiscreteGraphSample::Tropical { sample, .. } => {
                     graph.evaluate_tropical(sample, rotation_for_overlap, settings)
                 }
                 DiscreteGraphSample::DiscreteMultiChanneling {
@@ -997,10 +997,65 @@ impl GammaLoopIntegrand {
                             &self.global_data.polarizations[0],
                             &graph.bare_graph.external_in_or_out_signature(),
                         );
+
+                        let momtrop_metadata = sampling_result.metadata.unwrap();
+                        let lambda = F::from_f64(momtrop_metadata.lambda);
+                        let determinant =
+                            F::from_f64(momtrop_metadata.decompoisiton_result.determinant);
+
+                        let l_matrix = momtrop_metadata.l_matrix.into();
+                        let l_matrix_inverse = momtrop_metadata.decompoisiton_result.inverse.into();
+                        let q_transposed_inverse = momtrop_metadata
+                            .decompoisiton_result
+                            .q_transposed_inverse
+                            .into();
+
+                        let q_vectors = momtrop_metadata
+                            .q_vectors
+                            .into_iter()
+                            .map(|vec| ThreeMomentum {
+                                px: F(vec[0]),
+                                py: F(vec[1]),
+                                pz: F(vec[2]),
+                            })
+                            .collect();
+
+                        let shift = momtrop_metadata
+                            .shift
+                            .into_iter()
+                            .map(|vec| ThreeMomentum {
+                                px: F(vec[0]),
+                                py: F(vec[1]),
+                                pz: F(vec[2]),
+                            })
+                            .collect();
+
+                        let u_vectors = momtrop_metadata
+                            .u_vectors
+                            .into_iter()
+                            .map(|vec| ThreeMomentum {
+                                px: F(vec[0]),
+                                py: F(vec[1]),
+                                pz: F(vec[2]),
+                            })
+                            .collect();
+
+                        let tropical_sampling_metadata = TropicalSamplingMetadata {
+                            lambda,
+                            determinant,
+                            l_matrix,
+                            l_matrix_inverse,
+                            q_transposed_inverse,
+                            q_vectors,
+                            shift,
+                            u_vectors,
+                        };
+
                         Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::Tropical {
                                 sample: default_sample,
+                                metadata: tropical_sampling_metadata,
                             },
                         })
                     }
@@ -1853,6 +1908,7 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     /// This variant is equivalent to Default, but needs to be handled differently in the evaluation.
     Tropical {
         sample: DefaultSample<T>,
+        metadata: TropicalSamplingMetadata<T>,
     },
     DiscreteMultiChanneling {
         alpha: f64,
@@ -1905,12 +1961,13 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     ),
                 }
             }
-            DiscreteGraphSample::Tropical { sample } => DiscreteGraphSample::Tropical {
+            DiscreteGraphSample::Tropical { sample, metadata } => DiscreteGraphSample::Tropical {
                 sample: sample.get_rotated_sample_cached(
                     rotation,
                     rotated_externals,
                     rotated_polarizations,
                 ),
+                metadata: metadata.rotate(rotation),
             },
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
@@ -1944,8 +2001,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     sample: sample.cast_sample(),
                 }
             }
-            DiscreteGraphSample::Tropical { sample } => DiscreteGraphSample::Tropical {
+            DiscreteGraphSample::Tropical { sample, metadata } => DiscreteGraphSample::Tropical {
                 sample: sample.cast_sample(),
+                metadata: metadata.cast_metadata(),
             },
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
@@ -1973,8 +2031,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     sample: sample.higher_precision(),
                 }
             }
-            DiscreteGraphSample::Tropical { sample } => DiscreteGraphSample::Tropical {
+            DiscreteGraphSample::Tropical { sample, metadata } => DiscreteGraphSample::Tropical {
                 sample: sample.higher_precision(),
+                metadata: metadata.higher_precision(),
             },
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
@@ -2002,8 +2061,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     sample: sample.lower_precision(),
                 }
             }
-            DiscreteGraphSample::Tropical { sample } => DiscreteGraphSample::Tropical {
+            DiscreteGraphSample::Tropical { sample, metadata } => DiscreteGraphSample::Tropical {
                 sample: sample.lower_precision(),
+                metadata: metadata.lower_precision(),
             },
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
@@ -2023,7 +2083,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample,
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample,
-            DiscreteGraphSample::Tropical { sample } => sample,
+            DiscreteGraphSample::Tropical { sample, .. } => sample,
             DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample,
         }
     }
@@ -2057,12 +2117,83 @@ fn unwrap_double_discrete_sample(sample: &Sample<F<f64>>) -> (usize, (usize, &[F
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TropicalSamplingMetadata<T: FloatLike> {
     pub q_vectors: Vec<ThreeMomentum<F<T>>>,
     pub lambda: F<T>,
+    pub determinant: F<T>,
     pub l_matrix: SmallSquareMatrix<F<T>>,
     pub l_matrix_inverse: SmallSquareMatrix<F<T>>,
     pub q_transposed_inverse: SmallSquareMatrix<F<T>>,
     pub u_vectors: Vec<ThreeMomentum<F<T>>>,
     pub shift: Vec<ThreeMomentum<F<T>>>,
+}
+
+impl<T: FloatLike> TropicalSamplingMetadata<T> {
+    fn rotate(&self, rotation: &Rotation) -> Self {
+        let rotated_q_vectors = self.q_vectors.iter().map(|v| v.rotate(rotation)).collect();
+        let rotated_u_vectors = self.u_vectors.iter().map(|v| v.rotate(rotation)).collect();
+        let rotated_shift = self.shift.iter().map(|v| v.rotate(rotation)).collect();
+
+        Self {
+            q_vectors: rotated_q_vectors,
+            u_vectors: rotated_u_vectors,
+            shift: rotated_shift,
+            lambda: self.lambda.clone(),
+            determinant: self.determinant.clone(),
+            l_matrix: self.l_matrix.clone(),
+            l_matrix_inverse: self.l_matrix_inverse.clone(),
+            q_transposed_inverse: self.q_transposed_inverse.clone(),
+        }
+    }
+
+    fn cast_metadata<T2: FloatLike>(&self) -> TropicalSamplingMetadata<T2>
+    where
+        F<T2>: From<F<T>>,
+    {
+        TropicalSamplingMetadata {
+            q_vectors: self.q_vectors.iter().map(|vec| vec.cast()).collect(),
+            shift: self.shift.iter().map(|vec| vec.cast()).collect(),
+            u_vectors: self.u_vectors.iter().map(|vec| vec.cast()).collect(),
+            lambda: self.lambda.clone().into(),
+            determinant: self.determinant.clone().into(),
+            l_matrix: self.l_matrix.cast(),
+            l_matrix_inverse: self.l_matrix_inverse.cast(),
+            q_transposed_inverse: self.q_transposed_inverse.cast(),
+        }
+    }
+
+    // this is most likely a bad idea for stability, it is probably better to redo the param in order
+    // to get the inverted matrices accurate in the higher precision.
+    fn higher_precision(&self) -> TropicalSamplingMetadata<T::Higher>
+    where
+        T::Higher: FloatLike,
+    {
+        TropicalSamplingMetadata {
+            determinant: self.determinant.higher(),
+            lambda: self.lambda.higher(),
+            l_matrix: self.l_matrix.higher_precision(),
+            l_matrix_inverse: self.l_matrix_inverse.higher_precision(),
+            q_transposed_inverse: self.q_transposed_inverse.higher_precision(),
+            q_vectors: self.q_vectors.iter().map(|vec| vec.higher()).collect(),
+            shift: self.shift.iter().map(|vec| vec.higher()).collect(),
+            u_vectors: self.u_vectors.iter().map(|vec| vec.higher()).collect(),
+        }
+    }
+
+    fn lower_precision(&self) -> TropicalSamplingMetadata<T::Lower>
+    where
+        T::Lower: FloatLike,
+    {
+        TropicalSamplingMetadata {
+            determinant: self.determinant.lower(),
+            lambda: self.lambda.lower(),
+            l_matrix: self.l_matrix.lower_precision(),
+            l_matrix_inverse: self.l_matrix_inverse.lower_precision(),
+            q_transposed_inverse: self.q_transposed_inverse.lower_precision(),
+            q_vectors: self.q_vectors.iter().map(|vec| vec.lower()).collect(),
+            shift: self.shift.iter().map(|vec| vec.lower()).collect(),
+            u_vectors: self.u_vectors.iter().map(|vec| vec.lower()).collect(),
+        }
+    }
 }
