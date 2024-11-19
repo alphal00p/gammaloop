@@ -786,7 +786,9 @@ impl Wood {
                 for &c in sg.parents.iter() {
                     let mut is_in = 0;
                     for comp in &cs {
-                        if *comp == poset.nodes[c].data {
+                        let comp =
+                            InternalSubGraph::cleaned_filter_optimist(comp.clone(), &graph.0);
+                        if comp == poset.nodes[c].data {
                             union.push(c);
                             is_in += 1;
                         }
@@ -1190,6 +1192,10 @@ pub struct Forest {
 }
 
 impl Forest {
+    pub fn n_terms(&self) -> usize {
+        self.dag.nodes.len()
+    }
+
     pub fn compute(&mut self, graph: &UVGraph) {
         let order = self.dag.compute_topological_order();
 
@@ -1469,6 +1475,12 @@ impl<T, R: Key> SlotNode<T, R> {
 pub struct DAG<T, R: Key, D = ()> {
     pub nodes: SlotMap<R, SlotNode<T, R>>,
     associated_data: SecondaryMap<R, D>,
+}
+
+impl<T, R: Key, D> DAG<T, R, D> {
+    pub fn n_nodes(&self) -> usize {
+        self.nodes.len()
+    }
 }
 
 pub type Poset<T, D> = DAG<T, PosetNode, D>;
