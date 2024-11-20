@@ -8,7 +8,7 @@ use crate::{
         generation::generate_cff_expression,
     },
     feyngen::FeynGenError,
-    gammaloop_integrand::{BareSample, DefaultSample},
+    gammaloop_integrand::{BareSample, DefaultSample, TropicalSamplingMetadata},
     graph::half_edge::{HedgeGraph, HedgeGraphBuilder},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
@@ -2749,6 +2749,7 @@ impl Graph<Evaluators> {
     pub fn evaluate_threshold_counterterm<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
+        tropical_metadata: Option<&TropicalSamplingMetadata<T>>,
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
@@ -2758,6 +2759,7 @@ impl Graph<Evaluators> {
             .evaluate_threshold_counterterm(
                 &self.bare_graph,
                 sample,
+                tropical_metadata.expect("only tropical sampling is accepted on this branch"),
                 rotation_for_overlap,
                 settings,
             )
@@ -3071,12 +3073,14 @@ impl DerivedGraphData<Evaluators> {
         &mut self,
         graph: &BareGraph,
         sample: &DefaultSample<T>,
+        tropical_metadata: &TropicalSamplingMetadata<T>,
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
         match self.static_counterterm.as_ref() {
             Some(ct) => CounterTerm::evaluate(
                 sample,
+                tropical_metadata,
                 graph,
                 &self.cff_expression.as_ref().unwrap().esurfaces,
                 ct,

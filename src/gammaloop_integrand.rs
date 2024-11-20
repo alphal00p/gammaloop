@@ -263,6 +263,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
 
         let counter_term_eval = self.get_mut_graph().evaluate_threshold_counterterm(
             sample,
+            None,
             rotation_for_overlap,
             settings,
         );
@@ -335,6 +336,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
 
         let counterterm = self.get_mut_graph().evaluate_threshold_counterterm(
             sample,
+            Some(metadata),
             rotation_for_overlap,
             settings,
         ) * self

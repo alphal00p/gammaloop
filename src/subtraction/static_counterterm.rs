@@ -11,6 +11,7 @@ const MAX_ITERATIONS: usize = 40;
 const TOLERANCE: f64 = 1.0;
 
 use crate::cff::esurface::Esurface;
+use crate::gammaloop_integrand::TropicalSamplingMetadata;
 use crate::graph::BareGraph;
 use crate::momentum::{Rotatable, Rotation};
 
@@ -166,8 +167,10 @@ impl CounterTerm {
             .unwrap_or_else(|| const_builder.zero())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate<T: FloatLike>(
         sample: &DefaultSample<T>,
+        tropical_metadata: &TropicalSamplingMetadata<T>,
         graph: &BareGraph,
         esurfaces: &EsurfaceCollection,
         counterterm: &CounterTerm,
