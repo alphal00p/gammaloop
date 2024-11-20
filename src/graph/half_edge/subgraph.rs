@@ -1,17 +1,109 @@
 use std::{
     hash::Hash,
+    num::TryFromIntError,
     ops::{BitAndAssign, BitOrAssign, BitXorAssign, Index},
 };
 
+use ahash::AHashSet;
 use bitvec::{bitvec, order::Lsb0, vec::BitVec};
 use serde::{Deserialize, Serialize};
 
-use super::{GVEdgeAttrs, HedgeGraph, HedgeNodeBuilder, InvolutiveMapping, TraversalTree};
+use super::{
+    GVEdgeAttrs, HedgeGraph, HedgeNodeBuilder, InvolutiveMapping, PowersetIterator, TraversalTree,
+};
 
 const BASE62_ALPHABET: &[u8; 62] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-pub trait SubGraph: Clone {
+pub trait SubGraph: Clone + Eq + Hash {
+    fn all_pairwise_ops<F>(left: &mut AHashSet<Self>, right: &[Self], op: F) -> bool
+    where
+        F: Fn(&Self, &Self) -> Self,
+    {
+        let mut added = false;
+        let mut new = AHashSet::new();
+        for l in left.iter() {
+            for r in right {
+                new.insert(op(l, r));
+            }
+        }
+        for n in new.drain() {
+            if left.insert(n) {
+                added = true;
+            }
+        }
+        added
+    }
+
+    fn all_pairwise_unions(left: &mut AHashSet<Self>, right: &[Self]) -> bool {
+        Self::all_pairwise_ops(left, right, |l, r| l.union(r))
+    }
+    fn all_unions_iterative(set: &[Self]) -> AHashSet<Self> {
+        let mut s: AHashSet<_> = set.iter().cloned().collect();
+        while Self::all_pairwise_unions(&mut s, set) {}
+        s
+    }
+
+    fn all_pairwise_sym_diff(left: &mut AHashSet<Self>, right: &[Self]) -> bool {
+        Self::all_pairwise_ops(left, right, |l, r| l.sym_diff(r))
+    }
+    fn all_sym_diff_iterative(set: &[Self]) -> AHashSet<Self> {
+        let mut s: AHashSet<_> = set.iter().cloned().collect();
+        while Self::all_pairwise_sym_diff(&mut s, set) {}
+        s
+    }
+
+    fn all_op_powerset_filter_map(
+        set: &[Self],
+        op: impl Fn(&mut Self, &Self),
+        filter_map: &impl Fn(Self) -> Option<Self>,
+    ) -> Result<AHashSet<Self>, TryFromIntError> {
+        let mut s = AHashSet::new();
+        let mut pset = PowersetIterator::new(set.len().try_into()?);
+
+        pset.next().unwrap(); //Skip the empty set
+
+        for i in pset {
+            let mut ones = i.iter_ones();
+
+            let mut union = set[ones.next().unwrap()].clone();
+
+            for o in ones {
+                op(&mut union, &set[o]);
+            }
+
+            if let Some(union) = filter_map(union) {
+                s.insert(union);
+            }
+        }
+
+        Ok(s)
+    }
+
+    fn all_unions_powerset_filter_map(
+        set: &[Self],
+        filter_map: &impl Fn(Self) -> Option<Self>,
+    ) -> Result<AHashSet<Self>, TryFromIntError> {
+        Self::all_op_powerset_filter_map(set, |l, r| l.union_with(r), filter_map)
+    }
+
+    fn all_sym_diff_powerset(
+        set: &[Self],
+        filter_map: &impl Fn(Self) -> Option<Self>,
+    ) -> Result<AHashSet<Self>, TryFromIntError> {
+        Self::all_op_powerset_filter_map(set, |l, r| l.sym_diff_with(r), filter_map)
+    }
+
+    fn n_op(n: usize, set: &[Self], op: &impl Fn(&Self, &Self) -> Self) -> AHashSet<Self> {
+        if n == 0 {
+            AHashSet::new()
+        } else {
+            let mut s = Self::n_op(n - 1, set, op);
+            Self::all_pairwise_ops(&mut s, set, op);
+            s
+        }
+    }
+
     fn string_label(&self) -> String;
     fn included(&self) -> impl Iterator<Item = usize>;
     fn is_included(&self, i: usize) -> bool;

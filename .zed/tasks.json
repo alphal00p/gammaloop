@@ -1,7 +1,7 @@
 [
   {
     "label": "Run Rust tests",
-    "command": "cargo nextest r $env.ZED_SYMBOL --no-default-features --lib  --nocapture --release",
+    "command": "cargo nextest r $env.ZED_SYMBOL --no-default-features --lib  --nocapture",
     "tags": ["rust-test"]
   },
   {

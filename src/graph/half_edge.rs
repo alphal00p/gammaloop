@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Display, hash::Hash};
+use std::{collections::VecDeque, fmt::Display, hash::Hash, num::TryFromIntError};
 
 use ahash::{AHashMap, AHashSet};
 use bitvec::{slice::IterOnes, vec::BitVec};
@@ -1025,16 +1025,9 @@ impl<E, V> HedgeGraph<E, V> {
     }
 
     ///Read, R.C. and Tarjan, R.E. (1975), Bounds on Backtrack Algorithms for Listing Cycles, Paths, and Spanning Trees. Networks, 5: 237-252. https://doi.org/10.1002/net.1975.5.3.237
-
-    pub fn read_tarjan(&self) -> Vec<HedgeNode> {
-        let mut cycles = Vec::new();
-        for (i, (_, e)) in self.involution.inv.iter().enumerate() {
-            if matches!(e, InvolutiveMapping::Source(_)) {
-                cycles.extend(self.increasing_cycles_from(i));
-            }
-        }
-        cycles
-    }
+    // pub fn read_tarjan(&self) -> Vec<HedgeNode> {
+    //     todo!("Implement")
+    // }
 
     pub fn backtrack(
         &self,
@@ -1065,81 +1058,6 @@ impl<E, V> HedgeGraph<E, V> {
         }
     }
 
-    pub fn increasing_cycles_from(&self, start: usize) -> Vec<HedgeNode> {
-        let cycles = Vec::new();
-
-        let mut tree: InternalSubGraph = self.empty_subgraph();
-        let mut options: InternalSubGraph = self.full_graph();
-        for i in 0..=start {
-            options.filter.set(i, false);
-        }
-
-        tree.filter.set(start, true);
-        options.filter.set(start, false);
-
-        // let current = start;
-
-        // loop {
-        //     let next_possible = InternalSubGraph::from(
-        //         self.involution
-        //             .get_connected_node_id(current)
-        //             .unwrap()
-        //             .hairs
-        //             .clone(),
-        //     );
-
-        //     if next_possible.empty_intersection(&tree) {
-        //         tree.filter.set(self.involution.inv(current), true);
-        //         options.filter.set(self.involution.inv(current), false);
-
-        //         if let Some(i) = next_possible
-        //             .filter
-        //             .iter_ones()
-        //             .find(|&i| i != self.involution.inv(start) && options.filter[i])
-        //         {
-        //             tree.filter.set(i, true);
-        //             options.filter.set(i, false);
-
-        //             current = i;
-        //         } else if current == start {
-        //             //No edges greater than start-> abort
-        //             break;
-        //         } else {
-        //             current = self
-        //                 .backtrack(&mut options, &mut tree, current)
-        //                 .unwrap_or(start);
-
-        //             if current == start {
-        //                 break;
-        //             }
-        //         }
-        //     } else {
-        //         let int = next_possible.intersection(&tree);
-        //         if int.filter[start] {
-        //             tree.filter.set(self.involution.inv(current), true);
-        //             options.filter.set(self.involution.inv(current), false);
-
-        //             let mut cycle = self.nesting_node_from_subgraph(tree.clone());
-
-        //             self.cut_branches(&mut cycle);
-
-        //             cycle.internal_graph.loopcount = Some(1);
-
-        //             cycles.push(cycle);
-        //         }
-        //         current = self
-        //             .backtrack(&mut options, &mut tree, current)
-        //             .unwrap_or(start);
-
-        //         if current == start {
-        //             break;
-        //         }
-        //     }
-        // }
-
-        cycles
-    }
-
     pub fn order_basis(&self, basis: &[HedgeNode]) -> Vec<Vec<InternalSubGraph>> {
         let mut seen = vec![basis[0].internal_graph.clone()];
         let mut partitions = vec![seen.clone()];
@@ -1164,110 +1082,27 @@ impl<E, V> HedgeGraph<E, V> {
         partitions
     }
 
-    pub fn welchs_violating(partitions: &[Vec<InternalSubGraph>]) -> Vec<InternalSubGraph> {
-        let mut violations = Vec::new();
-
-        for (b1, b2) in partitions.iter().tuple_windows() {
-            for (_, _, ck) in
-                b1.iter()
-                    .chain(b2.iter())
-                    .tuple_combinations()
-                    .filter(|(ci, cj, ck)| {
-                        ci.empty_intersection(cj)
-                            && !ci.empty_intersection(ck)
-                            && !cj.empty_intersection(ck)
-                    })
-            {
-                violations.push(ck.clone());
+    pub fn all_cycles(&self) -> Vec<InternalSubGraph> {
+        InternalSubGraph::all_sym_diff_powerset(&self.cycle_basis().0, &|mut c| {
+            if self.is_cycle(&c) {
+                c.loopcount = Some(1);
+                Some(c)
+            } else {
+                None
             }
-        }
-
-        violations
+        })
+        .unwrap()
+        .into_iter()
+        .collect()
     }
 
-    pub fn all_cycles(&self) -> Vec<InternalSubGraph> {
-        self.all_composite_cycles_with_basis(&self.cycle_basis().0)
+    pub fn all_cycle_sym_diffs(&self) -> Result<Vec<InternalSubGraph>, TryFromIntError> {
+        InternalSubGraph::all_sym_diff_powerset(&self.cycle_basis().0, &|s| Some(s))
+            .map(|a| a.into_iter().collect())
     }
 
     pub fn all_cycle_unions(&self) -> AHashSet<InternalSubGraph> {
-        let cycles = self.read_tarjan();
-        let mut spinneys = AHashSet::new();
-
-        let pset = PowersetIterator::new(cycles.len() as u8);
-
-        for p in pset {
-            // let union = p
-            //     .iter_ones()
-            //     .map(|i| cycles[i].clone())
-            //     .reduce(|acc, n| acc.union(&n));
-
-            // if let Some(union) = union {
-            //     spinneys.push(union);
-            // }
-            let mut union: Option<InternalSubGraph> = None;
-
-            for i in p.iter_ones() {
-                if let Some(union) = &mut union {
-                    union.union_with(&cycles[i].internal_graph);
-                } else {
-                    union = Some(cycles[i].internal_graph.clone());
-                }
-            }
-
-            if let Some(union) = union {
-                spinneys.insert(union);
-            }
-        }
-
-        spinneys
-    }
-
-    pub fn all_basis_sym_diffs(&self, basis: &[HedgeNode]) -> Vec<HedgeNode> {
-        let mut diffs = Vec::new();
-
-        let mut pset = PowersetIterator::new(basis.len() as u8);
-
-        pset.next(); //Skip empty set
-
-        for p in pset {
-            let mut cycle: InternalSubGraph = self.empty_subgraph();
-            for c in p.iter_ones().map(|i| &basis[i]) {
-                cycle.sym_diff_with(&c.internal_graph);
-            }
-
-            let cycle = self.nesting_node_from_subgraph(cycle);
-            diffs.push(cycle);
-        }
-
-        diffs
-    }
-
-    pub fn all_composite_cycles_with_basis(
-        &self,
-        basis: &[InternalSubGraph],
-    ) -> Vec<InternalSubGraph> {
-        let mut cycles = Vec::new();
-
-        // println!("loops: {}", basis.len());
-
-        let mut pset = PowersetIterator::new(basis.len() as u8);
-
-        pset.next(); //Skip empty set
-
-        for p in pset {
-            let mut cycle: InternalSubGraph = self.empty_subgraph();
-            for c in p.iter_ones().map(|i| &basis[i]) {
-                cycle.sym_diff_with(c);
-            }
-
-            if self.is_cycle(&cycle) {
-                // let cycle = self.nesting_node_from_subgraph(cycle);
-                cycle.loopcount = Some(1);
-                cycles.push(cycle);
-            }
-        }
-
-        cycles
+        InternalSubGraph::all_unions_iterative(&self.all_cycle_sym_diffs().unwrap())
     }
 
     fn is_cycle(&self, subgraph: &InternalSubGraph) -> bool {
