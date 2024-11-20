@@ -185,6 +185,7 @@ impl CounterTerm {
             rotation_for_overlap,
             settings,
             sample,
+            tropical_metadata,
         );
 
         let res = counterterm
@@ -320,6 +321,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     esurface_collection: &'a EsurfaceCollection,
     sample: &'a DefaultSample<T>,
     prefactor: Complex<F<T>>,
+    tropical_metadata: &'a TropicalSamplingMetadata<T>,
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
@@ -330,6 +332,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         rotation_for_overlap: &'a Rotation,
         settings: &'a Settings,
         sample: &'a DefaultSample<T>,
+        tropical_metadata: &'a TropicalSamplingMetadata<T>,
     ) -> Self {
         let real_mass_vector = graph
             .get_real_mass_vector()
@@ -351,6 +354,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             settings,
             sample,
             prefactor,
+            tropical_metadata,
         }
     }
 
@@ -399,7 +403,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             .loop_moms()
             .iter()
             .zip(rotated_center.iter())
-            .map(|(momentum, center)| momentum.clone() - center.clone())
+            .map(|(momentum, center)| momentum - center)
             .collect_vec();
 
         let (hemispherical_unit_shifted_momenta, hemispherical_radius) =
@@ -539,6 +543,55 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                 .map(|(k, center)| k * &solution.solution + center)
                 .collect_vec();
 
+            let loop_number = rstar_loop_momenta.len();
+
+            let lambda = &self
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .tropical_metadata
+                .lambda;
+
+            let v = &self
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .tropical_metadata
+                .v;
+
+            let kq_transformation_prefactor = (v.from_usize(2) * lambda / v).sqrt();
+
+            let qstar_loop_momenta_step_1 = self
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .tropical_metadata
+                .shift
+                .iter()
+                .zip(&rstar_loop_momenta)
+                .map(|(shift, rstar_loop_momentum)| {
+                    (rstar_loop_momentum - shift) * &kq_transformation_prefactor
+                })
+                .collect_vec();
+
+            let qstar_loop_momenta = (0..loop_number)
+                .map(|loop_index| {
+                    qstar_loop_momenta_step_1
+                        .iter()
+                        .enumerate()
+                        .map(|(loop_index_prime, vec)| {
+                            vec * &self
+                                .esurface_ct_builder
+                                .overlap_builder
+                                .counterterm_builder
+                                .tropical_metadata
+                                .q_transposed[(loop_index, loop_index_prime)]
+                        })
+                        .reduce(|acc, x| acc + x)
+                        .unwrap()
+                })
+                .collect_vec();
+
             // some gymnastics to get the sample right
             // do not touch!
             let mut sample_to_modify = self
@@ -557,7 +610,10 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             {
                 None => {
                     sample_to_modify.sample.loop_moms = rstar_loop_momenta;
-                    sample_to_modify
+                    RstarSample {
+                        sample: sample_to_modify,
+                        qstar_vector: qstar_loop_momenta,
+                    }
                 }
                 Some(_) => {
                     sample_to_modify.rotated_sample.as_mut().unwrap().loop_moms =
@@ -584,7 +640,10 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                         .collect_vec();
 
                     sample_to_modify.sample.loop_moms = new_unrotated_momenta;
-                    sample_to_modify
+                    RstarSample {
+                        sample: sample_to_modify,
+                        qstar_vector: qstar_loop_momenta,
+                    }
                 }
             }
         });
@@ -596,8 +655,13 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
     }
 }
 
+struct RstarSample<T: FloatLike> {
+    sample: DefaultSample<T>,
+    qstar_vector: Vec<ThreeMomentum<F<T>>>,
+}
+
 struct RstarSamples<'a, T: FloatLike> {
-    rstar_samples: [DefaultSample<T>; 2],
+    rstar_samples: [RstarSample<T>; 2],
     rstar_solutions: RstarSolution<'a, T>,
 }
 
@@ -615,8 +679,10 @@ impl<'a, T: FloatLike> RstarSamples<'a, T> {
         let existing_esurface_id = esurface_ct_builder.existing_esurface_id;
 
         let residues = self.rstar_samples.each_ref().map(|rstar_sample| {
-            let energy_cache = graph
-                .compute_onshell_energies(rstar_sample.loop_moms(), rstar_sample.external_moms());
+            let energy_cache = graph.compute_onshell_energies(
+                rstar_sample.sample.loop_moms(),
+                rstar_sample.sample.external_moms(),
+            );
             let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
 
             let rstar_energy_product = graph
@@ -643,7 +709,7 @@ impl<'a, T: FloatLike> RstarSamples<'a, T> {
             let eval_terms = terms.evaluate_from_esurface_cache(
                 graph,
                 numerator,
-                rstar_sample,
+                &rstar_sample.sample,
                 &esurface_cache,
                 &energy_cache,
                 settings,
@@ -720,6 +786,7 @@ impl<'a, T: FloatLike> ResiudeEval<'a, T> {
                 let rstar_derivative = &self.rstar_samples.rstar_solutions.solutions[sign_index]
                     .derivative_at_solution;
                 let loop_number = self.rstar_samples.rstar_samples[sign_index]
+                    .sample
                     .loop_moms()
                     .len();
 

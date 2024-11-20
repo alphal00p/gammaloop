@@ -1005,6 +1005,7 @@ impl GammaLoopIntegrand {
 
                         let momtrop_metadata = sampling_result.metadata.unwrap();
                         let lambda = F::from_f64(momtrop_metadata.lambda);
+                        let v = F::from_f64(sampling_result.v);
                         let determinant =
                             F::from_f64(momtrop_metadata.decompoisiton_result.determinant);
 
@@ -1014,6 +1015,9 @@ impl GammaLoopIntegrand {
                             .decompoisiton_result
                             .q_transposed_inverse
                             .into();
+
+                        let q_transposed =
+                            momtrop_metadata.decompoisiton_result.q_transposed.into();
 
                         let q_vectors = momtrop_metadata
                             .q_vectors
@@ -1047,10 +1051,12 @@ impl GammaLoopIntegrand {
 
                         let tropical_sampling_metadata = TropicalSamplingMetadata {
                             lambda,
+                            v,
                             determinant,
                             l_matrix,
                             l_matrix_inverse,
                             q_transposed_inverse,
+                            q_transposed,
                             q_vectors,
                             shift,
                             u_vectors,
@@ -2127,9 +2133,11 @@ pub struct TropicalSamplingMetadata<T: FloatLike> {
     pub q_vectors: Vec<ThreeMomentum<F<T>>>,
     pub lambda: F<T>,
     pub determinant: F<T>,
+    pub v: F<T>,
     pub l_matrix: SmallSquareMatrix<F<T>>,
     pub l_matrix_inverse: SmallSquareMatrix<F<T>>,
     pub q_transposed_inverse: SmallSquareMatrix<F<T>>,
+    pub q_transposed: SmallSquareMatrix<F<T>>,
     pub u_vectors: Vec<ThreeMomentum<F<T>>>,
     pub shift: Vec<ThreeMomentum<F<T>>>,
 }
@@ -2145,10 +2153,12 @@ impl<T: FloatLike> TropicalSamplingMetadata<T> {
             u_vectors: rotated_u_vectors,
             shift: rotated_shift,
             lambda: self.lambda.clone(),
+            v: self.v.clone(),
             determinant: self.determinant.clone(),
             l_matrix: self.l_matrix.clone(),
             l_matrix_inverse: self.l_matrix_inverse.clone(),
             q_transposed_inverse: self.q_transposed_inverse.clone(),
+            q_transposed: self.q_transposed.clone(),
         }
     }
 
@@ -2162,9 +2172,11 @@ impl<T: FloatLike> TropicalSamplingMetadata<T> {
             u_vectors: self.u_vectors.iter().map(|vec| vec.cast()).collect(),
             lambda: self.lambda.clone().into(),
             determinant: self.determinant.clone().into(),
+            v: self.v.clone().into(),
             l_matrix: self.l_matrix.cast(),
             l_matrix_inverse: self.l_matrix_inverse.cast(),
             q_transposed_inverse: self.q_transposed_inverse.cast(),
+            q_transposed: self.q_transposed.cast(),
         }
     }
 
@@ -2177,9 +2189,11 @@ impl<T: FloatLike> TropicalSamplingMetadata<T> {
         TropicalSamplingMetadata {
             determinant: self.determinant.higher(),
             lambda: self.lambda.higher(),
+            v: self.v.higher(),
             l_matrix: self.l_matrix.higher_precision(),
             l_matrix_inverse: self.l_matrix_inverse.higher_precision(),
             q_transposed_inverse: self.q_transposed_inverse.higher_precision(),
+            q_transposed: self.q_transposed.higher_precision(),
             q_vectors: self.q_vectors.iter().map(|vec| vec.higher()).collect(),
             shift: self.shift.iter().map(|vec| vec.higher()).collect(),
             u_vectors: self.u_vectors.iter().map(|vec| vec.higher()).collect(),
@@ -2193,9 +2207,11 @@ impl<T: FloatLike> TropicalSamplingMetadata<T> {
         TropicalSamplingMetadata {
             determinant: self.determinant.lower(),
             lambda: self.lambda.lower(),
+            v: self.v.lower(),
             l_matrix: self.l_matrix.lower_precision(),
             l_matrix_inverse: self.l_matrix_inverse.lower_precision(),
             q_transposed_inverse: self.q_transposed_inverse.lower_precision(),
+            q_transposed: self.q_transposed.lower_precision(),
             q_vectors: self.q_vectors.iter().map(|vec| vec.lower()).collect(),
             shift: self.shift.iter().map(|vec| vec.lower()).collect(),
             u_vectors: self.u_vectors.iter().map(|vec| vec.lower()).collect(),
