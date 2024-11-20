@@ -32,7 +32,7 @@ use symbolica::symb;
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Index, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -3413,6 +3413,14 @@ impl From<momtrop::matrix::SquareMatrix<f64>> for SmallSquareMatrix<F<f64>> {
         let data = value.get_raw_data().into_iter().map(F::from_f64).collect();
 
         Self { dim, data }
+    }
+}
+
+impl<T> Index<(usize, usize)> for SmallSquareMatrix<T> {
+    type Output = T;
+
+    fn index(&self, index: (usize, usize)) -> &Self::Output {
+        self.data[index.0 * self.dim + index.1]
     }
 }
 
