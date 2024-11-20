@@ -16,15 +16,27 @@ const BASE62_ALPHABET: &[u8; 62] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 pub trait SubGraph: Clone + Eq + Hash {
-    fn all_pairwise_ops<F>(left: &mut AHashSet<Self>, right: &[Self], op: F) -> bool
-    where
-        F: Fn(&Self, &Self) -> Self,
-    {
+    fn all_pairwise_ops(
+        left: &mut AHashSet<Self>,
+        right: &[Self],
+        op: &impl Fn(&Self, &Self) -> Self,
+    ) -> bool {
+        Self::all_pairwise_ops_filter_map(left, right, op, &|x| Some(x))
+    }
+
+    fn all_pairwise_ops_filter_map(
+        left: &mut AHashSet<Self>,
+        right: &[Self],
+        op: &impl Fn(&Self, &Self) -> Self,
+        filter_map: &impl Fn(Self) -> Option<Self>,
+    ) -> bool {
         let mut added = false;
         let mut new = AHashSet::new();
         for l in left.iter() {
             for r in right {
-                new.insert(op(l, r));
+                if let Some(n) = filter_map(op(l, r)) {
+                    new.insert(n);
+                }
             }
         }
         for n in new.drain() {
@@ -36,21 +48,29 @@ pub trait SubGraph: Clone + Eq + Hash {
     }
 
     fn all_pairwise_unions(left: &mut AHashSet<Self>, right: &[Self]) -> bool {
-        Self::all_pairwise_ops(left, right, |l, r| l.union(r))
-    }
-    fn all_unions_iterative(set: &[Self]) -> AHashSet<Self> {
-        let mut s: AHashSet<_> = set.iter().cloned().collect();
-        while Self::all_pairwise_unions(&mut s, set) {}
-        s
+        Self::all_pairwise_ops(left, right, &|l, r| l.union(r))
     }
 
     fn all_pairwise_sym_diff(left: &mut AHashSet<Self>, right: &[Self]) -> bool {
-        Self::all_pairwise_ops(left, right, |l, r| l.sym_diff(r))
+        Self::all_pairwise_ops(left, right, &|l, r| l.sym_diff(r))
     }
-    fn all_sym_diff_iterative(set: &[Self]) -> AHashSet<Self> {
+
+    fn all_ops_iterative_filter_map(
+        set: &[Self],
+        op: &impl Fn(&Self, &Self) -> Self,
+        filter_map: &impl Fn(Self) -> Option<Self>,
+    ) -> AHashSet<Self> {
         let mut s: AHashSet<_> = set.iter().cloned().collect();
-        while Self::all_pairwise_sym_diff(&mut s, set) {}
+        while Self::all_pairwise_ops_filter_map(&mut s, set, op, filter_map) {}
         s
+    }
+
+    fn all_unions_iterative(set: &[Self]) -> AHashSet<Self> {
+        Self::all_ops_iterative_filter_map(set, &|a, b| a.union(b), &|a| Some(a))
+    }
+
+    fn all_sym_diff_iterative(set: &[Self]) -> AHashSet<Self> {
+        Self::all_ops_iterative_filter_map(set, &|a, b| a.sym_diff(b), &|a| Some(a))
     }
 
     fn all_op_powerset_filter_map(
