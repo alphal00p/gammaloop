@@ -62,7 +62,7 @@ pub trait SubGraph: Clone + Eq + Hash {
     ) -> AHashSet<Self> {
         let mut s: AHashSet<_> = set.iter().cloned().collect();
         while Self::all_pairwise_ops_filter_map(&mut s, set, op, filter_map) {}
-        s
+        s.drain().filter_map(filter_map).collect()
     }
 
     fn all_unions_iterative(set: &[Self]) -> AHashSet<Self> {
