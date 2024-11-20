@@ -3420,7 +3420,7 @@ impl<T> Index<(usize, usize)> for SmallSquareMatrix<T> {
     type Output = T;
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
-        self.data[index.0 * self.dim + index.1]
+        &self.data[index.0 * self.dim + index.1]
     }
 }
 
