@@ -184,6 +184,37 @@ impl Esurface {
         (energy_sum + shift, derivative)
     }
 
+    pub fn compute_rq_derivative<T: FloatLike>(
+        &self,
+        loop_moms: &[ThreeMomentum<F<T>>],
+        shiftless_k_unit_q: &[ThreeMomentum<F<T>>],
+        external_moms: &[FourMomentum<F<T>>],
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &[F<T>],
+    ) -> F<T> {
+        let spatial_part_of_externals = external_moms
+            .iter()
+            .map(|mom| mom.spatial.clone())
+            .collect_vec();
+
+        self.energies
+            .iter()
+            .map(|&index| {
+                let signature = &lmb.edge_signatures[index];
+                let momentum = signature.compute_momentum(loop_moms, &spatial_part_of_externals);
+                let shiftless_k_part = compute_loop_part(&signature.internal, shiftless_k_unit_q);
+
+                let energy = (momentum.norm_squared()
+                    + &real_mass_vector[index] * &real_mass_vector[index])
+                    .sqrt();
+
+                let numerator = momentum * shiftless_k_part;
+
+                numerator / energy
+            })
+            .fold(loop_moms[0].px.zero(), |acc, x| acc + x)
+    }
+
     #[inline]
     pub fn get_radius_guess<T: FloatLike>(
         &self,
