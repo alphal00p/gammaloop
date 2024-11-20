@@ -125,11 +125,12 @@ fn bugblatter_forest() {
 
     let wood = uv_graph.wood();
 
+    assert_eq!(20, wood.n_spinneys());
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
     let mut ufold = wood.unfold_impl(&uv_graph);
-    println!("N terms: {}", ufold.n_terms());
+    assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
@@ -143,7 +144,7 @@ fn bugblatter_forest() {
 
 #[test]
 #[allow(unused)]
-fn kaapo_scalar() {
+fn kaapo_triplering() {
     let model = load_generic_model("scalars");
     let mut symbolica_graph = symbolica::graph::Graph::new();
 
@@ -173,6 +174,7 @@ fn kaapo_scalar() {
     // println!("{}", uv_graph.0.base_dot());
 
     let wood = uv_graph.wood();
+    assert_eq!(26, wood.n_spinneys());
 
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
@@ -183,12 +185,12 @@ fn kaapo_scalar() {
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     println!("graph: {}", ufold.graphs());
 
-    println!("n terms {}", ufold.n_terms());
+    assert_eq!(242, ufold.n_terms());
 }
 
 #[test]
 #[allow(unused)]
-fn kaapo_scalar_2() {
+fn kaapo_quintic_scalar() {
     let model = load_generic_model("scalars");
     let mut symbolica_graph = symbolica::graph::Graph::new();
 
@@ -219,6 +221,8 @@ fn kaapo_scalar_2() {
 
     let wood = uv_graph.wood();
 
+    assert_eq!(25, wood.n_spinneys());
+
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
@@ -228,7 +232,7 @@ fn kaapo_scalar_2() {
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     println!("graph: {}", ufold.graphs());
 
-    println!("n terms {}", ufold.n_terms());
+    assert_eq!(248, ufold.n_terms());
 }
 
 use super::*;

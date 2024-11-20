@@ -431,25 +431,17 @@ impl UVGraph {
     }
 
     fn spinneys(&self) -> AHashSet<InternalSubGraph> {
-        let cycles = self.0.all_cycles();
-
-        let mut spinneys = AHashSet::new();
-
-        for (ci, cj) in cycles.iter().tuple_combinations() {
-            let union = ci.union(cj);
-
-            if self.dod(&union) >= 0 {
-                spinneys.insert(union);
-            } else {
-                // println!("not dod >=0 spinney :{}", self.dod(&union));
-            }
-        }
-
-        for c in cycles {
-            if self.dod(&c) >= 0 {
-                spinneys.insert(c);
-            }
-        }
+        let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
+            &self.0.all_cycle_sym_diffs().unwrap(),
+            &|a, b| a.union(b),
+            &|union| {
+                if self.dod(&union) >= 0 {
+                    Some(union)
+                } else {
+                    None
+                }
+            },
+        );
 
         spinneys.insert(self.0.empty_subgraph());
 
@@ -769,6 +761,9 @@ impl TryFromIterator<Top, ()> for UnfoldedWoodEl {
 }
 
 impl Wood {
+    pub fn n_spinneys(&self) -> usize {
+        self.poset.n_nodes()
+    }
     pub fn from_spinneys<I: IntoIterator<Item = InternalSubGraph>>(s: I, graph: &UVGraph) -> Self {
         let mut poset = Poset::from_iter(s.into_iter().map(|s| (s, None)));
 
