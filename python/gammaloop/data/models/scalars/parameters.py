@@ -7,7 +7,7 @@ from .function_library import complexconjugate, re, im, csc, sec, acsc, asec
 # Specify here how many scalars need to be considered
 N_SCALARS = 3
 # Add all possible three-point interactions. User can filter undesired ones in vertices.py if needed.
-N_POINT_INTERACTIONS = [3, 4]
+N_POINT_INTERACTIONS = [3,4,5,6,7,8,9,10]
 
 # This is a default parameter object representing 0.
 ZERO = Parameter(name='ZERO',

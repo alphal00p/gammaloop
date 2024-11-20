@@ -179,7 +179,7 @@ def expression_to_string(expr: sb.Expression | None) -> str | None:
 
 def expression_to_string_safe(expr: sb.Expression) -> str:
     try:
-        return expr.pretty_str(
+        return expr.format(
             terms_on_new_line=False,
             color_top_level_sum=False,
             color_builtin_symbols=False,
@@ -190,7 +190,6 @@ def expression_to_string_safe(expr: sb.Expression) -> str:
             square_brackets_for_function=False,
             num_exp_as_superscript=False,
             latex=False)
-        # return expr.to_canonical_string()
     except Exception as exception:  # pylint: disable=broad-except
         raise common.GammaLoopError(
             "Symbolica (@%s)failed to cast expression to string:\n%s\nwith exception:\n%s", sb.__file__, expr, exception)

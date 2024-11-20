@@ -1,12 +1,13 @@
 use std::fmt::Debug;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::debug_info::DEBUG_LOGGER;
 use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
 use crate::momentum::Polarization;
-use crate::utils::f128;
+use crate::utils::{f128, OwnedFunctionMap, GS};
 use crate::{
     graph::EdgeType,
     model::Model,
@@ -29,7 +30,7 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use spenso::arithmetic::ScalarMul;
 use spenso::contraction::Contract;
-use spenso::data::DataTensor;
+use spenso::data::{DataTensor, GetTensorData};
 
 use spenso::network::Levels;
 use spenso::parametric::{
@@ -37,8 +38,9 @@ use spenso::parametric::{
     SerializableCompiledEvaluator, TensorSet,
 };
 use spenso::shadowing::ETS;
+use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::structure::representation::{BaseRepName, ColorAdjoint, ColorFundamental};
-use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
+use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
 use spenso::symbolica_utils::SerializableSymbol;
 use spenso::{
@@ -51,6 +53,9 @@ use spenso::{
         NamedStructure, TensorStructure,
     },
 };
+use symbolica::domains::rational::Rational;
+use symbolica::poly::Variable;
+use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
 use symbolica::atom::AtomView;
@@ -64,7 +69,7 @@ use symbolica::{
     symb,
 };
 use symbolica::{
-    domains::{float::NumericalFloatLike, rational::Rational},
+    domains::float::NumericalFloatLike,
     evaluate::FunctionMap,
     id::{Pattern, Replacement},
 };
@@ -73,6 +78,7 @@ pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NumeratorSettings {
     pub eval_settings: NumeratorEvaluatorOptions,
+    pub parse_mode: NumeratorParseMode,
     pub global_numerator: Option<String>,
     pub global_prefactor: Option<GlobalPrefactor>,
     pub gamma_algebra: GammaAlgebraMode,
@@ -85,6 +91,7 @@ impl Default for NumeratorSettings {
             global_numerator: None,
             global_prefactor: None,
             gamma_algebra: GammaAlgebraMode::Symbolic,
+            parse_mode: NumeratorParseMode::Polynomial,
         }
     }
 }
@@ -110,7 +117,7 @@ pub trait Evaluate<T: FloatLike> {
         polarizations: &[Polarization<Complex<F<T>>>],
         tag: Option<Uuid>,
         setting: &Settings,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>>>>;
 
     fn evaluate_single(
         &mut self,
@@ -118,7 +125,7 @@ pub trait Evaluate<T: FloatLike> {
         polarizations: &[Polarization<Complex<F<T>>>],
         tag: Option<Uuid>,
         setting: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure>;
+    ) -> DataTensor<Complex<F<T>>>;
 }
 
 impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
@@ -128,7 +135,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         polarizations: &[Polarization<Complex<F<T>>>],
         _tag: Option<Uuid>,
         settings: &Settings,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>>>> {
         <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations, settings);
 
         if !settings.general.load_compiled_numerator {
@@ -146,7 +153,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         polarizations: &[Polarization<Complex<F<T>>>],
         _tag: Option<Uuid>,
         setting: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         if !setting.general.load_compiled_numerator {
             self.disable_compiled();
         }
@@ -162,10 +169,9 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
 pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
     fn evaluate_all_orientations(
         num: &mut Numerator<Evaluators>,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>>>;
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>>>>;
 
-    fn evaluate_single(num: &mut Numerator<Evaluators>)
-        -> DataTensor<Complex<F<T>>, AtomStructure>;
+    fn evaluate_single(num: &mut Numerator<Evaluators>) -> DataTensor<Complex<F<T>>>;
 
     fn update_params(
         num: &mut Numerator<Evaluators>,
@@ -281,7 +287,7 @@ impl NumeratorEvaluateFloat for f64 {
 
     fn evaluate_all_orientations(
         num: &mut Numerator<Evaluators>,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>>>> {
         let params = &mut num.state.double_param_values;
         if num.state.single.param_len != params.len() {
             return Err(eyre!(
@@ -333,9 +339,7 @@ impl NumeratorEvaluateFloat for f64 {
         }
     }
 
-    fn evaluate_single(
-        num: &mut Numerator<Evaluators>,
-    ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+    fn evaluate_single(num: &mut Numerator<Evaluators>) -> DataTensor<Complex<F<Self>>> {
         let params = &num.state.double_param_values;
         if num.state.single.param_len != params.len() {
             panic!("params length mismatch");
@@ -379,7 +383,7 @@ impl NumeratorEvaluateFloat for f128 {
 
     fn evaluate_all_orientations(
         num: &mut Numerator<Evaluators>,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, AtomStructure>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>>>> {
         let params = &mut num.state.quad_param_values;
         if num.state.single.param_len != params.len() {
             return Err(eyre!("params length mismatch"));
@@ -410,9 +414,7 @@ impl NumeratorEvaluateFloat for f128 {
         }
     }
 
-    fn evaluate_single(
-        num: &mut Numerator<Evaluators>,
-    ) -> DataTensor<Complex<F<Self>>, AtomStructure> {
+    fn evaluate_single(num: &mut Numerator<Evaluators>) -> DataTensor<Complex<F<Self>>> {
         let params = &num.state.quad_param_values;
         if num.state.single.param_len != params.len() {
             panic!("params length mismatch");
@@ -441,15 +443,12 @@ impl<S: NumeratorState> Numerator<S> {
         self.state.update_model(model)
     }
 
-    fn add_consts_to_fn_map(fn_map: &mut FunctionMap) {
-        fn_map.add_constant(Atom::parse("Nc").unwrap(), 3.into());
+    fn add_consts_to_fn_map(fn_map: &mut OwnedFunctionMap<F<f64>>) {
+        fn_map.add_constant(Atom::parse("Nc").unwrap(), F(3.));
 
-        fn_map.add_constant(Atom::parse("TR").unwrap(), Rational::from((1, 2)));
+        fn_map.add_constant(Atom::parse("TR").unwrap(), F(0.5));
 
-        fn_map.add_constant(
-            Atom::parse("pi").unwrap(),
-            Rational::from(std::f64::consts::PI),
-        );
+        fn_map.add_constant(Atom::parse("pi").unwrap(), F(std::f64::consts::PI));
     }
 }
 
@@ -600,10 +599,13 @@ impl Numerator<UnInit> {
         graph: &BareGraph,
         prefactor: Option<&GlobalPrefactor>,
     ) -> Numerator<AppliedFeynmanRule> {
-        debug!("applying feynman rules ");
-        Numerator {
-            state: AppliedFeynmanRule::from_graph(graph, prefactor),
-        }
+        debug!("Applying feynman rules");
+        let state = AppliedFeynmanRule::from_graph(graph, prefactor);
+        debug!(
+            "Applied feynman rules:\n\tcolor:{}\n\tcolorless:{}",
+            state.color, state.colorless
+        );
+        Numerator { state }
     }
 
     pub fn from_global(
@@ -612,19 +614,20 @@ impl Numerator<UnInit> {
         // _graph: &BareGraph,
         prefactor: Option<&GlobalPrefactor>,
     ) -> Numerator<Global> {
-        debug!("setting global numerator");
-
-        if let Some(prefactor) = prefactor {
+        debug!("Setting global numerator");
+        let state = if let Some(prefactor) = prefactor {
             let mut global = global;
             global = global * &prefactor.color * &prefactor.colorless;
-            Numerator {
-                state: Global::new(global.into()),
-            }
+
+            Global::new(global.into())
         } else {
-            Numerator {
-                state: Global::new(global.into()),
-            }
-        }
+            Global::new(global.into())
+        };
+        debug!(
+            "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
+            state.color, state.colorless
+        );
+        Numerator { state }
     }
 }
 
@@ -800,7 +803,8 @@ impl ExpressionState for NonLocal {
 
 impl Numerator<Global> {
     pub fn color_simplify(self) -> Numerator<ColorSimplified> {
-        let new_state = ColorSimplified {
+        debug!("Color simplifying global numerator");
+        let state = ColorSimplified {
             colorless: self
                 .state
                 .colorless
@@ -808,8 +812,11 @@ impl Numerator<Global> {
             color: self.state.color,
             state: Default::default(),
         };
-        debug!("color simplifying global numerator");
-        Numerator { state: new_state }
+        debug!(
+            "Color simplified numerator: color:{}\n colorless:{}",
+            state.color, state.colorless
+        );
+        Numerator { state }
     }
 
     fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
@@ -861,7 +868,7 @@ impl ExpressionState for Color {
                 Err(NumeratorStateError::NoneVariant)
             }
         } else {
-            Err(NumeratorStateError::NotColorSymplified)
+            Err(NumeratorStateError::NotColorSimplified)
         }
     }
 }
@@ -916,7 +923,7 @@ impl ExpressionState for Gamma {
 
 impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
     fn export(&self) -> String {
-        self.get_single_atom().unwrap().to_string()
+        self.get_single_atom().unwrap().0.to_string()
     }
 
     fn forget_type(self) -> PythonState {
@@ -963,7 +970,7 @@ impl AppliedFeynmanRule {
             .map_data_mut(|a| a.replace_repeat_multiple(&reps));
     }
     pub fn from_graph(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>) -> Self {
-        debug!("generating numerator for graph: {}", graph.name);
+        debug!("Generating numerator for graph: {}", graph.name);
         debug!("momentum: {}", graph.dot_lmb());
 
         let vatoms: Vec<_> = graph
@@ -1018,15 +1025,16 @@ impl AppliedFeynmanRule {
 
 impl Numerator<AppliedFeynmanRule> {
     pub fn color_simplify(self) -> Numerator<ColorSimplified> {
-        debug!(
-            "Applied feynman rules: color:{}\n colorless:{}",
-            self.state.color, self.state.colorless
-        );
-        debug!("color symplifying local numerator");
+        debug!("Color simplifying local numerator");
 
-        Numerator {
-            state: ColorSimplified::color_simplify(self.state),
-        }
+        let state = ColorSimplified::color_simplify(self.state);
+
+        debug!(
+            "Color simplified numerator: color:{}\n colorless:{}",
+            state.color, state.colorless
+        );
+
+        Numerator { state }
     }
 }
 
@@ -1233,9 +1241,12 @@ impl ColorSimplified {
     }
 
     pub fn color_simplify<T: ExpressionState>(expr: SymbolicExpression<T>) -> ColorSimplified {
+        let colorless = expr.colorless;
+        let color = expr.color.map_data(Self::color_symplify_impl);
+
         ColorSimplified {
-            colorless: expr.colorless,
-            color: expr.color.map_data(Self::color_symplify_impl),
+            colorless,
+            color,
             state: Default::default(),
         }
     }
@@ -1253,10 +1264,11 @@ impl ColorSimplified {
     }
 }
 
+pub type Gloopoly =
+    symbolica::poly::polynomial::MultivariatePolynomial<symbolica::domains::atom::AtomField, u8>;
 impl Numerator<ColorSimplified> {
     pub fn gamma_simplify(self) -> Numerator<GammaSimplified> {
-        debug!("ColorSimplified numerator: {}", self.export());
-        debug!("gamma simplifying color symplified numerator");
+        debug!("Gamma simplifying color symplified numerator");
 
         let gamma_simplified = self
             .state
@@ -1272,68 +1284,461 @@ impl Numerator<ColorSimplified> {
         }
     }
 
-    // pub fn color_project(self) -> Numerator<ColorProjected> {
-    //     debug!("ColorSymplified numerator: {}", self.export());
-    //     debug!("projecting color simplified numerator");
-    //     Numerator {
-    //         state: ColorProjected::color_project(self.state),
-    //     }
-    // }
+    pub fn parse_poly(self, bare_graph: &BareGraph) -> Numerator<PolySplit> {
+        debug!("Parsing color simplified numerator into polynomial");
+        let state = PolySplit::from_color_simplified(self, bare_graph);
+        Numerator { state }
+    }
 
     pub fn parse(self) -> Numerator<Network> {
-        debug!(
-            "ColorSymplified numerator: color:{}\n,colorless:{}\n",
-            self.state.color, self.state.colorless
-        );
-        Numerator {
-            state: self.state.parse(),
+        debug!("Parsing color simplified numerator into network");
+        let state = self.state.parse();
+        // debug!("");
+        Numerator { state }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PolySplit {
+    pub colorless: DataTensor<Gloopoly>,
+    pub var_map: Arc<Vec<Variable>>,
+    pub energies: Vec<usize>,
+    pub color: ParamTensor,
+}
+
+impl PolySplit {
+    fn generate_variables(bare_graph: &BareGraph) -> Vec<Variable> {
+        let mut vars: Vec<Variable> = vec![];
+
+        for (i, e) in bare_graph.edges.iter().enumerate() {
+            if let EdgeType::Virtual = e.edge_type {
+                let named_structure: NamedStructure<String> = NamedStructure::from_iter(
+                    [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
+                    "Q".into(),
+                    Some(i),
+                );
+
+                vars.push(
+                    named_structure
+                        .to_shell()
+                        .expanded_shadow()
+                        .unwrap()
+                        .get_owned_linear(0.into())
+                        .unwrap()
+                        .into(),
+                );
+            }
+        }
+
+        vars
+    }
+
+    pub fn from_color_out(color_simplified: Numerator<ColorSimplified>) -> DataTensor<Atom> {
+        let colorless_parsed = color_simplified
+            .state
+            .colorless
+            .map_data(|a| {
+                let mut net =
+                    TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
+                        a.0.as_view(),
+                    )
+                    .unwrap();
+                net.contract();
+                net.to_fully_parametric()
+                    .result_tensor_smart()
+                    .unwrap()
+                    .tensor
+                    .map_structure(VecStructure::from)
+            })
+            .flatten(&Atom::new_num(0))
+            .unwrap();
+
+        colorless_parsed
+    }
+
+    fn from_color_simplified(
+        color_simplified: Numerator<ColorSimplified>,
+        bare_graph: &BareGraph,
+    ) -> Self {
+        let var_map = Arc::new(Self::generate_variables(bare_graph));
+        let energies: Vec<_> = (0..var_map.len()).collect();
+
+        let colorless_parsed = color_simplified
+            .state
+            .colorless
+            .map_data(|a| {
+                let mut net =
+                    TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
+                        a.0.as_view(),
+                    )
+                    .unwrap();
+                net.contract();
+                net.to_fully_parametric()
+                    .result_tensor_smart()
+                    .unwrap()
+                    .tensor
+                    .map_structure(VecStructure::from)
+            })
+            .flatten(&Atom::new_num(0))
+            .unwrap()
+            .map_data(|a| a.as_view().to_polynomial_in_vars::<u8>(&var_map));
+
+        PolySplit {
+            colorless: colorless_parsed,
+            var_map,
+            energies,
+            color: ParamTensor::composite(color_simplified.state.color.map_data(|a| a.0)),
+        }
+    }
+
+    fn to_shadowed_poly_impl(
+        poly: &Gloopoly,
+        workspace: &Workspace,
+        reps: Arc<Mutex<Vec<Atom>>>,
+    ) -> Atom {
+        if poly.is_zero() {
+            return Atom::new_num(0);
+        }
+
+        let mut add = Atom::new_num(0);
+        let coef = symb!("coef");
+        let shift = reps.as_ref().lock().unwrap().len();
+
+        let mut mul_h;
+        let mut var_h = workspace.new_atom();
+        let mut num_h = workspace.new_atom();
+        let mut pow_h = workspace.new_atom();
+
+        for (i, monomial) in poly.into_iter().enumerate() {
+            mul_h = Atom::new_num(1);
+            for (var_id, &pow) in poly.variables.iter().zip(monomial.exponents) {
+                if pow > 0 {
+                    match var_id {
+                        Variable::Symbol(v) => {
+                            var_h.to_var(*v);
+                        }
+                        Variable::Temporary(_) => {
+                            unreachable!("Temporary variable in expression")
+                        }
+                        Variable::Function(_, a) | Variable::Other(a) => {
+                            var_h.set_from_view(&a.as_view());
+                        }
+                    }
+
+                    if pow > 0 {
+                        num_h.to_num((pow as i64).into());
+                        pow_h.to_pow(var_h.as_view(), num_h.as_view());
+                        mul_h = mul_h * pow_h.as_view();
+                    } else {
+                        mul_h = mul_h * var_h.as_view();
+                    }
+                }
+            }
+
+            reps.lock()
+                .as_mut()
+                .unwrap()
+                .push(monomial.coefficient.clone());
+
+            mul_h = mul_h * fun!(coef, Atom::new_num((i + shift) as i64));
+            add = add + mul_h.as_view();
+        }
+
+        add
+    }
+    fn shadow_poly(poly: Gloopoly, reps: Arc<Mutex<Vec<Atom>>>) -> Atom {
+        Workspace::get_local().with(|ws| Self::to_shadowed_poly_impl(&poly, ws, reps))
+    }
+
+    pub fn optimize(self) -> PolyContracted {
+        let reps = Arc::new(Mutex::new(Vec::new()));
+
+        let colorless = self
+            .colorless
+            .map_data(|a| Self::shadow_poly(a, reps.clone()));
+
+        let out = ParamTensor::composite(colorless)
+            .contract(&self.color)
+            .unwrap();
+
+        let reps = Arc::try_unwrap(reps).unwrap().into_inner().unwrap();
+
+        PolyContracted {
+            tensor: out,
+            coef_map: reps,
         }
     }
 }
 
-// impl ColorProjected {
-//     pub fn color_project(mut color_simple: ColorSimplified) -> ColorProjected {
-//         let reps = vec![
-//             (
-//                 Pattern::parse("f_(a___,aind(b___,cof(c__),d___))").unwrap(),
-//                 Pattern::parse("1").unwrap().into(),
-//             ),
-//             (
-//                 Pattern::parse("f_(a___,aind(b___,cos(c__),d___))").unwrap(),
-//                 Pattern::parse("1").unwrap().into(),
-//             ),
-//             (
-//                 Pattern::parse("f_(a___,aind(b___,coaf(c__),d___))").unwrap(),
-//                 Pattern::parse("1").unwrap().into(),
-//             ),
-//         ];
+impl Numerator<PolySplit> {
+    pub fn contract(self) -> Result<Numerator<PolyContracted>> {
+        match self.validate_squared_energies_impl() {
+            Err(_) => {
+                debug!("Trying to contract polynomial");
+                let state = self.state.optimize();
+                debug!("PolyContracted: {}", state.tensor);
+                Ok(Numerator { state })
+            }
+            Ok(r) => Err(eyre!("has higher powers here: {}", r)),
+        }
+    }
 
-//         let reps = reps
-//             .iter()
-//             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-//             .collect_vec();
-//         color_simple.colorless.replace_repeat_multiple(&reps);
+    fn validate_squared_energies_impl(&self) -> Result<DataTensor<ExpandedIndex>, ()> {
+        self.state.colorless.map_data_ref_result(|p| {
+            let mut square: Result<Vec<usize>, ()> = Err(());
+            for (i, &e) in p.exponents.iter().enumerate() {
+                if e > 1 {
+                    if let Ok(sq) = &mut square {
+                        sq.push(i);
+                    } else {
+                        square = Ok(vec![i]);
+                    }
+                }
+            }
+            square.map(ExpandedIndex::from)
+        })
+    }
 
-//         ColorProjected::new(color_simple.colorless)
-//     }
-// }
+    pub fn validate_squared_energies(&self) -> bool {
+        self.validate_squared_energies_impl().is_err()
+    }
+}
 
-// impl Numerator<ColorProjected> {
-//     pub fn parse(self) -> Numerator<Network> {
-//         // debug!("ColorProjected numerator: {}", self.export());
-//         Numerator {
-//             state: Network::parse_impl(self.state.colorless.0.as_view()),
-//         }
-//     }
+pub struct PolyContracted {
+    pub tensor: ParamTensor,
+    pub coef_map: Vec<Atom>,
+}
 
-//     pub fn gamma_symplify(self) -> Numerator<GammaSimplified> {
-//         // debug!("ColorSymplified numerator: {}", self.export());
-//         debug!("gamma symplifying color symplified numerator");
-//         Numerator {
-//             state: GammaSimplified::gamma_symplify(self.state),
-//         }
-//     }
-// }
+impl Numerator<PolyContracted> {
+    pub fn to_contracted(self) -> Numerator<Contracted> {
+        let coefs: Vec<_> = (0..self.state.coef_map.len())
+            .map(|i| fun!(GS.coeff, Atom::new_num(i as i64)).into_pattern())
+            .collect();
+
+        let coefs_reps: Vec<_> = self
+            .state
+            .coef_map
+            .iter()
+            .map(|a| a.into_pattern().into())
+            .collect();
+
+        let reps: Vec<_> = coefs
+            .iter()
+            .zip(coefs_reps.iter())
+            .map(|(p, rhs)| Replacement::new(p, rhs))
+            .collect();
+
+        Numerator {
+            state: Contracted {
+                tensor: self.state.tensor.replace_all_multiple(&reps),
+            },
+        }
+    }
+
+    fn generate_fn_map(&self) -> OwnedFunctionMap<F<f64>> {
+        let mut fn_map = OwnedFunctionMap::new();
+
+        for (v, k) in self.state.coef_map.clone().iter().enumerate() {
+            fn_map
+                .add_tagged_function(
+                    GS.coeff,
+                    vec![Atom::new_num(v as i64)],
+                    format!("coef{v}"),
+                    vec![],
+                    k.clone(),
+                )
+                .unwrap();
+        }
+
+        Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
+        fn_map
+    }
+    pub fn generate_evaluators(
+        self,
+        model: &Model,
+        graph: &BareGraph,
+        extra_info: &ExtraInfo,
+        export_settings: &ExportSettings,
+    ) -> Numerator<Evaluators> {
+        debug!("generating evaluators for contracted numerator");
+        let (params, double_param_values, quad_param_values, model_params_start) =
+            Contracted::generate_params(graph, model);
+
+        let emr_len = graph.edges.len();
+
+        let owned_fn_map = self.generate_fn_map();
+
+        let fn_map: FunctionMap = (&owned_fn_map).into();
+
+        let single = self.state.evaluator(
+            extra_info.path.clone(),
+            &graph.name,
+            export_settings,
+            &params,
+            &fn_map,
+        );
+
+        match export_settings.numerator_settings.eval_settings {
+            NumeratorEvaluatorOptions::Joint(_) => Numerator {
+                state: Evaluators {
+                    orientated: Some(single.orientated_joint(
+                        graph,
+                        &params,
+                        extra_info,
+                        export_settings,
+                        &fn_map,
+                    )),
+                    single,
+                    choice: SingleOrCombined::Combined,
+                    orientations: extra_info.orientations.clone(),
+                    quad_param_values,
+                    double_param_values,
+                    model_params_start,
+                    emr_len,
+                    fn_map: owned_fn_map,
+                },
+            },
+            NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+                iterations,
+                n_cores,
+                verbose,
+                ..
+            }) => Numerator {
+                state: Evaluators {
+                    orientated: Some(single.orientated_iterative(
+                        graph,
+                        &params,
+                        extra_info,
+                        export_settings,
+                        iterations,
+                        n_cores,
+                        verbose,
+                        &fn_map,
+                    )),
+                    single,
+                    choice: SingleOrCombined::Combined,
+                    orientations: extra_info.orientations.clone(),
+                    quad_param_values,
+                    double_param_values,
+                    model_params_start,
+                    emr_len,
+                    fn_map: owned_fn_map,
+                },
+            },
+            _ => Numerator {
+                state: Evaluators {
+                    orientated: None,
+                    single,
+                    choice: SingleOrCombined::Single,
+                    orientations: extra_info.orientations.clone(),
+                    quad_param_values,
+                    double_param_values,
+                    model_params_start,
+                    emr_len,
+                    fn_map: owned_fn_map,
+                },
+            },
+        }
+    }
+}
+
+impl PolyContracted {
+    pub fn evaluator(
+        self,
+        path: PathBuf,
+        name: &str,
+        export_settings: &ExportSettings,
+        params: &[Atom],
+        fn_map: &FunctionMap,
+    ) -> EvaluatorSingle {
+        debug!("Generating single evaluator");
+        //
+
+        debug!("Generate eval tree set with {} params", params.len());
+
+        let mut eval_tree = self.tensor.eval_tree(fn_map, params).unwrap();
+        debug!("Horner scheme");
+
+        eval_tree.horner_scheme();
+        debug!("Common subexpression elimination");
+        eval_tree.common_subexpression_elimination();
+        debug!("Linearize double");
+        let cpe_rounds = export_settings
+            .numerator_settings
+            .eval_settings
+            .cpe_rounds();
+        let eval_double = eval_tree
+            .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
+                re: F(r.into()),
+                im: F(0.),
+            })
+            .linearize(cpe_rounds);
+        debug!("Linearize quad");
+
+        let eval_quad = eval_tree
+            .map_coeff::<Complex<F<f128>>, _>(&|r| Complex {
+                re: F(r.into()),
+                im: F(f128::new_zero()),
+            })
+            .linearize(cpe_rounds);
+
+        let eval = eval_tree
+            .map_coeff::<F<f64>, _>(&|r| r.into())
+            .linearize(cpe_rounds);
+        let compiled = if export_settings
+            .numerator_settings
+            .eval_settings
+            .compile_options()
+            .compile()
+        {
+            debug!("Compiling iterative evaluator");
+            let path = path.join("compiled");
+            // let res = std::fs::create_dir_all(&path);
+            match std::fs::create_dir(&path) {
+                Ok(_) => {}
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::AlreadyExists => {}
+                    _ => {
+                        panic!("Error creating directory: {} at path {}", e, path.display())
+                    }
+                },
+            }
+            let mut filename = path.clone();
+            filename.push(format!("{}_numerator_single.cpp", name));
+            debug!("Compiling  single evaluator to {}", filename.display());
+            let filename = filename.to_string_lossy();
+
+            let function_name = format!("{}_numerator_single", name);
+
+            let library_name = path.join(format!("{}_numerator_single.so", name));
+            let library_name = library_name.to_string_lossy();
+            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
+
+            let compile_options = export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options();
+
+            CompiledEvaluator::new(
+                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                    .unwrap()
+                    .compile(&library_name, compile_options)
+                    .unwrap()
+                    .load()
+                    .unwrap(),
+            )
+        } else {
+            CompiledEvaluator::default()
+        };
+
+        EvaluatorSingle {
+            tensor: self.tensor,
+            eval_double,
+            eval_quad,
+            compiled,
+            param_len: params.len(),
+        }
+    }
+}
 
 impl GammaSimplified {
     pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> SerializableAtom {
@@ -1598,15 +2003,14 @@ impl GammaSimplified {
 impl Numerator<GammaSimplified> {
     pub fn parse(self) -> Numerator<Network> {
         // debug!("GammaSymplified numerator: {}", self.export());
-        debug!("parsing numerator into tensor network");
+        debug!("Parsing gamma simplified numerator into tensor network");
         Numerator {
             state: self.state.parse(),
         }
     }
 
     pub fn parse_only_colorless(self) -> Numerator<Network> {
-        // debug!("GammaSymplified numerator: {}", self.export());
-        debug!("parsing numerator into tensor network");
+        debug!("Parsing only colorless gamma simplified numerator into tensor network");
         Numerator {
             state: self.state.parse_only_colorless(),
         }
@@ -1635,7 +2039,7 @@ impl TryFrom<PythonState> for Network {
         }
     }
 }
-pub enum ContractionSettings<'a, 'b, R> {
+pub enum ContractionSettings<'a, 'b, R = Rational> {
     Levelled((usize, &'a mut FunctionMap<'b, R>)),
     Normal,
 }
@@ -1661,7 +2065,10 @@ impl Network {
             }
             ContractionSettings::Normal => {
                 self.net.contract();
-                let tensor = self.net.result_tensor_smart()?;
+                let tensor = self
+                    .net
+                    .result_tensor_smart()?
+                    .map_structure(VecStructure::from);
                 // debug!("contracted tensor: {}", tensor);
                 Ok(Contracted { tensor })
             }
@@ -1719,7 +2126,7 @@ impl Numerator<Network> {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Contracted {
     #[bincode(with_serde)]
-    pub tensor: ParamTensor<AtomStructure>,
+    pub tensor: ParamTensor,
 }
 
 impl TryFrom<PythonState> for Contracted {
@@ -1746,16 +2153,14 @@ impl Contracted {
         name: &str,
         export_settings: &ExportSettings,
         params: &[Atom],
+        fn_map: &FunctionMap,
     ) -> EvaluatorSingle {
         debug!("generating single evaluator");
         // println!("{}", self.tensor);
-        let mut fn_map: FunctionMap = FunctionMap::new();
-
-        Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = self.tensor.eval_tree(&fn_map, params).unwrap();
+        let mut eval_tree = self.tensor.eval_tree(fn_map, params).unwrap();
         debug!("Horner scheme");
 
         eval_tree.horner_scheme();
@@ -1980,6 +2385,11 @@ impl TypedNumeratorState for Contracted {
 }
 
 impl Numerator<Contracted> {
+    fn generate_fn_map(&self) -> OwnedFunctionMap<F<f64>> {
+        let mut map = OwnedFunctionMap::new();
+        Numerator::<Contracted>::add_consts_to_fn_map(&mut map);
+        map
+    }
     #[allow(clippy::too_many_arguments)]
     pub fn generate_evaluators_from_params(
         self,
@@ -1992,9 +2402,16 @@ impl Numerator<Contracted> {
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
     ) -> Numerator<Evaluators> {
-        let single = self
-            .state
-            .evaluator(extra_info.path.clone(), name, export_settings, params);
+        let owned_fn_map = self.generate_fn_map();
+
+        let fn_map: FunctionMap = (&owned_fn_map).into();
+        let single = self.state.evaluator(
+            extra_info.path.clone(),
+            name,
+            export_settings,
+            params,
+            &fn_map,
+        );
 
         match export_settings.numerator_settings.eval_settings {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
@@ -2005,6 +2422,7 @@ impl Numerator<Contracted> {
                         params,
                         extra_info,
                         export_settings,
+                        &fn_map,
                     )),
                     single,
                     choice: SingleOrCombined::Combined,
@@ -2013,6 +2431,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len: n_edges,
+                    fn_map: owned_fn_map,
                 },
             },
             NumeratorEvaluatorOptions::Iterative(IterativeOptions {
@@ -2031,6 +2450,7 @@ impl Numerator<Contracted> {
                         iterations,
                         n_cores,
                         verbose,
+                        &fn_map,
                     )),
                     single,
                     choice: SingleOrCombined::Combined,
@@ -2039,6 +2459,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len: n_edges,
+                    fn_map: owned_fn_map,
                 },
             },
             _ => Numerator {
@@ -2051,6 +2472,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len: n_edges,
+                    fn_map: owned_fn_map,
                 },
             },
         }
@@ -2071,11 +2493,16 @@ impl Numerator<Contracted> {
 
         let emr_len = graph.edges.len();
 
+        let owned_fn_map = self.generate_fn_map();
+
+        let fn_map: FunctionMap = (&owned_fn_map).into();
+
         let single = self.state.evaluator(
             extra_info.path.clone(),
             &graph.name,
             export_settings,
             &params,
+            &fn_map,
         );
 
         match export_settings.numerator_settings.eval_settings {
@@ -2086,6 +2513,7 @@ impl Numerator<Contracted> {
                         &params,
                         extra_info,
                         export_settings,
+                        &fn_map,
                     )),
                     single,
                     choice: SingleOrCombined::Combined,
@@ -2094,6 +2522,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len,
+                    fn_map: owned_fn_map,
                 },
             },
             NumeratorEvaluatorOptions::Iterative(IterativeOptions {
@@ -2111,6 +2540,7 @@ impl Numerator<Contracted> {
                         iterations,
                         n_cores,
                         verbose,
+                        &fn_map,
                     )),
                     single,
                     choice: SingleOrCombined::Combined,
@@ -2119,6 +2549,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len,
+                    fn_map: owned_fn_map,
                 },
             },
             _ => Numerator {
@@ -2131,6 +2562,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len,
+                    fn_map: owned_fn_map,
                 },
             },
         }
@@ -2143,6 +2575,12 @@ pub struct IterativeOptions {
     pub iterations: usize,
     pub n_cores: usize,
     pub verbose: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+pub enum NumeratorParseMode {
+    Polynomial,
+    Direct,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -2212,9 +2650,9 @@ impl NumeratorCompileOptions {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct EvaluatorOrientations {
-    pub eval_double: LinearizedEvalTensorSet<Complex<F<f64>>, AtomStructure>,
-    pub eval_quad: LinearizedEvalTensorSet<Complex<F<f128>>, AtomStructure>,
-    pub compiled: CompiledEvaluator<EvalTensorSet<SerializableCompiledEvaluator, AtomStructure>>,
+    pub eval_double: LinearizedEvalTensorSet<Complex<F<f64>>, VecStructure>,
+    pub eval_quad: LinearizedEvalTensorSet<Complex<F<f128>>, VecStructure>,
+    pub compiled: CompiledEvaluator<EvalTensorSet<SerializableCompiledEvaluator, VecStructure>>,
     pub positions: Vec<usize>,
 }
 
@@ -2236,10 +2674,10 @@ impl Debug for EvaluatorOrientations {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct EvaluatorSingle {
-    tensor: ParamTensor<AtomStructure>,
-    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>,
-    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>,
-    compiled: CompiledEvaluator<EvalTensor<SerializableCompiledEvaluator, AtomStructure>>,
+    tensor: ParamTensor,
+    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, VecStructure>,
+    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, VecStructure>,
+    compiled: CompiledEvaluator<EvalTensor<SerializableCompiledEvaluator, VecStructure>>,
     param_len: usize, //to validate length of params at run time
 }
 
@@ -2255,11 +2693,8 @@ impl EvaluatorSingle {
         iterations: usize,
         n_cores: usize,
         verbose: bool,
+        fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
-        let mut fn_map: FunctionMap = FunctionMap::new();
-
-        Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
-
         let mut seen = 0;
 
         let mut index_map = IndexSet::new();
@@ -2339,7 +2774,7 @@ impl EvaluatorSingle {
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = set.eval_tree(&fn_map, params).unwrap();
+        let mut eval_tree = set.eval_tree(fn_map, params).unwrap();
 
         debug!("{} tensors in eval_tree", eval_tree.len());
         debug!("Horner scheme");
@@ -2354,7 +2789,7 @@ impl EvaluatorSingle {
         debug!("{} linearized tensors", linearized.len());
 
         for (i, t) in new_index_map.iter().enumerate() {
-            let eval_tree = t.eval_tree(&fn_map, params).unwrap();
+            let eval_tree = t.eval_tree(fn_map, params).unwrap();
             debug!("Push optimizing :{}", i + 1);
             linearized.push_optimize(eval_tree, cpe_rounds, iterations, n_cores, verbose);
         }
@@ -2439,6 +2874,7 @@ impl EvaluatorSingle {
         iterations: usize,
         n_cores: usize,
         verbose: bool,
+        fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
         debug!("generate iterative evaluator");
         self.orientated_iterative_impl(
@@ -2450,6 +2886,7 @@ impl EvaluatorSingle {
             iterations,
             n_cores,
             verbose,
+            fn_map,
         )
     }
 
@@ -2460,11 +2897,8 @@ impl EvaluatorSingle {
         params: &[Atom],
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
+        fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
-        let mut fn_map: FunctionMap = FunctionMap::new();
-
-        Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
-
         let mut seen = 0;
 
         let mut index_map = IndexSet::new();
@@ -2538,7 +2972,7 @@ impl EvaluatorSingle {
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = set.eval_tree(&fn_map, params).unwrap();
+        let mut eval_tree = set.eval_tree(fn_map, params).unwrap();
         debug!("Horner scheme");
 
         eval_tree.horner_scheme();
@@ -2570,7 +3004,7 @@ impl EvaluatorSingle {
             .compile_options()
             .compile()
         {
-            debug!("compiling joint evaluator");
+            debug!("Compiling joint evaluator");
             let path = extra_info.path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
             match std::fs::create_dir(&path) {
@@ -2623,14 +3057,16 @@ impl EvaluatorSingle {
         params: &[Atom],
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
+        fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
-        debug!("generate joint evaluator");
+        debug!("Generate joint evaluator");
         self.orientated_joint_impl(
             graph.edges.len(),
             &graph.name,
             params,
             extra_info,
             export_settings,
+            fn_map,
         )
     }
 }
@@ -2720,6 +3156,8 @@ pub struct Evaluators {
     quad_param_values: Vec<Complex<F<f128>>>,
     model_params_start: usize,
     emr_len: usize,
+    #[bincode(with_serde)]
+    fn_map: OwnedFunctionMap<F<f64>>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
@@ -2812,10 +3250,14 @@ impl Numerator<Evaluators> {
             self.state.choice = SingleOrCombined::Combined;
         } else if let Some((model, graph, extra_info, export_settings)) = generate {
             let (params, _, _, _) = Contracted::generate_params(graph, model);
-            let orientated =
-                self.state
-                    .single
-                    .orientated_joint(graph, &params, extra_info, export_settings);
+            let fn_map: FunctionMap = (&self.state.fn_map).into();
+            let orientated = self.state.single.orientated_joint(
+                graph,
+                &params,
+                extra_info,
+                export_settings,
+                &fn_map,
+            );
             self.state.orientated = Some(orientated);
             self.state.choice = SingleOrCombined::Combined;
         } else {
@@ -2837,8 +3279,8 @@ pub enum NumeratorStateError {
     NotColorProjected,
     #[error("Not Global")]
     NotGlobal,
-    #[error("Not ColorSymplified")]
-    NotColorSymplified,
+    #[error("Not ColorSimplified")]
+    NotColorSimplified,
     #[error("Not GammaSymplified")]
     NotGammaSymplified,
     #[error("Not Network")]

@@ -1,0 +1,30 @@
+OUTPUT = feynman_diagrams.pdf
+N_ROWS_IN_MERGED_OUTPUT = {n_rows}
+N_COLUMNS_IN_MERGED_OUTPUT = {n_columns}
+COMPILE_LOG = compilation.log
+
+ALLGRAPHS=all_graphs.pdf
+GRAPHS_SRC=$(wildcard *.dot)
+# GRAPHS_PDF=$(sort $(patsubst %.tex,%.pdf,$(wildcard *.tex)))
+GRAPHS_PDF= {all_targets}
+
+all: $(OUTPUT)
+
+%.pdf: %.dot
+	@echo "\nCompiling "$*.pdf" ...\n"
+	dot -Tpdf $*.dot -o $*.pdf 2>&1 >> $(COMPILE_LOG)
+	sleep 0.1
+	pdfcrop $*.pdf $*.pdf 2>&1 >> $(COMPILE_LOG)
+
+$(ALLGRAPHS): $(GRAPHS_PDF)
+	pdfunite $^ $@
+
+$(OUTPUT): $(ALLGRAPHS)
+	python3 ./combine_pages.py $(ALLGRAPHS) $(OUTPUT) --margins 0.15 0.15 --grid_shape $(N_ROWS_IN_MERGED_OUTPUT) $(N_COLUMNS_IN_MERGED_OUTPUT)
+	@echo "\n> Feynman diagrams all written to file '"$(OUTPUT)"'\n"
+
+clean:
+	rm -f *.t1 *.log *.dvi *.mp *.log *.1 *.ps *.aux
+
+clean_pdf:
+	rm *.pdf

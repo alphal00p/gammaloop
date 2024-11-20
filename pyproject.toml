@@ -7,6 +7,7 @@ authors = [
   "Mathijs Fraaije <mathijsfraaije@gmail.com>",
   "Lucien Huber <mail@lcnbr.ch>",
 ]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -66,7 +67,7 @@ exclude = [
   "gammaloop/dependencies/dependency_build.log",
   "gammaloop/dependencies/venv",
   "gammaloop/dependencies/venv/**",
-  "gammaloop/dependencies/symbolica/symbolica_path.txt",  
+  "gammaloop/dependencies/symbolica/symbolica_path.txt",
 ]
 include = [
   "gammaloop/.pytest_cache/v/test_runtimes",

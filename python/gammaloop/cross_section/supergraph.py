@@ -37,13 +37,13 @@ class SuperGraph(object):
         self.topology_class: list[int] = topology_class
         self.cuts: list[SuperGraphCut] = cuts
 
-    def draw(self, model: Model, drawings_path: str, file_name: str | None = None, **drawing_options: dict[str, Any]) -> Path | None:
+    def draw(self, drawing_mode: str | None, model: Model, drawings_path: str, file_name: str | None = None, **drawing_options: dict[str, Any]) -> Path | None:
         if len(self.graph.edges) == 0 and len(self.cuts) > 0:
-            return self.cuts[0].forward_scattering_graph.draw(model, drawings_path, file_name, specify_cut=False, **drawing_options)
+            return self.cuts[0].forward_scattering_graph.draw(drawing_mode, model, drawings_path, file_name, specify_cut=False, **drawing_options)
 
         if file_name is None:
             file_name = f'{self.sg_id}_{self.graph.name}'
-        return self.graph.draw(model, pjoin(drawings_path, file_name), caption=f"Supergraph {self.graph.name.replace('_', ' ')}", diagram_id='#%d' % self.sg_id, **drawing_options)
+        return self.graph.draw(drawing_mode, model, pjoin(drawings_path, file_name), caption=f"Supergraph {self.graph.name.replace('_', ' ')}", diagram_id='#%d' % self.sg_id, **drawing_options)
 
     @ staticmethod
     def from_serializable_dict(model: Model, sg_dict: dict[str, Any]) -> SuperGraph:
@@ -99,7 +99,7 @@ class ForwardScatteringGraph(object):
         self.multiplicity: str = multiplicity
         self.cuts: list[ForwardScatteringGraphCut] = cuts
 
-    def draw(self, model: Model, drawings_path: str, file_name: str | None, specify_cut: bool = True, **drawing_options: dict[str, Any]) -> Path | None:
+    def draw(self, drawing_mode: str | None, model: Model, drawings_path: str, file_name: str | None, specify_cut: bool = True, **drawing_options: dict[str, Any]) -> Path | None:
 
         if file_name is None:
             file_name = f'{self.sg_id}_{self.sg_cut_id}_{self.graph.name}'
@@ -108,7 +108,7 @@ class ForwardScatteringGraph(object):
             g_id = f'#(sg={self.sg_id},sg_cut={self.sg_cut_id})'
         else:
             g_id = f'#{self.sg_id}'
-        return self.graph.draw(model, pjoin(drawings_path, file_name),
+        return self.graph.draw(drawing_mode, model, pjoin(drawings_path, file_name),
                                caption=f"FSG {self.graph.name.replace(f'_{self.sg_id}', '').replace('_', ' ')}", diagram_id=g_id, **drawing_options)
 
     @staticmethod
@@ -144,7 +144,7 @@ class AmplitudeGraph(object):
         self.multiplicity: str = multiplicity
         self.multi_channeling_channels: list[int] = []
 
-    def draw(self, model: Model, drawings_path: str, file_name: str | None, **drawing_options: dict[str, Any]) -> Path | None:
+    def draw(self, drawing_mode: str | None, model: Model, drawings_path: str, file_name: str | None, **drawing_options: dict[str, Any]) -> Path | None:
 
         if file_name is None:
             file_name = f'{self.sg_id}_{self.sg_cut_id}_{self.fs_cut_id}_{
@@ -153,7 +153,7 @@ class AmplitudeGraph(object):
                 self.fs_cut_id},side={str(self.amplitude_side).lower()})'
         else:
             g_id = f'#{self.fs_cut_id}'
-        return self.graph.draw(model, pjoin(drawings_path, file_name),
+        return self.graph.draw(drawing_mode, model, pjoin(drawings_path, file_name),
                                caption=f"Amplitude {self.graph.name.replace(f'_{self.fs_cut_id}', '').replace('_', ' ')}", diagram_id=g_id, **drawing_options)
 
     @staticmethod

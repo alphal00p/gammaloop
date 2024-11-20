@@ -1855,7 +1855,7 @@ impl<'a, T> IntoIterator for &'a Polarization<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Hash)]
 #[repr(i8)]
 pub enum Sign {
     Positive = 1,
@@ -1979,7 +1979,7 @@ pub type Helicity = SignOrZero;
 #[derive(
     Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Encode, Decode, PartialOrd, Ord, Hash,
 )]
-pub struct Signature(Vec<SignOrZero>);
+pub struct Signature(pub Vec<SignOrZero>);
 
 impl Display for Signature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

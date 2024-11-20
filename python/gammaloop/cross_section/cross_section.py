@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 import yaml
+import os
 import gammaloop.cross_section.supergraph as supergraph
 from gammaloop.base_objects.model import Model
 import gammaloop.misc.utils as utils
@@ -15,17 +16,21 @@ class CrossSection(object):
         self.name: str = name
         self.supergraphs: list[supergraph.SuperGraph] = supergraphs
 
-    def draw(self, model: Model, drawings_path: str, **drawing_options: Any) -> list[Path | None]:
+    def draw(self, model: Model, drawings_path: str, **drawing_options: Any) -> dict[str, list[Path | None]]:
 
         if len(self.supergraphs) == 0:
-            return []
+            return {mode: [] for mode in drawing_options["modes"]}
 
-        drawing_file_paths: list[Path | None] = []
-        for super_graph in self.supergraphs:
-            drawing_file_paths.append(super_graph.draw(
-                model, drawings_path, None, **drawing_options))
+        drawing_file_paths_per_mode: dict[str, list[Path | None]] = {}
+        for mode in drawing_options["modes"]:
+            drawings_path_for_mode = os.path.join(drawings_path, mode)
+            os.makedirs(drawings_path_for_mode, exist_ok=True)
+            drawing_file_paths_per_mode[mode] = []
+            for super_graph in self.supergraphs:
+                drawing_file_paths_per_mode[mode].append(super_graph.draw(
+                    mode, model, drawings_path_for_mode, None, **drawing_options))
 
-        return drawing_file_paths
+        return drawing_file_paths_per_mode
 
     @staticmethod
     def from_serializable_dict(model: Model, cross_section_dict: dict[str, Any]) -> CrossSection:
@@ -57,17 +62,21 @@ class Amplitude(object):
         self.name: str = name
         self.amplitude_graphs: list[supergraph.AmplitudeGraph] = amplitude_graphs
 
-    def draw(self, model: Model, drawings_path: str, **drawing_options: Any) -> list[Path | None]:
+    def draw(self, model: Model, drawings_path: str, **drawing_options: Any) -> dict[str, list[Path | None]]:
 
         if len(self.amplitude_graphs) == 0:
-            return []
+            return {mode: [] for mode in drawing_options["modes"]}
 
-        drawing_file_paths: list[Path | None] = []
-        for amplitude_graph in self.amplitude_graphs:
-            drawing_file_paths.append(
-                amplitude_graph.draw(model, drawings_path, f'{amplitude_graph.fs_cut_id}_{amplitude_graph.graph.name}', **drawing_options))
+        drawing_file_paths_per_mode: dict[str, list[Path | None]] = {}
+        for mode in drawing_options["modes"]:
+            drawings_path_for_mode = os.path.join(drawings_path, mode)
+            os.makedirs(drawings_path_for_mode, exist_ok=True)
+            drawing_file_paths_per_mode[mode] = []
+            for amplitude_graph in self.amplitude_graphs:
+                drawing_file_paths_per_mode[mode].append(
+                    amplitude_graph.draw(mode, model, drawings_path_for_mode, f'{amplitude_graph.fs_cut_id}_{amplitude_graph.graph.name}', **drawing_options))
 
-        return drawing_file_paths
+        return drawing_file_paths_per_mode
 
     @staticmethod
     def from_serializable_dict(model: Model, amplitude_dict: dict[str, Any]) -> Amplitude:

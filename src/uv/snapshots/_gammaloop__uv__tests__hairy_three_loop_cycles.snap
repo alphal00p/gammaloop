@@ -1,9 +1,9 @@
 ---
-source: src/graph/half_edge.rs
+source: src/uv/tests.rs
 expression: cycles
 ---
 [
-  HalfEdgeNode(
+  NestingNode(
     internal_graph: SubGraph(
       filter: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -11,7 +11,7 @@ expression: cycles
           width: 64,
           index: 0,
         ),
-        bits: 12,
+        bits: 15,
         data: [
           15,
         ],
@@ -24,13 +24,13 @@ expression: cycles
         width: 64,
         index: 0,
       ),
-      bits: 12,
+      bits: 15,
       data: [
-        2160,
+        17392,
       ],
     ),
   ),
-  HalfEdgeNode(
+  NestingNode(
     internal_graph: SubGraph(
       filter: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -38,7 +38,7 @@ expression: cycles
           width: 64,
           index: 0,
         ),
-        bits: 12,
+        bits: 15,
         data: [
           51,
         ],
@@ -51,13 +51,13 @@ expression: cycles
         width: 64,
         index: 0,
       ),
-      bits: 12,
+      bits: 15,
       data: [
-        2124,
+        17356,
       ],
     ),
   ),
-  HalfEdgeNode(
+  NestingNode(
     internal_graph: SubGraph(
       filter: BitSeq(
         order: "bitvec::order::Lsb0",
@@ -65,9 +65,9 @@ expression: cycles
           width: 64,
           index: 0,
         ),
-        bits: 12,
+        bits: 15,
         data: [
-          4035,
+          32259,
         ],
       ),
       loopcount: Some(1),
@@ -78,9 +78,9 @@ expression: cycles
         width: 64,
         index: 0,
       ),
-      bits: 12,
+      bits: 15,
       data: [
-        60,
+        508,
       ],
     ),
   ),

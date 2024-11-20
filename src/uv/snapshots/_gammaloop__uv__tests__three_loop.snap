@@ -1,10 +1,10 @@
 ---
-source: src/graph/half_edge.rs
+source: src/uv/tests.rs
 expression: graph
 ---
-HedgeGraph(
+NestingGraph(
   nodes: {
-    HalfEdgeNode(
+    NestingNode(
       internal_graph: SubGraph(
         filter: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -31,7 +31,7 @@ HedgeGraph(
         ],
       ),
     ): (),
-    HalfEdgeNode(
+    NestingNode(
       internal_graph: SubGraph(
         filter: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -58,7 +58,7 @@ HedgeGraph(
         ],
       ),
     ): (),
-    HalfEdgeNode(
+    NestingNode(
       internal_graph: SubGraph(
         filter: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -85,7 +85,7 @@ HedgeGraph(
         ],
       ),
     ): (),
-    HalfEdgeNode(
+    NestingNode(
       internal_graph: SubGraph(
         filter: BitSeq(
           order: "bitvec::order::Lsb0",
@@ -116,7 +116,7 @@ HedgeGraph(
   base_nodes: 4,
   involution: Involution(
     inv: [
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -143,7 +143,7 @@ HedgeGraph(
           ],
         ),
       ), Source((Some(()), 1))),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -170,7 +170,7 @@ HedgeGraph(
           ],
         ),
       ), Sink(0)),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -197,7 +197,7 @@ HedgeGraph(
           ],
         ),
       ), Source((Some(()), 3))),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -224,7 +224,7 @@ HedgeGraph(
           ],
         ),
       ), Sink(2)),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -251,7 +251,7 @@ HedgeGraph(
           ],
         ),
       ), Source((Some(()), 5))),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -278,7 +278,7 @@ HedgeGraph(
           ],
         ),
       ), Sink(4)),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -305,7 +305,7 @@ HedgeGraph(
           ],
         ),
       ), Source((Some(()), 7))),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -332,7 +332,7 @@ HedgeGraph(
           ],
         ),
       ), Sink(6)),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -359,7 +359,7 @@ HedgeGraph(
           ],
         ),
       ), Source((Some(()), 9))),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -386,7 +386,7 @@ HedgeGraph(
           ],
         ),
       ), Sink(8)),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",
@@ -413,7 +413,7 @@ HedgeGraph(
           ],
         ),
       ), Source((Some(()), 11))),
-      (HalfEdgeNode(
+      (NestingNode(
         internal_graph: SubGraph(
           filter: BitSeq(
             order: "bitvec::order::Lsb0",

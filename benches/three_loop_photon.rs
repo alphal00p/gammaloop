@@ -4,7 +4,7 @@ use _gammaloop::{
     graph::Graph,
     numerator::{
         ContractionSettings, EvaluatorOptions, GammaAlgebraMode, NumeratorCompileOptions,
-        NumeratorEvaluatorOptions, NumeratorSettings,
+        NumeratorEvaluatorOptions, NumeratorParseMode, NumeratorSettings,
     },
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
@@ -28,6 +28,7 @@ fn load_helper(path: &str) -> Graph {
             global_prefactor: None,
             gamma_algebra: GammaAlgebraMode::Concrete,
             global_numerator: None,
+            parse_mode: NumeratorParseMode::Direct,
         },
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: false,
