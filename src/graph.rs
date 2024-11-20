@@ -2750,6 +2750,7 @@ impl Graph<Evaluators> {
         &mut self,
         sample: &DefaultSample<T>,
         tropical_metadata: Option<&TropicalSamplingMetadata<T>>,
+        edge_weights: Option<&[f64]>,
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
@@ -2760,6 +2761,7 @@ impl Graph<Evaluators> {
                 &self.bare_graph,
                 sample,
                 tropical_metadata.expect("only tropical sampling is accepted on this branch"),
+                edge_weights.unwrap(),
                 rotation_for_overlap,
                 settings,
             )
@@ -3074,6 +3076,7 @@ impl DerivedGraphData<Evaluators> {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         tropical_metadata: &TropicalSamplingMetadata<T>,
+        edge_weights: &[f64],
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
@@ -3081,6 +3084,7 @@ impl DerivedGraphData<Evaluators> {
             Some(ct) => CounterTerm::evaluate(
                 sample,
                 tropical_metadata,
+                edge_weights,
                 graph,
                 &self.cff_expression.as_ref().unwrap().esurfaces,
                 ct,

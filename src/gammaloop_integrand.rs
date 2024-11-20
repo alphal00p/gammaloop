@@ -264,6 +264,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let counter_term_eval = self.get_mut_graph().evaluate_threshold_counterterm(
             sample,
             None,
+            None,
             rotation_for_overlap,
             settings,
         );
@@ -318,10 +319,10 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             .get_loop_edges_iterator()
             .map(|(index, _)| onshell_energies[index].clone());
 
-        let weight_iterator = tropical_subgraph_table.iter_edge_weights();
+        let weight_iterator = tropical_subgraph_table.iter_edge_weights().collect_vec();
 
         let energy_product = virtual_loop_energies
-            .zip(weight_iterator)
+            .zip(&weight_iterator)
             .map(|(energy, weight)| energy.powf(&F::<T>::from_f64(2. * weight - 1.)))
             .fold(one.clone(), |acc, x| acc * x);
 
@@ -337,14 +338,10 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
         let counterterm = self.get_mut_graph().evaluate_threshold_counterterm(
             sample,
             Some(metadata),
+            Some(&weight_iterator),
             rotation_for_overlap,
             settings,
-        ) * self
-            .get_graph()
-            .bare_graph
-            .compute_energy_product(sample.loop_moms(), sample.external_moms());
-
-        let final_energy_product = &energy_product / &tree_product;
+        );
 
         let prefactor = if let Some(p) = settings.general.amplitude_prefactor {
             p.map(|x| F::from_ff64(x))
@@ -362,7 +359,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             );
         }
 
-        (rep3d + counterterm) * final_energy_product * prefactor
+        (rep3d * energy_product + counterterm) / tree_product * prefactor
     }
 }
 

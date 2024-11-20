@@ -171,6 +171,7 @@ impl CounterTerm {
     pub fn evaluate<T: FloatLike>(
         sample: &DefaultSample<T>,
         tropical_metadata: &TropicalSamplingMetadata<T>,
+        edge_weights: &[f64],
         graph: &BareGraph,
         esurfaces: &EsurfaceCollection,
         counterterm: &CounterTerm,
@@ -186,6 +187,7 @@ impl CounterTerm {
             settings,
             sample,
             tropical_metadata,
+            edge_weights,
         );
 
         let res = counterterm
@@ -322,6 +324,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     sample: &'a DefaultSample<T>,
     prefactor: Complex<F<T>>,
     tropical_metadata: &'a TropicalSamplingMetadata<T>,
+    edge_weights: &'a [f64],
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
@@ -333,6 +336,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         settings: &'a Settings,
         sample: &'a DefaultSample<T>,
         tropical_metadata: &'a TropicalSamplingMetadata<T>,
+        edge_weights: &'a [f64],
     ) -> Self {
         let real_mass_vector = graph
             .get_real_mass_vector()
@@ -355,6 +359,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             sample,
             prefactor,
             tropical_metadata,
+            edge_weights,
         }
     }
 
@@ -685,10 +690,21 @@ impl<'a, T: FloatLike> RstarSamples<'a, T> {
             );
             let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
 
-            let rstar_energy_product = graph
-                .get_virtual_edges_iterator()
-                .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
-                .fold(energy_cache[0].one(), |acc, e| acc * e);
+            let virtual_loop_energies = graph
+                .get_loop_edges_iterator()
+                .map(|(edge_id, _)| &energy_cache[edge_id]);
+
+            //let rstar_energy_product = graph
+            //    .get_virtual_edges_iterator()
+            //    .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
+            //    .fold(energy_cache[0].one(), |acc, e| acc * e);
+            //
+
+            // raise to the power of the edge weights
+            let rstar_energy_product = virtual_loop_energies
+                .zip(ct_builder.edge_weights)
+                .map(|(energy, weight)| energy.powf(&F::<T>::from_f64(2. * weight - 1.)))
+                .fold(rstar_sample.sample.one(), |acc, x| acc * x);
 
             let multichanneling_denominator =
                 counterterm.evaluate_multichanneling_denominator(&esurface_cache);
@@ -715,7 +731,7 @@ impl<'a, T: FloatLike> RstarSamples<'a, T> {
                 settings,
             );
 
-            let res = eval_terms * &multichanneling_factor / &rstar_energy_product;
+            let res = eval_terms * &multichanneling_factor * &rstar_energy_product;
 
             SingleResidueEvalResult {
                 residue: res,
