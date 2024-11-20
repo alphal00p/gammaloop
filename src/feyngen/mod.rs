@@ -1,9 +1,8 @@
 pub mod diagram_generator;
 
 use ahash::HashMap;
-use diagram_generator::FeynGen;
 use smartstring::{LazyCompact, SmartString};
-use std::{fmt, path::Path, str::FromStr};
+use std::{fmt, str::FromStr};
 use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 
@@ -55,7 +54,7 @@ impl FromStr for GenerationType {
 
 pub fn get_coupling_orders(
     model: &Model,
-    graph: &SymbolicaGraph<(usize, SmartString<LazyCompact>), &str>,
+    graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
 ) -> HashMap<String, usize> {
     let mut coupling_orders = HashMap::default();
     for node in graph.nodes() {
@@ -120,7 +119,7 @@ impl FeynGenFilters {
         &self,
         model: &Model,
         graphs: &mut Vec<(
-            SymbolicaGraph<(usize, SmartString<LazyCompact>), &str>,
+            SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
             String,
         )>,
     ) -> Result<(), FeynGenError> {

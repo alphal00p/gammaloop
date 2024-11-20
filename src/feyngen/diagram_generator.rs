@@ -30,20 +30,20 @@ impl FeynGen {
 
     #[allow(clippy::type_complexity)]
     pub fn assign_node_colors<'a>(
-        graph: &SymbolicaGraph<usize, &'a str>,
+        graph: &SymbolicaGraph<i32, &'a str>,
         node_colors: &HashMap<
             Vec<(Option<bool>, SmartString<LazyCompact>)>,
             Vec<SmartString<LazyCompact>>,
         >,
     ) -> Result<
         Vec<(
-            SymbolicaGraph<(usize, SmartString<LazyCompact>), &'a str>,
+            SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
             usize,
         )>,
         FeynGenError,
     > {
         // println!("graph = {}", graph.to_dot());
-        let mut colored_nodes: Vec<Vec<(usize, SmartString<LazyCompact>)>> = vec![vec![]];
+        let mut colored_nodes: Vec<Vec<(i32, SmartString<LazyCompact>)>> = vec![vec![]];
         let edges = graph.edges();
         for (i_n, node) in graph.nodes().iter().enumerate() {
             let mut node_edges = vec![];
@@ -70,7 +70,7 @@ impl FeynGen {
                     node_edges
                 )));
             };
-            let mut new_colored_nodes: Vec<Vec<(usize, SmartString<LazyCompact>)>> = vec![];
+            let mut new_colored_nodes: Vec<Vec<(i32, SmartString<LazyCompact>)>> = vec![];
             for current_colors in colored_nodes.iter_mut() {
                 for color in colors {
                     current_colors.push((node.data, color.clone()));
@@ -97,16 +97,16 @@ impl FeynGen {
 
     #[allow(clippy::type_complexity)]
     pub fn group_isomorphic_graphs<'a>(
-        graphs: &[SymbolicaGraph<(usize, SmartString<LazyCompact>), &'a str>],
+        graphs: &[SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>],
     ) -> Vec<(
-        SymbolicaGraph<(usize, SmartString<LazyCompact>), &'a str>,
+        SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
         usize,
     )> {
         if graphs.len() == 1 {
             return vec![(graphs[0].clone(), 1)];
         }
         let mut iso_buckets: HashMap<
-            SymbolicaGraph<(usize, SmartString<LazyCompact>), &'a str>,
+            SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
             usize,
         > = HashMap::default();
         for g in graphs.iter() {
@@ -122,7 +122,7 @@ impl FeynGen {
     }
 
     pub fn contains_particles(
-        graph: &SymbolicaGraph<usize, &str>,
+        graph: &SymbolicaGraph<i32, &str>,
         particles: &[SmartString<LazyCompact>],
     ) -> bool {
         let mut particles_stack = particles
@@ -141,7 +141,7 @@ impl FeynGen {
     }
 
     pub fn find_edge_position(
-        graph: &SymbolicaGraph<usize, &str>,
+        graph: &SymbolicaGraph<i32, &str>,
         edge_vertices: (usize, usize),
         oriented: bool,
     ) -> Option<usize> {
@@ -157,7 +157,7 @@ impl FeynGen {
 
     pub fn veto_special_topologies(
         model: &Model,
-        graph: &SymbolicaGraph<usize, &str>,
+        graph: &SymbolicaGraph<i32, &str>,
         veto_self_energy: Option<&SelfEnergyFilterOptions>,
         veto_tadpole: Option<&TadpolesFilterOptions>,
         veto_snails: Option<&SnailFilterOptions>,
@@ -197,7 +197,7 @@ impl FeynGen {
         if veto_self_energy.is_none() && veto_tadpole.is_none() && veto_snails.is_none() {
             return false;
         }
-        let graph_nodes: &[symbolica::graph::Node<usize>] = graph.nodes();
+        let graph_nodes: &[symbolica::graph::Node<i32>] = graph.nodes();
         let graph_edges: &[symbolica::graph::Edge<&str>] = graph.edges();
 
         let max_external = graph
@@ -206,7 +206,7 @@ impl FeynGen {
             .filter(|n| n.data > 0)
             .map(|n| n.data)
             .max()
-            .unwrap_or(0);
+            .unwrap_or(0) as usize;
         if max_external == 0 {
             // Do not implement any veto for vacuum graphs
             return false;
@@ -214,7 +214,7 @@ impl FeynGen {
         let max_external_node_position = graph
             .nodes()
             .iter()
-            .position(|n| n.data == max_external)
+            .position(|n| n.data == (max_external as i32))
             .unwrap();
         if debug {
             debug!(
@@ -227,10 +227,10 @@ impl FeynGen {
             vec![model.particles[0].clone(); max_external];
         for e in graph_edges {
             if graph_nodes[e.vertices.0].data != 0 {
-                external_partices[graph_nodes[e.vertices.0].data - 1] =
+                external_partices[(graph_nodes[e.vertices.0].data - 1) as usize] =
                     model.get_particle(&SmartString::<LazyCompact>::from(e.data));
             } else if graph_nodes[e.vertices.1].data != 0 {
-                external_partices[graph_nodes[e.vertices.1].data - 1] =
+                external_partices[(graph_nodes[e.vertices.1].data - 1) as usize] =
                     model.get_particle(&SmartString::<LazyCompact>::from(e.data));
             }
         }
@@ -262,10 +262,10 @@ impl FeynGen {
         }
         let mut external_momenta_routing: Vec<Vec<usize>> = vec![vec![]; spanning_tree.nodes.len()];
         for (i_n, node) in graph.nodes().iter().enumerate() {
-            if (node.edges.len() != 1) || node.data == max_external_node_position {
+            if (node.edges.len() != 1) || node.data == (max_external_node_position as i32) {
                 continue;
             }
-            let external_index = node.data;
+            let external_index = node.data as usize;
             external_momenta_routing[i_n].push(external_index);
             let mut next_node = spanning_tree.nodes[i_n].parent;
             // println!("max_external={},max_external_node_position={},sink_node_position_in_spanning_tree={}", max_external, max_external_node_position, sink_node_position_in_spanning_tree);
@@ -348,9 +348,15 @@ impl FeynGen {
                             && external_momenta_routing[i_n][0] == leg_id
                         {
                             // Also For 1 -> 1 processes, we must also verify that it is not the whole graph
-                            if spanning_tree.nodes.iter().any(|n| {
-                                !n.external && n.chain_id.is_none() && n.back_edges.is_empty()
-                            }) {
+                            // Also For 1 -> 1 processes, we must also verify that it is not the whole graph
+                            if max_external > 2
+                                || spanning_tree
+                                    .nodes
+                                    .iter()
+                                    .filter(|n| (!n.external) && n.chain_id.is_none())
+                                    .count()
+                                    > 1
+                            {
                                 self_energy_attachments.insert((leg_id, i_n, i_back_edge, i_chain));
                             }
                         }
@@ -503,7 +509,7 @@ impl FeynGen {
     }
 
     pub fn contains_cut(
-        graph: &SymbolicaGraph<usize, &str>,
+        graph: &SymbolicaGraph<i32, &str>,
         n_initial_states: usize,
         particles: &[SmartString<LazyCompact>],
     ) -> bool {
@@ -516,23 +522,29 @@ impl FeynGen {
             cut_map.insert(p.as_str(), vec![]);
         }
         for (i_e, edge) in graph.edges().iter().enumerate() {
+            // filter out external edges
+            if graph.nodes()[edge.vertices.0].data != 0 || graph.nodes()[edge.vertices.1].data != 0
+            {
+                continue;
+            }
             if let Some(cut_entry) = cut_map.get_mut(&edge.data) {
                 cut_entry.push(i_e);
             }
         }
 
-        let cut_options_values: Vec<_> = cut_map.values().collect();
-
         // Generate unique, unordered combinations
         let mut unique_combinations: std::collections::HashSet<Vec<usize>, ahash::RandomState> =
             HashSet::default();
-        for combination in cut_options_values
+        for combination in particles
             .iter()
-            .map(|v| v.iter())
+            .map(|p| cut_map.get(p.as_str()).unwrap().iter())
             .multi_cartesian_product()
         {
             // Sort the combination and insert into HashSet
             let mut sorted_combination: Vec<_> = combination.into_iter().cloned().collect();
+            if sorted_combination.iter().collect::<HashSet<_>>().len() != sorted_combination.len() {
+                continue;
+            }
             sorted_combination.sort_unstable();
             unique_combinations.insert(sorted_combination);
         }
@@ -550,13 +562,25 @@ impl FeynGen {
         }
 
         let left_initial_state_positions = (1..=n_initial_states)
-            .map(|leg_id| graph.nodes().iter().position(|n| n.data == leg_id).unwrap())
+            .map(|leg_id| {
+                graph
+                    .nodes()
+                    .iter()
+                    .position(|n| n.data == (leg_id as i32))
+                    .unwrap()
+            })
             .collect::<Vec<_>>();
         let right_initial_state_positions = (n_initial_states + 1..=2 * n_initial_states)
-            .map(|leg_id| graph.nodes().iter().position(|n| n.data == leg_id).unwrap())
+            .map(|leg_id| {
+                graph
+                    .nodes()
+                    .iter()
+                    .position(|n| n.data == (leg_id as i32))
+                    .unwrap()
+            })
             .collect::<Vec<_>>();
 
-        'cutloop: for cut in cut_options_values {
+        'cutloop: for cut in unique_combinations {
             for left_node in left_initial_state_positions.iter() {
                 for right_node in right_initial_state_positions.iter() {
                     let mut visited: Vec<bool> = vec![false; graph.nodes().len()];
@@ -581,18 +605,18 @@ impl FeynGen {
     }
 
     fn group_isomorphic_graphs_after_node_color_change<'a>(
-        graphs: &HashMap<SymbolicaGraph<usize, &'a str>, Integer>,
-        node_colors_to_change: &HashMap<usize, usize>,
-    ) -> HashMap<SymbolicaGraph<usize, &'a str>, Integer> {
+        graphs: &HashMap<SymbolicaGraph<i32, &'a str>, Integer>,
+        node_colors_to_change: &HashMap<i32, i32>,
+    ) -> HashMap<SymbolicaGraph<i32, &'a str>, Integer> {
         #[allow(clippy::type_complexity)]
         let mut iso_buckets: HashMap<
-            SymbolicaGraph<usize, &'a str>,
-            (usize, (SymbolicaGraph<usize, &'a str>, Integer)),
+            SymbolicaGraph<i32, &'a str>,
+            (usize, (SymbolicaGraph<i32, &'a str>, Integer)),
         > = HashMap::default();
 
         for (g, symmetry_factor) in graphs.iter() {
             let mut g_node_color_modified = g.clone();
-            let mut modifications: Vec<(usize, usize)> = vec![];
+            let mut modifications: Vec<(usize, i32)> = vec![];
             for (i_n, node) in g.nodes().iter().enumerate() {
                 for (src_node_color, trgt_node_color) in node_colors_to_change {
                     if node.data == *src_node_color {
@@ -744,7 +768,7 @@ impl FeynGen {
         // debug!("vertex_signatures = {:?}", vertex_signatures);
         let external_edges_for_generation = external_edges
             .iter()
-            .map(|(i, (orientation, name))| (*i, (*orientation, name.as_str())))
+            .map(|(i, (orientation, name))| (*i as i32, (*orientation, name.as_str())))
             .collect::<Vec<_>>();
         let vertex_signatures_for_generation = vertex_signatures
             .keys()
@@ -859,19 +883,16 @@ impl FeynGen {
                 )
             });
         }
-
         // Now account for initial state symmetry by further grouping contributions
-        let mut node_colors_to_change: HashMap<usize, usize> = HashMap::default();
+        let mut node_colors_to_change: HashMap<i32, i32> = HashMap::default();
         if self.options.symmetrize_initial_states {
             for initial_color in 1..=self.options.initial_pdgs.len() {
                 node_colors_to_change.insert(
-                    initial_color,
-                    if self.options.generation_type == GenerationType::CrossSection
-                        && self.options.symmetrize_left_right_states
-                    {
+                    initial_color as i32,
+                    if self.options.symmetrize_left_right_states {
                         0
                     } else {
-                        1
+                        -1
                     },
                 );
             }
@@ -880,11 +901,11 @@ impl FeynGen {
                     self.options.initial_pdgs.len() + 1..=2 * self.options.initial_pdgs.len()
                 {
                     node_colors_to_change.insert(
-                        final_color,
+                        final_color as i32,
                         if self.options.symmetrize_left_right_states {
                             0
                         } else {
-                            2
+                            -2
                         },
                     );
                 }
@@ -896,7 +917,14 @@ impl FeynGen {
             for final_color in self.options.initial_pdgs.len() + 1
                 ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
             {
-                node_colors_to_change.insert(final_color, 0);
+                node_colors_to_change.insert(
+                    final_color as i32,
+                    if self.options.symmetrize_left_right_states {
+                        0
+                    } else {
+                        -2
+                    },
+                );
             }
         }
         if !node_colors_to_change.is_empty() {

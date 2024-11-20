@@ -422,10 +422,10 @@ impl<N, E> Involution<N, E> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-struct GVEdgeAttrs {
-    label: Option<String>,
-    color: Option<String>,
-    other: Option<String>,
+pub struct GVEdgeAttrs {
+    pub label: Option<String>,
+    pub color: Option<String>,
+    pub other: Option<String>,
 }
 
 impl std::fmt::Display for GVEdgeAttrs {
@@ -593,7 +593,7 @@ impl<'a> From<&'a BareGraph> for HedgeGraph<usize, usize> {
     }
 }
 
-use subgraph::{ContractedSubGraph, HedgeNode, InternalSubGraph, SubGraph};
+use subgraph::{HedgeNode, InternalSubGraph, SubGraph};
 use thiserror::Error;
 
 use super::BareGraph;
@@ -1097,7 +1097,7 @@ impl<E, V> HedgeGraph<E, V> {
     }
 
     pub fn all_cycle_sym_diffs(&self) -> Result<Vec<InternalSubGraph>, TryFromIntError> {
-        InternalSubGraph::all_sym_diff_powerset(&self.cycle_basis().0, &|s| Some(s))
+        InternalSubGraph::all_sym_diff_powerset(&self.cycle_basis().0, &Some)
             .map(|a| a.into_iter().collect())
     }
 
