@@ -4,6 +4,7 @@ use ahash::{AHashMap, AHashSet};
 use bitvec::{slice::IterOnes, vec::BitVec};
 use indexmap::IndexMap;
 use itertools::Itertools;
+use pathfinding::undirected::connected_components;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
@@ -459,6 +460,7 @@ pub struct HedgeNodeBuilder<V> {
     hedges: Vec<usize>,
 }
 
+#[derive(Clone, Debug)]
 pub struct HedgeGraphBuilder<E, V> {
     nodes: Vec<HedgeNodeBuilder<V>>,
     involution: Involution<NodeIndex, E>,
@@ -758,6 +760,93 @@ impl<E, V> HedgeGraph<E, V> {
         succesors
     }
 
+    fn combinations<const K: usize>(n: usize) -> Vec<[usize; K]> {
+        let mut result = Vec::new();
+        let mut current = [0; K]; // Fixed-size array to store combinations
+        Self::generate_combinations::<K>(0, 0, n, &mut current, &mut result);
+        result
+    }
+
+    fn generate_combinations<const K: usize>(
+        depth: usize,
+        start: usize,
+        n: usize,
+        current: &mut [usize; K],
+        result: &mut Vec<[usize; K]>,
+    ) {
+        if depth == K {
+            result.push(*current); // Push a copy of the current array
+            return;
+        }
+
+        for i in start..n {
+            current[depth] = i;
+            Self::generate_combinations::<K>(depth + 1, i + 1, n, current, result);
+        }
+    }
+
+    fn non_cut_edges_impl(
+        &self,
+        connected_components: usize,
+        cyclotomatic_number: usize,
+        start: usize,
+        current: &mut BitVec,
+        set: &mut AHashSet<BitVec>,
+    ) {
+        if current.count_ones() >= 2 * cyclotomatic_number {
+            return;
+        }
+        if self.count_connected_components(&current.complement(self)) == connected_components {
+            set.insert(current.clone());
+        }
+
+        for i in start..self.involution.len() {
+            let j = self.involution.inv(i);
+
+            if i != j {
+                current.set(i, true);
+                current.set(j, true);
+            }
+            self.non_cut_edges_impl(
+                connected_components,
+                cyclotomatic_number,
+                i + 1,
+                current,
+                set,
+            );
+
+            current.set(i, false);
+            current.set(j, false);
+        }
+    }
+
+    pub fn non_cut_edges(&self) -> AHashSet<BitVec> {
+        let connected_components = self.count_connected_components(&self.full_filter());
+
+        let cyclotomatic_number = self.cyclotomatic_number(&self.full_node().internal_graph);
+
+        let mut current = self.empty_filter();
+        let mut set = AHashSet::new();
+
+        self.non_cut_edges_impl(
+            connected_components,
+            cyclotomatic_number,
+            0,
+            &mut current,
+            &mut set,
+        );
+
+        set
+    }
+
+    pub fn all_connectivity_spanning_subgraphs<S: SubGraph>(&self, subgraph: &S) -> AHashSet<S> {
+        let n = self.count_connected_components(subgraph);
+        let mut spanning_subgraphs = AHashSet::new();
+
+        for n in self.iter_node_data(subgraph) {}
+        spanning_subgraphs
+    }
+
     pub fn neighbors<S: SubGraph>(&self, subgraph: &S, pos: usize) -> BitVec {
         subgraph.hairs(self.involution.get_node_id(pos))
     }
@@ -766,14 +855,11 @@ impl<E, V> HedgeGraph<E, V> {
         Some(subgraph.hairs(self.involution.get_connected_node_id(pos)?))
     }
 
-    pub fn iter_egde_node<'a>(
+    pub fn iter_egde_node<'a, S: SubGraph>(
         &'a self,
-        subgraph: &'a InternalSubGraph,
+        subgraph: &'a S,
     ) -> impl Iterator<Item = &HedgeNode> + '_ {
-        subgraph
-            .filter
-            .iter_ones()
-            .map(|i| self.involution.get_node_id(i))
+        subgraph.included().map(|i| self.involution.get_node_id(i))
     }
 
     pub fn iter_node_data<'a, S: SubGraph>(

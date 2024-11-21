@@ -87,6 +87,53 @@ fn hairythreeloop() {
 }
 
 #[test]
+fn banana_cuts() {
+    let mut builder: HedgeGraphBuilder<(), ()> = HedgeGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    builder.add_edge(a, b, ());
+    builder.add_edge(a, b, ());
+    builder.add_edge(a, b, ());
+
+    let three_banana = builder.clone().build();
+
+    assert_eq!(6, three_banana.non_cut_edges().len());
+    builder.add_edge(a, b, ());
+
+    let four_banana = builder.build();
+    assert_eq!(14, four_banana.non_cut_edges().len());
+}
+
+#[test]
+fn three_loop_fly() {
+    let mut builder: HedgeGraphBuilder<(), ()> = HedgeGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+    builder.add_edge(a, b, ());
+    builder.add_edge(b, a, ());
+    builder.add_edge(b, c, ());
+    builder.add_edge(d, a, ());
+
+    builder.add_edge(c, d, ());
+    builder.add_edge(d, c, ());
+
+    let fly = builder.clone().build();
+
+    let mut sum = 0;
+    for c in fly.non_cut_edges() {
+        // println!("{c:?}");
+        //
+        sum += 2 ^ (c.count_ones() / 2) / 2;
+
+        println!("{}", fly.dot(&c));
+    }
+    assert_eq!(21, fly.non_cut_edges().len());
+    println!("{sum}");
+}
+
+#[test]
 fn cube() {
     let mut builder: HedgeGraphBuilder<(), ()> = HedgeGraphBuilder::new();
     let a = builder.add_node(());
