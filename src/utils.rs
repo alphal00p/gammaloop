@@ -3457,3 +3457,34 @@ impl<T: Clone> SmallSquareMatrix<T> {
         }
     }
 }
+
+impl<T: FloatLike> Mul<&F<T>> for &SmallSquareMatrix<F<T>> {
+    type Output = SmallSquareMatrix<F<T>>;
+
+    fn mul(self, rhs: &F<T>) -> Self::Output {
+        let new_data = self.data.iter().map(|x| x * rhs).collect();
+
+        Self::Output {
+            data: new_data,
+            dim: self.dim,
+        }
+    }
+}
+
+impl<T: FloatLike> Mul<&[ThreeMomentum<F<T>>]> for &SmallSquareMatrix<F<T>> {
+    type Output = Vec<ThreeMomentum<F<T>>>;
+
+    fn mul(self, rhs: &[ThreeMomentum<F<T>>]) -> Self::Output {
+        assert_eq!(rhs.len(), self.dim, "mismatched dimensions");
+
+        (0..self.dim)
+            .map(|loop_index| {
+                rhs.iter()
+                    .enumerate()
+                    .map(|(loop_index_prime, vec)| vec * &self[(loop_index, loop_index_prime)])
+                    .reduce(|acc, x| acc + x)
+                    .unwrap()
+            })
+            .collect()
+    }
+}
