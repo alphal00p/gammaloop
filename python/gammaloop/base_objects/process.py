@@ -153,9 +153,15 @@ class Process(object):
 
         if generation_args.amplitude:
             if generation_args.symmetrize_initial_states is None:
-                generation_args.symmetrize_initial_states = False
+                generation_args.symmetrize_initial_states = generation_args.symmetrize_left_right_states
+            elif not generation_args.symmetrize_initial_states and generation_args.symmetrize_left_right_states:
+                raise GammaLoopError(
+                    "Symmetrization of left and right states for amplitudes requires also enabling initial-state symmetrization.")
             if generation_args.symmetrize_final_states is None:
-                generation_args.symmetrize_final_states = False
+                generation_args.symmetrize_final_states = generation_args.symmetrize_left_right_states
+            elif not generation_args.symmetrize_final_states and generation_args.symmetrize_left_right_states:
+                raise GammaLoopError(
+                    "Symmetrization of left and right states for amplitudes requires also enabling final-state symmetrization.")
         else:
             if generation_args.symmetrize_initial_states is None:
                 generation_args.symmetrize_initial_states = True
@@ -465,11 +471,11 @@ class Process(object):
         # Adjust filter default values
         # Disable these filter for vacuum generation
         enable_filters = True
-        if len(initial_particles) <= 0:
+        if len(initial_particles) == 0:
             if not process_args.amplitude:
                 enable_filters = False
             else:
-                if len(final_particles) <= 0:
+                if len(final_particles) == 0:
                     enable_filters = False
         if process_args.filter_tadpoles is None:
             process_args.filter_tadpoles = enable_filters

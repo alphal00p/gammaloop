@@ -158,23 +158,23 @@ fn alt_vs_pair() {
     // println!("all spinneys alt{}", rand_graph.all_spinneys_alt().len());
 }
 
-#[test]
-#[should_panic]
-fn read_tarjan_vs_cycle_space() {
-    for s in 0..100 {
-        let rand_graph = HedgeGraph::<(), ()>::random(6, 9, s);
+// #[test]
+// #[should_panic]
+// fn read_tarjan_vs_cycle_space() {
+//     for s in 0..100 {
+//         let rand_graph = HedgeGraph::<(), ()>::random(6, 9, s);
 
-        let all_cycles = rand_graph.read_tarjan();
-        let all_cycles_alt = rand_graph.all_cycles();
+//         let all_cycles = rand_graph.read_tarjan();
+//         let all_cycles_alt = rand_graph.all_cycles();
 
-        assert_eq!(
-            all_cycles.len(),
-            all_cycles_alt.len(),
-            "{} with seed {s}",
-            rand_graph.base_dot()
-        );
-    }
-}
+//         assert_eq!(
+//             all_cycles.len(),
+//             all_cycles_alt.len(),
+//             "{} with seed {s}",
+//             rand_graph.base_dot()
+//         );
+//     }
+// }
 
 // #[test]
 // fn random_graph() {
@@ -314,7 +314,10 @@ fn petersen() {
 
     println!("loop count {}", graph.cycle_basis().0.len());
     println!("cycle count {}", graph.all_cycles().len());
-    println!("cycle count alt {}", graph.read_tarjan().len());
+    println!(
+        "loop count alt {}",
+        graph.cyclotomatic_number(&graph.full_node().internal_graph)
+    );
     if let Some((s, v)) = graph
         .all_spinneys()
         .iter()

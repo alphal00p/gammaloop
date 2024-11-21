@@ -1242,7 +1242,7 @@ impl BareGraph {
     pub fn from_symbolica_graph(
         model: &model::Model,
         name: String,
-        graph: &SymbolicaGraph<(usize, SmartString<LazyCompact>), &str>,
+        graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
         symmetry_factor: String,
         external_connections: Vec<(Option<usize>, Option<usize>)>,
         forced_lmb: Option<Vec<SmartString<LazyCompact>>>,
@@ -1300,18 +1300,23 @@ impl BareGraph {
                 } else {
                     panic!("Graph inconsistency in Feyngen.")
                 };
-                let physical_edge_type = *external_directions.get(&n.data.0).unwrap_or_else(|| {
-                    panic!(
-                        "External edge direction not specified for external leg {} in Feyngen.",
-                        n.data.0
-                    )
-                });
+                let physical_edge_type = *external_directions
+                    .get(&(n.data.0 as usize))
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "External edge direction not specified for external leg {} in Feyngen.",
+                            n.data.0
+                        )
+                    });
                 if edge_type_from_symbolica != physical_edge_type {
                     external_edge.vertices = (external_edge.vertices.1, external_edge.vertices.0);
                     particle = particle.get_anti_particle(model);
                 }
 
-                external_nodes.insert(n.data.0, (i_n, physical_edge_type, particle.name.clone()));
+                external_nodes.insert(
+                    n.data.0 as usize,
+                    (i_n, physical_edge_type, particle.name.clone()),
+                );
                 external_edges.insert(n.edges[0], (physical_edge_type, particle.name.clone()));
             }
         }
@@ -1339,7 +1344,7 @@ impl BareGraph {
         for (i_n, node) in graph_nodes.iter().enumerate() {
             let vertex_info = if node.data.1 == "external" {
                 let (_external_node_position, external_direction, external_particle_name) =
-                    external_nodes.get(&node.data.0).unwrap();
+                    external_nodes.get(&(node.data.0 as usize)).unwrap();
                 SerializableVertexInfo::ExternalVertexInfo(SerializableExternalVertexInfo {
                     direction: *external_direction,
                     particle: external_particle_name.clone(),
@@ -1404,14 +1409,14 @@ impl BareGraph {
                 EdgeType::Incoming => {
                     edges_sorting_priority.insert(
                         format!("p{}", graph_nodes[edge.vertices.0].data.0).into(),
-                        graph_nodes[edge.vertices.0].data.0,
+                        graph_nodes[edge.vertices.0].data.0 as usize,
                     );
                     format!("p{}", graph_nodes[edge.vertices.0].data.0)
                 }
                 EdgeType::Outgoing => {
                     edges_sorting_priority.insert(
                         format!("p{}", graph_nodes[edge.vertices.1].data.0).into(),
-                        graph_nodes[edge.vertices.1].data.0,
+                        graph_nodes[edge.vertices.1].data.0 as usize,
                     );
                     format!("p{}", graph_nodes[edge.vertices.1].data.0)
                 }
