@@ -1029,7 +1029,7 @@ impl GammaLoopIntegrand {
                         let shift = momtrop_metadata
                             .shift
                             .into_iter()
-                            .map(|vec| ThreeMomentum {
+                            .map(|vec| -ThreeMomentum {
                                 px: F(vec[0]),
                                 py: F(vec[1]),
                                 pz: F(vec[2]),
