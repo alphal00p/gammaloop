@@ -103,6 +103,9 @@ insta = { version = "1.40.0", features = ["ron", "toml"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
 pathfinding = "4.11.0"
 brotli = "7.0.0"
+cgmath = "0.18.0"
+argmin = "0.10.0"
+by_address = "1.2.1"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]

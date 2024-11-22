@@ -9,7 +9,7 @@ use crate::{
     },
     feyngen::FeynGenError,
     gammaloop_integrand::{BareSample, DefaultSample},
-    graph::half_edge::{HedgeGraph, HedgeGraphBuilder},
+    graph::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},

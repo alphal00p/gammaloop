@@ -6,13 +6,13 @@ fn threeloop() {
     let c = builder.add_node(());
     let d = builder.add_node(());
 
-    builder.add_edge(a, b, ());
-    builder.add_edge(b, a, ());
-    builder.add_edge(a, b, ());
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(b, a, (), false);
+    builder.add_edge(a, b, (), false);
 
-    builder.add_edge(b, c, ());
-    builder.add_edge(c, d, ());
-    builder.add_edge(d, a, ());
+    builder.add_edge(b, c, (), false);
+    builder.add_edge(c, d, (), false);
+    builder.add_edge(d, a, (), false);
 
     let graph = builder.build();
 
@@ -49,16 +49,16 @@ fn hairythreeloop() {
     let c = builder.add_node(());
     let d = builder.add_node(());
 
-    builder.add_edge(a, b, ());
-    builder.add_edge(b, a, ());
-    builder.add_edge(a, b, ());
-    builder.add_external_edge(a, ());
-    builder.add_external_edge(b, ());
-    builder.add_external_edge(b, ());
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(b, a, (), false);
+    builder.add_edge(a, b, (), false);
+    builder.add_external_edge(a, (), false);
+    builder.add_external_edge(b, (), false);
+    builder.add_external_edge(b, (), false);
 
-    builder.add_edge(b, c, ());
-    builder.add_edge(c, d, ());
-    builder.add_edge(d, a, ());
+    builder.add_edge(b, c, (), false);
+    builder.add_edge(c, d, (), false);
+    builder.add_edge(d, a, (), false);
 
     assert_eq!(builder.involution.len(), 15);
     let graph = builder.build();
@@ -91,14 +91,14 @@ fn banana_cuts() {
     let mut builder: HedgeGraphBuilder<(), ()> = HedgeGraphBuilder::new();
     let a = builder.add_node(());
     let b = builder.add_node(());
-    builder.add_edge(a, b, ());
-    builder.add_edge(a, b, ());
-    builder.add_edge(a, b, ());
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(a, b, (), false);
 
     let three_banana = builder.clone().build();
 
     assert_eq!(6, three_banana.non_cut_edges().len());
-    builder.add_edge(a, b, ());
+    builder.add_edge(a, b, (), false);
 
     let four_banana = builder.build();
     assert_eq!(14, four_banana.non_cut_edges().len());
@@ -111,13 +111,13 @@ fn three_loop_fly() {
     let b = builder.add_node(());
     let c = builder.add_node(());
     let d = builder.add_node(());
-    builder.add_edge(a, b, ());
-    builder.add_edge(b, a, ());
-    builder.add_edge(b, c, ());
-    builder.add_edge(d, a, ());
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(b, a, (), false);
+    builder.add_edge(b, c, (), false);
+    builder.add_edge(d, a, (), false);
 
-    builder.add_edge(c, d, ());
-    builder.add_edge(d, c, ());
+    builder.add_edge(c, d, (), false);
+    builder.add_edge(d, c, (), false);
 
     let fly = builder.clone().build();
 
@@ -145,20 +145,20 @@ fn cube() {
     let g = builder.add_node(());
     let h = builder.add_node(());
 
-    builder.add_edge(a, b, ());
-    builder.add_edge(b, c, ());
-    builder.add_edge(c, d, ());
-    builder.add_edge(d, a, ());
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(b, c, (), false);
+    builder.add_edge(c, d, (), false);
+    builder.add_edge(d, a, (), false);
 
-    builder.add_edge(e, f, ());
-    builder.add_edge(f, g, ());
-    builder.add_edge(g, h, ());
-    builder.add_edge(h, e, ());
+    builder.add_edge(e, f, (), false);
+    builder.add_edge(f, g, (), false);
+    builder.add_edge(g, h, (), false);
+    builder.add_edge(h, e, (), false);
 
-    builder.add_edge(a, e, ());
-    builder.add_edge(b, f, ());
-    builder.add_edge(c, g, ());
-    builder.add_edge(d, h, ());
+    builder.add_edge(a, e, (), false);
+    builder.add_edge(b, f, (), false);
+    builder.add_edge(c, g, (), false);
+    builder.add_edge(d, h, (), false);
 
     let graph = builder.build();
 
@@ -252,17 +252,17 @@ fn K33() {
     let e = builder.add_node(());
     let f = builder.add_node(());
 
-    builder.add_edge(a, d, ());
-    builder.add_edge(a, e, ());
-    builder.add_edge(a, f, ());
+    builder.add_edge(a, d, (), false);
+    builder.add_edge(a, e, (), false);
+    builder.add_edge(a, f, (), false);
 
-    builder.add_edge(b, d, ());
-    builder.add_edge(b, e, ());
-    builder.add_edge(b, f, ());
+    builder.add_edge(b, d, (), false);
+    builder.add_edge(b, e, (), false);
+    builder.add_edge(b, f, (), false);
 
-    builder.add_edge(c, d, ());
-    builder.add_edge(c, e, ());
-    builder.add_edge(c, f, ());
+    builder.add_edge(c, d, (), false);
+    builder.add_edge(c, e, (), false);
+    builder.add_edge(c, f, (), false);
 
     let graph = builder.build();
     graph.full_node();
@@ -330,28 +330,28 @@ fn petersen() {
     let i = builder.add_node(());
     let j = builder.add_node(());
 
-    builder.add_edge(a, b, ());
-    builder.add_edge(a, f, ());
-    builder.add_edge(a, e, ());
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(a, f, (), false);
+    builder.add_edge(a, e, (), false);
 
-    builder.add_edge(b, c, ());
-    builder.add_edge(b, g, ());
+    builder.add_edge(b, c, (), false);
+    builder.add_edge(b, g, (), false);
 
-    builder.add_edge(c, d, ());
-    builder.add_edge(c, h, ());
+    builder.add_edge(c, d, (), false);
+    builder.add_edge(c, h, (), false);
 
-    builder.add_edge(d, e, ());
-    builder.add_edge(d, i, ());
+    builder.add_edge(d, e, (), false);
+    builder.add_edge(d, i, (), false);
 
-    builder.add_edge(e, j, ());
+    builder.add_edge(e, j, (), false);
 
-    builder.add_edge(f, h, ());
-    builder.add_edge(f, i, ());
+    builder.add_edge(f, h, (), false);
+    builder.add_edge(f, i, (), false);
 
-    builder.add_edge(g, i, ());
-    builder.add_edge(g, j, ());
+    builder.add_edge(g, i, (), false);
+    builder.add_edge(g, j, (), false);
 
-    builder.add_edge(h, j, ());
+    builder.add_edge(h, j, (), false);
 
     let graph = builder.build();
 
@@ -398,25 +398,25 @@ fn wagner_graph() {
     let n7 = builder.add_node(());
     let n8 = builder.add_node(());
 
-    builder.add_edge(n1, n2, ());
-    builder.add_edge(n1, n5, ());
+    builder.add_edge(n1, n2, (), false);
+    builder.add_edge(n1, n5, (), false);
 
-    builder.add_edge(n2, n3, ());
-    builder.add_edge(n2, n6, ());
+    builder.add_edge(n2, n3, (), false);
+    builder.add_edge(n2, n6, (), false);
 
-    builder.add_edge(n3, n4, ());
-    builder.add_edge(n3, n7, ());
+    builder.add_edge(n3, n4, (), false);
+    builder.add_edge(n3, n7, (), false);
 
-    builder.add_edge(n4, n5, ());
-    builder.add_edge(n4, n8, ());
+    builder.add_edge(n4, n5, (), false);
+    builder.add_edge(n4, n8, (), false);
 
-    builder.add_edge(n5, n6, ());
+    builder.add_edge(n5, n6, (), false);
 
-    builder.add_edge(n6, n7, ());
+    builder.add_edge(n6, n7, (), false);
 
-    builder.add_edge(n7, n8, ());
+    builder.add_edge(n7, n8, (), false);
 
-    builder.add_edge(n8, n1, ());
+    builder.add_edge(n8, n1, (), false);
 
     let graph = builder.build();
 
@@ -471,51 +471,51 @@ fn flower_snark() {
     let n19 = builder.add_node(());
     let n20 = builder.add_node(());
 
-    builder.add_edge(n1, n2, ());
-    builder.add_edge(n2, n3, ());
-    builder.add_edge(n3, n4, ());
-    builder.add_edge(n4, n5, ());
-    builder.add_edge(n5, n1, ());
+    builder.add_edge(n1, n2, (), false);
+    builder.add_edge(n2, n3, (), false);
+    builder.add_edge(n3, n4, (), false);
+    builder.add_edge(n4, n5, (), false);
+    builder.add_edge(n5, n1, (), false);
 
-    builder.add_edge(n6, n1, ()); // center
-    builder.add_edge(n6, n7, ()); //next
+    builder.add_edge(n6, n1, (), false); // center
+    builder.add_edge(n6, n7, (), false); //next
 
-    builder.add_edge(n7, n17, ()); //+10
-    builder.add_edge(n7, n8, ()); //next
+    builder.add_edge(n7, n17, (), false); //+10
+    builder.add_edge(n7, n8, (), false); //next
 
-    builder.add_edge(n8, n13, ()); //+5
-    builder.add_edge(n8, n9, ()); //next
+    builder.add_edge(n8, n13, (), false); //+5
+    builder.add_edge(n8, n9, (), false); //next
 
-    builder.add_edge(n9, n2, ()); //center
-    builder.add_edge(n9, n10, ()); //next
+    builder.add_edge(n9, n2, (), false); //center
+    builder.add_edge(n9, n10, (), false); //next
 
-    builder.add_edge(n10, n20, ()); //+10
-    builder.add_edge(n10, n11, ()); //next
+    builder.add_edge(n10, n20, (), false); //+10
+    builder.add_edge(n10, n11, (), false); //next
 
-    builder.add_edge(n11, n16, ()); //+5
-    builder.add_edge(n11, n12, ()); //next
+    builder.add_edge(n11, n16, (), false); //+5
+    builder.add_edge(n11, n12, (), false); //next
 
-    builder.add_edge(n12, n3, ()); //center
-    builder.add_edge(n12, n13, ()); //next
+    builder.add_edge(n12, n3, (), false); //center
+    builder.add_edge(n12, n13, (), false); //next
 
-    builder.add_edge(n13, n14, ()); //next
+    builder.add_edge(n13, n14, (), false); //next
 
-    builder.add_edge(n14, n19, ()); //+5
-    builder.add_edge(n14, n15, ()); //next
+    builder.add_edge(n14, n19, (), false); //+5
+    builder.add_edge(n14, n15, (), false); //next
 
-    builder.add_edge(n15, n4, ()); //center
-    builder.add_edge(n15, n16, ()); //next
+    builder.add_edge(n15, n4, (), false); //center
+    builder.add_edge(n15, n16, (), false); //next
 
-    builder.add_edge(n16, n17, ()); //next
+    builder.add_edge(n16, n17, (), false); //next
 
-    builder.add_edge(n17, n18, ()); //next
+    builder.add_edge(n17, n18, (), false); //next
 
-    builder.add_edge(n18, n5, ()); //center
-    builder.add_edge(n18, n19, ()); //next
+    builder.add_edge(n18, n5, (), false); //center
+    builder.add_edge(n18, n19, (), false); //next
 
-    builder.add_edge(n19, n20, ()); //next
+    builder.add_edge(n19, n20, (), false); //next
 
-    builder.add_edge(n20, n6, ()); //next
+    builder.add_edge(n20, n6, (), false); //next
 
     let graph = builder.build();
 
