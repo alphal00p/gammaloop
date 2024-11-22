@@ -16,6 +16,7 @@ use crate::graph::BareGraph;
 use crate::momentum::{Rotatable, Rotation};
 
 use crate::numerator::{Evaluators, Numerator};
+use crate::utils::SmallSquareMatrix;
 use crate::{
     cff::{
         esurface::{
@@ -325,6 +326,8 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     prefactor: Complex<F<T>>,
     tropical_metadata: &'a TropicalSamplingMetadata<T>,
     edge_weights: &'a [f64],
+    a_matrix: SmallSquareMatrix<F<T>>,
+    a_matrix_inverse: SmallSquareMatrix<F<T>>,
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
@@ -348,6 +351,14 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         let loop_number = graph.loop_momentum_basis.basis.len();
         let prefactor = -Complex::new(sample.zero(), -sample.one()).pow(loop_number as u64);
 
+        let multiplicative_factor = (&tropical_metadata.v
+            / (sample.one().from_usize(2) * &tropical_metadata.lambda))
+            .sqrt();
+        let mul_factor_inv = multiplicative_factor.inv();
+
+        let a_matrix = &tropical_metadata.q_transposed_inverse * &multiplicative_factor;
+        let a_matrix_inverse = &tropical_metadata.q_transposed * &mul_factor_inv;
+
         Self {
             real_mass_vector,
             e_cm,
@@ -360,6 +371,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             prefactor,
             tropical_metadata,
             edge_weights,
+            a_matrix,
+            a_matrix_inverse,
         }
     }
 
@@ -414,6 +427,21 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         let (hemispherical_unit_shifted_momenta, hemispherical_radius) =
             normalize_momenta(&shifted_momenta);
 
+        let shift = &self.a_matrix_inverse * self.tropical_metadata.shift.as_slice();
+
+        let q_prime_vectors = self
+            .tropical_metadata
+            .q_vectors
+            .iter()
+            .zip(&shift)
+            .map(|(q, a_c)| q + a_c)
+            .collect_vec();
+
+        let (_, q_norm) = normalize_momenta(&self.tropical_metadata.q_vectors);
+        let q_squared = &q_norm * &q_norm;
+
+        let (_q_prime_hat, radius_q) = normalize_momenta(&q_prime_vectors);
+
         if self.settings.general.debug > 0 {
             DEBUG_LOGGER.write("hemispherical_radius", &hemispherical_radius);
         }
@@ -425,6 +453,10 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             unrotated_center,
             hemispherical_unit_shifted_momenta,
             hemispherical_radius,
+            q_prime_vectors,
+            radius_q,
+            q_squared,
+            tropical_shift: shift,
         }
     }
 }
@@ -436,6 +468,10 @@ struct OverlapBuilder<'a, T: FloatLike> {
     unrotated_center: Vec<ThreeMomentum<F<T>>>,
     hemispherical_unit_shifted_momenta: Vec<ThreeMomentum<F<T>>>,
     hemispherical_radius: F<T>,
+    q_prime_vectors: Vec<ThreeMomentum<F<T>>>,
+    radius_q: F<T>,
+    q_squared: F<T>,
+    tropical_shift: Vec<ThreeMomentum<F<T>>>,
 }
 
 impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
@@ -548,54 +584,12 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                 .map(|(k, center)| k * &solution.solution + center)
                 .collect_vec();
 
-            let loop_number = rstar_loop_momenta.len();
-
-            let lambda = &self
+            let qstar_prime = &self
                 .esurface_ct_builder
                 .overlap_builder
                 .counterterm_builder
-                .tropical_metadata
-                .lambda;
-
-            let v = &self
-                .esurface_ct_builder
-                .overlap_builder
-                .counterterm_builder
-                .tropical_metadata
-                .v;
-
-            let kq_transformation_prefactor = (v.from_usize(2) * lambda / v).sqrt();
-
-            let qstar_loop_momenta_step_1 = self
-                .esurface_ct_builder
-                .overlap_builder
-                .counterterm_builder
-                .tropical_metadata
-                .shift
-                .iter()
-                .zip(&rstar_loop_momenta)
-                .map(|(shift, rstar_loop_momentum)| {
-                    (rstar_loop_momentum - shift) * &kq_transformation_prefactor
-                })
-                .collect_vec();
-
-            let qstar_loop_momenta = (0..loop_number)
-                .map(|loop_index| {
-                    qstar_loop_momenta_step_1
-                        .iter()
-                        .enumerate()
-                        .map(|(loop_index_prime, vec)| {
-                            vec * &self
-                                .esurface_ct_builder
-                                .overlap_builder
-                                .counterterm_builder
-                                .tropical_metadata
-                                .q_transposed[(loop_index, loop_index_prime)]
-                        })
-                        .reduce(|acc, x| acc + x)
-                        .unwrap()
-                })
-                .collect_vec();
+                .a_matrix_inverse
+                * rstar_loop_momenta.as_slice();
 
             // some gymnastics to get the sample right
             // do not touch!
@@ -617,7 +611,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                     sample_to_modify.sample.loop_moms = rstar_loop_momenta;
                     RstarSample {
                         sample: sample_to_modify,
-                        qstar_vector: qstar_loop_momenta,
+                        qstar_prime,
                     }
                 }
                 Some(_) => {
@@ -647,7 +641,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                     sample_to_modify.sample.loop_moms = new_unrotated_momenta;
                     RstarSample {
                         sample: sample_to_modify,
-                        qstar_vector: qstar_loop_momenta,
+                        qstar_prime,
                     }
                 }
             }
@@ -662,7 +656,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
 
 struct RstarSample<T: FloatLike> {
     sample: DefaultSample<T>,
-    qstar_vector: Vec<ThreeMomentum<F<T>>>,
+    qstar_prime: Vec<ThreeMomentum<F<T>>>,
 }
 
 struct RstarSamples<'a, T: FloatLike> {
@@ -762,89 +756,143 @@ struct ResiudeEval<'a, T: FloatLike> {
 
 impl<'a, T: FloatLike> ResiudeEval<'a, T> {
     fn compute_counterterm(self) -> CounterTermResult<'a, T> {
-        let r = &self
-            .rstar_samples
-            .rstar_solutions
-            .esurface_ct_builder
-            .overlap_builder
-            .hemispherical_radius;
+        //let r = &self
+        //    .rstar_samples
+        //    .rstar_solutions
+        //    .esurface_ct_builder
+        //    .overlap_builder
+        //    .hemispherical_radius;
+        let esurface_ct_builder = &self.rstar_samples.rstar_solutions.esurface_ct_builder;
+        let overlap_builder = &esurface_ct_builder.overlap_builder;
+        let ct_builder = overlap_builder.counterterm_builder;
 
-        let e_cm = &self
-            .rstar_samples
-            .rstar_solutions
-            .esurface_ct_builder
-            .overlap_builder
-            .counterterm_builder
-            .e_cm;
+        let rq = &esurface_ct_builder.overlap_builder.radius_q;
 
-        let prefactor = &self
-            .rstar_samples
-            .rstar_solutions
-            .esurface_ct_builder
-            .overlap_builder
-            .counterterm_builder
-            .prefactor;
+        let e_cm = &ct_builder.e_cm;
 
-        let settings = self
-            .rstar_samples
-            .rstar_solutions
-            .esurface_ct_builder
-            .overlap_builder
-            .counterterm_builder
-            .settings;
+        let prefactor = &ct_builder.prefactor;
+
+        let settings = ct_builder.settings;
+
+        let a_matrix = &ct_builder.a_matrix;
 
         let (cts_plus, cts_minus): (SingleCTData<T>, SingleCTData<T>) = self
             .residues
             .iter()
             .enumerate()
             .map(|(sign_index, residue)| {
-                let rstar = &self.rstar_samples.rstar_solutions.solutions[sign_index].solution;
-                let rstar_derivative = &self.rstar_samples.rstar_solutions.solutions[sign_index]
-                    .derivative_at_solution;
+                //let rstar = &self.rstar_samples.rstar_solutions.solutions[sign_index].solution;
+
+                let q_star = &self.rstar_samples.rstar_samples[sign_index]
+                    .qstar_prime
+                    .iter()
+                    .zip(&overlap_builder.tropical_shift)
+                    .map(|(qstar_prime, a_c)| qstar_prime - a_c)
+                    .collect_vec();
+
+                let (qstar_prime_normalized, rq_star) =
+                    normalize_momenta(&self.rstar_samples.rstar_samples[sign_index].qstar_prime);
+
+                let (_qstar_normalized, q_star_norm) = normalize_momenta(q_star);
+
+                let q_star_squared = &q_star_norm * &q_star_norm;
+
                 let loop_number = self.rstar_samples.rstar_samples[sign_index]
                     .sample
                     .loop_moms()
                     .len();
 
-                let jacobian_ratio = (rstar / r).abs().pow(3 * loop_number as u64 - 1);
+                let qstar_transformed = a_matrix * qstar_prime_normalized.as_slice();
+
+                // let rstar_derivative = &self.rstar_samples.rstar_solutions.solutions[sign_index]
+                //     .derivative_at_solution;
+
+                let rq_star_derivative: F<T> = esurface_ct_builder.esurface.compute_rq_derivative(
+                    self.rstar_samples.rstar_samples[sign_index]
+                        .sample
+                        .loop_moms(),
+                    &qstar_transformed,
+                    self.rstar_samples.rstar_samples[sign_index]
+                        .sample
+                        .external_moms(),
+                    &ct_builder.graph.loop_momentum_basis,
+                    &ct_builder.real_mass_vector,
+                );
+
+                let jacobian_ratio = (&rq_star / rq).abs().pow(3 * loop_number as u64 - 1);
+
+                let exponential_correction_factor_1 = (-&q_star_squared / e_cm.from_usize(2)).exp();
+
+                let exponential_correction_factor_2 =
+                    (&overlap_builder.q_squared.abs() / e_cm.from_usize(2)).exp();
 
                 let uv_localisation = evaluate_uv_localisation(
-                    r,
-                    rstar,
-                    e_cm,
+                    rq,
+                    &rq_star,
+                    &e_cm.one(),
                     &settings.subtraction.local_ct_settings.uv_localisation,
                 );
 
                 let singularity_dampener = evaluate_singularity_dampener(
-                    r,
-                    rstar,
+                    rq,
+                    &rq_star,
                     &settings
                         .subtraction
                         .local_ct_settings
                         .dampen_integrable_singularity,
                 );
 
+                let delta_rq = rq - &rq_star;
+                let esurface_id = ct_builder.counterterm.existing_esurfaces
+                    [esurface_ct_builder.existing_esurface_id];
+
+                if settings.general.debug > 1 && delta_rq.abs() < rq.one() {
+                    println!("esurface_id: {}", Into::<usize>::into(esurface_id));
+                    println!("delta_r: {}  ", delta_rq);
+                    let esurf_approx = &delta_rq * &rq_star_derivative;
+                    println!("esurf_approx: {}", esurf_approx);
+                    let esurface_value = esurface_ct_builder.esurface.compute_from_momenta(
+                        &ct_builder.graph.loop_momentum_basis,
+                        &ct_builder.real_mass_vector,
+                        ct_builder.sample.loop_moms(),
+                        ct_builder.sample.external_moms(),
+                    );
+
+                    println!("esurface_value: {}", esurface_value);
+                    println!(
+                        "exponential correction factors: {}",
+                        &exponential_correction_factor_1 * &exponential_correction_factor_2
+                    );
+
+                    println!("jacobian_ratio: {}", jacobian_ratio);
+                }
+
                 let local_counterterm = &residue.residue
-                    * rstar_derivative.inv()
-                    * (r - rstar).inv()
+                    * rq_star_derivative.inv()
+                    * (rq - &rq_star).inv()
                     * &uv_localisation
                     * &jacobian_ratio
                     * &singularity_dampener
-                    * prefactor;
+                    * prefactor
+                    * &exponential_correction_factor_1
+                    * &exponential_correction_factor_2;
 
                 let h_function = evaluate_integrated_ct_normalisation(
-                    r,
-                    rstar,
-                    e_cm,
+                    rq,
+                    &rq_star,
+                    &e_cm.one(),
                     &settings.subtraction.integrated_ct_settings,
                 );
 
-                let i = Complex::new_im(r.one());
+                let i = Complex::new_im(e_cm.one());
 
-                let integrated_counterterm = &i * r.PI() * &residue.residue / -rstar_derivative
+                let integrated_counterterm = &i * e_cm.PI() * &residue.residue
+                    / -rq_star_derivative
                     * &h_function
                     * &jacobian_ratio
-                    * prefactor;
+                    * prefactor
+                    * &exponential_correction_factor_1
+                    * &exponential_correction_factor_2;
 
                 SingleCTData {
                     jacobian_ratio,
