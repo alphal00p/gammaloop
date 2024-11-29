@@ -714,9 +714,9 @@ impl Externals {
         }
     }
 
-    pub fn pdf(&self, _x_space_point: &[F<f64>]) -> F<f64> {
+    pub fn pdf<T: FloatLike>(&self, _x_space_point: &[F<T>]) -> F<T> {
         match self {
-            Externals::Constant { .. } => F(1.0),
+            Externals::Constant { .. } => F::from_f64(1.0),
         }
     }
 }

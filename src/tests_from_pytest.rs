@@ -158,7 +158,7 @@ where
         loop_moms.push(ThreeMomentum::new(F(rng.gen()), F(rng.gen()), F(rng.gen())));
     }
 
-    let jacobian = F(1.0);
+    let jacobian = F::from_f64(1.0);
 
     let helicities = if let Some(hel) = helicities {
         if hel.len() != n_indep_externals + 1 {

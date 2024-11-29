@@ -17,8 +17,8 @@ use crate::momentum::{
 use crate::numerator::Evaluators;
 use crate::subtraction::static_counterterm::CounterTerm;
 use crate::utils::{
-    self, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
-    PrecisionUpgradable, SmallSquareMatrix, F,
+    self, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize,
+    FloatLike, PrecisionUpgradable, SmallSquareMatrix, F,
 };
 use crate::{
     DiscreteGraphSamplingSettings, Externals, IntegratedPhase, Polarizations, SamplingSettings,
@@ -631,43 +631,6 @@ impl HasIntegrand for GammaLoopIntegrand {
         // create an iterator containing the information for evaluation at each stability level
         let stability_iterator = self.create_stability_vec(use_f128);
 
-        let before_parameterization = std::time::Instant::now();
-        let sample_point_result = self.parameterize(sample);
-        let sample_point = match sample_point_result {
-            Ok(sample_point) => sample_point,
-            Err(_) => {
-                return EvaluationResult {
-                    integrand_result: Complex::new_zero(),
-                    integrator_weight: F(0.0),
-                    event_buffer: vec![],
-                    evaluation_metadata: EvaluationMetaData {
-                        total_timing: Duration::ZERO,
-                        rep3d_evaluation_time: Duration::ZERO,
-                        parameterization_time: Duration::ZERO,
-                        relative_instability_error: Complex::new_zero(),
-                        highest_precision: Precision::Double,
-                        is_nan: true,
-                    },
-                };
-            }
-        };
-
-        if self.global_data.settings.general.debug > 0 {
-            DEBUG_LOGGER.write("jacobian", &sample_point.get_default_sample().jacobian());
-        }
-
-        let parameterization_time = before_parameterization.elapsed();
-
-        // rotate the momenta for the stability tests.
-        let samples: Vec<_> = self
-            .global_data
-            .rotations
-            .iter()
-            .zip(self.global_data.externals.iter().cloned())
-            .zip(self.global_data.polarizations.iter().cloned())
-            .map(|((r, e), p)| (sample_point.get_rotated_sample(r, e, p)))
-            .collect(); //since the first rotation is the identity, the first sample is the same as the original sample
-
         // 1 / (2 pi )^L
         let prefactor = F(self.compute_2pi_factor().inv());
 
@@ -678,11 +641,11 @@ impl HasIntegrand for GammaLoopIntegrand {
         // iterate over the stability levels, break if the point is stable
         for stability_level in &stability_iterator {
             // evaluate the integrand at the current stability level
-            let (results, duration) = self.evaluate_at_prec(&samples, stability_level.precision);
+            let (results, duration) = self.evaluate_at_prec(sample, stability_level.precision);
+
             let results_scaled = results
                 .iter()
-                .zip(samples.iter())
-                .map(|(result, sample)| result * sample.get_default_sample().jacobian() * prefactor)
+                .map(|result| result * prefactor)
                 .collect_vec();
 
             // check for the stability
@@ -728,7 +691,8 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         let evaluation_metadata = EvaluationMetaData {
             rep3d_evaluation_time: *duration,
-            parameterization_time,
+            parameterization_time: *duration,
+            // this is wrong
             relative_instability_error: Complex::new_zero(),
             highest_precision: *precision,
             total_timing: start_evaluate_sample.elapsed(),
@@ -769,7 +733,7 @@ impl GammaLoopIntegrand {
     /// This function performs the evaluation twice, once for the original sample and once for the rotated sample.
     fn evaluate_at_prec(
         &mut self,
-        samples: &[GammaLoopSample<f64>],
+        sample: &Sample<F<f64>>,
         precision: Precision,
     ) -> (Vec<Complex<F<f64>>>, Duration) {
         // measure timing if we are below the max number if we are below the max number
@@ -779,93 +743,148 @@ impl GammaLoopIntegrand {
             Precision::Single => {
                 unimplemented!("From<f64> for f32 can't be implemented")
             }
-            Precision::Double => match &mut self.graph_integrands {
-                GraphIntegrands::Amplitude(graph_integrands) => samples
-                    .iter()
-                    .zip(self.global_data.rotations.iter())
-                    .map(|(sample, rotation_for_overlap)| {
-                        if self.global_data.settings.general.debug > 0 {
-                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
-                                rotation_for_overlap.setting(),
-                                precision,
-                            )));
-                        }
+            Precision::Double => {
+                let before_parameterization = std::time::Instant::now();
+                let sample_point_result = self.parameterize(sample);
+                let sample_point = match sample_point_result {
+                    Ok(sample_point) => sample_point,
+                    Err(_) => {
+                        todo!()
+                    }
+                };
 
-                        evaluate(
-                            graph_integrands,
-                            sample,
-                            rotation_for_overlap,
-                            &self.global_data.settings,
-                        )
-                    })
-                    .collect(),
-                GraphIntegrands::CrossSection(graph_integrands) => samples
-                    .iter()
-                    .zip(self.global_data.rotations.iter())
-                    .map(|(sample, rotate_overlap_centers)| {
-                        if self.global_data.settings.general.debug > 0 {
-                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
-                                rotate_overlap_centers.setting(),
-                                precision,
-                            )));
-                        }
-                        evaluate(
-                            graph_integrands,
-                            sample,
-                            rotate_overlap_centers,
-                            &self.global_data.settings,
-                        )
-                    })
-                    .collect(),
-            },
-            Precision::Quad => match &mut self.graph_integrands {
-                GraphIntegrands::Amplitude(graph_integrands) => samples
-                    .iter()
-                    .zip(self.global_data.rotations.iter())
-                    .map(|(sample, rotate_overlap_centers)| {
-                        if self.global_data.settings.general.debug > 0 {
-                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
-                                rotate_overlap_centers.setting(),
-                                precision,
-                            )));
-                        }
+                if self.global_data.settings.general.debug > 0 {
+                    DEBUG_LOGGER.write("jacobian", &sample_point.get_default_sample().jacobian());
+                }
 
-                        evaluate(
-                            graph_integrands,
-                            &sample.higher_precision(),
-                            rotate_overlap_centers,
-                            &self.global_data.settings,
-                        )
-                        .lower()
-                    })
-                    .collect(),
-                GraphIntegrands::CrossSection(graph_integrands) => samples
-                    .iter()
-                    .zip(self.global_data.rotations.iter())
-                    .map(|(sample, rotate_overlap_centers)| {
-                        if self.global_data.settings.general.debug > 0 {
-                            DEBUG_LOGGER.set_state(EvalState::PrecRot((
-                                rotate_overlap_centers.setting(),
-                                precision,
-                            )));
-                        }
+                let parameterization_time = before_parameterization.elapsed();
 
-                        evaluate(
-                            graph_integrands,
-                            &sample.higher_precision(),
-                            rotate_overlap_centers,
-                            &self.global_data.settings,
-                        )
-                        .lower()
-                    })
-                    .collect(),
-            },
+                // rotate the momenta for the stability tests.
+                let samples: Vec<_> = self
+                    .global_data
+                    .rotations
+                    .iter()
+                    .zip(self.global_data.externals.iter().cloned())
+                    .zip(self.global_data.polarizations.iter().cloned())
+                    .map(|((r, e), p)| (sample_point.get_rotated_sample(r, e, p)))
+                    .collect(); //since the first rotation is the identity, the first sample is the same as the original sample
+
+                match &mut self.graph_integrands {
+                    GraphIntegrands::Amplitude(graph_integrands) => samples
+                        .iter()
+                        .zip(self.global_data.rotations.iter())
+                        .map(|(sample, rotation_for_overlap)| {
+                            if self.global_data.settings.general.debug > 0 {
+                                DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                    rotation_for_overlap.setting(),
+                                    precision,
+                                )));
+                            }
+
+                            evaluate(
+                                graph_integrands,
+                                sample,
+                                rotation_for_overlap,
+                                &self.global_data.settings,
+                            ) * sample.get_default_sample().jacobian()
+                        })
+                        .collect(),
+                    GraphIntegrands::CrossSection(graph_integrands) => samples
+                        .iter()
+                        .zip(self.global_data.rotations.iter())
+                        .map(|(sample, rotate_overlap_centers)| {
+                            if self.global_data.settings.general.debug > 0 {
+                                DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                    rotate_overlap_centers.setting(),
+                                    precision,
+                                )));
+                            }
+                            evaluate(
+                                graph_integrands,
+                                sample,
+                                rotate_overlap_centers,
+                                &self.global_data.settings,
+                            ) * sample.get_default_sample().jacobian()
+                        })
+                        .collect(),
+                }
+            }
+            Precision::Quad => {
+                let before_parameterization = std::time::Instant::now();
+                let sample_point_result: Result<GammaLoopSample<f128>, String> =
+                    self.parameterize(sample);
+                let sample_point = match sample_point_result {
+                    Ok(sample_point) => sample_point,
+                    Err(_) => {
+                        todo!()
+                    }
+                };
+
+                if self.global_data.settings.general.debug > 0 {
+                    DEBUG_LOGGER.write("jacobian", &sample_point.get_default_sample().jacobian());
+                }
+
+                let parameterization_time = before_parameterization.elapsed();
+
+                // rotate the momenta for the stability tests.
+                let samples: Vec<_> = self
+                    .global_data
+                    .rotations
+                    .iter()
+                    .zip(self.global_data.externals.iter().cloned())
+                    .zip(self.global_data.polarizations.iter().cloned())
+                    .map(|((r, e), p)| (sample_point.get_rotated_sample(r, e, p)))
+                    .collect(); //since the first rotation is the identity, the first sample is the same as the original sample
+
+                match &mut self.graph_integrands {
+                    GraphIntegrands::Amplitude(graph_integrands) => samples
+                        .iter()
+                        .zip(self.global_data.rotations.iter())
+                        .map(|(sample, rotate_overlap_centers)| {
+                            if self.global_data.settings.general.debug > 0 {
+                                DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                    rotate_overlap_centers.setting(),
+                                    precision,
+                                )));
+                            }
+
+                            (evaluate(
+                                graph_integrands,
+                                &sample.higher_precision(),
+                                rotate_overlap_centers,
+                                &self.global_data.settings,
+                            ) * sample.get_default_sample().jacobian())
+                            .lower()
+                        })
+                        .collect(),
+                    GraphIntegrands::CrossSection(graph_integrands) => samples
+                        .iter()
+                        .zip(self.global_data.rotations.iter())
+                        .map(|(sample, rotate_overlap_centers)| {
+                            if self.global_data.settings.general.debug > 0 {
+                                DEBUG_LOGGER.set_state(EvalState::PrecRot((
+                                    rotate_overlap_centers.setting(),
+                                    precision,
+                                )));
+                            }
+
+                            (evaluate(
+                                graph_integrands,
+                                &sample.higher_precision(),
+                                rotate_overlap_centers,
+                                &self.global_data.settings,
+                            ) * sample.get_default_sample().jacobian())
+                            .lower()
+                        })
+                        .collect(),
+                }
+            }
             Precision::Arb(_prec) => {
                 unimplemented!("need better traits to use arb prec")
             }
         };
 
-        let duration = start.elapsed() / (samples.len() as u32);
+        let duration = start.elapsed() / (self.global_data.rotations.len() as u32);
 
         (results, duration)
     }
@@ -895,42 +914,52 @@ impl GammaLoopIntegrand {
 
     /// Perform map from unit hypercube to 3-momenta
     #[inline]
-    fn parameterize(&self, sample_point: &Sample<F<f64>>) -> Result<GammaLoopSample<f64>, String> {
+    fn parameterize<T: FloatLike>(
+        &self,
+        sample_point: &Sample<F<f64>>,
+    ) -> Result<GammaLoopSample<T>, String> {
         match &self.global_data.settings.sampling {
             SamplingSettings::Default => {
                 let xs = unwrap_cont_sample(sample_point);
-                Ok(GammaLoopSample::Default(self.default_parametrize(xs, 0)))
+                let xs_upgraded = xs.iter().map(|x| F::<T>::from_ff64(*x)).collect_vec();
+                Ok(GammaLoopSample::Default(
+                    self.default_parametrize(&xs_upgraded, 0),
+                ))
             }
             SamplingSettings::MultiChanneling(multichanneling_settings) => {
                 let xs = unwrap_cont_sample(sample_point);
+                let xs_upgraded = xs.iter().map(|x| F::<T>::from_ff64(*x)).collect_vec();
                 Ok(GammaLoopSample::MultiChanneling {
                     alpha: multichanneling_settings.alpha,
-                    sample: self.default_parametrize(xs, 0),
+                    sample: self.default_parametrize(&xs_upgraded, 0),
                 })
             }
             SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
                 match discrete_graph_settings {
                     DiscreteGraphSamplingSettings::Default => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
+                        let xs_upgraded = xs.iter().map(|x| F::<T>::from_ff64(*x)).collect_vec();
                         Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::Default(
-                                self.default_parametrize(xs, graph_id),
+                                self.default_parametrize(&xs_upgraded, graph_id),
                             ),
                         })
                     }
                     DiscreteGraphSamplingSettings::MultiChanneling(multichanneling_settings) => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
+                        let xs_upgraded = xs.iter().map(|x| F::<T>::from_ff64(*x)).collect_vec();
                         Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::MultiChanneling {
                                 alpha: multichanneling_settings.alpha,
-                                sample: self.default_parametrize(xs, graph_id),
+                                sample: self.default_parametrize(&xs_upgraded, graph_id),
                             },
                         })
                     }
                     DiscreteGraphSamplingSettings::TropicalSampling(tropical_sampling_settings) => {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
+                        let xs_upgraded = xs.iter().map(|x| F::<T>::from_ff64(*x)).collect_vec();
                         let externals = &self.global_data.settings.kinematics.externals;
 
                         let graph = match &self.graph_integrands {
@@ -945,6 +974,7 @@ impl GammaLoopIntegrand {
                             .tropical_subgraph_table
                             .as_ref()
                             .unwrap();
+
                         let xs_f64 = xs.iter().map(|x| x.0).collect_vec();
 
                         let edge_data = graph
@@ -952,7 +982,8 @@ impl GammaLoopIntegrand {
                             .get_loop_edges_iterator()
                             .map(|(edge_id, edge)| {
                                 let mass = edge.particle.mass.value;
-                                let mass_re = mass.map(|complex_mass| complex_mass.re.0);
+                                let mass_re =
+                                    mass.map(|complex_mass| F::from_ff64(complex_mass.re));
 
                                 let shift = utils::compute_shift_part(
                                     &graph.bare_graph.loop_momentum_basis.edge_signatures[edge_id]
@@ -961,9 +992,9 @@ impl GammaLoopIntegrand {
                                 );
 
                                 let shift_momtrop = Vector::from_array([
-                                    shift.spatial.px.0,
-                                    shift.spatial.py.0,
-                                    shift.spatial.pz.0,
+                                    F::from_ff64(shift.spatial.px),
+                                    F::from_ff64(shift.spatial.py),
+                                    F::from_ff64(shift.spatial.pz),
                                 ]);
 
                                 (mass_re, shift_momtrop)
@@ -971,7 +1002,7 @@ impl GammaLoopIntegrand {
                             .collect_vec();
 
                         let sampling_result_result = sampler.generate_sample_from_x_space_point(
-                            &xs_f64,
+                            &xs_upgraded,
                             edge_data,
                             &tropical_sampling_settings.into_tropical_sampling_settings(
                                 self.global_data.settings.general.debug,
@@ -989,22 +1020,21 @@ impl GammaLoopIntegrand {
                         let loop_moms = sampling_result
                             .loop_momenta
                             .into_iter()
-                            .map(Into::<ThreeMomentum<F<f64>>>::into)
+                            .map(Into::<ThreeMomentum<F<T>>>::into)
                             .collect_vec();
 
                         let default_sample = DefaultSample::new(
                             loop_moms,
                             externals,
-                            F(sampling_result.jacobian) * externals.pdf(xs),
+                            sampling_result.jacobian * externals.pdf(&xs_upgraded),
                             &self.global_data.polarizations[0],
                             &graph.bare_graph.external_in_or_out_signature(),
                         );
 
                         let momtrop_metadata = sampling_result.metadata.unwrap();
-                        let lambda = F::from_f64(momtrop_metadata.lambda);
-                        let v = F::from_f64(sampling_result.v);
-                        let determinant =
-                            F::from_f64(momtrop_metadata.decompoisiton_result.determinant);
+                        let lambda = momtrop_metadata.lambda;
+                        let v = sampling_result.v;
+                        let determinant = momtrop_metadata.decompoisiton_result.determinant;
 
                         let l_matrix = momtrop_metadata.l_matrix.into();
                         let l_matrix_inverse = momtrop_metadata.decompoisiton_result.inverse.into();
@@ -1019,31 +1049,19 @@ impl GammaLoopIntegrand {
                         let q_vectors = momtrop_metadata
                             .q_vectors
                             .into_iter()
-                            .map(|vec| ThreeMomentum {
-                                px: F(vec[0]),
-                                py: F(vec[1]),
-                                pz: F(vec[2]),
-                            })
+                            .map(|vec| ThreeMomentum::from(vec.get_elements()))
                             .collect();
 
                         let shift = momtrop_metadata
                             .shift
                             .into_iter()
-                            .map(|vec| -ThreeMomentum {
-                                px: F(vec[0]),
-                                py: F(vec[1]),
-                                pz: F(vec[2]),
-                            })
+                            .map(|vec| -ThreeMomentum::from(vec.get_elements()))
                             .collect();
 
                         let u_vectors = momtrop_metadata
                             .u_vectors
                             .into_iter()
-                            .map(|vec| ThreeMomentum {
-                                px: F(vec[0]),
-                                py: F(vec[1]),
-                                pz: F(vec[2]),
-                            })
+                            .map(|vec| ThreeMomentum::from(vec.get_elements()))
                             .collect();
 
                         let tropical_sampling_metadata = TropicalSamplingMetadata {
@@ -1072,12 +1090,13 @@ impl GammaLoopIntegrand {
                     ) => {
                         let (graph_id, (channel_id, xs)) =
                             unwrap_double_discrete_sample(sample_point);
+                        let xs_upgraded = xs.iter().map(|x| F::<T>::from_ff64(*x)).collect_vec();
                         Ok(GammaLoopSample::DiscreteGraph {
                             graph_id,
                             sample: DiscreteGraphSample::DiscreteMultiChanneling {
                                 alpha: multichanneling_settings.alpha,
                                 channel_id,
-                                sample: self.default_parametrize(xs, graph_id),
+                                sample: self.default_parametrize(&xs_upgraded, graph_id),
                             },
                         })
                     }
@@ -1088,12 +1107,12 @@ impl GammaLoopIntegrand {
 
     /// Default parametrize is basically everything except tropical sampling.
     #[inline]
-    fn default_parametrize(&self, xs: &[F<f64>], graph_id: usize) -> DefaultSample<f64> {
+    fn default_parametrize<T: FloatLike>(&self, xs: &[F<T>], graph_id: usize) -> DefaultSample<T> {
         let externals = &self.global_data.settings.kinematics.externals;
 
         let (loop_moms_vec, param_jacobian) = global_parameterize(
             xs,
-            self.global_data.settings.kinematics.e_cm.square(),
+            F::from_ff64(self.global_data.settings.kinematics.e_cm).square(),
             &self.global_data.settings,
             false,
         );
@@ -1385,7 +1404,7 @@ pub enum GammaLoopSample<T: FloatLike> {
     },
 }
 
-impl GammaLoopSample<f64> {
+impl<T: FloatLike> GammaLoopSample<T> {
     /// Rotation for stability checks
     #[inline]
     fn get_rotated_sample(
@@ -1398,10 +1417,24 @@ impl GammaLoopSample<f64> {
             return self.clone();
         }
 
-        let rotated_externals = rotated_externals.get_indep_externals();
+        let rotated_externals = rotated_externals
+            .get_indep_externals()
+            .iter()
+            .map(|v| FourMomentum::from_ff64(v))
+            .collect();
+
+        // there is probably a better way to do this @Lucien
         let rotated_polarizations = match rotated_polarizations {
             Polarizations::None => vec![],
-            Polarizations::Constant { polarizations } => polarizations,
+            Polarizations::Constant { polarizations } => polarizations
+                .iter()
+                .map(|x| {
+                    x.map(|cf_f64| Complex {
+                        re: F::from_ff64(cf_f64.re),
+                        im: F::from_ff64(cf_f64.im),
+                    })
+                })
+                .collect(),
         };
         match self {
             GammaLoopSample::Default(sample) => {
@@ -1537,7 +1570,7 @@ pub struct BareSample<T: FloatLike> {
     pub loop_moms: Vec<ThreeMomentum<F<T>>>,
     pub external_moms: Vec<FourMomentum<F<T>>>,
     pub polarizations: Vec<Polarization<Complex<F<T>>>>,
-    pub jacobian: F<f64>,
+    pub jacobian: F<T>,
 }
 
 use uuid::Uuid;
@@ -1569,7 +1602,7 @@ impl<T: FloatLike> BareSample<T> {
     pub fn new(
         loop_moms: Vec<ThreeMomentum<F<T>>>,
         external_moms: &Externals,
-        jacobian: F<f64>,
+        jacobian: F<T>,
         polarizations: &Polarizations,
         external_signature: &Signature,
     ) -> Self {
@@ -1628,7 +1661,7 @@ impl<T: FloatLike> BareSample<T> {
                 .iter()
                 .map(Polarization::complex_cast)
                 .collect_vec(),
-            jacobian: self.jacobian,
+            jacobian: self.jacobian.clone().into(),
         }
     }
 
@@ -1652,7 +1685,7 @@ impl<T: FloatLike> BareSample<T> {
                 .iter()
                 .map(Polarization::higher)
                 .collect_vec(),
-            jacobian: self.jacobian,
+            jacobian: self.jacobian.higher(),
         }
     }
 
@@ -1676,7 +1709,7 @@ impl<T: FloatLike> BareSample<T> {
                 .iter()
                 .map(Polarization::lower)
                 .collect_vec(),
-            jacobian: self.jacobian,
+            jacobian: self.jacobian.lower(),
         }
     }
 
@@ -1696,7 +1729,7 @@ impl<T: FloatLike> BareSample<T> {
                 .collect_vec(),
             external_moms: rotated_externals,
             polarizations: rotated_polarizations,
-            jacobian: self.jacobian,
+            jacobian: self.jacobian.clone(),
         }
     }
 
@@ -1718,7 +1751,7 @@ impl<T: FloatLike> BareSample<T> {
                 .iter()
                 .map(|l| l.rotate(rotation))
                 .collect_vec(),
-            jacobian: self.jacobian,
+            jacobian: self.jacobian.clone(),
         }
     }
 }
@@ -1805,18 +1838,18 @@ impl<T: FloatLike> DefaultSample<T> {
         )
     }
 
-    pub fn jacobian(&self) -> F<f64> {
+    pub fn jacobian(&self) -> &F<T> {
         if let Some(rotated_sample) = &self.rotated_sample {
-            rotated_sample.jacobian
+            &rotated_sample.jacobian
         } else {
-            self.sample.jacobian
+            &self.sample.jacobian
         }
     }
 
     pub fn new(
         loop_moms: Vec<ThreeMomentum<F<T>>>,
         external_moms: &Externals,
-        jacobian: F<f64>,
+        jacobian: F<T>,
         polarizations: &Polarizations,
         external_signature: &Signature,
     ) -> Self {

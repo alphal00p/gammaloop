@@ -3407,10 +3407,10 @@ pub struct SmallSquareMatrix<T> {
     pub dim: usize,
 }
 
-impl From<momtrop::matrix::SquareMatrix<f64>> for SmallSquareMatrix<F<f64>> {
-    fn from(value: momtrop::matrix::SquareMatrix<f64>) -> Self {
+impl<T> From<momtrop::matrix::SquareMatrix<T>> for SmallSquareMatrix<T> {
+    fn from(value: momtrop::matrix::SquareMatrix<T>) -> Self {
         let dim = value.get_dim();
-        let data = value.get_raw_data().into_iter().map(F::from_f64).collect();
+        let data = value.get_raw_data();
 
         Self { dim, data }
     }
