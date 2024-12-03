@@ -58,7 +58,7 @@ use symbolica::poly::Variable;
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::AtomView;
+use symbolica::atom::{AtomOrView, AtomView};
 use symbolica::evaluate::ExpressionEvaluator;
 use symbolica::id::{Condition, Match, MatchSettings, PatternOrMap};
 
@@ -821,8 +821,9 @@ impl Numerator<Global> {
 
     fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
         ColorSimplified::isolate_color(&mut expression);
-        // println!("{}", expression);
-        let (mut coefs, rem) = expression.0.coefficient_list(State::get_symbol("color"));
+        let mut coefs = expression
+            .0
+            .coefficient_list::<i32>(&[AtomOrView::Atom(Atom::parse("color").unwrap())]);
         let mut atom = Atom::new_num(0);
         for (key, coef) in coefs.iter_mut() {
             if let AtomView::Fun(f) = key.as_view() {
@@ -843,7 +844,6 @@ impl Numerator<Global> {
             }
             // println!("coef {i}:{}\n", coef.factor());
         }
-        atom = atom + rem;
         expression.0 = atom;
         expression
     }
@@ -1292,7 +1292,13 @@ impl Numerator<ColorSimplified> {
 
     pub fn parse(self) -> Numerator<Network> {
         debug!("Parsing color simplified numerator into network");
+        println!("State colorless: {}", self.state.colorless);
+        println!("State colorful: {}", self.state.color);
         let state = self.state.parse();
+        println!(
+            "Parsing done colorless afterwards: {}",
+            state.net.result_tensor_ref().unwrap()
+        );
         // debug!("");
         Numerator { state }
     }

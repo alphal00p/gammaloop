@@ -1,16 +1,32 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use ahash::HashMap;
+use itertools::zip;
 use log::debug;
 use smartstring::{LazyCompact, SmartString};
+use spenso::iterators::IteratableTensor;
+use spenso::parametric::ParamTensor;
+use spenso::structure::HasStructure;
+use spenso::structure::TensorStructure;
+use spenso::upgrading_arithmetic::FallibleAdd;
+use spenso::upgrading_arithmetic::FallibleSub;
+use symbolica::domains::rational::Rational;
+use symbolica::id::Condition;
+use symbolica::id::MatchSettings;
+use symbolica::id::Pattern;
 
+use super::NumeratorAwareGraphGroupingOption;
 use super::SelfEnergyFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 use crate::model::Particle;
+use crate::numerator::Color;
+use crate::numerator::ContractionSettings;
 use crate::numerator::Numerator;
+use crate::numerator::SymbolicExpression;
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     graph::BareGraph,
@@ -509,6 +525,7 @@ impl FeynGen {
     }
 
     pub fn contains_cut(
+        model: &Model,
         graph: &SymbolicaGraph<i32, &str>,
         n_initial_states: usize,
         particles: &[SmartString<LazyCompact>],
@@ -516,10 +533,23 @@ impl FeynGen {
         // Quick filter to check if the diagram can possibly contain a cut with the right particles and splitting the graph in two parts,
         // as expected for a final-state cut of a forward scattering graph.
 
-        let mut cut_map: std::collections::HashMap<&str, std::vec::Vec<usize>, ahash::RandomState> =
-            HashMap::default();
+        // TODO: replace this with s_and_t_cut from hedge, so as to have proper handling of particle vs anti-particles.
+        //let he_graph = HedgeGraph::from(graph.clone());
+        //he_graph.all_s_t_cuts(s, t, regions)
+
+        // for now normalize it all to particles
+        let mut cut_map: std::collections::HashMap<
+            SmartString<LazyCompact>,
+            std::vec::Vec<usize>,
+            ahash::RandomState,
+        > = HashMap::default();
         for p in particles {
-            cut_map.insert(p.as_str(), vec![]);
+            let particle = model.get_particle(p);
+            if particle.is_antiparticle() {
+                cut_map.insert(particle.get_anti_particle(model).name.clone(), vec![]);
+            } else {
+                cut_map.insert(p.clone(), vec![]);
+            }
         }
         for (i_e, edge) in graph.edges().iter().enumerate() {
             // filter out external edges
@@ -527,7 +557,13 @@ impl FeynGen {
             {
                 continue;
             }
-            if let Some(cut_entry) = cut_map.get_mut(&edge.data) {
+            let particle = model.get_particle(&edge.data.into());
+            let e = if particle.is_antiparticle() {
+                cut_map.get_mut(&particle.get_anti_particle(model).name)
+            } else {
+                cut_map.get_mut(&particle.name)
+            };
+            if let Some(cut_entry) = e {
                 cut_entry.push(i_e);
             }
         }
@@ -580,14 +616,20 @@ impl FeynGen {
             })
             .collect::<Vec<_>>();
 
-        'cutloop: for cut in unique_combinations {
-            for left_node in left_initial_state_positions.iter() {
-                for right_node in right_initial_state_positions.iter() {
+        fn are_incoming_connected_to_outgoing(
+            cut: &[usize],
+            graph: &SymbolicaGraph<i32, &str>,
+            adj_list: &HashMap<usize, Vec<(usize, usize)>>,
+            left_nodes: &[usize],
+            right_nodes: &[usize],
+        ) -> bool {
+            for left_node in left_nodes.iter() {
+                for right_node in right_nodes.iter() {
                     let mut visited: Vec<bool> = vec![false; graph.nodes().len()];
                     let mut stack: Vec<usize> = vec![*left_node];
                     while let Some(node) = stack.pop() {
                         if node == *right_node {
-                            continue 'cutloop;
+                            return true;
                         }
                         visited[node] = true;
                         for (i_e, neighbor) in adj_list[&node].iter() {
@@ -596,6 +638,33 @@ impl FeynGen {
                             }
                         }
                     }
+                }
+            }
+            false
+        }
+
+        'cutloop: for cut in unique_combinations {
+            if are_incoming_connected_to_outgoing(
+                &cut,
+                graph,
+                &adj_list,
+                &left_initial_state_positions,
+                &right_initial_state_positions,
+            ) {
+                continue 'cutloop;
+            }
+            // Make sure the cut is minimal and that no subcut is a valid cut
+            for subcut in (1..=(particles.len() - 1))
+                .flat_map(|offset| cut.iter().combinations(particles.len() - offset))
+            {
+                if !are_incoming_connected_to_outgoing(
+                    subcut.iter().map(|&id| *id).collect::<Vec<_>>().as_slice(),
+                    graph,
+                    &adj_list,
+                    &left_initial_state_positions,
+                    &right_initial_state_positions,
+                ) {
+                    continue 'cutloop;
                 }
             }
             return true;
@@ -645,11 +714,94 @@ impl FeynGen {
             .collect()
     }
 
+    /// This function canonizes the edge and vertex ordering of a graph based on the skeletton graph with only propagator mass as edge color.
+    /// This is useful to then allow for further grouping of isomorphic graphs, incl numerator.
+    #[allow(clippy::type_complexity)]
+    pub fn canonized_edge_and_vertex_ordering<'a>(
+        &self,
+        model: &Model,
+        input_graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
+    ) -> (
+        SymbolicaGraph<i32, std::string::String>,
+        SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
+    ) {
+        // Make sure to canonize the edge ordering based on the skeletton graph with only propagator mass as edge color
+        let mut skeletton_graph = SymbolicaGraph::new();
+        for node in input_graph.nodes() {
+            skeletton_graph.add_node(node.data.0);
+        }
+        for edge in input_graph.edges() {
+            skeletton_graph
+                .add_edge(
+                    edge.vertices.0,
+                    edge.vertices.1,
+                    false,
+                    model.get_particle(&edge.data.into()).mass.to_string(),
+                )
+                .unwrap();
+        }
+        let canonized_skeletton = skeletton_graph.canonize();
+
+        let mut reordered_nodes: Vec<usize> = vec![0; input_graph.nodes().len()];
+        for (input_graph_node_position, node_order) in
+            canonized_skeletton.vertex_map.iter().enumerate()
+        {
+            reordered_nodes[*node_order] = input_graph_node_position;
+        }
+        let mut reordered_edges = input_graph
+            .edges()
+            .iter()
+            .map(|e| {
+                let unoriented_edge = if canonized_skeletton.vertex_map[e.vertices.0]
+                    < canonized_skeletton.vertex_map[e.vertices.1]
+                {
+                    (
+                        canonized_skeletton.vertex_map[e.vertices.0],
+                        canonized_skeletton.vertex_map[e.vertices.1],
+                    )
+                } else {
+                    (
+                        canonized_skeletton.vertex_map[e.vertices.1],
+                        canonized_skeletton.vertex_map[e.vertices.0],
+                    )
+                };
+                (
+                    e,
+                    // This key will serve to give a unique ordering of the edges
+                    (
+                        unoriented_edge.0,
+                        unoriented_edge.1,
+                        model.get_particle(&e.data.into()).mass.to_string(),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        reordered_edges.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        // Sort nodes according to the canonized skeletton graph
+        let mut sorted_g = SymbolicaGraph::new();
+        for node_order in reordered_nodes {
+            sorted_g.add_node(input_graph.nodes()[node_order].data.clone());
+        }
+        for (e, _sorting_key) in reordered_edges.iter() {
+            sorted_g
+                .add_edge(
+                    canonized_skeletton.vertex_map[e.vertices.0],
+                    canonized_skeletton.vertex_map[e.vertices.1],
+                    e.directed,
+                    e.data,
+                )
+                .unwrap();
+        }
+
+        (canonized_skeletton.graph, sorted_g)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn generate(
         &self,
         model: &Model,
-        numerator_aware_isomorphism_grouping: bool,
+        numerator_aware_isomorphism_grouping: NumeratorAwareGraphGroupingOption,
         filter_self_loop: bool,
         graph_prefix: String,
         selected_graphs: Option<Vec<String>>,
@@ -822,6 +974,7 @@ impl FeynGen {
             if !final_state_particles.is_empty() {
                 graphs.retain(|g, _symmetry_factor| {
                     FeynGen::contains_cut(
+                        model,
                         g,
                         self.options.initial_pdgs.len(),
                         final_state_particles.as_slice(),
@@ -973,10 +1126,15 @@ impl FeynGen {
             processed_graphs.len()
         );
 
-        let mut bare_graphs: Vec<BareGraph> = vec![];
+        #[allow(clippy::type_complexity)]
+        let mut pooled_bare_graphs: HashMap<
+            SymbolicaGraph<i32, std::string::String>,
+            Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
+        > = HashMap::default();
 
         for (i_g, (g, symmetry_factor)) in processed_graphs.iter().enumerate() {
-            // Now generate multiple copies of the graph for each vertex and
+            let (canonical_repr, sorted_g) = self.canonized_edge_and_vertex_ordering(model, g);
+
             let graph_name = format!("{}{}", graph_prefix, i_g);
             if let Some(selected_graphs) = &selected_graphs {
                 if !selected_graphs.contains(&graph_name) {
@@ -997,37 +1155,256 @@ impl FeynGen {
             let bare_graph = BareGraph::from_symbolica_graph(
                 model,
                 graph_name,
-                g,
+                &sorted_g,
                 symmetry_factor.clone(),
                 external_connections.clone(),
                 forced_lmb,
             )?;
-            bare_graphs.push(bare_graph);
+            // When disabling numerator-aware graph isomorphism, each graph is added separately
+            if numerator_aware_isomorphism_grouping == NumeratorAwareGraphGroupingOption::NoGrouping
+            {
+                match pooled_bare_graphs.entry(canonical_repr) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(vec![(i_g, None, bare_graph)]);
+                    }
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().push((i_g, None, bare_graph));
+                    }
+                }
+            } else {
+                let numerator = Numerator::default().from_graph(&bare_graph, None);
+                let numerator_color_simplified = numerator.color_simplify();
+                if numerator_color_simplified
+                    .get_single_atom()
+                    .unwrap()
+                    .0
+                    .is_zero()
+                {
+                    continue;
+                }
+                if numerator_aware_isomorphism_grouping
+                    == NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
+                {
+                    match pooled_bare_graphs.entry(canonical_repr) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(vec![(i_g, None, bare_graph)]);
+                        }
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().push((i_g, None, bare_graph));
+                        }
+                    }
+                } else {
+                    // println!(
+                    //     "I have:\n{}",
+                    //     numerator_color_simplified
+                    //         .clone()
+                    //         .parse()
+                    //         .contract(ContractionSettings::<Rational>::Normal)
+                    //         .unwrap()
+                    //         .state
+                    //         .tensor
+                    //         .iter_flat()
+                    //         .map(|(id, d)| format!("{}: {}", id, d))
+                    //         .collect::<Vec<_>>()
+                    //         .join("\n")
+                    // );
+                    let numerator_data = Some(
+                        ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
+                            &numerator_aware_isomorphism_grouping,
+                            i_g,
+                            numerator_color_simplified,
+                        ),
+                    );
+                    // let numerator = Some(
+                    //     numerator_color_simplified
+                    //         .parse()
+                    //         .contract(ContractionSettings::<Rational>::Normal)
+                    //         .unwrap()
+                    //         .state
+                    //         .tensor
+                    //         // TODO: A future implementation of "compare_tensors" should be able to avoid the expansion below.
+                    //         .map_data(|d| d.expand()),
+                    // );
+
+                    match pooled_bare_graphs.entry(canonical_repr) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(vec![(i_g, numerator_data, bare_graph)]);
+                        }
+                        Entry::Occupied(mut entry) => {
+                            let mut found_match = false;
+                            for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
+                                if let Some(ratio) = FeynGen::compare_numerator_tensors(
+                                    &numerator_aware_isomorphism_grouping,
+                                    numerator_data.as_ref().unwrap(),
+                                    other_numerator.as_ref().unwrap(),
+                                ) {
+                                    found_match = true;
+                                    other_graph.overall_factor =
+                                        (Atom::parse(other_graph.overall_factor.as_str()).unwrap()
+                                            + ratio)
+                                            .to_canonical_string();
+                                }
+                            }
+                            if !found_match {
+                                entry.get_mut().push((i_g, numerator_data, bare_graph));
+                            }
+                        }
+                    }
+                }
+            }
         }
+
+        let mut bare_graphs = pooled_bare_graphs
+            .values()
+            .flatten()
+            .filter_map(|(graph_id, _numerator, graph)| {
+                if Atom::parse(&graph.overall_factor)
+                    .unwrap()
+                    .expand()
+                    .is_zero()
+                {
+                    None
+                } else {
+                    Some((*graph_id, graph))
+                }
+            })
+            .collect::<Vec<_>>();
+        bare_graphs.sort_by(|a, b| (a.0).cmp(&b.0));
 
         debug!(
-            "Total number of graphs generated by gammaLoop: {}",
+            "Number of graphs after numerator-aware grouping with strategy '{}': {}",
+            numerator_aware_isomorphism_grouping,
             bare_graphs.len()
         );
-        let previous_length = bare_graphs.len();
-        if numerator_aware_isomorphism_grouping {
-            debug!("Now performing numerator-aware isomorphic grouping of skeleton graphs.");
-            bare_graphs.retain(|g| {
-                let numerator = Numerator::default().from_graph(g, None);
-                let numerator_color_simplified =
-                    numerator.color_simplify().get_single_atom().unwrap().0;
-                // println!(
-                //     "numerator_color_simplified of graph {} = {}",
-                //     g.name, numerator_color_simplified
-                // );
-                !numerator_color_simplified.is_zero()
-            });
-            debug!(
-                "Total number of graphs remaining after graph isomorphism check including numerator: {} / {}",
-                bare_graphs.len(), previous_length
-            );
-        }
 
-        Ok(bare_graphs)
+        Ok(bare_graphs
+            .iter()
+            .cloned()
+            .map(|(_graph_id, graph)| graph.clone())
+            .collect::<Vec<_>>())
+    }
+
+    fn compare_numerator_tensors(
+        numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
+        numerator_a: &ProcessedNumeratorForComparison,
+        numerator_b: &ProcessedNumeratorForComparison,
+    ) -> Option<Atom> {
+        match numerator_aware_isomorphism_grouping {
+            NumeratorAwareGraphGroupingOption::NoGrouping
+            | NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => None,
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling => {
+                let ratios = zip(
+                    numerator_a.tensor.iter_flat(),
+                    numerator_b.tensor.iter_flat(),
+                )
+                .map(|((_idx_a, a), (_idx_b, b))| a / b)
+                .collect::<HashSet<_>>();
+                if ratios.len() > 1 {
+                    None
+                } else {
+                    let ratio = ratios.iter().next().unwrap().to_owned();
+                    // Make sure the ratio only consists of couplings
+                    for pattern in ["cind(arg_)"] {
+                        if Pattern::parse(pattern)
+                            .unwrap()
+                            .pattern_match(
+                                ratio.as_view(),
+                                &Condition::default(),
+                                &MatchSettings::default(),
+                            )
+                            .next()
+                            .is_some()
+                        {
+                            return None;
+                        }
+                    }
+                    debug!(
+                        "Combining graph #{} with #{}, with ratio #{}/#{}={}",
+                        numerator_b.diagram_id,
+                        numerator_a.diagram_id,
+                        numerator_a.diagram_id,
+                        numerator_b.diagram_id,
+                        ratio
+                    );
+                    Some(ratio)
+                }
+            }
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign => {
+                if !numerator_a
+                    .tensor
+                    .structure()
+                    .same_external(numerator_b.tensor.structure())
+                {
+                    return None;
+                }
+                let res = if let Some(diff) = numerator_a.tensor.sub_fallible(&numerator_b.tensor) {
+                    if diff.iter_flat().all(|(_idx, d)| d.is_zero()) {
+                        Some(1)
+                    } else {
+                        let sum = numerator_a
+                            .tensor
+                            .add_fallible(&numerator_b.tensor)
+                            .unwrap();
+                        if sum.iter_flat().all(|(_idx, d)| d.is_zero()) {
+                            Some(-1)
+                        } else {
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                if let Some(r) = res {
+                    debug!(
+                        "Combining identical graph{} #{} with #{}",
+                        if r == -1 {
+                            " (up to a relative sign)"
+                        } else {
+                            ""
+                        },
+                        numerator_b.diagram_id,
+                        numerator_a.diagram_id
+                    );
+                    Some(Atom::new_num(r))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+struct ProcessedNumeratorForComparison {
+    diagram_id: usize,
+    tensor: ParamTensor,
+}
+
+impl ProcessedNumeratorForComparison {
+    fn from_numerator_symbolic_expression(
+        numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
+        diagram_id: usize,
+        numerator: Numerator<SymbolicExpression<Color>>,
+    ) -> Self {
+        let mut tensor = numerator
+            .parse()
+            .contract(ContractionSettings::<Rational>::Normal)
+            .unwrap()
+            .state
+            .tensor;
+        match numerator_aware_isomorphism_grouping {
+            NumeratorAwareGraphGroupingOption::NoGrouping
+            | NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => {}
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign => {
+                // TODO use expand_num().collect_num() instead of expand() as it is much faster but for now
+                // fails to properly detect cancellations
+                tensor = tensor.map_data(|d| d.expand())
+            }
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling => {
+                // TODO use expand_num().collect_num() instead of expand() as it is much faster but for now
+                // fails to properly detect cancellations
+                tensor = tensor.map_data(|d| d.expand())
+            }
+        }
+        ProcessedNumeratorForComparison { diagram_id, tensor }
     }
 }

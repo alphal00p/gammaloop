@@ -1,6 +1,6 @@
 import pytest
 import os
-from gammaloop.interface.gammaloop_interface import CommandList, GammaLoopConfiguration
+from gammaloop.interface.gammaloop_interface import CommandList, GammaLoopConfiguration, GammaLoopError, GammaLoop
 from gammaloop.misc.common import load_configuration, GL_PATH
 from gammaloop.tests.common import get_gamma_loop_interpreter, get_gamma_loop_interpreter_no_compilation, RESOURCES_PATH, pjoin, run_drawing
 from pathlib import Path
@@ -116,6 +116,146 @@ class TestLoadModel:
         assert len(gloop.model.parameters) == 12
         assert len(gloop.model.vertex_rules) == 25
         assert len(gloop.model.orders) == 2
+
+
+class TestProcessGeneration:
+
+    @staticmethod
+    def run_tests(gloop: GammaLoop, tests: list[tuple[str, int]]):
+        for test, expected_graph_number in tests:
+            try:
+                gloop.run(CommandList.from_string(
+                    f"generate {test} --clear_existing_processes"))
+            except GammaLoopError as e:
+                pass
+            n_graphs = (
+                0 if len(gloop.amplitudes) == 0 else len(
+                    gloop.amplitudes[0].amplitude_graphs)
+            ) + (
+                0 if len(gloop.cross_sections) == 0 else len(
+                    gloop.cross_sections[0].supergraphs)
+            )
+            assert n_graphs == expected_graph_number, f"For process: '{test}' | Expected {
+                expected_graph_number} graphs, got {n_graphs}"
+
+    def test_generate_sm_a_ddx(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        tests = [
+            # Only d, g and a as particle contents
+            ('a > d d~ [{{1}}] | d g a', 1),
+            ('a > d d~ g [{{2}}] | d g a', 3),
+            ('a > d d~ g [{{2}}] | d g a --symmetrize_left_right_states', 2),
+            ('a > d d~ z [{{2}}] | d g a', 0),
+            # Full particle contents
+            ('a > d d~ [{{1}}] --symmetrize_left_right_states', 1),
+            ('a > d d~ [{{2}}] --symmetrize_left_right_states', 9),
+            # Only 1-flavour pure QCD corrections
+            ('a > d d~ | d g ghG a QED^2=2 [{{1}}] --symmetrize_left_right_states', 1),
+            ('a > d d~ | d g ghG a QED^2=2 [{{2}}] --symmetrize_left_right_states', 2),
+            ('a > d d~ | d g ghG a QED^2=2 [{{3}}] --symmetrize_left_right_states', 19),
+            ('a > d d~ | d g ghG a QED^2=2 [{{4}}] --symmetrize_left_right_states', 258),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    def test_slow_generate_sm_a_ddx(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        tests = [
+            # Full particle contents
+            ('a > d d~ [{{3}}] --symmetrize_left_right_states', 658),
+            # Only 1-flavour pure QCD corrections
+            ('a > d d~ | d g ghG a QED^2=2 [{{5}}] --symmetrize_left_right_states', 5016),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    def test_generate_sm_full_a_ddx(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm-full"))
+        tests = [
+            # Full particle contents
+            ('a > d d~ [{{1}}] --symmetrize_left_right_states', 1),
+            ('a > d d~ [{{2}}] --symmetrize_left_right_states', 25),
+            ('a > d d~ [{{3}}] --symmetrize_left_right_states', 4060),
+            ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping no_grouping', 4142),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    # Currently bugged with spenso network parsing for "-num_grouping group_identical_graphs_up_to_sign"
+    def no_test_generate_sm_h_n_j(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        tests = [
+            # Full particle contents
+            ('h > g g [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 1),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    def test_generate_amplitude_1l_sm_ddx_ddx_ng(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        # Targets confirmed by MadGraph
+        tests = [
+            ('d d~ > d d~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 20),
+            ('d d~ > d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 192),
+            ('d d~ > d d~ g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 2284),
+            ('d d~ > u u~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 10),
+            ('d d~ > u u~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 96),
+            ('d d~ > u u~ g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 1142),
+            ('d d~ > u u~ d d~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 414),
+            ('d d~ > d d~ d d~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 1242),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    # Currently bugged with spenso network parsing for "-num_grouping group_identical_graphs_up_to_sign"
+    def no_test_generate_amplitude_1l_sm_ddx_ddx_ng_with_grouping(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        # Targets confirmed by MadGraph
+        tests = [
+            ('d d~ > d d~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 18),
+            ('d d~ > d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 176),
+            ('d d~ > d d~ g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 2090),
+            ('d d~ > u u~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 9),
+            ('d d~ > u u~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 88),
+            ('d d~ > u u~ g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 1045),
+            ('d d~ > u u~ d d~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 380),
+            ('d d~ > d d~ d d~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 1140),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    def test_slow_generate_amplitude_1l_sm_ddx_ddx_ng(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        # Targets confirmed by MadGraph
+        tests = [
+            ('d d~ > d d~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 32074),
+            ('d d~ > u u~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 16037),
+            ('d d~ > d d~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 16272),
+            ('d d~ > u u~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 5024),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    # Currently bugged with spenso network parsing for "-num_grouping group_identical_graphs_up_to_sign"
+    def no_test_slow_generate_amplitude_1l_sm_ddx_ddx_ng_with_grouping(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        # Targets confirmed by MadGraph
+        tests = [
+            ('d d~ > d d~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 29210),
+            ('d d~ > u u~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 14605),
+            ('d d~ > d d~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 15030),
+            ('d d~ > u u~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 5010),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
 
 
 class TestLoadQGraph:

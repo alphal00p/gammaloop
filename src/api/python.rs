@@ -1,7 +1,10 @@
 use crate::{
     cli_functions::cli,
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
-    feyngen::{self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions},
+    feyngen::{
+        self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
+        NumeratorAwareGraphGroupingOption,
+    },
     graph::SerializableGraph,
     inspect,
     integrands::Integrand,
@@ -80,6 +83,7 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyTadpolesFilterOptions>()?;
     m.add_class::<PySelfEnergyFilterOptions>()?;
     m.add_class::<PyFeynGenOptions>()?;
+    m.add_class::<PyNumeratorAwareGroupingOption>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
     Ok(())
@@ -308,6 +312,32 @@ impl PyFeynGenOptions {
     }
 }
 
+#[pyclass(name = "NumeratorAwareGroupingOption")]
+pub struct PyNumeratorAwareGroupingOption {
+    pub grouping_options: NumeratorAwareGraphGroupingOption,
+}
+
+#[pymethods]
+impl PyNumeratorAwareGroupingOption {
+    #[new]
+    pub fn __new__(
+        numerator_aware_grouping_option: Option<String>,
+    ) -> PyResult<PyNumeratorAwareGroupingOption> {
+        Ok(PyNumeratorAwareGroupingOption {
+            grouping_options: NumeratorAwareGraphGroupingOption::from_str(
+                numerator_aware_grouping_option
+                    .unwrap_or("only_detect_zeroes".into())
+                    .as_str(),
+            )
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
+        })
+    }
+
+    pub fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{}", self.grouping_options))
+    }
+}
+
 // TODO: Improve error broadcasting to Python so as to show rust backtrace
 #[pymethods]
 impl PythonWorker {
@@ -399,7 +429,7 @@ impl PythonWorker {
     pub fn generate_diagrams(
         &mut self,
         generation_options: PyRef<PyFeynGenOptions>,
-        numerator_aware_isomorphism_grouping: Option<bool>,
+        numerator_aware_isomorphism_grouping: Option<PyRef<PyNumeratorAwareGroupingOption>>,
         filter_self_loop: Option<bool>,
         graph_prefix: Option<String>,
         selected_graphs: Option<Vec<String>>,
@@ -418,7 +448,9 @@ impl PythonWorker {
         let diagrams = diagram_generator
             .generate(
                 &self.model,
-                numerator_aware_isomorphism_grouping.unwrap_or(true),
+                numerator_aware_isomorphism_grouping
+                    .map(|o| o.grouping_options.clone())
+                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping),
                 filter_self_loop.unwrap_or(false),
                 graph_prefix.unwrap_or("GL".to_string()),
                 selected_graphs,

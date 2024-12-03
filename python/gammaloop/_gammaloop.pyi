@@ -10,6 +10,17 @@ def cli_wrapper() -> None:
     """ Starts a CLI interface for GammaLoop exposing rust functionalities. """
 
 
+class NumeratorAwareGroupingOption:
+
+    @classmethod
+    def __new__(_cls,
+                numerator_aware_grouping_option: Optional[str] = "only_detect_zeroes",
+                ) -> NumeratorAwareGroupingOption:
+        """ Creates options for grouping diagrams using isomorphisms and taking into account numerator.
+        Possible options are: no_grouping, only_detect_zeroes, group_identical_graphs_up_to_sign and group_identical_graphs_up_to_scalar_rescaling
+        """
+
+
 class SnailFilterOptions:
 
     @classmethod
@@ -87,7 +98,7 @@ class Worker:
         """ Returns the yaml string representation of the model currently active. """
 
     def generate_diagrams(self, generation_options: FeynGenOptions,
-                          numerator_aware_isomorphism_grouping: Optional[bool] = True,
+                          numerator_aware_isomorphism_grouping: NumeratorAwareGroupingOption,
                           filter_self_loop: Optional[bool] = False,
                           graph_prefix: Optional[str] = "GL",
                           selected_graphs: Optional[list[str]] = None,

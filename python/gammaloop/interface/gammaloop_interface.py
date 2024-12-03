@@ -765,22 +765,26 @@ class GammaLoop(object):
     generate_parser = ArgumentParser(prog='generate')
     generate_parser.add_argument(
         'process', metavar='process', type=str, nargs="+", help='Process to generate.')
+    generate_parser.add_argument('--clear_existing_processes', '-clear', default=False, action='store_true',
+                                 help='Filter tadpole diagrams.')
     generate_parser.add_argument('--graph_prefix', '-gp', type=str, default="GL",
                                  help='Graph name prefix. default: "GL"')
     generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
                                  help='Specify the maximum number of bridges for the graphs to generate. Set negative to disable. (default: 0)')
     generate_parser.add_argument('--filter_self_loop', default=False, action=BooleanOptionalAction,
                                  help='Filter all self-loops directly during generation.')
-    generate_parser.add_argument('--numerator_aware_isomorphism_grouping', default=True, action=BooleanOptionalAction,
-                                 help='Group identical diagrams (in absolute value) after generation and including numerator')
+    generate_parser.add_argument('--numerator_aware_isomorphism_grouping', '-num_grouping', default="only_detect_zeroes", type=str,
+                                 choices=["no_grouping", "only_detect_zeroes", "group_identical_graphs_up_to_sign",
+                                          "group_identical_graphs_up_to_scalar_rescaling"],
+                                 help='Group identical diagrams after generation and including numerator (default: only_detect_zeroes)')
     # Tadpole filter
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')
-    generate_parser.add_argument('--no_tadpole_attached_to_massive', dest='veto_tadpoles_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
+    generate_parser.add_argument('--veto_tadpole_attached_to_massive', dest='veto_tadpoles_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams attached to massive lines.')
-    generate_parser.add_argument('--no_tadpole_attached_to_massless', dest='veto_tadpoles_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
+    generate_parser.add_argument('--veto_tadpole_attached_to_massless', dest='veto_tadpoles_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams attached to massive lines.')
-    generate_parser.add_argument('--no_scaleless_tadpole', dest='veto_only_scaleless_tadpoles', default=None, action=BooleanOptionalAction,
+    generate_parser.add_argument('--veto_scaleless_tadpole', dest='veto_only_scaleless_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter scalless tadpole diagrams.')
     # Snail filter
     generate_parser.add_argument('--filter_snails', default=None, action=BooleanOptionalAction,
@@ -833,6 +837,12 @@ class GammaLoop(object):
 
         if args.max_n_bridges is not None and args.max_n_bridges < 0:
             args.max_n_bridges = None
+
+        if args.clear_existing_processes:
+            if args.amplitude:
+                self.amplitudes.clear()
+            else:
+                self.cross_sections.clear()
 
         parsed_process = Process.from_input_args(self.model, args)
 

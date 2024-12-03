@@ -34,7 +34,6 @@ use color_eyre::Result;
 use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
-use half_edge::subgraph::SubGraph;
 use itertools::Itertools;
 use log::{debug, warn};
 use momtrop::SampleGenerator;

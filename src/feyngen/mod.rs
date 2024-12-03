@@ -19,6 +19,50 @@ pub enum FeynGenError {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub enum NumeratorAwareGraphGroupingOption {
+    NoGrouping,
+    OnlyDetectZeroes,
+    GroupIdenticalGraphUpToSign,
+    GroupIdenticalGraphUpToScalarRescaling,
+}
+
+impl fmt::Display for NumeratorAwareGraphGroupingOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::NoGrouping => "No grouping",
+                Self::OnlyDetectZeroes => "Only detect zero numerators",
+                Self::GroupIdenticalGraphUpToSign => "Group identical graphs up to a sign",
+                Self::GroupIdenticalGraphUpToScalarRescaling => {
+                    "Group identical graphs up to a scalar rescaling"
+                }
+            }
+        )
+    }
+}
+
+impl FromStr for NumeratorAwareGraphGroupingOption {
+    type Err = FeynGenError;
+
+    fn from_str(s: &str) -> Result<Self, FeynGenError> {
+        match s {
+            "no_grouping" => Ok(Self::NoGrouping),
+            "only_detect_zeroes" => Ok(Self::OnlyDetectZeroes),
+            "group_identical_graphs_up_to_sign" => Ok(Self::GroupIdenticalGraphUpToSign),
+            "group_identical_graphs_up_to_scalar_rescaling" => {
+                Ok(Self::GroupIdenticalGraphUpToScalarRescaling)
+            }
+            _ => Err(FeynGenError::GenericError(format!(
+                "Invalid grouping option: {}",
+                s
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum GenerationType {
     Amplitude,
     CrossSection,

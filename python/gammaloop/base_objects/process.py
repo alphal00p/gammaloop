@@ -185,7 +185,8 @@ class Process(object):
                 generation_args.symmetrize_left_right_states,
                 filters=filters
             ),
-            generation_args.numerator_aware_isomorphism_grouping,
+            gl_rust.NumeratorAwareGroupingOption(
+                generation_args.numerator_aware_isomorphism_grouping),
             generation_args.filter_self_loop,
             generation_args.graph_prefix,
             generation_args.select_graphs,
