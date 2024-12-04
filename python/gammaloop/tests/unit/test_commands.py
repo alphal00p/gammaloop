@@ -195,7 +195,7 @@ class TestProcessGeneration:
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
-    def test_generate_amplitude_1l_sm_ddx_ddx_ng(self):
+    def test_generate_amplitude_1l_sm_jets(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             "import_model sm"))
@@ -203,6 +203,8 @@ class TestProcessGeneration:
         tests = [
             ('d d~ > d d~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 20),
             ('d d~ > d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 192),
+            ('d d~ > g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 384),
+            ('g g > g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 1139),
             ('d d~ > d d~ g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 2284),
             ('d d~ > u u~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 10),
             ('d d~ > u u~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 96),
@@ -213,7 +215,7 @@ class TestProcessGeneration:
         TestProcessGeneration.run_tests(gloop, tests)
 
     # Currently bugged with spenso network parsing for "-num_grouping group_identical_graphs_up_to_sign"
-    def no_test_generate_amplitude_1l_sm_ddx_ddx_ng_with_grouping(self):
+    def no_test_generate_amplitude_1l_sm_jets_with_grouping(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             "import_model sm"))
@@ -221,6 +223,8 @@ class TestProcessGeneration:
         tests = [
             ('d d~ > d d~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 18),
             ('d d~ > d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 176),
+            ('d d~ > g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 341),
+            ('g g > g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 905),
             ('d d~ > d d~ g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 2090),
             ('d d~ > u u~ | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 9),
             ('d d~ > u u~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 88),
@@ -230,26 +234,28 @@ class TestProcessGeneration:
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
-    def test_slow_generate_amplitude_1l_sm_ddx_ddx_ng(self):
+    def test_slow_generate_amplitude_1l_sm_jets(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             "import_model sm"))
         # Targets confirmed by MadGraph
         tests = [
+            ('g g > g g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 14875),
             ('d d~ > d d~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 32074),
             ('d d~ > u u~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 16037),
             ('d d~ > d d~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 16272),
-            ('d d~ > u u~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 5024),
+            ('d d~ > u u~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 5424),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
     # Currently bugged with spenso network parsing for "-num_grouping group_identical_graphs_up_to_sign"
-    def no_test_slow_generate_amplitude_1l_sm_ddx_ddx_ng_with_grouping(self):
+    def no_test_slow_generate_amplitude_1l_sm_jets_with_grouping(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             "import_model sm"))
         # Targets confirmed by MadGraph
         tests = [
+            ('g g > g g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 11850),
             ('d d~ > d d~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 29210),
             ('d d~ > u u~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 14605),
             ('d d~ > d d~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 15030),
