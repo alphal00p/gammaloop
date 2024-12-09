@@ -147,6 +147,10 @@ impl ColorStructure {
         ColorStructure { color_structure }
     }
 
+    pub fn len(&self) -> usize {
+        self.color_structure.len()
+    }
+
     pub fn iter(&self) -> std::slice::Iter<Atom> {
         self.color_structure.iter()
     }
@@ -318,8 +322,8 @@ impl VertexRule {
             ..
         } = shifts;
 
-        let i_dim = self.couplings.len();
-        let j_dim = self.couplings[0].len();
+        let i_dim = self.color_structures.len();
+        let j_dim = self.lorentz_structures.len();
 
         let coupling_indices = Some([
             Euclidean::slot(i_dim, coupling_shift),

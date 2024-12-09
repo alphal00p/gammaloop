@@ -276,11 +276,11 @@ impl HasVertexInfo for InteractionVertexInfo {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern = if e < &0 {
-                        Pattern::parse(&format!("-Q({},mink(4,x_))", -e))
+                        Pattern::parse(&format!("-Q({},mink(4,indexid(x_)))", -e))
                             .unwrap()
                             .into() //TODO flip based on flow
                     } else {
-                        Pattern::parse(&format!("Q({},mink(4,x_))", e))
+                        Pattern::parse(&format!("Q({},mink(4,indexid(x_)))", e))
                             .unwrap()
                             .into() //TODO flip based on flow
                     };

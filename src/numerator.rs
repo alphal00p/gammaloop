@@ -1003,6 +1003,8 @@ impl AppliedFeynmanRule {
         let mut colorful_builder = DataTensor::new_scalar(Atom::new_num(1));
 
         for [colorless, color] in &vatoms {
+            println!("colorless vertex: {}", colorless);
+            println!("colorfull vertex: {}", color);
             colorless_builder = colorless_builder.contract(colorless).unwrap();
             colorful_builder = colorful_builder.contract(color).unwrap();
             // println!("vertex: {v}");
@@ -1010,6 +1012,8 @@ impl AppliedFeynmanRule {
         }
 
         for [n, c] in &eatoms {
+            println!("colorless edge {n}");
+            println!("colorfull edge {c}");
             colorless_builder = colorless_builder.scalar_mul(n).unwrap();
             colorful_builder = colorful_builder.scalar_mul(c).unwrap();
         }
@@ -1298,13 +1302,8 @@ impl Numerator<ColorSimplified> {
 
     pub fn parse(self) -> Numerator<Network> {
         debug!("Parsing color simplified numerator into network");
-        println!("State colorless: {}", self.state.colorless);
-        println!("State colorful: {}", self.state.color);
         let state = self.state.parse();
-        println!(
-            "Parsing done colorless afterwards: {}",
-            state.net.result_tensor_ref().unwrap()
-        );
+
         // debug!("");
         Numerator { state }
     }
