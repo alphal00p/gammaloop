@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::debug_info::DEBUG_LOGGER;
-use crate::feyngen::dis::{DisEdge, DisVertex};
+// use crate::feyngen::dis::{DisEdge, DisVertex};
 use crate::graph::half_edge::subgraph::SubGraph;
 use crate::graph::half_edge::{EdgeId, HedgeGraph};
 use crate::graph::{BareGraph, VertexInfo};
@@ -246,7 +246,10 @@ impl<T: HasStructure> From<TensorSet<T>> for RepeatingIteratorTensorOrScalar<T> 
 }
 
 impl<T> LendingIterator for RepeatingIterator<T> {
-    type Item<'a> = &'a T where Self:'a ;
+    type Item<'a>
+        = &'a T
+    where
+        Self: 'a;
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
         Some(&self.elements[self.positions.next()?])
@@ -604,69 +607,6 @@ impl Numerator<UnInit> {
     ) -> Numerator<AppliedFeynmanRule> {
         debug!("Applying feynman rules");
         let state = AppliedFeynmanRule::from_graph(graph, prefactor);
-        debug!(
-            "Applied feynman rules:\n\tcolor:{}\n\tcolorless:{}",
-            state.color, state.colorless
-        );
-        Numerator { state }
-    }
-
-    pub fn from_dis_graph(
-        self,
-        bare: &BareGraph,
-        graph: &HedgeGraph<DisEdge, DisVertex>,
-        subgraph: &impl SubGraph,
-        prefactor: Option<&GlobalPrefactor>,
-    ) -> Numerator<AppliedFeynmanRule> {
-        debug!("Applying feynman rules");
-
-        let mut vatoms = Vec::new();
-        for (n, v) in graph.iter_node_data(subgraph) {
-            if let Some(a) = v.bare_vertex.colorless_vertex_rule(bare) {
-                vatoms.push(a);
-            }
-        }
-
-        let mut eatoms: Vec<_> = vec![];
-        let i = Atom::new_var(State::I);
-        for (j, e) in graph.iter_egdes(subgraph) {
-            let edge = &e.data.as_ref().unwrap().bare_edge;
-            let [n, c] = edge.color_separated_numerator(bare);
-            if matches!(j, EdgeId::Paired { .. }) {
-                eatoms.push([&n * &i, c]);
-            };
-            // shift += s;
-            // graph.shifts.0 += shift;
-        }
-        let mut colorless_builder = DataTensor::new_scalar(Atom::new_num(1));
-
-        let mut colorful_builder = DataTensor::new_scalar(Atom::new_num(1));
-
-        for [colorless, color] in &vatoms {
-            colorless_builder = colorless_builder.contract(colorless).unwrap();
-            colorful_builder = colorful_builder.contract(color).unwrap();
-            // println!("vertex: {v}");
-            // builder = builder * v;
-        }
-
-        for [n, c] in &eatoms {
-            colorless_builder = colorless_builder.scalar_mul(n).unwrap();
-            colorful_builder = colorful_builder.scalar_mul(c).unwrap();
-        }
-
-        if let Some(prefactor) = prefactor {
-            colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
-            colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
-        }
-
-        let mut num = AppliedFeynmanRule {
-            colorless: colorless_builder.map_data(|a| normalise_complex(&a).into()),
-            color: colorful_builder.map_data(|a| normalise_complex(&a).into()),
-            state: Default::default(),
-        };
-        num.simplify_ids();
-
-        let state = num;
         debug!(
             "Applied feynman rules:\n\tcolor:{}\n\tcolorless:{}",
             state.color, state.colorless

@@ -8,6 +8,7 @@ use argmin::{
 use cgmath::{Angle, InnerSpace, Rad, Vector2, Zero};
 use indexmap::IndexMap;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
+use serde::{Deserialize, Serialize};
 
 use super::{
     drawing::{CetzEdge, CetzString, Decoration, EdgeGeometry},
@@ -167,7 +168,6 @@ impl<E> LayoutEdge<E> {
                 label_pos,
                 label_angle,
             } => {
-                println!("fancy");
                 if let Some(sink) = sink {
                     format!(
                     "edge(node{}.pos,{},node{}.pos,decoration:{},angle:{})\ncetz.draw.content({},angle:{},[{}])\n",
@@ -199,7 +199,6 @@ impl<E> LayoutEdge<E> {
                 label_pos,
                 label_angle,
             } => {
-                println!("super fancy");
                 if let Some(sink) = sink {
                     format!(
                 "edge(node{}.pos,{},node{}.pos,decoration:{},angle:{})\ncetz.draw.content({},angle:{},[{}])\n{}\n",
@@ -320,7 +319,7 @@ impl<E, V> PositionalHedgeGraph<E, V> {
         let mut out = String::new();
 
         out.push_str(
-            r#"#import "@preview/cetz:0.3.0"
+            r#"#import "@preview/cetz:0.3.1"
 "#,
         );
         out
@@ -427,7 +426,7 @@ pub struct GraphLayout<'a, E, V> {
     pub rng: Arc<Mutex<SmallRng>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct LayoutParams {
     pub spring_constant: f64,
     pub spring_length: f64,
@@ -864,7 +863,7 @@ impl<'a, E, V> Anneal for GraphLayout<'a, E, V> {
 pub struct LayoutSettings {
     params: LayoutParams,
     temperature: f64,
-    iters: usize,
+    iters: u64,
     positions: Positions,
     seed: u64,
 
@@ -876,7 +875,7 @@ impl LayoutSettings {
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
-        iters: usize,
+        iters: u64,
         temperature: f64,
     ) -> Self {
         let (init_params, positions) = Positions::new(graph, seed);
@@ -895,7 +894,7 @@ impl LayoutSettings {
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
-        iters: usize,
+        iters: u64,
         temperature: f64,
         edge: f64,
         left: Vec<Hedge>,
@@ -978,7 +977,7 @@ impl LayoutSettings {
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
-        iters: usize,
+        iters: u64,
         temperature: f64,
         angle_factors: Vec<u32>,
         n_div: usize,
@@ -1049,7 +1048,7 @@ impl<E, V> HedgeGraph<E, V> {
 
         let best = {
             let res = Executor::new(layout, solver)
-                .configure(|state| state.param(settings.init_params).max_iters(10000))
+                .configure(|state| state.param(settings.init_params).max_iters(settings.iters))
                 // run the solver on the defined problem
                 .run()
                 .unwrap();

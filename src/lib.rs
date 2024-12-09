@@ -6,6 +6,8 @@
 // #![warn(clippy::nursery)]
 // #![warn(clippy::cargo)]
 // #![feature(min_specialization)]
+//
+#[cfg(feature = "python_api")]
 pub mod api;
 pub mod cff;
 pub mod cli_functions;

@@ -215,7 +215,7 @@ impl OrientedCut {
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
-        iters: usize,
+        iters: u64,
         temperature: f64,
         edge: f64,
     ) -> HedgeGraph<LayoutEdge<(&E, Orientation)>, LayoutVertex<&V>> {
