@@ -1010,16 +1010,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "f128"
-version = "0.2.2"
-source = "git+https://github.com/benruijl/f128#8fa3132068b4ad2b9833016eaa4cfa8968499e9b"
-dependencies = [
- "cc",
- "libc",
- "num-traits",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1093,7 +1083,6 @@ dependencies = [
  "enum_dispatch",
  "env_logger",
  "eyre",
- "f128",
  "gat-lending-iterator",
  "git-version",
  "hyperdual",
@@ -1505,7 +1494,6 @@ name = "lorentz_vector"
 version = "0.1.4"
 source = "git+https://github.com/benruijl/lorentz_vector?branch=hyperdual#c2d8d6f527455ec1c380ae39d69f395d710dd1d4"
 dependencies = [
- "f128",
  "hyperdual",
  "num 0.3.1",
  "serde",
@@ -1557,14 +1545,14 @@ dependencies = [
 [[package]]
 name = "momtrop"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/momtrop#9d25e9e398167d37755efacb28f056dd89bd41e7"
+source = "git+https://github.com/alphal00p/momtrop?branch=float_refactor#e91828b93fc777613724d5e57f6a0a1a4d450027"
 dependencies = [
  "ahash",
  "criterion",
- "f128",
  "itertools 0.12.1",
  "num 0.4.3",
  "rand",
+ "ref-ops",
  "serde",
  "smallvec",
  "statrs",

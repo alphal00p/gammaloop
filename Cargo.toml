@@ -45,18 +45,16 @@ criterion = { version = "0.5", features = ["html_reports"] }
 symbolica = { version = "0.13.0" }
 spenso = { version = "0.4.0", features = ["shadowing"] }
 
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"]}
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"], branch='float_refactor'}
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = { version = "2.0.0-rc.3", features = ["serde"] }
 clap = "2.34"
 color-eyre = { version = "^0.3", default-features = false }
 eyre = "^0.4"
-f128 = { git = "https://github.com/benruijl/f128" }
 lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = "hyperdual", features = [
     "serde_support",
     "hyperdual_support",
-    "f128_support",
 ] }
 hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
 rand = { version = "0.8", features = ["small_rng"] }
