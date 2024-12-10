@@ -45,7 +45,9 @@ criterion = { version = "0.5", features = ["html_reports"] }
 symbolica = { version = "0.13.0" }
 spenso = { version = "0.4.0", features = ["shadowing"] }
 
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"], branch='float_refactor'}
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
+    "log",
+], branch = 'float_refactor' }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = { version = "2.0.0-rc.3", features = ["serde"] }
@@ -56,7 +58,7 @@ lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = 
     "serde_support",
     "hyperdual_support",
 ] }
-hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
+hyperdual = { git = "https://gitlab.com/benruijl/hyperdual.git" }
 rand = { version = "0.8", features = ["small_rng"] }
 rayon = "1.5"
 tabled = "0.7"
