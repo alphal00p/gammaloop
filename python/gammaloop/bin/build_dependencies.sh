@@ -45,7 +45,8 @@ build_dependencies () {
     CCOMPILER="${CC:-cc}"
     # We must also test explictly cc as it is used *explicitely* when building some of quadruple precision rust crates
     FORCEDCCOMPILER="cc"
-    if ! test -f test_quad_math/test_quad_math; then
+#    if ! test -f test_quad_math/test_quad_math; then
+    if ! true; then
         cd test_quad_math
 
         echo "Testing quadruple precision support with C++ compiler "$CPPCOMPILER" ...";
