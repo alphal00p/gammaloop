@@ -46,6 +46,8 @@ use pyo3::{
     wrap_pyfunction, FromPyObject, IntoPy, PyObject, PyRef, PyResult, Python,
 };
 
+use pyo3_log;
+
 #[pyfunction]
 #[pyo3(name = "rust_cli")]
 fn cli_wrapper(py: Python) -> PyResult<()> {
