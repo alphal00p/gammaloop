@@ -50,12 +50,14 @@
         buildInputs =
           [
             pkgs.mold
+            pkgs.gcc
             pkgs.clang
             # Add additional build inputs here
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
             pkgs.libiconv
+            pkgs.gcc.cc.lib
           ];
 
         # Additional environment variables can be set directly
@@ -154,16 +156,33 @@
 
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
+        shellHook =
+          if pkgs.stdenv.isDarwin
+          then ''
+            export CC=gcc
+            export CXX=g++
+            export RUSTFLAGS="$RUSTFLAGS -Clink-arg=${pkgs.gcc.cc.lib}/lib/libgcc_s.1.1.dylib"
+
+            # Point the history file to your home directory’s bash history
+            export HISTFILE=~/.bash_history
+
+            # Ensure the history is appended rather than overwritten
+            shopt -s histappend
+
+            # Append each command to the history file immediately
+            export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
+          ''
+          else ''
+          '';
+
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
           # pkgs.ripgrep
           cargo-udeps
           cargo-insta
           openssl
-          diffedit3
           pyright
           gnum4
-          typst
           gmp.dev
           mpfr.dev
           gcc_debug.out
@@ -179,9 +198,14 @@
           mupdf
           poppler_utils
           rust-analyzer
-          graphviz
           maturin
         ];
       };
     });
+
+  # Avoid re-direction warnings
+  inputs.hyperdual = {
+    url = "git+https://gitlab.com/benruijl/hyperdual.git";
+    flake = false;
+  };
 }
