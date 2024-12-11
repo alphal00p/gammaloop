@@ -52,7 +52,9 @@ def patch_build_rs():
                 """fn main() {
     if cfg!(target_os = "macos") {
         pyo3_build_config::add_extension_module_link_args();
-        println!("cargo:rustc-link-lib=gcc_s");
+        if std::env::var_os("EXTRA_MACOS_LIBS_FOR_GNU_GCC").is_some() {
+            println!("cargo:rustc-link-lib=gcc_s");
+        }
     }"""))
 
 
