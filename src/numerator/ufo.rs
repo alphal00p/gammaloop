@@ -4,12 +4,13 @@ use spenso::shadowing::ETS;
 use spenso::structure::representation::{
     BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Minkowski,
 };
+use symbolica::atom::AtomCore;
 use symbolica::id::MatchSettings;
 use symbolica::state::FunctionAttribute;
 use symbolica::{
     atom::{Atom, Symbol},
     fun,
-    id::{Pattern, PatternOrMap, Replacement},
+    id::Replacement,
     state::State,
     symb,
 };
@@ -146,12 +147,10 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
         ),
     ];
 
-    let reps: Vec<(Pattern, PatternOrMap)> = reps
+    let reps: Vec<Replacement> = reps
         .into_iter()
-        .map(|(a, b)| (a.into_pattern(), b.into_pattern().into()))
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
         .collect();
-
-    let reps: Vec<_> = reps.iter().map(|(a, b)| Replacement::new(a, b)).collect();
 
     atom.replace_all_multiple(&reps)
 }
@@ -218,18 +217,15 @@ pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
         ),
     ];
 
-    let reps: Vec<(Pattern, PatternOrMap)> = reps
-        .into_iter()
-        .map(|(a, b)| (a.into_pattern(), b.into_pattern().into()))
-        .collect();
-
     let settings = MatchSettings {
         rhs_cache_size: 0,
         ..Default::default()
     };
     let reps: Vec<_> = reps
-        .iter()
-        .map(|(a, b)| Replacement::new(a, b).with_settings(&settings))
+        .into_iter()
+        .map(|(a, b)| {
+            Replacement::new(a.to_pattern(), b.to_pattern()).with_settings(settings.clone())
+        })
         .collect();
 
     atom.replace_all_multiple(&reps)

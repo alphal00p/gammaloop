@@ -46,7 +46,7 @@ use spenso::{
     arithmetic::ScalarMul,
     complex::Complex,
     contraction::{IsZero, RefZero},
-    data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
+    data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor},
     scalar::Scalar,
     shadowing::{Shadowable, ETS},
     structure::{
@@ -72,7 +72,7 @@ use std::{
     sync::Arc,
 };
 
-use symbolica::graph::Graph as SymbolicaGraph;
+use symbolica::{atom::AtomCore, graph::Graph as SymbolicaGraph};
 use symbolica::{
     atom::{Atom, Symbol},
     domains::{float::NumericalFloatLike, rational::Rational},
@@ -276,21 +276,15 @@ impl HasVertexInfo for InteractionVertexInfo {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern = if e < &0 {
-                        Pattern::parse(&format!("-Q({},mink(4,indexid(x_)))", -e))
-                            .unwrap()
-                            .into() //TODO flip based on flow
+                        Pattern::parse(&format!("-Q({},mink(4,indexid(x_)))", -e)).unwrap()
+                        //TODO flip based on flow
                     } else {
-                        Pattern::parse(&format!("Q({},mink(4,indexid(x_)))", e))
-                            .unwrap()
-                            .into() //TODO flip based on flow
+                        Pattern::parse(&format!("Q({},mink(4,indexid(x_)))", e)).unwrap()
+                        //TODO flip based on flow
                     };
 
-                    atom = momentum_in_pattern.replace_all(
-                        atom.as_view(),
-                        &momentum_out_pattern,
-                        None,
-                        None,
-                    );
+                    atom =
+                        atom.replace_all(&momentum_in_pattern, &momentum_out_pattern, None, None);
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom);
@@ -298,12 +292,7 @@ impl HasVertexInfo for InteractionVertexInfo {
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
 
-                    let reps: Vec<Replacement> = replacements
-                        .iter()
-                        .map(|(pat, rhs)| Replacement::new(pat, rhs))
-                        .collect();
-
-                    atom = atom.replace_all_multiple(&reps);
+                    atom = atom.replace_all_multiple(&replacements);
                 }
                 atom
             })
@@ -324,10 +313,9 @@ impl HasVertexInfo for InteractionVertexInfo {
                     self.vertex_rule.particles.iter().map(|s| s.color).collect();
 
                 for (i, s) in spins.iter().enumerate() {
-                    let id1 = fun!(UFO.identity, Atom::new_num((i + 1) as i32), symb!("x_"))
-                        .into_pattern();
-                    let id2 =
-                        fun!(ETS.id, symb!("x_"), Atom::new_num((i + 1) as i32)).into_pattern();
+                    let id1 =
+                        fun!(UFO.identity, Atom::new_num((i + 1) as i32), symb!("x_")).to_pattern();
+                    let id2 = fun!(ETS.id, symb!("x_"), Atom::new_num((i + 1) as i32)).to_pattern();
 
                     let ind = match s {
                         1 => Euclidean::slot(1, i + 1).to_symbolic_wrapped(),
@@ -341,16 +329,16 @@ impl HasVertexInfo for InteractionVertexInfo {
                         i => panic!("Color {i}not supported "),
                     };
 
-                    atom = id1.replace_all(
-                        atom.as_view(),
-                        &fun!(ETS.id, ind, symb!("x_")).into_pattern().into(),
+                    atom = atom.replace_all(
+                        &id1,
+                        &fun!(ETS.id, ind, symb!("x_")).to_pattern(),
                         None,
                         None,
                     );
 
-                    atom = id2.replace_all(
-                        atom.as_view(),
-                        &fun!(ETS.id, symb!("x_"), ind).into_pattern().into(),
+                    atom = atom.replace_all(
+                        &id2,
+                        &fun!(ETS.id, symb!("x_"), ind).to_pattern(),
                         None,
                         None,
                     );
@@ -359,26 +347,20 @@ impl HasVertexInfo for InteractionVertexInfo {
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
 
-                    let reps: Vec<Replacement> = replacements
-                        .iter()
-                        .map(|(pat, rhs)| Replacement::new(pat, rhs))
-                        .collect();
-
-                    atom = atom.replace_all_multiple(&reps);
+                    atom = atom.replace_all_multiple(&replacements);
                 }
 
                 for i in 0..n_dummies {
                     let pat: Pattern = Atom::parse(&format!("indexid({})", -1 - i as i64))
                         .unwrap()
-                        .into_pattern();
+                        .to_pattern();
 
-                    atom = pat.replace_all(
-                        atom.as_view(),
+                    atom = atom.replace_all(
+                        &pat,
                         &Atom::new_num(usize::from(
                             vertex_slots.internal_dummy.color[i + color_dummy_shift],
                         ) as i64)
-                        .into_pattern()
-                        .into(),
+                        .to_pattern(),
                         None,
                         None,
                     );
@@ -535,7 +517,7 @@ impl Edge {
     pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = Pattern::parse(&format!("Q({num},x_)")).unwrap();
-        let mom_rep = lmb.pattern(num).into();
+        let mom_rep = lmb.pattern(num);
         atom.replace_all(&mom, &mom_rep, None, None)
     }
 
@@ -585,20 +567,16 @@ impl Edge {
 
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 if self.particle.is_antiparticle() {
-                    atom = pfun.replace_all(
-                        atom.as_view(),
-                        &Pattern::parse(&format!("-Q({},mink(4,x_))", num))
-                            .unwrap()
-                            .into(),
+                    atom = atom.replace_all(
+                        &pfun,
+                        &Pattern::parse(&format!("-Q({},mink(4,x_))", num)).unwrap(),
                         None,
                         None,
                     );
                 } else {
-                    atom = pfun.replace_all(
-                        atom.as_view(),
-                        &Pattern::parse(&format!("Q({},mink(4,x_))", num))
-                            .unwrap()
-                            .into(),
+                    atom = atom.replace_all(
+                        &pfun,
+                        &Pattern::parse(&format!("Q({},mink(4,x_))", num)).unwrap(),
                         None,
                         None,
                     );
@@ -607,26 +585,24 @@ impl Edge {
                 let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
                 let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.is_antiparticle() {
-                    atom = pslashfun.replace_all(
-                        atom.as_view(),
+                    atom = atom.replace_all(
+                        &pslashfun,
                         &Pattern::parse(&format!(
                             "-Q({},mink(4,{}))*Gamma({},i_,j_)",
                             num, pindex_num, pindex_num
                         ))
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                         None,
                         None,
                     );
                 } else {
-                    atom = pslashfun.replace_all(
-                        atom.as_view(),
+                    atom = atom.replace_all(
+                        &pslashfun,
                         &Pattern::parse(&format!(
                             "Q({},mink(4,{}))*Gamma({},i_,j_)",
                             num, pindex_num, pindex_num
                         ))
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                         None,
                         None,
                     );
@@ -640,9 +616,9 @@ impl Edge {
                     (in_slots.replacements(1), out_slots.replacements(2))
                 };
 
-                replacements_out.push((
-                    Atom::parse("indexid(x_)").unwrap().into_pattern(),
-                    Atom::parse("x_").unwrap().into_pattern().into(),
+                replacements_out.push(Replacement::new(
+                    Atom::parse("indexid(x_)").unwrap().to_pattern(),
+                    Atom::parse("x_").unwrap().to_pattern(),
                 ));
 
                 let mut color_atom = Atom::new_num(1);
@@ -653,9 +629,8 @@ impl Edge {
                 }
 
                 let reps: Vec<Replacement> = replacements_in
-                    .iter()
-                    .chain(replacements_out.iter())
-                    .map(|(pat, rhs)| Replacement::new(pat, rhs))
+                    .into_iter()
+                    .chain(replacements_out.into_iter())
                     .collect();
 
                 [
@@ -2305,15 +2280,16 @@ impl BareGraph {
             .map_err(|e| eyre!(e))
     }
 
-    pub fn load_derived_data<NumState: NumeratorState + DeserializeOwned>(
+    pub fn load_derived_data<NumState: NumeratorState>(
         self,
         model: &Model,
         path: &Path,
         settings: &Settings,
     ) -> Result<Graph<NumState>, Report> {
         let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
+        let state_path = path.join("state.bin");
         debug!("Loading derived data from {:?}", derived_data_path);
-        let mut derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
+        let mut derived_data = DerivedGraphData::load_from_path(&derived_data_path, &state_path)?;
         debug!("updating model in numerator");
 
         derived_data.numerator.update_model(model)?;
@@ -2788,10 +2764,16 @@ pub struct DerivedGraphData<NumState> {
 
 impl DerivedGraphData<PythonState> {
     pub fn load_python_from_path<S: NumeratorState>(path: &Path) -> Result<Self, Report> {
+        let mut source = std::fs::File::open(path)?;
+        let mut statemap = State::import(&mut source, None)?;
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
-                let derived_data: DerivedGraphData<S> =
-                    bincode::decode_from_slice(&derived_data_bytes, bincode::config::standard())?.0;
+                let derived_data: DerivedGraphData<S> = bincode::decode_from_slice_with_context(
+                    &derived_data_bytes,
+                    bincode::config::standard(),
+                    &mut statemap,
+                )?
+                .0;
                 Ok(derived_data.forget_type())
             }
             Err(_) => {
@@ -3292,17 +3274,23 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
         params
     }
 
-    pub fn load_from_path(path: &Path) -> Result<Self, Report> {
-        match std::fs::read(path) {
+    pub fn load_from_path(derived_data_path: &Path, state_path: &Path) -> Result<Self, Report> {
+        let mut source = std::fs::File::open(state_path)?;
+        let mut statemap = State::import(&mut source, None)?;
+        match std::fs::read(derived_data_path) {
             Ok(derived_data_bytes) => {
-                let derived_data: Self =
-                    bincode::decode_from_slice(&derived_data_bytes, bincode::config::standard())?.0;
+                let derived_data: Self = bincode::decode_from_slice_with_context(
+                    &derived_data_bytes,
+                    bincode::config::standard(),
+                    &mut statemap,
+                )?
+                .0;
                 Ok(derived_data)
             }
             Err(_) => {
                 Err(eyre!(
                     "Could not read derived data from path: {}",
-                    path.display()
+                    derived_data_path.display()
                 ))
                 // Ok(Self::new_empty())
             }
@@ -3459,7 +3447,7 @@ impl LoopMomentumBasis {
             atom = &atom + &p;
         }
 
-        atom.into_pattern()
+        atom.to_pattern()
     }
 
     pub fn set_edge_signatures(&mut self, graph: &BareGraph) -> Result<(), Report> {

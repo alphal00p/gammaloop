@@ -335,6 +335,15 @@ impl From<Flow> for Orientation {
     }
 }
 
+impl From<Flow> for SignOrZero {
+    fn from(value: Flow) -> Self {
+        match value {
+            Flow::Source => SignOrZero::Plus,
+            Flow::Sink => SignOrZero::Minus,
+        }
+    }
+}
+
 impl TryFrom<Orientation> for Flow {
     type Error = &'static str;
 
@@ -656,8 +665,14 @@ pub trait Get<H> {
 }
 
 impl<N, E> Get<Hedge> for Involution<N, E> {
-    type Output<'a> = &'a InvolutiveMapping<E> where Self: 'a;
-    type MutOutput<'a> = &'a mut InvolutiveMapping<E> where Self: 'a;
+    type Output<'a>
+        = &'a InvolutiveMapping<E>
+    where
+        Self: 'a;
+    type MutOutput<'a>
+        = &'a mut InvolutiveMapping<E>
+    where
+        Self: 'a;
     fn get(&self, h: Hedge) -> Self::Output<'_> {
         &self.inv[h.0]
     }
@@ -668,11 +683,13 @@ impl<N, E> Get<Hedge> for Involution<N, E> {
 }
 
 impl<N, E> Get<EdgeId> for Involution<N, E> {
-    type Output<'a> = Option<(Flow,&'a EdgeData<E>)>
+    type Output<'a>
+        = Option<(Flow, &'a EdgeData<E>)>
     where
-        Self: 'a ;
+        Self: 'a;
 
-    type MutOutput<'a>= Option<(Flow,&'a mut EdgeData<E>)>
+    type MutOutput<'a>
+        = Option<(Flow, &'a mut EdgeData<E>)>
     where
         Self: 'a;
 

@@ -42,11 +42,11 @@ use symbolica::evaluate::FunctionMap;
 use eyre::Result;
 use std::ops::Index;
 use std::path::Path;
-use symbolica::id::{Pattern, PatternOrMap};
+use symbolica::id::{Pattern, Replacement};
 // use std::str::pattern::Pattern;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
-use symbolica::atom::{Atom, AtomView, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 
 use crate::utils::GS;
 use spenso::complex::Complex;
@@ -63,17 +63,12 @@ pub fn normalise_complex(atom: &Atom) -> Atom {
 
     let comp_id = State::get_symbol("complex");
 
-    let complexfn = fun!(comp_id, re, im).into_pattern();
+    let complexfn = fun!(comp_id, re, im).to_pattern();
 
-    let i = Atom::new_var(State::I);
+    let i = Atom::new_var(Atom::I);
     let complexpanded = &re + i * &im;
 
-    complexfn.replace_all(
-        atom.as_view(),
-        &complexpanded.into_pattern().into(),
-        None,
-        None,
-    )
+    atom.replace_all(&complexfn, &complexpanded.to_pattern(), None, None)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -747,27 +742,30 @@ where
             color: self.color.iter().map(|c| c.dual()).collect(),
         }
     }
-    pub fn replacements(&self, id: usize) -> Vec<(Pattern, PatternOrMap)> {
-        let rhs_lor = LorRep::slot(4, id).to_symbolic_wrapped().into_pattern();
+    pub fn replacements(&self, id: usize) -> Vec<Replacement> {
+        let rhs_lor = LorRep::slot(4, id).to_symbolic_wrapped().to_pattern();
 
         let rhs_spin = Bispinor::slot(4, id);
 
-        let rhs_spin = rhs_spin.to_symbolic_wrapped().into_pattern();
+        let rhs_spin = rhs_spin.to_symbolic_wrapped().to_pattern();
 
         let mut reps = vec![];
         for l in &self.lorentz {
-            reps.push((rhs_lor.clone(), l.to_atom().into_pattern().into()));
+            reps.push(Replacement::new(rhs_lor.clone(), l.to_atom().to_pattern()));
         }
 
         for s in &self.spin {
-            reps.push((rhs_spin.clone(), s.to_atom().into_pattern().into()));
+            reps.push(Replacement::new(rhs_spin.clone(), s.to_atom().to_pattern()));
         }
 
         for c in &self.color {
             let mut rhs_color = *c;
             rhs_color.aind = id.into();
-            let rhs_color = rhs_color.to_symbolic_wrapped().into_pattern();
-            reps.push((rhs_color.clone(), c.to_atom().into_pattern().into()));
+            let rhs_color = rhs_color.to_symbolic_wrapped().to_pattern();
+            reps.push(Replacement::new(
+                rhs_color.clone(),
+                c.to_atom().to_pattern(),
+            ));
         }
 
         reps
@@ -1504,7 +1502,7 @@ impl Model {
             let key = State::get_symbol(&c.name);
             expr.push(c.expression.as_view());
             fn_map
-                .add_function(key, c.name.clone().into(), vec![], c.expression.as_view())
+                .add_function(key, c.name.clone().into(), vec![], c.expression.clone())
                 .unwrap();
             new_values_len += 1;
         }
@@ -1532,7 +1530,7 @@ impl Model {
                             key,
                             p.name.clone().into(),
                             vec![],
-                            p.expression.as_ref().unwrap().as_view(),
+                            p.expression.clone().unwrap(),
                         )
                         .unwrap();
                 }
@@ -1556,22 +1554,13 @@ impl Model {
         for cpl in self.couplings.iter() {
             let [pattern, rhs] = cpl.rep_rule();
 
-            sub_atom = sub_atom.replace_all(
-                &pattern.into_pattern(),
-                &rhs.into_pattern().into(),
-                None,
-                None,
-            );
+            sub_atom = sub_atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
         }
 
         for para in self.parameters.iter() {
             if let Some([pattern, rhs]) = para.rep_rule() {
-                sub_atom = sub_atom.replace_all(
-                    &pattern.into_pattern(),
-                    &rhs.into_pattern().into(),
-                    None,
-                    None,
-                );
+                sub_atom =
+                    sub_atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
             }
         }
         sub_atom
@@ -1581,7 +1570,7 @@ impl Model {
         let mut reps = vec![];
         for cpl in self.couplings.iter().filter(|c| c.value.is_none()) {
             let [pattern, rhs] = cpl.rep_rule();
-            reps.push((pattern.into_pattern(), rhs.into_pattern()));
+            reps.push((pattern.to_pattern(), rhs.to_pattern()));
         }
         reps
     }
@@ -1594,7 +1583,7 @@ impl Model {
             .filter(|p| matches!(p.nature, ParameterNature::Internal))
         {
             if let Some([pattern, rhs]) = para.rep_rule() {
-                reps.push((pattern.into_pattern(), rhs.into_pattern()));
+                reps.push((pattern.to_pattern(), rhs.to_pattern()));
             }
         }
         reps
@@ -1603,23 +1592,23 @@ impl Model {
     pub fn valued_coupling_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
-            let lhs = Atom::parse(&cpl.name).unwrap().into_pattern();
+            let lhs = Atom::parse(&cpl.name).unwrap().to_pattern();
             if let Some(value) = cpl.value {
                 let rhs = if value.im == 0.0 {
                     let name = Atom::new_var(State::get_symbol(format!("{}_re", cpl.name)));
 
-                    name.into_pattern()
+                    name.to_pattern()
                 } else if value.re == 0.0 {
                     let name = Atom::new_var(State::get_symbol(format!("{}_im", cpl.name)));
 
-                    name.into_pattern()
+                    name.to_pattern()
                 } else {
                     let name_re = Atom::new_var(State::get_symbol(cpl.name.clone() + "_re"));
 
                     let name_im = Atom::new_var(State::get_symbol(cpl.name.clone() + "_im"));
 
-                    let i = Atom::new_var(State::I);
-                    (&name_re + i * &name_im).into_pattern()
+                    let i = Atom::new_var(Atom::I);
+                    (&name_re + i * &name_im).to_pattern()
                 };
                 reps.push((lhs, rhs));
             }
@@ -1676,7 +1665,7 @@ impl Model {
     pub fn valued_parameter_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for param in self.parameters.iter().filter(|p| p.value.is_some()) {
-            let lhs = Atom::parse(&param.name).unwrap().into_pattern();
+            let lhs = Atom::parse(&param.name).unwrap().to_pattern();
             if let Some(value) = param.value {
                 let rhs = match param.parameter_type {
                     ParameterType::Imaginary => {
@@ -1684,7 +1673,7 @@ impl Model {
                             let name =
                                 Atom::new_var(State::get_symbol(format!("{}_im", param.name)));
 
-                            name.into_pattern()
+                            name.to_pattern()
                         } else {
                             let name_re =
                                 Atom::new_var(State::get_symbol(param.name.clone() + "_re"));
@@ -1692,14 +1681,14 @@ impl Model {
                             let name_im =
                                 Atom::new_var(State::get_symbol(param.name.clone() + "_im"));
 
-                            let i = Atom::new_var(State::I);
-                            (&name_re + i * &name_im).into_pattern()
+                            let i = Atom::new_var(Atom::I);
+                            (&name_re + i * &name_im).to_pattern()
                         }
                     }
                     ParameterType::Real => {
                         let name = Atom::new_var(State::get_symbol(format!("{}_re", param.name)));
 
-                        name.into_pattern()
+                        name.to_pattern()
                     }
                 };
                 reps.push((lhs, rhs));
@@ -1712,13 +1701,13 @@ impl Model {
         // let mut atom = atom;
         // for cpl in self.couplings.iter() {
         //     if let Some(value) = cpl.value {
-        //         let pat = Atom::parse(&cpl.name).unwrap().into_pattern();
+        //         let pat = Atom::parse(&cpl.name).unwrap().to_pattern();
 
         //         let re = Atom::new_num(value);
-        //         atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+        //         atom = atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
         //     }
         //     let [pattern, rhs] = cpl.rep_rule();
-        //     atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+        //     atom = atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
         // }
         atom
     }

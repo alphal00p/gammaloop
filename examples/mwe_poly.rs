@@ -193,10 +193,10 @@ fn main() {
     let reps = (0..12)
         .map(|i| {
             (
-                fun!(q, Atom::new_num(i), cinds[0]).into_pattern(),
+                fun!(q, Atom::new_num(i), cinds[0]).to_pattern(),
                 fun!(q, Atom::new_num(i), cinds[0])
                     .ref_neg()
-                    .into_pattern()
+                    .to_pattern()
                     .into(),
             )
         })
@@ -470,10 +470,10 @@ fn main() {
     let coef = symb!("coef");
 
     let coefs_syms: Vec<_> = (0..coefs.len())
-        .map(|i| fun!(coef, Atom::new_num(i as i64)).into_pattern())
+        .map(|i| fun!(coef, Atom::new_num(i as i64)).to_pattern())
         .collect();
 
-    let coefs_reps: Vec<_> = coefs.iter().map(|a| a.into_pattern().into()).collect();
+    let coefs_reps: Vec<_> = coefs.iter().map(|a| a.to_pattern().into()).collect();
 
     let reps: Vec<_> = coefs_syms
         .iter()

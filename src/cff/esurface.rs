@@ -575,7 +575,7 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
 
 #[cfg(test)]
 mod tests {
-    use symbolica::atom::Atom;
+    use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
         cff::{cff_graph::VertexSet, esurface::Esurface},

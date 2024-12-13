@@ -12,9 +12,14 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
     complex::RealOrComplexTensor,
     contraction::{Contract, RefZero},
-    data::{DataIterator, DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor},
+    data::{
+        DataIterator, DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor,
+        StorageTensor,
+    },
     iterators::IteratableTensor,
-    parametric::{EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete},
+    parametric::{
+        atomcore::TensorAtomOps, EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete,
+    },
     shadowing::Shadowable,
     structure::{
         abstract_index::AbstractIndex,
@@ -26,7 +31,7 @@ use spenso::{
     upgrading_arithmetic::FallibleAdd,
 };
 use symbolica::{
-    atom::{Atom, Symbol},
+    atom::{Atom, AtomCore, Symbol},
     coefficient::Coefficient,
     domains::{
         float::{NumericalFloatLike, Real, RealNumberLike, SingleFloat},
@@ -2603,7 +2608,7 @@ impl Rotation {
             .unwrap()
             .try_into_parametric()
             .unwrap()
-            .eval_tree(
+            .to_evaluation_tree(
                 &fn_map,
                 &shadow_t.try_into_parametric().unwrap().tensor.data(),
             )
@@ -2631,10 +2636,12 @@ impl Rotation {
 
         let fn_map = FunctionMap::new();
         let mut params = shadow_t.try_into_parametric().unwrap().tensor.data();
-        params.push(Atom::new_var(State::I));
+        params.push(Atom::new_var(Atom::I));
 
-        let spinor_eval: EvalTensor<ExpressionEvaluator<Rational>, VecStructure> =
-            res.eval_tree(&fn_map, &params).unwrap().linearize(Some(1));
+        let spinor_eval: EvalTensor<ExpressionEvaluator<Rational>, VecStructure> = res
+            .to_evaluation_tree(&fn_map, &params)
+            .unwrap()
+            .linearize(Some(1));
 
         Self {
             method,

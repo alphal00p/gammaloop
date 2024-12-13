@@ -7,14 +7,14 @@ use itertools::zip;
 use log::debug;
 use smartstring::{LazyCompact, SmartString};
 use spenso::iterators::IteratableTensor;
+use spenso::parametric::atomcore::TensorAtomMaps;
 use spenso::parametric::ParamTensor;
 use spenso::structure::HasStructure;
 use spenso::structure::TensorStructure;
 use spenso::upgrading_arithmetic::FallibleAdd;
 use spenso::upgrading_arithmetic::FallibleSub;
+use symbolica::atom::AtomCore;
 use symbolica::domains::rational::Rational;
-use symbolica::id::Condition;
-use symbolica::id::MatchSettings;
 use symbolica::id::Pattern;
 
 use super::NumeratorAwareGraphGroupingOption;
@@ -1305,13 +1305,8 @@ impl FeynGen {
                     let ratio = ratios.iter().next().unwrap().to_owned();
                     // Make sure the ratio only consists of couplings
                     for pattern in ["cind(arg_)"] {
-                        if Pattern::parse(pattern)
-                            .unwrap()
-                            .pattern_match(
-                                ratio.as_view(),
-                                &Condition::default(),
-                                &MatchSettings::default(),
-                            )
+                        if ratio
+                            .pattern_match(&Pattern::parse(pattern).unwrap(), None, None)
                             .next()
                             .is_some()
                         {
@@ -1387,7 +1382,7 @@ impl ProcessedNumeratorForComparison {
     ) -> Self {
         let mut tensor = numerator
             .parse()
-            .contract(ContractionSettings::<Rational>::Normal)
+            .contract::<Rational>(ContractionSettings::<Rational>::Normal)
             .unwrap()
             .state
             .tensor;
@@ -1397,12 +1392,12 @@ impl ProcessedNumeratorForComparison {
             NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign => {
                 // TODO use expand_num().collect_num() instead of expand() as it is much faster but for now
                 // fails to properly detect cancellations
-                tensor = tensor.map_data(|d| d.expand())
+                tensor = tensor.expand()
             }
             NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling => {
                 // TODO use expand_num().collect_num() instead of expand() as it is much faster but for now
                 // fails to properly detect cancellations
-                tensor = tensor.map_data(|d| d.expand())
+                tensor = tensor.expand()
             }
         }
         ProcessedNumeratorForComparison { diagram_id, tensor }

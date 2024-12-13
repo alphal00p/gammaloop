@@ -1,7 +1,11 @@
 use brotli::CompressorWriter;
 use spenso::{
-    complex::Complex, data::DenseTensor, iterators::IteratableTensor, parametric::ParamTensor,
-    structure::HasStructure, upgrading_arithmetic::FallibleSub,
+    complex::Complex,
+    data::{DenseTensor, StorageTensor},
+    iterators::IteratableTensor,
+    parametric::{atomcore::TensorAtomMaps, ParamTensor},
+    structure::HasStructure,
+    upgrading_arithmetic::FallibleSub,
 };
 use std::{
     fs::File,
@@ -207,7 +211,7 @@ fn compare_poly_to_direct(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>
         Atom::new_num(0),
     ));
 
-    zero == poly.sub_fallible(&direct).unwrap().map_data(|a| a.expand())
+    zero == poly.sub_fallible(&direct).unwrap().expand()
 }
 
 #[allow(dead_code)]
@@ -217,7 +221,7 @@ pub fn save_expr(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>, name: &
         .color_simplify();
     let direct = color_simplified
         .parse()
-        .contract(ContractionSettings::<Rational>::Normal)
+        .contract::<Rational>(ContractionSettings::<Rational>::Normal)
         .unwrap()
         .state
         .tensor
@@ -422,7 +426,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
         .color_simplify()
         // .gamma_symplify()
         .parse()
-        .contract(ContractionSettings::<Rational>::Normal)
+        .contract::<Rational>(ContractionSettings::<Rational>::Normal)
         .unwrap()
         .generate_evaluators(
             model,
@@ -438,7 +442,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
         .color_simplify()
         .gamma_simplify()
         .parse()
-        .contract(ContractionSettings::<Rational>::Normal)
+        .contract::<Rational>(ContractionSettings::<Rational>::Normal)
         .unwrap()
         .generate_evaluators(
             model,

@@ -530,6 +530,9 @@ impl<const N: u32> RealNumberLike for VarFloat<N> {
 }
 
 impl<const N: u32> Real for VarFloat<N> {
+    fn i(&self) -> Option<Self> {
+        None
+    }
     #[inline(always)]
     fn pi(&self) -> Self {
         Float::with_val(N, rug::float::Constant::Pi).into()
@@ -1007,6 +1010,10 @@ impl<T: FloatLike + ConstructibleFloat> ConstructibleFloat for F<T> {
 impl<T: FloatLike> Real for F<T> {
     fn atan2(&self, x: &Self) -> Self {
         F(self.0.atan2(&x.0))
+    }
+
+    fn i(&self) -> Option<Self> {
+        None
     }
 
     fn powf(&self, e: &Self) -> Self {
@@ -3238,132 +3245,6 @@ pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<Permutati
         left_to_right,
         right_to_left,
     })
-}
-
-#[derive(PartialEq, Eq, Hash, Clone, Serialize, Deserialize, Debug)]
-enum OwnedAtomOrTaggedFunction {
-    Atom(SerializableAtom),
-    TaggedFunction(SerializableSymbol, Vec<SerializableAtom>),
-}
-
-use ahash::AHashMap;
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct OwnedFunctionMap<T = Rational> {
-    map: AHashMap<OwnedAtomOrTaggedFunction, OwnedConstOrExpr<T>>,
-    tag: AHashMap<SerializableSymbol, usize>,
-}
-
-impl<T> OwnedFunctionMap<T> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        OwnedFunctionMap {
-            map: AHashMap::default(),
-            tag: AHashMap::default(),
-        }
-    }
-
-    pub fn add_constant<A: Into<Atom>>(&mut self, key: A, value: T) {
-        self.map.insert(
-            OwnedAtomOrTaggedFunction::Atom(<A as Into<Atom>>::into(key).into()),
-            OwnedConstOrExpr::Const(value),
-        );
-    }
-
-    pub fn add_function(
-        &mut self,
-        name: Symbol,
-        rename: String,
-        args: Vec<Symbol>,
-        body: Atom,
-    ) -> Result<(), &str> {
-        if let Some(t) = self.tag.insert(name.into(), 0) {
-            if t != 0 {
-                return Err("Cannot add the same function with a different number of parameters");
-            }
-        }
-
-        self.map.insert(
-            OwnedAtomOrTaggedFunction::TaggedFunction(name.into(), vec![]),
-            OwnedConstOrExpr::Expr(
-                rename,
-                0,
-                args.into_iter().map(SerializableSymbol::from).collect(),
-                body.into(),
-            ),
-        );
-
-        Ok(())
-    }
-
-    pub fn add_tagged_function(
-        &mut self,
-        name: Symbol,
-        tags: Vec<Atom>,
-        rename: String,
-        args: Vec<Symbol>,
-        body: Atom,
-    ) -> Result<(), &str> {
-        if let Some(t) = self.tag.insert(name.into(), tags.len()) {
-            if t != tags.len() {
-                return Err("Cannot add the same function with a different number of parameters");
-            }
-        }
-
-        let tag_len = tags.len();
-
-        self.map.insert(
-            OwnedAtomOrTaggedFunction::TaggedFunction(
-                name.into(),
-                tags.into_iter().map(SerializableAtom::from).collect(),
-            ),
-            OwnedConstOrExpr::Expr(
-                rename,
-                tag_len,
-                args.into_iter().map(SerializableSymbol::from).collect(),
-                body.into(),
-            ),
-        );
-
-        Ok(())
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-enum OwnedConstOrExpr<T> {
-    Const(T),
-    Expr(String, usize, Vec<SerializableSymbol>, SerializableAtom),
-}
-
-impl<'a, T: Clone, U: From<T>> From<&'a OwnedFunctionMap<T>> for FunctionMap<'a, U> {
-    fn from(owned: &'a OwnedFunctionMap<T>) -> Self {
-        let mut fn_map = FunctionMap::new();
-
-        for (k, v) in owned.map.iter() {
-            match v {
-                OwnedConstOrExpr::Const(v) => {
-                    if let OwnedAtomOrTaggedFunction::Atom(a) = k {
-                        fn_map.add_constant(a.0.as_view(), v.clone().into());
-                    }
-                }
-                OwnedConstOrExpr::Expr(rename, _tag_len, args, body) => {
-                    if let OwnedAtomOrTaggedFunction::TaggedFunction(name, tags) = k {
-                        fn_map
-                            .add_tagged_function(
-                                (*name).into(),
-                                tags.iter().map(|a| a.0.as_view().into()).collect(),
-                                rename.clone(),
-                                args.iter().map(|&a| a.into()).collect(),
-                                body.0.as_view(),
-                            )
-                            .unwrap();
-                    }
-                }
-            }
-        }
-
-        fn_map
-    }
 }
 
 #[derive(Clone, Debug)]

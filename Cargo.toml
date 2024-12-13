@@ -50,7 +50,9 @@ momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
 ], branch = 'float_refactor' }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
-bincode = { version = "2.0.0-rc.3", features = ["serde"] }
+bincode = { git = "https://github.com/branchseer/bincode", branch = "decode_context", features = [
+    "serde",
+] }
 clap = "2.34"
 color-eyre = { version = "^0.3", default-features = false }
 eyre = "^0.4"
@@ -138,4 +140,4 @@ no_python = []
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # spenso = { path = "../../alphal00p/spenso" }
-spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "1db1cadef4482b6a70c300d413efa19a76dca489" }

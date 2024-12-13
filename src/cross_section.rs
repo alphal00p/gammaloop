@@ -21,6 +21,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 use symbolica::printer::{AtomPrinter, PrintOptions};
+use symbolica::state::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OutputType {
@@ -786,9 +787,18 @@ impl Amplitude<UnInit> {
             serde_yaml::to_string(&amp.to_serializable())?,
         )?;
 
+        // fs::write(
+        //     path.clone().join("state.bin"),
+
+        //     )?,
+        // )?;
+        //
+        let mut state = fs::File::create(path.clone().join("state.bin"))?;
+        State::export(&mut state)?;
         // dump the derived data in a binary file
         for amplitude_graph in amp.amplitude_graphs.iter() {
             debug!("dumping derived data to {:?}", path);
+
             fs::write(
                 path.clone().join(format!(
                     "derived_data_{}.bin",
