@@ -294,8 +294,8 @@ impl<E> EdgeData<E> {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
 pub enum Orientation {
-    Default,  //incoming for externals
-    Reversed, //outgoing for externals
+    Default,
+    Reversed,
     Undirected,
 }
 
@@ -1472,18 +1472,18 @@ impl<E, V> HedgeGraph<E, V> {
     pub fn iter_edge_id<'a, S: SubGraph>(&'a self, subgraph: &'a S) -> EdgeIdIter<'a, E, V, S> {
         EdgeIdIter::new(self, subgraph)
     }
-    // pub fn map_edges_ref<E2>(&self, f: &impl Fn(&E) -> E2) -> HedgeGraph<E2, V>
-    // where
-    //     V: Clone,
-    // {
-    //     let involution = self.involution.map_edge_data_ref(f);
-    //     let nodes = self.nodes.clone();
-    //     HedgeGraph {
-    //         base_nodes: self.base_nodes,
-    //         nodes,
-    //         involution,
-    //     }
-    // }
+    pub fn map_edges_ref<E2>(&self, f: &impl Fn(&E) -> E2) -> HedgeGraph<E2, V>
+    where
+        V: Clone,
+    {
+        let involution = self.involution.map_edge_data_ref(f);
+        let nodes = self.nodes.clone();
+        HedgeGraph {
+            base_nodes: self.base_nodes,
+            nodes,
+            involution,
+        }
+    }
 
     pub fn map_nodes_ref<V2>(&self, f: &impl Fn(&V) -> V2) -> HedgeGraph<E, V2>
     where

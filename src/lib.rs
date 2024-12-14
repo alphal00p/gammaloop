@@ -9,6 +9,7 @@
 //
 #[cfg(feature = "python_api")]
 pub mod api;
+
 pub mod cff;
 pub mod cli_functions;
 pub mod cross_section;
@@ -24,6 +25,7 @@ pub mod integrate;
 pub mod ltd;
 pub mod model;
 pub mod momentum;
+pub mod new_cs;
 pub mod numerator;
 pub mod observables;
 pub mod subtraction;
