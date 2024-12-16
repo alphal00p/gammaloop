@@ -5,8 +5,8 @@ use spenso::structure::representation::{
     BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Minkowski,
 };
 use symbolica::atom::AtomCore;
+use symbolica::atom::FunctionAttribute;
 use symbolica::id::MatchSettings;
-use symbolica::state::FunctionAttribute;
 use symbolica::{
     atom::{Atom, Symbol},
     fun,
@@ -48,11 +48,11 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
     projp: symb!("ProjP"),
     sigma: symb!("Sigma"),
     charge_conj: symb!("C"),
-    metric: State::get_symbol_with_attributes("Metric", &[FunctionAttribute::Symmetric]).unwrap(),
+    metric: Symbol::new_with_attributes("Metric", &[FunctionAttribute::Symmetric]).unwrap(),
     momentum: symb!("P"),
     levicivita: symb!("Epsilon"),
     t: symb!("T"),
-    f: State::get_symbol_with_attributes("f", &[FunctionAttribute::Antisymmetric]).unwrap(),
+    f: Symbol::new_with_attributes("f", &[FunctionAttribute::Antisymmetric]).unwrap(),
     d: symb!("d"),
     antilevicivita: symb!("EpsilonBar"),
     t6: symb!("T6"),

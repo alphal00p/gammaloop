@@ -59,7 +59,7 @@ use symbolica::poly::Variable;
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::{AtomCore, AtomOrView, AtomView};
+use symbolica::atom::{AtomCore, AtomView, Symbol};
 use symbolica::evaluate::ExpressionEvaluator;
 use symbolica::id::{Condition, Match, MatchSettings, PatternOrMap};
 
@@ -1048,7 +1048,7 @@ impl Numerator<AppliedFeynmanRule> {
 
 impl ColorSimplified {
     fn isolate_color(expression: &mut SerializableAtom) {
-        let color_fn = FunctionBuilder::new(State::get_symbol("color"))
+        let color_fn = FunctionBuilder::new(Symbol::new("color"))
             .add_arg(&Atom::new_num(1))
             .finish();
         expression.0 = &expression.0 * color_fn;
@@ -1083,7 +1083,7 @@ impl ColorSimplified {
         // if let AtomView::Mul(mul) = expression.0.as_view() {
         //     for a in mul {
         //         if let AtomView::Fun(f) = a {
-        //             if f.get_symbol() == State::get_symbol("color") {
+        //             if f.get_symbol() == Symbol::new("color") {
         //                 color.set_from_view(&f.iter().next().unwrap());
         //             }
         //         }
@@ -1091,7 +1091,7 @@ impl ColorSimplified {
         // }
 
         // expression.0.replace_all(
-        //     &Pattern::Fn(State::get_symbol("color"), vec![]),
+        //     &Pattern::Fn(Symbol::new("color"), vec![]),
         //     &Pattern::Literal(Atom::new_num(1)).into(),
         //     None,
         //     None,
@@ -1833,9 +1833,9 @@ impl GammaSimplified {
                 // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
                 for j in 1..n {
                     let mut gamma_chain_builder_slots =
-                        FunctionBuilder::new(State::get_symbol("gamma_trace"));
+                        FunctionBuilder::new(Symbol::new("gamma_trace"));
 
-                    let metric_builder_slots = FunctionBuilder::new(State::get_symbol("Metric"));
+                    let metric_builder_slots = FunctionBuilder::new(Symbol::new("Metric"));
 
                     for k in 1..j {
                         let mu = Atom::parse(&format!("a{}_", k)).unwrap();
@@ -1864,7 +1864,7 @@ impl GammaSimplified {
                 }
 
                 let mut gamma_chain_builder_slots =
-                    FunctionBuilder::new(State::get_symbol("gamma_trace"));
+                    FunctionBuilder::new(Symbol::new("gamma_trace"));
                 for k in 0..n {
                     let mu = Atom::parse(&format!("a{}_", k)).unwrap();
                     gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
@@ -1874,7 +1874,7 @@ impl GammaSimplified {
                 reps.push((a.to_pattern(), sum.to_pattern()));
             } else {
                 let mut gamma_chain_builder_slots =
-                    FunctionBuilder::new(State::get_symbol("gamma_trace"));
+                    FunctionBuilder::new(Symbol::new("gamma_trace"));
                 for k in 0..n {
                     let mu = Atom::parse(&format!("a{}_", k)).unwrap();
                     gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
@@ -2242,10 +2242,10 @@ impl Contracted {
         fn atoms_for_pol(name: String, num: i64, size: usize) -> Vec<Atom> {
             let mut data = vec![];
             for index in 0..size {
-                let e = FunctionBuilder::new(State::get_symbol(&name));
+                let e = FunctionBuilder::new(Symbol::new(&name));
                 data.push(
-                    e.add_arg(&Atom::new_num(num))
-                        .add_arg(&Atom::parse(&format!("cind({})", index)).unwrap())
+                    e.add_arg(Atom::new_num(num))
+                        .add_arg(Atom::parse(&format!("cind({})", index)).unwrap())
                         .finish(),
                 );
             }

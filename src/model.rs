@@ -61,7 +61,7 @@ pub fn normalise_complex(atom: &Atom) -> Atom {
     let re = Atom::parse("re_").unwrap();
     let im = Atom::parse("im_").unwrap();
 
-    let comp_id = State::get_symbol("complex");
+    let comp_id = Symbol::new("complex");
 
     let complexfn = fun!(comp_id, re, im).to_pattern();
 
@@ -787,7 +787,7 @@ where
     }
 
     pub fn to_cind_atom(&self) -> Atom {
-        let mut builder = FunctionBuilder::new(State::get_symbol(CONCRETEIND));
+        let mut builder = FunctionBuilder::new(Symbol::new(CONCRETEIND));
 
         for l in &self.lorentz {
             builder = builder.add_arg(l.to_atom().as_view());
@@ -1499,7 +1499,7 @@ impl Model {
         let mut new_values_len = 0;
 
         for c in &self.couplings {
-            let key = State::get_symbol(&c.name);
+            let key = Symbol::new(&c.name);
             expr.push(c.expression.as_view());
             fn_map
                 .add_function(key, c.name.clone().into(), vec![], c.expression.clone())
@@ -1523,7 +1523,7 @@ impl Model {
                 }
                 ParameterNature::Internal => {
                     new_values_len += 1;
-                    let key = State::get_symbol(&p.name);
+                    let key = Symbol::new(&p.name);
                     expr.push(p.expression.as_ref().unwrap().as_view());
                     fn_map
                         .add_function(
@@ -1595,17 +1595,17 @@ impl Model {
             let lhs = Atom::parse(&cpl.name).unwrap().to_pattern();
             if let Some(value) = cpl.value {
                 let rhs = if value.im == 0.0 {
-                    let name = Atom::new_var(State::get_symbol(format!("{}_re", cpl.name)));
+                    let name = Atom::new_var(Symbol::new(format!("{}_re", cpl.name)));
 
                     name.to_pattern()
                 } else if value.re == 0.0 {
-                    let name = Atom::new_var(State::get_symbol(format!("{}_im", cpl.name)));
+                    let name = Atom::new_var(Symbol::new(format!("{}_im", cpl.name)));
 
                     name.to_pattern()
                 } else {
-                    let name_re = Atom::new_var(State::get_symbol(cpl.name.clone() + "_re"));
+                    let name_re = Atom::new_var(Symbol::new(cpl.name.clone() + "_re"));
 
-                    let name_im = Atom::new_var(State::get_symbol(cpl.name.clone() + "_im"));
+                    let name_im = Atom::new_var(Symbol::new(cpl.name.clone() + "_im"));
 
                     let i = Atom::new_var(Atom::I);
                     (&name_re + i * &name_im).to_pattern()
@@ -1671,22 +1671,22 @@ impl Model {
                     ParameterType::Imaginary => {
                         if value.re.is_zero() {
                             let name =
-                                Atom::new_var(State::get_symbol(format!("{}_im", param.name)));
+                                Atom::new_var(Symbol::new(format!("{}_im", param.name)));
 
                             name.to_pattern()
                         } else {
                             let name_re =
-                                Atom::new_var(State::get_symbol(param.name.clone() + "_re"));
+                                Atom::new_var(Symbol::new(param.name.clone() + "_re"));
 
                             let name_im =
-                                Atom::new_var(State::get_symbol(param.name.clone() + "_im"));
+                                Atom::new_var(Symbol::new(param.name.clone() + "_im"));
 
                             let i = Atom::new_var(Atom::I);
                             (&name_re + i * &name_im).to_pattern()
                         }
                     }
                     ParameterType::Real => {
-                        let name = Atom::new_var(State::get_symbol(format!("{}_re", param.name)));
+                        let name = Atom::new_var(Symbol::new(format!("{}_re", param.name)));
 
                         name.to_pattern()
                     }

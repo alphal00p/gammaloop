@@ -1315,7 +1315,7 @@ impl<T: Clone> Polarization<T> {
             .clone()
             .to_dense_labeled(|_, i| FlatCoefficent::<NoArgs> {
                 index: i,
-                name: Some(State::get_symbol(self.pol_type.to_string())),
+                name: Some(Symbol::new(self.pol_type.to_string())),
                 args: None,
             })
             .unwrap()

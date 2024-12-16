@@ -791,7 +791,7 @@ impl Vertex {
 
         let v = graph.get_vertex_position(&self.name).unwrap();
 
-        let color = color.map_structure(|s| s.to_named(State::get_symbol("Col"), Some(v)));
+        let color = color.map_structure(|s| s.to_named(Symbol::new("Col"), Some(v)));
 
         let color_shadow = color.expanded_shadow().unwrap().cast_structure().into();
 
