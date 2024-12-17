@@ -1020,6 +1020,51 @@ impl<N, E> Involution<N, E> {
         Hedge(sink)
     }
 
+    fn connect_identities(
+        &mut self,
+        source_idx: Hedge,
+        sink_idx: Hedge,
+        merge_fn: &impl Fn(Flow, EdgeData<E>, Flow, EdgeData<E>) -> EdgeData<E>,
+    ) {
+        let (source, sink) = if source_idx.0 < sink_idx.0 {
+            let (a, b) = self.inv.split_at_mut(sink_idx.0);
+
+            (&mut a[source_idx.0], &mut b[0])
+        } else {
+            let (a, b) = self.inv.split_at_mut(source_idx.0);
+
+            (&mut b[0], &mut a[sink_idx.0])
+        };
+        let new_data = if let (
+            InvolutiveMapping::Identity { data, underlying },
+            InvolutiveMapping::Identity {
+                data: sink_data,
+                underlying: sink_underlying,
+            },
+        ) = (source, sink)
+        {
+            merge_fn(*underlying, data.take(), *sink_underlying, sink_data.take())
+        } else {
+            return;
+        };
+
+        let (source, sink) = if source_idx.0 < sink_idx.0 {
+            let (a, b) = self.inv.split_at_mut(sink_idx.0);
+
+            (&mut a[source_idx.0], &mut b[0])
+        } else {
+            let (a, b) = self.inv.split_at_mut(source_idx.0);
+
+            (&mut b[0], &mut a[sink_idx.0])
+        };
+
+        *source = InvolutiveMapping::Source {
+            data: new_data,
+            sink_idx,
+        };
+        *sink = InvolutiveMapping::Sink { source_idx };
+    }
+
     fn connect(&mut self, source_idx: Hedge, sink_idx: Hedge)
     where
         E: Clone,
@@ -1470,52 +1515,113 @@ where
 
 #[derive(Clone, Debug, Serialize, Deserialize, Error)]
 pub enum HedgeGraphError {
-    #[error("Invalid start node")]
+    #[error("Nodes do not partition")]
     NodesDoNotPartition,
+    #[error("Invalid node")]
+    NoNode,
 }
 
 impl<E, V> HedgeGraph<E, V> {
-    pub fn add_dangling_edge(
-        &self,
-        source: HedgeNode,
-        data: E,
-        orientation: impl Into<Orientation>,
-    ) -> Result<Self, HedgeGraphError>
-    where
-        V: Clone,
-        E: Clone,
-    {
-        let mut involution = self.involution.clone();
-        let o = orientation.into();
+    pub fn join(
+        self,
+        other: Self,
+        matching_fn: impl Fn(Flow, EdgeData<&E>, Flow, EdgeData<&E>) -> bool,
+        merge_fn: impl Fn(Flow, EdgeData<E>, Flow, EdgeData<E>) -> EdgeData<E>,
+    ) -> Result<Self, HedgeGraphError> {
+        let self_inv_len = self.empty_filter();
+        let other_inv_len = other.empty_filter();
 
         let nodes: IndexMap<_, _> = self
             .nodes
-            .clone()
             .into_iter()
             .map(|(mut k, v)| {
-                k.internal_graph.filter.push(false);
-                if k == source {
-                    k.hairs.push(true);
-                    let hedge = involution.add_identity(data.clone(), k.clone(), o, Flow::Source);
-                } else {
-                    k.hairs.push(false);
-                }
-
+                k.hairs.extend(other_inv_len.clone());
+                k.internal_graph.filter.extend(other_inv_len.clone());
                 (k, v)
             })
+            .chain(other.nodes.into_iter().map(|(mut k, v)| {
+                let mut new_hairs = self_inv_len.clone();
+                new_hairs.extend(k.hairs.clone());
+                k.hairs = new_hairs;
+
+                let mut internal = self_inv_len.clone();
+                internal.extend(k.internal_graph.filter.clone());
+                k.internal_graph.filter = internal;
+
+                (k, v)
+            }))
             .collect();
 
-        let mut cover = self.empty_filter();
-        cover.push(true);
+        let involution = Involution {
+            inv: self
+                .involution
+                .inv
+                .into_iter()
+                .chain(other.involution.inv)
+                .collect(),
+            hedge_data: self
+                .involution
+                .hedge_data
+                .into_iter()
+                .chain(other.involution.hedge_data)
+                .collect(),
+        };
 
+        let mut found_match = true;
+
+        let mut g = HedgeGraph {
+            base_nodes: self.base_nodes + other.base_nodes, // need to fix
+            nodes,
+            involution,
+        };
+
+        let other = self_inv_len.complement(&g);
+
+        while found_match {
+            let mut matching_ids = None;
+
+            for i in self_inv_len.included_iter() {
+                if let InvolutiveMapping::Identity {
+                    data: datas,
+                    underlying: underlyings,
+                } = &g.involution.inv[i.0]
+                {
+                    for j in other.included_iter() {
+                        if let InvolutiveMapping::Identity { data, underlying } =
+                            &g.involution.inv[j.0]
+                        {
+                            if matching_fn(*underlyings, datas.as_ref(), *underlying, data.as_ref())
+                            {
+                                matching_ids = Some((i, j));
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some((source, sink)) = matching_ids {
+                g.involution.connect_identities(source, sink, &merge_fn);
+            } else {
+                found_match = false;
+            }
+        }
+
+        g.check_and_set_nodes()?;
+
+        Ok(g)
+    }
+
+    fn check_and_set_nodes(&mut self) -> Result<(), HedgeGraphError> {
+        let mut cover = self.empty_filter();
         for i in 0..self.base_nodes {
-            let node = nodes.get_index(i).unwrap().0;
+            let node = self.nodes.get_index(i).unwrap().0;
             for h in node.hairs.included_iter() {
                 if cover.includes(&h) {
                     return Err(HedgeGraphError::NodesDoNotPartition);
                 } else {
                     cover.set(h.0, true);
-                    involution.set_hedge_data(h, node.clone());
+                    self.involution.set_hedge_data(h, node.clone());
                 }
             }
         }
@@ -1524,11 +1630,57 @@ impl<E, V> HedgeGraph<E, V> {
             return Err(HedgeGraphError::NodesDoNotPartition);
         }
 
-        Ok(HedgeGraph {
+        Ok(())
+    }
+
+    pub fn add_dangling_edge(
+        self,
+        source: HedgeNode,
+        data: E,
+        orientation: impl Into<Orientation>,
+    ) -> Result<(Hedge, Self), HedgeGraphError> {
+        let mut cover = self.empty_filter();
+        let full = self.full_filter();
+        let mut involution = self.involution;
+        let o = orientation.into();
+        let mut data = Some(data);
+        let mut hedge = None;
+
+        let nodes: IndexMap<_, _> = self
+            .nodes
+            .into_iter()
+            .map(|(mut k, v)| {
+                k.internal_graph.filter.push(false);
+                if k == source {
+                    if let Some(d) = data.take() {
+                        k.hairs.push(true);
+                        hedge = Some(involution.add_identity(d, k.clone(), o, Flow::Source));
+                    } else {
+                        k.hairs.push(false);
+                    }
+                } else {
+                    k.hairs.push(false);
+                }
+
+                (k, v)
+            })
+            .collect();
+
+        cover.push(false);
+
+        let mut g = HedgeGraph {
             base_nodes: self.base_nodes,
             nodes,
             involution,
-        })
+        };
+
+        g.check_and_set_nodes()?;
+
+        if let Some(hedge) = hedge {
+            Ok((hedge, g))
+        } else {
+            Err(HedgeGraphError::NoNode)
+        }
     }
 
     pub fn iter_edge_id<'a, S: SubGraph>(&'a self, subgraph: &'a S) -> EdgeIdIter<'a, E, V, S> {
