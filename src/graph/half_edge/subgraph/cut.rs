@@ -210,20 +210,21 @@ impl SubGraph for OrientedCut {
 }
 
 impl OrientedCut {
-    pub fn layout<E, V>(
+    pub fn layout<'a, E, V, T>(
         self,
-        graph: &HedgeGraph<E, V>,
+        graph: &'a HedgeGraph<E, V>,
         params: LayoutParams,
         seed: u64,
         iters: u64,
         temperature: f64,
         edge: f64,
-    ) -> HedgeGraph<LayoutEdge<(&E, Orientation)>, LayoutVertex<&V>> {
+        map: &impl Fn(&E) -> T,
+    ) -> HedgeGraph<LayoutEdge<(&'a E, Orientation, T)>, LayoutVertex<&'a V>> {
         let mut left = vec![];
         let mut leftright_map = IndexMap::new();
         let mut right = vec![];
 
-        let graph = self.to_owned_graph(graph);
+        let graph = self.to_owned_graph(graph, map);
 
         for (j, i) in graph.involution.inv.iter().enumerate() {
             if let InvolutiveMapping::Identity { data, underlying } = i {
@@ -268,10 +269,11 @@ impl OrientedCut {
         graph.layout(settings)
     }
 
-    pub fn to_owned_graph<E, V>(
+    pub fn to_owned_graph<'a, E, V, T>(
         self,
-        graph: &HedgeGraph<E, V>,
-    ) -> HedgeGraph<(&E, Orientation), &V> {
+        graph: &'a HedgeGraph<E, V>,
+        map: &impl Fn(&E) -> T,
+    ) -> HedgeGraph<(&'a E, Orientation, T), &'a V> {
         let mut builder = HedgeGraphBuilder::new();
 
         let mut nodeidmap = AHashMap::new();
@@ -287,19 +289,24 @@ impl OrientedCut {
             }
             let source = graph.node_id(i);
             match &graph.involution[i] {
-                InvolutiveMapping::Identity { data, underlying } => builder.add_external_edge(
-                    nodeidmap[source],
-                    (data.as_ref().data.unwrap(), Orientation::Default),
-                    data.orientation,
-                    *underlying,
-                ),
+                InvolutiveMapping::Identity { data, underlying } => {
+                    let datae = data.data.as_ref().unwrap();
+                    builder.add_external_edge(
+                        nodeidmap[source],
+                        (datae, Orientation::Default, map(datae)),
+                        data.orientation,
+                        *underlying,
+                    )
+                }
                 InvolutiveMapping::Source { data, sink_idx } => {
                     let sink = graph.node_id(*sink_idx);
+
+                    let datae = data.data.as_ref().unwrap();
 
                     builder.add_edge(
                         nodeidmap[source],
                         nodeidmap[sink],
-                        (data.data.as_ref().unwrap(), Orientation::Default),
+                        (datae, Orientation::Default, map(datae)),
                         data.orientation,
                     );
                 }
@@ -322,10 +329,10 @@ impl OrientedCut {
 
             // Flow::try_from(self.relative_orientation(i)).unwrap();
             let orientation = data.orientation.relative_to(flow);
-
+            let datae = data.data.unwrap();
             builder.add_external_edge(
                 nodeidmap[source],
-                (data.data.unwrap(), underlying),
+                (datae, underlying, map(datae)),
                 orientation,
                 flow,
             );
@@ -333,7 +340,7 @@ impl OrientedCut {
             let sink = graph.node_id(h);
             builder.add_external_edge(
                 nodeidmap[sink],
-                (data.data.unwrap(), underlying),
+                (datae, underlying, map(datae)),
                 orientation,
                 -flow,
             );

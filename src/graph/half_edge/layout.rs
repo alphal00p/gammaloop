@@ -261,6 +261,7 @@ let edge(..points,decoration:"",angle:0deg)={
 }
 "#;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FancySettings {
     pub label_shift: f64,
     pub arrow_angle_percentage: Option<f64>,

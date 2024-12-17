@@ -73,6 +73,7 @@ pub trait HasIntegrand {
     fn update_results(&mut self, _iter: usize) {}
 
     // In case your integrand has an EventManager, overload this function to return it
+
     fn get_event_manager_mut(&mut self) -> &mut EventManager {
         panic!("This integrand does not have an EventManager");
     }

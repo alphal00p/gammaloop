@@ -1468,7 +1468,69 @@ where
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Error)]
+pub enum HedgeGraphError {
+    #[error("Invalid start node")]
+    NodesDoNotPartition,
+}
+
 impl<E, V> HedgeGraph<E, V> {
+    pub fn add_dangling_edge(
+        &self,
+        source: HedgeNode,
+        data: E,
+        orientation: impl Into<Orientation>,
+    ) -> Result<Self, HedgeGraphError>
+    where
+        V: Clone,
+        E: Clone,
+    {
+        let mut involution = self.involution.clone();
+        let o = orientation.into();
+
+        let nodes: IndexMap<_, _> = self
+            .nodes
+            .clone()
+            .into_iter()
+            .map(|(mut k, v)| {
+                k.internal_graph.filter.push(false);
+                if k == source {
+                    k.hairs.push(true);
+                    let hedge = involution.add_identity(data.clone(), k.clone(), o, Flow::Source);
+                } else {
+                    k.hairs.push(false);
+                }
+
+                (k, v)
+            })
+            .collect();
+
+        let mut cover = self.empty_filter();
+        cover.push(true);
+
+        for i in 0..self.base_nodes {
+            let node = nodes.get_index(i).unwrap().0;
+            for h in node.hairs.included_iter() {
+                if cover.includes(&h) {
+                    return Err(HedgeGraphError::NodesDoNotPartition);
+                } else {
+                    cover.set(h.0, true);
+                    involution.set_hedge_data(h, node.clone());
+                }
+            }
+        }
+
+        if cover.sym_diff(&self.full_filter()).count_ones() > 0 {
+            return Err(HedgeGraphError::NodesDoNotPartition);
+        }
+
+        Ok(HedgeGraph {
+            base_nodes: self.base_nodes,
+            nodes,
+            involution,
+        })
+    }
+
     pub fn iter_edge_id<'a, S: SubGraph>(&'a self, subgraph: &'a S) -> EdgeIdIter<'a, E, V, S> {
         EdgeIdIter::new(self, subgraph)
     }

@@ -127,9 +127,10 @@ name = "cli"
 # required-features = ["binary"]
 bench = false
 [features]
+default = ["python_api", "fjcore"]
 extension-module = ["pyo3/extension-module"]
-default = ["python_api"]
 higher_loops = []
+fjcore = []
 
 python_api = ["pyo3", "extension-module", "pyo3-log"]
 binary = []

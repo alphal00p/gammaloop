@@ -23,15 +23,13 @@
           }
         },
         "cargo": {
-          // "features": "all"
+          "features": "none"
         },
         "diagnostics": {
           "experimental": {
             "enable": true
           }
         },
-        // To disable the checking entirely
-        // (ignores all cargo and check settings below)
         "checkOnSave": true,
         "check": {
           "onSave": true,

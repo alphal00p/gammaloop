@@ -1,7 +1,7 @@
 //! This module steers the integration process.
 //! It contains two main ways of integrating the integrand.
 //! The havana_integrate function is mostly used for local runs.
-//! The master node in combination with batch_integrate is for distributed runs.  
+//! The master node in combination with batch_integrate is for distributed runs.
 
 use bincode::Decode;
 use bincode::Encode;
@@ -610,6 +610,7 @@ fn generate_event_output(
 ) -> EventOutput {
     match event_output_settings {
         EventOutputSettings::None => EventOutput::None,
+
         EventOutputSettings::EventList => {
             let event_list = evaluation_results
                 .into_iter()
