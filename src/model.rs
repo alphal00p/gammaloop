@@ -54,7 +54,6 @@ use spenso::shadowing::ETS;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::fun;
 use symbolica::printer::{AtomPrinter, PrintOptions};
-use symbolica::state::State;
 
 #[allow(unused)]
 pub fn normalise_complex(atom: &Atom) -> Atom {
@@ -68,7 +67,7 @@ pub fn normalise_complex(atom: &Atom) -> Atom {
     let i = Atom::new_var(Atom::I);
     let complexpanded = &re + i * &im;
 
-    atom.replace_all(&complexfn, &complexpanded.to_pattern(), None, None)
+    atom.replace_all(&complexfn, complexpanded.to_pattern(), None, None)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -144,6 +143,10 @@ impl ColorStructure {
 
     pub fn len(&self) -> usize {
         self.color_structure.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.color_structure.is_empty()
     }
 
     pub fn iter(&self) -> std::slice::Iter<Atom> {
@@ -906,7 +909,7 @@ impl Particle {
         colorless.color = vec![];
         if let Some(name) = self.in_pol_symbol() {
             colorless
-                .complete_fn_builder(FunctionBuilder::new(name).add_arg(&Atom::new_num(num as i64)))
+                .complete_fn_builder(FunctionBuilder::new(name).add_arg(Atom::new_num(num as i64)))
         } else {
             Atom::new_num(1)
         }
@@ -1082,7 +1085,7 @@ impl Particle {
         colorless.color = vec![];
         if let Some(name) = self.out_pol_symbol() {
             colorless
-                .complete_fn_builder(FunctionBuilder::new(name).add_arg(&Atom::new_num(num as i64)))
+                .complete_fn_builder(FunctionBuilder::new(name).add_arg(Atom::new_num(num as i64)))
         } else {
             Atom::new_num(1)
         }
@@ -1554,13 +1557,13 @@ impl Model {
         for cpl in self.couplings.iter() {
             let [pattern, rhs] = cpl.rep_rule();
 
-            sub_atom = sub_atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
+            sub_atom = sub_atom.replace_all(&pattern.to_pattern(), rhs.to_pattern(), None, None);
         }
 
         for para in self.parameters.iter() {
             if let Some([pattern, rhs]) = para.rep_rule() {
                 sub_atom =
-                    sub_atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
+                    sub_atom.replace_all(&pattern.to_pattern(), rhs.to_pattern(), None, None);
             }
         }
         sub_atom
@@ -1670,16 +1673,13 @@ impl Model {
                 let rhs = match param.parameter_type {
                     ParameterType::Imaginary => {
                         if value.re.is_zero() {
-                            let name =
-                                Atom::new_var(Symbol::new(format!("{}_im", param.name)));
+                            let name = Atom::new_var(Symbol::new(format!("{}_im", param.name)));
 
                             name.to_pattern()
                         } else {
-                            let name_re =
-                                Atom::new_var(Symbol::new(param.name.clone() + "_re"));
+                            let name_re = Atom::new_var(Symbol::new(param.name.clone() + "_re"));
 
-                            let name_im =
-                                Atom::new_var(Symbol::new(param.name.clone() + "_im"));
+                            let name_im = Atom::new_var(Symbol::new(param.name.clone() + "_im"));
 
                             let i = Atom::new_var(Atom::I);
                             (&name_re + i * &name_im).to_pattern()

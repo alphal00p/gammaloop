@@ -72,11 +72,11 @@ impl Inclusion<InternalSubGraph> for InternalSubGraph {
 
 impl Inclusion<BitVec> for InternalSubGraph {
     fn includes(&self, other: &BitVec) -> bool {
-        &self.filter.intersection(&other) == other
+        &self.filter.intersection(other) == other
     }
 
     fn intersects(&self, other: &BitVec) -> bool {
-        self.filter.intersection(&other).count_ones() > 0
+        self.filter.intersection(other).count_ones() > 0
     }
 }
 

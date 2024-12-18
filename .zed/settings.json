@@ -6,8 +6,6 @@
   "shell": {
     "program": "bash"
   },
-  "ui_font_family": "Iosevka-Custom-Heavy",
-  "buffer_font_family": "Iosevka-Custom-Heavy",
   "lsp": {
     "rust-analyzer": {
       "initialization_options": {

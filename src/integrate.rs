@@ -69,7 +69,6 @@ pub struct IntegralResult {
 
 /// struct to keep track of state, used in the havana_integrate function
 /// the idea is to save this to disk after each iteration, so that the integration can be resumed
-
 pub struct IntegrationState {
     pub num_points: usize,
     pub integral: StatisticsAccumulator<F<f64>>,

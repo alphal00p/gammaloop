@@ -873,6 +873,7 @@ pub enum HybridNode {
 
 // custom option so we have control over serialize/deserialize
 #[derive(Clone, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum CompiledCFFExpression {
     // #[serde(skip)]
     Some(InnerCompiledCFF),

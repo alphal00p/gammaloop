@@ -90,6 +90,7 @@ impl Cycle {
 impl Add<&Cycle> for &Cycle {
     type Output = Cycle;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, other: &Cycle) -> Cycle {
         Cycle {
             filter: self.filter.clone() ^ other.filter.clone(),

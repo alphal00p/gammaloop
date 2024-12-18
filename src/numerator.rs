@@ -61,12 +61,11 @@ use symbolica::state::Workspace;
 use crate::numerator::ufo::UFO;
 use symbolica::atom::{AtomCore, AtomView, Symbol};
 use symbolica::evaluate::ExpressionEvaluator;
-use symbolica::id::{Condition, Match, MatchSettings, PatternOrMap};
+use symbolica::id::{Match, MatchSettings};
 
 use symbolica::{
     atom::{Atom, FunctionBuilder},
     fun,
-    state::State,
     symb,
 };
 use symbolica::{
@@ -1049,7 +1048,7 @@ impl Numerator<AppliedFeynmanRule> {
 impl ColorSimplified {
     fn isolate_color(expression: &mut SerializableAtom) {
         let color_fn = FunctionBuilder::new(Symbol::new("color"))
-            .add_arg(&Atom::new_num(1))
+            .add_arg(Atom::new_num(1))
             .finish();
         expression.0 = &expression.0 * color_fn;
         let replacements = vec![
@@ -1527,7 +1526,7 @@ impl Numerator<PolyContracted> {
 
         let reps: Vec<_> = coefs
             .into_iter()
-            .zip(coefs_reps.into_iter())
+            .zip(coefs_reps)
             .map(|(p, rhs)| Replacement::new(p, rhs))
             .collect();
 
@@ -1803,7 +1802,7 @@ impl GammaSimplified {
 
         let pat = Pattern::parse("gamma_trace(a__)").unwrap();
 
-        let mut it = expr.0.pattern_match(&pat, None, None);
+        let it = expr.0.pattern_match(&pat, None, None);
 
         let mut max_nargs = 0;
         for i in it {

@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     graph::half_edge::{
-        layout::{LayoutEdge, LayoutParams, LayoutSettings, LayoutVertex},
+        layout::{LayoutEdge, LayoutIters, LayoutParams, LayoutSettings, LayoutVertex},
         EdgeData, Flow, Hedge, HedgeGraph, HedgeGraphBuilder, InvolutiveMapping, Orientation,
         PowersetIterator,
     },
@@ -210,13 +210,12 @@ impl SubGraph for OrientedCut {
 }
 
 impl OrientedCut {
+    #[allow(clippy::too_many_arguments)]
     pub fn layout<'a, E, V, T>(
         self,
         graph: &'a HedgeGraph<E, V>,
         params: LayoutParams,
-        seed: u64,
-        iters: u64,
-        temperature: f64,
+        iters: LayoutIters,
         edge: f64,
         map: &impl Fn(&E) -> T,
     ) -> HedgeGraph<LayoutEdge<(&'a E, Orientation, T)>, LayoutVertex<&'a V>> {
@@ -240,7 +239,6 @@ impl OrientedCut {
                             .entry(d)
                             .or_insert_with(|| [None, Some(Hedge(j))])[1] = Some(Hedge(j))
                     }
-                    _ => {}
                 }
             }
         }
@@ -254,16 +252,7 @@ impl OrientedCut {
             }
         }
 
-        let settings = LayoutSettings::left_right_square(
-            &graph,
-            params,
-            seed,
-            iters,
-            temperature,
-            edge,
-            left,
-            right,
-        );
+        let settings = LayoutSettings::left_right_square(&graph, params, iters, edge, left, right);
 
         // println!("{:?}", settings);
         graph.layout(settings)
@@ -345,10 +334,6 @@ impl OrientedCut {
                 -flow,
             );
         }
-
-        let graph = builder.build();
-
-        // println!("{}", &self);
-        graph
+        builder.build()
     }
 }

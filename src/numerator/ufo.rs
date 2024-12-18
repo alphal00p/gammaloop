@@ -11,7 +11,6 @@ use symbolica::{
     atom::{Atom, Symbol},
     fun,
     id::Replacement,
-    state::State,
     symb,
 };
 

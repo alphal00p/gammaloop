@@ -162,7 +162,7 @@ pub struct SubGraphHedgeIter<'a> {
     iter: std::iter::Map<bitvec::slice::IterOnes<'a, usize, Lsb0>, fn(usize) -> Hedge>,
 }
 
-impl<'a> Iterator for SubGraphHedgeIter<'a> {
+impl Iterator for SubGraphHedgeIter<'_> {
     type Item = Hedge;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -180,7 +180,7 @@ pub trait SubGraph:
     }
 
     fn string_label(&self) -> String;
-    fn included_iter<'a>(&'a self) -> SubGraphHedgeIter<'a> {
+    fn included_iter(&self) -> SubGraphHedgeIter {
         SubGraphHedgeIter {
             iter: self.included().iter_ones().map(Hedge),
         }

@@ -294,9 +294,8 @@ pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq, Encode, Decode)]
 pub struct EsurfaceID(usize);
 
-pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
-
 /// Container for esurfaces that exist at a given point in the phase space
+pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
 
 /// Index in the list of all existing esurfaces, essentially a pointer to a pointer to an esurface
 #[derive(

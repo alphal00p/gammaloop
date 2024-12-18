@@ -1,7 +1,6 @@
 use bitvec::slice::BitSlice;
 use bitvec::vec::BitVec;
 use bitvec::{bitvec, order::Lsb0};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::graph::half_edge::{

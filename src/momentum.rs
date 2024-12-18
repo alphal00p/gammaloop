@@ -40,7 +40,6 @@ use symbolica::{
     },
     evaluate::{ExpressionEvaluator, FunctionMap},
     poly::{polynomial::MultivariatePolynomial, Exponent},
-    state::State,
 };
 
 use spenso::complex::Complex;
@@ -153,7 +152,7 @@ where
     }
 }
 
-impl<'b, T> Add<Energy<T>> for &'b Energy<T>
+impl<T> Add<Energy<T>> for &Energy<T>
 where
     T: for<'a> Add<&'a T, Output = T>,
 {
@@ -689,7 +688,7 @@ where
     }
 }
 
-impl<'b, T> Add<ThreeMomentum<T>> for &'b ThreeMomentum<T>
+impl<T> Add<ThreeMomentum<T>> for &ThreeMomentum<T>
 where
     T: for<'a> Add<&'a T, Output = T>,
 {
@@ -777,7 +776,7 @@ where
     }
 }
 
-impl<'a, T> Mul<ThreeMomentum<T>> for &'a ThreeMomentum<T>
+impl<T> Mul<ThreeMomentum<T>> for &ThreeMomentum<T>
 where
     T: for<'b> Mul<&'b T, Output = T> + Add<T, Output = T>,
 {
@@ -815,7 +814,7 @@ where
     }
 }
 
-impl<'a, T> Mul<T> for &'a ThreeMomentum<T>
+impl<T> Mul<T> for &ThreeMomentum<T>
 where
     T: Mul<T, Output = T> + Clone,
 {
@@ -829,7 +828,7 @@ where
     }
 }
 
-impl<'a, T> Mul<&T> for &'a ThreeMomentum<T>
+impl<T> Mul<&T> for &ThreeMomentum<T>
 where
     T: for<'b> Mul<&'b T, Output = T> + Clone,
 {
@@ -857,7 +856,7 @@ where
     }
 }
 
-impl<'a, T> Neg for &'a ThreeMomentum<T>
+impl<T> Neg for &ThreeMomentum<T>
 where
     T: Neg<Output = T> + Clone,
 {
@@ -1480,7 +1479,7 @@ impl<T: Real> RefDefault for FourMomentum<T, T> {
     }
 }
 
-impl<'a, T> Mul<T> for &'a FourMomentum<T, T>
+impl<T> Mul<T> for &FourMomentum<T, T>
 where
     T: Mul<T, Output = T> + Clone,
 {
@@ -1495,7 +1494,7 @@ where
     }
 }
 
-impl<'a, T> Mul<&T> for &'a FourMomentum<T, T>
+impl<T> Mul<&T> for &FourMomentum<T, T>
 where
     T: for<'b> Mul<&'b T, Output = T> + Clone,
 {
@@ -2443,7 +2442,7 @@ where
     }
 }
 
-impl<'a, T, U> Neg for &'a FourMomentum<T, U>
+impl<T, U> Neg for &FourMomentum<T, U>
 where
     T: Neg<Output = T> + Clone,
     U: Neg<Output = U> + Clone,

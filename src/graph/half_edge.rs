@@ -1192,7 +1192,7 @@ impl<N, E> Involution<N, E> {
                 old
             }
             InvolutiveMapping::Sink { source_idx } => {
-                let source = source_idx.clone();
+                let source = *source_idx;
                 self.set_edge_data(source, new_data)
             }
         }
@@ -1228,17 +1228,15 @@ pub struct GVEdgeAttrs {
 
 impl std::fmt::Display for GVEdgeAttrs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let out = format!(
-            "{}",
-            [
-                ("label=", self.label.as_ref()),
-                ("color=", self.color.as_ref()),
-                ("", self.other.as_ref())
-            ]
-            .iter()
-            .filter_map(|(prefix, x)| x.map(|s| format!("{}{}", prefix, s)))
-            .join(",")
-        );
+        let out = [
+            ("label=", self.label.as_ref()),
+            ("color=", self.color.as_ref()),
+            ("", self.other.as_ref()),
+        ]
+        .iter()
+        .filter_map(|(prefix, x)| x.map(|s| format!("{}{}", prefix, s)))
+        .join(",")
+        .to_string();
         write!(f, "{}", out)
     }
 }
@@ -1442,7 +1440,7 @@ impl<N: Clone, E: Clone> From<symbolica::graph::Graph<N, E>> for HedgeGraph<E, N
     }
 }
 
-impl<'a> From<&'a BareGraph> for HedgeGraph<usize, usize> {
+impl From<&BareGraph> for HedgeGraph<usize, usize> {
     fn from(value: &BareGraph) -> Self {
         let mut builder = HedgeGraphBuilder::new();
         let mut map = AHashMap::new();
@@ -1496,7 +1494,7 @@ where
     }
 }
 
-impl<'a, E, V, S> Iterator for EdgeIdIter<'a, E, V, S>
+impl<E, V, S> Iterator for EdgeIdIter<'_, E, V, S>
 where
     S: SubGraph,
 {
@@ -1519,9 +1517,52 @@ pub enum HedgeGraphError {
     NodesDoNotPartition,
     #[error("Invalid node")]
     NoNode,
+    #[error("Invalid edge")]
+    NoEdge,
 }
 
 impl<E, V> HedgeGraph<E, V> {
+    /// Splits the edge that hedge is a part of into two dangling hedges, adding the data to the side given by hedge. The underlying orientation of the new edges is the same as the original edge, i.e. the source will now have `Flow::Source` and the sink will have `Flow::Sink`. The superficial orientation has to be given knowing this.
+    pub fn split_edge(&mut self, hedge: Hedge, data: EdgeData<E>) -> Result<(), HedgeGraphError> {
+        let (data_hedge, other) = match &mut self.involution[hedge] {
+            InvolutiveMapping::Source { data, sink_idx } => {
+                let old_data = data.take();
+                (Some(old_data), *sink_idx)
+            }
+            InvolutiveMapping::Sink { source_idx } => (None, *source_idx),
+            _ => return Err(HedgeGraphError::NoEdge),
+        };
+
+        if let Some(d) = data_hedge {
+            self.involution.inv[hedge.0] = InvolutiveMapping::Identity {
+                data,
+                underlying: Flow::Source,
+            };
+            self.involution.inv[other.0] = InvolutiveMapping::Identity {
+                data: d,
+                underlying: Flow::Sink,
+            };
+        } else {
+            self.involution.inv[hedge.0] = InvolutiveMapping::Identity {
+                data,
+                underlying: Flow::Sink,
+            };
+
+            let data = self.involution.edge_data_mut(other).take();
+
+            self.involution.inv[other.0] = InvolutiveMapping::Identity {
+                data,
+                underlying: Flow::Source,
+            };
+        }
+
+        Ok(())
+    }
+
+    /// Joins two graphs together, matching edges with the given function and merging them with the given function.
+    /// The function `matching_fn` should return true if the two dangling half edges should be matched.
+    /// The function `merge_fn` should return the new data for the merged edge, given the data of the two edges being merged.
+    ///
     pub fn join(
         self,
         other: Self,
@@ -1633,14 +1674,13 @@ impl<E, V> HedgeGraph<E, V> {
         Ok(())
     }
 
+    /// Adds a dangling edge to the specified node with the given data and superficial orientation. /// The underlying orientation is always `Flow::Source`.
     pub fn add_dangling_edge(
         self,
         source: HedgeNode,
         data: E,
         orientation: impl Into<Orientation>,
     ) -> Result<(Hedge, Self), HedgeGraphError> {
-        let mut cover = self.empty_filter();
-        let full = self.full_filter();
         let mut involution = self.involution;
         let o = orientation.into();
         let mut data = Some(data);
@@ -1665,8 +1705,6 @@ impl<E, V> HedgeGraph<E, V> {
                 (k, v)
             })
             .collect();
-
-        cover.push(false);
 
         let mut g = HedgeGraph {
             base_nodes: self.base_nodes,
@@ -1730,33 +1768,10 @@ impl<E, V> HedgeGraph<E, V> {
         }
     }
 
-    // fn node_out_edges(&self, node_index: NodeIndex) -> Vec<usize> {
-    //     let leaves = AHashSet::from_iter(
-    //         self.nodes
-    //             .get_leaves_from_node(node_index)
-    //             .into_iter()
-    //             .map(|x| *x),
-    //     );
-
-    //     let inv_leaves = leaves
-    //         .clone()
-    //         .into_iter()
-    //         .map(|x| self.involutions.inv(x))
-    //         .collect::<AHashSet<_>>();
-
-    //     let externals: Vec<usize> = leaves.difference(&inv_leaves).map(|x| *x).collect();
-
-    //     externals
-    // }
-
-    // fn out_degree(&self, node_index: NodeIndex) -> usize {
-    //     self.node_out_edges(node_index).len()
-    // }
-
     pub fn iter_egde_data<'a, S: SubGraph>(
         &'a self,
         subgraph: &'a S,
-    ) -> impl Iterator<Item = EdgeData<&E>> + '_ {
+    ) -> impl Iterator<Item = EdgeData<&'a E>> + 'a {
         subgraph
             .included_iter()
             .map(|i| self.involution.edge_data(i).as_ref())
@@ -1765,7 +1780,7 @@ impl<E, V> HedgeGraph<E, V> {
     pub fn iter_egdes<'a, S: SubGraph>(
         &'a self,
         subgraph: &'a S,
-    ) -> impl Iterator<Item = (EdgeId, EdgeData<&E>)> + '_ {
+    ) -> impl Iterator<Item = (EdgeId, EdgeData<&'a E>)> + 'a {
         subgraph.included_iter().flat_map(|i| {
             self.involution.smart_data(i, subgraph).map(|d| {
                 (
@@ -1776,24 +1791,10 @@ impl<E, V> HedgeGraph<E, V> {
         })
     }
 
-    // pub fn iter_egdes_mut<'a, S: SubGraph>(
-    //     &'a mut self,
-    //     subgraph: &'a S,
-    // ) -> impl Iterator<Item = (EdgeId, &mut EdgeData<E>)> + '_ {
-    //     subgraph.included_iter().flat_map(move |i| {
-    //         self.involution.smart_data_mut(i, subgraph).map(|d| {
-    //             (
-    //                 EdgeId::from_half_edge_with_subgraph(i, &self.involution, subgraph).unwrap(),
-    //                 d,
-    //             )
-    //         })
-    //     })
-    // }
-
     pub fn iter_internal_edge_data<'a, S: SubGraph>(
         &'a self,
         subgraph: &'a S,
-    ) -> impl Iterator<Item = EdgeData<&E>> + '_ {
+    ) -> impl Iterator<Item = EdgeData<&'a E>> + 'a {
         subgraph
             .included_iter()
             .flat_map(|i| self.involution.smart_data(i, subgraph).map(|d| d.as_ref()))
@@ -1873,54 +1874,6 @@ impl<E, V> HedgeGraph<E, V> {
         internal_edge_count
     }
 
-    // pub fn dfs_reach(&self, subgraph: &InternalSubGraph, start: InvolutionIdx) -> InternalSubGraph {
-    //     let mut dfs_reach = self.empty_filter();
-    //     for i in pathfinding::directed::dfs::dfs_reach(start, |i| {
-    //         self.succesors(subgraph, InvolutionIdx(i)).into_iter()
-    //     }) {
-    //         dfs_reach.set(i, true);
-    //     }
-
-    //     InternalSubGraph::try_new(dfs_reach, self).unwrap()
-    // }
-
-    // pub fn succesors(&self, subgraph: &InternalSubGraph, start: InvolutionIdx) -> Vec<usize> {
-    //     let mut succesors = Vec::new();
-    //     if let Some(connected) = self.involution.involved_hedge_data(start) {
-    //         for i in connected.hairs.iter_ones().filter(|x| subgraph.filter[*x]) {
-    //             {
-    //                 succesors.push(i);
-    //             }
-    //         }
-    //     }
-    //     succesors
-    // }
-
-    fn combinations<const K: usize>(n: usize) -> Vec<[usize; K]> {
-        let mut result = Vec::new();
-        let mut current = [0; K]; // Fixed-size array to store combinations
-        Self::generate_combinations::<K>(0, 0, n, &mut current, &mut result);
-        result
-    }
-
-    fn generate_combinations<const K: usize>(
-        depth: usize,
-        start: usize,
-        n: usize,
-        current: &mut [usize; K],
-        result: &mut Vec<[usize; K]>,
-    ) {
-        if depth == K {
-            result.push(*current); // Push a copy of the current array
-            return;
-        }
-
-        for i in start..n {
-            current[depth] = i;
-            Self::generate_combinations::<K>(depth + 1, i + 1, n, current, result);
-        }
-    }
-
     fn non_cut_edges_impl(
         &self,
         connected_components: usize,
@@ -1943,7 +1896,7 @@ impl<E, V> HedgeGraph<E, V> {
             set.insert(current.clone());
         }
 
-        for i in (start.0..self.involution.len()).map(|i| Hedge(i)) {
+        for i in (start.0..self.involution.len()).map(Hedge) {
             let j = self.involution.inv(i);
             if i > j {
                 current.set(i.0, true);
@@ -1992,7 +1945,7 @@ impl<E, V> HedgeGraph<E, V> {
     pub fn iter_egde_node<'a, S: SubGraph>(
         &'a self,
         subgraph: &'a S,
-    ) -> impl Iterator<Item = &HedgeNode> + '_ {
+    ) -> impl Iterator<Item = &'a HedgeNode> + 'a {
         subgraph.included_iter().map(|i| self.node_id(i))
     }
 
@@ -2377,40 +2330,6 @@ impl<E, V> HedgeGraph<E, V> {
         }
     }
 
-    ///Read, R.C. and Tarjan, R.E. (1975), Bounds on Backtrack Algorithms for Listing Cycles, Paths, and Spanning Trees. Networks, 5: 237-252. https://doi.org/10.1002/net.1975.5.3.237
-    // pub fn read_tarjan(&self) -> Vec<HedgeNode> {
-    //     todo!("Implement")
-    // }
-
-    // pub fn backtrack(
-    //     &self,
-    //     options: &mut InternalSubGraph,
-    //     tree: &mut InternalSubGraph,
-    //     current: usize,
-    // ) -> Option<usize> {
-    //     tree.filter.set(self.involution.inv(current), false);
-    //     tree.filter.set(current, false);
-
-    //     let current_node = &self.involution.get_node_id(current).hairs;
-
-    //     let current = current_node.iter_ones().find(|&i| options.filter[i]);
-
-    //     if let Some(current) = current {
-    //         tree.filter.set(current, true);
-    //         options.filter.set(current, false);
-    //         Some(current)
-    //     } else {
-    //         let current = current_node.iter_ones().find_map(|i| {
-    //             if tree.filter[i] {
-    //                 Some(self.involution.inv(i))
-    //             } else {
-    //                 None
-    //             }
-    //         });
-    //         self.backtrack(options, tree, current?)
-    //     }
-    // }
-
     pub fn order_basis(&self, basis: &[HedgeNode]) -> Vec<Vec<InternalSubGraph>> {
         let mut seen = vec![basis[0].internal_graph.clone()];
         let mut partitions = vec![seen.clone()];
@@ -2456,18 +2375,6 @@ impl<E, V> HedgeGraph<E, V> {
 
     pub fn all_cycle_unions(&self) -> AHashSet<InternalSubGraph> {
         InternalSubGraph::all_unions_iterative(&self.all_cycle_sym_diffs().unwrap())
-    }
-
-    fn is_cycle(&self, subgraph: &InternalSubGraph) -> bool {
-        let mut is = true;
-        for e in self.iter_egde_node(subgraph) {
-            let adgacent = subgraph.filter.clone() & &e.hairs;
-            if adgacent.count_ones() != 2 {
-                is = false;
-                break;
-            }
-        }
-        is
     }
 
     pub fn full_graph(&self) -> InternalSubGraph {
@@ -2659,7 +2566,7 @@ impl<E, V> HedgeGraph<E, V> {
         }
 
         for (ci, cj) in cycles.iter().tuple_combinations() {
-            let union = ci.union(&cj);
+            let union = ci.union(cj);
 
             if let Some(v) = spinneys.get_mut(&union) {
                 v.push((ci.clone(), Some(cj.clone())));

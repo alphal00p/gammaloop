@@ -430,7 +430,7 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
     fn new_esurface_ct_builder(
         &'a self,
         existing_esurface_id: ExistingEsurfaceId,
-    ) -> EsurfaceCTBuilder<'_, T> {
+    ) -> EsurfaceCTBuilder<'a, T> {
         let esurface_id =
             self.counterterm_builder.counterterm.existing_esurfaces[existing_esurface_id];
         let esurface = &self.counterterm_builder.esurface_collection[esurface_id];
@@ -852,7 +852,7 @@ struct CounterTermResult<'a, T: FloatLike> {
     counterterms: [SingleCTData<T>; 2],
 }
 
-impl<'a, T: FloatLike> CounterTermResult<'a, T> {
+impl<T: FloatLike> CounterTermResult<'_, T> {
     fn to_number(&self) -> Complex<F<T>> {
         let ct_plus = &self.counterterms[0];
         let ct_minus = &self.counterterms[1];

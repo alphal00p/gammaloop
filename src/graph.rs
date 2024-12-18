@@ -61,7 +61,7 @@ use spenso::{
 use uuid::Uuid;
 
 use core::panic;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{
@@ -331,14 +331,14 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                     atom = atom.replace_all(
                         &id1,
-                        &fun!(ETS.id, ind, symb!("x_")).to_pattern(),
+                        fun!(ETS.id, ind, symb!("x_")).to_pattern(),
                         None,
                         None,
                     );
 
                     atom = atom.replace_all(
                         &id2,
-                        &fun!(ETS.id, symb!("x_"), ind).to_pattern(),
+                        fun!(ETS.id, symb!("x_"), ind).to_pattern(),
                         None,
                         None,
                     );
@@ -357,7 +357,7 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                     atom = atom.replace_all(
                         &pat,
-                        &Atom::new_num(usize::from(
+                        Atom::new_num(usize::from(
                             vertex_slots.internal_dummy.color[i + color_dummy_shift],
                         ) as i64)
                         .to_pattern(),
@@ -569,14 +569,14 @@ impl Edge {
                 if self.particle.is_antiparticle() {
                     atom = atom.replace_all(
                         &pfun,
-                        &Pattern::parse(&format!("-Q({},mink(4,x_))", num)).unwrap(),
+                        Pattern::parse(&format!("-Q({},mink(4,x_))", num)).unwrap(),
                         None,
                         None,
                     );
                 } else {
                     atom = atom.replace_all(
                         &pfun,
-                        &Pattern::parse(&format!("Q({},mink(4,x_))", num)).unwrap(),
+                        Pattern::parse(&format!("Q({},mink(4,x_))", num)).unwrap(),
                         None,
                         None,
                     );
@@ -587,7 +587,7 @@ impl Edge {
                 if self.particle.is_antiparticle() {
                     atom = atom.replace_all(
                         &pslashfun,
-                        &Pattern::parse(&format!(
+                        Pattern::parse(&format!(
                             "-Q({},mink(4,{}))*Gamma({},i_,j_)",
                             num, pindex_num, pindex_num
                         ))
@@ -598,7 +598,7 @@ impl Edge {
                 } else {
                     atom = atom.replace_all(
                         &pslashfun,
-                        &Pattern::parse(&format!(
+                        Pattern::parse(&format!(
                             "Q({},mink(4,{}))*Gamma({},i_,j_)",
                             num, pindex_num, pindex_num
                         ))
@@ -630,7 +630,7 @@ impl Edge {
 
                 let reps: Vec<Replacement> = replacements_in
                     .into_iter()
-                    .chain(replacements_out.into_iter())
+                    .chain(replacements_out)
                     .collect();
 
                 [
@@ -1567,7 +1567,7 @@ impl BareGraph {
     }
 
     pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
-        if self.external_edges.len() == 0 {
+        if self.external_edges.is_empty() {
             return Ok(vec![]);
         }
         let last = self.external_edges.len() - 1;

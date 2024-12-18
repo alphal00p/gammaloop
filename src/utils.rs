@@ -14,7 +14,6 @@ use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Deserializer, Serialize};
 use spenso::complex::SymbolicaComplex;
-use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use spenso::{
     complex::{Complex, R},
     contraction::{RefOne, RefZero},
@@ -25,7 +24,7 @@ use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
-use symbolica::evaluate::{CompiledEvaluatorFloat, FunctionMap};
+use symbolica::evaluate::CompiledEvaluatorFloat;
 use symbolica::symb;
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
@@ -159,7 +158,7 @@ impl<const N: u32> FromStr for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> Rem<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Rem<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn rem(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -217,7 +216,7 @@ impl<const N: u32> std::ops::Mul<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Mul<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: VarFloat<N>) -> Self::Output {
@@ -225,7 +224,7 @@ impl<'a, const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Mul<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Mul<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -263,7 +262,7 @@ impl<const N: u32> std::ops::Add<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Add<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: VarFloat<N>) -> Self::Output {
@@ -271,7 +270,7 @@ impl<'a, const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Add<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Add<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -309,7 +308,7 @@ impl<const N: u32> std::ops::Sub<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Sub<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: VarFloat<N>) -> Self::Output {
@@ -317,7 +316,7 @@ impl<'a, const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Sub<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Sub<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -355,7 +354,7 @@ impl<const N: u32> Div<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Div<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: VarFloat<N>) -> Self::Output {
@@ -363,7 +362,7 @@ impl<'a, const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> Div<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Div<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -393,7 +392,7 @@ impl<const N: u32> std::ops::Neg for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Neg for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Neg for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn neg(self) -> Self::Output {
@@ -847,7 +846,7 @@ pub struct F<T: FloatLike>(pub T);
 
 impl<T: FloatLike> R for F<T> {}
 
-impl<'a, T: FloatLike> Rem<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Rem<&F<T>> for &F<T> {
     type Output = F<T>;
 
     fn rem(self, rhs: &F<T>) -> Self::Output {
@@ -1181,14 +1180,14 @@ impl<T: FloatLike> Add<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Add<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Add<&F<T>> for &F<T> {
     type Output = F<T>;
     fn add(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_add(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Add<F<T>> for &'a F<T> {
+impl<T: FloatLike> Add<F<T>> for &F<T> {
     type Output = F<T>;
     fn add(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_add(rhs.0))
@@ -1221,14 +1220,14 @@ impl<T: FloatLike> Sub<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Sub<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Sub<&F<T>> for &F<T> {
     type Output = F<T>;
     fn sub(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_sub(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Sub<F<T>> for &'a F<T> {
+impl<T: FloatLike> Sub<F<T>> for &F<T> {
     type Output = F<T>;
     fn sub(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_sub(rhs.0))
@@ -1261,14 +1260,14 @@ impl<T: FloatLike> Mul<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Mul<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Mul<&F<T>> for &F<T> {
     type Output = F<T>;
     fn mul(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_mul(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Mul<F<T>> for &'a F<T> {
+impl<T: FloatLike> Mul<F<T>> for &F<T> {
     type Output = F<T>;
     fn mul(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_mul(rhs.0))
@@ -1301,14 +1300,14 @@ impl<T: FloatLike> Div<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Div<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Div<&F<T>> for &F<T> {
     type Output = F<T>;
     fn div(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_div(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Div<F<T>> for &'a F<T> {
+impl<T: FloatLike> Div<F<T>> for &F<T> {
     type Output = F<T>;
     fn div(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_div(rhs.0))
@@ -1334,7 +1333,7 @@ impl<T: FloatLike> Neg for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Neg for &'a F<T> {
+impl<T: FloatLike> Neg for &F<T> {
     type Output = F<T>;
     fn neg(self) -> Self::Output {
         F(self.0.ref_neg())

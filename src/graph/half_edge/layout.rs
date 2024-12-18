@@ -17,7 +17,7 @@ use super::{
 };
 
 pub struct LayoutVertex<V> {
-    data: V,
+    pub data: V,
     pos: Vector2<f64>,
 }
 
@@ -135,11 +135,11 @@ impl<E> LayoutEdge<E> {
         label: &impl Fn(&E) -> String,
         decoration: &impl Fn(&E) -> Decoration,
         source: usize,
-        orientation: Orientation,
+        _orientation: Orientation,
         sink: Option<usize>,
     ) -> String {
         match &self.geometry {
-            EdgeGeometry::Simple { pos, mut angle } => {
+            EdgeGeometry::Simple { pos, angle } => {
                 // if let Orientation::Reversed = orientation {
                 //     angle += Rad::turn_div_2();
                 //     println!("reversed")
@@ -297,20 +297,17 @@ impl<E, V> PositionalHedgeGraph<E, V> {
             if let InvolutiveMapping::Identity { data, underlying } = &mut self.involution.inv[eid]
             {
                 if let Some(d) = &mut data.data {
-                    d.to_fancy(i, None, underlying.clone(), settings);
+                    d.to_fancy(i, None, *underlying, settings);
                 }
             }
 
             if let Some(cn) = self.involved_node_id(super::Hedge(eid)) {
                 let j = self.nodes.get(cn).unwrap().pos;
 
-                match &mut self.involution.inv[eid] {
-                    InvolutiveMapping::Source { data, .. } => {
-                        if let Some(d) = &mut data.data {
-                            d.to_fancy(i, Some(j), Flow::Source, settings);
-                        }
+                if let InvolutiveMapping::Source { data, .. } = &mut self.involution.inv[eid] {
+                    if let Some(d) = &mut data.data {
+                        d.to_fancy(i, Some(j), Flow::Source, settings);
                     }
-                    _ => {}
                 }
             }
         }
@@ -371,10 +368,10 @@ impl<E, V> PositionalHedgeGraph<E, V> {
         }
 
         for (eid, (e, nid)) in self.involution.iter() {
-            let i = self.get_node_pos(&nid);
+            let i = self.get_node_pos(nid);
 
             if let Some(cn) = self.involved_node_id(eid) {
-                let j = self.get_node_pos(&cn);
+                let j = self.get_node_pos(cn);
 
                 if let InvolutiveMapping::Source { data, .. } = e {
                     if let Some(l) = &data.data {
@@ -466,6 +463,7 @@ impl Default for LayoutParams {
 // }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::type_complexity)]
 pub struct Positions {
     vertex_positions: IndexMap<HedgeNode, (Option<(f64, f64)>, usize, usize)>,
     edge_positions: Involution<(), (Option<(f64, f64)>, usize, usize)>,
@@ -726,7 +724,7 @@ impl Positions {
     }
 }
 
-impl<'a, E, V> CostFunction for GraphLayout<'a, E, V> {
+impl<E, V> CostFunction for GraphLayout<'_, E, V> {
     type Param = Vec<f64>;
     type Output = f64;
 
@@ -834,7 +832,7 @@ impl<'a, E, V> CostFunction for GraphLayout<'a, E, V> {
     }
 }
 
-impl<'a, E, V> Anneal for GraphLayout<'a, E, V> {
+impl<E, V> Anneal for GraphLayout<'_, E, V> {
     type Param = Vec<f64>;
     type Output = Vec<f64>;
     type Float = f64;
@@ -863,28 +861,24 @@ impl<'a, E, V> Anneal for GraphLayout<'a, E, V> {
 #[derive(Debug, Clone)]
 pub struct LayoutSettings {
     params: LayoutParams,
-    temperature: f64,
-    iters: u64,
     positions: Positions,
-    seed: u64,
-
+    iters: LayoutIters,
     init_params: Vec<f64>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct LayoutIters {
+    n_iters: u64,
+    temp: f64,
+    seed: u64,
+}
+
 impl LayoutSettings {
-    pub fn new<E, V>(
-        graph: &HedgeGraph<E, V>,
-        params: LayoutParams,
-        seed: u64,
-        iters: u64,
-        temperature: f64,
-    ) -> Self {
-        let (init_params, positions) = Positions::new(graph, seed);
+    pub fn new<E, V>(graph: &HedgeGraph<E, V>, params: LayoutParams, iters: LayoutIters) -> Self {
+        let (init_params, positions) = Positions::new(graph, iters.seed);
 
         LayoutSettings {
             params,
-            temperature,
-            seed,
             positions,
             iters,
             init_params,
@@ -894,14 +888,12 @@ impl LayoutSettings {
     pub fn left_right_square<E, V>(
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
-        seed: u64,
-        iters: u64,
-        temperature: f64,
+        iters: LayoutIters,
         edge: f64,
         left: Vec<Hedge>,
         right: Vec<Hedge>,
     ) -> Self {
-        let mut rng = SmallRng::seed_from_u64(seed);
+        let mut rng = SmallRng::seed_from_u64(iters.seed);
         let mut vertex_positions = IndexMap::new();
         let mut edge_positions = graph.involution.forgetful_map_node_data_ref(|_| ());
 
@@ -963,9 +955,7 @@ impl LayoutSettings {
 
         LayoutSettings {
             params,
-            temperature,
             iters,
-            seed,
             positions: Positions {
                 vertex_positions,
                 edge_positions,
@@ -974,18 +964,17 @@ impl LayoutSettings {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn circle_ext<E, V>(
         graph: &HedgeGraph<E, V>,
         params: LayoutParams,
-        seed: u64,
-        iters: u64,
-        temperature: f64,
+        iters: LayoutIters,
         angle_factors: Vec<u32>,
-        n_div: usize,
+        _n_div: usize,
         shift: Rad<f64>,
         radius: f64,
     ) -> Self {
-        let mut rng = SmallRng::seed_from_u64(seed);
+        let mut rng = SmallRng::seed_from_u64(iters.seed);
         let mut vertex_positions = IndexMap::new();
         let mut edge_positions = graph.involution.forgetful_map_node_data_ref(|_| ());
 
@@ -1021,9 +1010,9 @@ impl LayoutSettings {
 
         LayoutSettings {
             params,
-            temperature,
+
             iters,
-            seed,
+
             positions: Positions {
                 vertex_positions,
                 edge_positions,
@@ -1045,11 +1034,15 @@ impl<E, V> HedgeGraph<E, V> {
             params: settings.params,
         };
 
-        let solver = SimulatedAnnealing::new(settings.temperature).unwrap();
+        let solver = SimulatedAnnealing::new(settings.iters.temp).unwrap();
 
         let best = {
             let res = Executor::new(layout, solver)
-                .configure(|state| state.param(settings.init_params).max_iters(settings.iters))
+                .configure(|state| {
+                    state
+                        .param(settings.init_params)
+                        .max_iters(settings.iters.n_iters)
+                })
                 // run the solver on the defined problem
                 .run()
                 .unwrap();

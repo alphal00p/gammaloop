@@ -40,7 +40,7 @@ struct PropagatorConstraint<'a> {
     signature: &'a LoopExtSignature,
 }
 
-impl<'a> PropagatorConstraint<'a> {
+impl PropagatorConstraint<'_> {
     fn get_dimension(&self) -> usize {
         let mass_value = if self.mass_pointer.is_some() { 1 } else { 0 };
 
