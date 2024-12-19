@@ -23,7 +23,7 @@ fn threeloop() {
         assert_eq!(
             3,
             graph
-                .paton_cycle_basis(&graph.full_graph(), graph.node_id(Hedge(i)), None)
+                .paton_cycle_basis(&graph.full_graph(), graph.node_hairs(Hedge(i)), None)
                 .unwrap()
                 .0
                 .len()
@@ -74,7 +74,7 @@ fn hairythreeloop() {
         assert_eq!(
             3,
             graph
-                .paton_cycle_basis(&graph.full_graph(), graph.node_id(i), None)
+                .paton_cycle_basis(&graph.full_graph(), graph.node_hairs(i), None)
                 .unwrap()
                 .0
                 .len()
@@ -345,7 +345,7 @@ fn K33() {
     println!(
         "{}",
         graph
-            .paton_count_loops(&graph.full_graph(), graph.node_id(Hedge(0)))
+            .paton_count_loops(&graph.full_graph(), graph.node_hairs(Hedge(0)))
             .unwrap()
     );
 
@@ -585,7 +585,7 @@ fn flower_snark() {
     println!(
         "loop count {}",
         graph
-            .paton_count_loops(&graph.full_graph(), graph.node_id(Hedge(0)))
+            .paton_count_loops(&graph.full_graph(), graph.node_hairs(Hedge(0)))
             .unwrap()
     );
     if let Some((s, v)) = graph

@@ -174,7 +174,7 @@ pub trait SubGraph:
     fn covers<E, V>(&self, graph: &HedgeGraph<E, V>) -> BitVec {
         let mut covering = graph.empty_filter();
         for i in self.included_iter() {
-            covering.union_with(&graph.node_id(i).hairs)
+            covering.union_with(&graph.node_hairs(i).hairs)
         }
         covering
     }
@@ -288,7 +288,7 @@ impl SubGraph for BitVec {
                     };
                     out.push_str(&InvolutiveMapping::<()>::identity_dot(
                         hedge_id,
-                        graph.nodes.get_index_of(incident_node).unwrap(),
+                        incident_node.0,
                         attr.as_ref(),
                         data.orientation,
                         *underlying,
@@ -327,11 +327,8 @@ impl SubGraph for BitVec {
                         })
                     };
                     out.push_str(&InvolutiveMapping::<()>::pair_dot(
-                        graph.nodes.get_index_of(incident_node).unwrap(),
-                        graph
-                            .nodes
-                            .get_index_of(graph.involved_node_id(hedge_id).unwrap())
-                            .unwrap(),
+                        incident_node.0,
+                        graph.involved_node_id(hedge_id).unwrap().0,
                         attr.as_ref(),
                         data.orientation,
                     ));

@@ -1246,7 +1246,33 @@ pub mod subgraph;
 pub struct HedgeGraph<E, V> {
     nodes: IndexMap<HedgeNode, V>, // Forest of nodes, that contain half-edges, with data E
     base_nodes: usize,
-    pub involution: Involution<HedgeNode, E>, // Involution of half-edges
+    pub involution: Involution<NodeIndex, E>, // Involution of half-edges
+}
+
+impl<E, V> Index<HedgeNode> for HedgeGraph<E, V> {
+    type Output = V;
+    fn index(&self, index: HedgeNode) -> &Self::Output {
+        self.nodes.get(&index).unwrap()
+    }
+}
+
+impl<E, V> IndexMut<HedgeNode> for HedgeGraph<E, V> {
+    fn index_mut(&mut self, index: HedgeNode) -> &mut Self::Output {
+        self.nodes.get_mut(&index).unwrap()
+    }
+}
+
+impl<E, V> Index<NodeIndex> for HedgeGraph<E, V> {
+    type Output = V;
+    fn index(&self, index: NodeIndex) -> &Self::Output {
+        &self.nodes[index.0]
+    }
+}
+
+impl<E, V> IndexMut<NodeIndex> for HedgeGraph<E, V> {
+    fn index_mut(&mut self, index: NodeIndex) -> &mut Self::Output {
+        &mut self.nodes[index.0]
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1272,7 +1298,7 @@ impl<'a, E, V, I: Iterator<Item = Hedge>> Iterator for NodeIterator<'a, E, V, I>
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(next) = self.edges.next() {
-            let node = self.graph.node_id(next);
+            let node = self.graph.node_hairs(next);
             let node_pos = self.graph.get_node_pos(node);
 
             if self.seen[node_pos] {
@@ -1398,20 +1424,15 @@ impl<E, V> Default for HedgeGraphBuilder<E, V> {
 impl<E, V> From<HedgeGraphBuilder<E, V>> for HedgeGraph<E, V> {
     fn from(builder: HedgeGraphBuilder<E, V>) -> Self {
         let len = builder.involution.len();
-        let involution = Involution {
-            inv: builder.involution.inv,
-            hedge_data: builder
-                .involution
-                .hedge_data
-                .into_iter()
-                .map(|n| HedgeNode::from_builder(&builder.nodes[n.0], len))
-                .collect(),
-        };
         let nodes: IndexMap<HedgeNode, V> = builder
             .nodes
             .into_iter()
             .map(|x| (HedgeNode::from_builder(&x, len), x.data))
             .collect();
+        let involution = Involution {
+            inv: builder.involution.inv,
+            hedge_data: builder.involution.hedge_data,
+        };
         HedgeGraph {
             base_nodes: nodes.len(),
             nodes,
@@ -1662,7 +1683,7 @@ impl<E, V> HedgeGraph<E, V> {
                     return Err(HedgeGraphError::NodesDoNotPartition);
                 } else {
                     cover.set(h.0, true);
-                    self.involution.set_hedge_data(h, node.clone());
+                    self.involution.set_hedge_data(h, NodeIndex(i));
                 }
             }
         }
@@ -1677,7 +1698,7 @@ impl<E, V> HedgeGraph<E, V> {
     /// Adds a dangling edge to the specified node with the given data and superficial orientation. /// The underlying orientation is always `Flow::Source`.
     pub fn add_dangling_edge(
         self,
-        source: HedgeNode,
+        source: NodeIndex,
         data: E,
         orientation: impl Into<Orientation>,
     ) -> Result<(Hedge, Self), HedgeGraphError> {
@@ -1689,12 +1710,13 @@ impl<E, V> HedgeGraph<E, V> {
         let nodes: IndexMap<_, _> = self
             .nodes
             .into_iter()
-            .map(|(mut k, v)| {
+            .enumerate()
+            .map(|(i, (mut k, v))| {
                 k.internal_graph.filter.push(false);
-                if k == source {
+                if NodeIndex(i) == source {
                     if let Some(d) = data.take() {
                         k.hairs.push(true);
-                        hedge = Some(involution.add_identity(d, k.clone(), o, Flow::Source));
+                        hedge = Some(involution.add_identity(d, source, o, Flow::Source));
                     } else {
                         k.hairs.push(false);
                     }
@@ -1803,7 +1825,7 @@ impl<E, V> HedgeGraph<E, V> {
     pub fn is_connected<S: SubGraph>(&self, subgraph: &S) -> bool {
         let n_edges = subgraph.nedges(self);
         if let Some(start) = subgraph.included_iter().next() {
-            TraversalTree::dfs(self, subgraph, self.node_id(start), None)
+            TraversalTree::dfs(self, subgraph, self.node_hairs(start), None)
                 .covers()
                 .nedges(self)
                 == n_edges
@@ -1816,12 +1838,26 @@ impl<E, V> HedgeGraph<E, V> {
         self.connected_components(subgraph).len()
     }
 
-    pub fn node_id(&self, hedge: Hedge) -> &HedgeNode {
-        self.involution.hedge_data(hedge)
+    pub fn node_hairs(&self, hedge: Hedge) -> &HedgeNode {
+        self.hairs_from_id(*self.involution.hedge_data(hedge))
     }
 
-    pub fn involved_node_id(&self, hedge: Hedge) -> Option<&HedgeNode> {
-        self.involution.involved_hedge_data(hedge)
+    pub fn hairs_from_id(&self, id: NodeIndex) -> &HedgeNode {
+        self.nodes.get_index(id.0).unwrap().0
+    }
+
+    pub fn id_from_hairs(&self, id: &HedgeNode) -> Option<NodeIndex> {
+        Some(NodeIndex(self.nodes.get_index_of(id)?))
+    }
+
+    pub fn involved_node_hairs(&self, hedge: Hedge) -> Option<&HedgeNode> {
+        self.involution
+            .involved_hedge_data(hedge)
+            .map(|i| self.hairs_from_id(*i))
+    }
+
+    pub fn involved_node_id(&self, hedge: Hedge) -> Option<NodeIndex> {
+        self.involution.involved_hedge_data(hedge).map(|i| *i)
     }
 
     pub fn connected_components<S: SubGraph>(&self, subgraph: &S) -> Vec<BitVec> {
@@ -1835,7 +1871,7 @@ impl<E, V> HedgeGraph<E, V> {
                 // Perform DFS to find all reachable edges from this edge
 
                 //
-                let root_node = self.node_id(hedge_index);
+                let root_node = self.node_hairs(hedge_index);
                 let reachable_edges = TraversalTree::dfs(self, subgraph, root_node, None).covers();
 
                 visited_edges.union_with(&reachable_edges);
@@ -1935,18 +1971,18 @@ impl<E, V> HedgeGraph<E, V> {
 
     /// including pos
     pub fn neighbors<S: SubGraph>(&self, subgraph: &S, pos: Hedge) -> BitVec {
-        subgraph.hairs(self.node_id(pos))
+        subgraph.hairs(self.node_hairs(pos))
     }
 
     pub fn connected_neighbors<S: SubGraph>(&self, subgraph: &S, pos: Hedge) -> Option<BitVec> {
-        Some(subgraph.hairs(self.involved_node_id(pos)?))
+        Some(subgraph.hairs(self.involved_node_hairs(pos)?))
     }
 
     pub fn iter_egde_node<'a, S: SubGraph>(
         &'a self,
         subgraph: &'a S,
     ) -> impl Iterator<Item = &'a HedgeNode> + 'a {
-        subgraph.included_iter().map(|i| self.node_id(i))
+        subgraph.included_iter().map(|i| self.node_hairs(i))
     }
 
     pub fn iter_node_data<'a, S: SubGraph>(
@@ -2014,8 +2050,8 @@ impl<E, V> HedgeGraph<E, V> {
     }
 
     pub fn random(nodes: usize, edges: usize, seed: u64) -> HedgeGraph<(), ()> {
-        let mut inv: Involution<Option<HedgeNode>, ()> =
-            Involution::<HedgeNode, ()>::random(edges, seed);
+        let mut inv: Involution<Option<NodeIndex>, ()> =
+            Involution::<NodeIndex, ()>::random(edges, seed);
 
         let mut rng = SmallRng::seed_from_u64(seed);
 
@@ -2076,15 +2112,22 @@ impl<E, V> HedgeGraph<E, V> {
             }
         }
 
-        for sink in &sinks {
-            for i in sink.hairs.included_iter() {
-                inv.set_hedge_data(i, Some(sink.clone()));
+        let mut nodes = IndexMap::new();
+
+        for (nid, n) in sources.into_iter().enumerate() {
+            nodes.insert(n.clone(), ());
+            for i in n.hairs.included_iter() {
+                inv.set_hedge_data(i, Some(NodeIndex(nid)));
             }
         }
 
-        for source in &sources {
-            for i in source.hairs.included_iter() {
-                inv.set_hedge_data(i, Some(source.clone()));
+        let len = nodes.len();
+
+        for (nid, n) in sinks.into_iter().enumerate() {
+            nodes.insert(n.clone(), ());
+
+            for i in n.hairs.included_iter() {
+                inv.set_hedge_data(i, Some(NodeIndex(nid + len)));
             }
         }
 
@@ -2092,16 +2135,6 @@ impl<E, V> HedgeGraph<E, V> {
             inv: inv.inv,
             hedge_data: inv.hedge_data.into_iter().map(|n| n.unwrap()).collect(),
         };
-
-        let mut nodes = IndexMap::new();
-
-        for n in sources {
-            nodes.insert(n.clone(), ());
-        }
-
-        for n in sinks {
-            nodes.insert(n.clone(), ());
-        }
 
         HedgeGraph {
             base_nodes: nodes.len(),
@@ -2117,8 +2150,8 @@ impl<E, V> HedgeGraph<E, V> {
             out.push_str(
                 &e.default_dot(
                     i,
-                    self.nodes.get_index_of(n),
-                    self.involved_node_id(i)
+                    Some(n.0),
+                    self.involved_node_hairs(i)
                         .map(|x| self.nodes.get_index_of(x).unwrap()),
                     None,
                 ),
@@ -2156,8 +2189,8 @@ impl<E, V> HedgeGraph<E, V> {
             out.push_str(
                 &m.default_dot(
                     i,
-                    self.nodes.get_index_of(n),
-                    self.involved_node_id(i)
+                    Some(n.0),
+                    self.involved_node_hairs(i)
                         .map(|x| self.nodes.get_index_of(x).unwrap()),
                     None,
                 ),
@@ -2175,7 +2208,7 @@ impl<E, V> HedgeGraph<E, V> {
         }
 
         for i in internal_graph.included_iter() {
-            hairs |= &self.involution.hedge_data(i).hairs;
+            hairs |= &self.node_hairs(i).hairs;
         }
 
         HedgeNode {
@@ -2187,8 +2220,8 @@ impl<E, V> HedgeGraph<E, V> {
     fn nesting_node_fix(&self, node: &mut HedgeNode) {
         let mut externalhedges = bitvec![usize, Lsb0; 0; self.involution.len()];
 
-        for i in node.internal_graph.filter.iter_ones() {
-            externalhedges |= &self.involution.hedge_data[i].hairs;
+        for i in node.internal_graph.filter.included_iter() {
+            externalhedges |= &self.node_hairs(i).hairs;
         }
 
         node.hairs = !(!externalhedges | &node.internal_graph.filter);
@@ -2248,7 +2281,7 @@ impl<E, V> HedgeGraph<E, V> {
     }
 
     pub fn cycle_basis(&self) -> (Vec<Cycle>, TraversalTree) {
-        self.paton_cycle_basis(&self.full_graph(), self.node_id(Hedge(0)), None)
+        self.paton_cycle_basis(&self.full_graph(), self.node_hairs(Hedge(0)), None)
             .unwrap()
     }
 
@@ -2464,7 +2497,7 @@ impl<E, V> HedgeGraph<E, V> {
             subgraph
                 .internal_graph
                 .included_iter()
-                .map(|i| self.node_id(i)),
+                .map(|i| self.node_hairs(i)),
         );
         self.remove_externals(subgraph);
 
@@ -2644,7 +2677,7 @@ impl<E, V> HedgeGraph<E, V> {
 
             if invh != h && !t.hairs.includes(&invh) {
                 let mut new_node = s.clone();
-                new_node.hairs.union_with(&self.node_id(invh).hairs);
+                new_node.hairs.union_with(&self.node_hairs(invh).hairs);
 
                 new_node.hairs.set(h.0, false);
                 new_node.hairs.set(invh.0, false);

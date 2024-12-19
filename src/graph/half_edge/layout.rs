@@ -292,7 +292,7 @@ impl FancySettings {
 impl<E, V> PositionalHedgeGraph<E, V> {
     pub fn to_fancy(&mut self, settings: &FancySettings) {
         for (eid, nid) in self.involution.hedge_data.iter().enumerate() {
-            let i = self.nodes.get(nid).unwrap().pos;
+            let i = self[*nid].pos;
 
             if let InvolutiveMapping::Identity { data, underlying } = &mut self.involution.inv[eid]
             {
@@ -301,7 +301,7 @@ impl<E, V> PositionalHedgeGraph<E, V> {
                 }
             }
 
-            if let Some(cn) = self.involved_node_id(super::Hedge(eid)) {
+            if let Some(cn) = self.involved_node_hairs(super::Hedge(eid)) {
                 let j = self.nodes.get(cn).unwrap().pos;
 
                 if let InvolutiveMapping::Source { data, .. } = &mut self.involution.inv[eid] {
@@ -368,9 +368,9 @@ impl<E, V> PositionalHedgeGraph<E, V> {
         }
 
         for (eid, (e, nid)) in self.involution.iter() {
-            let i = self.get_node_pos(nid);
+            let i = nid.0;
 
-            if let Some(cn) = self.involved_node_id(eid) {
+            if let Some(cn) = self.involved_node_hairs(eid) {
                 let j = self.get_node_pos(cn);
 
                 if let InvolutiveMapping::Source { data, .. } = e {
@@ -561,13 +561,13 @@ impl Positions {
             .map(|(i, m)| {
                 let pos = &self.get_edge_position(super::Hedge(i), params);
 
-                let mut source = nodes[hedge_data.get(i).unwrap()].pos;
+                let mut source = nodes[hedge_data.get(i).unwrap().0].pos;
                 let m = match m {
                     InvolutiveMapping::Sink { source_idx } => {
                         InvolutiveMapping::Sink { source_idx }
                     }
                     InvolutiveMapping::Source { data, sink_idx } => {
-                        let mut sink = nodes[hedge_data.get(sink_idx.0).unwrap()].pos;
+                        let mut sink = nodes[hedge_data.get(sink_idx.0).unwrap().0].pos;
 
                         if let Orientation::Reversed = data.orientation {
                             std::mem::swap(&mut sink, &mut source);

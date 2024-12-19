@@ -276,7 +276,7 @@ impl OrientedCut {
             if self.reference.includes(&graph.involution.inv(i)) {
                 continue;
             }
-            let source = graph.node_id(i);
+            let source = graph.node_hairs(i);
             match &graph.involution[i] {
                 InvolutiveMapping::Identity { data, underlying } => {
                     let datae = data.data.as_ref().unwrap();
@@ -288,7 +288,7 @@ impl OrientedCut {
                     )
                 }
                 InvolutiveMapping::Source { data, sink_idx } => {
-                    let sink = graph.node_id(*sink_idx);
+                    let sink = graph.node_hairs(*sink_idx);
 
                     let datae = data.data.as_ref().unwrap();
 
@@ -307,7 +307,7 @@ impl OrientedCut {
             // if !graph.involution[i].is_source() {
             //     panic!("should be source");
             // }
-            let source = graph.node_id(i);
+            let source = graph.node_hairs(i);
             let data = graph.involution.edge_data(i).as_ref();
 
             let (flow, underlying) = if self.sign.includes(&i) {
@@ -326,7 +326,7 @@ impl OrientedCut {
                 flow,
             );
             let h = graph.involution.inv(i);
-            let sink = graph.node_id(h);
+            let sink = graph.node_hairs(h);
             builder.add_external_edge(
                 nodeidmap[sink],
                 (datae, underlying, map(datae)),

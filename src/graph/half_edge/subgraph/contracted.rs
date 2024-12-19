@@ -103,7 +103,7 @@ impl SubGraph for ContractedSubGraph {
                     };
                     out.push_str(&InvolutiveMapping::<()>::identity_dot(
                         hedge_id,
-                        graph.nodes.get_index_of(incident_node).unwrap(),
+                        incident_node.0,
                         attr.as_ref(),
                         data.orientation,
                         *underlying,
@@ -144,11 +144,8 @@ impl SubGraph for ContractedSubGraph {
                         None
                     };
                     out.push_str(&InvolutiveMapping::<()>::pair_dot(
-                        graph.nodes.get_index_of(incident_node).unwrap(),
-                        graph
-                            .nodes
-                            .get_index_of(graph.involved_node_id(hedge_id).unwrap())
-                            .unwrap(),
+                        incident_node.0,
+                        graph.involved_node_id(hedge_id).unwrap().0,
                         attr.as_ref(),
                         data.orientation,
                     ));
