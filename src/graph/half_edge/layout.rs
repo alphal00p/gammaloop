@@ -6,14 +6,13 @@ use argmin::{
     solver::simulatedannealing::{Anneal, SimulatedAnnealing},
 };
 use cgmath::{Angle, InnerSpace, Rad, Vector2, Zero};
-use indexmap::IndexMap;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 use super::{
     drawing::{CetzEdge, CetzString, Decoration, EdgeGeometry},
-    subgraph::{node::HedgeNode, SubGraph},
-    Flow, Hedge, HedgeGraph, Involution, InvolutiveMapping, Orientation,
+    subgraph::SubGraph,
+    Flow, Hedge, HedgeGraph, Involution, InvolutiveMapping, NodeIndex, Orientation,
 };
 
 pub struct LayoutVertex<V> {
@@ -302,7 +301,7 @@ impl<E, V> PositionalHedgeGraph<E, V> {
             }
 
             if let Some(cn) = self.involved_node_hairs(super::Hedge(eid)) {
-                let j = self.nodes.get(cn).unwrap().pos;
+                let j = self[cn].pos;
 
                 if let InvolutiveMapping::Source { data, .. } = &mut self.involution.inv[eid] {
                     if let Some(d) = &mut data.data {
@@ -362,7 +361,7 @@ impl<E, V> PositionalHedgeGraph<E, V> {
             out.push_str(&format!(
                 "let node{}= (pos:{})\n",
                 a,
-                self.nodes[a].pos.to_cetz()
+                self.node_data[a].pos.to_cetz()
             ));
             out.push_str(&format!("node(node{}.pos)\n", a));
         }
@@ -371,7 +370,7 @@ impl<E, V> PositionalHedgeGraph<E, V> {
             let i = nid.0;
 
             if let Some(cn) = self.involved_node_hairs(eid) {
-                let j = self.get_node_pos(cn);
+                let j = self.id_from_hairs(cn).unwrap().0;
 
                 if let InvolutiveMapping::Source { data, .. } = e {
                     if let Some(l) = &data.data {
@@ -465,13 +464,13 @@ impl Default for LayoutParams {
 #[derive(Debug, Clone)]
 #[allow(clippy::type_complexity)]
 pub struct Positions {
-    vertex_positions: IndexMap<HedgeNode, (Option<(f64, f64)>, usize, usize)>,
+    vertex_positions: Vec<(Option<(f64, f64)>, usize, usize)>,
     edge_positions: Involution<(), (Option<(f64, f64)>, usize, usize)>,
 }
 
 impl Positions {
     pub fn scale(&mut self, scale: f64) {
-        self.vertex_positions.iter_mut().for_each(|(_, (a, _, _))| {
+        self.vertex_positions.iter_mut().for_each(|(a, _, _)| {
             if let Some(pos) = a {
                 pos.0 /= scale;
                 pos.1 /= scale;
@@ -500,7 +499,7 @@ impl Positions {
         let vertex_max = self
             .vertex_positions
             .iter()
-            .map(|(_, (v, i, j))| {
+            .map(|(v, i, j)| {
                 if let Some((x, y)) = v {
                     x.abs().max(y.abs())
                 } else {
@@ -542,12 +541,13 @@ impl Positions {
         params: &[f64],
     ) -> PositionalHedgeGraph<E, V> {
         // let mut new_graph = graph;
-        let nodes: IndexMap<HedgeNode, LayoutVertex<V>> = graph
-            .nodes
+        let node_data: Vec<LayoutVertex<V>> = graph
+            .node_data
             .into_iter()
-            .map(|(e, v)| {
-                let pos = self.vertex_positions.get(&e).unwrap();
-                (e, LayoutVertex::new(v, params[pos.1], params[pos.2]))
+            .enumerate()
+            .map(|(pos, v)| {
+                let pos = self.vertex_positions.get(pos).unwrap();
+                LayoutVertex::new(v, params[pos.1], params[pos.2])
             })
             .collect();
 
@@ -561,13 +561,13 @@ impl Positions {
             .map(|(i, m)| {
                 let pos = &self.get_edge_position(super::Hedge(i), params);
 
-                let mut source = nodes[hedge_data.get(i).unwrap().0].pos;
+                let mut source = node_data[hedge_data.get(i).unwrap().0].pos;
                 let m = match m {
                     InvolutiveMapping::Sink { source_idx } => {
                         InvolutiveMapping::Sink { source_idx }
                     }
                     InvolutiveMapping::Source { data, sink_idx } => {
-                        let mut sink = nodes[hedge_data.get(sink_idx.0).unwrap().0].pos;
+                        let mut sink = node_data[hedge_data.get(sink_idx.0).unwrap().0].pos;
 
                         if let Orientation::Reversed = data.orientation {
                             std::mem::swap(&mut sink, &mut source);
@@ -600,14 +600,15 @@ impl Positions {
             .collect();
 
         HedgeGraph {
-            nodes,
+            node_data,
+            nodes: graph.nodes,
             involution: Involution { inv, hedge_data },
             base_nodes: graph.base_nodes,
         }
     }
     pub fn new<E, V>(graph: &HedgeGraph<E, V>, seed: u64) -> (Vec<f64>, Self) {
         let mut rng = SmallRng::seed_from_u64(seed);
-        let mut vertex_positions = IndexMap::new();
+        let mut vertex_positions = Vec::new();
         let mut edge_positions = graph.involution.forgetful_map_node_data_ref(|_| ());
 
         let range = -1.0..1.0;
@@ -627,11 +628,11 @@ impl Positions {
             edge_positions.set_edge_data(super::Hedge(i), (None, j, j + 1));
         }
 
-        for (node, _) in graph.nodes.iter() {
+        for _ in graph.base_nodes_iter() {
             let j = params.len();
             params.push(rng.gen_range(range.clone()));
             params.push(rng.gen_range(range.clone()));
-            vertex_positions.insert(node.clone(), (None, j, j + 1));
+            vertex_positions.push((None, j, j + 1));
         }
 
         (
@@ -644,7 +645,7 @@ impl Positions {
     }
     pub fn circle_ext<E, V>(graph: &HedgeGraph<E, V>, seed: u64, radius: f64) -> (Vec<f64>, Self) {
         let mut rng = SmallRng::seed_from_u64(seed);
-        let mut vertex_positions = IndexMap::new();
+        let mut vertex_positions = Vec::new();
         let mut edge_positions = graph.involution.forgetful_map_node_data_ref(|_| ());
 
         let range = -1.0..1.0;
@@ -668,11 +669,11 @@ impl Positions {
             }
         }
 
-        for (node, _) in graph.nodes.iter() {
+        for _ in graph.base_nodes_iter() {
             let j = params.len();
             params.push(rng.gen_range(range.clone()));
             params.push(rng.gen_range(range.clone()));
-            vertex_positions.insert(node.clone(), (None, j, j + 1));
+            vertex_positions.push((None, j, j + 1));
         }
 
         (
@@ -687,14 +688,17 @@ impl Positions {
     pub fn iter_vertex_positions<'a>(
         &'a self,
         params: &'a [f64],
-    ) -> impl Iterator<Item = (&'a HedgeNode, (f64, f64))> + 'a {
-        self.vertex_positions.iter().map(|(node, (p, x, y))| {
-            if let Some(p) = p {
-                (node, (p.0, p.1))
-            } else {
-                (node, (params[*x], params[*y]))
-            }
-        })
+    ) -> impl Iterator<Item = (NodeIndex, (f64, f64))> + 'a {
+        self.vertex_positions
+            .iter()
+            .enumerate()
+            .map(|(i, (p, x, y))| {
+                if let Some(p) = p {
+                    (NodeIndex(i), (p.0, p.1))
+                } else {
+                    (NodeIndex(i), (params[*x], params[*y]))
+                }
+            })
     }
 
     pub fn iter_edge_positions<'a>(
@@ -754,7 +758,7 @@ impl<E, V> CostFunction for GraphLayout<'_, E, V> {
                 let dist = (dx * dx + dy * dy).sqrt();
                 cost += self.params.edge_vertex_repulsion / dist;
             }
-            for e in node.hairs.included_iter() {
+            for e in self.graph.hairs_from_id(node).hairs.included_iter() {
                 let (ex, ey) = self.positions.get_edge_position(e, param);
 
                 let dx = x - ex;
@@ -766,7 +770,7 @@ impl<E, V> CostFunction for GraphLayout<'_, E, V> {
                     0.5 * self.params.spring_constant * (self.params.spring_length - dist).powi(2);
                 // cost += self.params.charge_constant_e / dist;
 
-                for othere in node.hairs.included_iter() {
+                for othere in self.graph.hairs_from_id(node).hairs.included_iter() {
                     let a = self.positions.edge_positions.inv(othere);
                     if e > othere && a != e {
                         let (ox, oy) = self.positions.get_edge_position(othere, param);
@@ -894,7 +898,7 @@ impl LayoutSettings {
         right: Vec<Hedge>,
     ) -> Self {
         let mut rng = SmallRng::seed_from_u64(iters.seed);
-        let mut vertex_positions = IndexMap::new();
+        let mut vertex_positions = Vec::new();
         let mut edge_positions = graph.involution.forgetful_map_node_data_ref(|_| ());
 
         let range = -edge..edge;
@@ -946,11 +950,11 @@ impl LayoutSettings {
             right_bot_corner.1 += right_step;
         }
 
-        for (node, _) in graph.nodes.iter() {
+        for _ in graph.base_nodes_iter() {
             let j = init_params.len();
             init_params.push(rng.gen_range(range.clone()));
             init_params.push(rng.gen_range(range.clone()));
-            vertex_positions.insert(node.clone(), (None, j, j + 1));
+            vertex_positions.push((None, j, j + 1));
         }
 
         LayoutSettings {
@@ -975,7 +979,7 @@ impl LayoutSettings {
         radius: f64,
     ) -> Self {
         let mut rng = SmallRng::seed_from_u64(iters.seed);
-        let mut vertex_positions = IndexMap::new();
+        let mut vertex_positions = Vec::new();
         let mut edge_positions = graph.involution.forgetful_map_node_data_ref(|_| ());
 
         let range = -1.0..1.0;
@@ -1001,11 +1005,11 @@ impl LayoutSettings {
             }
         }
 
-        for (node, _) in graph.nodes.iter() {
+        for _ in graph.base_nodes_iter() {
             let j = init_params.len();
             init_params.push(rng.gen_range(range.clone()));
             init_params.push(rng.gen_range(range.clone()));
-            vertex_positions.insert(node.clone(), (None, j, j + 1));
+            vertex_positions.push((None, j, j + 1));
         }
 
         LayoutSettings {

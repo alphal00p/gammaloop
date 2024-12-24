@@ -74,7 +74,7 @@ impl SubGraph for HedgeNode {
             out.push_str(
                 format!(
                     "  {} [{}];\n",
-                    graph.nodes.get_index_of(n).unwrap(),
+                    graph.id_from_hairs(n).unwrap().0,
                     node_attr(v).map_or("".into(), |x| x).as_str()
                 )
                 .as_str(),
@@ -144,10 +144,7 @@ impl SubGraph for HedgeNode {
                     };
                     out.push_str(&InvolutiveMapping::<()>::pair_dot(
                         incident_node.0,
-                        graph
-                            .nodes
-                            .get_index_of(graph.involved_node_hairs(hedge_id).unwrap())
-                            .unwrap(),
+                        graph.involved_node_id(hedge_id).unwrap().0,
                         attr.as_ref(),
                         data.orientation,
                     ));

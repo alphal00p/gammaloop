@@ -266,7 +266,7 @@ impl OrientedCut {
         let mut builder = HedgeGraphBuilder::new();
 
         let mut nodeidmap = AHashMap::new();
-        for (n, v) in &graph.nodes {
+        for (n, v) in graph.iter_nodes() {
             nodeidmap.insert(n, builder.add_node(v));
         }
 

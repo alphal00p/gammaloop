@@ -310,12 +310,7 @@ fn K33() {
 
     println!("{}", graph.dot(&graph.full_node()));
 
-    let t1 = TraversalTree::dfs(
-        &graph,
-        &graph.full_filter(),
-        graph.nodes.get_index(4).unwrap().0,
-        None,
-    );
+    let t1 = TraversalTree::dfs(&graph, &graph.full_filter(), &graph.nodes[4], None);
 
     println!(
         "{}",
@@ -352,11 +347,7 @@ fn K33() {
     println!("{}", graph.cyclotomatic_number(&graph.full_graph()));
 
     let cycles = graph
-        .paton_cycle_basis(
-            &graph.full_graph(),
-            graph.nodes.get_index(4).unwrap().0,
-            None,
-        )
+        .paton_cycle_basis(&graph.full_graph(), &graph.nodes[4], None)
         .unwrap()
         .0;
 

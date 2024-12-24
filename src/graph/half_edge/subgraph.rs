@@ -259,7 +259,7 @@ impl SubGraph for BitVec {
             out.push_str(
                 format!(
                     "  {} [{}];\n",
-                    graph.nodes.get_index_of(n).unwrap(),
+                    graph.id_from_hairs(n).unwrap().0,
                     node_attr(v).map_or("".into(), |x| x).as_str()
                 )
                 .as_str(),
