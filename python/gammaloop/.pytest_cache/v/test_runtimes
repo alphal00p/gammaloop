@@ -88,13 +88,14 @@
   "tests/unit/test_rust.py::TestRust::test_generate_h_ttxaah_tree": 0.24527085572481155,
   "tests/unit/test_rust.py::TestRust::test_generate_aa_aahhttx_tree": 0.2517485097050667,
   "tests/unit/test_commands.py::TestProcessGeneration::test_generate_a_ddx": 0.055291458033025265,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_sm_a_ddx": 28.791945666074753,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_sm_full_a_ddx": 2.374706457834691,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_sm_a_ddx": 146.98220004234463,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_sm_a_ddx": 2.5929050846025348,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_sm_full_a_ddx": 117.93397779110819,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_sm_a_ddx": 142.7087507499382,
   "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_ddx_ddx_ng": 47.739360583014786,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets": 87.32753312494606,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_sm_h_n_j": 0.3610502500087023,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_epem_a_qqh": 40.78434812556952,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets_with_grouping": 9.481217540800571,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_amplitude_1l_sm_jets": 2435.472102958709
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets": 81.67961400002241,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_sm_h_n_j": 0.46000274922698736,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_epem_a_qqh": 41.59327062498778,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets_with_grouping": 9.697644208557904,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_sm_h_n_j": 171.95000420790166,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_amplitude_1l_sm_jets": 55.518137665465474
 }

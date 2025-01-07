@@ -2,6 +2,7 @@ use crate::momentum::FourMomentum;
 use crate::utils::{FloatLike, F};
 use crate::Settings;
 use itertools::Itertools;
+#[allow(unused_imports)]
 use libc::{c_double, c_int, c_void};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -588,6 +589,7 @@ impl JetClustering {
     pub fn cluster_fastjet(&mut self, event: &Event) {
         self.fastjet_jets_in.clear();
 
+        #[allow(unused_variables)]
         let mut len: c_int = 0;
         for (e, id) in event
             .kinematic_configuration
@@ -614,8 +616,11 @@ impl JetClustering {
         self.fastjet_jets_map.clear();
         self.fastjet_jets_map.resize(self.fastjet_jets_in.len(), 0);
 
+        #[allow(unused_mut)]
         let mut actual_len: c_int = 0;
+        #[allow(unused_variables)]
         let palg = -1.0;
+        #[allow(unused_variables)]
         let clustering_ptjet_min = 0.;
         #[cfg(feature = "fjcore")]
         {

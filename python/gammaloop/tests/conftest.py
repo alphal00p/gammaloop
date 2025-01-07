@@ -524,7 +524,7 @@ def scalar_massless_pentabox_export(tmpdir_factory: pytest.TempPathFactory) -> P
                                      "TEST_AMPLITUDE_scalar_massless_pentabox", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-generate_graph --name=massless_pentabox -ve=[(1000,1,6),(1000,6,7),(1000,7,2),(1000,2,1),(1000,7,3),(1000,3,4),(1000,4,5),(1000,5,6)] -ee=[("in",1),("in",2),("in",3),("in",4),("out",5)]
+define_graph --name=massless_pentabox -ve=[(1000,1,6),(1000,6,7),(1000,7,2),(1000,2,1),(1000,7,3),(1000,3,4),(1000,4,5),(1000,5,6)] -ee=[("in",1),("in",2),("in",3),("in",4),("out",5)]
 output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
@@ -536,7 +536,7 @@ def scalar_massless_3l_pentabox_export(tmpdir_factory: pytest.TempPathFactory) -
                                      "TEST_AMPLITUDE_scalar_massless_3l_pentabox", True).joinpath("GL_OUTPUT")
     gloop.run(CommandList.from_string(
         f"""import_model scalars;
-generate_graph --name=massless_3l_pentabox -ve=[(1000,1,6),(1000,6,7),(1000,7,2),(1000,2,1),(1000,7,8),(1000,8,9),(1000,9,6),(1000,8,3),(1000,3,4),(1000,4,5),(1000,5,9)] -ee=[("in",1),("in",2),("in",3),("in",4),("out",5)]
+define_graph --name=massless_3l_pentabox -ve=[(1000,1,6),(1000,6,7),(1000,7,2),(1000,2,1),(1000,7,8),(1000,8,9),(1000,9,6),(1000,8,3),(1000,3,4),(1000,4,5),(1000,5,9)] -ee=[("in",1),("in",2),("in",3),("in",4),("out",5)]
 output {output_path} --overwrite_output --yaml_only"""))
     return output_path
 
