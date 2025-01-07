@@ -42,7 +42,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 
 [dependencies]
 # These will be patched
-symbolica = { version = "0.13.0" }
+symbolica = { version = "0.14.0" }
 spenso = { version = "0.4.0", features = ["shadowing"] }
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
@@ -140,5 +140,4 @@ no_python = []
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-# spenso = { path = "../../alphal00p/spenso" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "b6a0cd19d225993ac72423aa416e1153475878a4" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "e93679f3f77c24017b73cce527087a1bce52bbbf" }

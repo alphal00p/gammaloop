@@ -92,5 +92,9 @@
   "tests/unit/test_commands.py::TestProcessGeneration::test_generate_sm_full_a_ddx": 2.374706457834691,
   "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_sm_a_ddx": 146.98220004234463,
   "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_ddx_ddx_ng": 47.739360583014786,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets": 87.32753312494606
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets": 87.32753312494606,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_sm_h_n_j": 0.3610502500087023,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_epem_a_qqh": 40.78434812556952,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets_with_grouping": 9.481217540800571,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_amplitude_1l_sm_jets": 2435.472102958709
 }

@@ -1533,7 +1533,8 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 num_exp_as_superscript: false,
                 latex: false,
                 double_star_for_exponentiation: false,
-                precision: None
+                precision: None,
+                pretty_matrix: false,
             },
         )
     )

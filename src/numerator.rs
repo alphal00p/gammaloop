@@ -65,8 +65,7 @@ use symbolica::id::{Match, MatchSettings};
 
 use symbolica::{
     atom::{Atom, FunctionBuilder},
-    fun,
-    symb,
+    fun, symb,
 };
 use symbolica::{
     domains::float::NumericalFloatLike,
@@ -1000,8 +999,8 @@ impl AppliedFeynmanRule {
         let mut colorful_builder = DataTensor::new_scalar(Atom::new_num(1));
 
         for [colorless, color] in &vatoms {
-            println!("colorless vertex: {}", colorless);
-            println!("colorfull vertex: {}", color);
+            // println!("colorless vertex: {}", colorless);
+            // println!("colorful vertex: {}", color);
             colorless_builder = colorless_builder.contract(colorless).unwrap();
             colorful_builder = colorful_builder.contract(color).unwrap();
             // println!("vertex: {v}");
@@ -1009,8 +1008,8 @@ impl AppliedFeynmanRule {
         }
 
         for [n, c] in &eatoms {
-            println!("colorless edge {n}");
-            println!("colorfull edge {c}");
+            // println!("colorless edge {n}");
+            // println!("colorfull edge {c}");
             colorless_builder = colorless_builder.scalar_mul(n).unwrap();
             colorful_builder = colorful_builder.scalar_mul(c).unwrap();
         }

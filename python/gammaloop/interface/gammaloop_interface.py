@@ -326,9 +326,11 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -774,7 +776,7 @@ class GammaLoop(object):
     generate_parser.add_argument('--numerator_aware_isomorphism_grouping', '-num_grouping', default="only_detect_zeroes", type=str,
                                  choices=["no_grouping", "only_detect_zeroes", "group_identical_graphs_up_to_sign",
                                           "group_identical_graphs_up_to_scalar_rescaling"],
-                                 help='Group identical diagrams after generation and including numerator (default: only_detect_zeroes)')
+                                 help='Group identical diagrams after generation and including numerator (default: only_detect_zeroes, otherwise slow)')
     # Tadpole filter
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')
@@ -871,7 +873,8 @@ class GammaLoop(object):
             logger.info("A total of %s%s graphs%s have been generated.",
                         Colour.GREEN, len(all_graphs), Colour.END)
         else:
-            raise GammaLoopError(f"No graphs were generated for process:\n{repr(self.process)}.")
+            raise GammaLoopError(f"No graphs were generated for process:\n{
+                                 repr(self.process)}.")
 
         if args.amplitude:
             self.amplitudes.add_amplitude(cross_section.Amplitude(

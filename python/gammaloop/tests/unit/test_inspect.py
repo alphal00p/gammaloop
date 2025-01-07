@@ -32,7 +32,7 @@ class TestScalarTopologies:
         inspect_res = gl.do_inspect(
             'scalar_3L_6P_topology_A -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327')
         check_inspect_result(
-            inspect_res, complex(2.2265511758628186e-44, 0.), max_relative_diff=1.0e-12)
+            inspect_res['final_result'], complex(2.2265511758628186e-44, 0.), max_relative_diff=1.0e-12)
 
 
 class TestPhysicalTopologies:
@@ -68,7 +68,7 @@ class TestPhysicalTopologies:
         inspect_res = gl.do_inspect(
             'physical_1L_6photons -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327')
         check_inspect_result(
-            inspect_res, complex(-6.511498992086646e-16, 5.698855018015016e-16), max_relative_diff=1.0e-12)
+            inspect_res['final_result'], complex(-6.511498992086646e-16, 5.698855018015016e-16), max_relative_diff=1.0e-12)
 
     def test_inspect_physical_1L_6photons(self, physical_1L_6photons_export: Path):
         gl = get_gamma_loop_interpreter()
@@ -101,4 +101,4 @@ class TestPhysicalTopologies:
         inspect_res = gl.do_inspect(
             'physical_1L_6photons -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327')
         check_inspect_result(
-            inspect_res, complex(9.63106712759288e-12, -3.991478014419087e-11), max_relative_diff=1.0e-12)
+            inspect_res['final_result'], complex(9.63106712759288e-12, -3.991478014419087e-11), max_relative_diff=1.0e-12)

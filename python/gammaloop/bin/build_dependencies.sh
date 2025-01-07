@@ -207,8 +207,8 @@ build_dependencies () {
         fi
         cd ..
     fi
-
-    if ! test -f symbolica/symbolica_path.txt; then
+    
+	if ! test -f symbolica/symbolica_path.txt; then
         cd symbolica
         
 		SYMBOLICA_BUILD_PROFILE="${SYMBOLICA_BUILD_PROFILE:-release}"

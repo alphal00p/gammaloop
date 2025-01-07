@@ -9,8 +9,6 @@ use smartstring::{LazyCompact, SmartString};
 use spenso::iterators::IteratableTensor;
 use spenso::parametric::atomcore::TensorAtomMaps;
 use spenso::parametric::ParamTensor;
-use spenso::structure::HasStructure;
-use spenso::structure::TensorStructure;
 use spenso::upgrading_arithmetic::FallibleAdd;
 use spenso::upgrading_arithmetic::FallibleSub;
 use symbolica::atom::AtomCore;
@@ -33,7 +31,7 @@ use crate::{
     model::Model,
 };
 use itertools::Itertools;
-use symbolica::{atom::Atom, domains::integer::Integer, graph::Graph as SymbolicaGraph};
+use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 pub struct FeynGen {
     pub options: FeynGenOptions,
@@ -674,13 +672,13 @@ impl FeynGen {
     }
 
     fn group_isomorphic_graphs_after_node_color_change<'a>(
-        graphs: &HashMap<SymbolicaGraph<i32, &'a str>, Integer>,
+        graphs: &HashMap<SymbolicaGraph<i32, &'a str>, Atom>,
         node_colors_to_change: &HashMap<i32, i32>,
-    ) -> HashMap<SymbolicaGraph<i32, &'a str>, Integer> {
+    ) -> HashMap<SymbolicaGraph<i32, &'a str>, Atom> {
         #[allow(clippy::type_complexity)]
         let mut iso_buckets: HashMap<
             SymbolicaGraph<i32, &'a str>,
-            (usize, (SymbolicaGraph<i32, &'a str>, Integer)),
+            (usize, (SymbolicaGraph<i32, &'a str>, Vec<usize>, Atom)),
         > = HashMap::default();
 
         for (g, symmetry_factor) in graphs.iter() {
@@ -697,20 +695,43 @@ impl FeynGen {
                 g_node_color_modified.set_node_data(i_n, new_color);
             }
             let canonized_g = g_node_color_modified.canonize();
-            (iso_buckets
-                .entry(canonized_g.graph)
-                .or_insert_with(|| (1, (g.clone(), symmetry_factor.clone()))))
-            .0 += 1;
+            let ext_ordering = g
+                .nodes()
+                .iter()
+                .filter_map(|n| {
+                    if n.data > 0 {
+                        Some(*n.edges.first().unwrap())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            if let Some((count, (other_g, external_ordering, sym_fact))) =
+                iso_buckets.get_mut(&canonized_g.graph)
+            {
+                // Make sure to pick a representative with a canonical external ordering so that additional flavour grouping afterwards is possible
+                if ext_ordering < *external_ordering {
+                    *external_ordering = ext_ordering;
+                    *other_g = g.clone();
+                }
+                *count += 1;
+
+                assert!(sym_fact == symmetry_factor);
+            } else {
+                iso_buckets.insert(
+                    canonized_g.graph,
+                    (1, (g.clone(), ext_ordering, symmetry_factor.clone())),
+                );
+            }
         }
 
         iso_buckets
             .iter()
-            .map(|(_canonized_g, (count, (g, symmetry_factor)))| {
-                (
-                    g.clone(),
-                    Integer::Natural(symmetry_factor.to_i64().unwrap() * (*count as i64)),
-                )
-            })
+            .map(
+                |(_canonized_g, (count, (g, _external_ordering, symmetry_factor)))| {
+                    (g.clone(), symmetry_factor * Atom::new_num(*count as i64))
+                },
+            )
             .collect()
     }
 
@@ -1036,6 +1057,17 @@ impl FeynGen {
                 )
             });
         }
+        // Re-interpret the symmetry factor as a multiplier where the symbolica factor from symbolica appears in the denominator
+        let mut graphs = graphs
+            .iter()
+            .map(|(g, symmetry_factor)| {
+                (
+                    g.clone(),
+                    Atom::new_num(1) / Atom::new_num(symmetry_factor.clone()),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
         // Now account for initial state symmetry by further grouping contributions
         let mut node_colors_to_change: HashMap<i32, i32> = HashMap::default();
         if self.options.symmetrize_initial_states {
@@ -1104,9 +1136,7 @@ impl FeynGen {
             for (colored_g, multiplicity) in FeynGen::assign_node_colors(g, &node_colors)? {
                 processed_graphs.push((
                     colored_g.canonize().graph,
-                    (Atom::new_num(multiplicity as i64)
-                        / Atom::new_num(symmetry_factor.to_i64().unwrap()))
-                    .to_canonical_string(),
+                    (Atom::new_num(multiplicity as i64) * symmetry_factor).to_canonical_string(),
                 ));
             }
         }
@@ -1133,8 +1163,44 @@ impl FeynGen {
         > = HashMap::default();
 
         for (i_g, (g, symmetry_factor)) in processed_graphs.iter().enumerate() {
+            // println!(
+            //     "Computing canonical representation for graph #{}:\nedges: {:?}\n nodes: {:?}",
+            //     i_g,
+            //     g.edges()
+            //         .iter()
+            //         .enumerate()
+            //         .map(|(i_e, e)| format!("{}|{}", i_e, e.data))
+            //         .collect::<Vec<_>>(),
+            //     g.nodes()
+            //         .iter()
+            //         .enumerate()
+            //         .map(|(i_n, n)| format!(
+            //             "{}|{}|{}|edges:{:?}",
+            //             i_n, n.data.0, n.data.1, n.edges
+            //         ))
+            //         .collect::<Vec<_>>()
+            // );
             let (canonical_repr, sorted_g) = self.canonized_edge_and_vertex_ordering(model, g);
-
+            // println!(
+            //     "Canonical representation for graph #{}:\nedges: {:?}\n nodes: {:?}",
+            //     i_g,
+            //     sorted_g
+            //         .edges()
+            //         .iter()
+            //         .enumerate()
+            //         .map(|(i_e, e)| format!("{}|{}", i_e, e.data))
+            //         .collect::<Vec<_>>(),
+            //     sorted_g
+            //         .nodes()
+            //         .iter()
+            //         .enumerate()
+            //         .map(|(i_n, n)| format!(
+            //             "{}|{}|{}|edges:{:?}",
+            //             i_n, n.data.0, n.data.1, n.edges
+            //         ))
+            //         .collect::<Vec<_>>()
+            // );
+            // println!("Canonical dot for graph #{}:", canonical_repr.to_dot());
             let graph_name = format!("{}{}", graph_prefix, i_g);
             if let Some(selected_graphs) = &selected_graphs {
                 if !selected_graphs.contains(&graph_name) {
@@ -1272,9 +1338,10 @@ impl FeynGen {
         bare_graphs.sort_by(|a, b| (a.0).cmp(&b.0));
 
         debug!(
-            "Number of graphs after numerator-aware grouping with strategy '{}': {}",
+            "Number of graphs after numerator-aware grouping with strategy '{}': {} ({} buckets)",
             numerator_aware_isomorphism_grouping,
-            bare_graphs.len()
+            bare_graphs.len(),
+            pooled_bare_graphs.len()
         );
 
         Ok(bare_graphs
@@ -1297,8 +1364,22 @@ impl FeynGen {
                     numerator_a.tensor.iter_flat(),
                     numerator_b.tensor.iter_flat(),
                 )
-                .map(|((_idx_a, a), (_idx_b, b))| a / b)
+                .map(|((_idx_a, a), (_idx_b, b))| (a / b))
                 .collect::<HashSet<_>>();
+                // for (a_idx, a) in numerator_a.tensor.iter_flat() {
+                //     println!("Numerator A #{} : {}", a_idx, a);
+                // }
+                // for (b_idx, b) in numerator_b.tensor.iter_flat() {
+                //     println!("Numerator B #{} : {}", b_idx, b);
+                // }
+                // println!(
+                //     "ratios: {:?}",
+                //     ratios
+                //         .iter()
+                //         .map(|av| av.to_canonical_string())
+                //         .collect::<Vec<_>>()
+                //         .join(",")
+                // );
                 if ratios.len() > 1 {
                     None
                 } else {
@@ -1325,22 +1406,30 @@ impl FeynGen {
                 }
             }
             NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign => {
-                if !numerator_a
-                    .tensor
-                    .structure()
-                    .same_external(numerator_b.tensor.structure())
-                {
-                    return None;
-                }
+                // for (a_idx, a) in numerator_a.tensor.iter_flat() {
+                //     println!("Numerator A #{} : {}", a_idx, a);
+                // }
+                // for (b_idx, b) in numerator_b.tensor.iter_flat() {
+                //     println!("Numerator B #{} : {}", b_idx, b);
+                // }
                 let res = if let Some(diff) = numerator_a.tensor.sub_fallible(&numerator_b.tensor) {
-                    if diff.iter_flat().all(|(_idx, d)| d.is_zero()) {
+                    if diff
+                        .iter_flat()
+                        .all(|(_idx, d)| d.expand_num().collect_num().is_zero())
+                    {
                         Some(1)
                     } else {
                         let sum = numerator_a
                             .tensor
                             .add_fallible(&numerator_b.tensor)
                             .unwrap();
-                        if sum.iter_flat().all(|(_idx, d)| d.is_zero()) {
+                        // for (sum_idx, sum) in sum.iter_flat() {
+                        //     println!("Sum #{}: {}", sum_idx, sum);
+                        // }
+                        if sum
+                            .iter_flat()
+                            .all(|(_idx, d)| d.expand_num().collect_num().is_zero())
+                        {
                             Some(-1)
                         } else {
                             None
@@ -1390,14 +1479,18 @@ impl ProcessedNumeratorForComparison {
             NumeratorAwareGraphGroupingOption::NoGrouping
             | NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => {}
             NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign => {
-                // TODO use expand_num().collect_num() instead of expand() as it is much faster but for now
-                // fails to properly detect cancellations
+                // d.expand() is much slower and not necessary as we just need to canonicalize the product, sadly it's necessary in complicated cases, i.e.
+                // generate h > a a | h a b [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign
+                // should yield only one graph!
+                // TODO: FIX so that d.expand_num().collect_num() works!
+                // tensor = tensor.map_data(|d: Atom| d.expand())
                 tensor = tensor.expand()
+
+                // tensor = tensor.map_data(|d| d.expand_num().collect_num())
             }
             NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling => {
-                // TODO use expand_num().collect_num() instead of expand() as it is much faster but for now
-                // fails to properly detect cancellations
-                tensor = tensor.expand()
+                // TOFIX: this does not work in more complicated cases. Need to use canonicalized tensors instead of spenso-expanded ones.
+                tensor = tensor.expand_num().collect_num()
             }
         }
         ProcessedNumeratorForComparison { diagram_id, tensor }
