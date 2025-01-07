@@ -1521,6 +1521,7 @@ pub fn to_str_expression(expression: &Atom) -> String {
         AtomPrinter::new_with_options(
             expression.as_view(),
             PrintOptions {
+                pretty_matrix: true,
                 terms_on_new_line: false,
                 color_top_level_sum: false,
                 color_builtin_symbols: false,

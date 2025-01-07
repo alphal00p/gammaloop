@@ -1744,12 +1744,18 @@ impl PolyContracted {
 impl GammaSimplified {
     pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> SerializableAtom {
         expr.0 = expr.0.expand();
-        let pats = [Replacement::new(
-            Pattern::parse("id(a_,b_)*t_(d___,b_,c___)").unwrap(),
-            Pattern::parse("t_(d___,a_,c___)").unwrap(),
-        )];
+        let pats = [
+            Replacement::new(
+                Pattern::parse("id(a_,b_)*t_(d___,b_,c___)").unwrap(),
+                Pattern::parse("t_(d___,a_,c___)").unwrap(),
+            ),
+            Replacement::new(
+                Pattern::parse("Metric(mink(a_),mink(b_))*t_(d___,mink(b_),c___)").unwrap(),
+                Pattern::parse("t_(d___,mink(a_),c___)").unwrap(),
+            ),
+        ];
 
-        expr.replace_all_multiple_repeat(&pats);
+        expr = expr.replace_all_multiple_repeat(&pats);
         let pats = vec![
             (
                 Pattern::parse("ProjP(a_,b_)").unwrap(),
@@ -1795,9 +1801,9 @@ impl GammaSimplified {
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect();
         expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat(&reps);
+        expr.replace_all_multiple_repeat_mut(&reps);
         expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat(&reps);
+        expr.replace_all_multiple_repeat_mut(&reps);
 
         let pat = Pattern::parse("gamma_trace(a__)").unwrap();
 

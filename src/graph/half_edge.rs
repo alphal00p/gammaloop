@@ -1779,6 +1779,7 @@ impl<E, V> HedgeGraph<E, V> {
     pub fn iter_edge_id<'a, S: SubGraph>(&'a self, subgraph: &'a S) -> EdgeIdIter<'a, E, V, S> {
         EdgeIdIter::new(self, subgraph)
     }
+
     // pub fn map_edges_ref<E2>(&self, f: &impl Fn(&E) -> E2) -> HedgeGraph<E2, V>
     // where
     //     V: Clone,
@@ -2291,7 +2292,7 @@ impl<E, V> HedgeGraph<E, V> {
         subgraph.internal_graph.filter &= !externals;
     }
 
-    fn external_filter(&self) -> BitVec {
+    pub fn external_filter(&self) -> BitVec {
         let mut filter = bitvec![usize, Lsb0; 0; self.involution.len()];
 
         for (i, edge) in self.involution.inv.iter().enumerate() {
