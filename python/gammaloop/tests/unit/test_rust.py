@@ -26,6 +26,12 @@ class TestRust:
                                        scalar_massless_3l_pentabox_export: Path,
                                        scalar_sunrise_export: Path,
                                        physical_3L_6photons_topology_A_export: Path,
+                                       ta_ta_tree_export: Path,
+                                       t_ta_tree_export: Path,
+                                       th_th_tree_export: Path,
+                                       hh_ttxaa_tree_export: Path,
+                                       h_ttxaah_tree_export: Path,
+                                       aa_aahhttx_tree_export: Path
                                        ):
         assert True
 

@@ -56,19 +56,23 @@ sampling:
   subtype: tropical
   upcast_on_failure: true
 subtraction:
+  local_ct_settings:
+    uv_localisation:
+      sliver_width: 10.0
+      dynamic_width: false
+      gaussian_width: 1.0
+    dampen_integrable_singularity:
+      type: exponential
+  integrated_ct_settings:
+    range:
+      type: infinite
+      h_function_settings:
+        function: poly_exponential
+        sigma: 1.0
+        enabled_dampening: true
+        power: null
   overlap_settings:
-    check_global_center: true
     force_global_center: null
+    check_global_center: true
     try_origin: false
     try_origin_all_lmbs: false
-  ct_settings:
-    integrated_ct_sigma: null
-    local_ct_width: 1.0
-    sliver_width: 1.0
-    dampen_integrable_singularity: true
-    dynamic_sliver: false
-    integrated_ct_hfunction:
-      enabled_dampening: true
-      function: poly_exponential
-      power: null
-      sigma: 1.0

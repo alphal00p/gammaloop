@@ -35,4 +35,4 @@ set use_ltd False
 #'escalate_for_large_weight_threshold':-1.0\
 #}]
 #inspect ltd_topology_f -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327 -t 0
-integrate ltd_topology_f -c 1 -r -t (5.26647e-6,0.)
+integrate ltd_topology_f -c 1 -r -t (-5.26647e-6,0.)

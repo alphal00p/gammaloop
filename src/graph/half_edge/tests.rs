@@ -120,14 +120,7 @@ fn three_loop_fly() {
     builder.add_edge(d, c, (), false);
 
     let fly = builder.clone().build();
-
-    for c in fly.non_cut_edges() {
-        // println!("{c:?}");
-        //
-        sum += (2 ^ (c.count_ones() / 2)) / 2;
-
-        // println!("{}", fly.dot(&c));
-    }
+    
     assert_eq!(32, fly.non_cut_edges().len());
     // println!("{sum}");
     // println!("{}", SignedCut::all_initial_state_cuts(&fly).len());

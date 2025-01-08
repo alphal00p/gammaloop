@@ -3659,26 +3659,10 @@ impl<'a> LoopMomentumBasisSpecification<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-
-    use crate::cross_section::OutputMetaData;
-
     use super::*;
 
     fn model_sm() -> Model {
-        let path = Path::new("./src/test_resources/lbl/");
-        let output_meta_data: OutputMetaData =
-            serde_yaml::from_reader(File::open(path.join("output_metadata.yaml")).unwrap())
-                .unwrap();
-        Model::from_file(String::from(
-            path.join(format!(
-                "sources/model/{}.yaml",
-                output_meta_data.model_name
-            ))
-            .to_str()
-            .unwrap(),
-        ))
-        .unwrap()
+        Model::from_file(String::from("src/test_resources/gammaloop_models/sm.yaml")).unwrap()
     }
 
     #[test]
