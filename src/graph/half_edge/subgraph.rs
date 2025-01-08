@@ -256,14 +256,11 @@ impl SubGraph for BitVec {
         out.push_str(graph_info.as_str());
 
         for (n, v) in graph.iter_node_data(self) {
-            out.push_str(
-                format!(
-                    "  {} [{}];\n",
-                    graph.id_from_hairs(n).unwrap().0,
-                    node_attr(v).map_or("".into(), |x| x).as_str()
-                )
-                .as_str(),
-            );
+            if let Some(a) = node_attr(v) {
+                out.push_str(
+                    format!("  {} [{}];\n", graph.id_from_hairs(n).unwrap().0, a).as_str(),
+                );
+            }
         }
 
         for (hedge_id, (edge, incident_node)) in graph.involution.iter() {

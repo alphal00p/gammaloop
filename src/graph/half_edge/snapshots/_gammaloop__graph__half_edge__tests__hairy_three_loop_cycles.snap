@@ -3,7 +3,7 @@ source: src/graph/half_edge/tests.rs
 expression: cycles
 ---
 [
-  InternalSubGraph(
+  Cycle(
     filter: BitSeq(
       order: "bitvec::order::Lsb0",
       head: BitIdx(
@@ -15,9 +15,9 @@ expression: cycles
         32259,
       ],
     ),
-    loopcount: Some(1),
+    loop_count: Some(1),
   ),
-  InternalSubGraph(
+  Cycle(
     filter: BitSeq(
       order: "bitvec::order::Lsb0",
       head: BitIdx(
@@ -29,9 +29,9 @@ expression: cycles
         32268,
       ],
     ),
-    loopcount: Some(1),
+    loop_count: Some(1),
   ),
-  InternalSubGraph(
+  Cycle(
     filter: BitSeq(
       order: "bitvec::order::Lsb0",
       head: BitIdx(
@@ -43,6 +43,6 @@ expression: cycles
         32304,
       ],
     ),
-    loopcount: Some(1),
+    loop_count: Some(1),
   ),
 ]

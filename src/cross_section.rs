@@ -746,80 +746,6 @@ impl Amplitude<UnInit> {
         }
     }
 
-    pub fn export(
-        self,
-        export_root: &str,
-        model: &Model,
-        export_settings: &ExportSettings,
-    ) -> Result<Amplitude<Evaluators>, Report> {
-        // TODO process amplitude by adding lots of additional information necessary for runtime.
-        // e.g. generate e-surface, cff expression, counterterms, etc.
-
-        // Then dumped the new yaml representation of the amplitude now containing all that additional information
-        let path = Path::new(export_root)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str());
-
-        // generate cff and ltd for each graph in the ampltiudes, ltd also generates lmbs
-
-        let amp = self.map_res(|a| {
-            a.map_res(|mut g| {
-                g.generate_cff();
-                g.generate_ltd();
-                g.generate_tropical_subgraph_table(
-                    &export_settings.tropical_subgraph_table_settings,
-                );
-                g.generate_esurface_data()?;
-                g.build_compiled_expression(path.clone(), export_settings)?;
-                let g = g.process_numerator(
-                    model,
-                    ContractionSettings::Normal,
-                    path.clone(),
-                    export_settings,
-                );
-                Result::<_, Report>::Ok(g)
-            })
-        })?;
-
-        fs::write(
-            path.clone().join("amplitude.yaml"),
-            serde_yaml::to_string(&amp.to_serializable())?,
-        )?;
-
-        // fs::write(
-        //     path.clone().join("state.bin"),
-
-        //     )?,
-        // )?;
-        //
-        let mut state = fs::File::create(path.clone().join("state.bin"))?;
-        State::export(&mut state)?;
-        // dump the derived data in a binary file
-        for amplitude_graph in amp.amplitude_graphs.iter() {
-            debug!("dumping derived data to {:?}", path);
-
-            fs::write(
-                path.clone().join(format!(
-                    "derived_data_{}.bin",
-                    amplitude_graph.graph.bare_graph.name
-                )),
-                &bincode::encode_to_vec(
-                    amplitude_graph
-                        .graph
-                        .derived_data
-                        .as_ref()
-                        .ok_or(eyre!("empty derived data"))?,
-                    bincode::config::standard(),
-                )?,
-            )?;
-        }
-
-        // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
-
-        Ok(amp)
-    }
-
     pub fn apply_feynman_rules(
         self,
         export_settings: &ExportSettings,
@@ -898,6 +824,9 @@ impl Amplitude<PythonState> {
             path.clone().join("amplitude.yaml"),
             serde_yaml::to_string(&self.to_serializable())?,
         )?;
+
+        let mut state = fs::File::create(path.clone().join("state.bin"))?;
+        State::export(&mut state)?;
 
         // dump the derived data in a binary file
         for amplitude_graph in self.amplitude_graphs.iter() {

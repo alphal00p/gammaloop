@@ -2,18 +2,18 @@
 source: src/graph/half_edge/tests.rs
 expression: graph.base_dot()
 ---
-graph {
+digraph {
    node [shape=circle,height=0.1,label=""];  overlap="scale";
-   0 -- 1 [color="red:blue;0.5 " ];
-  1 -- 2 [color="red:blue;0.5 " ];
-  2 -- 3 [color="red:blue;0.5 " ];
-  3 -- 0 [color="red:blue;0.5 " ];
-  4 -- 5 [color="red:blue;0.5 " ];
-  5 -- 6 [color="red:blue;0.5 " ];
-  6 -- 7 [color="red:blue;0.5 " ];
-  7 -- 4 [color="red:blue;0.5 " ];
-  0 -- 4 [color="red:blue;0.5 " ];
-  1 -- 5 [color="red:blue;0.5 " ];
-  2 -- 6 [color="red:blue;0.5 " ];
-  3 -- 7 [color="red:blue;0.5 " ];
+ 0 -> 1[ dir=none  color="red:blue;0.5 " ];
+1 -> 2[ dir=none  color="red:blue;0.5 " ];
+2 -> 3[ dir=none  color="red:blue;0.5 " ];
+3 -> 0[ dir=none  color="red:blue;0.5 " ];
+4 -> 5[ dir=none  color="red:blue;0.5 " ];
+5 -> 6[ dir=none  color="red:blue;0.5 " ];
+6 -> 7[ dir=none  color="red:blue;0.5 " ];
+7 -> 4[ dir=none  color="red:blue;0.5 " ];
+0 -> 4[ dir=none  color="red:blue;0.5 " ];
+1 -> 5[ dir=none  color="red:blue;0.5 " ];
+2 -> 6[ dir=none  color="red:blue;0.5 " ];
+3 -> 7[ dir=none  color="red:blue;0.5 " ];
 }

@@ -823,30 +823,23 @@ impl Numerator<Global> {
 
     fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
         ColorSimplified::isolate_color(&mut expression);
-        let mut coefs = expression
-            .0
-            .coefficient_list::<i32, _>(&[Atom::parse("color").unwrap()]);
-        let mut atom = Atom::new_num(0);
-        for (key, coef) in coefs.iter_mut() {
-            if let AtomView::Fun(f) = key.as_view() {
-                let mut key = Atom::new();
+        let color_pat = fun!(GS.color_wrap, GS.x_).to_pattern();
 
-                key.set_from_view(&f.iter().next().unwrap());
+        let color_simplified = {
+            let pat = expression
+                .0
+                .pattern_match(&color_pat, None, None)
+                .next()
+                .unwrap();
 
-                // println!("{key}");
-                let color_simplified = ColorSimplified::color_symplify_impl(key.clone().into())
-                    .0
-                    .factor();
+            ColorSimplified::color_symplify_impl(pat[&GS.x_].to_atom().into())
+                .0
+                .factor()
+        };
 
-                // println!("{coef}");
+        expression.replace_all_mut(&color_pat, Atom::new_num(1).to_pattern(), None, None);
+        expression.0 = expression.0 * color_simplified;
 
-                atom = atom + coef.factor() * color_simplified;
-            } else {
-                panic!("not a color fun");
-            }
-            // println!("coef {i}:{}\n", coef.factor());
-        }
-        expression.0 = atom;
         expression
     }
 }
@@ -925,7 +918,7 @@ impl ExpressionState for Gamma {
 
 impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
     fn export(&self) -> String {
-        self.get_single_atom().unwrap().to_string()
+        self.get_single_atom().unwrap().0.to_canonical_string()
     }
 
     fn forget_type(self) -> PythonState {

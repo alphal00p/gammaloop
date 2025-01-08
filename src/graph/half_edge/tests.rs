@@ -121,16 +121,15 @@ fn three_loop_fly() {
 
     let fly = builder.clone().build();
 
-    let mut sum = 0;
     for c in fly.non_cut_edges() {
-        println!("{c:?}");
+        // println!("{c:?}");
         //
         sum += (2 ^ (c.count_ones() / 2)) / 2;
 
-        println!("{}", fly.dot(&c));
+        // println!("{}", fly.dot(&c));
     }
-    assert_eq!(37, fly.non_cut_edges().len());
-    println!("{sum}");
+    assert_eq!(32, fly.non_cut_edges().len());
+    // println!("{sum}");
     // println!("{}", SignedCut::all_initial_state_cuts(&fly).len());
 
     // for c in SignedCut::all_initial_state_cuts(&fly) {
@@ -155,16 +154,15 @@ fn doubletriangle() {
 
     let fly = builder.clone().build();
 
-    let mut sum = 0;
-    for c in fly.non_cut_edges() {
-        println!("{c:?}");
+    for _c in fly.non_cut_edges() {
+        // println!("{c:?}");
         //
-        sum += (2 ^ (c.count_ones() / 2)) / 2;
+        // sum += (2 ^ (c.count_ones() / 2)) / 2;
 
-        println!("{}", fly.dot(&c));
+        // println!("{}", fly.dot(&c));
     }
-    assert_eq!(37, fly.non_cut_edges().len());
-    println!("{sum}");
+    // println!("{sum}");
+    assert_eq!(13, fly.non_cut_edges().len());
     // println!("{}", SignedCut::all_initial_state_cuts(&fly).len());
 
     // for c in SignedCut::all_initial_state_cuts(&fly) {

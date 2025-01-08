@@ -2529,7 +2529,9 @@ impl<E, V> HedgeGraph<E, V> {
     }
 
     pub fn dot<S: SubGraph>(&self, node_as_graph: &S) -> String {
-        self.dot_impl(node_as_graph, "".to_string(), &|_| None, &|_| None)
+        self.dot_impl(node_as_graph, "start=2;\n".to_string(), &|_| None, &|_| {
+            None
+        })
     }
 
     pub fn cut_branches(&self, subgraph: &mut HedgeNode) {
