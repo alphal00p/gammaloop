@@ -45,8 +45,7 @@ def write_current_test_name(nodeid):
         test_name = '...' + test_name[-(max_test_name_length - 3):]
 
     # Move cursor to the right position and write the test name
-    output = f"\033[s\033[{terminal_width -
-                           max_test_name_length}G{test_name}\033[u"
+    output = f"\033[s\033[{terminal_width - max_test_name_length}G{test_name}\033[u"
     sys.stderr.write(output)
     sys.stderr.flush()
 
@@ -55,8 +54,7 @@ def clear_current_test_name():
     terminal_width = get_terminal_width()
     # Clear the area where the test name was displayed
     blank_space = ' ' * (terminal_width // 2)
-    output = f"\033[s\033[{terminal_width -
-                           len(blank_space)}G{blank_space}\033[u"
+    output = f"\033[s\033[{terminal_width - len(blank_space)}G{blank_space}\033[u"
     sys.stderr.write(output)
     sys.stderr.flush()
 
@@ -171,8 +169,7 @@ def pytest_runtest_makereport(item, call):
                 if fix in ['tmpdir_factory', 'request']:
                     continue
                 if fix not in fixture_setup_times:
-                    print(f"WARNING: setup time for fixture '{
-                          fix}' is not recorded. Make sure you decorated it with 'measure_fixture_setup_time'.")
+                    print(f"WARNING: setup time for fixture '{fix}' is not recorded. Make sure you decorated it with 'measure_fixture_setup_time'.")
             fixtures_duration = sum(fixture_setup_times.get(fix, 0)
                                     for fix in used_fixtures)
             test_runtime = duration + fixtures_duration

@@ -147,10 +147,8 @@ class AmplitudeGraph(object):
     def draw(self, drawing_mode: str | None, model: Model, drawings_path: str, file_name: str | None, **drawing_options: dict[str, Any]) -> Path | None:
 
         if file_name is None:
-            file_name = f'{self.sg_id}_{self.sg_cut_id}_{self.fs_cut_id}_{
-                str(self.amplitude_side).lower()}_{self.graph.name}'
-            g_id = f'#(sg={self.fs_cut_id},sg_cut={self.sg_cut_id},fs_cut={
-                self.fs_cut_id},side={str(self.amplitude_side).lower()})'
+            file_name = f'{self.sg_id}_{self.sg_cut_id}_{self.fs_cut_id}_{str(self.amplitude_side).lower()}_{self.graph.name}'
+            g_id = f'#(sg={self.fs_cut_id},sg_cut={self.sg_cut_id},fs_cut={self.fs_cut_id},side={str(self.amplitude_side).lower()})'
         else:
             g_id = f'#{self.fs_cut_id}'
         return self.graph.draw(drawing_mode, model, pjoin(drawings_path, file_name),

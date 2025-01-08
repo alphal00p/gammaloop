@@ -65,8 +65,7 @@ class Process(object):
         )
         if not short:
             if self.particle_vetos is not None:
-                res.append(f"no__{'_'.join([p.name.lower()
-                                            for p in self.particle_vetos])}")
+                res.append(f"no__{'_'.join([p.name.lower() for p in self.particle_vetos])}")
             if self.amplitude_orders is not None:
                 res.append(
                     '__'.join([f"{k}_eq_{v}" for k, v in self.amplitude_orders.items()]))
@@ -415,10 +414,7 @@ class Process(object):
                                         model.get_particle(t))
                                 except KeyError:
                                     raise MalformedProcessError(
-                                        f"Unknown particle '{t}' in initial state. Particle in the model are:\n{
-                                            sorted(
-                                                [p.name for p in model.particles])
-                                        }")
+                                        f"Unknown particle '{t}' in initial state. Particle in the model are:\n{sorted([p.name for p in model.particles])}")
                         case ("final_states", False):
                             if t == "{}":
                                 accept_empty_final_state = True
@@ -428,10 +424,7 @@ class Process(object):
                                         model.get_particle(t))
                                 except KeyError:
                                     raise MalformedProcessError(
-                                        f"Unknown particle '{t}' in final state. Particle in the model are:\n{
-                                            sorted(
-                                                [p.name for p in model.particles])
-                                        }")
+                                        f"Unknown particle '{t}' in final state. Particle in the model are:\n{sorted([p.name for p in model.particles])}")
                         case ("vetos", False) | ("vetos_complement", False):
                             try:
                                 veto_particle = model.get_particle(t)
@@ -440,10 +433,7 @@ class Process(object):
                                         model)
                             except KeyError:
                                 raise MalformedProcessError(
-                                    f"Unknown particle '{t}' in vetoed particles specification. Particle in the model are:\n{
-                                        sorted(
-                                            [p.name for p in model.particles])
-                                    }")
+                                    f"Unknown particle '{t}' in vetoed particles specification. Particle in the model are:\n{sorted([p.name for p in model.particles])}")
                             if parsing_stage == "vetos":
                                 particle_vetos.append(veto_particle)
                             else:

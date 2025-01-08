@@ -213,19 +213,15 @@ class GammaLoopCustomFormatter(logging.Formatter):
             record.name = f"{record.name:20}"
         match record.levelno:
             case logging.DEBUG:
-                record.levelname = f"{Colour.GRAY}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.GRAY}{record.levelname:8}{Colour.END}"
             case logging.INFO:
                 record.levelname = f"{record.levelname:8}"
             case logging.WARNING:
-                record.levelname = f"{Colour.YELLOW}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.YELLOW}{record.levelname:8}{Colour.END}"
             case logging.ERROR:
-                record.levelname = f"{Colour.RED}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.RED}{record.levelname:8}{Colour.END}"
             case logging.CRITICAL:
-                record.levelname = f"{Colour.RED}{Colour.BOLD}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.RED}{Colour.BOLD}{record.levelname:8}{Colour.END}"
             case _:
                 record.levelname = f"{record.levelname:8}"
         record.asctime = self.formatTime(record, self.datefmt)
@@ -247,12 +243,10 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
             console_format = f'%(levelname)s: %(message)s'
             time_format = "%H:%M:%S"
         case 'short':
-            console_format = f'[{Colour.GREEN}%(asctime)s{
-                Colour.END}] %(levelname)s: %(message)s'
+            console_format = f'[{Colour.GREEN}%(asctime)s{Colour.END}] %(levelname)s: %(message)s'
             time_format = "%H:%M:%S"
         case 'long':
-            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{
-                Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
+            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
             time_format = '%Y-%m-%d %H:%M:%S'
         case _:
             raise common.GammaLoopError(
