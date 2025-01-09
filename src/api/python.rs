@@ -224,13 +224,16 @@ impl PyFeynGenFilters {
     }
 
     #[new]
+    #[allow(clippy::too_many_arguments)]
     pub fn __new__(
         particle_veto: Option<Vec<i64>>,
         max_number_of_bridges: Option<usize>,
         self_energy_filter: Option<PyRef<PySelfEnergyFilterOptions>>,
         tadpoles_filter: Option<PyRef<PyTadpolesFilterOptions>>,
         zero_snails_filter: Option<PyRef<PySnailFilterOptions>>,
+        perturbative_orders: Option<HashMap<String, usize>>,
         coupling_orders: Option<HashMap<String, usize>>,
+        loop_count_range: Option<(usize, usize)>,
     ) -> PyResult<PyFeynGenFilters> {
         let mut filters = Vec::new();
         if let Some(self_energy_filter) = self_energy_filter {
@@ -254,8 +257,14 @@ impl PyFeynGenFilters {
                 zero_snails_filter.filter_options,
             ));
         }
+        if let Some(perturbative_orders) = perturbative_orders {
+            filters.push(FeynGenFilter::PerturbativeOrders(perturbative_orders));
+        }
         if let Some(coupling_orders) = coupling_orders {
             filters.push(FeynGenFilter::CouplingOrders(coupling_orders));
+        }
+        if let Some(loop_count_range) = loop_count_range {
+            filters.push(FeynGenFilter::LoopCountRange(loop_count_range));
         }
         Ok(PyFeynGenFilters { filters })
     }
@@ -296,7 +305,8 @@ impl PyFeynGenOptions {
         symmetrize_initial_states: bool,
         symmetrize_final_states: bool,
         symmetrize_left_right_states: bool,
-        filters: Option<PyRef<PyFeynGenFilters>>,
+        amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
+        cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
     ) -> PyResult<PyFeynGenOptions> {
         Ok(PyFeynGenOptions {
             options: FeynGenOptions {
@@ -308,7 +318,16 @@ impl PyFeynGenOptions {
                 symmetrize_initial_states,
                 symmetrize_final_states,
                 symmetrize_left_right_states,
-                filters: FeynGenFilters(filters.map(|f| f.filters.clone()).unwrap_or_default()),
+                amplitude_filters: FeynGenFilters(
+                    amplitude_filters
+                        .map(|f| f.filters.clone())
+                        .unwrap_or_default(),
+                ),
+                cross_section_filters: FeynGenFilters(
+                    cross_section_filters
+                        .map(|f| f.filters.clone())
+                        .unwrap_or_default(),
+                ),
             },
         })
     }

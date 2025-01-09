@@ -169,7 +169,7 @@ def pytest_runtest_makereport(item, call):
                 if fix in ['tmpdir_factory', 'request']:
                     continue
                 if fix not in fixture_setup_times:
-                    print(f"WARNING: setup time for fixture '{fix}' is not recorded. Make sure you decorated it with 'measure_fixture_setup_time'.")
+                    print(f"WARNING: setup time for fixture '{fix}' is not recorded. Make sure you decorated it with '@measure_fixture_setup_time(scope=\"session\")'.")
             fixtures_duration = sum(fixture_setup_times.get(fix, 0)
                                     for fix in used_fixtures)
             test_runtime = duration + fixtures_duration

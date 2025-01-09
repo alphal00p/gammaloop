@@ -62,7 +62,9 @@ class FeynGenFilters:
                 self_energy_filter: Optional[SelfEnergyFilterOptions] = None,
                 tadpoles_filter: Optional[TadpolesFilterOptions] = None,
                 zero_snails_filter: Optional[SnailFilterOptions] = None,
+                perturbative_orders: Optional[dict[str, int]] = None,
                 coupling_orders: Optional[dict[str, int]] = {},
+                loop_count_range: Optional[tuple[int, int]] = None,
                 ) -> FeynGenFilters:
         """ Creates a new set of diagram generation filters. """
 
@@ -78,7 +80,8 @@ class FeynGenOptions:
                 symmetrize_initial_states: bool,
                 symmetrize_final_states: bool,
                 symmetrize_left_right_states: bool,
-                filters: Optional[FeynGenFilters] = None,
+                amplitude_filters: Optional[FeynGenFilters] = None,
+                cross_section_filters: Optional[FeynGenFilters] = None,
                 ) -> FeynGenOptions:
         """ Creates options for steering diagram generation.  """
 

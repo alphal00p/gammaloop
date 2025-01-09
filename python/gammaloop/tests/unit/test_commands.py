@@ -223,7 +223,6 @@ class TestProcessGeneration:
         gloop.run(CommandList.from_string(
             "import_model sm"))
         tests = [
-            # Full particle contents
             ('e+ e- > d d~ | d a e- ghg g QED^2=4 [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 2),
             ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 2),
             ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{3}} QCD=2] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 15),

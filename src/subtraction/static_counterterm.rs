@@ -565,7 +565,8 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                         .overlap_builder
                         .counterterm_builder
                         .sample
-                        .loop_moms()
+                        .sample
+                        .loop_moms
                         .iter()
                         .zip(&self.esurface_ct_builder.overlap_builder.unrotated_center)
                         .map(|(k, center)| {

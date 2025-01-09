@@ -158,6 +158,18 @@ impl FeynGenFilters {
             .find(|f| matches!(f, FeynGenFilter::ParticleVeto(_)))
     }
 
+    pub fn get_perturbative_orders(&self) -> Option<&FeynGenFilter> {
+        self.0
+            .iter()
+            .find(|f| matches!(f, FeynGenFilter::PerturbativeOrders(_)))
+    }
+
+    pub fn get_loop_count_range(&self) -> Option<&FeynGenFilter> {
+        self.0
+            .iter()
+            .find(|f| matches!(f, FeynGenFilter::LoopCountRange(_)))
+    }
+
     #[allow(clippy::type_complexity)]
     pub fn apply_filters(
         &self,
@@ -178,7 +190,13 @@ impl FeynGenFilters {
                         })
                     });
                 }
-                FeynGenFilter::MaxNumberOfBridges(_)
+                FeynGenFilter::LoopCountRange((loop_count_min, loop_count_max)) => {
+                    graphs.retain(|(g, _)| {
+                        g.num_loops() >= *loop_count_min && g.num_loops() <= *loop_count_max
+                    });
+                }
+                FeynGenFilter::PerturbativeOrders(_)
+                | FeynGenFilter::MaxNumberOfBridges(_)
                 | FeynGenFilter::SelfEnergyFilter(_)
                 | FeynGenFilter::TadpolesFilter(_)
                 | FeynGenFilter::ZeroSnailsFilter(_)
@@ -302,6 +320,8 @@ pub enum FeynGenFilter {
     ParticleVeto(Vec<i64>),
     MaxNumberOfBridges(usize),
     CouplingOrders(HashMap<String, usize>),
+    LoopCountRange((usize, usize)),
+    PerturbativeOrders(HashMap<String, usize>),
 }
 
 impl fmt::Display for FeynGenFilter {
@@ -329,6 +349,16 @@ impl fmt::Display for FeynGenFilter {
                         .collect::<Vec<String>>()
                         .join("|")
                 ),
+                Self::PerturbativeOrders(orders) => format!(
+                    "PerturbativeOrders({})",
+                    orders
+                        .iter()
+                        .map(|(k, v)| format!("{}={}", k, v))
+                        .collect::<Vec<String>>()
+                        .join("|")
+                ),
+                Self::LoopCountRange((loop_count_min, loop_count_max)) =>
+                    format!("{{{},{}}}", loop_count_min, loop_count_max),
             }
         )
     }
@@ -343,14 +373,15 @@ pub struct FeynGenOptions {
     pub symmetrize_initial_states: bool,
     pub symmetrize_final_states: bool,
     pub symmetrize_left_right_states: bool,
-    pub filters: FeynGenFilters,
+    pub amplitude_filters: FeynGenFilters,
+    pub cross_section_filters: FeynGenFilters,
 }
 
 impl fmt::Display for FeynGenOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Generation type: {}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {:?}{}\nLoop count: {}\nFilters:{}{}",
+            "Generation type: {}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {:?}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
             self.generation_type,
             if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
             self.initial_pdgs,
@@ -362,8 +393,16 @@ impl fmt::Display for FeynGenOptions {
             } else {
                 format!("{:?}", self.loop_count_range)
             },
-            if self.filters.0.is_empty() { " None" } else {"\n"},
-            if self.filters.0.is_empty() { "".into() } else { self.filters
+            if self.amplitude_filters.0.is_empty() { " None" } else {"\n"},
+            if self.amplitude_filters.0.is_empty() { "".into() } else { self.amplitude_filters
+                .0
+                .iter()
+                .map(|f| format!(" > {}", f))
+                .collect::<Vec<String>>()
+                .join("\n")
+            },
+            if self.cross_section_filters.0.is_empty() { " None" } else {"\n"},
+            if self.cross_section_filters.0.is_empty() { "".into() } else { self.cross_section_filters
                 .0
                 .iter()
                 .map(|f| format!(" > {}", f))

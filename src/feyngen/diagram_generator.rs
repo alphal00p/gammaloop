@@ -834,6 +834,11 @@ impl FeynGen {
             model.name, self.options
         );
 
+        let filters = match self.options.generation_type {
+            GenerationType::Amplitude => &self.options.amplitude_filters,
+            GenerationType::CrossSection => &self.options.cross_section_filters,
+        };
+
         #[allow(clippy::type_complexity)]
         let mut vertex_signatures: HashMap<
             Vec<(Option<bool>, SmartString<LazyCompact>)>,
@@ -850,7 +855,7 @@ impl FeynGen {
                     oriented_particles.push((Some(false), p.name.clone()));
                 }
                 if let Some(FeynGenFilter::ParticleVeto(vetoed_particles)) =
-                    self.options.filters.get_particle_vetos()
+                    filters.get_particle_vetos()
                 {
                     if vetoed_particles.contains(&(p.pdg_code as i64))
                         || vetoed_particles.contains(&(p.get_anti_particle(model).pdg_code as i64))
@@ -965,7 +970,7 @@ impl FeynGen {
             vertex_signatures_for_generation.as_slice(),
             None,
             Some(self.options.loop_count_range.1),
-            self.options.filters.get_max_bridge(),
+            filters.get_max_bridge(),
             !filter_self_loop,
         );
         // Immediately drop lower loop count contributions
@@ -1004,9 +1009,7 @@ impl FeynGen {
             }
         }
 
-        let tadpole_filter = self
-            .options
-            .filters
+        let tadpole_filter = filters
             .0
             .iter()
             .filter_map(|f| {
@@ -1017,9 +1020,7 @@ impl FeynGen {
                 }
             })
             .next();
-        let external_self_energy_filter = self
-            .options
-            .filters
+        let external_self_energy_filter = filters
             .0
             .iter()
             .filter_map(|f| {
@@ -1030,9 +1031,7 @@ impl FeynGen {
                 }
             })
             .next();
-        let zero_snails_filter = self
-            .options
-            .filters
+        let zero_snails_filter = filters
             .0
             .iter()
             .filter_map(|f| {
@@ -1147,9 +1146,7 @@ impl FeynGen {
             processed_graphs.len()
         );
 
-        self.options
-            .filters
-            .apply_filters(model, &mut processed_graphs)?;
+        filters.apply_filters(model, &mut processed_graphs)?;
 
         debug!(
             "Number of graphs after all filters are applied: {}",

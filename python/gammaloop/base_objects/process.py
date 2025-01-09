@@ -7,7 +7,7 @@ from gammaloop.base_objects.model import Model
 from gammaloop.base_objects.graph import Graph
 import yaml
 import gammaloop._gammaloop as gl_rust
-
+from gammaloop.misc.common import logger
 
 class MalformedProcessError(GammaLoopError):
     pass
@@ -43,8 +43,26 @@ class Process(object):
             tadpoles_filter=tadpole_filter,
             zero_snails_filter=zero_snail_filter,
             max_number_of_bridges=max_n_bridges,
-            coupling_orders=self.amplitude_orders,
+            coupling_orders=amplitude_orders,
+            loop_count_range=amplitude_loop_count,
         )
+
+        # Adjust amplitude and cross-section orders given the perturbative orders
+        if self.perturbative_orders is not None:
+            if self.amplitude_orders is not None:
+                amplitude_orders = self.amplitude_orders.copy()
+            else:
+                amplitude_orders = None
+            if self.cross_section_orders is not None:
+                cross_section_orders = self.cross_section_orders.copy()
+            else:
+                cross_section_orders = None
+            for k, v in self.perturbative_orders.items():
+                if amplitude_orders is not None and k in amplitude_orders:
+                    amplitude_orders[k] += 2*v
+                if cross_section_orders is not None and k in cross_section_orders:
+                    cross_section_orders[k] += 2*v
+
         self.cross_section_filters = gl_rust.FeynGenFilters(
             particle_veto=(None if self.particle_vetos is None else [
                 p.get_pdg_code() for p in self.particle_vetos]),
@@ -52,7 +70,9 @@ class Process(object):
             tadpoles_filter=tadpole_filter,
             zero_snails_filter=zero_snail_filter,
             max_number_of_bridges=max_n_bridges,
-            coupling_orders=self.cross_section_orders,
+            perturbative_orders=self.perturbative_orders,
+            coupling_orders=cross_section_orders,
+            loop_count_range=cross_section_loop_count,
         )
 
     def process_shell_name(self, short=True) -> str:
@@ -130,10 +150,8 @@ class Process(object):
     def generate_diagrams(self, gl_worker: gl_rust.Worker, model: Model, generation_args: Namespace) -> list[Graph]:
 
         if generation_args.amplitude:
-            filters = self.amplitude_filters
             loop_count_range = self.amplitude_loop_count
         else:
-            filters = self.cross_section_filters
             loop_count_range = self.cross_section_loop_count
 
         # TODO: Improve automatic detection of ampltidue / cross section coupling orders and loop count
@@ -182,7 +200,8 @@ class Process(object):
                 generation_args.symmetrize_initial_states,
                 generation_args.symmetrize_final_states,
                 generation_args.symmetrize_left_right_states,
-                filters=filters
+                amplitude_filters=self.amplitude_filters,
+                cross_section_filters=self.cross_section_filters
             ),
             gl_rust.NumeratorAwareGroupingOption(
                 generation_args.numerator_aware_isomorphism_grouping),
@@ -429,13 +448,15 @@ class Process(object):
                             try:
                                 veto_particle = model.get_particle(t)
                                 if veto_particle.pdg_code < 0:
+                                    logger.warning("Particle veto %s in process definition is not a particle but an antiparticle. Automatically converting to particle.", veto_particle.name)
                                     veto_particle = veto_particle.get_anti_particle(
                                         model)
                             except KeyError:
                                 raise MalformedProcessError(
                                     f"Unknown particle '{t}' in vetoed particles specification. Particle in the model are:\n{sorted([p.name for p in model.particles])}")
                             if parsing_stage == "vetos":
-                                particle_vetos.append(veto_particle)
+                                if veto_particle not in particle_vetos:
+                                    particle_vetos.append(veto_particle)
                             else:
                                 particle_vetos.remove(veto_particle)
                         case _:
@@ -451,13 +472,6 @@ class Process(object):
                             parsing_stage = "waiting_for_equal"
 
         check_process_defined()
-
-        # Adjust amplitude and cross-section orders given the perturbative orders
-        for k, v in perturbative_orders.items():
-            if k in amplitude_orders:
-                amplitude_orders[k] += 2*v
-            if k in cross_section_orders:
-                cross_section_orders[k] += 2*v
 
         # Adjust filter default values
         # Disable these filter for vacuum generation
