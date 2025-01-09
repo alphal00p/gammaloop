@@ -21,11 +21,11 @@ set externals.data.momenta [[0.,0.,0.,1.],]
 set n_start 10000
 set n_max 100000000
 set use_ltd False
-#set rotation_axis ["x","y"]
+#set rotation_axis [[{'type':'x'}],[{'type':'y'}]]
 #set Stability.levels [{\
 #'precision':'Double',\
-#'required_precision_for_re':1.e-40,\
-#'required_precision_for_im':1.e-40,\
+#'required_precision_for_re':1.e-10,\
+#'required_precision_for_im':1.e-10,\
 #'escalate_for_large_weight_threshold':0.9\
 #},\
 #{\
