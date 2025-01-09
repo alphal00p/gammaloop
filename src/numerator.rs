@@ -56,11 +56,12 @@ use spenso::{
 };
 use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
+use symbolica::printer::PrintOptions;
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
 use symbolica::atom::{AtomCore, AtomView, Symbol};
-use symbolica::evaluate::ExpressionEvaluator;
+use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
 use symbolica::id::{Match, MatchSettings};
 
 use symbolica::{
@@ -78,9 +79,31 @@ pub mod ufo;
 pub struct NumeratorSettings {
     pub eval_settings: NumeratorEvaluatorOptions,
     pub parse_mode: NumeratorParseMode,
+    pub dump_expression: Option<ExpressionFormat>,
     pub global_numerator: Option<String>,
     pub global_prefactor: Option<GlobalPrefactor>,
     pub gamma_algebra: GammaAlgebraMode,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum ExpressionFormat {
+    Mathematica,
+    Symbolica,
+}
+
+impl Default for ExpressionFormat {
+    fn default() -> Self {
+        ExpressionFormat::Symbolica
+    }
+}
+
+impl Into<PrintOptions> for ExpressionFormat {
+    fn into(self) -> PrintOptions {
+        match self {
+            ExpressionFormat::Symbolica => PrintOptions::default(),
+            ExpressionFormat::Mathematica => PrintOptions::mathematica(),
+        }
+    }
 }
 
 impl Default for NumeratorSettings {
@@ -89,6 +112,7 @@ impl Default for NumeratorSettings {
             eval_settings: Default::default(),
             global_numerator: None,
             global_prefactor: None,
+            dump_expression: None,
             gamma_algebra: GammaAlgebraMode::Symbolic,
             parse_mode: NumeratorParseMode::Polynomial,
         }
@@ -1503,7 +1527,10 @@ impl Numerator<PolySplit> {
     }
 }
 
+#[derive(Debug, Clone, Encode, Decode)]
+#[bincode(decode_context = "StateMap")]
 pub struct PolyContracted {
+    #[bincode(with_serde)]
     pub tensor: ParamTensor,
     pub coef_map: Vec<Atom>,
 }
@@ -1554,6 +1581,7 @@ impl Numerator<PolyContracted> {
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
     ) -> Numerator<Evaluators> {
+        let s = &export_settings.numerator_settings.eval_settings;
         debug!("generating evaluators for contracted numerator");
         let (params, double_param_values, quad_param_values, model_params_start) =
             Contracted::generate_params(graph, model);
@@ -1563,25 +1591,28 @@ impl Numerator<PolyContracted> {
         let fn_map = self.generate_fn_map();
 
         // let fn_map: FunctionMap = (&owned_fn_map).into();
+        let settings = NumeratorEvaluatorSettings {
+            options: s,
+            inline_asm: export_settings.gammaloop_compile_options.inline_asm(),
+            compile_options: export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options(),
+        };
 
         let single = self.state.evaluator(
             extra_info.path.clone(),
             &graph.name,
-            export_settings,
+            &settings,
             &params,
             &fn_map,
         );
 
-        match export_settings.numerator_settings.eval_settings {
+        match s {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
                 state: Evaluators {
-                    orientated: Some(single.orientated_joint(
-                        graph,
-                        &params,
-                        extra_info,
-                        export_settings,
-                        &fn_map,
-                    )),
+                    orientated: Some(
+                        single.orientated_joint(graph, &params, extra_info, &settings, &fn_map),
+                    ),
                     single,
                     choice: SingleOrCombined::Combined,
                     orientations: extra_info.orientations.clone(),
@@ -1603,10 +1634,10 @@ impl Numerator<PolyContracted> {
                         graph,
                         &params,
                         extra_info,
-                        export_settings,
-                        iterations,
-                        n_cores,
-                        verbose,
+                        &settings,
+                        *iterations,
+                        *n_cores,
+                        *verbose,
                         &fn_map,
                     )),
                     single,
@@ -1633,6 +1664,25 @@ impl Numerator<PolyContracted> {
                 },
             },
         }
+
+        // else {
+        //     let first = self.state.tensor.iter_flat().next().unwrap().1.to_owned();
+
+        //     Err(self)
+        // }
+    }
+}
+
+impl NumeratorState for PolyContracted {
+    fn export(&self) -> String {
+        self.tensor.to_string()
+    }
+    fn forget_type(self) -> PythonState {
+        PythonState::PolyContracted(Some(self))
+    }
+
+    fn update_model(&mut self, _model: &Model) -> Result<()> {
+        Err(eyre!("Only applied feynman rule, simplified color, gamma, parsed into network and contracted, nothing to update"))
     }
 }
 
@@ -1641,7 +1691,7 @@ impl PolyContracted {
         self,
         path: PathBuf,
         name: &str,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         params: &[Atom],
         fn_map: &FunctionMap,
     ) -> EvaluatorSingle {
@@ -1657,10 +1707,7 @@ impl PolyContracted {
         debug!("Common subexpression elimination");
         eval_tree.common_subexpression_elimination();
         debug!("Linearize double");
-        let cpe_rounds = export_settings
-            .numerator_settings
-            .eval_settings
-            .cpe_rounds();
+        let cpe_rounds = eval_options.options.cpe_rounds();
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
                 re: F(r.into()),
@@ -1679,12 +1726,7 @@ impl PolyContracted {
         let eval = eval_tree
             .map_coeff::<F<f64>, _>(&|r| r.into())
             .linearize(cpe_rounds);
-        let compiled = if export_settings
-            .numerator_settings
-            .eval_settings
-            .compile_options()
-            .compile()
-        {
+        let compiled = if eval_options.options.compile_options().compile() {
             debug!("Compiling iterative evaluator");
             let path = path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
@@ -1706,16 +1748,11 @@ impl PolyContracted {
 
             let library_name = path.join(format!("{}_numerator_single.so", name));
             let library_name = library_name.to_string_lossy();
-            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
-
-            let compile_options = export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options();
 
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, eval_options.inline_asm)
                     .unwrap()
-                    .compile(&library_name, compile_options)
+                    .compile(&library_name, eval_options.compile_options.clone())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -2140,7 +2177,7 @@ impl Contracted {
         self,
         path: PathBuf,
         name: &str,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         params: &[Atom],
         fn_map: &FunctionMap,
     ) -> EvaluatorSingle {
@@ -2156,10 +2193,7 @@ impl Contracted {
         debug!("Common subexpression elimination");
         eval_tree.common_subexpression_elimination();
         debug!("Linearize double");
-        let cpe_rounds = export_settings
-            .numerator_settings
-            .eval_settings
-            .cpe_rounds();
+        let cpe_rounds = eval_options.options.cpe_rounds();
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
                 re: F(r.into()),
@@ -2178,12 +2212,7 @@ impl Contracted {
         let eval = eval_tree
             .map_coeff::<F<f64>, _>(&|r| r.into())
             .linearize(cpe_rounds);
-        let compiled = if export_settings
-            .numerator_settings
-            .eval_settings
-            .compile_options()
-            .compile()
-        {
+        let compiled = if eval_options.options.compile_options().compile() {
             debug!("compiling iterative evaluator");
             let path = path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
@@ -2205,16 +2234,11 @@ impl Contracted {
 
             let library_name = path.join(format!("{}_numerator_single.so", name));
             let library_name = library_name.to_string_lossy();
-            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
-
-            let compile_options = export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options();
 
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, eval_options.inline_asm)
                     .unwrap()
-                    .compile(&library_name, compile_options)
+                    .compile(&library_name, eval_options.compile_options.clone())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -2391,18 +2415,30 @@ impl Numerator<Contracted> {
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
     ) -> Numerator<Evaluators> {
+        let o = &export_settings.numerator_settings.eval_settings;
         let owned_fn_map = self.generate_fn_map();
+
+        let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
+        let compile_options = export_settings
+            .gammaloop_compile_options
+            .to_symbolica_compile_options();
+
+        let eval_settings = NumeratorEvaluatorSettings {
+            options: o,
+            inline_asm,
+            compile_options,
+        };
 
         let fn_map: FunctionMap = owned_fn_map;
         let single = self.state.evaluator(
             extra_info.path.clone(),
             name,
-            export_settings,
+            &eval_settings,
             params,
             &fn_map,
         );
 
-        match export_settings.numerator_settings.eval_settings {
+        match o {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
                 state: Evaluators {
                     orientated: Some(single.orientated_joint_impl(
@@ -2410,7 +2446,7 @@ impl Numerator<Contracted> {
                         name,
                         params,
                         extra_info,
-                        export_settings,
+                        &eval_settings,
                         &fn_map,
                     )),
                     single,
@@ -2435,10 +2471,10 @@ impl Numerator<Contracted> {
                         name,
                         params,
                         extra_info,
-                        export_settings,
-                        iterations,
-                        n_cores,
-                        verbose,
+                        &eval_settings,
+                        *iterations,
+                        *n_cores,
+                        *verbose,
                         &fn_map,
                     )),
                     single,
@@ -2474,6 +2510,7 @@ impl Numerator<Contracted> {
         extra_info: &ExtraInfo,
         export_settings: &ExportSettings,
     ) -> Numerator<Evaluators> {
+        let o = &export_settings.numerator_settings.eval_settings;
         debug!("generating evaluators for contracted numerator");
         let (params, double_param_values, quad_param_values, model_params_start) =
             Contracted::generate_params(graph, model);
@@ -2484,24 +2521,28 @@ impl Numerator<Contracted> {
 
         let fn_map = self.generate_fn_map();
 
+        let settings = NumeratorEvaluatorSettings {
+            options: o,
+            inline_asm: export_settings.gammaloop_compile_options.inline_asm(),
+            compile_options: export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options(),
+        };
+
         let single = self.state.evaluator(
             extra_info.path.clone(),
             &graph.name,
-            export_settings,
+            &settings,
             &params,
             &fn_map,
         );
 
-        match export_settings.numerator_settings.eval_settings {
+        match o {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
                 state: Evaluators {
-                    orientated: Some(single.orientated_joint(
-                        graph,
-                        &params,
-                        extra_info,
-                        export_settings,
-                        &fn_map,
-                    )),
+                    orientated: Some(
+                        single.orientated_joint(graph, &params, extra_info, &settings, &fn_map),
+                    ),
                     single,
                     choice: SingleOrCombined::Combined,
                     orientations: extra_info.orientations.clone(),
@@ -2523,17 +2564,17 @@ impl Numerator<Contracted> {
                         graph,
                         &params,
                         extra_info,
-                        export_settings,
-                        iterations,
-                        n_cores,
-                        verbose,
+                        &settings,
+                        *iterations,
+                        *n_cores,
+                        *verbose,
                         &fn_map,
                     )),
                     single,
                     choice: SingleOrCombined::Combined,
                     orientations: extra_info.orientations.clone(),
-                    quad_param_values,
                     double_param_values,
+                    quad_param_values,
                     model_params_start,
                     emr_len,
                     fn_map,
@@ -2545,8 +2586,8 @@ impl Numerator<Contracted> {
                     single,
                     choice: SingleOrCombined::Single,
                     orientations: extra_info.orientations.clone(),
-                    quad_param_values,
                     double_param_values,
+                    quad_param_values,
                     model_params_start,
                     emr_len,
                     fn_map,
@@ -2579,6 +2620,13 @@ pub enum NumeratorEvaluatorOptions {
     Joint(EvaluatorOptions),
     #[serde(rename = "Iterative")]
     Iterative(IterativeOptions),
+}
+
+#[derive(Clone)]
+pub struct NumeratorEvaluatorSettings<'a> {
+    pub options: &'a NumeratorEvaluatorOptions,
+    pub inline_asm: InlineASM,
+    pub compile_options: CompileOptions,
 }
 
 impl Default for NumeratorEvaluatorOptions {
@@ -2676,7 +2724,7 @@ impl EvaluatorSingle {
         name: &str,
         params: &[Atom],
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         iterations: usize,
         n_cores: usize,
         verbose: bool,
@@ -2755,10 +2803,7 @@ impl EvaluatorSingle {
 
         debug!("{} tensors in set", set.tensors.len());
 
-        let cpe_rounds = export_settings
-            .numerator_settings
-            .eval_settings
-            .cpe_rounds();
+        let cpe_rounds = eval_options.options.cpe_rounds();
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -2799,12 +2844,7 @@ impl EvaluatorSingle {
 
         let eval = linearized.clone().map_coeff::<F<f64>, _>(&|r| r.into());
 
-        let compiled = if export_settings
-            .numerator_settings
-            .eval_settings
-            .compile_options()
-            .compile()
-        {
+        let compiled = if eval_options.options.compile_options().compile() {
             debug!("compiling iterative evaluator");
             let path = extra_info.path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
@@ -2827,15 +2867,10 @@ impl EvaluatorSingle {
 
             let library_name = path.join(format!("{}_numerator_iterative.so", name));
             let library_name = library_name.to_string_lossy();
-            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
-
-            let compile_options = export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options();
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, eval_options.inline_asm)
                     .unwrap()
-                    .compile(&library_name, compile_options)
+                    .compile(&library_name, eval_options.compile_options.clone())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -2858,7 +2893,7 @@ impl EvaluatorSingle {
         graph: &BareGraph,
         params: &[Atom],
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        export_settings: &NumeratorEvaluatorSettings,
         iterations: usize,
         n_cores: usize,
         verbose: bool,
@@ -2884,7 +2919,7 @@ impl EvaluatorSingle {
         name: &str,
         params: &[Atom],
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
         let mut seen = 0;
@@ -2954,10 +2989,7 @@ impl EvaluatorSingle {
 
         let set = ParamTensorSet::new(index_map.into_iter().collect_vec());
 
-        let cpe_rounds = export_settings
-            .numerator_settings
-            .eval_settings
-            .cpe_rounds();
+        let cpe_rounds = eval_options.options.cpe_rounds();
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -2987,12 +3019,7 @@ impl EvaluatorSingle {
             .map_coeff::<F<f64>, _>(&|r| r.into())
             .linearize(cpe_rounds);
 
-        let compiled = if export_settings
-            .numerator_settings
-            .eval_settings
-            .compile_options()
-            .compile()
-        {
+        let compiled = if eval_options.options.compile_options().compile() {
             debug!("Compiling joint evaluator");
             let path = extra_info.path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
@@ -3015,15 +3042,11 @@ impl EvaluatorSingle {
 
             let library_name = path.join(format!("{}_numerator_joint.so", name));
             let library_name = library_name.to_string_lossy();
-            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
 
-            let compile_options = export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options();
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, eval_options.inline_asm)
                     .unwrap()
-                    .compile(&library_name, compile_options)
+                    .compile(&library_name, eval_options.compile_options.clone())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -3045,7 +3068,7 @@ impl EvaluatorSingle {
         graph: &BareGraph,
         params: &[Atom],
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
         debug!("Generate joint evaluator");
@@ -3054,7 +3077,7 @@ impl EvaluatorSingle {
             &graph.name,
             params,
             extra_info,
-            export_settings,
+            eval_options,
             fn_map,
         )
     }
@@ -3234,7 +3257,7 @@ impl Numerator<Evaluators> {
 
     pub fn enable_combined(
         &mut self,
-        generate: Option<(&Model, &BareGraph, &ExtraInfo, &ExportSettings)>,
+        generate: Option<(&Model, &BareGraph, &ExtraInfo, &NumeratorEvaluatorSettings)>,
     ) {
         if self.state.orientated.is_some() {
             self.state.choice = SingleOrCombined::Combined;
@@ -3298,6 +3321,7 @@ pub enum PythonState {
     GammaSimplified(Option<GammaSimplified>),
     Network(Option<Network>),
     Contracted(Option<Contracted>),
+    PolyContracted(Option<PolyContracted>),
     Evaluators(Option<Evaluators>),
 }
 
@@ -3367,6 +3391,13 @@ impl NumeratorState for PythonState {
                     "None".into()
                 }
             }
+            PythonState::PolyContracted(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
             PythonState::Evaluators(state) => {
                 if let Some(s) = state {
                     s.export()
@@ -3425,6 +3456,14 @@ impl NumeratorState for PythonState {
                     Err(NumeratorStateError::NoneVariant.into())
                 }
             }
+            PythonState::PolyContracted(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
+
             PythonState::Evaluators(state) => {
                 if let Some(s) = state {
                     s.update_model(model)

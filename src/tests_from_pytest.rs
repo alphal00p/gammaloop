@@ -100,6 +100,7 @@ pub fn test_export_settings() -> ExportSettings {
                 cpe_rounds: Some(1),
                 compile_options: NumeratorCompileOptions::Compiled,
             }),
+            dump_expression: None,
             global_numerator: None,
             global_prefactor: None,
             parse_mode: NumeratorParseMode::Polynomial,

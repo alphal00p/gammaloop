@@ -1260,6 +1260,8 @@ class GammaLoop(object):
     output_parser = ArgumentParser(prog='output')
     output_parser.add_argument(
         'output_path', type=str, help='Path to output the cross section to')
+    output_parser.add_argument('-nev', '--no_evaluators', default=False, action='store_true',
+                               help='Do not generate evaluators')
     output_parser.add_argument('-exp', '--expression', default=False, action='store_true',
                                help='Generate expression associated to the graph and output it to a text file')
     output_parser.add_argument('-mr', '--model_replacements', default=False, action='store_true',
@@ -1317,7 +1319,7 @@ class GammaLoop(object):
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
             amplitude_exporter.export(
-                args.output_path, self.amplitudes)
+                args.output_path, self.amplitudes,args.no_evaluators)
             if args.expression:
                 amplitude_exporter.export_expression(
                     args.output_path, self.amplitudes, args.expression_format)

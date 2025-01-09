@@ -313,7 +313,7 @@ class AmplitudesExporter(GammaLoopExporter):
         self.gammaloop.rust_worker.export_expressions(
             str(export_root), format, yaml.dump(self.gammaloop.config['export_settings']))
 
-    def export(self, export_root: Path, amplitudes: AmplitudeList):
+    def export(self, export_root: Path, amplitudes: AmplitudeList,no_evaluators: bool):
 
         # Tweak the run configuration for the particular process exported before attending to the generic export
         self.adjust_run_settings(amplitudes)
@@ -349,7 +349,7 @@ class AmplitudesExporter(GammaLoopExporter):
         if not self.output_options.yaml_only:
             # Now address the rust export aspect
             self.gammaloop.rust_worker.export_amplitudes(
-                str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']))
+                str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']),no_evaluators)
 
 
 class CrossSectionsExporter(GammaLoopExporter):

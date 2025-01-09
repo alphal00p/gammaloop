@@ -897,6 +897,20 @@ impl Graph<PythonState> {
         self.statefull_apply::<_, S, T>(|d, _| d.map_numerator(f))
     }
 
+    pub fn forgetfull_apply<F, S: TypedNumeratorState>(&mut self, mut f: F) -> Result<()>
+    where
+        F: FnMut(DerivedGraphData<S>, &mut BareGraph) -> DerivedGraphData<PythonState>,
+    {
+        if let Some(d) = self.derived_data.take() {
+            self.derived_data = Some(f(
+                DerivedGraphData::<S>::try_from_python(d)?,
+                &mut self.bare_graph,
+            ));
+            Ok(())
+        } else {
+            Err(eyre!("Derived data is None"))
+        }
+    }
     pub fn statefull_apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
         &mut self,
         mut f: F,
@@ -912,6 +926,31 @@ impl Graph<PythonState> {
                 )
                 .forget_type(),
             );
+            Ok(())
+        } else {
+            Err(eyre!("Derived data is None"))
+        }
+    }
+
+    pub fn statefull_apply_res<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+        &mut self,
+        mut f: F,
+    ) -> Result<()>
+    where
+        F: FnMut(
+            DerivedGraphData<S>,
+            &mut BareGraph,
+        ) -> Result<DerivedGraphData<T>, DerivedGraphData<PythonState>>,
+    {
+        if let Some(d) = self.derived_data.take() {
+            let res = f(
+                DerivedGraphData::<S>::try_from_python(d)?,
+                &mut self.bare_graph,
+            );
+            self.derived_data = Some(match res {
+                Ok(r) => r.forget_type(),
+                Err(e) => e,
+            });
             Ok(())
         } else {
             Err(eyre!("Derived data is None"))
@@ -2334,6 +2373,7 @@ impl Graph<UnInit> {
                 export_path,
                 export_settings,
             )
+            .unwrap()
         });
         Graph {
             bare_graph: self.bare_graph,
@@ -2845,6 +2885,37 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
             numerator: f(self.numerator)?,
         })
     }
+
+    pub fn map_numerator_res_self<F, T: NumeratorState>(
+        self,
+        f: F,
+    ) -> Result<DerivedGraphData<T>, Self>
+    where
+        F: FnOnce(Numerator<NumState>) -> Result<Numerator<T>, Numerator<NumState>>,
+    {
+        match f(self.numerator) {
+            Ok(o) => Ok(DerivedGraphData {
+                loop_momentum_bases: self.loop_momentum_bases,
+                cff_expression: self.cff_expression,
+                ltd_expression: self.ltd_expression,
+                tropical_subgraph_table: self.tropical_subgraph_table,
+                edge_groups: self.edge_groups,
+                esurface_derived_data: self.esurface_derived_data,
+                static_counterterm: self.static_counterterm,
+                numerator: o,
+            }),
+            Err(e) => Err(DerivedGraphData {
+                loop_momentum_bases: self.loop_momentum_bases,
+                cff_expression: self.cff_expression,
+                ltd_expression: self.ltd_expression,
+                tropical_subgraph_table: self.tropical_subgraph_table,
+                edge_groups: self.edge_groups,
+                esurface_derived_data: self.esurface_derived_data,
+                static_counterterm: self.static_counterterm,
+                numerator: e,
+            }),
+        }
+    }
 }
 
 impl<NumState: TypedNumeratorState> DerivedGraphData<NumState> {
@@ -3119,14 +3190,14 @@ impl DerivedGraphData<UnInit> {
         }
     }
 
-    pub fn process_numerator(
+    pub fn process_numerator_no_eval(
         self,
         base_graph: &mut BareGraph,
         model: &Model,
         contraction_settings: ContractionSettings<Rational>,
         export_path: PathBuf,
         export_settings: &ExportSettings,
-    ) -> DerivedGraphData<Evaluators> {
+    ) -> Result<DerivedGraphData<PythonState>> {
         let extra_info = self.generate_extra_info(export_path);
 
         let color_simplified =
@@ -3152,35 +3223,73 @@ impl DerivedGraphData<UnInit> {
                 })
                 //.color_project())
             };
-
-        let parsed: Result<DerivedGraphData<Evaluators>> = match &export_settings
-            .numerator_settings
-            .gamma_algebra
-        {
-            GammaAlgebraMode::Symbolic => color_simplified.map_numerator_res(|n| {
-                Ok(n.gamma_simplify()
-                    .parse()
-                    .contract(contraction_settings)?
-                    .generate_evaluators(model, base_graph, &extra_info, export_settings))
-            }),
+        Ok(match &export_settings.numerator_settings.gamma_algebra {
+            GammaAlgebraMode::Symbolic => color_simplified
+                .map_numerator_res(|n| n.gamma_simplify().parse().contract(contraction_settings))?
+                .forget_type(),
             GammaAlgebraMode::Concrete => match &export_settings.numerator_settings.parse_mode {
-                NumeratorParseMode::Polynomial => color_simplified.map_numerator_res(|n| {
-                    Ok(n.parse_poly(base_graph).contract()?.generate_evaluators(
-                        model,
-                        base_graph,
-                        &extra_info,
-                        export_settings,
-                    ))
-                }),
-                NumeratorParseMode::Direct => color_simplified.map_numerator_res(|n| {
-                    Ok(n.parse()
-                        .contract(contraction_settings)?
-                        .generate_evaluators(model, base_graph, &extra_info, export_settings))
-                }),
+                NumeratorParseMode::Polynomial => color_simplified
+                    .map_numerator_res(|n| n.parse_poly(base_graph).contract())?
+                    .forget_type(),
+                NumeratorParseMode::Direct => color_simplified
+                    .map_numerator_res(|n| n.parse().contract(contraction_settings))?
+                    .forget_type(),
             },
-        };
+        })
+    }
 
-        parsed.unwrap()
+    pub fn process_numerator(
+        self,
+        base_graph: &mut BareGraph,
+        model: &Model,
+        contraction_settings: ContractionSettings<Rational>,
+        export_path: PathBuf,
+        export_settings: &ExportSettings,
+    ) -> Result<DerivedGraphData<Evaluators>> {
+        let extra_info = self.generate_extra_info(export_path);
+
+        let color_simplified =
+            if let Some(global) = &export_settings.numerator_settings.global_numerator {
+                debug!("Using global numerator: {}", global);
+                let global = Atom::parse(global).unwrap();
+                self.map_numerator(|n| {
+                    n.from_global(
+                        global,
+                        // base_graph,
+                        export_settings.numerator_settings.global_prefactor.as_ref(),
+                    )
+                    .color_simplify()
+                    // .color_project()
+                })
+            } else {
+                self.map_numerator(|n| {
+                    n.from_graph(
+                        base_graph,
+                        export_settings.numerator_settings.global_prefactor.as_ref(),
+                    )
+                    .color_simplify()
+                })
+                //.color_project())
+            };
+        Ok(match &export_settings.numerator_settings.gamma_algebra {
+            GammaAlgebraMode::Symbolic => color_simplified
+                .map_numerator_res(|n| n.gamma_simplify().parse().contract(contraction_settings))?
+                .map_numerator(|n| {
+                    n.generate_evaluators(model, base_graph, &extra_info, export_settings)
+                }),
+            GammaAlgebraMode::Concrete => match &export_settings.numerator_settings.parse_mode {
+                NumeratorParseMode::Polynomial => color_simplified
+                    .map_numerator_res(|n| n.parse_poly(base_graph).contract())?
+                    .map_numerator(|n| {
+                        n.generate_evaluators(model, base_graph, &extra_info, export_settings)
+                    }),
+                NumeratorParseMode::Direct => color_simplified
+                    .map_numerator_res(|n| n.parse().contract(contraction_settings))?
+                    .map_numerator(|n| {
+                        n.generate_evaluators(model, base_graph, &extra_info, export_settings)
+                    }),
+            },
+        })
     }
 
     fn apply_feynman_rules(

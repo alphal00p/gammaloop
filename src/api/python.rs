@@ -597,6 +597,7 @@ impl PythonWorker {
         export_root: &str,
         amplitude_names: Vec<String>,
         export_yaml_str: &str,
+        no_evaluators: bool,
     ) -> PyResult<String> {
         let export_settings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
@@ -605,7 +606,8 @@ impl PythonWorker {
         for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.to_string()) {
                 n_exported += 1;
-                let res = amplitude.export(export_root, &self.model, &export_settings);
+                let res =
+                    amplitude.export(export_root, &self.model, &export_settings, no_evaluators);
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));
                 }

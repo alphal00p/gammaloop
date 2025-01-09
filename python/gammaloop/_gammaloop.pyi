@@ -147,7 +147,7 @@ class Worker:
     def export_cross_sections(self, export_root: str, cross_section_names: list[str]) -> None:
         """ Exports the cross sections given in argument to the export root given in argument. """
 
-    def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str) -> None:
+    def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str,no_evaluators:bool) -> None:
         """ Exports the amplitudes given in argument to the export root given in argument, parse export settings as yaml str"""
 
     def export_expressions(self, export_root: str, format: str, export_yaml_str: str) -> None:

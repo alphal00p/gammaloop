@@ -780,6 +780,7 @@ impl Amplitude<PythonState> {
         export_root: &str,
         model: &Model,
         export_settings: &ExportSettings,
+        no_evaluators: bool,
     ) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
@@ -807,15 +808,29 @@ impl Amplitude<PythonState> {
                 g.build_compiled_expression(path.clone(), export_settings)
                     .unwrap();
 
-                g.statefull_apply::<_, UnInit, Evaluators>(|d, b| {
-                    d.process_numerator(
-                        b,
-                        model,
-                        ContractionSettings::Normal,
-                        path.clone(),
-                        export_settings,
-                    )
-                })
+                if no_evaluators {
+                    g.forgetfull_apply::<_, UnInit>(|d, b| {
+                        d.process_numerator_no_eval(
+                            b,
+                            model,
+                            ContractionSettings::Normal,
+                            path.clone(),
+                            export_settings,
+                        )
+                        .unwrap()
+                    })
+                } else {
+                    g.statefull_apply::<_, UnInit, Evaluators>(|d, b| {
+                        d.process_numerator(
+                            b,
+                            model,
+                            ContractionSettings::Normal,
+                            path.clone(),
+                            export_settings,
+                        )
+                        .unwrap()
+                    })
+                }
                 .unwrap();
             })
         });
