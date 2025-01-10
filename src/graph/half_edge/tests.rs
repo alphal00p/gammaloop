@@ -583,6 +583,27 @@ fn flower_snark() {
     }
 }
 
+#[test]
+fn join() {
+    let mut ab = HedgeGraphBuilder::<(), ()>::new();
+    let v1 = ab.add_node(());
+    let v2 = ab.add_node(());
+
+    ab.add_edge(v1, v2, (), true);
+    ab.add_edge(v2, v1, (), true);
+    ab.add_external_edge(v1, (), true, Flow::Sink);
+    ab.add_external_edge(v2, (), true, Flow::Source);
+
+    let a = ab.build();
+    println!("{}", a.base_dot());
+    let b = a.clone();
+
+    let c = a
+        .join(b, |af, ad, bf, bd| af == -bf, |af, ad, bf, bd| (af, ad))
+        .unwrap();
+
+    println!("{}", c.base_dot());
+}
 use std::time::Instant;
 
 use super::*;

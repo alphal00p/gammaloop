@@ -35,6 +35,7 @@ use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use itertools::Itertools;
+use libc::user;
 use log::{debug, warn};
 use momtrop::SampleGenerator;
 use nalgebra::DMatrix;
@@ -67,12 +68,17 @@ use smartstring::{LazyCompact, SmartString};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::{Display, Formatter},
+    fs,
     ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use symbolica::{atom::AtomCore, graph::Graph as SymbolicaGraph};
+use symbolica::{
+    atom::AtomCore,
+    graph::Graph as SymbolicaGraph,
+    printer::{AtomPrinter, PrintOptions},
+};
 use symbolica::{
     atom::{Atom, Symbol},
     domains::{float::NumericalFloatLike, rational::Rational},
@@ -540,14 +546,14 @@ impl Edge {
         graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn numerator(&self, graph: &BareGraph) -> Atom {
-        let [colorless, color] = self.color_separated_numerator(graph);
+    pub fn numerator(&self, graph: &BareGraph, num: usize) -> Atom {
+        let [colorless, color] = self.color_separated_numerator(graph, num);
 
         colorless * color
     }
 
-    pub fn color_separated_numerator(&self, graph: &BareGraph) -> [Atom; 2] {
-        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+    pub fn color_separated_numerator(&self, graph: &BareGraph, num: usize) -> [Atom; 2] {
+        // let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let in_slots = self.in_slot(graph);
         let out_slots = self.out_slot(graph);
 
@@ -985,6 +991,42 @@ pub struct Shifts {
 }
 
 impl BareGraph {
+    pub fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
+        self.generate_lmb_replacement_rules()
+            .iter()
+            .map(|(lhs, rhs)| {
+                (
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
+                    ),
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
+                    ),
+                )
+            })
+            .collect()
+    }
+    pub fn denominator_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
+        self.edges
+            .iter()
+            .map(|e| {
+                let (mom, mass) = e.denominator(&self);
+                (
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                    ),
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                    ),
+                )
+            })
+            .collect()
+    }
+
     pub fn external_slots(&self) -> Vec<EdgeSlots<Minkowski>> {
         self.vertices
             .iter()
@@ -2885,37 +2927,6 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
             numerator: f(self.numerator)?,
         })
     }
-
-    pub fn map_numerator_res_self<F, T: NumeratorState>(
-        self,
-        f: F,
-    ) -> Result<DerivedGraphData<T>, Self>
-    where
-        F: FnOnce(Numerator<NumState>) -> Result<Numerator<T>, Numerator<NumState>>,
-    {
-        match f(self.numerator) {
-            Ok(o) => Ok(DerivedGraphData {
-                loop_momentum_bases: self.loop_momentum_bases,
-                cff_expression: self.cff_expression,
-                ltd_expression: self.ltd_expression,
-                tropical_subgraph_table: self.tropical_subgraph_table,
-                edge_groups: self.edge_groups,
-                esurface_derived_data: self.esurface_derived_data,
-                static_counterterm: self.static_counterterm,
-                numerator: o,
-            }),
-            Err(e) => Err(DerivedGraphData {
-                loop_momentum_bases: self.loop_momentum_bases,
-                cff_expression: self.cff_expression,
-                ltd_expression: self.ltd_expression,
-                tropical_subgraph_table: self.tropical_subgraph_table,
-                edge_groups: self.edge_groups,
-                esurface_derived_data: self.esurface_derived_data,
-                static_counterterm: self.static_counterterm,
-                numerator: e,
-            }),
-        }
-    }
 }
 
 impl<NumState: TypedNumeratorState> DerivedGraphData<NumState> {
@@ -3198,41 +3209,94 @@ impl DerivedGraphData<UnInit> {
         export_path: PathBuf,
         export_settings: &ExportSettings,
     ) -> Result<DerivedGraphData<PythonState>> {
+        let expr_path = export_path.join("expressions");
         let extra_info = self.generate_extra_info(export_path);
 
+        let dump_numerator = export_settings.numerator_settings.dump_expression;
+
+        if let Some(n) = dump_numerator {
+            let opts = PrintOptions::from(n);
+            let dens: Vec<(String, String)> = base_graph.denominator_print(opts);
+            let rep_rules: Vec<(String, String)> = base_graph.rep_rules_print(opts);
+
+            fs::write(
+                expr_path.join(format!("{}_model_dens.json", base_graph.name)),
+                serde_json::to_string_pretty(&(rep_rules, dens)).unwrap(),
+            )?;
+        }
         let color_simplified =
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
                 debug!("Using global numerator: {}", global);
                 let global = Atom::parse(global).unwrap();
                 self.map_numerator(|n| {
-                    n.from_global(
+                    let n = n.from_global(
                         global,
                         // base_graph,
                         export_settings.numerator_settings.global_prefactor.as_ref(),
-                    )
-                    .color_simplify()
+                    );
+
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+
+                    n.color_simplify()
                     // .color_project()
                 })
             } else {
                 self.map_numerator(|n| {
-                    n.from_graph(
+                    let n = n.from_graph(
                         base_graph,
                         export_settings.numerator_settings.global_prefactor.as_ref(),
-                    )
-                    .color_simplify()
+                    );
+
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.color_simplify()
                 })
                 //.color_project())
             };
         Ok(match &export_settings.numerator_settings.gamma_algebra {
             GammaAlgebraMode::Symbolic => color_simplified
-                .map_numerator_res(|n| n.gamma_simplify().parse().contract(contraction_settings))?
+                .map_numerator_res(|n| {
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    let n = n.gamma_simplify();
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    let n = n.parse().contract(contraction_settings)?;
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    Result::<_, Report>::Ok(n)
+                })?
                 .forget_type(),
             GammaAlgebraMode::Concrete => match &export_settings.numerator_settings.parse_mode {
                 NumeratorParseMode::Polynomial => color_simplified
-                    .map_numerator_res(|n| n.parse_poly(base_graph).contract())?
+                    .map_numerator_res(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        let n = n.parse_poly(base_graph).contract()?;
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        Result::<_, Report>::Ok(n)
+                    })?
                     .forget_type(),
                 NumeratorParseMode::Direct => color_simplified
-                    .map_numerator_res(|n| n.parse().contract(contraction_settings))?
+                    .map_numerator_res(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        let n = n.parse().contract(contraction_settings)?;
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        Result::<_, Report>::Ok(n)
+                    })?
                     .forget_type(),
             },
         })
@@ -3246,46 +3310,96 @@ impl DerivedGraphData<UnInit> {
         export_path: PathBuf,
         export_settings: &ExportSettings,
     ) -> Result<DerivedGraphData<Evaluators>> {
+        let expr_path = export_path.join("expressions");
         let extra_info = self.generate_extra_info(export_path);
+
+        let dump_numerator = export_settings.numerator_settings.dump_expression;
+
+        if let Some(n) = dump_numerator {
+            let opts = PrintOptions::from(n);
+            let dens: Vec<(String, String)> = base_graph.denominator_print(opts);
+            let rep_rules: Vec<(String, String)> = base_graph.rep_rules_print(opts);
+
+            fs::write(
+                expr_path.join(format!("{}_model_dens.json", base_graph.name)),
+                serde_json::to_string_pretty(&(rep_rules, dens)).unwrap(),
+            )?;
+        }
 
         let color_simplified =
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
                 debug!("Using global numerator: {}", global);
                 let global = Atom::parse(global).unwrap();
                 self.map_numerator(|n| {
-                    n.from_global(
+                    let n = n.from_global(
                         global,
                         // base_graph,
                         export_settings.numerator_settings.global_prefactor.as_ref(),
-                    )
-                    .color_simplify()
+                    );
+
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.color_simplify()
                     // .color_project()
                 })
             } else {
                 self.map_numerator(|n| {
-                    n.from_graph(
+                    let n = n.from_graph(
                         base_graph,
                         export_settings.numerator_settings.global_prefactor.as_ref(),
-                    )
-                    .color_simplify()
+                    );
+
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.color_simplify()
                 })
                 //.color_project())
             };
         Ok(match &export_settings.numerator_settings.gamma_algebra {
             GammaAlgebraMode::Symbolic => color_simplified
-                .map_numerator_res(|n| n.gamma_simplify().parse().contract(contraction_settings))?
+                .map_numerator_res(|n| {
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    let n = n.gamma_simplify();
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.parse().contract(contraction_settings)
+                })?
                 .map_numerator(|n| {
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
                     n.generate_evaluators(model, base_graph, &extra_info, export_settings)
                 }),
             GammaAlgebraMode::Concrete => match &export_settings.numerator_settings.parse_mode {
                 NumeratorParseMode::Polynomial => color_simplified
-                    .map_numerator_res(|n| n.parse_poly(base_graph).contract())?
+                    .map_numerator_res(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        n.parse_poly(base_graph).contract()
+                    })?
                     .map_numerator(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
                         n.generate_evaluators(model, base_graph, &extra_info, export_settings)
                     }),
                 NumeratorParseMode::Direct => color_simplified
-                    .map_numerator_res(|n| n.parse().contract(contraction_settings))?
+                    .map_numerator_res(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        n.parse().contract(contraction_settings)
+                    })?
                     .map_numerator(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
                         n.generate_evaluators(model, base_graph, &extra_info, export_settings)
                     }),
             },

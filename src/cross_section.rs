@@ -890,41 +890,11 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
             let dens: Vec<(String, String)> = amplitude_graph
                 .graph
                 .bare_graph
-                .edges
-                .iter()
-                .map(|e| {
-                    let (mom, mass) = e.denominator(&amplitude_graph.graph.bare_graph);
-                    (
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(mom.as_view(), printer_ops)
-                        ),
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(mass.as_view(), printer_ops)
-                        ),
-                    )
-                })
-                .collect();
-
+                .denominator_print(printer_ops);
             let rep_rules: Vec<(String, String)> = amplitude_graph
                 .graph
                 .bare_graph
-                .generate_lmb_replacement_rules()
-                .iter()
-                .map(|(lhs, rhs)| {
-                    (
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
-                        ),
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
-                        ),
-                    )
-                })
-                .collect();
+                .rep_rules_print(printer_ops);
 
             let out = (
                 format!(

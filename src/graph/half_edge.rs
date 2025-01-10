@@ -1616,30 +1616,32 @@ impl<E, V> HedgeGraph<E, V> {
         matching_fn: impl Fn(Flow, EdgeData<&E>, Flow, EdgeData<&E>) -> bool,
         merge_fn: impl Fn(Flow, EdgeData<E>, Flow, EdgeData<E>) -> (Flow, EdgeData<E>),
     ) -> Result<Self, HedgeGraphError> {
-        let self_inv_len = self.empty_filter();
+        let self_empty_filter = self.empty_filter();
         let mut full_self = self.full_filter();
-        let other_inv_len = other.empty_filter();
-        let mut full_other = self_inv_len.clone();
-        full_self.extend(other_inv_len.clone());
+        let other_empty_filter = other.empty_filter();
+        let mut full_other = self_empty_filter.clone();
+        full_self.extend(other_empty_filter.clone());
         full_other.extend(other.full_filter());
 
         let mut node_data = self.node_data;
         node_data.extend(other.node_data);
 
+        let self_shift = self.nodes.len();
+
         let nodes: Vec<_> = self
             .nodes
             .into_iter()
             .map(|mut k| {
-                k.hairs.extend(other_inv_len.clone());
-                k.internal_graph.filter.extend(other_inv_len.clone());
+                k.hairs.extend(other_empty_filter.clone());
+                k.internal_graph.filter.extend(other_empty_filter.clone());
                 k
             })
             .chain(other.nodes.into_iter().map(|mut k| {
-                let mut new_hairs = self_inv_len.clone();
+                let mut new_hairs = self_empty_filter.clone();
                 new_hairs.extend(k.hairs.clone());
                 k.hairs = new_hairs;
 
-                let mut internal = self_inv_len.clone();
+                let mut internal = self_empty_filter.clone();
                 internal.extend(k.internal_graph.filter.clone());
                 k.internal_graph.filter = internal;
 
@@ -1647,18 +1649,32 @@ impl<E, V> HedgeGraph<E, V> {
             }))
             .collect();
 
+        let self_inv_shift = self.involution.inv.len();
+
         let involution = Involution {
             inv: self
                 .involution
                 .inv
                 .into_iter()
-                .chain(other.involution.inv)
+                .chain(other.involution.inv.into_iter().map(|i| match i {
+                    InvolutiveMapping::Sink { source_idx } => InvolutiveMapping::Sink {
+                        source_idx: Hedge(source_idx.0 + self_inv_shift),
+                    },
+                    InvolutiveMapping::Source { data, sink_idx } => InvolutiveMapping::Source {
+                        data,
+                        sink_idx: Hedge(sink_idx.0 + self_inv_shift),
+                    },
+                    a => a,
+                }))
                 .collect(),
             hedge_data: self
                 .involution
                 .hedge_data
                 .into_iter()
-                .chain(other.involution.hedge_data)
+                .chain(other.involution.hedge_data.into_iter().map(|mut a| {
+                    a.0 += self_shift;
+                    a
+                }))
                 .collect(),
         };
 

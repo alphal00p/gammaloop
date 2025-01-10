@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -33,6 +34,7 @@ use spenso::arithmetic::ScalarMul;
 use spenso::contraction::Contract;
 use spenso::data::{DataTensor, GetTensorData, StorageTensor};
 
+use spenso::iterators::IteratableTensor;
 use spenso::parametric::atomcore::{PatternReplacement, TensorAtomMaps, TensorAtomOps};
 use spenso::parametric::{
     EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, MixedTensor, ParamTensorSet,
@@ -56,7 +58,7 @@ use spenso::{
 };
 use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
-use symbolica::printer::PrintOptions;
+use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
@@ -97,9 +99,9 @@ impl Default for ExpressionFormat {
     }
 }
 
-impl Into<PrintOptions> for ExpressionFormat {
-    fn into(self) -> PrintOptions {
-        match self {
+impl From<ExpressionFormat> for PrintOptions {
+    fn from(value: ExpressionFormat) -> Self {
+        match value {
             ExpressionFormat::Symbolica => PrintOptions::default(),
             ExpressionFormat::Mathematica => PrintOptions::mathematica(),
         }
@@ -828,6 +830,30 @@ impl ExpressionState for NonLocal {
 }
 
 impl Numerator<Global> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing global numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+        );
+
+        fs::write(
+            file_path.join(format!("global_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+
     pub fn color_simplify(self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying global numerator");
         let state = ColorSimplified {
@@ -1000,8 +1026,8 @@ impl AppliedFeynmanRule {
 
         let mut eatoms: Vec<_> = vec![];
         let i = Atom::new_var(Atom::I);
-        for e in &graph.edges {
-            let [n, c] = e.color_separated_numerator(graph);
+        for (j, e) in graph.edges.iter().enumerate() {
+            let [n, c] = e.color_separated_numerator(graph, j);
             let n = if matches!(e.edge_type, EdgeType::Virtual) {
                 &n * &i
             } else {
@@ -1047,6 +1073,30 @@ impl AppliedFeynmanRule {
 }
 
 impl Numerator<AppliedFeynmanRule> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing local numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+        );
+
+        fs::write(
+            file_path.join(format!("local_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+
     pub fn color_simplify(self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying local numerator");
 
@@ -1289,6 +1339,30 @@ impl ColorSimplified {
 pub type Gloopoly =
     symbolica::poly::polynomial::MultivariatePolynomial<symbolica::domains::atom::AtomField, u8>;
 impl Numerator<ColorSimplified> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing color simplified numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+        );
+
+        fs::write(
+            file_path.join(format!("color_simplified_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+
     pub fn gamma_simplify(self) -> Numerator<GammaSimplified> {
         debug!("Gamma simplifying color symplified numerator");
 
@@ -1536,6 +1610,45 @@ pub struct PolyContracted {
 }
 
 impl Numerator<PolyContracted> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing poly contracted numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = (
+            self.state
+                .coef_map
+                .iter()
+                .map(|a| {
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(a.as_view(), printer_ops)
+                    )
+                })
+                .collect_vec(),
+            format!(
+                "{}",
+                AtomPrinter::new_with_options(
+                    self.state.tensor.iter_flat().next().unwrap().1,
+                    printer_ops
+                )
+            ),
+        );
+
+        fs::write(
+            file_path.join(format!("poly_contracted_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+
     pub fn to_contracted(self) -> Numerator<Contracted> {
         let coefs: Vec<_> = (0..self.state.coef_map.len())
             .map(|i| fun!(GS.coeff, Atom::new_num(i as i64)).to_pattern())
@@ -2027,6 +2140,29 @@ impl GammaSimplified {
 }
 
 impl Numerator<GammaSimplified> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing gamma simplified numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+        );
+
+        fs::write(
+            file_path.join(format!("gamma_simplified_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
     pub fn parse(self) -> Numerator<Network> {
         // debug!("GammaSymplified numerator: {}", self.export());
         debug!("Parsing gamma simplified numerator into tensor network");
@@ -2398,6 +2534,32 @@ impl TypedNumeratorState for Contracted {
 }
 
 impl Numerator<Contracted> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing poly contracted numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(
+                self.state.tensor.iter_flat().next().unwrap().1,
+                printer_ops
+            )
+        );
+
+        fs::write(
+            file_path.join(format!("contracted_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
     fn generate_fn_map(&self) -> FunctionMap {
         let mut map = FunctionMap::new();
         Numerator::<Contracted>::add_consts_to_fn_map(&mut map);
