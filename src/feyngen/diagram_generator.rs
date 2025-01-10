@@ -3,8 +3,10 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use ahash::HashMap;
+use colored::Colorize;
 use itertools::zip;
 use log::debug;
+use log::info;
 use smartstring::{LazyCompact, SmartString};
 use spenso::iterators::IteratableTensor;
 use spenso::parametric::atomcore::TensorAtomMaps;
@@ -964,7 +966,7 @@ impl FeynGen {
             "generation_vertex_signatures = {:?}",
             vertex_signatures_for_generation
         );
-        debug!("Starting graph generation with Symbolica");
+        info!("Starting Feynman graph generation with Symbolica...");
         let mut graphs = SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
@@ -975,8 +977,10 @@ impl FeynGen {
         );
         // Immediately drop lower loop count contributions
         graphs.retain(|g, _| g.num_loops() >= self.options.loop_count_range.0);
-
-        debug!("Symbolica generated {} graphs", graphs.len());
+        info!(
+            "Symbolica generated {} graphs.",
+            format!("{}", graphs.len()).green().bold()
+        );
 
         if self.options.generation_type == GenerationType::CrossSection {
             let final_state_particles = self
@@ -1118,7 +1122,10 @@ impl FeynGen {
             );
         }
 
-        debug!("Number of graphs retained: {}", graphs.len());
+        info!(
+            "Number of graphs retained after removal of vetoed topologies: {}",
+            format!("{}", graphs.len()).green().bold()
+        );
         #[allow(clippy::type_complexity)]
         let mut node_colors: HashMap<
             Vec<(Option<bool>, SmartString<LazyCompact>)>,
@@ -1141,16 +1148,16 @@ impl FeynGen {
         }
         processed_graphs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
-        debug!(
+        info!(
             "Number of graphs after node-color dressing: {}",
-            processed_graphs.len()
+            format!("{}", processed_graphs.len()).green().bold()
         );
 
         filters.apply_filters(model, &mut processed_graphs)?;
 
-        debug!(
+        info!(
             "Number of graphs after all filters are applied: {}",
-            processed_graphs.len()
+            format!("{}", processed_graphs.len()).green().bold()
         );
 
         #[allow(clippy::type_complexity)]
@@ -1334,10 +1341,10 @@ impl FeynGen {
             .collect::<Vec<_>>();
         bare_graphs.sort_by(|a, b| (a.0).cmp(&b.0));
 
-        debug!(
-            "Number of graphs after numerator-aware grouping with strategy '{}': {} ({} buckets)",
-            numerator_aware_isomorphism_grouping,
-            bare_graphs.len(),
+        info!(
+            "Number of graphs after numerator-aware grouping with strategy '{}': {} ({} isomorphically unique graphs when ignoring numerators)",
+            format!("{}", numerator_aware_isomorphism_grouping).blue(),
+            format!("{}", bare_graphs.len()).green().bold(),
             pooled_bare_graphs.len()
         );
 
