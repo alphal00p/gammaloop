@@ -2197,13 +2197,11 @@ impl BareGraph {
         &mut self,
         settings: &TropicalSubgraphTableSettings,
     ) -> Result<SampleGenerator<3>> {
-        let dimension = 3;
         let num_virtual_loop_edges = self.get_loop_edges_iterator().count();
         let num_loops = self.loop_momentum_basis.basis.len();
         let target_omega = settings.target_omega;
 
-        let weight =
-            (target_omega + (dimension * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
+        let weight = (target_omega + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
 
         debug!(
             "Building tropical subgraph table with all edge weights set to: {}",
@@ -2276,7 +2274,7 @@ impl BareGraph {
             .collect_vec();
 
         tropical_graph
-            .build_sampler(loop_part, dimension)
+            .build_sampler(loop_part)
             .map_err(|e| eyre!(e))
     }
 
