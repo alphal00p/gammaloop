@@ -6,6 +6,7 @@ use std::{
     fmt::{Display, Formatter},
     hash::Hash,
 };
+use thiserror::Error;
 
 use crate::{
     graph::half_edge::{
@@ -39,7 +40,73 @@ impl Display for OrientedCut {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum CutError {
+    #[error("Invalid edge")]
+    InvalidEdge,
+    #[error("Invalid orientation")]
+    InvalidOrientation,
+    #[error("Cut edge has already been set")]
+    CutEdgeAlreadySet,
+    #[error("Cut edge is identity")]
+    CutEdgeIsIdentity,
+}
+
 impl OrientedCut {
+    pub fn from_underlying_coerce<E, V>(
+        cut: BitVec,
+        graph: &HedgeGraph<E, V>,
+    ) -> Result<Self, CutError> {
+        let mut reference = graph.empty_filter();
+        let mut sign = graph.empty_filter();
+
+        for i in cut.included_iter() {
+            if sign.includes(&i) {
+                return Err(CutError::CutEdgeAlreadySet);
+            } else {
+                sign.set(i.0, true);
+            }
+            match graph.involution[i] {
+                InvolutiveMapping::Source { .. } => {
+                    reference.set(i.0, true);
+                }
+                InvolutiveMapping::Sink { source_idx } => {
+                    reference.set(source_idx.0, true);
+                }
+                _ => {}
+            }
+        }
+        Ok(OrientedCut { reference, sign })
+    }
+
+    pub fn from_underlying_strict<E, V>(
+        cut: BitVec,
+        graph: &HedgeGraph<E, V>,
+    ) -> Result<Self, CutError> {
+        let mut reference = graph.empty_filter();
+        let mut sign = graph.empty_filter();
+
+        for i in cut.included_iter() {
+            if sign.includes(&i) {
+                return Err(CutError::CutEdgeAlreadySet);
+            } else {
+                sign.set(i.0, true);
+            }
+            match graph.involution[i] {
+                InvolutiveMapping::Identity { .. } => {
+                    return Err(CutError::CutEdgeIsIdentity);
+                }
+                InvolutiveMapping::Source { .. } => {
+                    reference.set(i.0, true);
+                }
+                InvolutiveMapping::Sink { source_idx } => {
+                    reference.set(source_idx.0, true);
+                }
+            }
+        }
+        Ok(OrientedCut { reference, sign })
+    }
+
     pub fn all_initial_state_cuts<E, V>(graph: &HedgeGraph<E, V>) -> Vec<Self> {
         let mut all_cuts = Vec::new();
 

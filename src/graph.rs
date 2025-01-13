@@ -3311,6 +3311,7 @@ impl DerivedGraphData<UnInit> {
         export_settings: &ExportSettings,
     ) -> Result<DerivedGraphData<Evaluators>> {
         let expr_path = export_path.join("expressions");
+        std::fs::create_dir_all(&expr_path)?;
         let extra_info = self.generate_extra_info(export_path);
 
         let dump_numerator = export_settings.numerator_settings.dump_expression;

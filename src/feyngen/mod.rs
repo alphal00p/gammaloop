@@ -1,6 +1,6 @@
 pub mod diagram_generator;
 
-use ahash::HashMap;
+use ahash::{AHashMap, HashMap};
 use smartstring::{LazyCompact, SmartString};
 use std::{fmt, str::FromStr};
 use symbolica::graph::Graph as SymbolicaGraph;
@@ -99,36 +99,14 @@ impl FromStr for GenerationType {
 pub fn get_coupling_orders(
     model: &Model,
     graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
-) -> HashMap<String, usize> {
-    let mut coupling_orders = HashMap::default();
+) -> AHashMap<SmartString<LazyCompact>, usize> {
+    let mut coupling_orders = AHashMap::default();
     for node in graph.nodes() {
         if node.data.1 == "external" {
             continue;
         }
-        let mut node_coupling_orders: HashMap<String, usize> = HashMap::default();
-        model
-            .get_vertex_rule(&node.data.1)
-            .couplings
-            .iter()
-            .for_each(|cs| {
-                cs.iter().for_each(|c_opt| {
-                    if let Some(c) = c_opt {
-                        c.orders.iter().for_each(|(coupling_order, &weight)| {
-                            if let Some(curr_order) =
-                                node_coupling_orders.get_mut(&coupling_order.clone().to_string())
-                            {
-                                if *curr_order < weight {
-                                    *curr_order = weight;
-                                }
-                            } else {
-                                node_coupling_orders.insert(coupling_order.clone().into(), weight);
-                            }
-                        });
-                    }
-                })
-            });
-        for (k, v) in node_coupling_orders {
-            *coupling_orders.entry(k).or_insert_with(|| 0) += v;
+        for (k, v) in model.get_vertex_rule(&node.data.1).coupling_orders() {
+            *coupling_orders.entry(k).or_insert(0) += v;
         }
     }
     coupling_orders
@@ -152,22 +130,44 @@ impl FeynGenFilters {
             .any(|f| matches!(f, FeynGenFilter::TadpolesFilter(_)))
     }
 
-    pub fn get_particle_vetos(&self) -> Option<&FeynGenFilter> {
-        self.0
-            .iter()
-            .find(|f| matches!(f, FeynGenFilter::ParticleVeto(_)))
+    pub fn get_particle_vetos(&self) -> Option<&[i64]> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::ParticleVeto(v) = f {
+                Some(v.as_slice())
+            } else {
+                None
+            }
+        })
     }
 
-    pub fn get_perturbative_orders(&self) -> Option<&FeynGenFilter> {
-        self.0
-            .iter()
-            .find(|f| matches!(f, FeynGenFilter::PerturbativeOrders(_)))
+    pub fn get_coupling_orders(&self) -> Option<&HashMap<String, usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::CouplingOrders(o) = f {
+                Some(o)
+            } else {
+                None
+            }
+        })
     }
 
-    pub fn get_loop_count_range(&self) -> Option<&FeynGenFilter> {
-        self.0
-            .iter()
-            .find(|f| matches!(f, FeynGenFilter::LoopCountRange(_)))
+    pub fn get_perturbative_orders(&self) -> Option<&HashMap<String, usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::PerturbativeOrders(o) = f {
+                Some(o)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn get_loop_count_range(&self) -> Option<(usize, usize)> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::LoopCountRange(o) = f {
+                Some(*o)
+            } else {
+                None
+            }
+        })
     }
 
     #[allow(clippy::type_complexity)]
@@ -186,7 +186,9 @@ impl FeynGenFilters {
                     graphs.retain(|(g, _)| {
                         let graph_coupling_orders = get_coupling_orders(model, g);
                         orders.iter().all(|(k, v)| {
-                            graph_coupling_orders.get(k).map_or(0 == *v, |o| *o == *v)
+                            graph_coupling_orders
+                                .get(&SmartString::from(k))
+                                .map_or(0 == *v, |o| *o == *v)
                         })
                     });
                 }
@@ -203,6 +205,7 @@ impl FeynGenFilters {
                 | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
             }
         }
+
         Ok(())
     }
 }

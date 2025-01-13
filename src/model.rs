@@ -4,7 +4,7 @@ use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F};
 
-use ahash::{AHashMap, RandomState};
+use ahash::{AHashMap, AHashSet, HashSet, RandomState};
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
 use itertools::Itertools;
@@ -260,6 +260,25 @@ impl From<EdgeSlots<Minkowski>> for VertexSlots {
 }
 
 impl VertexRule {
+    pub fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+        let mut node_coupling_orders = AHashMap::default();
+        self.couplings.iter().for_each(|cs| {
+            cs.iter().for_each(|c_opt| {
+                if let Some(c) = c_opt {
+                    c.orders.iter().for_each(|(coupling_order, &weight)| {
+                        let w = node_coupling_orders
+                            .entry(coupling_order.clone())
+                            .or_insert(weight);
+                        if *w < weight {
+                            *w = weight;
+                        }
+                    });
+                }
+            })
+        });
+        node_coupling_orders
+    }
+
     pub fn dod(&self) -> isize {
         let dod;
         let mut spins = vec![];
@@ -530,6 +549,9 @@ pub struct Particle {
 }
 
 impl Particle {
+    pub fn is_massless(&self) -> bool {
+        !self.is_massive()
+    }
     pub fn decoration(&self) -> Decoration {
         match self.spin {
             0 => Decoration::Dashed,
@@ -547,6 +569,12 @@ impl Particle {
     }
 }
 
+impl std::hash::Hash for Particle {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.pdg_code.hash(state);
+    }
+}
+impl Eq for Particle {}
 impl PartialEq for Particle {
     fn eq(&self, other: &Self) -> bool {
         if self.pdg_code == other.pdg_code {
@@ -1445,6 +1473,7 @@ pub struct Model {
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Arc<Coupling>>,
     pub vertex_rules: Vec<Arc<VertexRule>>,
+    pub unresolved_particles: HashMap<SmartString<LazyCompact>, HashSet<Arc<Particle>>>,
     pub order_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub parameter_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -1477,6 +1506,7 @@ impl Default for Model {
                 usize,
                 RandomState,
             >::default(),
+            unresolved_particles: HashMap::new(),
             particle_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             particle_pdg_to_position: HashMap::<isize, usize, RandomState>::default(),
@@ -1775,8 +1805,30 @@ impl Model {
         Ok(())
     }
 
+    fn generate_unresolved_particles(&mut self) {
+        let mut map = HashMap::new();
+
+        for v in &self.vertex_rules {
+            let mut set = HashSet::default();
+            for p in &v.particles {
+                if p.is_massless() {
+                    set.insert(p.clone());
+                }
+            }
+            for (k, _) in v.coupling_orders() {
+                let current_set = map.entry(k).or_insert(HashSet::<Arc<Particle>>::default());
+
+                set.iter().for_each(|d| {
+                    current_set.insert(d.clone());
+                });
+            }
+        }
+
+        self.unresolved_particles = map;
+    }
+
     pub fn from_serializable_model(serializable_model: SerializableModel) -> Model {
-        //initialize the UFO and EFT symbols
+        //initialize the UFO and ETS symbols
 
         let _ = *UFO;
         let _ = *ETS;
@@ -1914,6 +1966,8 @@ impl Model {
                     map
                 },
             );
+
+        model.generate_unresolved_particles();
 
         model
     }

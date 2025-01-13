@@ -1499,7 +1499,8 @@ impl From<&BareGraph> for HedgeGraph<usize, usize> {
 }
 
 use subgraph::{
-    Cycle, HedgeNode, Inclusion, InternalSubGraph, SubGraph, SubGraphHedgeIter, SubGraphOps,
+    Cycle, HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphHedgeIter,
+    SubGraphOps,
 };
 
 use thiserror::Error;
@@ -2695,7 +2696,30 @@ impl<E, V> HedgeGraph<E, V> {
         spinneys
     }
 
-    pub fn all_s_t_cuts(
+    pub fn all_cuts(
+        &self,
+        source: NodeIndex,
+        target: NodeIndex,
+    ) -> Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)> {
+        let s = self.hairs_from_id(source);
+        let t = self.hairs_from_id(target);
+        let mut regions = AHashSet::new();
+        self.all_s_t_cuts_impl(s, t, &mut regions);
+
+        let mut cuts = vec![];
+
+        for r in regions.drain() {
+            let hairs = self.nesting_node_from_subgraph(r.clone()).hairs;
+            let complement = r.complement(self);
+
+            let cut = OrientedCut::from_underlying_coerce(hairs, self).unwrap();
+            cuts.push((r, cut, complement));
+        }
+
+        cuts
+    }
+
+    pub fn all_s_t_cuts_impl(
         &self,
         s: &HedgeNode,
         t: &HedgeNode,
@@ -2741,7 +2765,7 @@ impl<E, V> HedgeGraph<E, V> {
                 new_node.hairs.set(invh.0, false);
                 new_node.internal_graph.filter.set(h.0, true);
                 new_node.internal_graph.filter.set(invh.0, true);
-                self.all_s_t_cuts(&new_node, t, regions);
+                self.all_s_t_cuts_impl(&new_node, t, regions);
             }
         }
     }

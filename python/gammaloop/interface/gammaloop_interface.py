@@ -135,6 +135,7 @@ class GammaLoopConfiguration(object):
                     },
                     'global_numerator': None,
                     'global_prefactor': None,
+                    'dump_expression': 'Mathematica',
                     'gamma_algebra': 'Concrete',
                     'parse_mode': 'Polynomial'
                 },
@@ -326,11 +327,9 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -873,8 +872,7 @@ class GammaLoop(object):
             logger.info("A total of %s%s%s graphs%s have been generated.",
                         Colour.GREEN, Colour.BOLD, len(all_graphs), Colour.END)
         else:
-            raise GammaLoopError(f"No graphs were generated for process:\n{
-                                 repr(self.process)}.")
+            raise GammaLoopError(f"No graphs were generated for process:\n{prepr(self.process)}.")
 
         if args.amplitude:
             self.amplitudes.add_amplitude(cross_section.Amplitude(

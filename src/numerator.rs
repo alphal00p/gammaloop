@@ -102,7 +102,7 @@ impl Default for ExpressionFormat {
 impl From<ExpressionFormat> for PrintOptions {
     fn from(value: ExpressionFormat) -> Self {
         match value {
-            ExpressionFormat::Symbolica => PrintOptions::default(),
+            ExpressionFormat::Symbolica => PrintOptions::file(),
             ExpressionFormat::Mathematica => PrintOptions::mathematica(),
         }
     }
