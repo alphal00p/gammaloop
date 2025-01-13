@@ -3351,3 +3351,75 @@ fn test_is_permutation() {
         assert_eq!(b[ind], a[permutation_map.right_to_left[ind]]);
     }
 }
+
+impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
+    #[inline]
+    fn PI(&self) -> Self {
+        self.PI()
+    }
+
+    #[inline]
+    fn abs(&self) -> Self {
+        self.abs()
+    }
+
+    #[inline]
+    fn cos(&self) -> Self {
+        <F<T> as Real>::cos(self)
+    }
+
+    #[inline]
+    fn exp(&self) -> Self {
+        <F<T> as Real>::exp(self)
+    }
+
+    #[inline]
+    fn one(&self) -> Self {
+        <F<T> as NumericalFloatLike>::one(self)
+    }
+
+    #[inline]
+    fn from_f64(&self, value: f64) -> Self {
+        F::from_f64(value)
+    }
+
+    #[inline]
+    fn from_isize(&self, value: isize) -> Self {
+        Self(self.0.from_i64(value as i64))
+    }
+
+    #[inline]
+    fn inv(&self) -> Self {
+        <F<T> as NumericalFloatLike>::inv(self)
+    }
+
+    #[inline]
+    fn ln(&self) -> Self {
+        <F<T> as Real>::log(self)
+    }
+
+    #[inline]
+    fn powf(&self, power: &Self) -> Self {
+        <F<T> as Real>::powf(self, power)
+    }
+
+    #[inline]
+    fn sin(&self) -> Self {
+        <F<T> as Real>::sin(self)
+    }
+
+    #[inline]
+    fn sqrt(&self) -> Self {
+        <F<T> as Real>::sqrt(self)
+    }
+
+    #[inline]
+    fn zero(&self) -> Self {
+        <F<T> as NumericalFloatLike>::zero(self)
+    }
+
+    #[inline]
+    fn to_f64(&self) -> f64 {
+        self.into_f64()
+    }
+}

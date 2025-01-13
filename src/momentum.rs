@@ -2490,9 +2490,9 @@ impl<T: LowerExp, U: LowerExp> LowerExp for FourMomentum<T, U> {
     }
 }
 
-impl From<Vector<f64, 3>> for ThreeMomentum<F<f64>> {
-    fn from(value: Vector<f64, 3>) -> Self {
-        ThreeMomentum::new(F(value[0]), F(value[1]), F(value[2]))
+impl From<Vector<F<f64>, 3>> for ThreeMomentum<F<f64>> {
+    fn from(value: Vector<F<f64>, 3>) -> Self {
+        ThreeMomentum::new(value[0], value[1], value[2])
     }
 }
 

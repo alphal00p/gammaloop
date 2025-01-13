@@ -943,33 +943,30 @@ impl GammaLoopIntegrand {
                             .tropical_subgraph_table
                             .as_ref()
                             .unwrap();
-                        let xs_f64 = xs.iter().map(|x| x.0).collect_vec();
 
                         let edge_data = graph
                             .bare_graph
                             .get_loop_edges_iterator()
                             .map(|(edge_id, edge)| {
                                 let mass = edge.particle.mass.value;
-                                let mass_re = mass.map(|complex_mass| complex_mass.re.0);
+                                let mass_re = mass.map(|complex_mass| complex_mass.re);
 
                                 let shift = utils::compute_shift_part(
                                     &graph.bare_graph.loop_momentum_basis.edge_signatures[edge_id]
                                         .external,
                                     &externals.get_indep_externals(),
-                                );
+                                )
+                                .spatial;
 
-                                let shift_momtrop = Vector::from_array([
-                                    shift.spatial.px.0,
-                                    shift.spatial.py.0,
-                                    shift.spatial.pz.0,
-                                ]);
+                                let shift_momtrop =
+                                    Vector::from_array([shift.px, shift.py, shift.pz]);
 
                                 (mass_re, shift_momtrop)
                             })
                             .collect_vec();
 
                         let sampling_result_result = sampler.generate_sample_from_x_space_point(
-                            &xs_f64,
+                            xs,
                             edge_data,
                             &tropical_sampling_settings.into_tropical_sampling_settings(
                                 self.global_data.settings.general.debug,
@@ -993,7 +990,7 @@ impl GammaLoopIntegrand {
                         let default_sample = DefaultSample::new(
                             loop_moms,
                             externals,
-                            F(sampling_result.jacobian) * externals.pdf(xs),
+                            sampling_result.jacobian * externals.pdf(xs),
                             &self.global_data.polarizations[0],
                             &graph.bare_graph.external_in_or_out_signature(),
                         );
