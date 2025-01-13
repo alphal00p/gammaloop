@@ -47,7 +47,7 @@ spenso = { version = "0.4.0", features = ["shadowing"] }
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
     "log",
-], branch = 'float_refactor' }
+]}
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = { git = "https://github.com/branchseer/bincode", branch = "decode_context", features = [

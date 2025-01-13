@@ -1556,7 +1556,7 @@ dependencies = [
 [[package]]
 name = "momtrop"
 version = "0.2.0"
-source = "git+https://github.com/alphal00p/momtrop?branch=float_refactor#2a2b8b72143ea8889a05a5153bf6aef52e15fb7a"
+source = "git+https://github.com/alphal00p/momtrop#1020b0b10e9b98e1a25254f553ec9bed56eac390"
 dependencies = [
  "ahash",
  "criterion",
