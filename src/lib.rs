@@ -803,8 +803,11 @@ impl GammaloopTropicalSamplingSettings {
         &self,
         debug: usize,
     ) -> momtrop::TropicalSamplingSettings {
+        if self.upcast_on_failure {
+            unimplemented!("upcast_on_failure removed from momtrop, implement automatic upcast of parameterization in gammaloop and then remove this crash")
+        }
+
         momtrop::TropicalSamplingSettings {
-            upcast_on_failure: self.upcast_on_failure,
             matrix_stability_test: self.matrix_stability_test,
             print_debug_info: debug > 0,
             return_metadata: false,
