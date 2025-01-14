@@ -87,16 +87,11 @@ pub struct NumeratorSettings {
     pub gamma_algebra: GammaAlgebraMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum ExpressionFormat {
     Mathematica,
+    #[default]
     Symbolica,
-}
-
-impl Default for ExpressionFormat {
-    fn default() -> Self {
-        ExpressionFormat::Symbolica
-    }
 }
 
 impl From<ExpressionFormat> for PrintOptions {

@@ -812,7 +812,6 @@ impl Amplitude<PythonState> {
                     g.forgetfull_apply::<_, UnInit>(|d, b| {
                         d.process_numerator_no_eval(
                             b,
-                            model,
                             ContractionSettings::Normal,
                             path.clone(),
                             export_settings,
@@ -874,6 +873,7 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
         printer_ops: PrintOptions,
         export_settings: &ExportSettings,
     ) -> Result<(), Report> {
+        println!("Exporting Expressions");
         let path = Path::new(export_root)
             .join("sources")
             .join("amplitudes")

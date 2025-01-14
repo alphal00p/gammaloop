@@ -4,7 +4,7 @@ use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F};
 
-use ahash::{AHashMap, AHashSet, HashSet, RandomState};
+use ahash::{AHashMap, HashSet, RandomState};
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
 use itertools::Itertools;

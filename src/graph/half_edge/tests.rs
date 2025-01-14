@@ -599,7 +599,7 @@ fn join() {
     let b = a.clone();
 
     let c = a
-        .join(b, |af, ad, bf, bd| af == -bf, |af, ad, bf, bd| (af, ad))
+        .join(b, |af, _, bf, _| af == -bf, |af, ad, _, _| (af, ad))
         .unwrap();
 
     println!("{}", c.base_dot());

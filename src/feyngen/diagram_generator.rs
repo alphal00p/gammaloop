@@ -6,7 +6,6 @@ use std::sync::Arc;
 use ahash::AHashMap;
 use ahash::AHashSet;
 use ahash::HashMap;
-use ahash::HashSetExt;
 use colored::Colorize;
 use itertools::zip;
 use log::debug;
@@ -555,6 +554,7 @@ impl FeynGen {
         model: &Model,
         graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
     ) -> bool {
+        #[allow(clippy::too_many_arguments)]
         fn is_valid_cut(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
             s_set: &AHashSet<NodeIndex>,
@@ -620,7 +620,7 @@ impl FeynGen {
         ) -> bool {
             if let Some(amp_couplings) = amp_couplings {
                 let mut coupling_orders = AHashMap::default();
-                for (id, (s, node)) in graph.iter_node_data(amplitude_subgraph) {
+                for (_, (s, node)) in graph.iter_node_data(amplitude_subgraph) {
                     if s.is_zero() {
                         for (k, v) in node.coupling_orders() {
                             *coupling_orders.entry(k).or_insert(0) += v;
@@ -634,7 +634,7 @@ impl FeynGen {
                         .map_or(0 == *v, |o| *o == *v)
                 })
             } else {
-                return true;
+                true
             }
         }
 
@@ -674,7 +674,7 @@ impl FeynGen {
                 let v = model.get_vertex_rule(&v);
                 (flow, v)
             },
-            |i, d| d.map(|d| model.get_particle(&SmartString::from_str(d).unwrap())),
+            |_, d| d.map(|d| model.get_particle(&SmartString::from_str(d).unwrap())),
         );
 
         let mut s_set = AHashSet::new();
@@ -693,7 +693,7 @@ impl FeynGen {
             }
         }
 
-        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
+        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
             let cuts = he_graph.all_cuts(s, t);
 
             cuts.iter().any(|c| {

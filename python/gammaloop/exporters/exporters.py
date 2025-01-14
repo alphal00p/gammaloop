@@ -311,7 +311,7 @@ class AmplitudesExporter(GammaLoopExporter):
                         'amplitudes', f'{amplitude.name}', 'expressions'))
 
         self.gammaloop.rust_worker.export_expressions(
-            str(export_root), format, yaml.dump(self.gammaloop.config['export_settings']))
+            str(export_root),[amp.to_yaml_str() for amp in amplitudes], format, yaml.dump(self.gammaloop.config['export_settings']))
 
     def export(self, export_root: Path, amplitudes: AmplitudeList,no_evaluators: bool):
 

@@ -35,7 +35,6 @@ use color_eyre::{Help, Report};
 use enum_dispatch::enum_dispatch;
 use eyre::eyre;
 use itertools::Itertools;
-use libc::user;
 use log::{debug, warn};
 use momtrop::SampleGenerator;
 use nalgebra::DMatrix;
@@ -1012,7 +1011,7 @@ impl BareGraph {
         self.edges
             .iter()
             .map(|e| {
-                let (mom, mass) = e.denominator(&self);
+                let (mom, mass) = e.denominator(self);
                 (
                     format!(
                         "{}",
@@ -3204,7 +3203,6 @@ impl DerivedGraphData<UnInit> {
     pub fn process_numerator_no_eval(
         self,
         base_graph: &mut BareGraph,
-        model: &Model,
         contraction_settings: ContractionSettings<Rational>,
         export_path: PathBuf,
         export_settings: &ExportSettings,

@@ -872,7 +872,7 @@ class GammaLoop(object):
             logger.info("A total of %s%s%s graphs%s have been generated.",
                         Colour.GREEN, Colour.BOLD, len(all_graphs), Colour.END)
         else:
-            raise GammaLoopError(f"No graphs were generated for process:\n{prepr(self.process)}.")
+            raise GammaLoopError(f"No graphs were generated for process:\n{(self.process)}.")
 
         if args.amplitude:
             self.amplitudes.add_amplitude(cross_section.Amplitude(

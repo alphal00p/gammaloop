@@ -594,6 +594,7 @@ impl PythonWorker {
 
     pub fn export_amplitudes(
         &mut self,
+
         export_root: &str,
         amplitude_names: Vec<String>,
         export_yaml_str: &str,
@@ -650,16 +651,26 @@ impl PythonWorker {
     pub fn export_expressions(
         &mut self,
         export_root: &str,
+        amplitued_list: Vec<String>,
         format: &str,
         export_yaml_str: &str,
     ) -> PyResult<String> {
         let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
-        for amplitude in self.amplitudes.container.iter_mut() {
-            amplitude
-                .export_expressions(export_root, Self::printer_options(format), &export_settings)
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        for amplitude in amplitued_list.into_iter() {
+            match Amplitude::from_yaml_str(&self.model, amplitude) {
+                Ok(amp) => {
+                    amp.map(|a| a.map(|ag| ag.forget_type()))
+                        .export_expressions(
+                            export_root,
+                            Self::printer_options(format),
+                            &export_settings,
+                        )
+                        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+                }
+                Err(e) => return Err(exceptions::PyException::new_err(e.to_string())),
+            }
         }
         Ok("Exported expressions".to_string())
     }
