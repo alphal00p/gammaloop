@@ -99,6 +99,7 @@ class TestPhysicalTopologies:
         gl.run(command_list)
 
         inspect_res = gl.do_inspect(
-            'physical_1L_6photons -p 0.123 0.3242 0.4233 0.14235 0.25122 0.3245 0.12337 0.224237 0.32327')
+            'physical_1L_6photons -p 0.123 0.3242 0.4233')
         check_inspect_result(
-            inspect_res['final_result'], complex(9.63106712759288e-12, -3.991478014419087e-11), max_relative_diff=1.0e-12)
+            inspect_res['final_result'], complex(
+                3.2329161713509245e-16, -1.2667260904767698e-16), max_relative_diff=1.0e-12)
