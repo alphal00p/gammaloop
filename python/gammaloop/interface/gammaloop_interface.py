@@ -134,7 +134,7 @@ class GammaLoopConfiguration(object):
                         }
                     },
                     'global_numerator': None,
-                    'global_prefactor': None,
+                    'global_prefactor': {'type': "tt", 'val': 2},
                     'dump_expression': 'Mathematica',
                     'gamma_algebra': 'Concrete',
                     'parse_mode': 'Polynomial'
@@ -286,7 +286,7 @@ class GammaLoopConfiguration(object):
                 self.update_shorthands(
                     cur_path=cur_path + [key,], root_dict=value)
 
-    def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any] | None, updater: Any) -> None:
+    def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any], updater: Any) -> None:
         for key, value in updater.items():
             if root_path == '':
                 setting_path = key
@@ -295,9 +295,6 @@ class GammaLoopConfiguration(object):
             if not isinstance(key, str):
                 raise GammaLoopError(
                     f"Invalid path for setting {setting_path}")
-            if config_chunk is None:
-                raise GammaLoopError(
-                    f"Settting key '{key}' not found in parameters. You can force the setting of that key by wrapping the value to be set within quotes.")
             if key not in config_chunk:
                 # Allow to create new keys for the rust run settings configuration
                 if 'run_settings' in root_path.split('.'):
@@ -319,17 +316,22 @@ class GammaLoopConfiguration(object):
                         config_chunk[key] = updater
                         continue
                 else:
-                    self._update_config_chunk(
-                        setting_path, config_chunk[key], value)
+                    if config_chunk[key] is None:
+                        config_chunk[key] = value
+                    else:
+                        self._update_config_chunk(
+                            setting_path, config_chunk[key], value)
             else:
                 if value is not None and config_chunk[key] is not None and type(value) is not type(config_chunk[key]):
                     if isinstance(value, str) and isinstance(config_chunk[key], dict):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -348,10 +350,10 @@ class GammaLoopConfiguration(object):
         self._update_config_chunk(path, context, new_setting)
 
     def set_setting(self, path: str, new_setting: Any, allow_shorthands: bool = True) -> str:
-        if allow_shorthands and path in self._shorthands:
-            return self.set_setting(self._shorthands[path], new_setting, allow_shorthands=False)
-
         p = path.split('.')
+        if allow_shorthands and p[0] in self._shorthands:
+            return self.set_setting('.'.join([self._shorthands[p[0]],]+p[:-1]), new_setting, allow_shorthands=False)
+
         self.update({p[-1]: new_setting}, path=('.'.join(p[:-1])
                     if len(p) > 1 else ''), allow_shorthands=allow_shorthands)
         return path
@@ -385,14 +387,14 @@ def split_str_args(str_args: str) -> list[str]:
 
 class CommandList(list[tuple[str, str]]):
 
-    @staticmethod
+    @ staticmethod
     def from_file(filename: str):
         command_file = CommandList()
         with open(filename, 'r', encoding='utf-8') as file:
             command_file.parse(file.read())
         return command_file
 
-    @staticmethod
+    @ staticmethod
     def from_string(cmd_str: str):
         command_file = CommandList()
         command_file.parse(cmd_str)
@@ -547,6 +549,7 @@ class GammaLoop(object):
         help='Do not update the run card of the current launched output. This is useful for batching changes.')
 
     def do_set(self, str_args: str) -> None:
+        from pprint import pformat
         if str_args == 'help':
             self.set_parser.print_help()
             return
@@ -566,6 +569,7 @@ class GammaLoop(object):
         if not args.no_update_run_card and self.launched_output is not None:
             # Update the run card in the output with the current configuration
             update_run_card_in_output(self.launched_output, self.config)
+        logger.info(pformat(self.config._config))
 
     # show_settings command
     set_model_param_settings = ArgumentParser(prog='set_model_param')
@@ -872,7 +876,8 @@ class GammaLoop(object):
             logger.info("A total of %s%s%s graphs%s have been generated.",
                         Colour.GREEN, Colour.BOLD, len(all_graphs), Colour.END)
         else:
-            raise GammaLoopError(f"No graphs were generated for process:\n{(self.process)}.")
+            raise GammaLoopError(
+                f"No graphs were generated for process:\n{(self.process)}.")
 
         if args.amplitude:
             self.amplitudes.add_amplitude(cross_section.Amplitude(
@@ -1317,7 +1322,7 @@ class GammaLoop(object):
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
             amplitude_exporter.export(
-                args.output_path, self.amplitudes,args.no_evaluators)
+                args.output_path, self.amplitudes, args.no_evaluators)
             if args.expression:
                 amplitude_exporter.export_expression(
                     args.output_path, self.amplitudes, args.expression_format)
