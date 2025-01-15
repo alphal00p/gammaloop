@@ -286,7 +286,7 @@ class GammaLoopConfiguration(object):
                 self.update_shorthands(
                     cur_path=cur_path + [key,], root_dict=value)
 
-    def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any], updater: Any) -> None:
+    def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any] | None, updater: Any) -> None:
         for key, value in updater.items():
             if root_path == '':
                 setting_path = key
@@ -295,6 +295,9 @@ class GammaLoopConfiguration(object):
             if not isinstance(key, str):
                 raise GammaLoopError(
                     f"Invalid path for setting {setting_path}")
+            if config_chunk is None:
+                raise GammaLoopError(
+                    f"Settting key '{key}' not found in parameters. You can force the setting of that key by wrapping the value to be set within quotes.")
             if key not in config_chunk:
                 # Allow to create new keys for the rust run settings configuration
                 if 'run_settings' in root_path.split('.'):
@@ -316,11 +319,8 @@ class GammaLoopConfiguration(object):
                         config_chunk[key] = updater
                         continue
                 else:
-                    if config_chunk[key] is None:
-                        config_chunk[key] = value
-                    else:
-                        self._update_config_chunk(
-                            setting_path, config_chunk[key], value)
+                    self._update_config_chunk(
+                        setting_path, config_chunk[key], value)
             else:
                 if value is not None and config_chunk[key] is not None and type(value) is not type(config_chunk[key]):
                     if isinstance(value, str) and isinstance(config_chunk[key], dict):
@@ -340,14 +340,20 @@ class GammaLoopConfiguration(object):
 
     def update(self, new_setting: Any, path: str = '', allow_shorthands: bool = True) -> None:
         context = self._config
-        for key in path.split('.'):
+        p_split = path.split('.')
+        for key in p_split[:-1]:
             if key == "":
                 break
             if key not in context:
                 raise GammaLoopError(
                     f"No settings '{path}' in gammaloop configuration.")
             context = context[key]
-        self._update_config_chunk(path, context, new_setting)
+        if path != '' and isinstance(new_setting, dict):
+            context[p_split[-1]] = new_setting
+        else:
+            if path != '':
+                context = context[p_split[-1]]
+            self._update_config_chunk(path, context, new_setting)
 
     def set_setting(self, path: str, new_setting: Any, allow_shorthands: bool = True) -> str:
         p = path.split('.')
@@ -549,7 +555,6 @@ class GammaLoop(object):
         help='Do not update the run card of the current launched output. This is useful for batching changes.')
 
     def do_set(self, str_args: str) -> None:
-        from pprint import pformat
         if str_args == 'help':
             self.set_parser.print_help()
             return
@@ -565,11 +570,9 @@ class GammaLoop(object):
         str_setting = pformat(config_value)
         logger.info("Setting '%s%s%s' to:%s%s%s%s", Colour.GREEN,
                     full_path, Colour.END, Colour.BLUE, '\n' if len(str_setting) > 80 else ' ', str_setting, Colour.END)
-
         if not args.no_update_run_card and self.launched_output is not None:
             # Update the run card in the output with the current configuration
             update_run_card_in_output(self.launched_output, self.config)
-        logger.info(pformat(self.config._config))
 
     # show_settings command
     set_model_param_settings = ArgumentParser(prog='set_model_param')
