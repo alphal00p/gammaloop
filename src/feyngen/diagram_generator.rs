@@ -39,6 +39,7 @@ use crate::model::VertexRule;
 use crate::momentum::SignOrZero;
 use crate::numerator::Color;
 use crate::numerator::ContractionSettings;
+use crate::numerator::GlobalPrefactor;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
 use crate::{
@@ -1687,7 +1688,8 @@ impl FeynGen {
                     }
                 }
             } else {
-                let numerator = Numerator::default().from_graph(&bare_graph, None);
+                let numerator =
+                    Numerator::default().from_graph(&bare_graph, &GlobalPrefactor::default());
                 let numerator_color_simplified = numerator.color_simplify();
                 if numerator_color_simplified
                     .get_single_atom()

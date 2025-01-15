@@ -879,11 +879,12 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
             .join("amplitudes")
             .join(self.name.as_str())
             .join("expressions");
+        std::fs::create_dir_all(&path)?;
         for amplitude_graph in self.amplitude_graphs.iter() {
             let num = Numerator::default()
                 .from_graph(
                     &amplitude_graph.graph.bare_graph,
-                    export_settings.numerator_settings.global_prefactor.as_ref(),
+                    &export_settings.numerator_settings.global_prefactor,
                 )
                 .get_single_atom();
 

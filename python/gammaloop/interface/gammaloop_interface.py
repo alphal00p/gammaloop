@@ -135,7 +135,7 @@ class GammaLoopConfiguration(object):
                         }
                     },
                     'global_numerator': None,
-                    'global_prefactor': {'type': "tt", 'val': 2},
+                    'global_prefactor': {'color': "1", 'colorless': "1"},
                     'dump_expression': 'Mathematica',
                     'gamma_algebra': 'Concrete',
                     'parse_mode': 'Polynomial'
@@ -320,19 +320,23 @@ class GammaLoopConfiguration(object):
                         config_chunk[key] = updater
                         continue
                 else:
-                    self._update_config_chunk(
-                        setting_path, config_chunk[key], value)
+
+
+                     if config_chunk[key] is None:
+                         config_chunk[key] = value
+                     else:
+                         self._update_config_chunk(
+                         setting_path, config_chunk[key], value)
+
             else:
                 if value is not None and config_chunk[key] is not None and type(value) is not type(config_chunk[key]):
                     if isinstance(value, str) and isinstance(config_chunk[key], dict):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")

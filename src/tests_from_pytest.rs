@@ -17,7 +17,7 @@ use crate::momentum::{
     Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, Signature, ThreeMomentum,
 };
 use crate::numerator::{
-    ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, Gloopoly,
+    ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, GlobalPrefactor, Gloopoly,
     IterativeOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluateFloat,
     NumeratorEvaluatorOptions, NumeratorParseMode, NumeratorSettings, NumeratorState, PolySplit,
     PythonState, UnInit,
@@ -102,7 +102,7 @@ pub fn test_export_settings() -> ExportSettings {
             }),
             dump_expression: None,
             global_numerator: None,
-            global_prefactor: None,
+            global_prefactor: Default::default(),
             parse_mode: NumeratorParseMode::Polynomial,
             gamma_algebra: GammaAlgebraMode::Concrete,
         },
@@ -1736,7 +1736,7 @@ fn physical_1L_6photons_play() {
 
     let export_settings = test_export_settings();
     Numerator::default()
-        .from_graph(&graph.bare_graph, None)
+        .from_graph(&graph.bare_graph, &GlobalPrefactor::default())
         .color_simplify()
         .parse_poly(&graph.bare_graph)
         .contract()
@@ -1778,7 +1778,7 @@ fn physical_1L_6photons_play_two() {
     // let export_settings = test_export_settings();
     let a = PolySplit::from_color_out(
         Numerator::default()
-            .from_graph(&graph.bare_graph, None)
+            .from_graph(&graph.bare_graph, &GlobalPrefactor::default())
             .color_simplify(),
     )
     .get_owned_linear(0.into())

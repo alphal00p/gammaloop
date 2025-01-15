@@ -306,10 +306,6 @@ class AmplitudesExporter(GammaLoopExporter):
                     'run_settings.Kinematics.externals.data.helicities', helicities)
 
     def export_expression(self, export_root: Path, amplitudes: AmplitudeList, format: str):
-        for amplitude in amplitudes:
-            os.makedirs(pjoin(export_root, 'sources',
-                        'amplitudes', f'{amplitude.name}', 'expressions'))
-
         self.gammaloop.rust_worker.export_expressions(
             str(export_root),[amp.to_yaml_str() for amp in amplitudes], format, yaml.dump(self.gammaloop.config['export_settings']))
 

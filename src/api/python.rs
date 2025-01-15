@@ -25,7 +25,7 @@ use feyngen::{
 };
 use git_version::git_version;
 use itertools::{self, Itertools};
-use log::{info, warn};
+use log::{debug, info, trace, warn};
 use spenso::complex::Complex;
 use std::{
     fs,
@@ -546,7 +546,7 @@ impl PythonWorker {
             let a = Numerator::default()
                 .from_graph(
                     &g.bare_graph,
-                    export_settings.numerator_settings.global_prefactor.as_ref(),
+                    &export_settings.numerator_settings.global_prefactor,
                 )
                 .forget_type();
 
@@ -585,7 +585,7 @@ impl PythonWorker {
         }
         if n_exported != cross_section_names.len() {
             return Err(exceptions::PyException::new_err(format!(
-                "Could not find all cross sections to export: {:?}",
+                "Could not find all cross sections to export: {:#?}",
                 cross_section_names
             )));
         }
@@ -594,15 +594,16 @@ impl PythonWorker {
 
     pub fn export_amplitudes(
         &mut self,
-
         export_root: &str,
         amplitude_names: Vec<String>,
         export_yaml_str: &str,
         no_evaluators: bool,
     ) -> PyResult<String> {
+        debug!("importing settings: {}", export_yaml_str);
         let export_settings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
+        debug!("Export settings loaded:\n{:#?}", export_settings);
         let mut n_exported: usize = 0;
         for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.to_string()) {
@@ -658,6 +659,7 @@ impl PythonWorker {
         let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
+
         for amplitude in amplitued_list.into_iter() {
             match Amplitude::from_yaml_str(&self.model, amplitude) {
                 Ok(amp) => {

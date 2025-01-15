@@ -78,12 +78,19 @@ use symbolica::{
 
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Settings for the numerator
 pub struct NumeratorSettings {
     pub eval_settings: NumeratorEvaluatorOptions,
+    /// Parse mode for the numerator, once all processing is done. `Polynomial` turns it into a polynomial in the energies, while `Direct` keeps it as is
     pub parse_mode: NumeratorParseMode,
+    /// If set, dump the expression the expression at each step in this format
     pub dump_expression: Option<ExpressionFormat>,
+    /// If set, instead of deriving the numerator from feynman rules, use this as the numerator
+    /// Will be parsed to a symbolica expression
     pub global_numerator: Option<String>,
-    pub global_prefactor: Option<GlobalPrefactor>,
+    /// If set, multiply the numerator by this prefactor
+    pub global_prefactor: GlobalPrefactor,
+    /// Type of Gamma algebra to use, either symbolic (replacement rules) or concrete (replace by value using spenso)
     pub gamma_algebra: GammaAlgebraMode,
 }
 
@@ -108,7 +115,7 @@ impl Default for NumeratorSettings {
         NumeratorSettings {
             eval_settings: Default::default(),
             global_numerator: None,
-            global_prefactor: None,
+            global_prefactor: GlobalPrefactor::default(),
             dump_expression: None,
             gamma_algebra: GammaAlgebraMode::Symbolic,
             parse_mode: NumeratorParseMode::Polynomial,
@@ -586,6 +593,15 @@ pub struct GlobalPrefactor {
     pub colorless: Atom,
 }
 
+impl Default for GlobalPrefactor {
+    fn default() -> Self {
+        GlobalPrefactor {
+            color: Atom::new_num(1),
+            colorless: Atom::new_num(1),
+        }
+    }
+}
+
 impl Serialize for GlobalPrefactor {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -620,7 +636,7 @@ impl Numerator<UnInit> {
     pub fn from_graph(
         self,
         graph: &BareGraph,
-        prefactor: Option<&GlobalPrefactor>,
+        prefactor: &GlobalPrefactor,
     ) -> Numerator<AppliedFeynmanRule> {
         debug!("Applying feynman rules");
         let state = AppliedFeynmanRule::from_graph(graph, prefactor);
@@ -635,15 +651,12 @@ impl Numerator<UnInit> {
         self,
         global: Atom,
         // _graph: &BareGraph,
-        prefactor: Option<&GlobalPrefactor>,
+        prefactor: &GlobalPrefactor,
     ) -> Numerator<Global> {
         debug!("Setting global numerator");
-        let state = if let Some(prefactor) = prefactor {
+        let state = {
             let mut global = global;
             global = global * &prefactor.color * &prefactor.colorless;
-
-            Global::new(global.into())
-        } else {
             Global::new(global.into())
         };
         debug!(
@@ -1009,7 +1022,7 @@ impl AppliedFeynmanRule {
         self.colorless
             .map_data_mut(|a| a.replace_all_multiple_repeat_mut(&reps));
     }
-    pub fn from_graph(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>) -> Self {
+    pub fn from_graph(graph: &BareGraph, prefactor: &GlobalPrefactor) -> Self {
         debug!("Generating numerator for graph: {}", graph.name);
         debug!("momentum: {}", graph.dot_lmb());
 
@@ -1052,10 +1065,8 @@ impl AppliedFeynmanRule {
             colorful_builder = colorful_builder.scalar_mul(c).unwrap();
         }
 
-        if let Some(prefactor) = prefactor {
-            colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
-            colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
-        }
+        colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
+        colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
 
         let mut num = AppliedFeynmanRule {
             colorless: colorless_builder.map_data(|a| normalise_complex(&a).into()),
@@ -2535,7 +2546,7 @@ impl Numerator<Contracted> {
         bare_graph: &BareGraph,
         numerator_format: ExpressionFormat,
     ) -> std::io::Result<()> {
-        debug!("Writing poly contracted numerator");
+        debug!("Writing contracted numerator");
         let file_path = extra_info.path.join("expressions");
 
         let printer_ops = numerator_format.into();

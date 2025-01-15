@@ -57,7 +57,7 @@ fn hairy_glue_box() {
         println!("{i}:{}", s);
     }
 
-    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,Some(&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))").unwrap(),colorless:Atom::new_num(1)})).color_simplify().state.color.to_bare_dense().map_data(|a|a.to_string());
+    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,&GlobalPrefactor{color:Atom::parse("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))").unwrap(),colorless:Atom::new_num(1)}).color_simplify().state.color.to_bare_dense().map_data(|a|a.to_string());
 
     insta::assert_ron_snapshot!(color);
 }
@@ -130,10 +130,10 @@ fn trees() {
     for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
         println!("{i}:{}", s);
     }
-    export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
+    export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
         color: Atom::parse("id(cof(3,2),dind(cof(3,0)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
-    });
+    };
 
     graph.generate_cff();
     let mut graph =
@@ -185,7 +185,7 @@ fn trees() {
     println!("CFF: {}", valcff);
 }
 
-fn compare_poly_to_direct(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>) -> bool {
+fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> bool {
     let color_simplified = Numerator::default()
         .from_graph(graph, prefactor)
         .color_simplify();
@@ -215,7 +215,7 @@ fn compare_poly_to_direct(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>
 }
 
 #[allow(dead_code)]
-pub fn save_expr(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>, name: &str) {
+pub fn save_expr(graph: &BareGraph, prefactor: &GlobalPrefactor, name: &str) {
     let color_simplified = Numerator::default()
         .from_graph(graph, prefactor)
         .color_simplify();
@@ -249,7 +249,7 @@ fn t_ta() {
         colorless: Atom::new_num(1),
     };
     assert!(
-        compare_poly_to_direct(&graph.bare_graph, Some(&global_prefactor)),
+        compare_poly_to_direct(&graph.bare_graph, &global_prefactor),
         "Poly and direct are not equal"
     );
     // save_expr(&graph.bare_graph, Some(&global_prefactor), "t_ta.dat");
@@ -274,14 +274,14 @@ fn tree_ta_ta_1() {
         colorless: Atom::new_num(1),
     };
     assert!(
-        compare_poly_to_direct(&graph.bare_graph, Some(&global_prefactor)),
+        compare_poly_to_direct(&graph.bare_graph, &global_prefactor),
         "Poly and direct are not equal"
     );
 
-    // save_expr(&graph.bare_graph, Some(&global_prefactor), "ta_ta.dat");
+    // save_expr(&graph.bare_graph, &global_prefactor), "ta_ta.dat");
 
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.global_prefactor = Some(global_prefactor);
+    test_export_settings.numerator_settings.global_prefactor = global_prefactor;
 
     let mut graph = graph.process_numerator(
         &model,
@@ -396,10 +396,7 @@ fn tree_ta_ta_1() {
         Numerator::default()
             .from_graph(
                 &graph.bare_graph,
-                test_export_settings
-                    .numerator_settings
-                    .global_prefactor
-                    .as_ref()
+                &test_export_settings.numerator_settings.global_prefactor
             )
             .color_simplify()
             .gamma_simplify()
@@ -410,7 +407,7 @@ fn tree_ta_ta_1() {
 pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
     let num = g.derived_data.as_ref().unwrap().numerator.clone();
 
-    let num = num.from_graph(&g.bare_graph, None);
+    let num = num.from_graph(&g.bare_graph, &GlobalPrefactor::default());
 
     let path_gamma = path.join("gamma");
 
@@ -493,10 +490,10 @@ fn tree_h_ttxaah_1() {
     //     println!("{i}:{}", s);
     // }
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
+    test_export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
         color: Atom::parse("id(cof(3,1),dind(cof(3,2)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
-    });
+    };
 
     let mut graph = graph.process_numerator(
         &model,
@@ -545,10 +542,10 @@ fn tree_hh_ttxaa_1() {
         println!("{i}:{}", s);
     }
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
+    test_export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
         color: Atom::parse("id(cof(3,2),dind(cof(3,3)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
-    });
+    };
 
     let mut graph = graph.process_numerator(
         &model,
@@ -724,7 +721,7 @@ fn tree_h_ttxaah_0() {
         colorless: Atom::new_num(1),
     };
 
-    num.from_global(expr, Some(&prefactor))
+    num.from_global(expr, &prefactor)
         .color_simplify()
         // .color_project()
         // .gamma_symplify()
@@ -736,16 +733,16 @@ fn tree_h_ttxaah_0() {
 
 #[test]
 fn color() {
-    insta::assert_snapshot!("Single color string",Numerator::default().from_global(Atom::parse("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))").unwrap(), None).color_simplify().export());
+    insta::assert_snapshot!("Single color string",Numerator::default().from_global(Atom::parse("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))").unwrap(), &GlobalPrefactor::default()).color_simplify().export());
 }
 
 #[test]
 fn prefactor() {
     let mut test_export_settings = test_export_settings();
-    test_export_settings.numerator_settings.global_prefactor = Some(GlobalPrefactor {
+    test_export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
         color: Atom::parse("id(cof(3,2),dind(cof(3,3)))/Nc").unwrap(),
         colorless: Atom::new_num(1),
-    });
+    };
 
     println!(
         "{}",

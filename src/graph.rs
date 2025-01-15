@@ -3210,6 +3210,7 @@ impl DerivedGraphData<UnInit> {
         export_settings: &ExportSettings,
     ) -> Result<DerivedGraphData<PythonState>> {
         let expr_path = export_path.join("expressions");
+        std::fs::create_dir_all(&expr_path)?;
         let extra_info = self.generate_extra_info(export_path);
 
         let dump_numerator = export_settings.numerator_settings.dump_expression;
@@ -3232,7 +3233,7 @@ impl DerivedGraphData<UnInit> {
                     let n = n.from_global(
                         global,
                         // base_graph,
-                        export_settings.numerator_settings.global_prefactor.as_ref(),
+                        &export_settings.numerator_settings.global_prefactor,
                     );
 
                     if let Some(numerator_format) = dump_numerator {
@@ -3246,7 +3247,7 @@ impl DerivedGraphData<UnInit> {
                 self.map_numerator(|n| {
                     let n = n.from_graph(
                         base_graph,
-                        export_settings.numerator_settings.global_prefactor.as_ref(),
+                        &export_settings.numerator_settings.global_prefactor,
                     );
 
                     if let Some(numerator_format) = dump_numerator {
@@ -3335,7 +3336,7 @@ impl DerivedGraphData<UnInit> {
                     let n = n.from_global(
                         global,
                         // base_graph,
-                        export_settings.numerator_settings.global_prefactor.as_ref(),
+                        &export_settings.numerator_settings.global_prefactor,
                     );
 
                     if let Some(numerator_format) = dump_numerator {
@@ -3348,7 +3349,7 @@ impl DerivedGraphData<UnInit> {
                 self.map_numerator(|n| {
                     let n = n.from_graph(
                         base_graph,
-                        export_settings.numerator_settings.global_prefactor.as_ref(),
+                        &export_settings.numerator_settings.global_prefactor,
                     );
 
                     if let Some(numerator_format) = dump_numerator {
@@ -3415,7 +3416,7 @@ impl DerivedGraphData<UnInit> {
         self.map_numerator(|n| {
             n.from_graph(
                 base_graph,
-                export_settings.numerator_settings.global_prefactor.as_ref(),
+                &export_settings.numerator_settings.global_prefactor,
             )
         })
     }
