@@ -30,6 +30,7 @@ use crate::graph::half_edge::subgraph::OrientedCut;
 use crate::graph::half_edge::HedgeGraph;
 use crate::graph::half_edge::NodeIndex;
 use crate::graph::half_edge::Orientation;
+use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
 use crate::momentum::SignOrZero;
@@ -45,6 +46,111 @@ use crate::{
 use itertools::Itertools;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeColorWithVertexRule {
+    pub external_tag: i32,
+    pub vertex_rule: Arc<VertexRule>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct NodeColorWithoutVertexRule {
+    pub external_tag: i32,
+}
+
+pub trait NodeColorFunctions: Sized {
+    fn get_external_tag(&self) -> i32;
+
+    fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+        AHashMap::default()
+    }
+
+    fn get_sign(&self, n_initial_states: usize) -> SignOrZero {
+        if self.get_external_tag() > 0 {
+            if self.get_external_tag() <= n_initial_states as i32 {
+                SignOrZero::Plus
+            } else {
+                SignOrZero::Minus
+            }
+        } else {
+            SignOrZero::Zero
+        }
+    }
+
+    fn passes_amplitude_filter(
+        _amplitude_subgraph: &InternalSubGraph,
+        _graph: &HedgeGraph<Arc<Particle>, Self>,
+        _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+    ) -> bool {
+        true
+    }
+}
+
+impl NodeColorFunctions for NodeColorWithVertexRule {
+    fn get_external_tag(&self) -> i32 {
+        self.external_tag
+    }
+
+    fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+        let mut coupling_orders = AHashMap::default();
+        let vr = self.vertex_rule.clone();
+        if vr.name == "external" {
+            return coupling_orders;
+        }
+        for (k, v) in vr.coupling_orders() {
+            *coupling_orders.entry(k).or_insert(0) += v;
+        }
+        coupling_orders
+    }
+
+    fn passes_amplitude_filter(
+        amplitude_subgraph: &InternalSubGraph,
+        graph: &HedgeGraph<Arc<Particle>, Self>,
+        amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+    ) -> bool {
+        if let Some(amp_couplings) = amp_couplings {
+            let mut coupling_orders = AHashMap::default();
+            for (_, s) in graph.iter_node_data(amplitude_subgraph) {
+                if s.get_external_tag() != 0 {
+                    for (k, v) in s.coupling_orders() {
+                        *coupling_orders.entry(k).or_insert(0) += v;
+                    }
+                }
+            }
+
+            amp_couplings.iter().all(|(k, v)| {
+                coupling_orders
+                    .get(&SmartString::from(k))
+                    .map_or(0 == *v, |o| *o == *v)
+            })
+        } else {
+            true
+        }
+    }
+}
+
+impl NodeColorFunctions for NodeColorWithoutVertexRule {
+    fn get_external_tag(&self) -> i32 {
+        self.external_tag
+    }
+}
+
+impl std::fmt::Display for NodeColorWithoutVertexRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.external_tag)
+    }
+}
+
+impl std::fmt::Display for NodeColorWithVertexRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "({}|{})",
+            self.external_tag,
+            self.vertex_rule.name.clone()
+        )
+    }
+}
+
 pub struct FeynGen {
     pub options: FeynGenOptions,
 }
@@ -56,20 +162,15 @@ impl FeynGen {
 
     #[allow(clippy::type_complexity)]
     pub fn assign_node_colors<'a>(
-        graph: &SymbolicaGraph<i32, &'a str>,
+        model: &Model,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>,
         node_colors: &HashMap<
             Vec<(Option<bool>, SmartString<LazyCompact>)>,
             Vec<SmartString<LazyCompact>>,
         >,
-    ) -> Result<
-        Vec<(
-            SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
-            usize,
-        )>,
-        FeynGenError,
-    > {
+    ) -> Result<Vec<(SymbolicaGraph<NodeColorWithVertexRule, &'a str>, usize)>, FeynGenError> {
         // println!("graph = {}", graph.to_dot());
-        let mut colored_nodes: Vec<Vec<(i32, SmartString<LazyCompact>)>> = vec![vec![]];
+        let mut colored_nodes: Vec<Vec<NodeColorWithVertexRule>> = vec![vec![]];
         let edges = graph.edges();
         for (i_n, node) in graph.nodes().iter().enumerate() {
             let mut node_edges = vec![];
@@ -86,20 +187,32 @@ impl FeynGen {
                 }
             }
             node_edges.sort();
+            let dummy_external_vertex_rule = Arc::new(VertexRule {
+                name: "external".into(),
+                couplings: vec![],
+                lorentz_structures: vec![],
+                particles: vec![],
+                color_structures: ColorStructure::new(vec![]),
+            });
             let colors = if node_edges.len() == 1 {
-                &vec!["external".into()]
+                &vec![dummy_external_vertex_rule]
             } else if let Some(cs) = node_colors.get(&node_edges) {
-                cs
+                &cs.iter()
+                    .map(|c| model.get_vertex_rule(c))
+                    .collect::<Vec<_>>()
             } else {
                 return Err(FeynGenError::GenericError(format!(
                     "Could not find node colors for node edges {:?}",
                     node_edges
                 )));
             };
-            let mut new_colored_nodes: Vec<Vec<(i32, SmartString<LazyCompact>)>> = vec![];
+            let mut new_colored_nodes: Vec<Vec<NodeColorWithVertexRule>> = vec![];
             for current_colors in colored_nodes.iter_mut() {
                 for color in colors {
-                    current_colors.push((node.data, color.clone()));
+                    current_colors.push(NodeColorWithVertexRule {
+                        external_tag: node.data.external_tag,
+                        vertex_rule: color.clone(),
+                    });
                     new_colored_nodes.push(current_colors.clone());
                 }
             }
@@ -122,19 +235,17 @@ impl FeynGen {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn group_isomorphic_graphs<'a>(
-        graphs: &[SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>],
-    ) -> Vec<(
-        SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
-        usize,
-    )> {
+    pub fn group_isomorphic_graphs<
+        'a,
+        NodeColor: Clone + PartialEq + Eq + PartialOrd + Ord + std::hash::Hash,
+    >(
+        graphs: &[SymbolicaGraph<NodeColor, &'a str>],
+    ) -> Vec<(SymbolicaGraph<NodeColor, &'a str>, usize)> {
         if graphs.len() == 1 {
             return vec![(graphs[0].clone(), 1)];
         }
-        let mut iso_buckets: HashMap<
-            SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
-            usize,
-        > = HashMap::default();
+        let mut iso_buckets: HashMap<SymbolicaGraph<NodeColor, &'a str>, usize> =
+            HashMap::default();
         for g in graphs.iter() {
             let canonized_g = g.canonize();
             *iso_buckets.entry(canonized_g.graph).or_insert_with(|| 1) += 1;
@@ -148,7 +259,7 @@ impl FeynGen {
     }
 
     pub fn contains_particles(
-        graph: &SymbolicaGraph<i32, &str>,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, &str>,
         particles: &[SmartString<LazyCompact>],
     ) -> bool {
         let mut particles_stack = particles
@@ -167,7 +278,7 @@ impl FeynGen {
     }
 
     pub fn find_edge_position(
-        graph: &SymbolicaGraph<i32, &str>,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, &str>,
         edge_vertices: (usize, usize),
         oriented: bool,
     ) -> Option<usize> {
@@ -183,7 +294,7 @@ impl FeynGen {
 
     pub fn veto_special_topologies(
         model: &Model,
-        graph: &SymbolicaGraph<i32, &str>,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, &str>,
         veto_self_energy: Option<&SelfEnergyFilterOptions>,
         veto_tadpole: Option<&TadpolesFilterOptions>,
         veto_snails: Option<&SnailFilterOptions>,
@@ -223,14 +334,14 @@ impl FeynGen {
         if veto_self_energy.is_none() && veto_tadpole.is_none() && veto_snails.is_none() {
             return false;
         }
-        let graph_nodes: &[symbolica::graph::Node<i32>] = graph.nodes();
+        let graph_nodes: &[symbolica::graph::Node<NodeColorWithoutVertexRule>] = graph.nodes();
         let graph_edges: &[symbolica::graph::Edge<&str>] = graph.edges();
 
         let max_external = graph
             .nodes()
             .iter()
-            .filter(|n| n.data > 0)
-            .map(|n| n.data)
+            .filter(|n| n.data.external_tag > 0)
+            .map(|n| n.data.external_tag)
             .max()
             .unwrap_or(0) as usize;
         if max_external == 0 {
@@ -240,7 +351,7 @@ impl FeynGen {
         let max_external_node_position = graph
             .nodes()
             .iter()
-            .position(|n| n.data == (max_external as i32))
+            .position(|n| n.data.external_tag == (max_external as i32))
             .unwrap();
         if debug {
             debug!(
@@ -252,11 +363,11 @@ impl FeynGen {
         let mut external_partices: Vec<Arc<Particle>> =
             vec![model.particles[0].clone(); max_external];
         for e in graph_edges {
-            if graph_nodes[e.vertices.0].data != 0 {
-                external_partices[(graph_nodes[e.vertices.0].data - 1) as usize] =
+            if graph_nodes[e.vertices.0].data.external_tag != 0 {
+                external_partices[(graph_nodes[e.vertices.0].data.external_tag - 1) as usize] =
                     model.get_particle(&SmartString::<LazyCompact>::from(e.data));
-            } else if graph_nodes[e.vertices.1].data != 0 {
-                external_partices[(graph_nodes[e.vertices.1].data - 1) as usize] =
+            } else if graph_nodes[e.vertices.1].data.external_tag != 0 {
+                external_partices[(graph_nodes[e.vertices.1].data.external_tag - 1) as usize] =
                     model.get_particle(&SmartString::<LazyCompact>::from(e.data));
             }
         }
@@ -288,10 +399,12 @@ impl FeynGen {
         }
         let mut external_momenta_routing: Vec<Vec<usize>> = vec![vec![]; spanning_tree.nodes.len()];
         for (i_n, node) in graph.nodes().iter().enumerate() {
-            if (node.edges.len() != 1) || node.data == (max_external_node_position as i32) {
+            if (node.edges.len() != 1)
+                || node.data.external_tag == (max_external_node_position as i32)
+            {
                 continue;
             }
-            let external_index = node.data as usize;
+            let external_index = node.data.external_tag as usize;
             external_momenta_routing[i_n].push(external_index);
             let mut next_node = spanning_tree.nodes[i_n].parent;
             // println!("max_external={},max_external_node_position={},sink_node_position_in_spanning_tree={}", max_external, max_external_node_position, sink_node_position_in_spanning_tree);
@@ -549,13 +662,43 @@ impl FeynGen {
         }
     }
 
-    pub fn contains_cut(
+    pub fn contains_cut<NodeColor>(
         &self,
         model: &Model,
-        graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
-    ) -> bool {
+        graph: &SymbolicaGraph<NodeColor, &str>,
+        n_unresolved: usize,
+        unresolved_type: &AHashSet<Arc<Particle>>,
+    ) -> bool
+    where
+        NodeColor: NodeColorFunctions + Clone,
+    {
+        // println!(
+        //     "Graph:\nEdges:\n{:?}\nNodes:\n{:?}",
+        //     graph
+        //         .edges()
+        //         .iter()
+        //         .enumerate()
+        //         .map(|(i_e, e)| format!("{}|{}", i_e, e.data))
+        //         .collect::<Vec<_>>(),
+        //     graph
+        //         .nodes()
+        //         .iter()
+        //         .enumerate()
+        //         .map(|(i_n, n)| format!(
+        //             "{}|{}|{}|edges:{:?}",
+        //             i_n,
+        //             n.data.get_external_tag(),
+        //             n.data
+        //                 .get_vertex_rule()
+        //                 .map(|vr| vr.name.clone())
+        //                 .unwrap_or("None".into()),
+        //             n.edges
+        //         ))
+        //         .collect::<Vec<_>>()
+        // );
+
         #[allow(clippy::too_many_arguments)]
-        fn is_valid_cut(
+        fn is_valid_cut<NodeColor: NodeColorFunctions>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
             s_set: &AHashSet<NodeIndex>,
             model: &Model,
@@ -564,7 +707,7 @@ impl FeynGen {
             particle_content: &[Arc<Particle>],
             amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
             amp_loop_count: Option<(usize, usize)>,
-            graph: &HedgeGraph<Arc<Particle>, (SignOrZero, Arc<VertexRule>)>,
+            graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
             if is_s_channel(cut, s_set, graph) {
                 let mut cut_content: Vec<_> = cut
@@ -606,42 +749,17 @@ impl FeynGen {
                         return false;
                     }
                 }
-                passes_amplitude_filter(&cut.0, graph, amp_couplings)
-                    && passes_amplitude_filter(&cut.2, graph, amp_couplings)
+                NodeColor::passes_amplitude_filter(&cut.0, graph, amp_couplings)
+                    && NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings)
             } else {
                 false
             }
         }
 
-        fn passes_amplitude_filter(
-            amplitude_subgraph: &InternalSubGraph,
-            graph: &HedgeGraph<Arc<Particle>, (SignOrZero, Arc<VertexRule>)>,
-            amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
-        ) -> bool {
-            if let Some(amp_couplings) = amp_couplings {
-                let mut coupling_orders = AHashMap::default();
-                for (_, (s, node)) in graph.iter_node_data(amplitude_subgraph) {
-                    if s.is_zero() {
-                        for (k, v) in node.coupling_orders() {
-                            *coupling_orders.entry(k).or_insert(0) += v;
-                        }
-                    }
-                }
-
-                amp_couplings.iter().all(|(k, v)| {
-                    coupling_orders
-                        .get(&SmartString::from(k))
-                        .map_or(0 == *v, |o| *o == *v)
-                })
-            } else {
-                true
-            }
-        }
-
-        fn is_s_channel(
+        fn is_s_channel<NodeColor>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
             s_set: &AHashSet<NodeIndex>,
-            graph: &HedgeGraph<Arc<Particle>, (SignOrZero, Arc<VertexRule>)>,
+            graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
             let nodes: AHashSet<_> = graph
                 .iter_node_data(&cut.0)
@@ -650,39 +768,27 @@ impl FeynGen {
 
             s_set.is_subset(&nodes)
         }
+
         let particle_content = self
             .options
             .final_pdgs
             .iter()
             .map(|&pdg| model.get_particle_from_pdg(pdg as isize))
             .collect::<Vec<_>>();
-        let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
         let n_particles = self.options.initial_pdgs.len();
         let he_graph = HedgeGraph::from(graph.clone()).map(
-            |(i, v)| {
-                let flow = if i > 0 {
-                    if i <= n_particles as i32 {
-                        SignOrZero::Plus
-                    } else {
-                        SignOrZero::Minus
-                    }
-                } else {
-                    SignOrZero::Zero
-                };
-                let v = model.get_vertex_rule(&v);
-                (flow, v)
-            },
+            |node_color| node_color,
             |_, d| d.map(|d| model.get_particle(&SmartString::from_str(d).unwrap())),
         );
 
         let mut s_set = AHashSet::new();
         let mut t_set = vec![];
 
-        for (n, (f, _)) in he_graph.iter_nodes() {
+        for (n, f) in he_graph.iter_nodes() {
             let id = he_graph.id_from_hairs(n).unwrap();
-            match f {
+            match f.get_sign(n_particles) {
                 SignOrZero::Plus => {
                     s_set.insert(id);
                 }
@@ -692,32 +798,36 @@ impl FeynGen {
                 _ => {}
             }
         }
-
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
             let cuts = he_graph.all_cuts(s, t);
 
-            cuts.iter().any(|c| {
+            let pass_cut_filter = cuts.iter().any(|c| {
                 is_valid_cut(
                     c,
                     &s_set,
                     model,
                     n_unresolved,
-                    &unresolved_type,
+                    unresolved_type,
                     &particle_content,
                     amp_couplings,
                     amp_loop_count,
                     &he_graph,
                 )
-            })
+            });
+            pass_cut_filter
         } else {
-            true //TODO still check the amplitude level filters
+            true //TODO still check the amplitude level filters in the case where there is no initial-state specified
         }
     }
 
-    pub fn contains_cut_short_circuit(
+    // This fast cut checker does not enumerate all cuts, but rather checks if the graph can contain a cut with the right particles
+    // It also does not consider amplitude-level filters
+    pub fn contains_cut_fast<NodeColor: NodeColorFunctions>(
         &self,
         model: &Model,
-        graph: &SymbolicaGraph<i32, &str>,
+        graph: &SymbolicaGraph<NodeColor, &str>,
+        n_unresolved: usize,
+        unresolved_type: &AHashSet<Arc<Particle>>,
         particles: &[SmartString<LazyCompact>],
     ) -> bool {
         let n_initial_states = self.options.initial_pdgs.len();
@@ -734,7 +844,7 @@ impl FeynGen {
             std::vec::Vec<usize>,
             ahash::RandomState,
         > = HashMap::default();
-        for p in particles {
+        for p in particles.iter().collect::<HashSet<_>>() {
             let particle = model.get_particle(p);
             if particle.is_antiparticle() {
                 cut_map.insert(particle.get_anti_particle(model).name.clone(), vec![]);
@@ -742,9 +852,11 @@ impl FeynGen {
                 cut_map.insert(p.clone(), vec![]);
             }
         }
+        let mut unresolved_set: Vec<usize> = vec![];
         for (i_e, edge) in graph.edges().iter().enumerate() {
             // filter out external edges
-            if graph.nodes()[edge.vertices.0].data != 0 || graph.nodes()[edge.vertices.1].data != 0
+            if graph.nodes()[edge.vertices.0].data.get_external_tag() != 0
+                || graph.nodes()[edge.vertices.1].data.get_external_tag() != 0
             {
                 continue;
             }
@@ -757,23 +869,46 @@ impl FeynGen {
             if let Some(cut_entry) = e {
                 cut_entry.push(i_e);
             }
-        }
-
-        // Generate unique, unordered combinations
-        let mut unique_combinations: std::collections::HashSet<Vec<usize>, ahash::RandomState> =
-            HashSet::default();
-        for combination in particles
-            .iter()
-            .map(|p| cut_map.get(p.as_str()).unwrap().iter())
-            .multi_cartesian_product()
-        {
-            // Sort the combination and insert into HashSet
-            let mut sorted_combination: Vec<_> = combination.into_iter().cloned().collect();
-            if sorted_combination.iter().collect::<HashSet<_>>().len() != sorted_combination.len() {
-                continue;
+            if unresolved_type.contains(&particle) {
+                unresolved_set.push(i_e);
             }
-            sorted_combination.sort_unstable();
-            unique_combinations.insert(sorted_combination);
+        }
+        // Generate unique, unordered combinations, for each possible unresolved multiplicity
+        let mut unique_combinations: Vec<
+            std::collections::HashSet<Vec<usize>, ahash::RandomState>,
+        > = vec![];
+        for unresolved_multiplicity in 0..=n_unresolved {
+            let mut unique_combinations_for_this_multiplicity: std::collections::HashSet<
+                Vec<usize>,
+                ahash::RandomState,
+            > = HashSet::default();
+            let mut particles_for_this_multiplicity =
+                particles.iter().map(Some).collect::<Vec<_>>();
+            for _ in 0..unresolved_multiplicity {
+                particles_for_this_multiplicity.push(None);
+            }
+            for combination in particles_for_this_multiplicity
+                .iter()
+                .map(|p| {
+                    if let Some(particle) = p {
+                        cut_map.get(particle.as_str()).unwrap().iter()
+                    } else {
+                        unresolved_set.iter()
+                    }
+                })
+                .multi_cartesian_product()
+            {
+                // Sort the combination and insert into HashSet
+                let mut sorted_combination: Vec<_> = combination.into_iter().cloned().collect();
+                if sorted_combination.iter().collect::<HashSet<_>>().len()
+                    != sorted_combination.len()
+                {
+                    continue;
+                }
+                sorted_combination.sort_unstable();
+                unique_combinations_for_this_multiplicity.insert(sorted_combination);
+            }
+            unique_combinations.push(unique_combinations_for_this_multiplicity);
         }
 
         let mut adj_list: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
@@ -793,7 +928,7 @@ impl FeynGen {
                 graph
                     .nodes()
                     .iter()
-                    .position(|n| n.data == (leg_id as i32))
+                    .position(|n| n.data.get_external_tag() == (leg_id as i32))
                     .unwrap()
             })
             .collect::<Vec<_>>();
@@ -802,14 +937,14 @@ impl FeynGen {
                 graph
                     .nodes()
                     .iter()
-                    .position(|n| n.data == (leg_id as i32))
+                    .position(|n| n.data.get_external_tag() == (leg_id as i32))
                     .unwrap()
             })
             .collect::<Vec<_>>();
 
-        fn are_incoming_connected_to_outgoing(
+        fn are_incoming_connected_to_outgoing<NodeColor>(
             cut: &[usize],
-            graph: &SymbolicaGraph<i32, &str>,
+            graph: &SymbolicaGraph<NodeColor, &str>,
             adj_list: &HashMap<usize, Vec<(usize, usize)>>,
             left_nodes: &[usize],
             right_nodes: &[usize],
@@ -833,23 +968,10 @@ impl FeynGen {
             }
             false
         }
-
-        'cutloop: for cut in unique_combinations {
-            if are_incoming_connected_to_outgoing(
-                &cut,
-                graph,
-                &adj_list,
-                &left_initial_state_positions,
-                &right_initial_state_positions,
-            ) {
-                continue 'cutloop;
-            }
-            // Make sure the cut is minimal and that no subcut is a valid cut
-            for subcut in (1..=(particles.len() - 1))
-                .flat_map(|offset| cut.iter().combinations(particles.len() - offset))
-            {
-                if !are_incoming_connected_to_outgoing(
-                    subcut.iter().map(|&id| *id).collect::<Vec<_>>().as_slice(),
+        for unique_combination_with_fixed_multiplicity in unique_combinations {
+            'cutloop: for cut in unique_combination_with_fixed_multiplicity {
+                if are_incoming_connected_to_outgoing(
+                    &cut,
                     graph,
                     &adj_list,
                     &left_initial_state_positions,
@@ -857,20 +979,42 @@ impl FeynGen {
                 ) {
                     continue 'cutloop;
                 }
+                // Make sure the cut is minimal and that no subcut is a valid cut.
+                for subcut in (1..=(particles.len() - 1))
+                    .flat_map(|offset| cut.iter().combinations(particles.len() - offset))
+                {
+                    if !are_incoming_connected_to_outgoing(
+                        subcut.iter().map(|&id| *id).collect::<Vec<_>>().as_slice(),
+                        graph,
+                        &adj_list,
+                        &left_initial_state_positions,
+                        &right_initial_state_positions,
+                    ) {
+                        continue 'cutloop;
+                    }
+                }
+                return true;
             }
-            return true;
         }
-        true
+
+        false
     }
 
     fn group_isomorphic_graphs_after_node_color_change<'a>(
-        graphs: &HashMap<SymbolicaGraph<i32, &'a str>, Atom>,
+        graphs: &HashMap<SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>, Atom>,
         node_colors_to_change: &HashMap<i32, i32>,
-    ) -> HashMap<SymbolicaGraph<i32, &'a str>, Atom> {
+    ) -> HashMap<SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>, Atom> {
         #[allow(clippy::type_complexity)]
         let mut iso_buckets: HashMap<
-            SymbolicaGraph<i32, &'a str>,
-            (usize, (SymbolicaGraph<i32, &'a str>, Vec<usize>, Atom)),
+            SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>,
+            (
+                usize,
+                (
+                    SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>,
+                    Vec<usize>,
+                    Atom,
+                ),
+            ),
         > = HashMap::default();
 
         for (g, symmetry_factor) in graphs.iter() {
@@ -878,20 +1022,25 @@ impl FeynGen {
             let mut modifications: Vec<(usize, i32)> = vec![];
             for (i_n, node) in g.nodes().iter().enumerate() {
                 for (src_node_color, trgt_node_color) in node_colors_to_change {
-                    if node.data == *src_node_color {
+                    if node.data.external_tag == *src_node_color {
                         modifications.push((i_n, *trgt_node_color));
                     }
                 }
             }
             for (i_n, new_color) in modifications {
-                g_node_color_modified.set_node_data(i_n, new_color);
+                g_node_color_modified.set_node_data(
+                    i_n,
+                    NodeColorWithoutVertexRule {
+                        external_tag: new_color,
+                    },
+                );
             }
             let canonized_g = g_node_color_modified.canonize();
             let ext_ordering = g
                 .nodes()
                 .iter()
                 .filter_map(|n| {
-                    if n.data > 0 {
+                    if n.data.external_tag > 0 {
                         Some(*n.edges.first().unwrap())
                     } else {
                         None
@@ -933,15 +1082,17 @@ impl FeynGen {
     pub fn canonized_edge_and_vertex_ordering<'a>(
         &self,
         model: &Model,
-        input_graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
+        input_graph: &SymbolicaGraph<NodeColorWithVertexRule, &'a str>,
     ) -> (
-        SymbolicaGraph<i32, std::string::String>,
-        SymbolicaGraph<(i32, SmartString<LazyCompact>), &'a str>,
+        SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
+        SymbolicaGraph<NodeColorWithVertexRule, &'a str>,
     ) {
         // Make sure to canonize the edge ordering based on the skeletton graph with only propagator mass as edge color
         let mut skeletton_graph = SymbolicaGraph::new();
         for node in input_graph.nodes() {
-            skeletton_graph.add_node(node.data.0);
+            skeletton_graph.add_node(NodeColorWithoutVertexRule {
+                external_tag: node.data.external_tag,
+            });
         }
         for edge in input_graph.edges() {
             skeletton_graph
@@ -1068,7 +1219,9 @@ impl FeynGen {
             .map(|(i_initial, pdg)| {
                 let p = model.get_particle_from_pdg(*pdg as isize);
                 (
-                    i_initial + 1,
+                    NodeColorWithoutVertexRule {
+                        external_tag: (i_initial + 1) as i32,
+                    },
                     if p.is_self_antiparticle() {
                         (None, p.name.clone())
                     } else if p.is_antiparticle() {
@@ -1099,7 +1252,10 @@ impl FeynGen {
                         .map(|(i_final, pdg)| {
                             let p = model.get_particle_from_pdg(*pdg as isize);
                             (
-                                self.options.initial_pdgs.len() + i_final + 1,
+                                NodeColorWithoutVertexRule {
+                                    external_tag: (self.options.initial_pdgs.len() + i_final + 1)
+                                        as i32,
+                                },
                                 if p.is_self_antiparticle() {
                                     (None, p.name.clone())
                                 } else if p.is_antiparticle() {
@@ -1119,7 +1275,9 @@ impl FeynGen {
                     let p = model.get_particle_from_pdg(*pdg as isize);
                     external_connections.push((Some(i_initial + 1), Some(i_final)));
                     external_edges.push((
-                        i_final,
+                        NodeColorWithoutVertexRule {
+                            external_tag: i_final as i32,
+                        },
                         if p.is_self_antiparticle() {
                             (None, p.name.clone())
                         } else if p.is_antiparticle() {
@@ -1136,7 +1294,7 @@ impl FeynGen {
         // debug!("vertex_signatures = {:?}", vertex_signatures);
         let external_edges_for_generation = external_edges
             .iter()
-            .map(|(i, (orientation, name))| (*i as i32, (*orientation, name.as_str())))
+            .map(|(i, (orientation, name))| (i.clone(), (*orientation, name.as_str())))
             .collect::<Vec<_>>();
         let vertex_signatures_for_generation = vertex_signatures
             .keys()
@@ -1166,12 +1324,17 @@ impl FeynGen {
         // Immediately drop lower loop count contributions
         graphs.retain(|g, _| g.num_loops() >= self.options.loop_count_range.0);
         info!(
-            "Symbolica generated {} graphs.",
+            "{:<95}{}",
+            "Number of graphs resulting from Symbolica generation:",
             format!("{}", graphs.len()).green().bold()
         );
 
-        if self.options.generation_type == GenerationType::CrossSection {
-            let final_state_particles = self
+        let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
+
+        if self.options.generation_type == GenerationType::CrossSection
+            && !self.options.final_pdgs.is_empty()
+        {
+            let unoriented_final_state_particles = self
                 .options
                 .final_pdgs
                 .iter()
@@ -1184,16 +1347,32 @@ impl FeynGen {
                     }
                 })
                 .collect::<Vec<_>>();
+
             graphs.retain(|g, _symmetry_factor| {
-                FeynGen::contains_particles(g, final_state_particles.as_slice())
+                FeynGen::contains_particles(g, unoriented_final_state_particles.as_slice())
             });
 
-            // Make sure that there can be a valid Cutkosky cut in each graph retained
-            if !final_state_particles.is_empty() {
-                graphs.retain(|g, _symmetry_factor| {
-                    self.contains_cut_short_circuit(model, g, final_state_particles.as_slice())
-                });
-            }
+            info!(
+                "{:<95}{}",
+                "Number of graphs before fast Cutkosky cut filters is applied:",
+                format!("{}", graphs.len()).green()
+            );
+            graphs.retain(
+                |g: &SymbolicaGraph<NodeColorWithoutVertexRule, &str>, _symmetry_factor| {
+                    self.contains_cut_fast(
+                        model,
+                        g,
+                        n_unresolved,
+                        &unresolved_type,
+                        unoriented_final_state_particles.as_slice(),
+                    )
+                },
+            );
+            info!(
+                "{:<95}{}",
+                "Number of graphs after fast Cutkosky cut filters had been applied:",
+                format!("{}", graphs.len()).green()
+            );
         }
 
         let tadpole_filter = filters
@@ -1306,8 +1485,9 @@ impl FeynGen {
         }
 
         info!(
-            "Number of graphs retained after removal of vetoed topologies: {}",
-            format!("{}", graphs.len()).green().bold()
+            "{:<95}{}",
+            "Number of graphs retained after removal of vetoed topologies:",
+            format!("{}", graphs.len()).green()
         );
         #[allow(clippy::type_complexity)]
         let mut node_colors: HashMap<
@@ -1322,7 +1502,7 @@ impl FeynGen {
 
         let mut processed_graphs = vec![];
         for (g, symmetry_factor) in graphs.iter() {
-            for (colored_g, multiplicity) in FeynGen::assign_node_colors(g, &node_colors)? {
+            for (colored_g, multiplicity) in FeynGen::assign_node_colors(model, g, &node_colors)? {
                 processed_graphs.push((
                     colored_g.canonize().graph,
                     (Atom::new_num(multiplicity as i64) * symmetry_factor).to_canonical_string(),
@@ -1332,23 +1512,46 @@ impl FeynGen {
         processed_graphs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         info!(
-            "Number of graphs after node-color dressing: {}",
-            format!("{}", processed_graphs.len()).green().bold()
+            "{:<95}{}",
+            "Number of graphs after node-color dressing:",
+            format!("{}", processed_graphs.len()).green()
         );
 
-        filters.apply_filters(model, &mut processed_graphs)?;
+        filters.apply_filters(&mut processed_graphs)?;
 
-        if !self.options.final_pdgs.is_empty() {
-            processed_graphs.retain(|(g, _)| self.contains_cut(model, g));
+        // This secondary cutkosky cut filter is only necessary if some amplitude coupling order constraints where requested
+        // because that one cannot be done until the nodes have been colored with the proper choice of vertex rule
+        // Also the amplitude loop count restriction would not have been correctly handled when using the short-circuit.
+        if self.options.generation_type == GenerationType::CrossSection
+            && !self.options.final_pdgs.is_empty()
+            && (self
+                .options
+                .amplitude_filters
+                .get_coupling_orders()
+                .is_some()
+                || self
+                    .options
+                    .amplitude_filters
+                    .get_loop_count_range()
+                    .is_some())
+        {
+            info!(
+                "{:<95}{}",
+                "Number of graphs before except secondary exact Cutkosky cut filter is applied:",
+                format!("{}", processed_graphs.len()).green()
+            );
+            processed_graphs
+                .retain(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type));
         }
         info!(
-            "Number of graphs after all filters are applied: {}",
-            format!("{}", processed_graphs.len()).green().bold()
+            "{:<95}{}",
+            "Number of graphs after all filters are applied:",
+            format!("{}", processed_graphs.len()).green()
         );
 
         #[allow(clippy::type_complexity)]
         let mut pooled_bare_graphs: HashMap<
-            SymbolicaGraph<i32, std::string::String>,
+            SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
             Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
         > = HashMap::default();
 
@@ -1528,8 +1731,11 @@ impl FeynGen {
         bare_graphs.sort_by(|a, b| (a.0).cmp(&b.0));
 
         info!(
-            "Number of graphs after numerator-aware grouping with strategy '{}': {} ({} isomorphically unique graphs when ignoring numerators)",
-            format!("{}", numerator_aware_isomorphism_grouping).blue(),
+            "{:<95}{} ({} isomorphically unique graphs when ignoring numerators)",
+            format!(
+                "Number of graphs after numerator-aware grouping with strategy '{}':",
+                numerator_aware_isomorphism_grouping
+            ),
             format!("{}", bare_graphs.len()).green().bold(),
             pooled_bare_graphs.len()
         );

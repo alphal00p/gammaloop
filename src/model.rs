@@ -131,7 +131,7 @@ impl SerializableVertexRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColorStructure {
     color_structure: Vec<Atom>,
 }
@@ -199,6 +199,33 @@ pub struct VertexRule {
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Vec<Option<Arc<Coupling>>>>,
 }
+
+impl Eq for VertexRule {}
+
+impl PartialEq for VertexRule {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl PartialOrd for VertexRule {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.name.cmp(&other.name))
+    }
+}
+
+impl Ord for VertexRule {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl std::hash::Hash for VertexRule {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VertexSlots {
     edge_slots: Vec<EdgeSlots<Minkowski>>,
@@ -774,28 +801,34 @@ where
         }
     }
     pub fn replacements(&self, id: usize) -> Vec<Replacement> {
-        let rhs_lor = LorRep::slot(4, id).to_symbolic_wrapped().to_pattern();
+        let rhs_lor = <Atom as AtomCore>::to_pattern(&LorRep::slot(4, id).to_symbolic_wrapped());
 
         let rhs_spin = Bispinor::slot(4, id);
 
-        let rhs_spin = rhs_spin.to_symbolic_wrapped().to_pattern();
+        let rhs_spin = <Atom as AtomCore>::to_pattern(&rhs_spin.to_symbolic_wrapped());
 
         let mut reps = vec![];
         for l in &self.lorentz {
-            reps.push(Replacement::new(rhs_lor.clone(), l.to_atom().to_pattern()));
+            reps.push(Replacement::new(
+                rhs_lor.clone(),
+                <Atom as AtomCore>::to_pattern(&l.to_atom()),
+            ));
         }
 
         for s in &self.spin {
-            reps.push(Replacement::new(rhs_spin.clone(), s.to_atom().to_pattern()));
+            reps.push(Replacement::new(
+                rhs_spin.clone(),
+                <Atom as AtomCore>::to_pattern(&s.to_atom()),
+            ));
         }
 
         for c in &self.color {
             let mut rhs_color = *c;
             rhs_color.aind = id.into();
-            let rhs_color = rhs_color.to_symbolic_wrapped().to_pattern();
+            let rhs_color = <Atom as AtomCore>::to_pattern(&rhs_color.to_symbolic_wrapped());
             reps.push(Replacement::new(
                 rhs_color.clone(),
-                c.to_atom().to_pattern(),
+                <Atom as AtomCore>::to_pattern(&c.to_atom()),
             ));
         }
 
@@ -1260,7 +1293,7 @@ impl SerializableLorentzStructure {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LorentzStructure {
     pub name: SmartString<LazyCompact>,
     pub spins: Vec<isize>,

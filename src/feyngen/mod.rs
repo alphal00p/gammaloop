@@ -6,8 +6,6 @@ use std::{fmt, str::FromStr};
 use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 
-use crate::model::Model;
-
 #[derive(Error, Debug)]
 pub enum FeynGenError {
     #[error("{0}")]
@@ -96,16 +94,12 @@ impl FromStr for GenerationType {
     }
 }
 
-pub fn get_coupling_orders(
-    model: &Model,
-    graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
+pub fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
+    graph: &SymbolicaGraph<NodeColor, &str>,
 ) -> AHashMap<SmartString<LazyCompact>, usize> {
     let mut coupling_orders = AHashMap::default();
     for node in graph.nodes() {
-        if node.data.1 == "external" {
-            continue;
-        }
-        for (k, v) in model.get_vertex_rule(&node.data.1).coupling_orders() {
+        for (k, v) in node.data.coupling_orders() {
             *coupling_orders.entry(k).or_insert(0) += v;
         }
     }
@@ -171,20 +165,16 @@ impl FeynGenFilters {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn apply_filters(
+    pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions>(
         &self,
-        model: &Model,
-        graphs: &mut Vec<(
-            SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
-            String,
-        )>,
+        graphs: &mut Vec<(SymbolicaGraph<NodeColor, &str>, String)>,
     ) -> Result<(), FeynGenError> {
         for filter in self.0.iter() {
             #[allow(clippy::single_match)]
             match filter {
                 FeynGenFilter::CouplingOrders(orders) => {
                     graphs.retain(|(g, _)| {
-                        let graph_coupling_orders = get_coupling_orders(model, g);
+                        let graph_coupling_orders = get_coupling_orders(g);
                         orders.iter().all(|(k, v)| {
                             graph_coupling_orders
                                 .get(&SmartString::from(k))
@@ -361,7 +351,7 @@ impl fmt::Display for FeynGenFilter {
                         .join("|")
                 ),
                 Self::LoopCountRange((loop_count_min, loop_count_max)) =>
-                    format!("{{{},{}}}", loop_count_min, loop_count_max),
+                    format!("LoopCountRange({{{},{}}})", loop_count_min, loop_count_max),
             }
         )
     }

@@ -7,7 +7,7 @@ use crate::{
         expression::CFFExpression,
         generation::generate_cff_expression,
     },
-    feyngen::FeynGenError,
+    feyngen::{diagram_generator::NodeColorWithVertexRule, FeynGenError},
     gammaloop_integrand::{BareSample, DefaultSample},
     graph::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder},
     ltd::{generate_ltd_expression, LTDExpression},
@@ -1296,7 +1296,7 @@ impl BareGraph {
     pub fn from_symbolica_graph(
         model: &model::Model,
         name: String,
-        graph: &SymbolicaGraph<(i32, SmartString<LazyCompact>), &str>,
+        graph: &SymbolicaGraph<NodeColorWithVertexRule, &str>,
         symmetry_factor: String,
         external_connections: Vec<(Option<usize>, Option<usize>)>,
         forced_lmb: Option<Vec<SmartString<LazyCompact>>>,
@@ -1355,11 +1355,11 @@ impl BareGraph {
                     panic!("Graph inconsistency in Feyngen.")
                 };
                 let physical_edge_type = *external_directions
-                    .get(&(n.data.0 as usize))
+                    .get(&(n.data.external_tag as usize))
                     .unwrap_or_else(|| {
                         panic!(
                             "External edge direction not specified for external leg {} in Feyngen.",
-                            n.data.0
+                            n.data.external_tag
                         )
                     });
                 if edge_type_from_symbolica != physical_edge_type {
@@ -1368,7 +1368,7 @@ impl BareGraph {
                 }
 
                 external_nodes.insert(
-                    n.data.0 as usize,
+                    n.data.external_tag as usize,
                     (i_n, physical_edge_type, particle.name.clone()),
                 );
                 external_edges.insert(n.edges[0], (physical_edge_type, particle.name.clone()));
@@ -1396,19 +1396,21 @@ impl BareGraph {
         //         .collect::<Vec<_>>()
         // );
         for (i_n, node) in graph_nodes.iter().enumerate() {
-            let vertex_info = if node.data.1 == "external" {
+            let vertex_info = if node.data.vertex_rule.name == "external" {
                 let (_external_node_position, external_direction, external_particle_name) =
-                    external_nodes.get(&(node.data.0 as usize)).unwrap();
+                    external_nodes
+                        .get(&(node.data.external_tag as usize))
+                        .unwrap();
                 SerializableVertexInfo::ExternalVertexInfo(SerializableExternalVertexInfo {
                     direction: *external_direction,
                     particle: external_particle_name.clone(),
                 })
             } else {
-                if node.data.0 != 0 {
+                if node.data.external_tag != 0 {
                     panic!("Internal vertex with non-zero integer colour data found in Feyngen.")
                 }
                 SerializableVertexInfo::InteractonVertexInfo(SerializableInteractionVertexInfo {
-                    vertex_rule: node.data.1.clone(),
+                    vertex_rule: node.data.vertex_rule.name.clone(),
                 })
             };
             let vertex = Vertex::from_serializable_vertex(
@@ -1462,17 +1464,17 @@ impl BareGraph {
             let name = match edge_type {
                 EdgeType::Incoming => {
                     edges_sorting_priority.insert(
-                        format!("p{}", graph_nodes[edge.vertices.0].data.0).into(),
-                        graph_nodes[edge.vertices.0].data.0 as usize,
+                        format!("p{}", graph_nodes[edge.vertices.0].data.external_tag).into(),
+                        graph_nodes[edge.vertices.0].data.external_tag as usize,
                     );
-                    format!("p{}", graph_nodes[edge.vertices.0].data.0)
+                    format!("p{}", graph_nodes[edge.vertices.0].data.external_tag)
                 }
                 EdgeType::Outgoing => {
                     edges_sorting_priority.insert(
-                        format!("p{}", graph_nodes[edge.vertices.1].data.0).into(),
-                        graph_nodes[edge.vertices.1].data.0 as usize,
+                        format!("p{}", graph_nodes[edge.vertices.1].data.external_tag).into(),
+                        graph_nodes[edge.vertices.1].data.external_tag as usize,
                     );
-                    format!("p{}", graph_nodes[edge.vertices.1].data.0)
+                    format!("p{}", graph_nodes[edge.vertices.1].data.external_tag)
                 }
                 _ => {
                     i_edge_internal += 1;

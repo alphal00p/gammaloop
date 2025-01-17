@@ -135,9 +135,10 @@ class TestProcessGeneration:
                 0 if len(gloop.cross_sections) == 0 else len(
                     gloop.cross_sections[0].supergraphs)
             )
-            assert n_graphs == expected_graph_number, f"For process: '{test}' | Expected {expected_graph_number} graphs, got {n_graphs}"
+            assert n_graphs == expected_graph_number, f"For process: '{
+                test}' | Expected {expected_graph_number} graphs, got {n_graphs}"
             gloop.amplitudes.clear()
-            gloop.cross_sections.clear()            
+            gloop.cross_sections.clear()
 
     def test_generate_sm_a_ddx(self):
         gloop = get_gamma_loop_interpreter()
@@ -196,7 +197,7 @@ class TestProcessGeneration:
             ('h > g g | h g b t ghg [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 3),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
-    
+
     @pytest.mark.slow
     def test_slow_generate_sm_h_n_j(self):
         gloop = get_gamma_loop_interpreter()
@@ -206,7 +207,7 @@ class TestProcessGeneration:
             # Full particle contents
             ('h > g g g | h g b t ghg [{{4}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 56),
             # FIX: Weird, this process keeps randomly yielding 36, 37 or 38
-            #('h > g g g | h g b t ghg [{{4}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 36),
+            # ('h > g g g | h g b t ghg [{{4}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 36),
             ('h > g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 2),
             ('h > g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 36),
             ('h > g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 2),
@@ -225,10 +226,10 @@ class TestProcessGeneration:
         tests = [
             ('e+ e- > d d~ | d a e- ghg g QED^2=4 [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 2),
             ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 2),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{3}} QCD=2] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 15),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{4}} QCD=4] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 266),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 16),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 314),
             ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 12),
-            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{3}} QCD=2] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 84),
+            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{3}} QCD=2] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 100),
             # Too slow sadly
             # ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{4}} QCD=4] --symmetrize_left_right_states -num_grouping only_detect_zeroes', ?),
         ]
@@ -278,7 +279,7 @@ class TestProcessGeneration:
         # Targets confirmed by MadGraph
         tests = [
             ('d d~ > u u~ d d~ g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 5424),
-            # A bit too slow, let's skip for now 
+            # A bit too slow, let's skip for now
             # ('g g > g g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 14875),
             # ('d d~ > d d~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 32074),
             # ('d d~ > u u~ g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping only_detect_zeroes', 16037),
@@ -286,7 +287,7 @@ class TestProcessGeneration:
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
-    # A bit too slow, let's skip for now 
+    # A bit too slow, let's skip for now
     def very_slow_generate_amplitude_1l_sm_jets(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
