@@ -1,7 +1,10 @@
+use indicatif::ProgressBar;
+use indicatif::ProgressStyle;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -59,6 +62,7 @@ pub struct NodeColorWithoutVertexRule {
 
 pub trait NodeColorFunctions: Sized {
     fn get_external_tag(&self) -> i32;
+    fn set_external_tag(&mut self, external_tag: i32);
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
         AHashMap::default()
@@ -88,6 +92,9 @@ pub trait NodeColorFunctions: Sized {
 impl NodeColorFunctions for NodeColorWithVertexRule {
     fn get_external_tag(&self) -> i32 {
         self.external_tag
+    }
+    fn set_external_tag(&mut self, external_tag: i32) {
+        self.external_tag = external_tag;
     }
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
@@ -131,6 +138,9 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
 impl NodeColorFunctions for NodeColorWithoutVertexRule {
     fn get_external_tag(&self) -> i32 {
         self.external_tag
+    }
+    fn set_external_tag(&mut self, external_tag: i32) {
+        self.external_tag = external_tag;
     }
 }
 
@@ -1000,21 +1010,17 @@ impl FeynGen {
         false
     }
 
-    fn group_isomorphic_graphs_after_node_color_change<'a>(
-        graphs: &HashMap<SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>, Atom>,
+    fn group_isomorphic_graphs_after_node_color_change<'a, NC>(
+        graphs: &HashMap<SymbolicaGraph<NC, &'a str>, Atom>,
         node_colors_to_change: &HashMap<i32, i32>,
-    ) -> HashMap<SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>, Atom> {
+    ) -> HashMap<SymbolicaGraph<NC, &'a str>, Atom>
+    where
+        NC: NodeColorFunctions + Clone + PartialOrd + Ord + Eq + std::hash::Hash,
+    {
         #[allow(clippy::type_complexity)]
         let mut iso_buckets: HashMap<
-            SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>,
-            (
-                usize,
-                (
-                    SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>,
-                    Vec<usize>,
-                    Atom,
-                ),
-            ),
+            SymbolicaGraph<NC, &'a str>,
+            (usize, (SymbolicaGraph<NC, &'a str>, Vec<usize>, Atom)),
         > = HashMap::default();
 
         for (g, symmetry_factor) in graphs.iter() {
@@ -1022,25 +1028,22 @@ impl FeynGen {
             let mut modifications: Vec<(usize, i32)> = vec![];
             for (i_n, node) in g.nodes().iter().enumerate() {
                 for (src_node_color, trgt_node_color) in node_colors_to_change {
-                    if node.data.external_tag == *src_node_color {
+                    if node.data.get_external_tag() == *src_node_color {
                         modifications.push((i_n, *trgt_node_color));
                     }
                 }
             }
             for (i_n, new_color) in modifications {
-                g_node_color_modified.set_node_data(
-                    i_n,
-                    NodeColorWithoutVertexRule {
-                        external_tag: new_color,
-                    },
-                );
+                let mut node_data = g.nodes()[i_n].data.clone();
+                node_data.set_external_tag(new_color);
+                g_node_color_modified.set_node_data(i_n, node_data);
             }
             let canonized_g = g_node_color_modified.canonize();
             let ext_ordering = g
                 .nodes()
                 .iter()
                 .filter_map(|n| {
-                    if n.data.external_tag > 0 {
+                    if n.data.get_external_tag() > 0 {
                         Some(*n.edges.first().unwrap())
                     } else {
                         None
@@ -1329,13 +1332,11 @@ impl FeynGen {
             format!("{}", graphs.len()).green().bold()
         );
 
-        let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
-
-        if self.options.generation_type == GenerationType::CrossSection
+        let unoriented_final_state_particles = if self.options.generation_type
+            == GenerationType::CrossSection
             && !self.options.final_pdgs.is_empty()
         {
-            let unoriented_final_state_particles = self
-                .options
+            self.options
                 .final_pdgs
                 .iter()
                 .map(|pdg| {
@@ -1346,31 +1347,18 @@ impl FeynGen {
                         p.name.clone()
                     }
                 })
-                .collect::<Vec<_>>();
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
 
+        if !unoriented_final_state_particles.is_empty() {
             graphs.retain(|g, _symmetry_factor| {
                 FeynGen::contains_particles(g, unoriented_final_state_particles.as_slice())
             });
-
             info!(
                 "{:<95}{}",
-                "Number of graphs before fast Cutkosky cut filters is applied:",
-                format!("{}", graphs.len()).green()
-            );
-            graphs.retain(
-                |g: &SymbolicaGraph<NodeColorWithoutVertexRule, &str>, _symmetry_factor| {
-                    self.contains_cut_fast(
-                        model,
-                        g,
-                        n_unresolved,
-                        &unresolved_type,
-                        unoriented_final_state_particles.as_slice(),
-                    )
-                },
-            );
-            info!(
-                "{:<95}{}",
-                "Number of graphs after fast Cutkosky cut filters had been applied:",
+                "Number of graphs retained after enforcing supergraph particle content:",
                 format!("{}", graphs.len()).green()
             );
         }
@@ -1422,8 +1410,9 @@ impl FeynGen {
                 )
             });
         }
+
         // Re-interpret the symmetry factor as a multiplier where the symbolica factor from symbolica appears in the denominator
-        let mut graphs = graphs
+        let graphs = graphs
             .iter()
             .map(|(g, symmetry_factor)| {
                 (
@@ -1432,6 +1421,125 @@ impl FeynGen {
                 )
             })
             .collect::<HashMap<_, _>>();
+
+        info!(
+            "{:<95}{}",
+            "Number of graphs retained after removal of vetoed topologies:",
+            format!("{}", graphs.len()).green()
+        );
+
+        #[allow(clippy::type_complexity)]
+        let mut node_colors: HashMap<
+            Vec<(Option<bool>, SmartString<LazyCompact>)>,
+            Vec<SmartString<LazyCompact>>,
+        > = HashMap::default();
+        for (v_legs, v_colors) in vertex_signatures.iter() {
+            let mut sorted_ps = v_legs.clone();
+            sorted_ps.sort();
+            node_colors.insert(sorted_ps, v_colors.clone());
+        }
+
+        let mut processed_graphs = vec![];
+        for (g, symmetry_factor) in graphs.iter() {
+            for (colored_g, multiplicity) in FeynGen::assign_node_colors(model, g, &node_colors)? {
+                processed_graphs.push((
+                    colored_g.canonize().graph,
+                    (Atom::new_num(multiplicity as i64) * symmetry_factor).to_canonical_string(),
+                ));
+            }
+        }
+        processed_graphs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+        info!(
+            "{:<95}{}",
+            "Number of graphs after vertex info assignment:",
+            format!("{}", processed_graphs.len()).green()
+        );
+
+        filters.apply_filters(&mut processed_graphs)?;
+
+        info!(
+            "{:<95}{}",
+            "Number of graphs after all complete graphs filters are applied:",
+            format!("{}", processed_graphs.len()).green()
+        );
+
+        let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
+
+        // The fast cutksoky filter is only fast for up to ~ 6 particles to check
+        let mut applied_fast_cutksosky_cut_filter = false;
+        if self.options.generation_type == GenerationType::CrossSection
+            && !self.options.final_pdgs.is_empty()
+        // && self.options.final_pdgs.len() + n_unresolved <= 6
+        {
+            applied_fast_cutksosky_cut_filter = true;
+
+            let bar = ProgressBar::new(processed_graphs.len() as u64);
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+                )
+                .unwrap(),
+            );
+            bar.set_message("Applying fast Cutkosky cut filter...");
+            bar.enable_steady_tick(Duration::from_millis(100));
+            processed_graphs.retain(|(g, _symmetry_factor)| {
+                bar.inc(1);
+                self.contains_cut_fast(
+                    model,
+                    g,
+                    n_unresolved,
+                    &unresolved_type,
+                    unoriented_final_state_particles.as_slice(),
+                )
+            });
+            bar.finish_and_clear();
+
+            info!(
+                "{:<95}{}",
+                "Number of graphs after fast Cutkosky cut filter is applied:",
+                format!("{}", processed_graphs.len()).green()
+            );
+        }
+
+        // This secondary cutkosky cut filter is only necessary if some amplitude coupling order constraints where requested
+        // because that one cannot be done until the nodes have been colored with the proper choice of vertex rule
+        // Also the amplitude loop count restriction would not have been correctly handled when using the short-circuit.
+        if self.options.generation_type == GenerationType::CrossSection
+            && !self.options.final_pdgs.is_empty()
+            && (self
+                .options
+                .amplitude_filters
+                .get_coupling_orders()
+                .is_some()
+                || self
+                    .options
+                    .amplitude_filters
+                    .get_loop_count_range()
+                    .is_some()
+                || !applied_fast_cutksosky_cut_filter)
+        {
+            let bar = ProgressBar::new(processed_graphs.len() as u64);
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+                )
+                .unwrap(),
+            );
+            bar.set_message("Applying secondary exact Cutkosky cut filter...");
+            bar.enable_steady_tick(Duration::from_millis(100));
+            processed_graphs.retain(|(g, _)| {
+                bar.inc(1);
+                self.contains_cut(model, g, n_unresolved, &unresolved_type)
+            });
+            bar.finish_and_clear();
+
+            info!(
+                "{:<95}{}",
+                "Number of graphs after exact Cutkosky cut filter is applied:",
+                format!("{}", processed_graphs.len()).green()
+            );
+        }
 
         // Now account for initial state symmetry by further grouping contributions
         let mut node_colors_to_change: HashMap<i32, i32> = HashMap::default();
@@ -1478,74 +1586,21 @@ impl FeynGen {
             }
         }
         if !node_colors_to_change.is_empty() {
-            graphs = FeynGen::group_isomorphic_graphs_after_node_color_change(
-                &graphs,
+            processed_graphs = FeynGen::group_isomorphic_graphs_after_node_color_change(
+                &processed_graphs
+                    .iter()
+                    .map(|(g, m)| (g.clone(), Atom::parse(m).unwrap()))
+                    .collect::<HashMap<_, _>>(),
                 &node_colors_to_change,
-            );
+            )
+            .iter()
+            .map(|(g, m)| (g.clone(), m.to_canonical_string()))
+            .collect::<Vec<_>>();
         }
 
         info!(
             "{:<95}{}",
-            "Number of graphs retained after removal of vetoed topologies:",
-            format!("{}", graphs.len()).green()
-        );
-        #[allow(clippy::type_complexity)]
-        let mut node_colors: HashMap<
-            Vec<(Option<bool>, SmartString<LazyCompact>)>,
-            Vec<SmartString<LazyCompact>>,
-        > = HashMap::default();
-        for (v_legs, v_colors) in vertex_signatures.iter() {
-            let mut sorted_ps = v_legs.clone();
-            sorted_ps.sort();
-            node_colors.insert(sorted_ps, v_colors.clone());
-        }
-
-        let mut processed_graphs = vec![];
-        for (g, symmetry_factor) in graphs.iter() {
-            for (colored_g, multiplicity) in FeynGen::assign_node_colors(model, g, &node_colors)? {
-                processed_graphs.push((
-                    colored_g.canonize().graph,
-                    (Atom::new_num(multiplicity as i64) * symmetry_factor).to_canonical_string(),
-                ));
-            }
-        }
-        processed_graphs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
-        info!(
-            "{:<95}{}",
-            "Number of graphs after node-color dressing:",
-            format!("{}", processed_graphs.len()).green()
-        );
-
-        filters.apply_filters(&mut processed_graphs)?;
-
-        // This secondary cutkosky cut filter is only necessary if some amplitude coupling order constraints where requested
-        // because that one cannot be done until the nodes have been colored with the proper choice of vertex rule
-        // Also the amplitude loop count restriction would not have been correctly handled when using the short-circuit.
-        if self.options.generation_type == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
-            && (self
-                .options
-                .amplitude_filters
-                .get_coupling_orders()
-                .is_some()
-                || self
-                    .options
-                    .amplitude_filters
-                    .get_loop_count_range()
-                    .is_some())
-        {
-            info!(
-                "{:<95}{}",
-                "Number of graphs before except secondary exact Cutkosky cut filter is applied:",
-                format!("{}", processed_graphs.len()).green()
-            );
-            processed_graphs
-                .retain(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type));
-        }
-        info!(
-            "{:<95}{}",
-            "Number of graphs after all filters are applied:",
+            "Number of graphs after symmetrization of external states:",
             format!("{}", processed_graphs.len()).green()
         );
 

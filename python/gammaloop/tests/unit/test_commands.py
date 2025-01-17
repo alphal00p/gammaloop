@@ -155,9 +155,9 @@ class TestProcessGeneration:
             ('a > d d~ [{{2}}] --symmetrize_left_right_states', 9),
             # Only 1-flavour pure QCD corrections
             ('a > d d~ | d g ghG a QED^2=2 [{{1}}] --symmetrize_left_right_states', 1),
-            ('a > d d~ | d g ghG a QED^2=2 [{{2}} QCD=2] --symmetrize_left_right_states', 2),
-            ('a > d d~ | d g ghG a QED^2=2 [{{3}} QCD=4] --symmetrize_left_right_states', 19),
-            ('a > d d~ | d g ghG a QED^2=2 [{{4}} QCD=6] --symmetrize_left_right_states', 258),
+            ('a > d d~ | d g ghG a QED^2=2 [{{2}} QCD=1] --symmetrize_left_right_states', 2),
+            ('a > d d~ | d g ghG a QED^2=2 [{{3}} QCD=2] --symmetrize_left_right_states', 19),
+            ('a > d d~ | d g ghG a QED^2=2 [{{4}} QCD=3] --symmetrize_left_right_states', 258),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
@@ -230,6 +230,20 @@ class TestProcessGeneration:
             ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 314),
             ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 12),
             ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{3}} QCD=2] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 100),
+            # Too slow sadly
+            # ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{4}} QCD=4] --symmetrize_left_right_states -num_grouping only_detect_zeroes', ?),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    def test_generate_a_qqh(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        tests = [
+            ('a > d d~ | d a ghg g QED^2=2 [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 2),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 2),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 16),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 314),
             # Too slow sadly
             # ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{4}} QCD=4] --symmetrize_left_right_states -num_grouping only_detect_zeroes', ?),
         ]
