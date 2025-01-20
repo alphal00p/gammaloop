@@ -1490,17 +1490,17 @@ impl FeynGen {
         // Also the amplitude loop count restriction would not have been correctly handled when using the short-circuit.
         if self.options.generation_type == GenerationType::CrossSection
             && !self.options.final_pdgs.is_empty()
-            && (self
-                .options
-                .amplitude_filters
-                .get_coupling_orders()
-                .is_some()
-                || self
-                    .options
-                    .amplitude_filters
-                    .get_loop_count_range()
-                    .is_some()
-                || !applied_fast_cutksosky_cut_filter)
+        // && (self
+        //     .options
+        //     .amplitude_filters
+        //     .get_coupling_orders()
+        //     .is_some()
+        //     || self
+        //         .options
+        //         .amplitude_filters
+        //         .get_loop_count_range()
+        //         .is_some()
+        //     || !applied_fast_cutksosky_cut_filter)
         {
             let bar = ProgressBar::new(processed_graphs.len() as u64);
             bar.set_style(progress_bar_style.clone());

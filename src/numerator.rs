@@ -18,6 +18,7 @@ use crate::{
     utils::{FloatLike, F},
 };
 use crate::{ExportSettings, Settings};
+use ahash::AHashSet;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
@@ -43,7 +44,10 @@ use spenso::parametric::{
 };
 use spenso::shadowing::ETS;
 use spenso::structure::concrete_index::ExpandedIndex;
-use spenso::structure::representation::{BaseRepName, ColorAdjoint, ColorFundamental, Minkowski};
+
+use spenso::structure::representation::{
+    BaseRepName, ColorAdjoint, ColorFundamental, ExtendibleReps, Representation,
+};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
 use spenso::symbolica_utils::SerializableSymbol;
@@ -893,7 +897,7 @@ impl Numerator<Global> {
                 .next()
                 .unwrap();
 
-            ColorSimplified::color_symplify_impl(pat[&GS.x_].to_atom().into())
+            ColorSimplified::color_symplify_impl(pat[&GS.x_].clone().into())
                 .0
                 .factor()
         };
@@ -1082,6 +1086,47 @@ impl AppliedFeynmanRule {
 }
 
 impl Numerator<AppliedFeynmanRule> {
+    pub fn cannonize(&self) -> Result<Self, String> {
+        let pats: Vec<_> = ExtendibleReps::BUILTIN_SELFDUAL_NAMES
+            .iter()
+            .map(|s| Symbol::new(s))
+            .chain(
+                ExtendibleReps::BUILTIN_DUALIZABLE_NAMES
+                    .iter()
+                    .map(|s| Symbol::new(s)),
+            )
+            .collect();
+
+        let mut indices_map = AHashSet::new();
+
+        self.state.colorless.iter_flat().for_each(|(k, v)| {
+            for p in &pats {
+                for a in
+                    v.0.pattern_match(&fun!(*p, GS.x__).to_pattern(), None, None)
+                {
+                    indices_map.insert(fun!(*p, a.values().next().unwrap()));
+                }
+            }
+        });
+
+        let indices = indices_map.iter().map(|a| a.as_view()).collect::<Vec<_>>();
+
+        let color = self.state.color.clone(); //map_data_ref_result(|a| a.0.canonize_tensors(&indices, None).map(|a| a.into()))?;
+
+        let colorless = self
+            .state
+            .colorless
+            .map_data_ref_result(|a| a.0.canonize_tensors(&indices, None).map(|a| a.into()))?;
+
+        Ok(Self {
+            state: SymbolicExpression {
+                colorless,
+                color,
+                state: Local::default(),
+            },
+        })
+    }
+
     pub fn write(
         &self,
         extra_info: &ExtraInfo,
@@ -1931,6 +1976,91 @@ impl GammaSimplified {
         // let mink = Minkowski::rep(4);
         fn mink(wildcard: Symbol) -> Atom {
             Minkowski::rep(4).pattern(Atom::new_var(wildcard))
+        }
+        expr.0 = expr.0.expand();
+        let pats = [
+            Replacement::new(
+                Pattern::parse("id(a_,b_)*t_(d___,b_,c___)").unwrap(),
+                Pattern::parse("t_(d___,a_,c___)").unwrap(),
+            ),
+            Replacement::new(
+                Pattern::parse("Metric(mink(a_),mink(b_))*t_(d___,mink(b_),c___)").unwrap(),
+                Pattern::parse("t_(d___,mink(a_),c___)").unwrap(),
+            ),
+        ];
+
+        expr = expr.replace_all_multiple_repeat(&pats);
+        let pats = vec![
+            (
+                Pattern::parse("ProjP(a_,b_)").unwrap(),
+                Pattern::parse("1/2*id(a_,b_)-1/2*gamma5(a_,b_)").unwrap(),
+            ),
+            (
+                Pattern::parse("ProjM(a_,b_)").unwrap(),
+                Pattern::parse("1/2*id(a_,b_)+1/2*gamma5(a_,b_)").unwrap(),
+            ),
+            (
+                Pattern::parse("id(a_,b_)*f_(d___,b_,e___)").unwrap(),
+                Pattern::parse("f_(c___,a_,e___)").unwrap(),
+            ),
+            // (
+            //     Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap(),
+            //     Pattern::parse("f_(c___,aind(d___,b_,e___))")
+            //         .unwrap()
+            //         ,
+            // ),
+            (
+                Pattern::parse("γ(a_,b_,c_)*γ(d_,c_,e_)").unwrap(),
+                Pattern::parse("gamma_chain(a_,d_,b_,e_)").unwrap(),
+            ),
+            (
+                Pattern::parse("gamma_chain(a__,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
+                Pattern::parse("gamma_chain(a__,d__,b_,e_)").unwrap(),
+            ),
+            (
+                Pattern::parse("γ(a_,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
+                Pattern::parse("gamma_chain(a_,d__,b_,e_)").unwrap(),
+            ),
+            (
+                Pattern::parse("gamma_chain(a__,b_,c_)*γ(d_,c_,e_)").unwrap(),
+                Pattern::parse("gamma_chain(a__,d_,b_,e_)").unwrap(),
+            ),
+            (
+                Pattern::parse("gamma_chain(a__,b_,b_)").unwrap(),
+                Pattern::parse("gamma_trace(a__)").unwrap(),
+            ),
+        ];
+        let reps: Vec<Replacement> = pats
+            .into_iter()
+            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
+            .collect();
+        expr.0 = expr.0.expand();
+        expr.replace_all_multiple_repeat_mut(&reps);
+        expr.0 = expr.0.expand();
+        expr.replace_all_multiple_repeat_mut(&reps);
+
+        let pat = Pattern::parse("gamma_trace(a__)").unwrap();
+
+        let mut it = expr.0.pattern_match(&pat, None, None);
+
+        let mut max_nargs = 0;
+
+        while let Some(p) = it.next_detailed() {
+            for (_, v) in p.match_stack {
+                match v {
+                    Match::Single(_) => {
+                        if max_nargs < 1 {
+                            max_nargs = 1;
+                        }
+                    }
+                    Match::Multiple(_, v) => {
+                        if max_nargs < v.len() {
+                            max_nargs = v.len();
+                        }
+                    }
+                    _ => panic!("should be a single match"),
+                }
+            }
         }
 
         expr.0 = expr.0.expand();
