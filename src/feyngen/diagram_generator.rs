@@ -162,6 +162,7 @@ impl std::fmt::Display for NodeColorWithVertexRule {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct FeynGen {
     pub options: FeynGenOptions,
 }
@@ -658,7 +659,7 @@ impl FeynGen {
         false
     }
 
-    fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<Arc<Particle>>) {
+    pub(super) fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<Arc<Particle>>) {
         if let Some(p) = self.options.cross_section_filters.get_perturbative_orders() {
             let mut unresolved = AHashSet::new();
             for k in p.keys() {
@@ -683,31 +684,6 @@ impl FeynGen {
     where
         NodeColor: NodeColorFunctions + Clone,
     {
-        // println!(
-        //     "Graph:\nEdges:\n{:?}\nNodes:\n{:?}",
-        //     graph
-        //         .edges()
-        //         .iter()
-        //         .enumerate()
-        //         .map(|(i_e, e)| format!("{}|{}", i_e, e.data))
-        //         .collect::<Vec<_>>(),
-        //     graph
-        //         .nodes()
-        //         .iter()
-        //         .enumerate()
-        //         .map(|(i_n, n)| format!(
-        //             "{}|{}|{}|edges:{:?}",
-        //             i_n,
-        //             n.data.get_external_tag(),
-        //             n.data
-        //                 .get_vertex_rule()
-        //                 .map(|vr| vr.name.clone())
-        //                 .unwrap_or("None".into()),
-        //             n.edges
-        //         ))
-        //         .collect::<Vec<_>>()
-        // );
-
         #[allow(clippy::too_many_arguments)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
@@ -811,6 +787,7 @@ impl FeynGen {
         }
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
             let cuts = he_graph.all_cuts(s, t);
+            println!("looking at {} cuts", cuts.len());
 
             let pass_cut_filter = cuts.iter().any(|c| {
                 is_valid_cut(
@@ -825,6 +802,7 @@ impl FeynGen {
                     &he_graph,
                 )
             });
+
             pass_cut_filter
         } else {
             true //TODO still check the amplitude level filters in the case where there is no initial-state specified
@@ -1321,6 +1299,7 @@ impl FeynGen {
             "generation_vertex_signatures = {:?}",
             vertex_signatures_for_generation
         );
+        debug!("feygen options: {:?}", self);
         info!("Starting Feynman graph generation with Symbolica...");
         let mut graphs = SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),

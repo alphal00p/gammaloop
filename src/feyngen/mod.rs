@@ -405,3 +405,6 @@ impl fmt::Display for FeynGenOptions {
         )
     }
 }
+
+#[cfg(test)]
+pub mod test;

@@ -194,6 +194,7 @@
           texlive.combined.scheme-medium
           poetry
           ghostscript
+          graphviz
           mupdf
           poppler_utils
           rust-analyzer

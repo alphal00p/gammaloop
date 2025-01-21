@@ -2746,7 +2746,9 @@ impl<E, V> HedgeGraph<E, V> {
                 .set(self.involution.inv(h).0, true);
         }
 
-        let complement = new_node.complement(self).hairs;
+        let hairy = new_node.internal_graph.filter.union(&new_node.hairs);
+
+        let complement = hairy.complement(self);
 
         let count = self.count_connected_components(&complement);
 
