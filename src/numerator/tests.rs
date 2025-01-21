@@ -3,8 +3,15 @@ use spenso::{
     complex::Complex,
     data::{DenseTensor, StorageTensor},
     iterators::IteratableTensor,
-    parametric::{atomcore::TensorAtomMaps, ParamTensor},
-    structure::HasStructure,
+    parametric::{
+        atomcore::{PatternReplacement, TensorAtomMaps},
+        ParamTensor,
+    },
+    structure::{
+        representation::{BaseRepName, Bispinor, Minkowski},
+        slot::IsAbstractSlot,
+        HasStructure,
+    },
     upgrading_arithmetic::FallibleSub,
 };
 use std::{
@@ -12,7 +19,15 @@ use std::{
     io::BufWriter,
     path::{Path, PathBuf},
 };
-use symbolica::{atom::Atom, domains::rational::Rational};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    domains::{
+        finite_field::{FiniteField, FiniteFieldCore, Mersenne64, PrimeIteratorU64, Zp64},
+        rational::Rational,
+        Field,
+    },
+    fun, symb,
+};
 
 use crate::{
     cross_section::Amplitude,
@@ -20,15 +35,15 @@ use crate::{
     graph::{BareGraph, Graph},
     model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
-    numerator::{ContractionSettings, ExtraInfo, GlobalPrefactor},
+    numerator::{ufo::UFO, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
     tests_from_pytest::{load_amplitude_output, sample_generator, test_export_settings},
-    utils::{ApproxEq, F},
+    utils::{ApproxEq, F, GS},
     Externals, RotationSetting, Settings,
 };
 
 use super::{
-    Evaluate, EvaluatorOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluatorOptions,
-    UnInit,
+    Evaluate, EvaluatorOptions, GammaSimplified, Numerator, NumeratorCompileOptions,
+    NumeratorEvaluatorOptions, UnInit,
 };
 
 #[ignore]
@@ -748,4 +763,113 @@ fn prefactor() {
         "{}",
         serde_yaml::to_string(&test_export_settings.numerator_settings).unwrap()
     );
+}
+
+#[test]
+fn one_loop_lbl_concretize() {
+    let (_model, amplitude, _path) = load_amplitude_output(
+        &("TEST_AMPLITUDE_".to_string() + "physical_1L_6photons" + "/GL_OUTPUT"),
+        true,
+    );
+
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    let mut feyn = Numerator::default()
+        .from_graph(&graph.bare_graph, &GlobalPrefactor::default())
+        .color_simplify();
+
+    assert!(feyn.validate_against_branches(123));
+
+    let mut feyn = feyn.parse();
+
+    let reps = feyn.random_concretize_reps(111);
+
+    println!(
+        "{}",
+        feyn.apply_reps(&reps)
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .state
+            .tensor
+            .scalar()
+            .unwrap()
+            .expand()
+    );
+}
+
+#[test]
+fn gamma_simplify_one() {
+    fn gamma(mu: usize, i: usize, j: usize) -> Atom {
+        let mink = Minkowski::rep(4);
+        let bis = Bispinor::rep(4);
+
+        fun!(
+            UFO.gamma,
+            mink.new_slot(mu).to_atom(),
+            bis.new_slot(i).to_atom(),
+            bis.new_slot(j).to_atom()
+        )
+    }
+
+    fn metric(mu: usize, nu: usize) -> Atom {
+        let mink = Minkowski::rep(4);
+
+        fun!(
+            UFO.metric,
+            mink.new_slot(mu).to_atom(),
+            mink.new_slot(nu).to_atom()
+        )
+    }
+
+    fn test_and_assert(atom: Atom) {
+        // let g_t = Network::parse_impl(atom.as_view())
+        //     .contract::<Rational>(ContractionSettings::Normal)
+        //     .unwrap()
+        //     .tensor;
+        let g_simp = GammaSimplified::gamma_symplify_impl(atom.into()).0;
+
+        // let g_simp_t = Network::parse_impl(g_simp.as_view())
+        //     .contract::<Rational>(ContractionSettings::Normal)
+        //     .unwrap()
+        //     .tensor;
+
+        // assert_eq!(g_simp_t, g_t);
+
+        insta::assert_snapshot!(g_simp.to_canonical_string());
+    }
+    let g = metric(2, 4)
+        * metric(20, 40)
+        * gamma(4, 1, 2)
+        * gamma(40, 2, 3)
+        * gamma(3, 3, 4)
+        * gamma(30, 4, 5)
+        * gamma(2, 5, 6)
+        * gamma(20, 6, 7)
+        * gamma(1, 7, 8)
+        * gamma(5, 8, 1);
+
+    test_and_assert(g);
+
+    let g = gamma(1, 1, 2) * gamma(2, 2, 3) * gamma(3, 3, 4) * gamma(1, 4, 5);
+
+    test_and_assert(g);
+
+    let g = gamma(1, 1, 1);
+
+    assert!(GammaSimplified::gamma_symplify_impl(g.into()).0.is_zero());
+
+    let g = gamma(1, 1, 2) * gamma(2, 2, 1);
+
+    test_and_assert(g);
+
+    let g = gamma(1, 1, 2)
+        * gamma(2, 2, 3)
+        * gamma(10, 3, 4)
+        * gamma(20, 4, 1)
+        * gamma(1, 10, 20)
+        * gamma(2, 20, 30)
+        * gamma(30, 30, 40)
+        * gamma(40, 40, 10);
+
+    test_and_assert(g);
 }

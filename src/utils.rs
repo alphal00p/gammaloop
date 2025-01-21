@@ -3237,13 +3237,14 @@ pub struct GammaloopSymbols {
     pub f___: Symbol,
     pub g___: Symbol,
     pub h___: Symbol,
-
+    pub dim: Symbol,
     pub coeff: Symbol,
 }
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ubar: symb!("ubar"),
     vbar: symb!("vbar"),
+    dim: symb!("dim"),
     v: symb!("v"),
     u: symb!("u"),
     epsilon: symb!("ϵ"),

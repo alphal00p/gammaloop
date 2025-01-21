@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::fs;
 use std::path::PathBuf;
@@ -42,10 +43,11 @@ use spenso::parametric::{
 };
 use spenso::shadowing::ETS;
 use spenso::structure::concrete_index::ExpandedIndex;
-use spenso::structure::representation::{BaseRepName, ColorAdjoint, ColorFundamental};
+use spenso::structure::representation::{BaseRepName, ColorAdjoint, ColorFundamental, Minkowski};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
 use spenso::symbolica_utils::SerializableSymbol;
+use spenso::upgrading_arithmetic::FallibleSub;
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
@@ -56,6 +58,7 @@ use spenso::{
         NamedStructure, TensorStructure,
     },
 };
+use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
 use symbolica::printer::{AtomPrinter, PrintOptions};
@@ -64,7 +67,7 @@ use symbolica::state::Workspace;
 use crate::numerator::ufo::UFO;
 use symbolica::atom::{AtomCore, AtomView, Symbol};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
-use symbolica::id::{Match, MatchSettings};
+use symbolica::id::{Context, Match, MatchSettings, PatternOrMap};
 
 use symbolica::{
     atom::{Atom, FunctionBuilder},
@@ -1345,6 +1348,39 @@ impl ColorSimplified {
 pub type Gloopoly =
     symbolica::poly::polynomial::MultivariatePolynomial<symbolica::domains::atom::AtomField, u8>;
 impl Numerator<ColorSimplified> {
+    pub fn validate_against_branches(&self, seed: usize) -> bool {
+        let gamma = self.clone().gamma_simplify().parse();
+        let mut nogamma = self.clone().parse();
+        let reps = nogamma.random_concretize_reps(seed);
+
+        let gammat = gamma
+            .apply_reps(&reps)
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .state
+            .tensor;
+
+        let nogammat = nogamma
+            .apply_reps(&reps)
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .state
+            .tensor;
+
+        // println!("{gammat}\n{nogammat}");
+
+        gammat
+            .tensor
+            .sub_fallible(&nogammat.tensor)
+            .unwrap()
+            .iter_flat()
+            .all(|(_, a)| {
+                let a = a.expand();
+                // println!("{a}");
+                a.is_zero()
+            })
+    }
+
     pub fn write(
         &self,
         extra_info: &ExtraInfo,
@@ -1892,218 +1928,223 @@ impl PolyContracted {
 
 impl GammaSimplified {
     pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> SerializableAtom {
-        expr.0 = expr.0.expand();
-        let pats = [
-            Replacement::new(
-                Pattern::parse("id(a_,b_)*t_(d___,b_,c___)").unwrap(),
-                Pattern::parse("t_(d___,a_,c___)").unwrap(),
-            ),
-            Replacement::new(
-                Pattern::parse("Metric(mink(a_),mink(b_))*t_(d___,mink(b_),c___)").unwrap(),
-                Pattern::parse("t_(d___,mink(a_),c___)").unwrap(),
-            ),
-        ];
-
-        expr = expr.replace_all_multiple_repeat(&pats);
-        let pats = vec![
-            (
-                Pattern::parse("ProjP(a_,b_)").unwrap(),
-                Pattern::parse("1/2*id(a_,b_)-1/2*gamma5(a_,b_)").unwrap(),
-            ),
-            (
-                Pattern::parse("ProjM(a_,b_)").unwrap(),
-                Pattern::parse("1/2*id(a_,b_)+1/2*gamma5(a_,b_)").unwrap(),
-            ),
-            (
-                Pattern::parse("id(a_,b_)*f_(d___,b_,e___)").unwrap(),
-                Pattern::parse("f_(c___,a_,e___)").unwrap(),
-            ),
-            // (
-            //     Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap(),
-            //     Pattern::parse("f_(c___,aind(d___,b_,e___))")
-            //         .unwrap()
-            //         ,
-            // ),
-            (
-                Pattern::parse("γ(a_,b_,c_)*γ(d_,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a_,d_,b_,e_)").unwrap(),
-            ),
-            (
-                Pattern::parse("gamma_chain(a__,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a__,d__,b_,e_)").unwrap(),
-            ),
-            (
-                Pattern::parse("γ(a_,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a_,d__,b_,e_)").unwrap(),
-            ),
-            (
-                Pattern::parse("gamma_chain(a__,b_,c_)*γ(d_,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a__,d_,b_,e_)").unwrap(),
-            ),
-            (
-                Pattern::parse("gamma_chain(a__,b_,b_)").unwrap(),
-                Pattern::parse("gamma_trace(a__)").unwrap(),
-            ),
-        ];
-        let reps: Vec<Replacement> = pats
-            .into_iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect();
-        expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
-        expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
-
-        let pat = Pattern::parse("gamma_trace(a__)").unwrap();
-
-        let it = expr.0.pattern_match(&pat, None, None);
-
-        let mut max_nargs = 0;
-        for i in it {
-            for (_, v) in i {
-                match v {
-                    Match::Single(_) => {
-                        if max_nargs < 1 {
-                            max_nargs = 1;
-                        }
-                    }
-                    Match::Multiple(_, v) => {
-                        if max_nargs < v.len() {
-                            max_nargs = v.len();
-                        }
-                    }
-                    _ => panic!("should be a single match"),
-                }
-                // println!();
-            }
+        // let mink = Minkowski::rep(4);
+        fn mink(wildcard: Symbol) -> Atom {
+            Minkowski::rep(4).pattern(Atom::new_var(wildcard))
         }
 
-        let mut reps = vec![];
-        for n in 1..=max_nargs {
-            if n % 2 == 0 {
-                let mut sum = Atom::new_num(0);
+        expr.0 = expr.0.expand();
+        // let pats: Vec<_> = [
+        //     (
+        //         fun!(ETS.id, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
+        //         fun!(GS.f_, GS.d___, GS.a_, GS.c___),
+        //     ),
+        //     (
+        //         fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
+        //             * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+        //         fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+        //     ),
+        // ]
+        // .iter()
+        // .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        // .collect();
 
-                // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
-                for j in 1..n {
-                    let mut gamma_chain_builder_slots =
-                        FunctionBuilder::new(Symbol::new("gamma_trace"));
+        // expr = expr.replace_all_multiple_repeat(&pats);
 
-                    let metric_builder_slots = FunctionBuilder::new(Symbol::new("Metric"));
+        let gamma_chain = symb!("gamma_chain");
+        let gamma_trace = symb!("gamma_trace");
+        let reps: Vec<_> = [
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
+                fun!(GS.f_, GS.d___, GS.a_, GS.c___),
+            ),
+            (
+                fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
+                    * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+                fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+            ),
+            (
+                fun!(UFO.projp, GS.a_, GS.b_),
+                (fun!(ETS.id, GS.a_, GS.b_) - fun!(UFO.gamma5, GS.a_, GS.b_)) / 2,
+            ),
+            (
+                fun!(UFO.projm, GS.a_, GS.b_),
+                (fun!(ETS.id, GS.a_, GS.b_) + fun!(UFO.gamma5, GS.a_, GS.b_)) / 2,
+            ),
+            (
+                fun!(UFO.gamma, GS.a_, GS.b_, GS.c_) * fun!(UFO.gamma, GS.d_, GS.c_, GS.e_),
+                fun!(gamma_chain, GS.a_, GS.d_, GS.b_, GS.e_),
+            ),
+            (fun!(UFO.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
+            (
+                fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(gamma_chain, GS.b__, GS.b_, GS.c_),
+                fun!(gamma_chain, GS.a__, GS.b__, GS.a_, GS.c_),
+            ),
+            (
+                fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(UFO.gamma, GS.y_, GS.b_, GS.c_),
+                fun!(gamma_chain, GS.a__, GS.y_, GS.a_, GS.c_),
+            ),
+            (
+                fun!(UFO.gamma, GS.a_, GS.a_, GS.b_) * fun!(gamma_chain, GS.y__, GS.b_, GS.c_),
+                fun!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_),
+            ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
 
-                    for k in 1..j {
-                        let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                        gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
+        expr.0 = expr.0.expand();
+        expr.replace_all_multiple_repeat_mut(&reps);
+        expr.0 = expr.0.expand();
+        expr.replace_all_multiple_repeat_mut(&reps);
+
+        let pat = fun!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
+        // let patodd = (-2 * fun!(gamma_chain, GS.a___, GS.b_)).to_pattern();
+        // let pateven = (2 * (fun!(gamma_chain, GS.b_, GS.a___))).to_pattern();
+
+        // let rhs = PatternOrMap::Map(Box::new(move |m| m.));
+        //
+        fn gamma_chain_perm(arg: AtomView, context: &Context, out: &mut Atom) -> bool {
+            let gamma_chain = symb!("gamma_chain");
+            let mut found = false;
+            if let AtomView::Fun(f) = arg {
+                if f.get_symbol() == gamma_chain {
+                    found = true;
+                    let args = f.iter().collect::<Vec<_>>();
+                    let len = args.len();
+                    if len <= 3 {
+                        return false;
                     }
 
-                    for k in (j + 1)..n {
-                        let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                        gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                    }
+                    if args[len - 3] == args[0] {
+                        if len == 4 {
+                            *out = fun!(ETS.id, args[len - 2], args[len - 1]) * 4;
+                            return true;
+                        } else if len % 2 == 0 {
+                            let mut gcn = FunctionBuilder::new(gamma_chain);
+                            let mut gcnp = FunctionBuilder::new(gamma_chain);
+                            gcn = gcn.add_arg(args[len - 4]);
+                            gcn = gcn.add_args(&args[1..(len - 4)]);
+                            for a in &args[1..(len - 4)] {
+                                gcnp = gcnp.add_arg(*a);
+                            }
+                            gcnp = gcnp.add_arg(args[len - 4]);
+                            gcnp = gcnp.add_args(&args[(len - 2)..len]);
+                            gcn = gcn.add_args(&args[(len - 2)..len]);
+                            *out = (gcn.finish() + gcnp.finish()) * 2;
+                        } else {
+                            let mut gcn = FunctionBuilder::new(gamma_chain);
+                            gcn = gcn.add_args(&args[1..(len - 4)]);
+                            gcn = gcn.add_args(&args[(len - 2)..len]);
+                            *out = gcn.finish() * -2;
+                        }
 
-                    let metric = metric_builder_slots
-                        .add_args(&[
-                            &Atom::parse(&format!("a{}_", 0)).unwrap(),
-                            &Atom::parse(&format!("a{}_", j)).unwrap(),
-                        ])
-                        .finish();
-
-                    let gamma = gamma_chain_builder_slots.finish() * &metric;
-
-                    if j % 2 == 0 {
-                        sum = &sum - &gamma;
+                        // println!("{}->{}", arg, out);
                     } else {
-                        sum = &sum + &gamma;
+                        return false;
                     }
                 }
+            }
+            found
+        }
 
-                let mut gamma_chain_builder_slots =
-                    FunctionBuilder::new(Symbol::new("gamma_trace"));
-                for k in 0..n {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-                let a = gamma_chain_builder_slots.finish();
-
-                reps.push((a.to_pattern(), sum.to_pattern()));
+        loop {
+            let new = expr.0.replace_map(&gamma_chain_perm);
+            if new == expr.0 {
+                break;
             } else {
-                let mut gamma_chain_builder_slots =
-                    FunctionBuilder::new(Symbol::new("gamma_trace"));
-                for k in 0..n {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-                let a = gamma_chain_builder_slots.finish();
-                // println!("{}", a);
-                reps.push((a.to_pattern(), Atom::new_num(0).to_pattern()));
+                expr.0 = new;
             }
         }
 
-        reps.push((
-            Pattern::parse("gamma_trace()").unwrap(),
-            Pattern::parse("4").unwrap(),
-        ));
+        expr.replace_all_repeat_mut(
+            &(fun!(gamma_chain, GS.a__, GS.x_, GS.x_).to_pattern()),
+            fun!(gamma_trace, GS.a__).to_pattern(),
+            None,
+            None,
+        );
 
-        // Dd
-        reps.push((
-            Pattern::parse("f_(i_,a_)*Metric(a_,b_)").unwrap(),
-            Pattern::parse("f_(i_,b_)").unwrap(),
-        ));
-        // Du
-        // reps.push((
-        //     Pattern::parse("f_(i_,a_)*Metric(a_,b_)").unwrap(),
-        //     Pattern::parse("f_(i_,b_)").unwrap().into(),
-        // ));
-        reps.push((
-            Pattern::parse("f_(i_,a_)*id(a_,b_)").unwrap(),
-            Pattern::parse("f_(i_,b_)").unwrap(),
-        ));
-        // Uu
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(a__),mink(b__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // // Ud
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(a__),mink(b__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*id(mink(a__),mink(b__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // // dD
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // // uD
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*id(mink(b__),mink(a__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // // uU
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // dU
-        // reps.push((
-        // Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
-        // Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // reps.push((
-        // Pattern::parse("f_(i_,mink(a__)))*id(mink(b__),mink(a__)))").unwrap(),
-        // Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
+        // //Chisholm identity:
+        // expr.replace_all_repeat_mut(
+        //     &(fun!(UFO.gamma, GS.a_, GS.x_, GS.y_) * fun!(gamma_trace, GS.a_, GS.a__)).to_pattern(),
+        //     (fun!(gamma_chain, GS.a__)).to_pattern(),
+        //     None,
+        //     None,
+        // );
+        //
+        fn gamma_tracer(arg: AtomView, context: &Context, out: &mut Atom) -> bool {
+            let gamma_trace = symb!("gamma_trace");
 
-        let reps = reps
-            .into_iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect_vec();
+            let mut found = false;
+            if let AtomView::Fun(f) = arg {
+                if f.get_symbol() == gamma_trace {
+                    found = true;
+                    let mut sum = Atom::Zero;
+
+                    if f.get_nargs() == 1 {
+                        *out = Atom::Zero;
+                    }
+                    let args = f.iter().collect::<Vec<_>>();
+
+                    for i in 1..args.len() {
+                        let sign = if i % 2 == 0 { -1 } else { 1 };
+
+                        let mut gcn = FunctionBuilder::new(gamma_trace);
+                        for j in 1..args.len() {
+                            if i != j {
+                                gcn = gcn.add_arg(args[j]);
+                            }
+                        }
+
+                        let metric = if args[0] == args[i] {
+                            Atom::new_num(4)
+                            // Atom::new_var(GS.dim)
+                        } else {
+                            fun!(ETS.metric, args[0], args[i])
+                        };
+                        if args.len() == 2 {
+                            sum = sum + metric * sign * 4;
+                        } else {
+                            sum = sum + metric * gcn.finish() * sign;
+                        }
+                    }
+                    *out = sum;
+
+                    // println!("{}->{}", arg, out);
+                }
+            }
+
+            found
+        }
+
+        loop {
+            let new = expr.0.replace_map(&gamma_tracer);
+            if new == expr.0 {
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+
+        let reps: Vec<_> = [
+            (
+                fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
+                    * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+                fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+            ),
+            (
+                fun!(ETS.metric, mink(GS.a_), mink(GS.b_)).pow(Atom::new_num(2)),
+                Atom::new_num(4),
+            ),
+            (
+                fun!(UFO.gamma, GS.a__).pow(Atom::new_num(2)),
+                Atom::new_num(16),
+            ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+
         expr.replace_all_multiple_repeat_mut(&reps);
         expr.0 = expr.0.expand();
         expr.replace_all_multiple_repeat_mut(&reps);
@@ -2281,6 +2322,58 @@ impl TypedNumeratorState for Network {
 }
 
 impl Numerator<Network> {
+    pub fn apply_reps(&self, reps: &[Replacement]) -> Self {
+        let net = TensorNetwork {
+            graph: self
+                .state
+                .net
+                .graph
+                .map_nodes_ref(|(_, d)| d.map_data_ref_self(|a| a.replace_all_multiple(reps))),
+            scalar: self.state.net.scalar.clone(),
+        };
+
+        Self {
+            state: Network { net },
+        }
+    }
+    pub fn random_concretize_reps(&mut self, seed: usize) -> Vec<Replacement> {
+        let mut prime = PrimeIteratorU64::new(1)
+            .skip(seed)
+            .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
+
+        let mut reps = vec![];
+
+        let pat = fun!(
+            GS.f_,
+            Atom::new_var(GS.y___),
+            fun!(symb!("cind"), Atom::new_var(GS.x_))
+        )
+        .to_pattern();
+
+        for (n, d) in self.state.net.graph.nodes.iter() {
+            for (_, a) in d.tensor.iter_flat() {
+                for m in a.pattern_match(&pat, None, None) {
+                    if let Atom::Var(f) = m[&GS.f_].to_atom() {
+                        let mat = fun!(
+                            f.get_symbol(),
+                            m[&GS.y___].to_atom(),
+                            fun!(symb!("cind"), m[&GS.x_].to_atom())
+                        );
+                        // println!("{mat}");
+
+                        reps.push(Replacement::new(
+                            mat.to_pattern(),
+                            prime.next().unwrap().to_pattern(),
+                        ));
+                    } else {
+                        println!("{}", m[&GS.f_].to_atom());
+                    }
+                }
+            }
+        }
+        reps
+    }
+
     pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
         debug!(
             "contracting network {}",
