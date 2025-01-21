@@ -52,6 +52,7 @@ fn cut_content() {
     });
 
     let mut graph = Graph::new();
+    #[allow(non_snake_case)]
     let bbH = NodeColorWithVertexRule {
         external_tag: 0,
         vertex_rule: model.get_vertex_rule(&"V_78".into()),

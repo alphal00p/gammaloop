@@ -1,5 +1,8 @@
+use indicatif::ParallelProgressIterator;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -787,7 +790,6 @@ impl FeynGen {
         }
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
             let cuts = he_graph.all_cuts(s, t);
-            println!("looking at {} cuts", cuts.len());
 
             let pass_cut_filter = cuts.iter().any(|c| {
                 is_valid_cut(
@@ -1504,11 +1506,11 @@ impl FeynGen {
             bar.set_style(progress_bar_style.clone());
             bar.set_message("Applying secondary exact Cutkosky cut filter...");
             bar.enable_steady_tick(Duration::from_millis(100));
-            processed_graphs.retain(|(g, _)| {
-                bar.inc(1);
-                self.contains_cut(model, g, n_unresolved, &unresolved_type)
-            });
-            bar.finish_and_clear();
+            processed_graphs = processed_graphs
+                .into_par_iter()
+                .filter(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type))
+                .progress_with(bar)
+                .collect();
 
             info!(
                 "{:<95}{}",
