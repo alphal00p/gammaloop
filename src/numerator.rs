@@ -18,7 +18,7 @@ use crate::{
     utils::{FloatLike, F},
 };
 use crate::{ExportSettings, Settings};
-use ahash::AHashSet;
+use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
@@ -1097,26 +1097,28 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
             )
             .collect();
 
-        let mut indices_map = AHashSet::new();
+        let mut indices_map = AHashMap::new();
 
         self.state.colorless.iter_flat().for_each(|(_, v)| {
             for p in &pats {
                 for a in
-                    v.0.pattern_match(&fun!(*p, GS.x__).to_pattern(), None, None)
+                    v.0.pattern_match(&fun!(*p, GS.x_, GS.y_).to_pattern(), None, None)
                 {
-                    indices_map.insert(fun!(*p, a.values().next().unwrap()));
+                    indices_map.insert(fun!(*p, a[&GS.x_], a[&GS.y_]), fun!(*p, a[&GS.x_]));
                 }
             }
         });
 
-        let indices = indices_map.iter().map(|a| a.as_view()).collect::<Vec<_>>();
+        let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
 
+        let indices = sorted.iter().map(|(a, _)| a.as_view()).collect::<Vec<_>>();
+        let groups = sorted.iter().map(|(_, b)| b.as_view()).collect::<Vec<_>>();
         let color = self.state.color.clone(); //map_data_ref_result(|a| a.0.canonize_tensors(&indices, None).map(|a| a.into()))?;
 
-        let colorless = self
-            .state
-            .colorless
-            .map_data_ref_result(|a| a.0.canonize_tensors(&indices, None).map(|a| a.into()))?;
+        let colorless = self.state.colorless.map_data_ref_result(|a| {
+            a.0.canonize_tensors(&indices, Some(&groups))
+                .map(|a| a.into())
+        })?;
 
         Ok(Self {
             state: SymbolicExpression {
