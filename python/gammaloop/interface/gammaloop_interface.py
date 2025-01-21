@@ -6,6 +6,7 @@ import importlib
 from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 import subprocess
 import os
+import time
 from typing import Any, Dict
 from pprint import pformat
 import yaml  # type: ignore
@@ -14,7 +15,7 @@ import copy
 import pydot
 from gammaloop import __version__
 from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GIT_REVISION, GammaLoopWarning
-from gammaloop.misc.utils import Colour, verbose_yaml_dump
+from gammaloop.misc.utils import Colour, verbose_yaml_dump, format_elapsed
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
 from gammaloop.base_objects.graph import Graph
@@ -873,11 +874,13 @@ class GammaLoop(object):
 
         logger.info("Generating diagrams for process: %s%s%s",
                     Colour.GREEN, self.process, Colour.END)
+        t_start = time.time()
         all_graphs: list[Graph] = self.process.generate_diagrams(
             self.rust_worker, self.model, args)
         if len(all_graphs) > 0:
-            logger.info("A total of %s%s%s graphs%s have been generated.",
-                        Colour.GREEN, Colour.BOLD, len(all_graphs), Colour.END)
+            logger.info("A total of %s%s%s graphs%s have been generated in %s%s%s.",
+                        Colour.GREEN, Colour.BOLD, len(all_graphs), Colour.END,
+                        Colour.GREEN, format_elapsed(time.time()-t_start), Colour.END)
         else:
             raise GammaLoopError(
                 f"No graphs were generated for process:\n{(self.process)}.")

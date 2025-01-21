@@ -1175,6 +1175,11 @@ impl FeynGen {
         vetoed_graphs: Option<Vec<String>>,
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
     ) -> Result<Vec<BareGraph>, FeynGenError> {
+        let progress_bar_style = ProgressStyle::with_template(
+            "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
+        )
+        .unwrap();
+
         debug!(
             "Generating Feynman diagrams for model {} and process:\n{}",
             model.name, self.options
@@ -1467,20 +1472,16 @@ impl FeynGen {
         let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
 
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
+        const MAX_FAST_CUTKOSKY_PARTICLES: usize = 6;
         let mut applied_fast_cutksosky_cut_filter = false;
         if self.options.generation_type == GenerationType::CrossSection
             && !self.options.final_pdgs.is_empty()
-        // && self.options.final_pdgs.len() + n_unresolved <= 6
+            && self.options.final_pdgs.len() + n_unresolved <= MAX_FAST_CUTKOSKY_PARTICLES
         {
             applied_fast_cutksosky_cut_filter = true;
 
             let bar = ProgressBar::new(processed_graphs.len() as u64);
-            bar.set_style(
-                ProgressStyle::with_template(
-                    "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-                )
-                .unwrap(),
-            );
+            bar.set_style(progress_bar_style.clone());
             bar.set_message("Applying fast Cutkosky cut filter...");
             bar.enable_steady_tick(Duration::from_millis(100));
             processed_graphs.retain(|(g, _symmetry_factor)| {
@@ -1520,12 +1521,7 @@ impl FeynGen {
                 || !applied_fast_cutksosky_cut_filter)
         {
             let bar = ProgressBar::new(processed_graphs.len() as u64);
-            bar.set_style(
-                ProgressStyle::with_template(
-                    "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-                )
-                .unwrap(),
-            );
+            bar.set_style(progress_bar_style.clone());
             bar.set_message("Applying secondary exact Cutkosky cut filter...");
             bar.enable_steady_tick(Duration::from_millis(100));
             processed_graphs.retain(|(g, _)| {
@@ -1610,7 +1606,12 @@ impl FeynGen {
             Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
         > = HashMap::default();
 
+        let bar = ProgressBar::new(processed_graphs.len() as u64);
+        bar.set_style(progress_bar_style.clone());
+        bar.set_message("Final numerator-aware processing of remaining graphs...");
+        bar.enable_steady_tick(Duration::from_millis(100));
         for (i_g, (g, symmetry_factor)) in processed_graphs.iter().enumerate() {
+            bar.inc(1);
             // println!(
             //     "Computing canonical representation for graph #{}:\nedges: {:?}\n nodes: {:?}",
             //     i_g,
@@ -1767,6 +1768,7 @@ impl FeynGen {
                 }
             }
         }
+        bar.finish_and_clear();
 
         let mut bare_graphs = pooled_bare_graphs
             .values()
@@ -1934,8 +1936,8 @@ impl ProcessedNumeratorForComparison {
                 // generate h > a a | h a b [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign
                 // should yield only one graph!
                 // TODO: FIX so that d.expand_num().collect_num() works!
-                // tensor = tensor.map_data(|d: Atom| d.expand())
-                tensor = tensor.expand()
+                tensor = tensor.expand_num().collect_num()
+                // tensor = tensor.expand()
 
                 // tensor = tensor.map_data(|d| d.expand_num().collect_num())
             }
