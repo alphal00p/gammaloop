@@ -25,7 +25,7 @@ use feyngen::{
 };
 use git_version::git_version;
 use itertools::{self, Itertools};
-use log::{debug, info, trace, warn};
+use log::{debug, info, warn};
 use spenso::complex::Complex;
 use std::{
     fs,

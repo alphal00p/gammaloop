@@ -46,7 +46,7 @@ use spenso::shadowing::ETS;
 use spenso::structure::concrete_index::ExpandedIndex;
 
 use spenso::structure::representation::{
-    BaseRepName, ColorAdjoint, ColorFundamental, ExtendibleReps, Representation,
+    BaseRepName, ColorAdjoint, ColorFundamental, ExtendibleReps,
 };
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
@@ -796,7 +796,7 @@ impl<E: ExpressionState> TryFrom<PythonState> for SymbolicExpression<E> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct Local {}
 pub type AppliedFeynmanRule = SymbolicExpression<Local>;
 
@@ -820,7 +820,7 @@ impl ExpressionState for Local {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct NonLocal {}
 pub type Global = SymbolicExpression<NonLocal>;
 
@@ -909,7 +909,7 @@ impl Numerator<Global> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct Color {}
 pub type ColorSimplified = SymbolicExpression<Color>;
 
@@ -957,7 +957,7 @@ impl ExpressionState for Color {
 //     }
 // }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct Gamma {}
 pub type GammaSimplified = SymbolicExpression<Gamma>;
 
@@ -1085,21 +1085,21 @@ impl AppliedFeynmanRule {
     }
 }
 
-impl Numerator<AppliedFeynmanRule> {
+impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
     pub fn cannonize(&self) -> Result<Self, String> {
         let pats: Vec<_> = ExtendibleReps::BUILTIN_SELFDUAL_NAMES
             .iter()
-            .map(|s| Symbol::new(s))
+            .map(Symbol::new)
             .chain(
                 ExtendibleReps::BUILTIN_DUALIZABLE_NAMES
                     .iter()
-                    .map(|s| Symbol::new(s)),
+                    .map(Symbol::new),
             )
             .collect();
 
         let mut indices_map = AHashSet::new();
 
-        self.state.colorless.iter_flat().for_each(|(k, v)| {
+        self.state.colorless.iter_flat().for_each(|(_, v)| {
             for p in &pats {
                 for a in
                     v.0.pattern_match(&fun!(*p, GS.x__).to_pattern(), None, None)
@@ -1122,11 +1122,13 @@ impl Numerator<AppliedFeynmanRule> {
             state: SymbolicExpression {
                 colorless,
                 color,
-                state: Local::default(),
+                state: T::default(),
             },
         })
     }
+}
 
+impl Numerator<AppliedFeynmanRule> {
     pub fn write(
         &self,
         extra_info: &ExtraInfo,

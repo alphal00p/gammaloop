@@ -935,7 +935,7 @@ fn gamma_algebra() {
 }
 #[test]
 fn one_loop_lbl() {
-    let (model, amplitude, path) = load_amplitude_output(
+    let (_model, amplitude, _path) = load_amplitude_output(
         &("TEST_AMPLITUDE_".to_string() + "physical_1L_6photons" + "/GL_OUTPUT"),
         true,
     );
@@ -944,72 +944,19 @@ fn one_loop_lbl() {
 
     let feyn = Numerator::default().from_graph(&graph.bare_graph, &GlobalPrefactor::default());
 
-    println!("initial{:+}", feyn.get_single_atom().unwrap());
+    println!("initial{:+}", feyn.get_single_atom().unwrap().0);
     println!(
         "canonized:{:+}",
-        feyn.cannonize().unwrap().get_single_atom().unwrap()
+        feyn.cannonize().unwrap().get_single_atom().unwrap().0
     );
-}
 
-#[test]
-fn canonize() {
-    let expr = Atom::parse(
-        "(MT*id(bis(4,6),bis(4,9))+γ(mink(4,43),bis(4,6),bis(4,9))*Q(6,mink(4,43)))
-        *(MT*id(bis(4,7),bis(4,16))+γ(mink(4,48),bis(4,16),bis(4,7))*Q(11,mink(4,48)))
-    ",
-        // *(MT*id(bis(4,8),bis(4,11))+γ(mink(4,44),bis(4,8),bis(4,11))*Q(7,mink(4,44)))
-        // *(MT*id(bis(4,10),bis(4,13))+γ(mink(4,45),bis(4,10),bis(4,13))*Q(8,mink(4,45)))
-        // *(MT*id(bis(4,12),bis(4,15))+γ(mink(4,46),bis(4,12),bis(4,15))*Q(9,mink(4,46)))
-        // *(MT*id(bis(4,14),bis(4,17))+γ(mink(4,47),bis(4,14),bis(4,17))*Q(10,mink(4,47)))
-    )
-    .unwrap();
-
-    let indices = vec![
-        "bis(4,6)",
-        "bis(4,10)",
-        "mink(4,43)",
-        "bis(4,8)",
-        "bis(4,7)",
-        "mink(4,45)",
-        "mink(4,0)",
-        "mink(4,8)",
-        "mink(4,4)",
-        "mink(4,48)",
-        "bis(4,11)",
-        "mink(4,7)",
-        "mink(4,3)",
-        "bis(4,13)",
-        "bis(4,9)",
-        "mink(4,1)",
-        "bis(4,17)",
-        "bis(4,14)",
-        "mink(4,5)",
-        "bis(4,16)",
-        "mink(4,2)",
-        "mink(4,11)",
-        "mink(4,10)",
-        "mink(4,46)",
-        "mink(4,6)",
-        "mink(4,9)",
-        "bis(4,12)",
-        "bis(4,15)",
-        "mink(4,44)",
-        "bis(4,6)",
-        "mink(4,47)",
-    ]
-    .iter()
-    .map(|a| Atom::parse(a).unwrap())
-    .collect::<Vec<_>>();
-    let index_view = indices.iter().map(|a| a.as_view()).collect::<Vec<_>>();
-    // expr.canonize_tensors(&index_view, None).unwrap();
-
-    let expr2 = Atom::parse("(p(mu)+g(mu,nu)*q(nu))*(q(mu)+h(la)*f(la,mu))").unwrap();
-    let expr = Atom::parse("(p(mu)+g(mu,nu)*q(nu))*(h(la)*f(mu,la)+q(mu))").unwrap();
-
-    let indices = vec!["mu", "nu", "la"]
-        .iter()
-        .map(|a| Atom::parse(a).unwrap())
-        .collect::<Vec<_>>();
-    let index_view = indices.iter().map(|a| a.as_view()).collect::<Vec<_>>();
-    expr.canonize_tensors(&index_view, None).unwrap();
+    println!(
+        "canonized with color:{:+}",
+        feyn.color_simplify()
+            .cannonize()
+            .unwrap()
+            .get_single_atom()
+            .unwrap()
+            .0
+    );
 }
