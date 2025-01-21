@@ -46,7 +46,7 @@ use spenso::shadowing::ETS;
 use spenso::structure::concrete_index::ExpandedIndex;
 
 use spenso::structure::representation::{
-    BaseRepName, ColorAdjoint, ColorFundamental, ExtendibleReps,
+    BaseRepName, ColorAdjoint, ColorFundamental, ExtendibleReps, Minkowski,
 };
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
@@ -2470,38 +2470,62 @@ impl Numerator<Network> {
             state: Network { net },
         }
     }
+    // pub fn random_concretize_reps(&mut self, seed: usize) -> Vec<Replacement> {
+    //     let mut prime = PrimeIteratorU64::new(1)
+    //         .skip(seed)
+    //         .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
+
+    //     let mut reps = vec![];
+
+    //     let pat = fun!(
+    //         GS.f_,
+    //         Atom::new_var(GS.y___),
+    //         fun!(symb!("cind"), Atom::new_var(GS.x_))
+    //     )
+    //     .to_pattern();
+
+    //     for (n, d) in self.state.net.graph.nodes.iter() {
+    //         for (_, a) in d.tensor.iter_flat() {
+    //             for m in a.pattern_match(&pat, None, None) {
+    //                 if let Atom::Var(f) = m[&GS.f_].to_atom() {
+    //                     let mat = fun!(
+    //                         f.get_symbol(),
+    //                         m[&GS.y___].to_atom(),
+    //                         fun!(symb!("cind"), m[&GS.x_].to_atom())
+    //                     );
+    //                     // println!("{mat}");
+
+    //                     reps.push(Replacement::new(
+    //                         mat.to_pattern(),
+    //                         prime.next().unwrap().to_pattern(),
+    //                     ));
+    //                 } else {
+    //                     println!("{}", m[&GS.f_].to_atom());
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     reps
+    // }
+
     pub fn random_concretize_reps(&mut self, seed: usize) -> Vec<Replacement> {
         let mut prime = PrimeIteratorU64::new(1)
             .skip(seed)
             .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
-
         let mut reps = vec![];
-
         let pat = fun!(
             GS.f_,
-            Atom::new_var(GS.y___),
+            Atom::new_var(GS.y_),
             fun!(symb!("cind"), Atom::new_var(GS.x_))
         )
         .to_pattern();
-
         for (n, d) in self.state.net.graph.nodes.iter() {
             for (_, a) in d.tensor.iter_flat() {
                 for m in a.pattern_match(&pat, None, None) {
-                    if let Atom::Var(f) = m[&GS.f_].to_atom() {
-                        let mat = fun!(
-                            f.get_symbol(),
-                            m[&GS.y___].to_atom(),
-                            fun!(symb!("cind"), m[&GS.x_].to_atom())
-                        );
-                        // println!("{mat}");
-
-                        reps.push(Replacement::new(
-                            mat.to_pattern(),
-                            prime.next().unwrap().to_pattern(),
-                        ));
-                    } else {
-                        println!("{}", m[&GS.f_].to_atom());
-                    }
+                    reps.push(Replacement::new(
+                        pat.replace_wildcards(&m).to_pattern(),
+                        prime.next().unwrap().to_pattern(),
+                    ));
                 }
             }
         }
