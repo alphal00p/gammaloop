@@ -31,11 +31,6 @@ use super::SelfEnergyFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
-use crate::graph::half_edge::subgraph::InternalSubGraph;
-use crate::graph::half_edge::subgraph::OrientedCut;
-use crate::graph::half_edge::HedgeGraph;
-use crate::graph::half_edge::NodeIndex;
-use crate::graph::half_edge::Orientation;
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
@@ -51,6 +46,11 @@ use crate::{
     model::Model,
 };
 use itertools::Itertools;
+use linnet::half_edge::subgraph::InternalSubGraph;
+use linnet::half_edge::subgraph::OrientedCut;
+use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::Orientation;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

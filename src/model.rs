@@ -1,8 +1,8 @@
-use crate::graph::half_edge::drawing::Decoration;
 use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F};
+use linnet::half_edge::drawing::Decoration;
 
 use ahash::{AHashMap, HashSet, RandomState};
 use color_eyre::{Help, Report};

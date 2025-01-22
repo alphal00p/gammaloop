@@ -9,7 +9,6 @@ use crate::{
     },
     feyngen::{diagram_generator::NodeColorWithVertexRule, FeynGenError},
     gammaloop_integrand::{BareSample, DefaultSample},
-    graph::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
@@ -26,6 +25,8 @@ use crate::{
     utils::{self, sorted_vectorize, FloatLike, F},
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
+
+use linnet::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder};
 
 use ahash::{HashSet, RandomState};
 
@@ -87,7 +88,7 @@ use symbolica::{
     symb,
 };
 //use symbolica::{atom::Symbol,state::State};
-pub mod half_edge;
+//pub mod half_edge;
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
     #[serde(rename = "in")]
@@ -3877,6 +3878,25 @@ impl<'a> LoopMomentumBasisSpecification<'a> {
                 .as_ref()
                 .unwrap_or_else(|| panic!("Loop momentum bases not yet generated"))[*idx],
         }
+    }
+}
+
+impl From<&BareGraph> for HedgeGraph<usize, usize> {
+    fn from(value: &BareGraph) -> Self {
+        let mut builder = HedgeGraphBuilder::new();
+        let mut map = HashMap::new();
+
+        for (i, _) in value.vertices.iter().enumerate() {
+            map.insert(i, builder.add_node(i));
+        }
+
+        for (i, edge) in value.edges.iter().enumerate() {
+            let source = map[&edge.vertices[0]];
+            let sink = map[&edge.vertices[1]];
+            builder.add_edge(source, sink, i, true);
+        }
+
+        builder.into()
     }
 }
 
