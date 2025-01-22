@@ -1965,27 +1965,27 @@ impl GammaSimplified {
             ),
             (
                 fun!(UFO.projp, GS.a_, GS.b_),
-                (fun!(ETS.id, GS.a_, GS.b_) - fun!(UFO.gamma5, GS.a_, GS.b_)) / 2,
+                (fun!(ETS.id, GS.a_, GS.b_) - fun!(ETS.gamma5, GS.a_, GS.b_)) / 2,
             ),
             (
                 fun!(UFO.projm, GS.a_, GS.b_),
-                (fun!(ETS.id, GS.a_, GS.b_) + fun!(UFO.gamma5, GS.a_, GS.b_)) / 2,
+                (fun!(ETS.id, GS.a_, GS.b_) + fun!(ETS.gamma5, GS.a_, GS.b_)) / 2,
             ),
             (
-                fun!(UFO.gamma, GS.a_, GS.b_, GS.c_) * fun!(UFO.gamma, GS.d_, GS.c_, GS.e_),
+                fun!(ETS.gamma, GS.a_, GS.b_, GS.c_) * fun!(ETS.gamma, GS.d_, GS.c_, GS.e_),
                 fun!(gamma_chain, GS.a_, GS.d_, GS.b_, GS.e_),
             ),
-            (fun!(UFO.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
+            (fun!(ETS.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
             (
                 fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(gamma_chain, GS.b__, GS.b_, GS.c_),
                 fun!(gamma_chain, GS.a__, GS.b__, GS.a_, GS.c_),
             ),
             (
-                fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(UFO.gamma, GS.y_, GS.b_, GS.c_),
+                fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(ETS.gamma, GS.y_, GS.b_, GS.c_),
                 fun!(gamma_chain, GS.a__, GS.y_, GS.a_, GS.c_),
             ),
             (
-                fun!(UFO.gamma, GS.a_, GS.a_, GS.b_) * fun!(gamma_chain, GS.y__, GS.b_, GS.c_),
+                fun!(ETS.gamma, GS.a_, GS.a_, GS.b_) * fun!(gamma_chain, GS.y__, GS.b_, GS.c_),
                 fun!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_),
             ),
         ]
@@ -2066,7 +2066,7 @@ impl GammaSimplified {
 
         // //Chisholm identity:
         // expr.replace_all_repeat_mut(
-        //     &(fun!(UFO.gamma, GS.a_, GS.x_, GS.y_) * fun!(gamma_trace, GS.a_, GS.a__)).to_pattern(),
+        //     &(fun!(ETS.gamma, GS.a_, GS.x_, GS.y_) * fun!(gamma_trace, GS.a_, GS.a__)).to_pattern(),
         //     (fun!(gamma_chain, GS.a__)).to_pattern(),
         //     None,
         //     None,
@@ -2137,7 +2137,7 @@ impl GammaSimplified {
                 Atom::new_num(4),
             ),
             (
-                fun!(UFO.gamma, GS.a__).pow(Atom::new_num(2)),
+                fun!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
                 Atom::new_num(16),
             ),
         ]

@@ -7,6 +7,7 @@ use spenso::{
         atomcore::{PatternReplacement, TensorAtomMaps},
         ParamTensor,
     },
+    shadowing::ETS,
     structure::{
         representation::{BaseRepName, Bispinor, Minkowski},
         slot::IsAbstractSlot,
@@ -804,7 +805,7 @@ fn gamma_simplify_one() {
         let bis = Bispinor::rep(4);
 
         fun!(
-            UFO.gamma,
+            ETS.gamma,
             mink.new_slot(mu).to_atom(),
             bis.new_slot(i).to_atom(),
             bis.new_slot(j).to_atom()
@@ -815,7 +816,7 @@ fn gamma_simplify_one() {
         let mink = Minkowski::rep(4);
 
         fun!(
-            UFO.metric,
+            ETS.metric,
             mink.new_slot(mu).to_atom(),
             mink.new_slot(nu).to_atom()
         )
@@ -828,10 +829,10 @@ fn gamma_simplify_one() {
         //     .tensor;
         let g_simp = GammaSimplified::gamma_symplify_impl(atom.into()).0;
 
-        // let g_simp_t = Network::parse_impl(g_simp.as_view())
-        //     .contract::<Rational>(ContractionSettings::Normal)
-        //     .unwrap()
-        //     .tensor;
+        let g_simp_t = Network::parse_impl(g_simp.as_view())
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .tensor;
 
         // assert_eq!(g_simp_t, g_t);
 
@@ -872,4 +873,63 @@ fn gamma_simplify_one() {
         * gamma(40, 40, 10);
 
     test_and_assert(g);
+
+    let g = Atom::parse(
+        "(Metric(mink(4,2),mink(4,3))-phat^-2*p(mink(4,2))*p(mink(4,3)))
+        *Metric(mink(4,4),mink(4,5))
+        *γ(mink(4,4),bis(4,9),bis(4,8))
+        *γ(mink(4,28),bis(4,8),bis(4,11))
+        *γ(mink(4,5),bis(4,11),bis(4,10))
+        *γ(mink(4,29),bis(4,10),bis(4,7))
+        *γ(mink(4,3),bis(4,7),bis(4,6))
+        *γ(mink(4,30),bis(4,6),bis(4,5))
+        *γ(mink(4,2),bis(4,5),bis(4,4))
+        *γ(mink(4,27),bis(4,4),bis(4,9))
+        *Q(4,mink(4,27))
+        *Q(5,mink(4,28))
+        *Q(6,mink(4,29))
+        *Q(7,mink(4,30))",
+    )
+    .unwrap();
+    test_and_assert(g);
+}
+
+#[test]
+fn gamma_algebra() {
+    let _ = ETS.gamma;
+    let _ = UFO.t;
+    let g = Atom::parse(
+        "(Metric(mink(4,2),mink(4,3)))
+    *(Metric(mink(4,7),mink(4,8))
+        )
+    *(-Metric(mink(4,4),mink(4,5))
+        *Metric(mink(4,9),mink(4,6)))
+    *Metric(mink(4,4),mink(4,7))
+    *Metric(mink(4,5),mink(4,8))
+    *Metric(mink(4,6),mink(4,11))
+    *Metric(mink(4,9),mink(4,10))
+    *γ(mink(4,2),bis(4,3),bis(4,2))
+    *γ(mink(4,3),bis(4,5),bis(4,4))
+    *γ(mink(4,10),bis(4,7),bis(4,6))
+    *γ(mink(4,11),bis(4,9),bis(4,8))
+    *γ(mink(4,31),bis(4,2),bis(4,5))
+    *γ(mink(4,32),bis(4,8),bis(4,3))
+    *γ(mink(4,33),bis(4,4),bis(4,7))
+    *γ(mink(4,38),bis(4,6),bis(4,9))
+    *Metric(mink(4,31),mink(4,32))
+    *Metric(mink(4,33),mink(4,38))",
+    )
+    .unwrap();
+
+    let g = GammaSimplified::gamma_symplify_impl(g.into()).0;
+    println!(
+        "{}",
+        Network::parse_impl(g.as_view())
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .tensor
+            .scalar()
+            .unwrap()
+    );
+    println!("{g}");
 }
