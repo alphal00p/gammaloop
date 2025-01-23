@@ -1350,7 +1350,7 @@ pub type Gloopoly =
 impl Numerator<ColorSimplified> {
     pub fn validate_against_branches(&self, seed: usize) -> bool {
         let gamma = self.clone().gamma_simplify().parse();
-        let mut nogamma = self.clone().parse();
+        let mut nogamma = self.clone().expand().parse();
         let reps = nogamma.random_concretize_reps(seed);
 
         let gammat = gamma
@@ -1426,6 +1426,18 @@ impl Numerator<ColorSimplified> {
         debug!("Parsing color simplified numerator into polynomial");
         let state = PolySplit::from_color_simplified(self, bare_graph);
         Numerator { state }
+    }
+
+    pub fn expand(self) -> Self {
+        let colorless = self.state.colorless.map_data_self(|a| a.0.expand().into());
+        let color = self.state.color.map_data_self(|a| a.0.expand().into());
+        Self {
+            state: ColorSimplified {
+                colorless,
+                color,
+                state: Default::default(),
+            },
+        }
     }
 
     pub fn parse(self) -> Numerator<Network> {
@@ -2140,6 +2152,7 @@ impl GammaSimplified {
                 fun!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
                 Atom::new_num(16),
             ),
+            (fun!(ETS.id, GS.a_, GS.a_), Atom::new_num(4)),
         ]
         .iter()
         .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))

@@ -829,10 +829,10 @@ fn gamma_simplify_one() {
         //     .tensor;
         let g_simp = GammaSimplified::gamma_symplify_impl(atom.into()).0;
 
-        let g_simp_t = Network::parse_impl(g_simp.as_view())
-            .contract::<Rational>(ContractionSettings::Normal)
-            .unwrap()
-            .tensor;
+        // let g_simp_t = Network::parse_impl(g_simp.as_view())
+        //     .contract::<Rational>(ContractionSettings::Normal)
+        //     .unwrap()
+        //     .tensor;
 
         // assert_eq!(g_simp_t, g_t);
 
@@ -892,6 +892,10 @@ fn gamma_simplify_one() {
     )
     .unwrap();
     test_and_assert(g);
+    let g = metric(2, 3)
+        * (gamma(2, 1, 3) * gamma(3, 3, 1)
+            + gamma(1, 10, 20) * gamma(2, 20, 30) * gamma(1, 30, 40) * gamma(3, 40, 10));
+    test_and_assert(g);
 }
 
 #[test]
@@ -921,7 +925,6 @@ fn gamma_algebra() {
     )
     .unwrap();
 
-    let g = GammaSimplified::gamma_symplify_impl(g.into()).0;
     println!(
         "{}",
         Network::parse_impl(g.as_view())
@@ -931,5 +934,96 @@ fn gamma_algebra() {
             .scalar()
             .unwrap()
     );
+    let g = GammaSimplified::gamma_symplify_impl(g.into()).0;
     println!("{g}");
+}
+
+#[test]
+fn gamma_algebra_two() {
+    fn gamma(mu: usize, i: usize, j: usize) -> Atom {
+        let mink = Minkowski::rep(4);
+        let bis = Bispinor::rep(4);
+
+        fun!(
+            ETS.gamma,
+            mink.new_slot(mu).to_atom(),
+            bis.new_slot(i).to_atom(),
+            bis.new_slot(j).to_atom()
+        )
+    }
+
+    fn metric(mu: usize, nu: usize) -> Atom {
+        let mink = Minkowski::rep(4);
+
+        fun!(
+            ETS.metric,
+            mink.new_slot(mu).to_atom(),
+            mink.new_slot(nu).to_atom()
+        )
+    }
+
+    fn p(mu: usize) -> Atom {
+        let mink = Minkowski::rep(4);
+        fun!(symb!("p"), mink.new_slot(mu).to_atom())
+    }
+    let g = (p(1) * metric(2, 3) + p(3) * metric(2, 1))
+        * (p(4) * metric(5, 6) + p(6) * metric(5, 4))
+        * gamma(1, 2, 6)
+        * gamma(2, 1, 3)
+        * gamma(3, 3, 4)
+        * gamma(4, 4, 5)
+        * gamma(5, 5, 1)
+        * gamma(6, 6, 2);
+
+    // let g = (metric(1,2) * metric(10, 20))
+    //     // * gamma(1, 2, 6)
+    //     * gamma(1, 3,1)
+    //     * gamma(2, 4,3)
+    //     * gamma(10, 5,4)
+    //     * gamma(20, 1,5 )
+    //     + metric(1, 20)
+    //         * metric(10, 2)
+    //         * gamma(1, 3, 1)
+    //         * gamma(2, 4, 3)
+    //         * gamma(10, 5, 4)
+    //         * gamma(20, 1, 5);
+    let g = (metric(1,2) * metric(10, 20)+metric(1, 20)
+        * metric(10, 2))
+        // * gamma(1, 2, 6)
+        * gamma(1, 3,1)
+        * gamma(2, 4,3)
+        * gamma(10, 5,4)
+        * gamma(20, 1,5 );
+    // * gamma(6, 6, 2);
+    // let g = metric(2, 3)
+    //     * (gamma(2, 1, 3) * gamma(3, 3, 1)
+    //         + gamma(1, 10, 20) * gamma(2, 20, 30) * gamma(1, 30, 40) * gamma(3, 40, 10));
+
+    let mut num = Numerator {
+        state: Network::parse_impl(g.as_view()),
+    };
+    let num2 = Numerator {
+        state: Network::parse_impl(GammaSimplified::gamma_symplify_impl(g.into()).0.as_view()),
+    };
+    let reps = num.random_concretize_reps(100);
+
+    println!(
+        "{}",
+        num.apply_reps(&reps)
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .state
+            .tensor
+            .scalar()
+            .unwrap()
+            .expand()
+    );
+    println!(
+        "{}",
+        num2.apply_reps(&reps)
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .state
+            .tensor
+    );
 }

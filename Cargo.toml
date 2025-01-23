@@ -141,4 +141,5 @@ no_python = []
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "e93679f3f77c24017b73cce527087a1bce52bbbf" }
+# spenso = { git = "https://github.com/alphal00p/spenso", rev = "e93679f3f77c24017b73cce527087a1bce52bbbf" }
+spenso = { path = "../spenso" }
