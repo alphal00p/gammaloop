@@ -23,7 +23,7 @@ use color_eyre::{Report, Result};
 use eyre::eyre;
 use gat_lending_iterator::LendingIterator;
 // use gxhash::GxBuildHasher;
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 
 use log::{debug, trace};
@@ -44,6 +44,7 @@ use spenso::parametric::{
 use spenso::shadowing::ETS;
 use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::structure::representation::{BaseRepName, ColorAdjoint, ColorFundamental, Minkowski};
+use spenso::structure::slot::IsAbstractSlot;
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
 use spenso::symbolica_utils::SerializableSymbol;
@@ -65,9 +66,9 @@ use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::{AtomCore, AtomView, Symbol};
+use symbolica::atom::{AtomCore, AtomView, FunctionAttribute, Symbol};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
-use symbolica::id::{Context, Match, MatchSettings, PatternOrMap};
+use symbolica::id::{Context, Match, MatchSettings, MatchStack, PatternOrMap};
 
 use symbolica::{
     atom::{Atom, FunctionBuilder},
@@ -1349,16 +1350,26 @@ pub type Gloopoly =
     symbolica::poly::polynomial::MultivariatePolynomial<symbolica::domains::atom::AtomField, u8>;
 impl Numerator<ColorSimplified> {
     pub fn validate_against_branches(&self, seed: usize) -> bool {
-        let gamma = self.clone().gamma_simplify().parse();
-        let mut nogamma = self.clone().expand().parse();
+        let gamma = self.clone().gamma_simplify().contract();
+        println!(
+            "done gamma {}",
+            gamma
+                .state
+                .tensor
+                .iter_flat()
+                .next()
+                .unwrap()
+                .1
+                .to_owned()
+                .printer(PrintOptions {
+                    terms_on_new_line: true,
+                    ..Default::default()
+                })
+        );
+        let mut nogamma = self.clone().parse();
         let reps = nogamma.random_concretize_reps(seed);
 
-        let gammat = gamma
-            .apply_reps(&reps)
-            .contract::<Rational>(ContractionSettings::Normal)
-            .unwrap()
-            .state
-            .tensor;
+        let gammat = gamma.apply_reps(&reps).state.tensor;
 
         let nogammat = nogamma
             .apply_reps(&reps)
@@ -1369,16 +1380,22 @@ impl Numerator<ColorSimplified> {
 
         // println!("{gammat}\n{nogammat}");
 
-        gammat
+        let equal = gammat
             .tensor
             .sub_fallible(&nogammat.tensor)
             .unwrap()
             .iter_flat()
             .all(|(_, a)| {
                 let a = a.expand();
-                // println!("{a}");
+                println!("{a}");
                 a.is_zero()
-            })
+            });
+
+        // if !equal {
+        //     println!("gamma: {gammat}");
+        //     println!("nogamma: {nogammat}");
+        // }
+        equal
     }
 
     pub fn write(
@@ -1412,6 +1429,23 @@ impl Numerator<ColorSimplified> {
             .state
             .colorless
             .map_data(GammaSimplified::gamma_symplify_impl);
+
+        Numerator {
+            state: GammaSimplified {
+                colorless: gamma_simplified,
+                color: self.state.color,
+                state: Default::default(),
+            },
+        }
+    }
+
+    pub fn gamma_simplify_other(self) -> Numerator<GammaSimplified> {
+        debug!("Gamma simplifying color symplified numerator");
+
+        let gamma_simplified = self
+            .state
+            .colorless
+            .map_data(GammaSimplified::gamma_symplify_other);
 
         Numerator {
             state: GammaSimplified {
@@ -1939,42 +1973,19 @@ impl PolyContracted {
 }
 
 impl GammaSimplified {
-    pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> SerializableAtom {
+    pub fn gamma_symplify_other(mut expr: SerializableAtom) -> SerializableAtom {
+        let now = Instant::now();
+
+        let dim = symb!("dim_");
         // let mink = Minkowski::rep(4);
         fn mink(wildcard: Symbol) -> Atom {
-            Minkowski::rep(4).pattern(Atom::new_var(wildcard))
+            Minkowski::rep(symb!("dim_")).pattern(Atom::new_var(wildcard))
         }
 
         expr.0 = expr.0.expand();
-        // let pats: Vec<_> = [
-        //     (
-        //         fun!(ETS.id, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
-        //         fun!(GS.f_, GS.d___, GS.a_, GS.c___),
-        //     ),
-        //     (
-        //         fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
-        //             * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-        //         fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
-        //     ),
-        // ]
-        // .iter()
-        // .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
-        // .collect();
-
-        // expr = expr.replace_all_multiple_repeat(&pats);
-
         let gamma_chain = symb!("gamma_chain");
-        let gamma_trace = symb!("gamma_trace");
-        let reps: Vec<_> = [
-            (
-                fun!(ETS.id, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
-                fun!(GS.f_, GS.d___, GS.a_, GS.c___),
-            ),
-            (
-                fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
-                    * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-                fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
-            ),
+        let gamma_trace = Symbol::new_with_attributes("gamma_trace", &[]).unwrap();
+        let initial_reps: Vec<_> = [
             (
                 fun!(UFO.projp, GS.a_, GS.b_),
                 (fun!(ETS.id, GS.a_, GS.b_) - fun!(ETS.gamma5, GS.a_, GS.b_)) / 2,
@@ -1983,86 +1994,710 @@ impl GammaSimplified {
                 fun!(UFO.projm, GS.a_, GS.b_),
                 (fun!(ETS.id, GS.a_, GS.b_) + fun!(ETS.gamma5, GS.a_, GS.b_)) / 2,
             ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+
+        expr.replace_all_multiple_mut(&initial_reps);
+        expr.0 = expr.0.expand();
+
+        let gamma_chain_accumulator: Vec<_> = [
             (
-                fun!(ETS.gamma, GS.a_, GS.b_, GS.c_) * fun!(ETS.gamma, GS.d_, GS.c_, GS.e_),
-                fun!(gamma_chain, GS.a_, GS.d_, GS.b_, GS.e_),
+                fun!(ETS.gamma, mink(GS.a_), GS.b_, GS.c_)
+                    * fun!(ETS.gamma, mink(GS.d_), GS.c_, GS.e_),
+                fun!(
+                    gamma_chain,
+                    symb!("dim_"),
+                    fun!(Minkowski::selfless_symbol(), GS.a_, GS.d_),
+                    GS.b_,
+                    GS.e_
+                ),
             ),
-            (fun!(ETS.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
             (
-                fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(gamma_chain, GS.b__, GS.b_, GS.c_),
-                fun!(gamma_chain, GS.a__, GS.b__, GS.a_, GS.c_),
+                fun!(
+                    gamma_chain,
+                    GS.d_,
+                    fun!(Minkowski::selfless_symbol(), GS.a__),
+                    GS.a_,
+                    GS.b_
+                ) * fun!(
+                    gamma_chain,
+                    GS.d_,
+                    fun!(Minkowski::selfless_symbol(), GS.b__),
+                    GS.b_,
+                    GS.c_
+                ),
+                fun!(
+                    gamma_chain,
+                    GS.d_,
+                    fun!(Minkowski::selfless_symbol(), GS.a__, GS.b__),
+                    GS.a_,
+                    GS.c_
+                ),
             ),
             (
-                fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(ETS.gamma, GS.y_, GS.b_, GS.c_),
-                fun!(gamma_chain, GS.a__, GS.y_, GS.a_, GS.c_),
+                fun!(
+                    gamma_chain,
+                    symb!("dim_"),
+                    fun!(Minkowski::selfless_symbol(), GS.a__),
+                    GS.a_,
+                    GS.b_
+                ) * fun!(ETS.gamma, mink(GS.y_), GS.b_, GS.c_),
+                fun!(
+                    gamma_chain,
+                    symb!("dim_"),
+                    fun!(Minkowski::selfless_symbol(), GS.a__, GS.y_),
+                    GS.a_,
+                    GS.c_
+                ),
             ),
             (
-                fun!(ETS.gamma, GS.a_, GS.a_, GS.b_) * fun!(gamma_chain, GS.y__, GS.b_, GS.c_),
-                fun!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_),
+                fun!(ETS.gamma, mink(GS.y_), GS.a_, GS.b_)
+                    * fun!(
+                        gamma_chain,
+                        symb!("dim_"),
+                        fun!(Minkowski::selfless_symbol(), GS.a__),
+                        GS.b_,
+                        GS.c_
+                    ),
+                fun!(
+                    gamma_chain,
+                    symb!("dim_"),
+                    fun!(Minkowski::selfless_symbol(), GS.y_, GS.a__),
+                    GS.a_,
+                    GS.c_
+                ),
             ),
         ]
         .iter()
         .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
         .collect();
 
-        expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
-        expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
+        let simplification_reps: Vec<_> = [
+            (
+                fun!(ETS.metric, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
+                fun!(GS.f_, GS.d___, GS.a_, GS.c___),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(ETS.gamma, GS.f__, GS.b_),
+                fun!(ETS.gamma, GS.f__, GS.a_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(gamma_chain, GS.f__, GS.b_),
+                fun!(gamma_chain, GS.f__, GS.a_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(gamma_chain, GS.f__, GS.b_, GS.c_),
+                fun!(gamma_chain, GS.f__, GS.a_, GS.c_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(ETS.gamma, GS.f_, GS.b_, GS.d_),
+                fun!(ETS.gamma, GS.f_, GS.a_, GS.b_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(ETS.gamma, GS.b_, GS.x_, GS.y_),
+                fun!(ETS.gamma, GS.a_, GS.x_, GS.y_),
+            ),
+            (
+                fun!(ETS.metric, mink(GS.a_), mink(GS.b_)) * fun!(ETS.gamma, mink(GS.b_), GS.c__),
+                fun!(ETS.gamma, mink(GS.a_), GS.c__),
+            ),
+            (
+                fun!(ETS.metric, GS.a_, GS.b_) * fun!(ETS.metric, GS.c_, GS.b_),
+                fun!(ETS.metric, GS.a_, GS.c_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(ETS.id, GS.b_, GS.c_),
+                fun!(ETS.id, GS.a_, GS.c_),
+            ),
+            (fun!(ETS.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
+            (
+                fun!(ETS.metric, mink(GS.a_), mink(GS.b_)).pow(Atom::new_num(2)),
+                Atom::new_num(4),
+            ),
+            (
+                fun!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
+                Atom::new_num(16),
+            ),
+            (fun!(ETS.id, GS.a_, GS.a_), Atom::new_num(4)),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+        let mut iters = 0;
+        loop {
+            iters += 1;
+            expr.replace_all_repeat_mut(
+                &(fun!(ETS.gamma, GS.a_, GS.a_, GS.b_) * fun!(gamma_chain, GS.y__, GS.b_, GS.c_))
+                    .to_pattern(),
+                fun!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_).to_pattern(),
+                None,
+                None,
+            );
+            let new = expr.0.replace_all_multiple(&gamma_chain_accumulator);
+            let new = new.replace_all_multiple(&simplification_reps);
+            if new == expr.0 {
+                println!("gamma accumulate after {iters} iters:{}", new);
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
 
-        let pat = fun!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
-        // let patodd = (-2 * fun!(gamma_chain, GS.a___, GS.b_)).to_pattern();
-        // let pateven = (2 * (fun!(gamma_chain, GS.b_, GS.a___))).to_pattern();
-
-        // let rhs = PatternOrMap::Map(Box::new(move |m| m.));
-        //
         fn gamma_chain_perm(arg: AtomView, context: &Context, out: &mut Atom) -> bool {
             let gamma_chain = symb!("gamma_chain");
+            let mink = Minkowski::selfless_symbol();
             let mut found = false;
             if let AtomView::Fun(f) = arg {
                 if f.get_symbol() == gamma_chain {
-                    found = true;
-                    let args = f.iter().collect::<Vec<_>>();
-                    let len = args.len();
-                    if len <= 3 {
-                        return false;
-                    }
+                    let mut argiter = f.iter();
+                    let dim = argiter.next().unwrap();
+                    let minks = argiter.next().unwrap();
+                    let bisi = argiter.next().unwrap();
+                    let bisj = argiter.next().unwrap();
 
-                    if args[len - 3] == args[0] {
-                        if len == 4 {
-                            *out = fun!(ETS.id, args[len - 2], args[len - 1]) * 4;
-                            return true;
-                        } else if len % 2 == 0 {
-                            let mut gcn = FunctionBuilder::new(gamma_chain);
-                            let mut gcnp = FunctionBuilder::new(gamma_chain);
-                            gcn = gcn.add_arg(args[len - 4]);
-                            gcn = gcn.add_args(&args[1..(len - 4)]);
-                            for a in &args[1..(len - 4)] {
-                                gcnp = gcnp.add_arg(*a);
+                    if let AtomView::Fun(f) = minks {
+                        let mut initial_args: IndexSet<AtomView<'_>> = IndexSet::new();
+                        let mut final_args = vec![];
+                        let mut closed = None;
+                        for (j, a) in f.iter().enumerate() {
+                            if closed.is_none() {
+                                if let Some((i, _)) = initial_args.get_full(&a) {
+                                    let new_interval = i..(j.checked_sub(1).unwrap());
+                                    closed = Some(new_interval);
+                                } else {
+                                    initial_args.insert(a);
+                                }
+                            } else {
+                                final_args.push(a);
                             }
-                            gcnp = gcnp.add_arg(args[len - 4]);
-                            gcnp = gcnp.add_args(&args[(len - 2)..len]);
-                            gcn = gcn.add_args(&args[(len - 2)..len]);
-                            *out = (gcn.finish() + gcnp.finish()) * 2;
-                        } else {
-                            let mut gcn = FunctionBuilder::new(gamma_chain);
-                            gcn = gcn.add_args(&args[1..(len - 4)]);
-                            gcn = gcn.add_args(&args[(len - 2)..len]);
-                            *out = gcn.finish() * -2;
                         }
 
-                        // println!("{}->{}", arg, out);
-                    } else {
-                        return false;
+                        if let Some(interval) = closed {
+                            let len = interval.len();
+
+                            initial_args.shift_remove_index(interval.start);
+
+                            let new_args =
+                                initial_args.drain(0..interval.start).collect::<Vec<_>>();
+
+                            let mut gcn = FunctionBuilder::new(mink);
+                            gcn = gcn.add_args(&new_args);
+                            let inner_args = initial_args.drain(..).collect::<Vec<_>>();
+                            assert_eq!(inner_args.len(), len, "gamma chain perm {interval:?}");
+
+                            if len == 0 {
+                                gcn = gcn.add_args(&final_args);
+                                *out = fun!(gamma_chain, dim, gcn.finish(), bisi, bisj) * 4;
+                                return true;
+                            } else if len % 2 == 0 {
+                                let lenm1 = len.checked_sub(1).unwrap();
+                                let mut gcnp = FunctionBuilder::new(mink);
+                                gcnp = gcnp.add_args(&new_args);
+
+                                gcn = gcn.add_arg(inner_args[lenm1]);
+                                for a in &inner_args[0..(lenm1)] {
+                                    gcn = gcn.add_arg(*a);
+                                }
+                                for a in inner_args[0..(lenm1)].iter().rev() {
+                                    gcnp = gcnp.add_arg(*a);
+                                }
+                                gcnp = gcnp.add_arg(inner_args[lenm1]);
+
+                                gcn = gcn.add_args(&final_args);
+                                gcnp = gcnp.add_args(&final_args);
+
+                                *out = ((fun!(gamma_chain, dim, gcn.finish(), bisi, bisj)
+                                    + fun!(gamma_chain, dim, gcnp.finish(), bisi, bisj))
+                                    * 2)
+                                .replace_map(&gamma_chain_perm);
+                                return true;
+                            } else {
+                                for a in inner_args.iter().rev() {
+                                    gcn = gcn.add_arg(*a);
+                                }
+                                gcn = gcn.add_args(&final_args);
+                                let new = fun!(gamma_chain, dim, gcn.finish(), bisi, bisj) * -2;
+                                *out = new; //.replace_map(&gamma_chain_perm);
+                                return true;
+                            }
+                        }
                     }
                 }
             }
-            found
+            false
         }
 
+        let mut iters = 0;
         loop {
+            iters += 1;
             let new = expr.0.replace_map(&gamma_chain_perm);
+            expr.replace_all_multiple_mut(&simplification_reps);
             if new == expr.0 {
+                println!("gamma chain contract after {iters} iters:{}", new);
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+
+        expr.replace_all_repeat_mut(
+            &(fun!(gamma_chain, GS.a__, GS.x_, GS.x_).to_pattern()),
+            fun!(gamma_trace, GS.a__).to_pattern(),
+            None,
+            None,
+        );
+
+        // //Chisholm identity:
+        // expr.replace_all_repeat_mut(
+        //     &(fun!(ETS.gamma, GS.a_, GS.x_, GS.y_) * fun!(gamma_trace, GS.a_, GS.a__)).to_pattern(),
+        //     (fun!(gamma_chain, GS.a__)).to_pattern(),
+        //     None,
+        //     None,
+        // );
+        //
+
+        let trace_map = PatternOrMap::Map(Box::new(move |m: &MatchStack| {
+            let f_name = if let AtomView::Var(v) = m.get(GS.f_).unwrap().to_atom().as_view() {
+                v.get_symbol()
+            } else {
+                panic!("shouldn't be here");
+            };
+            let add_args_pre = m.get(GS.a___).unwrap().to_atom();
+            let add_args_post = m.get(GS.b___).unwrap().to_atom();
+            let dim_val = m.get(dim).unwrap().to_atom();
+
+            let trace_args = m.get(GS.c___).unwrap().to_atom();
+
+            let mut sum = Atom::Zero;
+
+            if let AtomView::Fun(f) = trace_args.as_view() {
+                if f.get_nargs() == 1 {
+                    return Atom::Zero;
+                }
+                let args = f.iter().collect::<Vec<_>>();
+
+                for i in 1..args.len() {
+                    let sign = if i % 2 == 0 { -1 } else { 1 };
+
+                    let mut gcn = FunctionBuilder::new(Minkowski::selfless_symbol());
+                    for j in 1..args.len() {
+                        if i != j {
+                            gcn = gcn.add_arg(args[j]);
+                        }
+                    }
+
+                    // let metric = if args[0] == args[i] {
+                    //     Atom::new_num(4)
+                    //     // Atom::new_var(GS.dim)
+                    // } else {
+                    let mut f_builder = FunctionBuilder::new(f_name);
+                    f_builder = f_builder.add_arg(&add_args_pre);
+
+                    f_builder = f_builder.add_arg(fun!(Minkowski::selfless_symbol(), dim, args[i]));
+                    f_builder = f_builder.add_arg(&add_args_post);
+                    // fun!(ETS.metric, mmink(dim, args[i]))
+                    // };
+                    if args.len() == 2 {
+                        sum = sum + f_builder.finish() * sign * 4;
+                    } else {
+                        sum =
+                            sum + f_builder.finish() * fun!(gamma_trace, dim, gcn.finish()) * sign;
+                    }
+                }
+            }
+            sum
+        }));
+
+        fn gamma_tracer(arg: AtomView, context: &Context, out: &mut Atom) -> bool {
+            let gamma_trace = symb!("gamma_trace");
+
+            fn mink(dim: AtomView, mu: AtomView) -> Atom {
+                fun!(Minkowski::selfless_symbol(), dim, mu)
+            }
+
+            if let AtomView::Fun(f) = arg {
+                if f.get_symbol() == gamma_trace {
+                    let mut argiter = f.iter();
+                    let dim = argiter.next().unwrap();
+                    let minks = argiter.next().unwrap();
+
+                    if let AtomView::Fun(f) = minks {
+                        let mut sum = Atom::Zero;
+
+                        if f.get_nargs() == 1 {
+                            *out = Atom::Zero;
+                        }
+                        let args = f.iter().collect::<Vec<_>>();
+
+                        for i in 1..args.len() {
+                            let sign = if i % 2 == 0 { -1 } else { 1 };
+
+                            let mut gcn = FunctionBuilder::new(Minkowski::selfless_symbol());
+                            for j in 1..args.len() {
+                                if i != j {
+                                    gcn = gcn.add_arg(args[j]);
+                                }
+                            }
+
+                            let metric = if args[0] == args[i] {
+                                Atom::new_num(4)
+                                // Atom::new_var(GS.dim)
+                            } else {
+                                fun!(ETS.metric, mink(dim, args[0]), mink(dim, args[i]))
+                            };
+                            if args.len() == 2 {
+                                sum = sum + metric * sign * 4;
+                            } else {
+                                sum = sum + metric * fun!(gamma_trace, dim, gcn.finish()) * sign;
+                            }
+                        }
+                        *out = sum.replace_map(&gamma_tracer);
+                        return true;
+                    }
+                    // println!("{}->{}", arg, out);
+                }
+            }
+
+            false
+        }
+
+        let mut iters = 0;
+        loop {
+            iters += 1;
+            expr.0.replace_all(
+                &(fun!(GS.f_, GS.a___, mink(GS.a_), GS.b___)
+                    * fun!(
+                        gamma_trace,
+                        dim,
+                        fun!(Minkowski::selfless_symbol(), GS.a_, GS.c___)
+                    ))
+                .to_pattern(),
+                trace_map.clone(),
+                None,
+                None,
+            );
+            let mut new = expr.0.replace_map(&gamma_tracer);
+            new = new.expand();
+            new.replace_all_multiple_mut(&simplification_reps);
+            if new == expr.0 {
+                // println!("gamma trace process after {iters} iters:{}", new);
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+
+        println!("all algebra done in {:?}", now.elapsed());
+        let now = Instant::now();
+
+        println!("expanding..");
+        iters = 0;
+        expr.0 = expr.0.expand();
+        println!("{:?} simplifying", now.elapsed());
+        loop {
+            iters += 1;
+            let new = expr.0.replace_all_multiple(&simplification_reps);
+            if new == expr.0 {
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+
+        let metric_simplify: Vec<_> = [
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
+                fun!(GS.f_, GS.d___, GS.a_, GS.c___),
+            ),
+            (
+                fun!(ETS.metric, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
+                fun!(GS.f_, GS.d___, GS.a_, GS.c___),
+            ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+
+        iters = 0;
+        loop {
+            iters += 1;
+            let new = expr.0.replace_all_multiple(&metric_simplify);
+            if new == expr.0 {
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+        println!("finished simplifying in {:?}", now.elapsed());
+
+        // );
+        expr
+    }
+
+    pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> SerializableAtom {
+        let now = Instant::now();
+        // let mink = Minkowski::rep(4);
+        fn mink(wildcard: Symbol) -> Atom {
+            Minkowski::rep(symb!("dim_")).pattern(Atom::new_var(wildcard))
+        }
+
+        expr.0 = expr.0.expand();
+        let gamma_chain = symb!("gamma_chain");
+        let gamma_trace = symb!("gamma_trace");
+
+        let initial_reps: Vec<_> = [
+            (
+                fun!(UFO.projp, GS.a_, GS.b_),
+                (fun!(ETS.id, GS.a_, GS.b_) - fun!(ETS.gamma5, GS.a_, GS.b_)) / 2,
+            ),
+            (
+                fun!(UFO.projm, GS.a_, GS.b_),
+                (fun!(ETS.id, GS.a_, GS.b_) + fun!(ETS.gamma5, GS.a_, GS.b_)) / 2,
+            ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+
+        expr.replace_all_multiple_mut(&initial_reps);
+        expr.0 = expr.0.expand();
+
+        let gamma_chain_accumulator: Vec<_> = [
+            (
+                fun!(ETS.gamma, mink(GS.a_), GS.b_, GS.c_)
+                    * fun!(ETS.gamma, mink(GS.d_), GS.c_, GS.e_),
+                fun!(
+                    gamma_chain,
+                    symb!("dim_"),
+                    fun!(Minkowski::selfless_symbol(), GS.a_, GS.d_),
+                    GS.b_,
+                    GS.e_
+                ),
+            ),
+            (
+                fun!(
+                    gamma_chain,
+                    GS.d_,
+                    fun!(Minkowski::selfless_symbol(), GS.a__),
+                    GS.a_,
+                    GS.b_
+                ) * fun!(
+                    gamma_chain,
+                    GS.d_,
+                    fun!(Minkowski::selfless_symbol(), GS.b__),
+                    GS.b_,
+                    GS.c_
+                ),
+                fun!(
+                    gamma_chain,
+                    GS.d_,
+                    fun!(Minkowski::selfless_symbol(), GS.a__, GS.b__),
+                    GS.a_,
+                    GS.c_
+                ),
+            ),
+            (
+                fun!(
+                    gamma_chain,
+                    symb!("dim_"),
+                    fun!(Minkowski::selfless_symbol(), GS.a__),
+                    GS.a_,
+                    GS.b_
+                ) * fun!(ETS.gamma, mink(GS.y_), GS.b_, GS.c_),
+                fun!(
+                    gamma_chain,
+                    symb!("dim_"),
+                    fun!(Minkowski::selfless_symbol(), GS.a__, GS.y_),
+                    GS.a_,
+                    GS.c_
+                ),
+            ),
+            (
+                fun!(ETS.gamma, mink(GS.y_), GS.a_, GS.b_)
+                    * fun!(
+                        gamma_chain,
+                        symb!("dim_"),
+                        fun!(Minkowski::selfless_symbol(), GS.a__),
+                        GS.b_,
+                        GS.c_
+                    ),
+                fun!(
+                    gamma_chain,
+                    symb!("dim_"),
+                    fun!(Minkowski::selfless_symbol(), GS.y_, GS.a__),
+                    GS.a_,
+                    GS.c_
+                ),
+            ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+
+        let simplification_reps: Vec<_> = [
+            // (
+            //     fun!(ETS.metric, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
+            //     fun!(GS.f_, GS.d___, GS.a_, GS.c___),
+            // ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(ETS.gamma, GS.f__, GS.b_),
+                fun!(ETS.gamma, GS.f__, GS.a_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(gamma_chain, GS.f__, GS.b_),
+                fun!(gamma_chain, GS.f__, GS.a_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(gamma_chain, GS.f__, GS.b_, GS.c_),
+                fun!(gamma_chain, GS.f__, GS.a_, GS.c_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(ETS.gamma, GS.f_, GS.b_, GS.d_),
+                fun!(ETS.gamma, GS.f_, GS.a_, GS.b_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(ETS.gamma, GS.b_, GS.x_, GS.y_),
+                fun!(ETS.gamma, GS.a_, GS.x_, GS.y_),
+            ),
+            (
+                fun!(ETS.metric, mink(GS.a_), mink(GS.b_)) * fun!(ETS.gamma, mink(GS.b_), GS.c__),
+                fun!(ETS.gamma, mink(GS.a_), GS.c__),
+            ),
+            (
+                fun!(ETS.metric, GS.a_, GS.b_) * fun!(ETS.metric, GS.c_, GS.b_),
+                fun!(ETS.metric, GS.a_, GS.c_),
+            ),
+            (
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(ETS.id, GS.b_, GS.c_),
+                fun!(ETS.id, GS.a_, GS.c_),
+            ),
+            (fun!(ETS.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
+            (
+                fun!(ETS.metric, mink(GS.a_), mink(GS.b_)).pow(Atom::new_num(2)),
+                Atom::new_num(4),
+            ),
+            (
+                fun!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
+                Atom::new_num(16),
+            ),
+            (fun!(ETS.id, GS.a_, GS.a_), Atom::new_num(4)),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+        let mut iters = 0;
+        loop {
+            iters += 1;
+            // expr.replace_all_repeat_mut(
+            //     &(fun!(ETS.gamma, GS.a_, GS.a_, GS.b_) * fun!(gamma_chain, GS.y__, GS.b_, GS.c_))
+            //         .to_pattern(),
+            //     fun!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_).to_pattern(),
+            //     None,
+            //     None,
+            // );
+            let new = expr.0.replace_all_multiple(&gamma_chain_accumulator);
+            let new = new.replace_all_multiple(&simplification_reps);
+            if new == expr.0 {
+                println!("gamma accumulate after {iters} iters:{}", new);
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+
+        fn gamma_chain_perm(arg: AtomView, context: &Context, out: &mut Atom) -> bool {
+            let gamma_chain = symb!("gamma_chain");
+            let mink = Minkowski::selfless_symbol();
+            let mut found = false;
+            if let AtomView::Fun(f) = arg {
+                if f.get_symbol() == gamma_chain {
+                    let mut argiter = f.iter();
+                    let dim = argiter.next().unwrap();
+                    let minks = argiter.next().unwrap();
+                    let bisi = argiter.next().unwrap();
+                    let bisj = argiter.next().unwrap();
+
+                    if let AtomView::Fun(f) = minks {
+                        let mut initial_args: IndexSet<AtomView<'_>> = IndexSet::new();
+                        let mut final_args = vec![];
+                        let mut closed = None;
+                        for (j, a) in f.iter().enumerate() {
+                            if closed.is_none() {
+                                if let Some((i, _)) = initial_args.get_full(&a) {
+                                    let new_interval = i..(j.checked_sub(1).unwrap());
+                                    closed = Some(new_interval);
+                                } else {
+                                    initial_args.insert(a);
+                                }
+                            } else {
+                                final_args.push(a);
+                            }
+                        }
+
+                        if let Some(interval) = closed {
+                            let len = interval.len();
+
+                            initial_args.shift_remove_index(interval.start);
+
+                            let new_args =
+                                initial_args.drain(0..interval.start).collect::<Vec<_>>();
+
+                            let mut gcn = FunctionBuilder::new(mink);
+                            gcn = gcn.add_args(&new_args);
+                            let inner_args = initial_args.drain(..).collect::<Vec<_>>();
+                            assert_eq!(inner_args.len(), len, "gamma chain perm {interval:?}");
+
+                            if len == 0 {
+                                gcn = gcn.add_args(&final_args);
+                                *out = fun!(gamma_chain, dim, gcn.finish(), bisi, bisj) * 4;
+                                return true;
+                            } else if len % 2 == 0 {
+                                let lenm1 = len.checked_sub(1).unwrap();
+                                let mut gcnp = FunctionBuilder::new(mink);
+                                gcnp = gcnp.add_args(&new_args);
+
+                                gcn = gcn.add_arg(inner_args[lenm1]);
+                                for a in &inner_args[0..(lenm1)] {
+                                    gcn = gcn.add_arg(*a);
+                                }
+                                for a in inner_args[0..(lenm1)].iter().rev() {
+                                    gcnp = gcnp.add_arg(*a);
+                                }
+                                gcnp = gcnp.add_arg(inner_args[lenm1]);
+
+                                gcn = gcn.add_args(&final_args);
+                                gcnp = gcnp.add_args(&final_args);
+
+                                *out = ((fun!(gamma_chain, dim, gcn.finish(), bisi, bisj)
+                                    + fun!(gamma_chain, dim, gcnp.finish(), bisi, bisj))
+                                    * 2)
+                                .replace_map(&gamma_chain_perm);
+                                return true;
+                            } else {
+                                for a in inner_args.iter().rev() {
+                                    gcn = gcn.add_arg(*a);
+                                }
+                                gcn = gcn.add_args(&final_args);
+                                let new = fun!(gamma_chain, dim, gcn.finish(), bisi, bisj) * -2;
+                                *out = new; //.replace_map(&gamma_chain_perm);
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        }
+
+        let mut iters = 0;
+        loop {
+            iters += 1;
+            let new = expr.0.replace_map(&gamma_chain_perm);
+            expr.replace_all_multiple_mut(&simplification_reps);
+            if new == expr.0 {
+                println!("gamma chain contract after {iters} iters:{}", new);
                 break;
             } else {
                 expr.0 = new;
@@ -2087,50 +2722,87 @@ impl GammaSimplified {
         fn gamma_tracer(arg: AtomView, context: &Context, out: &mut Atom) -> bool {
             let gamma_trace = symb!("gamma_trace");
 
-            let mut found = false;
+            fn mink(dim: AtomView, mu: AtomView) -> Atom {
+                fun!(Minkowski::selfless_symbol(), dim, mu)
+            }
+
             if let AtomView::Fun(f) = arg {
                 if f.get_symbol() == gamma_trace {
-                    found = true;
-                    let mut sum = Atom::Zero;
+                    let mut argiter = f.iter();
+                    let dim = argiter.next().unwrap();
+                    let minks = argiter.next().unwrap();
 
-                    if f.get_nargs() == 1 {
-                        *out = Atom::Zero;
-                    }
-                    let args = f.iter().collect::<Vec<_>>();
+                    if let AtomView::Fun(f) = minks {
+                        let mut sum = Atom::Zero;
 
-                    for i in 1..args.len() {
-                        let sign = if i % 2 == 0 { -1 } else { 1 };
+                        if f.get_nargs() == 0 {
+                            *out = Atom::new_num(4);
+                            return true;
+                        }
 
-                        let mut gcn = FunctionBuilder::new(gamma_trace);
-                        for j in 1..args.len() {
-                            if i != j {
-                                gcn = gcn.add_arg(args[j]);
+                        if f.get_nargs() == 1 {
+                            *out = Atom::Zero;
+                            return true;
+                        }
+
+                        let args = f.iter().collect::<Vec<_>>();
+
+                        for i in 1..args.len() {
+                            let sign = if i % 2 == 0 { -1 } else { 1 };
+
+                            let mut gcn = FunctionBuilder::new(Minkowski::selfless_symbol());
+                            for j in 1..args.len() {
+                                if i != j {
+                                    gcn = gcn.add_arg(args[j]);
+                                }
+                            }
+
+                            let metric = if args[0] == args[i] {
+                                Atom::new_num(4)
+                                // Atom::new_var(GS.dim)
+                            } else {
+                                fun!(ETS.metric, mink(dim, args[0]), mink(dim, args[i]))
+                            };
+                            if args.len() == 2 {
+                                sum = sum + metric * sign * 4;
+                            } else {
+                                sum = sum + metric * fun!(gamma_trace, dim, gcn.finish()) * sign;
                             }
                         }
-
-                        let metric = if args[0] == args[i] {
-                            Atom::new_num(4)
-                            // Atom::new_var(GS.dim)
-                        } else {
-                            fun!(ETS.metric, args[0], args[i])
-                        };
-                        if args.len() == 2 {
-                            sum = sum + metric * sign * 4;
-                        } else {
-                            sum = sum + metric * gcn.finish() * sign;
-                        }
+                        *out = sum.replace_map(&gamma_tracer);
+                        // println!("{}->{}", arg, out);
+                        return true;
                     }
-                    *out = sum;
-
-                    // println!("{}->{}", arg, out);
                 }
             }
 
-            found
+            false
         }
 
+        let mut iters = 0;
         loop {
-            let new = expr.0.replace_map(&gamma_tracer);
+            iters += 1;
+            let mut new = expr.0.replace_map(&gamma_tracer);
+            // new = new.expand();
+            new.replace_all_multiple_mut(&simplification_reps);
+            if new == expr.0 {
+                // println!("gamma trace process after {iters} iters:{}", new);
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+
+        println!("all algebra done in {:?}", now.elapsed());
+        let now = Instant::now();
+
+        println!("expanding..");
+        iters = 0;
+        expr.0 = expr.0.expand();
+        println!("{:?} simplifying", now.elapsed());
+        loop {
+            iters += 1;
+            let new = expr.0.replace_all_multiple(&simplification_reps);
             if new == expr.0 {
                 break;
             } else {
@@ -2138,30 +2810,70 @@ impl GammaSimplified {
             }
         }
 
-        let reps: Vec<_> = [
+        let metric_simplify: Vec<_> = [
             (
-                fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
-                    * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-                fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+                fun!(ETS.id, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
+                fun!(GS.f_, GS.d___, GS.a_, GS.c___),
             ),
             (
-                fun!(ETS.metric, mink(GS.a_), mink(GS.b_)).pow(Atom::new_num(2)),
-                Atom::new_num(4),
+                fun!(ETS.metric, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
+                fun!(GS.f_, GS.d___, GS.a_, GS.c___),
             ),
-            (
-                fun!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
-                Atom::new_num(16),
-            ),
-            (fun!(ETS.id, GS.a_, GS.a_), Atom::new_num(4)),
         ]
         .iter()
         .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
         .collect();
 
-        expr.replace_all_multiple_repeat_mut(&reps);
-        expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
+        iters = 0;
+        loop {
+            iters += 1;
+            let new = expr.0.replace_all_multiple(&metric_simplify);
+            if new == expr.0 {
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+        println!("finished simplifying in {:?}", now.elapsed());
+
+        // );
         expr
+    }
+
+    pub fn dot_expand(mut atom: SerializableAtom) -> SerializableAtom {
+        let mu = fun!(Minkowski::selfless_symbol(), 4, GS.a_);
+        fn concrete(i: usize) -> Atom {
+            fun!(symb!("cind"), i as i32)
+        }
+        let dot_simplify: Vec<_> = [
+            (
+                fun!(GS.f_, GS.a___, mu) * fun!(GS.g_, GS.d___, mu),
+                fun!(GS.f_, GS.a___, concrete(0)) * fun!(GS.g_, GS.d___, concrete(0))
+                    - fun!(GS.f_, GS.a___, concrete(1)) * fun!(GS.g_, GS.d___, concrete(1))
+                    - fun!(GS.f_, GS.a___, concrete(2)) * fun!(GS.g_, GS.d___, concrete(2))
+                    - fun!(GS.f_, GS.a___, concrete(3)) * fun!(GS.g_, GS.d___, concrete(3)),
+            ),
+            (
+                fun!(GS.f_, GS.a___, mu).pow(Atom::new_num(2)),
+                fun!(GS.f_, GS.a___, concrete(0)) * fun!(GS.f_, GS.a___, concrete(0))
+                    - fun!(GS.f_, GS.a___, concrete(1)) * fun!(GS.f_, GS.a___, concrete(1))
+                    - fun!(GS.f_, GS.a___, concrete(2)) * fun!(GS.f_, GS.a___, concrete(2))
+                    - fun!(GS.f_, GS.a___, concrete(3)) * fun!(GS.f_, GS.a___, concrete(3)),
+            ),
+            (
+                fun!(GS.f_, mu).pow(Atom::new_num(2)),
+                fun!(GS.f_, concrete(0)) * fun!(GS.f_, concrete(0))
+                    - fun!(GS.f_, concrete(1)) * fun!(GS.f_, concrete(1))
+                    - fun!(GS.f_, concrete(2)) * fun!(GS.f_, concrete(2))
+                    - fun!(GS.f_, concrete(3)) * fun!(GS.f_, concrete(3)),
+            ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+        atom.replace_all_multiple_repeat_mut(&dot_simplify);
+        // atom.0 = atom.0.factor();
+        atom
     }
 
     // pub fn gamma_symplify(color: ColorProjected) -> GammaSimplified {
@@ -2228,6 +2940,21 @@ impl Numerator<GammaSimplified> {
         debug!("Parsing gamma simplified numerator into tensor network");
         Numerator {
             state: self.state.parse(),
+        }
+    }
+
+    pub fn contract(self) -> Numerator<Contracted> {
+        let gamma_simplified = self.state.colorless.map_data(GammaSimplified::dot_expand);
+
+        Numerator {
+            state: Contracted {
+                tensor: ParamTensor::param(
+                    gamma_simplified
+                        .contract(&self.state.color)
+                        .unwrap()
+                        .map_data(|a| a.0),
+                ),
+            },
         }
     }
 
@@ -2646,6 +3373,17 @@ impl TypedNumeratorState for Contracted {
 }
 
 impl Numerator<Contracted> {
+    pub fn apply_reps(&self, reps: &[Replacement]) -> Self {
+        let tensor = self
+            .state
+            .tensor
+            .map_data_ref_self(|a| a.replace_all_multiple(reps));
+
+        Self {
+            state: Contracted { tensor },
+        }
+    }
+
     pub fn write(
         &self,
         extra_info: &ExtraInfo,

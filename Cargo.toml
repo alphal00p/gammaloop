@@ -46,7 +46,6 @@ symbolica = { version = "0.14.0" }
 spenso = { version = "0.4.0", features = ["shadowing"] }
 linnet = {git =  "https://github.com/alphal00p/linnet",features = ["symbolica","drawing"]}
 
-
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"

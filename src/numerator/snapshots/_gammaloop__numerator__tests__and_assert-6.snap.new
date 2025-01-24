@@ -1,6 +1,0 @@
----
-source: src/numerator/tests.rs
-assertion_line: 839
-expression: g_simp.to_canonical_string()
----
--16
