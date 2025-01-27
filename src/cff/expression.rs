@@ -5,7 +5,7 @@ use crate::{
     momentum::FourMomentum,
     numerator::{Evaluate, Evaluators, Numerator, RepeatingIteratorTensorOrScalar},
     utils::{FloatLike, VarFloat, F},
-    ExportSettings, Settings,
+    ProcessSettings, Settings,
 };
 use bincode::{Decode, Encode};
 use color_eyre::Report;
@@ -570,7 +570,7 @@ impl CFFExpression {
         params: &[Atom],
         path: PathBuf,
         graph_name: SmartString<LazyCompact>,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Result<(), Report> {
         if !export_settings.compile_cff && !export_settings.compile_separate_orientations {
             return Ok(());

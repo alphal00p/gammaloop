@@ -8,7 +8,7 @@ use _gammaloop::{
     },
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
-    ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,
+    GammaloopCompileOptions, ProcessSettings, TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
@@ -18,7 +18,7 @@ fn load_helper(path: &str) -> Graph {
     let (model, mut amplitude, _) = load_amplitude_output(path, true);
 
     amplitude.amplitude_graphs[0].graph.generate_cff();
-    let export_settings = ExportSettings {
+    let export_settings = ProcessSettings {
         compile_cff: true,
         numerator_settings: NumeratorSettings {
             eval_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {

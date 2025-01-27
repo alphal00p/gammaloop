@@ -15,7 +15,7 @@ use crate::{
     model::Model,
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
-    ExportSettings, HasIntegrand, Settings,
+    HasIntegrand, ProcessSettings, Settings,
 };
 use ahash::HashMap;
 use chrono::{Datelike, Local, Timelike};
@@ -715,7 +715,7 @@ impl PythonWorker {
     }
 
     pub fn apply_feynman_rules(&mut self, export_yaml_str: &str) {
-        let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
+        let export_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
         self.amplitudes.map_mut_graphs(|g| {
@@ -832,7 +832,7 @@ impl PythonWorker {
         format: &str,
         export_yaml_str: &str,
     ) -> PyResult<String> {
-        let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
+        let export_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
 

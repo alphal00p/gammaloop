@@ -25,11 +25,13 @@ pub mod integrate;
 pub mod ltd;
 pub mod model;
 pub mod momentum;
+pub mod momentum_sample;
 pub mod new_cs;
+pub mod new_graph;
 pub mod numerator;
 pub mod observables;
+pub mod signature;
 pub mod subtraction;
-
 pub mod tests;
 pub mod tests_from_pytest;
 pub mod utils;
@@ -917,7 +919,7 @@ pub struct SubtractionSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExportSettings {
+pub struct ProcessSettings {
     // Generation Time settings
     pub compile_cff: bool,
     pub numerator_settings: NumeratorSettings,

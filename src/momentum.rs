@@ -43,8 +43,10 @@ use symbolica::{
 };
 
 use spenso::complex::Complex;
+use typed_index_collections::TiVec;
 
 use crate::{
+    momentum_sample::LoopIndex,
     utils::{ApproxEq, FloatLike, RefDefault, F},
     RotationSetting,
 };
@@ -2064,6 +2066,22 @@ impl Index<usize> for Signature {
 impl Signature {
     pub fn validate_basis<T>(&self, basis: &[T]) -> bool {
         self.len() == basis.len()
+    }
+
+    pub fn sum(&mut self, other: &Self) {
+        for (i, sign) in other.iter().enumerate() {
+            match (self[i], sign) {
+                (SignOrZero::Zero, SignOrZero::Zero) => self.0[i] = SignOrZero::Zero,
+                (SignOrZero::Zero, SignOrZero::Plus) => self.0[i] = SignOrZero::Plus,
+                (SignOrZero::Zero, SignOrZero::Minus) => self.0[i] = SignOrZero::Minus,
+                (SignOrZero::Plus, SignOrZero::Zero) => self.0[i] = SignOrZero::Plus,
+                (SignOrZero::Plus, SignOrZero::Plus) => panic!("cannot add two positive signs"),
+                (SignOrZero::Plus, SignOrZero::Minus) => self.0[i] = SignOrZero::Zero,
+                (SignOrZero::Minus, SignOrZero::Zero) => self.0[i] = SignOrZero::Minus,
+                (SignOrZero::Minus, SignOrZero::Plus) => self.0[i] = SignOrZero::Zero,
+                (SignOrZero::Minus, SignOrZero::Minus) => panic!("cannot add two negative signs"),
+            }
+        }
     }
 
     pub fn panic_validate_basis<T>(&self, basis: &[T]) {

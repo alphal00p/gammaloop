@@ -17,7 +17,8 @@ use crate::{
     momentum::FourMomentum,
     utils::{FloatLike, F},
 };
-use crate::{ExportSettings, Settings};
+
+use crate::{ProcessSettings, Settings};
 use ahash::{AHashMap, HashSet};
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
@@ -2016,7 +2017,7 @@ impl Numerator<PolyContracted> {
         model: &Model,
         graph: &BareGraph,
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Numerator<Evaluators> {
         let s = &export_settings.numerator_settings.eval_settings;
         debug!("generating evaluators for contracted numerator");
@@ -3248,7 +3249,7 @@ impl Numerator<Contracted> {
         double_param_values: Vec<Complex<F<f64>>>,
         quad_param_values: Vec<Complex<F<f128>>>,
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Numerator<Evaluators> {
         let o = &export_settings.numerator_settings.eval_settings;
         let owned_fn_map = self.generate_fn_map();
@@ -3343,7 +3344,7 @@ impl Numerator<Contracted> {
         model: &Model,
         graph: &BareGraph,
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Numerator<Evaluators> {
         let o = &export_settings.numerator_settings.eval_settings;
         debug!("generating evaluators for contracted numerator");

@@ -6,7 +6,7 @@ use crate::numerator::{
     AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, Numerator, NumeratorState,
     PythonState, TypedNumeratorState, UnInit,
 };
-use crate::{utils::*, ExportSettings, Externals, Polarizations, Settings};
+use crate::{utils::*, Externals, Polarizations, ProcessSettings, Settings};
 use bincode;
 use color_eyre::Result;
 use color_eyre::{Help, Report};
@@ -430,7 +430,7 @@ impl AmplitudeGraph<UnInit> {
 
     pub fn apply_feynman_rules(
         self,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> AmplitudeGraph<AppliedFeynmanRule> {
         let graph = self.graph.apply_feynman_rules(export_settings);
         AmplitudeGraph {
@@ -748,7 +748,7 @@ impl Amplitude<UnInit> {
 
     pub fn apply_feynman_rules(
         self,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Amplitude<AppliedFeynmanRule> {
         let graphs = self
             .amplitude_graphs
@@ -779,7 +779,7 @@ impl Amplitude<PythonState> {
         &mut self,
         export_root: &str,
         model: &Model,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
         no_evaluators: bool,
     ) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
@@ -871,7 +871,7 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
         &self,
         export_root: &str,
         printer_ops: PrintOptions,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Result<(), Report> {
         let path = Path::new(export_root)
             .join("sources")
@@ -1184,7 +1184,7 @@ impl AmplitudeList<UnInit> {
 
     pub fn generate_numerator(
         self,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> AmplitudeList<AppliedFeynmanRule> {
         let container = self
             .container

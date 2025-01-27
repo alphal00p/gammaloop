@@ -29,7 +29,7 @@ use crate::utils::{f128, F};
 use crate::utils::{ApproxEq, FloatLike, PrecisionUpgradable};
 use crate::{cff, ltd, Externals, GeneralSettings, Integrand, Polarizations, RotationSetting};
 use crate::{
-    inspect::inspect, ExportSettings, GammaloopCompileOptions, Settings,
+    inspect::inspect, GammaloopCompileOptions, ProcessSettings, Settings,
     TropicalSubgraphTableSettings,
 };
 use ahash::AHashMap;
@@ -92,8 +92,8 @@ const PHASEMINUSONE: F<f64> = F(f64::consts::PI);
 #[allow(unused)]
 const PHASEMINUSI: F<f64> = F(-f64::consts::FRAC_PI_2);
 
-pub fn test_export_settings() -> ExportSettings {
-    ExportSettings {
+pub fn test_export_settings() -> ProcessSettings {
+    ProcessSettings {
         compile_cff: true,
         numerator_settings: NumeratorSettings {
             eval_settings: NumeratorEvaluatorOptions::Joint(EvaluatorOptions {

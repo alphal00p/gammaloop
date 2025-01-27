@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use bitvec::vec::BitVec;
 use color_eyre::Result;
-
+use hyperdual::Num;
 use linnet::half_edge::{
     subgraph::{cycle::SignedCycle, Inclusion, OrientedCut, SubGraph, SubGraphOps},
     EdgeData, EdgeId, Hedge, HedgeGraph, HedgeVec, Involution, Orientation, Parent, TraversalTree,
@@ -46,7 +46,8 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
 
         let tree = TraversalTree::dfs(self, &self.full_filter(), root, None);
 
-        let leaves = tree.leaf_edges();
+        let mut leaves = tree.leaf_edges();
+
         let mut external_leaves = self.empty_filter();
         let mut externals = vec![];
 
@@ -67,18 +68,18 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         }
 
         let mut current_leaf_nodes = tree.leaf_nodes(&self);
+
         while let Some(leaf_node) = current_leaf_nodes.pop() {
             let hairs = &self.hairs_from_id(leaf_node).hairs;
             let mut root_pointer = None;
-            let mut signature = empty_signature.clone();
+            let mut root_signature = empty_signature.clone();
 
             for h in hairs.included_iter() {
                 match tree.parent(h) {
                     Parent::Root => {}
                     Parent::Hedge { hedge_to_root, .. } => {
-                        if *hedge_to_root != h {
-                            signature.sum(&ext_signatures[h].as_ref().unwrap());
-                        } else {
+                        if *hedge_to_root == h {
+                            root_pointer = Some(h);
                             if self
                                 .involved_node_hairs(h)
                                 .unwrap()
@@ -86,19 +87,18 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
                                 .included_iter()
                                 .all(|a| a != h && ext_signatures.is_set(a))
                             {
-                                current_leaf_nodes.push(self.involved_node_id(h).unwrap())
+                                current_leaf_nodes.push(self.involved_node_id(h).unwrap());
                             }
-                            root_pointer = Some(h);
+                        } else {
+                            root_signature.sum(ext_signatures[h].as_ref().unwrap());
                         }
                     }
-                    Parent::Unset => {
-                        panic!("Unset parent")
-                    }
+                    Parent::Unset => {}
                 }
             }
 
             if let Some(root_pointer) = root_pointer {
-                ext_signatures[root_pointer] = Some(signature);
+                ext_signatures[root_pointer] = Some(root_signature);
             }
         }
 
@@ -156,110 +156,4 @@ impl Graph<UnInit> {
             derived_data: DerivedGraphData::new_empty(),
         }
     }
-}
-
-struct ProcessDefinition {
-    pub initial_pdgs: Vec<i64>,
-    pub final_pdgs: Vec<i64>,
-}
-struct Process<S: NumeratorState = PythonState> {
-    pub definition: ProcessDefinition,
-    pub collection: ProcessCollection<S>,
-}
-
-struct GenerationOptions {}
-
-impl Process {
-    pub fn generate(definition: ProcessDefinition, options: GenerationOptions) -> Result<Self> {
-        Ok(Process {
-            definition,
-            collection: ProcessCollection::Amplitudes(vec![]),
-        })
-    }
-}
-
-struct ProcessList<S: NumeratorState = PythonState> {
-    pub processes: Vec<Process<S>>,
-}
-
-struct ExportSettings {
-    root_folder: PathBuf,
-}
-
-// Python Api
-impl ProcessList {
-    /// Generates a new empty process list
-    pub fn new() -> Self {
-        ProcessList { processes: vec![] }
-    }
-
-    /// given the process definition generates a new process and adds it to the list
-    pub fn generate(
-        &mut self,
-        definition: ProcessDefinition,
-        options: GenerationOptions,
-    ) -> Result<()> {
-        self.processes.push(Process::generate(definition, options)?);
-        Ok(())
-    }
-
-    /// imports a process list from a folder
-    pub fn import(settings: ExportSettings) -> Result<Self> {
-        Ok(Self::new())
-    }
-
-    ///preprocesses the process list according to the settings
-    pub fn preprocess(&mut self, settings: ProcessSettings) -> Result<()> {
-        Ok(())
-    }
-
-    /// exports a process list to a folder
-    pub fn export(&self, settings: ExportSettings) -> Result<()> {
-        Ok(())
-    }
-}
-
-enum ProcessCollection<S: NumeratorState = PythonState> {
-    Amplitudes(Vec<Amplitude<S>>),
-    CrossSections(Vec<CrossSection<S>>),
-}
-
-impl<S: NumeratorState> ProcessCollection<S> {
-    fn new_amplitude() -> Self {
-        Self::Amplitudes(vec![])
-    }
-
-    fn new_cross_section() -> Self {
-        Self::CrossSections(vec![])
-    }
-}
-
-struct Amplitude<S: NumeratorState = PythonState> {
-    graphs: Vec<Graph<S>>,
-}
-
-impl<S: NumeratorState> Amplitude<S> {
-    pub fn new() -> Self {
-        Self { graphs: vec![] }
-    }
-
-    pub fn add_graph(&mut self, graph: Graph<S>) -> Result<()> {
-        self.graphs.push(graph);
-        /// TODO: validate that the graph is compatible
-        Ok(())
-    }
-}
-struct CrossSection<S: NumeratorState = PythonState> {
-    supergraphs: Vec<CrossSectionGraph<S>>,
-}
-
-pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
-    graph: Graph<S>,
-    cuts: Vec<CrossSectionCut>,
-}
-
-pub struct CrossSectionCut {
-    cut: OrientedCut,
-    left: BitVec,
-    right: BitVec,
 }

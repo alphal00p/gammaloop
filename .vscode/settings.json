@@ -1,15 +1,25 @@
 {
   "editor.formatOnSave": true,
   "rust-analyzer.check.command": "clippy",
-  "rust-analyzer.runnables.extraArgs": ["--no-default-features"],
+  "rust-analyzer.runnables.extraArgs": [
+    "--no-default-features"
+  ],
   "rust-analyzer.runnables.extraTestBinaryArgs": [
     "--nocapture"
   ],
-  "conventionalCommits.scopes": ["cargo", "python", "build", "rust"],
-  "rust-analyzer.linkedProjects": ["./Cargo.toml"],
+  "conventionalCommits.scopes": [
+    "cargo",
+    "python",
+    "build",
+    "rust"
+  ],
+  "rust-analyzer.linkedProjects": [
+    "./Cargo.toml"
+  ],
   "github.copilot.enable": {
     "*": true
   },
   "svg.preview.background": "white",
   "workbench.activityBar.location": "top",
+  "editor.fontFamily": "'Monaspace Neon', 'monospace', monospace",
 }

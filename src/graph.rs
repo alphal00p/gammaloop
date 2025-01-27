@@ -26,7 +26,7 @@ use crate::{
         static_counterterm::{self, CounterTerm},
     },
     utils::{self, sorted_vectorize, FloatLike, F, GS},
-    ExportSettings, Settings, TropicalSubgraphTableSettings,
+    ProcessSettings, Settings, TropicalSubgraphTableSettings,
 };
 
 use linnet::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder};
@@ -2676,7 +2676,7 @@ impl Graph<UnInit> {
         model: &Model,
         contraction_settings: ContractionSettings<Rational>,
         export_path: PathBuf,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Graph {
         let processed_data = self.derived_data.map(|d| {
             d.process_numerator(
@@ -2696,7 +2696,7 @@ impl Graph<UnInit> {
 
     pub fn apply_feynman_rules(
         mut self,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Graph<AppliedFeynmanRule> {
         let processed_data = self
             .derived_data
@@ -2817,7 +2817,7 @@ impl<S: NumeratorState> Graph<S> {
     pub fn build_compiled_expression(
         &mut self,
         export_path: PathBuf,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Result<(), Report> {
         let params = self.bare_graph.build_params_for_cff();
         match self.derived_data.as_mut().unwrap().cff_expression.as_mut() {
@@ -3472,7 +3472,7 @@ impl DerivedGraphData<Evaluators> {
 }
 
 impl DerivedGraphData<UnInit> {
-    fn new_empty() -> Self {
+    pub fn new_empty() -> Self {
         Self {
             loop_momentum_bases: None,
             cff_expression: None,
@@ -3490,7 +3490,7 @@ impl DerivedGraphData<UnInit> {
         base_graph: &mut BareGraph,
         contraction_settings: ContractionSettings<Rational>,
         export_path: PathBuf,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Result<DerivedGraphData<PythonState>> {
         let expr_path = export_path.join("expressions");
         std::fs::create_dir_all(&expr_path)?;
@@ -3592,7 +3592,7 @@ impl DerivedGraphData<UnInit> {
         model: &Model,
         contraction_settings: ContractionSettings<Rational>,
         export_path: PathBuf,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Result<DerivedGraphData<Evaluators>> {
         let expr_path = export_path.join("expressions");
         std::fs::create_dir_all(&expr_path)?;
@@ -3694,7 +3694,7 @@ impl DerivedGraphData<UnInit> {
     fn apply_feynman_rules(
         self,
         base_graph: &mut BareGraph,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> DerivedGraphData<AppliedFeynmanRule> {
         self.map_numerator(|n| {
             n.from_graph(
