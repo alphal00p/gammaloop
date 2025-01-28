@@ -165,7 +165,7 @@ impl Graph<UnInit> {
 }
 
 struct ProcessDefinition {
-    pub initial_pdgs: Vec<i64>,
+    pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
     pub final_pdgs: Vec<i64>,
 }
 struct Process<S: NumeratorState = PythonState> {
@@ -184,11 +184,12 @@ struct GenerationOptions {
 }
 
 impl Process {
-    pub fn generate(
-        definition: ProcessDefinition,
-        options: GenerationOptions,
-        model: &Model,
-    ) -> Result<Self> {
+    pub fn generate(options: GenerationOptions, model: &Model) -> Result<Self> {
+        let definition = ProcessDefinition {
+            initial_pdgs: options.feyngen_options.initial_pdgs.clone(),
+            final_pdgs: options.feyngen_options.final_pdgs.clone(),
+        };
+
         let diagram_generator = FeynGen::new(options.feyngen_options.clone());
 
         let bare_collection = diagram_generator.generate(
@@ -233,14 +234,8 @@ impl ProcessList {
     }
 
     /// given the process definition generates a new process and adds it to the list
-    pub fn generate(
-        &mut self,
-        definition: ProcessDefinition,
-        options: GenerationOptions,
-        model: &Model,
-    ) -> Result<()> {
-        self.processes
-            .push(Process::generate(definition, options, model)?);
+    pub fn generate(&mut self, options: GenerationOptions, model: &Model) -> Result<()> {
+        self.processes.push(Process::generate(options, model)?);
         Ok(())
     }
 
