@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use ahash::HashMap;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 
@@ -10,7 +11,12 @@ use linnet::half_edge::{
 use symbolica::atom::{representation::InlineNum, Atom};
 
 use crate::{
+    feyngen::{
+        diagram_generator::FeynGen, FeynGenOptions, GenerationType,
+        NumeratorAwareGraphGroupingOption,
+    },
     graph::{BareGraph, DerivedGraphData, Edge, LoopMomentumBasis, Vertex},
+    model::Model,
     momentum::{SignOrZero, Signature},
     numerator::{NumeratorState, PythonState, UnInit},
     ProcessSettings,
@@ -167,13 +173,46 @@ struct Process<S: NumeratorState = PythonState> {
     pub collection: ProcessCollection<S>,
 }
 
-struct GenerationOptions {}
+struct GenerationOptions {
+    pub feyngen_options: FeynGenOptions,
+    pub numerator_aware_isomorphism_grouping: NumeratorAwareGraphGroupingOption,
+    pub filter_self_loop: bool,
+    pub graph_prefix: String,
+    pub selected_graphs: Option<Vec<String>>,
+    pub vetoed_graphs: Option<Vec<String>>,
+    pub loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
+}
 
 impl Process {
-    pub fn generate(definition: ProcessDefinition, options: GenerationOptions) -> Result<Self> {
+    pub fn generate(
+        definition: ProcessDefinition,
+        options: GenerationOptions,
+        model: &Model,
+    ) -> Result<Self> {
+        let diagram_generator = FeynGen::new(options.feyngen_options.clone());
+
+        let bare_collection = diagram_generator.generate(
+            model,
+            options.numerator_aware_isomorphism_grouping,
+            options.filter_self_loop,
+            options.graph_prefix,
+            options.selected_graphs,
+            options.vetoed_graphs,
+            options.loop_momentum_bases,
+        )?;
+
+        let collection = match options.feyngen_options.generation_type {
+            GenerationType::Amplitude => {
+                ProcessCollection::Amplitudes(todo!("turn baregraph into amplitude graph"))
+            }
+            GenerationType::CrossSection => {
+                ProcessCollection::CrossSections(todo!("turn baregraph into crosssectiongraph"))
+            }
+        };
+
         Ok(Process {
             definition,
-            collection: ProcessCollection::Amplitudes(vec![]),
+            collection,
         })
     }
 }
@@ -198,8 +237,10 @@ impl ProcessList {
         &mut self,
         definition: ProcessDefinition,
         options: GenerationOptions,
+        model: &Model,
     ) -> Result<()> {
-        self.processes.push(Process::generate(definition, options)?);
+        self.processes
+            .push(Process::generate(definition, options, model)?);
         Ok(())
     }
 
