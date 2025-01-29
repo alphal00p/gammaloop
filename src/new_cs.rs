@@ -134,6 +134,7 @@ impl Process {
                         .expect("failed to convert overall factor to symbolica atom"),
                     hedge_graph_builder.build(),
                 )
+                .forget_type()
             })
             .collect_vec();
 
@@ -143,7 +144,8 @@ impl Process {
                     graphs: hedge_collection,
                 };
 
-                todo!("convert to PythonState")
+                // just one for now
+                ProcessCollection::Amplitudes(vec![amplitude])
             }
             GenerationType::CrossSection => {
                 todo!("build representation of cuts")

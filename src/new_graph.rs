@@ -23,6 +23,17 @@ pub struct Graph<S: NumeratorState = PythonState> {
     derived_data: DerivedGraphData<S>,
 }
 
+impl<S: NumeratorState> Graph<S> {
+    pub fn forget_type(self) -> Graph<PythonState> {
+        Graph {
+            multiplicity: self.multiplicity,
+            underlying: self.underlying,
+            loop_momentum_basis: self.loop_momentum_basis,
+            derived_data: self.derived_data.forget_type(),
+        }
+    }
+}
+
 pub trait FeynmanGraph {
     fn new_lmb(&self) -> HedgeLMB;
 }
