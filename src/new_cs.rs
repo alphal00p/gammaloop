@@ -276,16 +276,24 @@ impl Process {
                     }
                 }
 
-                hedge_graph_builder.build()
+                Graph::new(
+                    Atom::parse(&bare_graph.overall_factor)
+                        .expect("failed to convert overall factor to symbolica atom"),
+                    hedge_graph_builder.build(),
+                )
             })
             .collect_vec();
 
         let collection = match options.feyngen_options.generation_type {
             GenerationType::Amplitude => {
-                ProcessCollection::Amplitudes(todo!("turn baregraph into amplitude graph"))
+                let amplitude = Amplitude {
+                    graphs: hedge_collection,
+                };
+
+                todo!("convert to PythonState")
             }
             GenerationType::CrossSection => {
-                ProcessCollection::CrossSections(todo!("turn baregraph into crosssectiongraph"))
+                todo!("build representation of cuts")
             }
         };
 
