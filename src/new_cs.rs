@@ -157,7 +157,7 @@ impl Process {
     }
 }
 
-struct ProcessList<S: NumeratorState = PythonState> {
+pub struct ProcessList<S: NumeratorState = PythonState> {
     pub processes: Vec<Process<S>>,
 }
 
