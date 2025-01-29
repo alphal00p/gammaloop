@@ -8,6 +8,7 @@ use bincode::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
+use std::ops::Index;
 use symbolica::domains::float::NumericalFloatLike;
 use typed_index_collections::TiVec;
 use uuid::Uuid;
@@ -19,6 +20,8 @@ pub struct ExternalIndex(pub usize);
 
 #[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct LoopMomenta<T>(Vec<ThreeMomentum<T>>);
+
+pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
 
 impl<T> LoopMomenta<T> {
     fn iter(&self) -> std::slice::Iter<'_, ThreeMomentum<T>> {
@@ -33,6 +36,33 @@ impl<T> LoopMomenta<T> {
 impl<T> FromIterator<ThreeMomentum<T>> for LoopMomenta<T> {
     fn from_iter<I: IntoIterator<Item = ThreeMomentum<T>>>(iter: I) -> Self {
         LoopMomenta(iter.into_iter().collect())
+    }
+}
+
+impl<T> Index<LoopIndex> for LoopMomenta<T> {
+    type Output = ThreeMomentum<T>;
+
+    fn index(&self, index: LoopIndex) -> &Self::Output {
+        &self.0[index.0]
+    }
+}
+
+impl<T: FloatLike> LoopMomenta<F<T>> {
+    pub fn hyper_radius(&self, subspace: Subspace) -> F<T> {
+        let zero = self.0[0].px.zero();
+        match subspace {
+            None => self.iter().fold(zero, |acc, x| acc + x.norm_squared()),
+            Some(subspace) => subspace
+                .iter()
+                .fold(zero, |acc, &i| acc + self[i].norm_squared()),
+        }
+    }
+
+    pub fn rescale(&self, factor: &F<T>, subspace: Subspace) -> Self {
+        match subspace {
+            None => LoopMomenta::from_iter(self.iter().map(|k| k * factor)),
+            Some(subspace) => LoopMomenta::from_iter(subspace.iter().map(|&i| &self[i] * factor)),
+        }
     }
 }
 
