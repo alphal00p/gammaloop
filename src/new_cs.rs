@@ -1,16 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use ahash::HashMap;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 
 use itertools::Itertools;
-use linnet::half_edge::{
-    subgraph::{cycle::SignedCycle, Inclusion, OrientedCut, SubGraph, SubGraphOps},
-    EdgeData, EdgeId, Flow, Hedge, HedgeGraph, HedgeGraphBuilder, HedgeVec, Involution, NodeIndex,
-    Orientation, Parent, TraversalTree,
-};
-use symbolica::atom::{representation::InlineNum, Atom};
+use linnet::half_edge::{subgraph::OrientedCut, Flow, HedgeGraphBuilder, NodeIndex};
+use symbolica::atom::Atom;
 
 use crate::{
     feyngen::{
@@ -18,12 +14,10 @@ use crate::{
         NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
         TadpolesFilterOptions,
     },
-    graph::{BareGraph, DerivedGraphData, Edge, EdgeType, LoopMomentumBasis, Vertex},
+    graph::{Edge, EdgeType, Vertex},
     model::Model,
-    momentum::{SignOrZero, Signature},
     new_graph::Graph,
-    numerator::{NumeratorState, PythonState, UnInit},
-    tests_from_pytest::load_generic_model,
+    numerator::{NumeratorState, PythonState},
     ProcessSettings,
 };
 
@@ -247,7 +241,7 @@ pub struct CrossSectionCut {
 
 #[test]
 fn test_new_structure() {
-    let model = load_generic_model("sm");
+    let model = crate::tests_from_pytest::load_generic_model("sm");
     let generation_options = test_process();
 
     let mut process_list = ProcessList::new();
