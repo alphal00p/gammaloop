@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::debug_info::DEBUG_LOGGER;
+use crate::feyngen::FeynGenError;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
@@ -18,7 +19,7 @@ use crate::{
     utils::{FloatLike, F},
 };
 use crate::{ExportSettings, Settings};
-use ahash::AHashMap;
+use ahash::{AHashMap, HashSet};
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
@@ -63,6 +64,7 @@ use spenso::{
     },
 };
 use symbolica::domains::finite_field::PrimeIteratorU64;
+use symbolica::domains::integer::Integer;
 use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
 use symbolica::printer::{AtomPrinter, PrintOptions};
@@ -1031,7 +1033,7 @@ impl AppliedFeynmanRule {
     }
     pub fn from_graph(graph: &BareGraph, prefactor: &GlobalPrefactor) -> Self {
         debug!("Generating numerator for graph: {}", graph.name);
-        debug!("momentum: {}", graph.dot_lmb());
+        // debug!("momentum: {}", graph.dot_lmb());
 
         let vatoms: Vec<_> = graph
             .vertices
@@ -1086,7 +1088,7 @@ impl AppliedFeynmanRule {
 }
 
 impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
-    pub fn cannonize(&self) -> Result<Self, String> {
+    pub fn canonize(&self) -> Result<Self, String> {
         let pats: Vec<_> = ExtendibleReps::BUILTIN_SELFDUAL_NAMES
             .iter()
             .map(Symbol::new)
@@ -1116,6 +1118,23 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
         let color = self.state.color.clone(); //map_data_ref_result(|a| a.0.canonize_tensors(&indices, None).map(|a| a.into()))?;
 
         let colorless = self.state.colorless.map_data_ref_result(|a| {
+            // println!("canonizing atom: {}", a);
+            // println!(
+            //     "with indices: {}",
+            //     indices
+            //         .iter()
+            //         .map(|a| a.to_canonical_string())
+            //         .collect::<Vec<_>>()
+            //         .join(",")
+            // );
+            // println!(
+            //     "and groups: {}",
+            //     groups
+            //         .iter()
+            //         .map(|a| a.to_canonical_string())
+            //         .collect::<Vec<_>>()
+            //         .join(",")
+            // );
             a.0.canonize_tensors(&indices, Some(&groups))
                 .map(|a| a.into())
         })?;
@@ -1400,17 +1419,22 @@ impl Numerator<ColorSimplified> {
     pub fn validate_against_branches(&self, seed: usize) -> bool {
         let gamma = self.clone().gamma_simplify().parse();
         let mut nogamma = self.clone().parse();
-        let reps = nogamma.random_concretize_reps(seed);
+        let mut iter = PrimeIteratorU64::new(seed as u64);
+        let reps = nogamma.random_concretize_reps(Some(&mut iter), false);
 
+        let reps_view = reps
+            .iter()
+            .map(|(a, b)| (a.as_view(), b.as_view()))
+            .collect::<Vec<_>>();
         let gammat = gamma
-            .apply_reps(&reps)
+            .apply_reps(reps_view.clone())
             .contract::<Rational>(ContractionSettings::Normal)
             .unwrap()
             .state
             .tensor;
 
         let nogammat = nogamma
-            .apply_reps(&reps)
+            .apply_reps(reps_view)
             .contract::<Rational>(ContractionSettings::Normal)
             .unwrap()
             .state
@@ -2363,7 +2387,7 @@ impl Numerator<GammaSimplified> {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Network {
     #[bincode(with_serde)]
-    net: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>,
+    pub net: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>,
 }
 
 impl TryFrom<PythonState> for Network {
@@ -2455,14 +2479,129 @@ impl TypedNumeratorState for Network {
     }
 }
 
+impl Numerator<SymbolicExpression<Color>> {
+    pub fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
+        // println!(
+        //     "REPLACEMENTS FUFU:\n{}",
+        //     rep_atoms
+        //         .iter()
+        //         .map(|(a, b)| format!("{} -> {}", a, b))
+        //         .collect::<Vec<_>>()
+        //         .join("\n")
+        // );
+        // let reps: Vec<Replacement> = rep_atoms
+        //     .iter()
+        //     .map(|(l, r)| Replacement::new(l.to_pattern(), r.to_pattern()))
+        //     .collect::<Vec<_>>();
+        let expr = SymbolicExpression::<Color> {
+            colorless: self.state.colorless.map_data_ref_self(|a| {
+                let mut b: Atom = a.0.clone();
+                for (src, trgt) in rep_atoms.iter() {
+                    b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                }
+                //let b = a.0.replace_all_multiple(&reps).into();
+                // println!("AFTER: {}", b);
+                b.into()
+            }),
+            color: self.state.color.map_data_ref_self(|a| {
+                let mut b: Atom = a.0.clone();
+                // println!("BEFORE: {}", a.0);
+                for (src, trgt) in rep_atoms.iter() {
+                    b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                }
+                //let b = a.0.replace_all_multiple(&reps).into();
+                // println!("AFTER: {}", b);
+                b.into()
+            }),
+            state: self.state.state,
+        };
+        Self { state: { expr } }
+    }
+}
+
 impl Numerator<Network> {
-    pub fn apply_reps(&self, reps: &[Replacement]) -> Self {
+    pub fn evaluate_with_replacements(
+        &self,
+        replacements: Vec<(AtomView, AtomView)>,
+        fully_numerical_substitutions: bool,
+    ) -> Result<Atom, FeynGenError> {
+        if !fully_numerical_substitutions {
+            let t = self
+                .apply_reps(replacements)
+                .contract::<Rational>(ContractionSettings::Normal)
+                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
+            if let Some(s) = t.state.tensor.scalar() {
+                Ok(s.expand())
+            } else {
+                Err(FeynGenError::NumeratorEvaluationError(
+                    "Could not simplify to a scalar.".into(),
+                ))
+            }
+        } else {
+            let g = self.state.net.graph.map_nodes_ref(|(_, d)| {
+                d.map_data_ref_result::<_, FeynGenError>(|a| {
+                    let mut b = a.clone();
+                    for (src, trgt) in replacements.iter() {
+                        b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                    }
+                    b = b.expand();
+                    let mut re = 0;
+                    let mut im = 0;
+                    for (var, coeff) in b.coefficient_list::<u8,_>(&[Atom::new_var(Atom::I)]).iter() {
+                        let c = coeff.try_into().map_err(|e| {
+                            FeynGenError::NumeratorEvaluationError(format!(
+                                "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
+                                e, coeff
+                            ))
+                        })?;
+                        if *var == Atom::new_var(Atom::I) {
+                            re = c;
+                        } else if *var == Atom::new_num(1) {
+                            im = c;
+                        } else {
+                            return Err(FeynGenError::NumeratorEvaluationError(format!(
+                                "Could not convert the following tensor coefficient to a complex integer: {}",
+                                b
+                            )));
+                        }
+                    }
+                    Ok(Complex::<Integer>::new(Integer::new(re), Integer::new(im)))
+                })
+                .unwrap()
+            });
+
+            let mut net = TensorNetwork {
+                graph: g,
+                scalar: self.state.net.scalar.clone(),
+            };
+            net.contract();
+            let result_tensor = net
+                .result_tensor_ref()
+                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
+            if let Some(s) = result_tensor.clone().scalar() {
+                let factor = net.scalar.unwrap_or(Atom::new_num(1).into()).0;
+                let res = (Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I) * factor;
+                Ok(res.expand())
+            } else {
+                Err(FeynGenError::NumeratorEvaluationError(
+                    "Could not simplify to a scalar.".into(),
+                ))
+            }
+        }
+    }
+
+    pub fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
         let net = TensorNetwork {
-            graph: self
-                .state
-                .net
-                .graph
-                .map_nodes_ref(|(_, d)| d.map_data_ref_self(|a| a.replace_all_multiple(reps))),
+            graph: self.state.net.graph.map_nodes_ref(|(_, d)| {
+                d.map_data_ref_self(|a| {
+                    let mut b = a.clone();
+                    for (src, trgt) in rep_atoms.iter() {
+                        b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                    }
+                    b
+                    //let b = a.replace_all_multiple(&reps);
+                })
+            }),
             scalar: self.state.net.scalar.clone(),
         };
 
@@ -2508,35 +2647,75 @@ impl Numerator<Network> {
     //     reps
     // }
 
-    pub fn random_concretize_reps(&mut self, seed: usize) -> Vec<Replacement> {
-        let mut prime = PrimeIteratorU64::new(1)
-            .skip(seed)
+    pub fn random_concretize_reps(
+        &self,
+        sample_iterator: Option<&mut PrimeIteratorU64>,
+        fully_numerical_substitution: bool,
+    ) -> Vec<(Atom, Atom)> {
+        let prime_iterator = if let Some(iterator) = sample_iterator {
+            iterator
+        } else {
+            &mut PrimeIteratorU64::new(1)
+        };
+
+        let mut prime = prime_iterator
             .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
         let mut reps = vec![];
-        let pat = fun!(
-            GS.f_,
-            Atom::new_var(GS.y_),
-            fun!(symb!("cind"), Atom::new_var(GS.x_))
-        )
-        .to_pattern();
-        for (n, d) in self.state.net.graph.nodes.iter() {
-            for (_, a) in d.tensor.iter_flat() {
-                for m in a.pattern_match(&pat, None, None) {
-                    reps.push(Replacement::new(
-                        pat.replace_wildcards(&m).to_pattern(),
-                        prime.next().unwrap().to_pattern(),
-                    ));
+
+        if !fully_numerical_substitution {
+            let variable = fun!(
+                GS.f_,
+                Atom::new_var(GS.y_),
+                fun!(symb!("cind"), Atom::new_var(GS.x_))
+            );
+            let pat = variable.to_pattern();
+
+            for (_n, d) in self.state.net.graph.nodes.iter() {
+                for (_, a) in d.tensor.iter_flat() {
+                    for m in a.pattern_match(&pat, None, None) {
+                        reps.push(pat.replace_wildcards(&m));
+                    }
+                }
+            }
+        } else {
+            for (_n, d) in self.state.net.graph.nodes.iter() {
+                for (_, a) in d.tensor.iter_flat() {
+                    let all_symbols = a.get_all_symbols(true);
+                    for s in all_symbols {
+                        if s == Atom::I {
+                            continue;
+                        }
+                        let mut found_it = false;
+                        let pat = fun!(s, symb!("x__")).to_pattern();
+                        for m in a.pattern_match(&pat, None, None) {
+                            reps.push(pat.replace_wildcards(&m));
+                            found_it = true;
+                        }
+                        if !found_it {
+                            reps.push(Atom::new_var(s));
+                        }
+                    }
                 }
             }
         }
-        reps
+
+        reps = reps
+            .iter()
+            .collect::<HashSet<_>>()
+            .iter()
+            .map(|&a| a.to_owned())
+            .collect::<Vec<_>>();
+        reps.sort();
+        reps.iter()
+            .map(|a: &Atom| (a.clone(), prime.next().unwrap()))
+            .collect()
     }
 
     pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
-        debug!(
-            "contracting network {}",
-            self.state.net.rich_graph().dot_nodes()
-        );
+        // debug!(
+        //     "contracting network {}",
+        //     self.state.net.rich_graph().dot_nodes()
+        // );
         let contracted = self.state.contract(settings)?;
         Ok(Numerator { state: contracted })
     }

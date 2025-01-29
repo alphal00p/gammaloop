@@ -321,12 +321,11 @@ class GammaLoopConfiguration(object):
                         continue
                 else:
 
-
-                     if config_chunk[key] is None:
-                         config_chunk[key] = value
-                     else:
-                         self._update_config_chunk(
-                         setting_path, config_chunk[key], value)
+                    if config_chunk[key] is None:
+                        config_chunk[key] = value
+                    else:
+                        self._update_config_chunk(
+                            setting_path, config_chunk[key], value)
 
             else:
                 if value is not None and config_chunk[key] is not None and type(value) is not type(config_chunk[key]):
@@ -334,9 +333,11 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {
+                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -828,6 +829,18 @@ class GammaLoop(object):
                                  help='Select only the graphs with the specified names (default: all)')
     generate_parser.add_argument('--veto_graphs', '-veto_graphs', default=None, type=str, nargs="+",
                                  help='Veto graphs with the specified names (default: no veto)')
+
+    # grouping options
+    generate_parser.add_argument('--compare_canonized_numerator', '-can_num', default=None, action=BooleanOptionalAction,
+                                 help='Enable comparison of canonized numerators when grouping diagrams. (default: Automatic)')
+    generate_parser.add_argument('--number_of_samples_for_numerator_comparisons', '-n_num_samples', default=None, type=int,
+                                 help='Number of numerical samples to consider when performing comparison of numerators when grouping graphs (default: Automatic)')
+    generate_parser.add_argument('--consider_internal_masses_only_in_numerator_isomorphisms', '-masses_only', default=None, action=BooleanOptionalAction,
+                                 help='Consider internal masses only (and not PDGS) when grouping isomorphic diagrams. (default: Automatic)')
+    generate_parser.add_argument('--numerical_samples_seed', '-sseed', type=int, default=None,
+                                 help='Seed for generation of numerical prime samples when grouping diagrams. (default: Automatic)')
+    generate_parser.add_argument('--fully_numerical_substitution_when_comparing_numerators', '-full_num', default=None, action=BooleanOptionalAction,
+                                 help='Substitute all parameters and square roots to num numerical values when sampling numerators for grouping diagrams. (default: Automatic)')
 
     # generate_amplitude command, without the --amplitude option
     generate_amplitude_parser = copy.deepcopy(generate_parser)

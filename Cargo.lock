@@ -2586,7 +2586,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=e93679f3f77c24017b73cce527087a1bce52bbbf#e93679f3f77c24017b73cce527087a1bce52bbbf"
+source = "git+https://github.com/alphal00p/spenso?rev=2b5d8bf455dde5849ad6897731cb53430116aa17#2b5d8bf455dde5849ad6897731cb53430116aa17"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2607,6 +2607,7 @@ dependencies = [
  "flexi_logger",
  "gat-lending-iterator",
  "indexmap 2.7.0",
+ "itertools 0.14.0",
  "log",
  "num 0.4.3",
  "once_cell",

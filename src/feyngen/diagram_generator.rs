@@ -1,42 +1,41 @@
 use indicatif::ParallelProgressIterator;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
+use log::warn;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
+use spenso::structure::representation::ExtendibleReps;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use symbolica::atom::AtomView;
+use symbolica::atom::Symbol;
+use symbolica::domains::finite_field::PrimeIteratorU64;
+use symbolica::fun;
+use symbolica::symb;
 
 use ahash::AHashMap;
 use ahash::AHashSet;
 use ahash::HashMap;
 use colored::Colorize;
-use itertools::zip;
 use log::debug;
 use log::info;
 use smartstring::{LazyCompact, SmartString};
-use spenso::iterators::IteratableTensor;
-use spenso::parametric::atomcore::TensorAtomMaps;
-use spenso::parametric::ParamTensor;
-use spenso::upgrading_arithmetic::FallibleAdd;
-use spenso::upgrading_arithmetic::FallibleSub;
 use symbolica::atom::AtomCore;
-use symbolica::domains::rational::Rational;
-use symbolica::id::Pattern;
 
 use super::NumeratorAwareGraphGroupingOption;
 use super::SelfEnergyFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
+
+use crate::graph::EdgeType;
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
 use crate::momentum::SignOrZero;
 use crate::numerator::Color;
-use crate::numerator::ContractionSettings;
 use crate::numerator::GlobalPrefactor;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
@@ -62,6 +61,25 @@ pub struct NodeColorWithVertexRule {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct NodeColorWithoutVertexRule {
     pub external_tag: i32,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct EdgeColor {
+    pub pdg: isize,
+}
+
+impl std::fmt::Display for EdgeColor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.pdg)
+    }
+}
+
+impl EdgeColor {
+    pub fn from_particle(particle: Arc<Particle>) -> Self {
+        Self {
+            pdg: particle.pdg_code,
+        }
+    }
 }
 
 pub trait NodeColorFunctions: Sized {
@@ -176,29 +194,31 @@ impl FeynGen {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn assign_node_colors<'a>(
+    pub fn assign_node_colors(
         model: &Model,
-        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, &'a str>,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
         node_colors: &HashMap<
             Vec<(Option<bool>, SmartString<LazyCompact>)>,
             Vec<SmartString<LazyCompact>>,
         >,
-    ) -> Result<Vec<(SymbolicaGraph<NodeColorWithVertexRule, &'a str>, usize)>, FeynGenError> {
+    ) -> Result<Vec<(SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, usize)>, FeynGenError>
+    {
         // println!("graph = {}", graph.to_dot());
         let mut colored_nodes: Vec<Vec<NodeColorWithVertexRule>> = vec![vec![]];
         let edges = graph.edges();
         for (i_n, node) in graph.nodes().iter().enumerate() {
             let mut node_edges = vec![];
             for e in node.edges.iter() {
-                let orientation = if edges[*e].directed {
+                let orientation: Option<bool> = if edges[*e].directed {
                     Some(edges[*e].vertices.0 == i_n)
                 } else {
                     None
                 };
-                node_edges.push((orientation, edges[*e].data.into()));
+                let particle = model.get_particle_from_pdg(edges[*e].data.pdg);
+                node_edges.push((orientation, particle.name.clone()));
                 // self-loop edge must be counted twice
                 if edges[*e].vertices.0 == edges[*e].vertices.1 {
-                    node_edges.push((orientation.map(|o| !o), edges[*e].data.into()));
+                    node_edges.push((orientation.map(|o| !o), particle.name.clone()));
                 }
             }
             node_edges.sort();
@@ -242,7 +262,12 @@ impl FeynGen {
                 g.add_node(colored_node);
             }
             for edge in graph.edges() {
-                _ = g.add_edge(edge.vertices.0, edge.vertices.1, edge.directed, edge.data);
+                _ = g.add_edge(
+                    edge.vertices.0,
+                    edge.vertices.1,
+                    edge.directed,
+                    edge.data.clone(),
+                );
             }
             colored_graphs.push(g);
         }
@@ -251,15 +276,14 @@ impl FeynGen {
 
     #[allow(clippy::type_complexity)]
     pub fn group_isomorphic_graphs<
-        'a,
         NodeColor: Clone + PartialEq + Eq + PartialOrd + Ord + std::hash::Hash,
     >(
-        graphs: &[SymbolicaGraph<NodeColor, &'a str>],
-    ) -> Vec<(SymbolicaGraph<NodeColor, &'a str>, usize)> {
+        graphs: &[SymbolicaGraph<NodeColor, EdgeColor>],
+    ) -> Vec<(SymbolicaGraph<NodeColor, EdgeColor>, usize)> {
         if graphs.len() == 1 {
             return vec![(graphs[0].clone(), 1)];
         }
-        let mut iso_buckets: HashMap<SymbolicaGraph<NodeColor, &'a str>, usize> =
+        let mut iso_buckets: HashMap<SymbolicaGraph<NodeColor, EdgeColor>, usize> =
             HashMap::default();
         for g in graphs.iter() {
             let canonized_g = g.canonize();
@@ -274,15 +298,12 @@ impl FeynGen {
     }
 
     pub fn contains_particles(
-        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, &str>,
-        particles: &[SmartString<LazyCompact>],
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
+        particles: &[isize],
     ) -> bool {
-        let mut particles_stack = particles
-            .iter()
-            .map(|p_name| p_name.as_str())
-            .collect::<Vec<_>>();
+        let mut particles_stack = particles.to_vec();
         for edge in graph.edges().iter() {
-            if let Some(pos) = particles_stack.iter().position(|&x| x == edge.data) {
+            if let Some(pos) = particles_stack.iter().position(|&x| x == edge.data.pdg) {
                 particles_stack.swap_remove(pos);
             }
             if particles_stack.is_empty() {
@@ -293,7 +314,7 @@ impl FeynGen {
     }
 
     pub fn find_edge_position(
-        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, &str>,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
         edge_vertices: (usize, usize),
         oriented: bool,
     ) -> Option<usize> {
@@ -309,11 +330,14 @@ impl FeynGen {
 
     pub fn veto_special_topologies(
         model: &Model,
-        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, &str>,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
         veto_self_energy: Option<&SelfEnergyFilterOptions>,
         veto_tadpole: Option<&TadpolesFilterOptions>,
         veto_snails: Option<&SnailFilterOptions>,
     ) -> bool {
+        if graph.nodes().iter().any(|n| n.data.external_tag < 0) {
+            panic!("External tag must be positive, but found negative as obtained when performing external state symmetrization");
+        }
         let debug = false;
         if debug {
             debug!(
@@ -350,7 +374,7 @@ impl FeynGen {
             return false;
         }
         let graph_nodes: &[symbolica::graph::Node<NodeColorWithoutVertexRule>] = graph.nodes();
-        let graph_edges: &[symbolica::graph::Edge<&str>] = graph.edges();
+        let graph_edges: &[symbolica::graph::Edge<EdgeColor>] = graph.edges();
 
         let max_external = graph
             .nodes()
@@ -380,10 +404,10 @@ impl FeynGen {
         for e in graph_edges {
             if graph_nodes[e.vertices.0].data.external_tag != 0 {
                 external_partices[(graph_nodes[e.vertices.0].data.external_tag - 1) as usize] =
-                    model.get_particle(&SmartString::<LazyCompact>::from(e.data));
+                    model.get_particle_from_pdg(e.data.pdg);
             } else if graph_nodes[e.vertices.1].data.external_tag != 0 {
                 external_partices[(graph_nodes[e.vertices.1].data.external_tag - 1) as usize] =
-                    model.get_particle(&SmartString::<LazyCompact>::from(e.data));
+                    model.get_particle_from_pdg(e.data.pdg);
             }
         }
 
@@ -594,8 +618,7 @@ impl FeynGen {
             .unwrap_or_else(|| {
                 panic!("Could not find edge between bridge node parent and grandparent")
             })];
-            let attachment_particle =
-                model.get_particle(&SmartString::<LazyCompact>::from(attachment_edge.data));
+            let attachment_particle = model.get_particle_from_pdg(attachment_edge.data.pdg);
 
             if !tree_bridge_node_indices.contains(back_edge_start_node_index) {
                 // Tadpole
@@ -680,7 +703,7 @@ impl FeynGen {
     pub fn contains_cut<NodeColor>(
         &self,
         model: &Model,
-        graph: &SymbolicaGraph<NodeColor, &str>,
+        graph: &SymbolicaGraph<NodeColor, EdgeColor>,
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
     ) -> bool
@@ -770,7 +793,7 @@ impl FeynGen {
         let n_particles = self.options.initial_pdgs.len();
         let he_graph = HedgeGraph::from(graph.clone()).map(
             |node_color| node_color,
-            |_, d| d.map(|d| model.get_particle(&SmartString::from_str(d).unwrap())),
+            |_, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
         );
 
         let mut s_set = AHashSet::new();
@@ -816,10 +839,10 @@ impl FeynGen {
     pub fn contains_cut_fast<NodeColor: NodeColorFunctions>(
         &self,
         model: &Model,
-        graph: &SymbolicaGraph<NodeColor, &str>,
+        graph: &SymbolicaGraph<NodeColor, EdgeColor>,
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
-        particles: &[SmartString<LazyCompact>],
+        particles: &[isize],
     ) -> bool {
         let n_initial_states = self.options.initial_pdgs.len();
         // Quick filter to check if the diagram can possibly contain a cut with the right particles and splitting the graph in two parts,
@@ -831,16 +854,16 @@ impl FeynGen {
 
         // for now normalize it all to particles
         let mut cut_map: std::collections::HashMap<
-            SmartString<LazyCompact>,
+            isize,
             std::vec::Vec<usize>,
             ahash::RandomState,
         > = HashMap::default();
-        for p in particles.iter().collect::<HashSet<_>>() {
-            let particle = model.get_particle(p);
+        for &p in particles.iter().collect::<HashSet<_>>() {
+            let particle = model.get_particle_from_pdg(p);
             if particle.is_antiparticle() {
-                cut_map.insert(particle.get_anti_particle(model).name.clone(), vec![]);
+                cut_map.insert(particle.get_anti_particle(model).pdg_code, vec![]);
             } else {
-                cut_map.insert(p.clone(), vec![]);
+                cut_map.insert(p, vec![]);
             }
         }
         let mut unresolved_set: Vec<usize> = vec![];
@@ -851,11 +874,11 @@ impl FeynGen {
             {
                 continue;
             }
-            let particle = model.get_particle(&edge.data.into());
+            let particle = model.get_particle_from_pdg(edge.data.pdg);
             let e = if particle.is_antiparticle() {
-                cut_map.get_mut(&particle.get_anti_particle(model).name)
+                cut_map.get_mut(&particle.get_anti_particle(model).pdg_code)
             } else {
-                cut_map.get_mut(&particle.name)
+                cut_map.get_mut(&particle.pdg_code)
             };
             if let Some(cut_entry) = e {
                 cut_entry.push(i_e);
@@ -882,7 +905,7 @@ impl FeynGen {
                 .iter()
                 .map(|p| {
                     if let Some(particle) = p {
-                        cut_map.get(particle.as_str()).unwrap().iter()
+                        cut_map.get(particle).unwrap().iter()
                     } else {
                         unresolved_set.iter()
                     }
@@ -935,7 +958,7 @@ impl FeynGen {
 
         fn are_incoming_connected_to_outgoing<NodeColor>(
             cut: &[usize],
-            graph: &SymbolicaGraph<NodeColor, &str>,
+            graph: &SymbolicaGraph<NodeColor, EdgeColor>,
             adj_list: &HashMap<usize, Vec<(usize, usize)>>,
             left_nodes: &[usize],
             right_nodes: &[usize],
@@ -971,8 +994,8 @@ impl FeynGen {
                     continue 'cutloop;
                 }
                 // Make sure the cut is minimal and that no subcut is a valid cut.
-                for subcut in (1..=(particles.len() - 1))
-                    .flat_map(|offset| cut.iter().combinations(particles.len() - offset))
+                for subcut in (1..=(cut.len() - 1))
+                    .flat_map(|offset| cut.iter().combinations(cut.len() - offset))
                 {
                     if !are_incoming_connected_to_outgoing(
                         subcut.iter().map(|&id| *id).collect::<Vec<_>>().as_slice(),
@@ -991,17 +1014,17 @@ impl FeynGen {
         false
     }
 
-    fn group_isomorphic_graphs_after_node_color_change<'a, NC>(
-        graphs: &HashMap<SymbolicaGraph<NC, &'a str>, Atom>,
+    fn group_isomorphic_graphs_after_node_color_change<NC>(
+        graphs: &HashMap<SymbolicaGraph<NC, EdgeColor>, Atom>,
         node_colors_to_change: &HashMap<i32, i32>,
-    ) -> HashMap<SymbolicaGraph<NC, &'a str>, Atom>
+    ) -> HashMap<SymbolicaGraph<NC, EdgeColor>, Atom>
     where
         NC: NodeColorFunctions + Clone + PartialOrd + Ord + Eq + std::hash::Hash,
     {
         #[allow(clippy::type_complexity)]
         let mut iso_buckets: HashMap<
-            SymbolicaGraph<NC, &'a str>,
-            (usize, (SymbolicaGraph<NC, &'a str>, Vec<usize>, Atom)),
+            SymbolicaGraph<NC, EdgeColor>,
+            (usize, (SymbolicaGraph<NC, EdgeColor>, Vec<usize>, Atom)),
         > = HashMap::default();
 
         for (g, symmetry_factor) in graphs.iter() {
@@ -1060,101 +1083,427 @@ impl FeynGen {
             .collect()
     }
 
+    pub fn canonize_external_momenta_assignment(
+        &self,
+        model: &Model,
+        graph: &mut SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+    ) {
+        let mut initial_pdgs = self
+            .options
+            .initial_pdgs
+            .iter()
+            .enumerate()
+            .map(|(i_n, pdg)| (pdg, i_n + 1))
+            .collect::<Vec<_>>();
+        let mut final_pdgs = if matches!(self.options.generation_type, GenerationType::CrossSection)
+        {
+            self.options
+                .initial_pdgs
+                .iter()
+                .enumerate()
+                .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
+                .collect::<Vec<_>>()
+        } else {
+            self.options
+                .final_pdgs
+                .iter()
+                .enumerate()
+                .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
+                .collect::<Vec<_>>()
+        };
+
+        let mut all_pdgs = initial_pdgs.clone();
+        all_pdgs.extend(final_pdgs.clone());
+
+        let mut new_node_data = vec![];
+        let mut new_edge_data = vec![];
+        for (i_e, e) in graph.edges().iter().enumerate() {
+            // All edges supposed to be incoming at this stage
+            assert!(graph.nodes()[e.vertices.1].data.external_tag == 0);
+            let p = model.get_particle_from_pdg(e.data.pdg);
+            let external_tag = graph.nodes()[e.vertices.0].data.external_tag;
+            let is_initial_state = external_tag <= self.options.initial_pdgs.len() as i32;
+            let container = if is_initial_state {
+                &mut initial_pdgs
+            } else {
+                &mut final_pdgs
+            };
+            if external_tag != 0 {
+                let pdg_code = if is_initial_state {
+                    p.pdg_code
+                } else {
+                    p.get_anti_particle(model).pdg_code
+                };
+                if self.options.symmetrize_left_right_states {
+                    let matched_external_pos = all_pdgs
+                        .iter()
+                        .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
+                        .unwrap();
+                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
+                    let new_external_tag = all_pdgs[matched_external_pos].1 as i32;
+                    // If we swapped initial and final state assignment, then we must also flip the pdg code of the corresponding half-edges
+                    if (new_external_tag > initial_pdgs.len() as i32
+                        && new_data.external_tag <= initial_pdgs.len() as i32)
+                        || (new_external_tag <= initial_pdgs.len() as i32
+                            && new_data.external_tag > initial_pdgs.len() as i32)
+                    {
+                        let mut e_data = e.data.clone();
+                        e_data.pdg = model
+                            .get_particle_from_pdg(e_data.pdg)
+                            .get_anti_particle(model)
+                            .pdg_code;
+                        new_edge_data.push((i_e, e_data));
+                    }
+                    new_data.set_external_tag(new_external_tag);
+                    new_node_data.push((e.vertices.0, new_data));
+                    all_pdgs.remove(matched_external_pos);
+                } else {
+                    let matched_external_pos = container
+                        .iter()
+                        .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
+                        .unwrap();
+                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
+                    new_data.set_external_tag(container[matched_external_pos].1 as i32);
+                    new_node_data.push((e.vertices.0, new_data));
+                    container.remove(matched_external_pos);
+                }
+            }
+            /*
+            let external_tag = graph.nodes()[e.vertices.1].data.external_tag;
+            if external_tag != 0 {
+                // let pdg_code = if is_initial_state {
+                //     p.get_anti_particle(model).pdg_code
+                // } else {
+                //     p.pdg_code
+                // };
+                let pdg_code = p.get_anti_particle(model).pdg_code;
+                if self.options.symmetrize_left_right_states {
+                    let matched_external_pos = all_pdgs
+                        .iter()
+                        .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
+                        .unwrap();
+                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
+                    new_data.set_external_tag(all_pdgs[matched_external_pos].1 as i32);
+                    new_node_data.push((e.vertices.0, new_data));
+                    all_pdgs.remove(matched_external_pos);
+                } else {
+                    let matched_external_pos = container
+                        .iter()
+                        .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
+                        .unwrap();
+                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
+                    new_data.set_external_tag(container[matched_external_pos].1 as i32);
+                    new_node_data.push((e.vertices.0, new_data));
+                    container.remove(matched_external_pos);
+                }
+            }
+             */
+        }
+
+        for (node_pos, new_data) in new_node_data {
+            graph.set_node_data(node_pos, new_data);
+        }
+        for (edge_pos, new_data) in new_edge_data {
+            graph.set_edge_data(edge_pos, new_data);
+        }
+    }
+
     /// This function canonizes the edge and vertex ordering of a graph based on the skeletton graph with only propagator mass as edge color.
     /// This is useful to then allow for further grouping of isomorphic graphs, incl numerator.
     #[allow(clippy::type_complexity)]
-    pub fn canonized_edge_and_vertex_ordering<'a>(
+    pub fn canonicalize_edge_and_vertex_ordering(
         &self,
         model: &Model,
-        input_graph: &SymbolicaGraph<NodeColorWithVertexRule, &'a str>,
+        input_graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        node_colors_for_external_symmetrization: &HashMap<i32, i32>,
+        numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
+        manually_canonalize_initial_final_swap: bool,
     ) -> (
         SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
-        SymbolicaGraph<NodeColorWithVertexRule, &'a str>,
+        SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     ) {
-        // Make sure to canonize the edge ordering based on the skeletton graph with only propagator mass as edge color
-        let mut skeletton_graph = SymbolicaGraph::new();
-        for node in input_graph.nodes() {
-            skeletton_graph.add_node(NodeColorWithoutVertexRule {
-                external_tag: node.data.external_tag,
-            });
+        // println!("INPUT GRAPH:\n{}", input_graph.to_dot());
+        let mut canonized_skelettons = vec![];
+        let external_node_positions = input_graph
+            .nodes()
+            .iter()
+            .enumerate()
+            .filter_map(|(i_n, n)| {
+                if n.data.external_tag > 0 {
+                    Some((n.data.external_tag, i_n))
+                } else {
+                    None
+                }
+            })
+            .collect::<HashMap<_, _>>();
+        let mut external_remappings = vec![AHashMap::<usize, usize>::default()];
+        if manually_canonalize_initial_final_swap {
+            let mut remapping = AHashMap::default();
+            for i_ext in 1..=self.options.initial_pdgs.len() {
+                remapping.insert(
+                    *external_node_positions.get(&(i_ext as i32)).unwrap(),
+                    *external_node_positions
+                        .get(&((i_ext + self.options.initial_pdgs.len()) as i32))
+                        .unwrap(),
+                );
+                remapping.insert(
+                    *external_node_positions
+                        .get(&((i_ext + self.options.initial_pdgs.len()) as i32))
+                        .unwrap(),
+                    *external_node_positions.get(&(i_ext as i32)).unwrap(),
+                );
+            }
+            external_remappings.push(remapping);
         }
-        for edge in input_graph.edges() {
-            skeletton_graph
-                .add_edge(
-                    edge.vertices.0,
-                    edge.vertices.1,
-                    false,
-                    model.get_particle(&edge.data.into()).mass.to_string(),
-                )
-                .unwrap();
+        for remapping in external_remappings {
+            // Make sure to canonize the edge ordering based on the skeletton graph with only propagator mass as edge color
+            let mut skeletton_graph = SymbolicaGraph::new();
+            for node in input_graph.nodes() {
+                skeletton_graph.add_node(NodeColorWithoutVertexRule {
+                    external_tag: *node_colors_for_external_symmetrization
+                        .get(&node.data.external_tag)
+                        .unwrap_or(&node.data.external_tag),
+                });
+            }
+            let color_according_to_mass: bool = if let Some(grouping_options) =
+                numerator_aware_isomorphism_grouping.get_options()
+            {
+                grouping_options.differentiate_particle_masses_only
+            } else {
+                true
+            };
+            for edge in input_graph.edges() {
+                // We must maintain the directionality of the external edges to make sure that antifermions are not mapped to fermions
+                // when grouping is done based on the skeletton graph and only the mass of the propagators
+                // Also external edges must always retain their PDG since exchanging the momentum of e.g. a massless electron and muon
+                // would not be a valid isomorphism w.r.t the process definition
+                let is_edge_external = [edge.vertices.0, edge.vertices.1]
+                    .iter()
+                    .any(|e| input_graph.nodes()[*e].data.external_tag != 0);
+                let mut remapped_edge_vertices: (usize, usize) = (
+                    *remapping.get(&edge.vertices.0).unwrap_or(&edge.vertices.0),
+                    *remapping.get(&edge.vertices.1).unwrap_or(&edge.vertices.1),
+                );
+                // Force all externals incoming in the canonicalization
+                let particle = if input_graph.nodes()[edge.vertices.1].data.external_tag > 0 {
+                    remapped_edge_vertices = (remapped_edge_vertices.1, remapped_edge_vertices.0);
+                    model
+                        .get_particle_from_pdg(edge.data.pdg)
+                        .get_anti_particle(model)
+                } else {
+                    model.get_particle_from_pdg(edge.data.pdg)
+                };
+                skeletton_graph
+                    .add_edge(
+                        remapped_edge_vertices.0,
+                        remapped_edge_vertices.1,
+                        is_edge_external, //edge.directed && is_edge_external,
+                        if color_according_to_mass && !is_edge_external {
+                            particle.mass.to_string()
+                        } else {
+                            particle.name.to_string()
+                        },
+                    )
+                    .unwrap();
+            }
+            canonized_skelettons.push((remapping, skeletton_graph.canonize()));
         }
-        let canonized_skeletton = skeletton_graph.canonize();
+        canonized_skelettons.sort_by(|a, b| a.1.graph.partial_cmp(&b.1.graph).unwrap());
+        let (selected_external_remapping, canonized_skeletton) =
+            canonized_skelettons.first().unwrap();
 
-        let mut reordered_nodes: Vec<usize> = vec![0; input_graph.nodes().len()];
+        let mut can_graph_node_pos_to_input_graph_node_pos: Vec<usize> =
+            vec![0; input_graph.nodes().len()];
         for (input_graph_node_position, node_order) in
             canonized_skeletton.vertex_map.iter().enumerate()
         {
-            reordered_nodes[*node_order] = input_graph_node_position;
+            can_graph_node_pos_to_input_graph_node_pos[*node_order] = *selected_external_remapping
+                .get(&input_graph_node_position)
+                .unwrap_or(&input_graph_node_position);
         }
+        let mut input_graph_node_pos_to_can_graph_node_pos: Vec<usize> =
+            vec![0; input_graph.nodes().len()];
+        for (can_graph_node_pos, input_graph_node_pos) in can_graph_node_pos_to_input_graph_node_pos
+            .iter()
+            .enumerate()
+        {
+            input_graph_node_pos_to_can_graph_node_pos[*input_graph_node_pos] = can_graph_node_pos;
+        }
+
+        // Sort nodes according to the canonized skeletton graph
+        // This will also ensure that EMR variables line up
+        let mut sorted_g: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor> =
+            SymbolicaGraph::new();
+        for &node_order in can_graph_node_pos_to_input_graph_node_pos.iter() {
+            let node_data = input_graph.nodes()[*selected_external_remapping
+                .get(&node_order)
+                .unwrap_or(&node_order)]
+            .data
+            .clone();
+            sorted_g.add_node(node_data);
+        }
+
+        let input_graph_nodes = input_graph.nodes();
         let mut reordered_edges = input_graph
             .edges()
             .iter()
             .map(|e| {
-                let unoriented_edge = if canonized_skeletton.vertex_map[e.vertices.0]
-                    < canonized_skeletton.vertex_map[e.vertices.1]
-                {
-                    (
-                        canonized_skeletton.vertex_map[e.vertices.0],
-                        canonized_skeletton.vertex_map[e.vertices.1],
-                    )
+                // Set all external edges incoming and internal edges going from lower to higher node order
+                let is_external = input_graph_nodes[e.vertices.0].data.external_tag > 0
+                    || input_graph_nodes[e.vertices.1].data.external_tag > 0;
+                let is_external_outgoing = input_graph_nodes[e.vertices.1].data.external_tag > 0;
+                let is_flipped = is_external_outgoing
+                    || (!is_external
+                        && input_graph_node_pos_to_can_graph_node_pos[e.vertices.0]
+                            > input_graph_node_pos_to_can_graph_node_pos[e.vertices.1]);
+
+                // let is_flipped = if input_graph_nodes[e.vertices.0].data.external_tag > 0 {
+                //     false
+                // } else if input_graph_nodes[e.vertices.1].data.external_tag > 0 {
+                //     // let (node_data_in, node_data_out) = (
+                //     //     input_graph_nodes[e.vertices.0].data.clone(),
+                //     //     input_graph_nodes[e.vertices.1].data.clone(),
+                //     // );
+                //     // sorted_g.set_node_data(e.vertices.0, node_data_out);
+                //     // sorted_g.set_node_data(e.vertices.1, node_data_in);
+                //     true
+                // } else {
+                //     canonized_skeletton.vertex_map[e.vertices.0]
+                //         > canonized_skeletton.vertex_map[e.vertices.1]
+                // };
+                /*
+                let is_flipped = if input_graph_nodes[e.vertices.0].data.external_tag > 0 {
+                    let (node_data_in, node_data_out) = (
+                        input_graph_nodes[e.vertices.0].data.clone(),
+                        input_graph_nodes[e.vertices.1].data.clone(),
+                    );
+                    if input_graph_nodes[e.vertices.0].data.external_tag
+                        > self.options.initial_pdgs.len() as i32
+                    {
+                        sorted_g.set_node_data(e.vertices.0, node_data_out);
+                        sorted_g.set_node_data(e.vertices.1, node_data_in);
+                        true
+                    } else {
+                        false
+                    }
+                } else if input_graph_nodes[e.vertices.1].data.external_tag > 0 {
+                    let (node_data_in, node_data_out) = (
+                        input_graph_nodes[e.vertices.0].data.clone(),
+                        input_graph_nodes[e.vertices.1].data.clone(),
+                    );
+                    if input_graph_nodes[e.vertices.0].data.external_tag
+                        <= self.options.initial_pdgs.len() as i32
+                    {
+                        sorted_g.set_node_data(e.vertices.0, node_data_out);
+                        sorted_g.set_node_data(e.vertices.1, node_data_in);
+                        true
+                    } else {
+                        false
+                    }
                 } else {
-                    (
-                        canonized_skeletton.vertex_map[e.vertices.1],
-                        canonized_skeletton.vertex_map[e.vertices.0],
-                    )
+                    canonized_skeletton.vertex_map[e.vertices.0]
+                        > canonized_skeletton.vertex_map[e.vertices.1]
                 };
+                */
+                /*
+                let p_is_antiparticle = !p.is_self_antiparticle() && p.is_antiparticle();
+                #[allow(clippy::collapsible_else_if)]
+                let is_flipped = if input_graph_nodes[e.vertices.0].data.external_tag > 0 {
+                    if input_graph_nodes[e.vertices.0].data.external_tag
+                        <= self.options.initial_pdgs.len() as i32
+                    {
+                        false // p_is_antiparticle
+                    } else {
+                        true // !p_is_antiparticle
+                    }
+                } else if input_graph_nodes[e.vertices.1].data.external_tag > 0 {
+                    if input_graph_nodes[e.vertices.1].data.external_tag
+                        > self.options.initial_pdgs.len() as i32
+                    {
+                        false // p_is_antiparticle
+                    } else {
+                        true // !p_is_antiparticle
+                    }
+                } else {
+                    canonized_skeletton.vertex_map[e.vertices.0]
+                        > canonized_skeletton.vertex_map[e.vertices.1]
+                };
+                */
+                /*
+                let is_flipped = if input_graph_nodes[e.vertices.0].data.external_tag > 0
+                    || input_graph_nodes[e.vertices.1].data.external_tag > 0
+                {
+                    canonized_skeletton.vertex_map[e.vertices.0]
+                        > canonized_skeletton.vertex_map[e.vertices.1]
+                } else {
+                    false
+                };
+                 */
+
+                let mut particle = if is_flipped {
+                    model
+                        .get_particle_from_pdg(e.data.pdg)
+                        .get_anti_particle(model)
+                } else {
+                    model.get_particle_from_pdg(e.data.pdg)
+                };
+                // Apply the switch from particle to anti-particle if the canonilazation swapped initial and final states.
+                if !selected_external_remapping.is_empty() && is_external {
+                    particle = particle.get_anti_particle(model);
+                }
                 (
-                    e,
+                    (e, is_flipped),
                     // This key will serve to give a unique ordering of the edges
                     (
-                        unoriented_edge.0,
-                        unoriented_edge.1,
-                        model.get_particle(&e.data.into()).mass.to_string(),
+                        if !is_flipped {
+                            input_graph_node_pos_to_can_graph_node_pos[e.vertices.0]
+                        } else {
+                            input_graph_node_pos_to_can_graph_node_pos[e.vertices.1]
+                        },
+                        if !is_flipped {
+                            input_graph_node_pos_to_can_graph_node_pos[e.vertices.1]
+                        } else {
+                            input_graph_node_pos_to_can_graph_node_pos[e.vertices.0]
+                        },
+                        particle.pdg_code,
                     ),
                 )
             })
             .collect::<Vec<_>>();
         reordered_edges.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        // Sort nodes according to the canonized skeletton graph
-        let mut sorted_g = SymbolicaGraph::new();
-        for node_order in reordered_nodes {
-            sorted_g.add_node(input_graph.nodes()[node_order].data.clone());
-        }
-        for (e, _sorting_key) in reordered_edges.iter() {
+        for &((e, _is_flipped), (v_in, v_out, pdg)) in reordered_edges.iter() {
+            // We must canonize the fermion flow as well, so we force the fermion flow to always go from the lower to the higher node order,
+            // and adjust the edge colour (particle vs anti-particle) accordingly.
+            // This is necessary to ensure that the meaning of the edge momentum representation (which always aligns the monentum with the fermion flow)
+            // is preserved
             sorted_g
                 .add_edge(
-                    canonized_skeletton.vertex_map[e.vertices.0],
-                    canonized_skeletton.vertex_map[e.vertices.1],
+                    v_in,
+                    v_out,
                     e.directed,
-                    e.data,
+                    EdgeColor::from_particle(model.get_particle_from_pdg(pdg)),
                 )
                 .unwrap();
         }
 
-        (canonized_skeletton.graph, sorted_g)
+        // In order for the external assignment momenta to line up between the canonized versions of these graphs
+        self.canonize_external_momenta_assignment(model, &mut sorted_g);
+
+        (canonized_skeletton.graph.to_owned(), sorted_g)
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn generate(
         &self,
         model: &Model,
-        numerator_aware_isomorphism_grouping: NumeratorAwareGraphGroupingOption,
+        numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
         filter_self_loop: bool,
         graph_prefix: String,
         selected_graphs: Option<Vec<String>>,
         vetoed_graphs: Option<Vec<String>>,
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
+        numerator_global_prefactor: GlobalPrefactor,
     ) -> Result<Vec<BareGraph>, FeynGenError> {
         let progress_bar_style = ProgressStyle::with_template(
             "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
@@ -1212,11 +1561,14 @@ impl FeynGen {
                         external_tag: (i_initial + 1) as i32,
                     },
                     if p.is_self_antiparticle() {
-                        (None, p.name.clone())
+                        (None, EdgeColor::from_particle(p))
                     } else if p.is_antiparticle() {
-                        (Some(false), p.get_anti_particle(model).name.clone())
+                        (
+                            Some(false),
+                            EdgeColor::from_particle(p.get_anti_particle(model)),
+                        )
                     } else {
-                        (Some(true), p.name.clone())
+                        (Some(true), EdgeColor::from_particle(p))
                     },
                 )
             })
@@ -1246,11 +1598,14 @@ impl FeynGen {
                                         as i32,
                                 },
                                 if p.is_self_antiparticle() {
-                                    (None, p.name.clone())
+                                    (None, EdgeColor::from_particle(p))
                                 } else if p.is_antiparticle() {
-                                    (Some(true), p.get_anti_particle(model).name.clone())
+                                    (
+                                        Some(true),
+                                        EdgeColor::from_particle(p.get_anti_particle(model)),
+                                    )
                                 } else {
-                                    (Some(false), p.name.clone())
+                                    (Some(false), EdgeColor::from_particle(p))
                                 },
                             )
                         })
@@ -1268,11 +1623,14 @@ impl FeynGen {
                             external_tag: i_final as i32,
                         },
                         if p.is_self_antiparticle() {
-                            (None, p.name.clone())
+                            (None, EdgeColor::from_particle(p))
                         } else if p.is_antiparticle() {
-                            (Some(true), p.get_anti_particle(model).name.clone())
+                            (
+                                Some(true),
+                                EdgeColor::from_particle(p.get_anti_particle(model)),
+                            )
                         } else {
-                            (Some(false), p.name.clone())
+                            (Some(false), EdgeColor::from_particle(p))
                         },
                     ));
                 }
@@ -1281,15 +1639,22 @@ impl FeynGen {
 
         // debug!("external_edges = {:?}", external_edges);
         // debug!("vertex_signatures = {:?}", vertex_signatures);
-        let external_edges_for_generation = external_edges
-            .iter()
-            .map(|(i, (orientation, name))| (i.clone(), (*orientation, name.as_str())))
-            .collect::<Vec<_>>();
+
+        // let external_edges_for_generation = external_edges
+        //     .iter()
+        //     .map(|(i, (orientation, name))| (i.clone(), (*orientation, name)))
+        //     .collect::<Vec<_>>();
+        let external_edges_for_generation = external_edges.clone();
         let vertex_signatures_for_generation = vertex_signatures
             .keys()
             .map(|v| {
                 v.iter()
-                    .map(|(orientation, p)| (*orientation, p.as_str()))
+                    .map(|(orientation, p)| {
+                        (
+                            *orientation,
+                            EdgeColor::from_particle(model.get_particle(p)),
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -1329,9 +1694,9 @@ impl FeynGen {
                 .map(|pdg| {
                     let p = model.get_particle_from_pdg(*pdg as isize);
                     if p.is_antiparticle() {
-                        p.get_anti_particle(model).name.clone()
+                        p.get_anti_particle(model).pdg_code
                     } else {
-                        p.name.clone()
+                        p.pdg_code
                     }
                 })
                 .collect::<Vec<_>>()
@@ -1485,9 +1850,8 @@ impl FeynGen {
             );
         }
 
-        // This secondary cutkosky cut filter is only necessary if some amplitude coupling order constraints where requested
-        // because that one cannot be done until the nodes have been colored with the proper choice of vertex rule
-        // Also the amplitude loop count restriction would not have been correctly handled when using the short-circuit.
+        // This secondary cutkosky cut filter is always necessary as the fast one can have false positives
+        // even in the absence of constraints on amplitudes on either side of the cut
         if self.options.generation_type == GenerationType::CrossSection
             && !self.options.final_pdgs.is_empty()
             && (self
@@ -1502,10 +1866,14 @@ impl FeynGen {
                     .is_some()
                 || !applied_fast_cutksosky_cut_filter)
         {
+            // if self.options.generation_type == GenerationType::CrossSection
+            //     && !self.options.final_pdgs.is_empty()
+            // {
             let bar = ProgressBar::new(processed_graphs.len() as u64);
             bar.set_style(progress_bar_style.clone());
             bar.set_message("Applying secondary exact Cutkosky cut filter...");
             bar.enable_steady_tick(Duration::from_millis(100));
+
             processed_graphs = processed_graphs
                 .into_par_iter()
                 .filter(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type))
@@ -1520,30 +1888,36 @@ impl FeynGen {
         }
 
         // Now account for initial state symmetry by further grouping contributions
-        let mut node_colors_to_change: HashMap<i32, i32> = HashMap::default();
+        let mut node_colors_for_external_symmetrization: HashMap<i32, i32> = HashMap::default();
+        // Because of the interplay with the cutkosky cut filter and left-right canonization when using symmetrize_left_right_states
+        // we must do to canonicalizations here and we will select the "smallest one"
+        let mut node_colors_for_canonicalization_left_right: HashMap<i32, i32> = HashMap::default();
         if self.options.symmetrize_initial_states {
             for initial_color in 1..=self.options.initial_pdgs.len() {
-                node_colors_to_change.insert(
-                    initial_color as i32,
-                    if self.options.symmetrize_left_right_states {
-                        0
-                    } else {
-                        -1
-                    },
-                );
+                let trgt_color = if self.options.symmetrize_left_right_states {
+                    -1
+                } else {
+                    -2
+                };
+                node_colors_for_external_symmetrization.insert(initial_color as i32, trgt_color);
+                if self.options.generation_type == GenerationType::Amplitude {
+                    node_colors_for_canonicalization_left_right
+                        .insert(initial_color as i32, trgt_color);
+                } else {
+                    node_colors_for_canonicalization_left_right.insert(initial_color as i32, -2);
+                }
             }
             if self.options.generation_type == GenerationType::CrossSection {
                 for final_color in
                     self.options.initial_pdgs.len() + 1..=2 * self.options.initial_pdgs.len()
                 {
-                    node_colors_to_change.insert(
-                        final_color as i32,
-                        if self.options.symmetrize_left_right_states {
-                            0
-                        } else {
-                            -2
-                        },
-                    );
+                    let trgt_color = if self.options.symmetrize_left_right_states {
+                        -1
+                    } else {
+                        -3
+                    };
+                    node_colors_for_external_symmetrization.insert(final_color as i32, trgt_color);
+                    node_colors_for_canonicalization_left_right.insert(final_color as i32, -3);
                 }
             }
         }
@@ -1553,23 +1927,24 @@ impl FeynGen {
             for final_color in self.options.initial_pdgs.len() + 1
                 ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
             {
-                node_colors_to_change.insert(
-                    final_color as i32,
-                    if self.options.symmetrize_left_right_states {
-                        0
-                    } else {
-                        -2
-                    },
-                );
+                let trgt_color = if self.options.symmetrize_left_right_states {
+                    -1
+                } else {
+                    -3
+                };
+                node_colors_for_external_symmetrization.insert(final_color as i32, trgt_color);
+                node_colors_for_canonicalization_left_right.insert(final_color as i32, trgt_color);
             }
         }
-        if !node_colors_to_change.is_empty() {
+        // We must disable the naive grouping for cross-sections when symmetrizing the left-right states
+        // because we would wrongly count permutations that could be disabled by the cutkosky cut filter
+        if !node_colors_for_external_symmetrization.is_empty() {
             processed_graphs = FeynGen::group_isomorphic_graphs_after_node_color_change(
                 &processed_graphs
                     .iter()
                     .map(|(g, m)| (g.clone(), Atom::parse(m).unwrap()))
                     .collect::<HashMap<_, _>>(),
-                &node_colors_to_change,
+                &node_colors_for_canonicalization_left_right,
             )
             .iter()
             .map(|(g, m)| (g.clone(), m.to_canonical_string()))
@@ -1588,50 +1963,54 @@ impl FeynGen {
             Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
         > = HashMap::default();
 
+        let mut canonized_processed_graphs = processed_graphs
+            .iter()
+            .map(|(g, symmetry_factor)| {
+                let manually_canonalize_initial_final_swap = self.options.generation_type
+                    == GenerationType::CrossSection
+                    && self.options.symmetrize_left_right_states;
+                let (mut canonical_repr, mut sorted_g) = self
+                    .canonicalize_edge_and_vertex_ordering(
+                        model,
+                        g,
+                        &node_colors_for_canonicalization_left_right,
+                        numerator_aware_isomorphism_grouping,
+                        manually_canonalize_initial_final_swap,
+                    );
+                // If we are symmetrizing the left-right states in the context of a cross-section, the canonaliztion above
+                // has canonized the choice of which nodes to assign to the initial and final state.
+                // We now do a second pass to canonalize the vertex ordering for that particular choice.
+                if manually_canonalize_initial_final_swap {
+                    (canonical_repr, sorted_g) = self.canonicalize_edge_and_vertex_ordering(
+                        model,
+                        &sorted_g,
+                        &node_colors_for_canonicalization_left_right,
+                        numerator_aware_isomorphism_grouping,
+                        false,
+                    );
+                }
+                (canonical_repr, sorted_g, symmetry_factor.clone())
+            })
+            .collect::<Vec<_>>();
+
+        canonized_processed_graphs.sort_by(|a, b| (a.1).partial_cmp(&b.1).unwrap());
+
         let bar = ProgressBar::new(processed_graphs.len() as u64);
+        let mut n_zeroes = 0;
+        let mut n_groupings = 0;
         bar.set_style(progress_bar_style.clone());
-        bar.set_message("Final numerator-aware processing of remaining graphs...");
-        bar.enable_steady_tick(Duration::from_millis(100));
-        for (i_g, (g, symmetry_factor)) in processed_graphs.iter().enumerate() {
+        //bar.enable_steady_tick(Duration::from_millis(100));
+        for (i_g, (canonical_repr, g, symmetry_factor)) in
+            canonized_processed_graphs.iter().enumerate()
+        {
             bar.inc(1);
-            // println!(
-            //     "Computing canonical representation for graph #{}:\nedges: {:?}\n nodes: {:?}",
-            //     i_g,
-            //     g.edges()
-            //         .iter()
-            //         .enumerate()
-            //         .map(|(i_e, e)| format!("{}|{}", i_e, e.data))
-            //         .collect::<Vec<_>>(),
-            //     g.nodes()
-            //         .iter()
-            //         .enumerate()
-            //         .map(|(i_n, n)| format!(
-            //             "{}|{}|{}|edges:{:?}",
-            //             i_n, n.data.0, n.data.1, n.edges
-            //         ))
-            //         .collect::<Vec<_>>()
-            // );
-            let (canonical_repr, sorted_g) = self.canonized_edge_and_vertex_ordering(model, g);
-            // println!(
-            //     "Canonical representation for graph #{}:\nedges: {:?}\n nodes: {:?}",
-            //     i_g,
-            //     sorted_g
-            //         .edges()
-            //         .iter()
-            //         .enumerate()
-            //         .map(|(i_e, e)| format!("{}|{}", i_e, e.data))
-            //         .collect::<Vec<_>>(),
-            //     sorted_g
-            //         .nodes()
-            //         .iter()
-            //         .enumerate()
-            //         .map(|(i_n, n)| format!(
-            //             "{}|{}|{}|edges:{:?}",
-            //             i_n, n.data.0, n.data.1, n.edges
-            //         ))
-            //         .collect::<Vec<_>>()
-            // );
-            // println!("Canonical dot for graph #{}:", canonical_repr.to_dot());
+            bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                "#zeros".green(),
+                format!("{}",n_zeroes).green().bold(),
+                "#groupings".green(),
+                format!("{}",n_groupings).green().bold(),
+            ));
+
             let graph_name = format!("{}{}", graph_prefix, i_g);
             if let Some(selected_graphs) = &selected_graphs {
                 if !selected_graphs.contains(&graph_name) {
@@ -1643,24 +2022,23 @@ impl FeynGen {
                     continue;
                 }
             }
-            let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
-                lmbs.get(&graph_name)
-                    .map(|lmb| lmb.iter().map(SmartString::<LazyCompact>::from).collect())
-            } else {
-                None
-            };
+            // println!("graph #{} = \n{}", i_g, canonical_repr.to_dot());
+
             let bare_graph = BareGraph::from_symbolica_graph(
                 model,
                 graph_name,
-                &sorted_g,
+                g,
                 symmetry_factor.clone(),
                 external_connections.clone(),
-                forced_lmb,
+                None,
             )?;
+            // println!("BARE GRAPH #{}:\n{}", i_g, bare_graph.dot());
             // When disabling numerator-aware graph isomorphism, each graph is added separately
-            if numerator_aware_isomorphism_grouping == NumeratorAwareGraphGroupingOption::NoGrouping
-            {
-                match pooled_bare_graphs.entry(canonical_repr) {
+            if matches!(
+                numerator_aware_isomorphism_grouping,
+                NumeratorAwareGraphGroupingOption::NoGrouping
+            ) {
+                match pooled_bare_graphs.entry(canonical_repr.clone()) {
                     Entry::Vacant(entry) => {
                         entry.insert(vec![(i_g, None, bare_graph)]);
                     }
@@ -1670,20 +2048,23 @@ impl FeynGen {
                 }
             } else {
                 let numerator =
-                    Numerator::default().from_graph(&bare_graph, &GlobalPrefactor::default());
-                let numerator_color_simplified = numerator.color_simplify();
+                    Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
+                let numerator_color_simplified: Numerator<SymbolicExpression<Color>> =
+                    numerator.color_simplify();
                 if numerator_color_simplified
                     .get_single_atom()
                     .unwrap()
                     .0
                     .is_zero()
                 {
+                    n_zeroes += 1;
                     continue;
                 }
-                if numerator_aware_isomorphism_grouping
-                    == NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
-                {
-                    match pooled_bare_graphs.entry(canonical_repr) {
+                if matches!(
+                    numerator_aware_isomorphism_grouping,
+                    NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
+                ) {
+                    match pooled_bare_graphs.entry(canonical_repr.clone()) {
                         Entry::Vacant(entry) => {
                             entry.insert(vec![(i_g, None, bare_graph)]);
                         }
@@ -1708,23 +2089,15 @@ impl FeynGen {
                     // );
                     let numerator_data = Some(
                         ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
-                            &numerator_aware_isomorphism_grouping,
                             i_g,
+                            &bare_graph,
                             numerator_color_simplified,
-                        ),
+                            numerator_aware_isomorphism_grouping,
+                        )?,
                     );
-                    // let numerator = Some(
-                    //     numerator_color_simplified
-                    //         .parse()
-                    //         .contract(ContractionSettings::<Rational>::Normal)
-                    //         .unwrap()
-                    //         .state
-                    //         .tensor
-                    //         // TODO: A future implementation of "compare_tensors" should be able to avoid the expansion below.
-                    //         .map_data(|d| d.expand()),
-                    // );
+                    // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
 
-                    match pooled_bare_graphs.entry(canonical_repr) {
+                    match pooled_bare_graphs.entry(canonical_repr.clone()) {
                         Entry::Vacant(entry) => {
                             entry.insert(vec![(i_g, numerator_data, bare_graph)]);
                         }
@@ -1732,15 +2105,19 @@ impl FeynGen {
                             let mut found_match = false;
                             for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
                                 if let Some(ratio) = FeynGen::compare_numerator_tensors(
-                                    &numerator_aware_isomorphism_grouping,
+                                    numerator_aware_isomorphism_grouping,
                                     numerator_data.as_ref().unwrap(),
                                     other_numerator.as_ref().unwrap(),
                                 ) {
+                                    n_groupings += 1;
                                     found_match = true;
                                     other_graph.overall_factor =
                                         (Atom::parse(other_graph.overall_factor.as_str()).unwrap()
-                                            + ratio)
-                                            .to_canonical_string();
+                                            + ratio
+                                                * Atom::parse(bare_graph.overall_factor.as_str())
+                                                    .unwrap())
+                                        .expand()
+                                        .to_canonical_string();
                                 }
                             }
                             if !found_match {
@@ -1753,6 +2130,7 @@ impl FeynGen {
         }
         bar.finish_and_clear();
 
+        let mut n_cancellations = 0;
         let mut bare_graphs = pooled_bare_graphs
             .values()
             .flatten()
@@ -1762,27 +2140,55 @@ impl FeynGen {
                     .expand()
                     .is_zero()
                 {
+                    n_cancellations += 1;
                     None
                 } else {
-                    Some((*graph_id, graph))
+                    Some((*graph_id, graph.clone()))
                 }
             })
             .collect::<Vec<_>>();
-        bare_graphs.sort_by(|a, b| (a.0).cmp(&b.0));
+        bare_graphs.sort_by(|a: &(usize, BareGraph), b| (a.0).cmp(&b.0));
 
         info!(
-            "{:<95}{} ({} isomorphically unique graphs when ignoring numerators)",
+            "{:<95}{} ({} isomorphically unique graph{}, {} zero{}, {} grouped and {} cancellation{})",
             format!(
                 "Number of graphs after numerator-aware grouping with strategy '{}':",
                 numerator_aware_isomorphism_grouping
             ),
             format!("{}", bare_graphs.len()).green().bold(),
-            pooled_bare_graphs.len()
+            format!("{}", pooled_bare_graphs.len()).blue().bold(),
+            if pooled_bare_graphs.len() > 1 { "s" } else { "" },
+            format!("{}", n_zeroes).blue().bold(),
+            if n_zeroes > 1 { "s" } else { "" },
+            format!("{}", n_groupings).blue().bold(),
+            format!("{}", n_cancellations).blue().bold(),
+            if n_cancellations > 1 { "s" } else { "" },
         );
+
+        for (_graph_id, graph) in bare_graphs.iter_mut() {
+            let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
+                let g_name = String::from(graph.name.clone());
+                lmbs.get(&g_name).map(|lmb: &Vec<String>| {
+                    lmb.iter().map(SmartString::<LazyCompact>::from).collect()
+                })
+            } else {
+                None
+            };
+            if forced_lmb.is_some() {
+                graph.set_loop_momentum_basis(&forced_lmb)?;
+            }
+        }
+        // println!(
+        //     "Graphs: [{}]",
+        //     bare_graphs
+        //         .iter()
+        //         .map(|(_graph_id, graph)| format!("\"{}\"", graph.name.clone()))
+        //         .collect::<Vec<_>>()
+        //         .join(", "),
+        // );
 
         Ok(bare_graphs
             .iter()
-            .cloned()
             .map(|(_graph_id, graph)| graph.clone())
             .collect::<Vec<_>>())
     }
@@ -1792,143 +2198,531 @@ impl FeynGen {
         numerator_a: &ProcessedNumeratorForComparison,
         numerator_b: &ProcessedNumeratorForComparison,
     ) -> Option<Atom> {
+        fn analyze_ratios(ratios: &HashSet<Atom>) -> Option<Atom> {
+            if ratios.len() > 1 {
+                None
+            } else {
+                let ratio = ratios.iter().next().unwrap().to_owned();
+                for head in ExtendibleReps::BUILTIN_SELFDUAL_NAMES
+                    .iter()
+                    .chain(ExtendibleReps::BUILTIN_DUALIZABLE_NAMES.iter())
+                    .chain(["Q"].iter())
+                    .map(Symbol::new)
+                {
+                    if ratio
+                        .pattern_match(&fun!(head, symb!("args__")).to_pattern(), None, None)
+                        .next()
+                        .is_some()
+                    {
+                        return None;
+                    }
+                }
+                Some(ratio)
+            }
+        }
+
+        fn analyze_diff_and_sum(a: AtomView, b: AtomView) -> Option<Atom> {
+            if (a - b).expand_num().collect_num().is_zero() {
+                return Some(Atom::new_num(1));
+            }
+            if (a + b).expand_num().collect_num().is_zero() {
+                return Some(Atom::new_num(-1));
+            }
+            None
+        }
+
+        fn compare_sample_points(
+            sample_points_a: &[Vec<(Atom, Atom)>],
+            sample_points_b: &[Vec<(Atom, Atom)>],
+        ) -> bool {
+            sample_points_a
+                .iter()
+                .zip(sample_points_b.iter())
+                .all(|(sp_a, sp_b)| {
+                    sp_a.len() == sp_b.len() && sp_a.iter().zip(sp_b.iter()).all(|(a, b)| a == b)
+                })
+        }
+        // if numerator_a.diagram_id == 22 || numerator_b.diagram_id == 22 {
+        //     println!(
+        //         "STARTING COMPARISON of diag #{} and #{}",
+        //         numerator_b.diagram_id, numerator_a.diagram_id,
+        //     );
+        // }
         match numerator_aware_isomorphism_grouping {
             NumeratorAwareGraphGroupingOption::NoGrouping
             | NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => None,
-            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling => {
-                let ratios = zip(
-                    numerator_a.tensor.iter_flat(),
-                    numerator_b.tensor.iter_flat(),
-                )
-                .map(|((_idx_a, a), (_idx_b, b))| (a / b))
-                .collect::<HashSet<_>>();
-                // for (a_idx, a) in numerator_a.tensor.iter_flat() {
-                //     println!("Numerator A #{} : {}", a_idx, a);
-                // }
-                // for (b_idx, b) in numerator_b.tensor.iter_flat() {
-                //     println!("Numerator B #{} : {}", b_idx, b);
-                // }
-                // println!(
-                //     "ratios: {:?}",
-                //     ratios
-                //         .iter()
-                //         .map(|av| av.to_canonical_string())
-                //         .collect::<Vec<_>>()
-                //         .join(",")
-                // );
-                if ratios.len() > 1 {
-                    None
-                } else {
-                    let ratio = ratios.iter().next().unwrap().to_owned();
-                    // Make sure the ratio only consists of couplings
-                    for pattern in ["cind(arg_)"] {
-                        if ratio
-                            .pattern_match(&Pattern::parse(pattern).unwrap(), None, None)
-                            .next()
-                            .is_some()
-                        {
-                            return None;
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
+                grouping_options,
+            ) => {
+                if grouping_options.test_canonized_numerator {
+                    if let (Some(canonized_num_a), Some(canonized_num_b)) = (
+                        numerator_a.canonized_numerator.as_ref(),
+                        numerator_b.canonized_numerator.as_ref(),
+                    ) {
+                        let mut ratios = HashSet::<Atom>::default();
+                        let r = if canonized_num_a == canonized_num_b {
+                            Atom::new_num(1)
+                        } else if *canonized_num_a == canonized_num_b * Atom::new_num(-1) {
+                            Atom::new_num(-1)
+                        } else {
+                            (canonized_num_a.as_view() / canonized_num_b.as_view())
+                                .expand_num()
+                                .collect_num()
+                        };
+                        ratios.insert(r);
+                        // println!(
+                        //     "Canonalized numerator of diagiaram #{}: {}",
+                        //     numerator_a.diagram_id, numerator_a.canonized_numerator
+                        // );
+                        // println!(
+                        //     "Canonalized numerator of diagiaram #{}: {}",
+                        //     numerator_b.diagram_id, numerator_b.canonized_numerator
+                        // );
+                        // println!(
+                        //     "ratio from canonalized numerators: {:?}",
+                        //     ratios
+                        //         .iter()
+                        //         .map(|av| av.to_canonical_string())
+                        //         .collect::<Vec<_>>()
+                        //         .join(",")
+                        // );
+                        if let Some(ratio) = analyze_ratios(&ratios) {
+                            debug!(
+                                "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
+                                numerator_b.diagram_id,
+                                numerator_a.diagram_id,
+                                numerator_a.diagram_id,
+                                numerator_b.diagram_id,
+                                ratio
+                            );
+                            return Some(ratio);
                         }
                     }
-                    debug!(
-                        "Combining graph #{} with #{}, with ratio #{}/#{}={}",
-                        numerator_b.diagram_id,
-                        numerator_a.diagram_id,
-                        numerator_a.diagram_id,
-                        numerator_b.diagram_id,
-                        ratio
-                    );
-                    Some(ratio)
                 }
+                if grouping_options.number_of_numerical_samples > 0 {
+                    if let (
+                        (Some(sample_points_a), Some(evaluations_a)),
+                        (Some(sample_points_b), Some(evaluations_b)),
+                    ) = (
+                        (
+                            numerator_a.sample_points.as_ref(),
+                            numerator_a.sample_evaluations.as_ref(),
+                        ),
+                        (
+                            numerator_b.sample_points.as_ref(),
+                            numerator_b.sample_evaluations.as_ref(),
+                        ),
+                    ) {
+                        // Make sure the variables detected are the same to begin with
+                        if compare_sample_points(sample_points_a, sample_points_b) {
+                            // println!(
+                            //     "Sample evaluations a:\n{}",
+                            //     evaluations_a
+                            //         .iter()
+                            //         .map(|av| av.to_canonical_string())
+                            //         .collect::<Vec<_>>()
+                            //         .join("\n")
+                            // );
+                            // println!(
+                            //     "Sample evaluations b:\n{}",
+                            //     evaluations_b
+                            //         .iter()
+                            //         .map(|av| av.to_canonical_string())
+                            //         .collect::<Vec<_>>()
+                            //         .join("\n")
+                            // );
+                            let ratios = evaluations_a
+                                .iter()
+                                .zip(evaluations_b.iter())
+                                .map(|(a, b)| (a / b).expand_num().collect_num())
+                                .collect::<HashSet<_>>();
+                            // if numerator_a.diagram_id == 22 || numerator_b.diagram_id == 22 {
+                            //     println!(
+                            //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                            //     numerator_b.diagram_id,
+                            //     numerator_a.diagram_id,
+                            //     ratios
+                            //         .iter()
+                            //         .map(|av| av.to_canonical_string())
+                            //         .collect::<Vec<_>>()
+                            //         .join("\n")
+                            // );
+                            // }
+                            if let Some(ratio) = analyze_ratios(&ratios) {
+                                //     debug!(
+                                //     "Combining graph #{} with #{} using numerical evaluation, with ratio #{}/#{}={}",
+                                //     numerator_b.diagram_id,
+                                //     numerator_a.diagram_id,
+                                //     numerator_a.diagram_id,
+                                //     numerator_b.diagram_id,
+                                //     ratio
+                                // );
+                                return Some(ratio);
+                            }
+                        } else {
+                            warn!("Skipping comparison of numerical samples between diagrams #{} and #{} because their variables differ", numerator_b.diagram_id, numerator_a.diagram_id);
+                            warn!(
+                                "Sample points A:\n{}",
+                                sample_points_a
+                                    .first()
+                                    .unwrap()
+                                    .iter()
+                                    .map(|(a, b)| format!("{} -> {}", a, b))
+                                    .join("\n")
+                            );
+                            warn!(
+                                "Sample points B:\n{}",
+                                sample_points_b
+                                    .first()
+                                    .unwrap()
+                                    .iter()
+                                    .map(|(a, b)| format!("{} -> {}", a, b))
+                                    .join("\n")
+                            );
+                        }
+                    }
+                }
+                None
             }
-            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign => {
-                // for (a_idx, a) in numerator_a.tensor.iter_flat() {
-                //     println!("Numerator A #{} : {}", a_idx, a);
-                // }
-                // for (b_idx, b) in numerator_b.tensor.iter_flat() {
-                //     println!("Numerator B #{} : {}", b_idx, b);
-                // }
-                let res = if let Some(diff) = numerator_a.tensor.sub_fallible(&numerator_b.tensor) {
-                    if diff
-                        .iter_flat()
-                        .all(|(_idx, d)| d.expand_num().collect_num().is_zero())
-                    {
-                        Some(1)
-                    } else {
-                        let sum = numerator_a
-                            .tensor
-                            .add_fallible(&numerator_b.tensor)
-                            .unwrap();
-                        // for (sum_idx, sum) in sum.iter_flat() {
-                        //     println!("Sum #{}: {}", sum_idx, sum);
-                        // }
-                        if sum
-                            .iter_flat()
-                            .all(|(_idx, d)| d.expand_num().collect_num().is_zero())
-                        {
-                            Some(-1)
-                        } else {
-                            None
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign(grouping_options) => {
+                if grouping_options.test_canonized_numerator {
+                    if let (Some(canonized_num_a), Some(canonized_num_b)) = (
+                        numerator_a.canonized_numerator.as_ref(),
+                        numerator_b.canonized_numerator.as_ref(),
+                    ) {
+                        if let Some(ratio) = analyze_diff_and_sum(
+                            canonized_num_a.as_view(),
+                            canonized_num_b.as_view(),
+                        ) {
+                            debug!(
+                            "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
+                            numerator_b.diagram_id,
+                            numerator_a.diagram_id,
+                            numerator_a.diagram_id,
+                            numerator_b.diagram_id,
+                            ratio
+                        );
+                            return Some(ratio);
                         }
                     }
-                } else {
-                    None
-                };
-                if let Some(r) = res {
-                    debug!(
-                        "Combining identical graph{} #{} with #{}",
-                        if r == -1 {
-                            " (up to a relative sign)"
-                        } else {
-                            ""
-                        },
-                        numerator_b.diagram_id,
-                        numerator_a.diagram_id
-                    );
-                    Some(Atom::new_num(r))
-                } else {
-                    None
                 }
+                if grouping_options.number_of_numerical_samples > 0 {
+                    if let (
+                        (Some(sample_points_a), Some(evaluations_a)),
+                        (Some(sample_points_b), Some(evaluations_b)),
+                    ) = (
+                        (
+                            numerator_a.sample_points.as_ref(),
+                            numerator_a.sample_evaluations.as_ref(),
+                        ),
+                        (
+                            numerator_b.sample_points.as_ref(),
+                            numerator_b.sample_evaluations.as_ref(),
+                        ),
+                    ) {
+                        if compare_sample_points(sample_points_a, sample_points_b) {
+                            let ratios = evaluations_a
+                                .iter()
+                                .zip(evaluations_b.iter())
+                                .map(|(a, b)| analyze_diff_and_sum(a.as_view(), b.as_view()))
+                                .collect::<HashSet<_>>();
+                            if ratios.len() == 1 {
+                                if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
+                                    debug!(
+                                    "Combining graph #{} with #{} using numerical evaluation, with ratio = {}",
+                                    numerator_b.diagram_id,
+                                    numerator_a.diagram_id,
+                                    ratio
+                                );
+                                    return Some(ratio);
+                                }
+                            }
+                        } else {
+                            //println!("Skipping comparison of numerical samples between diagrams #{} and #{} because their variables differ", numerator_b.diagram_id, numerator_a.diagram_id);
+                        }
+                    }
+                }
+                None
             }
         }
     }
+
+    /*
+    pub fn remove_external_polarization_vectors(
+        numerator: symbolica::atom::AtomView,
+    ) -> (Atom, AHashMap<Atom, Vec<Atom>>) {
+        let mut new_numerator = numerator.to_owned();
+        let arc_mutex_external_indices = Arc::new(std::sync::Mutex::new(AHashMap::new()));
+        for pol_head in crate::momentum::POLARIZATION_TYPES {
+            let arc_mutex_external_indices_sent = arc_mutex_external_indices.clone();
+            let pattern = fun!(symb!(pol_head.to_string()), symb!("args__")).to_pattern();
+            new_numerator = numerator.replace_all(
+                &pattern,
+                symbolica::id::Pattern::Transformer(Box::new((
+                    Some(Atom::new_num(1).to_pattern()),
+                    vec![symbolica::transformer::Transformer::Map(Box::new(
+                        move |a_in: symbolica::atom::AtomView, a_out: &mut Atom| {
+                            if let symbolica::atom::AtomView::Fun(s) = a_in {
+                                let mut args_iter = s.to_slice().iter();
+                                // Skip the first argument
+                                args_iter.next();
+                                args_iter.for_each(|idx| {
+                                    if let Some(m) = idx
+                                        .pattern_match(
+                                            &Atom::parse("idxType_(idx_)").unwrap().to_pattern(),
+                                            None,
+                                            None,
+                                        )
+                                        .next()
+                                    {
+                                        arc_mutex_external_indices_sent
+                                            .lock()
+                                            .unwrap()
+                                            .entry(m[symb!("idxType_")])
+                                            .or_insert_with(|| vec![])
+                                            .push(m[symb!("idx_")]);
+                                    }
+                                });
+                            }
+                            *a_out = a_in.to_owned();
+                            Ok(())
+                        },
+                    ))],
+                ))),
+                None,
+                None,
+            );
+        }
+        let external_indices = arc_mutex_external_indices.lock().unwrap().clone();
+        for (idx_type, idxs) in external_indices.iter_mut() {
+            idxs.sort();
+        }
+        (new_numerator, external_indices)
+    }
+     */
 }
 
 struct ProcessedNumeratorForComparison {
     diagram_id: usize,
-    tensor: ParamTensor,
+    canonized_numerator: Option<Atom>,
+    sample_points: Option<Vec<Vec<(Atom, Atom)>>>,
+    sample_evaluations: Option<Vec<Atom>>,
 }
 
 impl ProcessedNumeratorForComparison {
     fn from_numerator_symbolic_expression(
-        numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
         diagram_id: usize,
+        bare_graph: &BareGraph,
         numerator: Numerator<SymbolicExpression<Color>>,
-    ) -> Self {
-        let mut tensor = numerator
-            .parse()
-            .contract::<Rational>(ContractionSettings::<Rational>::Normal)
-            .unwrap()
-            .state
-            .tensor;
-        match numerator_aware_isomorphism_grouping {
-            NumeratorAwareGraphGroupingOption::NoGrouping
-            | NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => {}
-            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign => {
-                // d.expand() is much slower and not necessary as we just need to canonicalize the product, sadly it's necessary in complicated cases, i.e.
-                // generate h > a a | h a b [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign
-                // should yield only one graph!
-                // TODO: FIX so that d.expand_num().collect_num() works!
-                tensor = tensor.expand_num().collect_num()
-                // tensor = tensor.expand()
+        numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
+    ) -> Result<Self, FeynGenError> {
+        // println!("----");
+        // println!(
+        //     "Numerator input for diagram        #{}: {}",
+        //     diagram_id,
+        //     numerator.get_single_atom().unwrap().0
+        // );
+        let default_processed_data = ProcessedNumeratorForComparison {
+            diagram_id,
+            canonized_numerator: None,
+            sample_points: None,
+            sample_evaluations: None,
+        };
+        let res = if let Some(group_options) = numerator_aware_isomorphism_grouping.get_options() {
+            if group_options.test_canonized_numerator
+                || group_options.number_of_numerical_samples > 0
+            {
+                let mut processed_numerator = numerator.clone();
+                let mut lmb_replacements = bare_graph.generate_lmb_replacement_rules(
+                    "Q(<i>,x<j>__)",
+                    "K(<i>,x<j>__)",
+                    "P(<i>,x<j>__)",
+                );
+                // // Flip the momentum direction of all antiparticle
+                // for (i_edge, edge) in bare_graph.edges.iter().enumerate() {
+                //     if edge.particle.is_antiparticle() {
+                //         'find_rep: for rep in lmb_replacements.iter_mut() {
+                //             if rep
+                //                 .0
+                //                 .pattern_match(
+                //                     &Atom::parse(&format!("Q({},x__)", i_edge))
+                //                         .unwrap()
+                //                         .to_pattern(),
+                //                     None,
+                //                     None,
+                //                 )
+                //                 .next()
+                //                 .is_some()
+                //             {
+                //                 rep.1 = (rep.1.clone() * 1).expand();
+                //                 break 'find_rep;
+                //             }
+                //         }
+                //     }
+                // }
+                // Force "final-state" momenta and pol vectors to be identical to external momenta
+                for (i_ext, connection) in bare_graph.external_connections.iter().enumerate() {
+                    if let (Some(left_edge_pos), Some(right_edge_pos)) = connection {
+                        let right_edge = &bare_graph.edges[*right_edge_pos];
+                        let left_edge = &bare_graph.edges[*left_edge_pos];
+                        let connected_external_id = bare_graph.external_connections.len() + i_ext;
+                        for rep in lmb_replacements.iter_mut() {
+                            rep.1 = rep.1.replace_all(
+                                &Atom::parse(&format!("P({},x__)", connected_external_id))
+                                    .unwrap()
+                                    .to_pattern(),
+                                Atom::parse(&format!("P({},x__)", i_ext))
+                                    .unwrap()
+                                    .to_pattern(),
+                                None,
+                                None,
+                            );
+                        }
+                        let left_edge_pol = match left_edge.edge_type {
+                            EdgeType::Incoming => left_edge.particle.in_pol_symbol(),
+                            EdgeType::Outgoing => left_edge.particle.out_pol_symbol(),
+                            _ => unreachable!(),
+                        };
+                        let right_edge_pol = match right_edge.edge_type {
+                            EdgeType::Incoming => right_edge.particle.in_pol_symbol(),
+                            EdgeType::Outgoing => right_edge.particle.out_pol_symbol(),
+                            _ => unreachable!(),
+                        };
+                        if let (Some(left_edge_pol), Some(right_edge_pol)) =
+                            (left_edge_pol, right_edge_pol)
+                        {
+                            lmb_replacements.push((
+                                Atom::parse(&format!(
+                                    "{}({},x__)",
+                                    right_edge_pol, connected_external_id
+                                ))
+                                .unwrap(),
+                                Atom::parse(&format!("{}({},x__)", left_edge_pol, i_ext)).unwrap(),
+                            ));
+                            // lmb_replacements.push((
+                            //     Atom::parse(&format!(
+                            //         "{}({},xA__)*{}({},xB__)",
+                            //         left_edge_pol, i_ext, right_edge_pol, connected_external_id,
+                            //     ))
+                            //     .unwrap(),
+                            //     Atom::parse("Metric(xA__,xB__)").unwrap(),
+                            // ));
+                        }
+                    }
+                }
+                //lmb_replacements.push((Atom::parse("MB").unwrap(), Atom::Zero));
+                // let test: Atom = Atom::parse("-1/9*𝑖*ee^2*G^2*(MB*id(bis(4,2),bis(4,5))+γ(mink(4,25),bis(4,2),bis(4,5))*Q(2,mink(4,25)))*(MB*id(bis(4,3),bis(4,8))-γ(mink(4,27),bis(4,8),bis(4,3))*Q(4,mink(4,27)))*(MB*id(bis(4,4),bis(4,7))+γ(mink(4,28),bis(4,4),bis(4,7))*Q(5,mink(4,28)))*(MB*id(bis(4,6),bis(4,9))+γ(mink(4,29),bis(4,6),bis(4,9))*Q(6,mink(4,29)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,0),mink(4,5))*id(mink(4,1),mink(4,4))*γ(mink(4,2),bis(4,3),bis(4,2))*γ(mink(4,3),bis(4,5),bis(4,4))*γ(mink(4,4),bis(4,7),bis(4,6))*γ(mink(4,5),bis(4,9),bis(4,8))").unwrap();
+                // let reps = lmb_replacements
+                //     .iter()
+                //     .map(|(l, r)| Replacement::new(l.to_pattern(), r.to_pattern()))
+                //     .collect::<Vec<_>>();
+                // let test2 = test.replace_all_multiple(&reps);
+                // println!("BEFORE: {}", test);
+                // println!("AFTER: {}", test2);
+                // println!(
+                //     "BEFORE: {}",
+                //     processed_numerator.get_single_atom().unwrap().0
+                // );
+                // println!(
+                //     "REPLACEMENTS:\n{}",
+                //     lmb_replacements
+                //         .iter()
+                //         .map(|(a, b)| format!("{} -> {}", a, b))
+                //         .collect::<Vec<_>>()
+                //         .join("\n")
+                // );
+                processed_numerator = processed_numerator.apply_reps(
+                    lmb_replacements
+                        .iter()
+                        .map(|(a, b)| (a.as_view(), b.as_view()))
+                        .collect::<Vec<_>>(),
+                );
+                // println!(
+                //     "AFTER: {}",
+                //     processed_numerator.get_single_atom().unwrap().0
+                // );
+                // processed_numerator = processed_numerator.apply_reps2(&lmb_replacements);
+                // println!(
+                //     "processed_numerator A:\n{}",
+                //     processed_numerator.state.colorless
+                // );
+                // println!(
+                //     "processed_numerator:\n{}",
+                //     processed_numerator.get_single_atom().unwrap().0
+                // );
+                let canonized_numerator = if group_options.test_canonized_numerator {
+                    Some(
+                        processed_numerator
+                            .canonize()
+                            .unwrap()
+                            .get_single_atom()
+                            .unwrap()
+                            .0,
+                    )
+                } else {
+                    None
+                };
 
-                // tensor = tensor.map_data(|d| d.expand_num().collect_num())
+                let (sample_points, sample_evaluations) =
+                    if group_options.number_of_numerical_samples > 0 {
+                        let parsed_numerator = processed_numerator.parse();
+
+                        // println!(
+                        //     "NUMERATOR DOT:\n{}",
+                        //     parsed_numerator.state.net.rich_graph().dot()
+                        // );
+                        // panic!("stop");
+
+                        // println!("----");
+
+                        if let Some(grouping_options) =
+                            numerator_aware_isomorphism_grouping.get_options()
+                        {
+                            let mut prime_iterator = PrimeIteratorU64::new(1);
+                            prime_iterator.nth(grouping_options.numerical_sample_seed as usize);
+                            let sample_points = (0..grouping_options.number_of_numerical_samples)
+                                .map(|_| {
+                                    parsed_numerator.random_concretize_reps(
+                                        Some(&mut prime_iterator),
+                                        grouping_options
+                                            .fully_numerical_substitution_when_comparing_numerators,
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            let sample_evaluations = sample_points
+                                .iter()
+                                .map(|sp| {
+                                    let reps = sp
+                                        .iter()
+                                        .map(|(a, b)| (a.as_view(), b.as_view()))
+                                        .collect::<Vec<_>>();
+                                    parsed_numerator.evaluate_with_replacements(
+                                        reps,
+                                        grouping_options
+                                            .fully_numerical_substitution_when_comparing_numerators,
+                                    )
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            (Some(sample_points), Some(sample_evaluations))
+                        } else {
+                            (None, None)
+                        }
+                    } else {
+                        (None, None)
+                    };
+
+                ProcessedNumeratorForComparison {
+                    diagram_id,
+                    canonized_numerator,
+                    sample_points,
+                    sample_evaluations,
+                }
+            } else {
+                default_processed_data
             }
-            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling => {
-                // TOFIX: this does not work in more complicated cases. Need to use canonicalized tensors instead of spenso-expanded ones.
-                tensor = tensor.expand_num().collect_num()
-            }
-        }
-        ProcessedNumeratorForComparison { diagram_id, tensor }
+        } else {
+            default_processed_data
+        };
+        Ok(res)
     }
 }

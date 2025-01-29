@@ -4,6 +4,7 @@ use ahash::HashMap;
 use ahash::HashMapExt;
 use symbolica::graph::Graph;
 
+use crate::feyngen::diagram_generator::EdgeColor;
 use crate::model::ColorStructure;
 use crate::model::VertexRule;
 use crate::tests_from_pytest::load_generic_model;
@@ -103,20 +104,26 @@ fn cut_content() {
         vertex_rule: dummy_external_vertex_rule.clone(),
     });
 
-    graph.add_edge(v0, v1, true, "H").unwrap();
-    graph.add_edge(v0, v5, true, "b").unwrap();
-    graph.add_edge(v1, v3, true, "b").unwrap();
-    graph.add_edge(v2, v4, true, "g").unwrap();
-    graph.add_edge(v2, v4, true, "b").unwrap();
-    graph.add_edge(v3, v2, true, "b").unwrap();
-    graph.add_edge(v3, v7, true, "a").unwrap();
-    graph.add_edge(v4, v1, true, "b").unwrap();
-    graph.add_edge(v5, v0, true, "b").unwrap();
-    graph.add_edge(v5, v6, true, "a").unwrap();
-    graph.add_edge(v6, v10, false, "e+").unwrap();
-    graph.add_edge(v6, v11, false, "e-").unwrap();
-    graph.add_edge(v8, v7, false, "e+").unwrap();
-    graph.add_edge(v9, v7, false, "e-").unwrap();
+    let h = EdgeColor::from_particle(model.get_particle(&"H".to_string().into()));
+    let b = EdgeColor::from_particle(model.get_particle(&"b".to_string().into()));
+    let g = EdgeColor::from_particle(model.get_particle(&"g".to_string().into()));
+    let a = EdgeColor::from_particle(model.get_particle(&"a".to_string().into()));
+    let eplus = EdgeColor::from_particle(model.get_particle(&"e+".to_string().into()));
+    let eminus = EdgeColor::from_particle(model.get_particle(&"e-".to_string().into()));
+    graph.add_edge(v0, v1, true, h).unwrap();
+    graph.add_edge(v0, v5, true, b).unwrap();
+    graph.add_edge(v1, v3, true, b).unwrap();
+    graph.add_edge(v2, v4, true, g).unwrap();
+    graph.add_edge(v2, v4, true, b).unwrap();
+    graph.add_edge(v3, v2, true, b).unwrap();
+    graph.add_edge(v3, v7, true, a).unwrap();
+    graph.add_edge(v4, v1, true, b).unwrap();
+    graph.add_edge(v5, v0, true, b).unwrap();
+    graph.add_edge(v5, v6, true, a).unwrap();
+    graph.add_edge(v6, v10, false, eplus).unwrap();
+    graph.add_edge(v6, v11, false, eminus).unwrap();
+    graph.add_edge(v8, v7, false, eplus).unwrap();
+    graph.add_edge(v9, v7, false, eminus).unwrap();
 
     let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
     assert!(!filters.contains_cut(&model, &graph, n_unresolved, &unresolved_type));

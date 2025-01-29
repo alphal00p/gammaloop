@@ -15,6 +15,12 @@ class NumeratorAwareGroupingOption:
     @classmethod
     def __new__(_cls,
                 numerator_aware_grouping_option: Optional[str] = "only_detect_zeroes",
+                compare_canonized_numerator: Optional[bool] = False,
+                number_of_samples_for_numerator_comparisons: Optional[int] = 5,
+                consider_internal_masses_only_in_numerator_isomorphisms: Optional[bool] = True,
+                substitute_numerical_masses_when_comparing_numerators: Optional[bool] = False,
+                fully_numerical_substitution_when_comparing_numerators: Optional[bool] = True,
+                numerical_samples_seed: Optional[int] = 3,
                 ) -> NumeratorAwareGroupingOption:
         """ Creates options for grouping diagrams using isomorphisms and taking into account numerator.
         Possible options are: no_grouping, only_detect_zeroes, group_identical_graphs_up_to_sign and group_identical_graphs_up_to_scalar_rescaling
@@ -147,10 +153,10 @@ class Worker:
     def export_cross_sections(self, export_root: str, cross_section_names: list[str]) -> None:
         """ Exports the cross sections given in argument to the export root given in argument. """
 
-    def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str,no_evaluators:bool) -> None:
+    def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str, no_evaluators: bool) -> None:
         """ Exports the amplitudes given in argument to the export root given in argument, parse export settings as yaml str"""
 
-    def export_expressions(self, export_root: str,amplitude_list: list[str], format: str, export_yaml_str: str) -> None:
+    def export_expressions(self, export_root: str, amplitude_list: list[str], format: str, export_yaml_str: str) -> None:
         """Exports the numerator and denominator to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
 
     def export_coupling_replacement_rules(self, export_root: str, format: str) -> None:

@@ -3013,7 +3013,7 @@ mod tests {
 
         let structure = pol.tensor.structure.clone();
 
-        println!("{}", structure.flat_index(&[2]).unwrap());
+        println!("{}", structure.flat_index([2]).unwrap());
 
         pol.tensor
             .iter_flat()

@@ -13,7 +13,7 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
-    numerator::{Numerator, PythonState},
+    numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
     ExportSettings, HasIntegrand, Settings,
 };
@@ -32,7 +32,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use symbolica::printer::PrintOptions;
+use symbolica::{atom::Atom, printer::PrintOptions};
 const GIT_VERSION: &str = git_version!();
 
 #[allow(unused)]
@@ -343,12 +343,22 @@ impl PyNumeratorAwareGroupingOption {
     #[new]
     pub fn __new__(
         numerator_aware_grouping_option: Option<String>,
+        compare_canonized_numerator: Option<bool>,
+        number_of_samples_for_numerator_comparisons: Option<usize>,
+        consider_internal_masses_only_in_numerator_isomorphisms: Option<bool>,
+        fully_numerical_substitution_when_comparing_numerators: Option<bool>,
+        numerical_samples_seed: Option<u16>,
     ) -> PyResult<PyNumeratorAwareGroupingOption> {
         Ok(PyNumeratorAwareGroupingOption {
-            grouping_options: NumeratorAwareGraphGroupingOption::from_str(
+            grouping_options: NumeratorAwareGraphGroupingOption::new_with_attributes(
                 numerator_aware_grouping_option
                     .unwrap_or("only_detect_zeroes".into())
                     .as_str(),
+                numerical_samples_seed,
+                number_of_samples_for_numerator_comparisons,
+                consider_internal_masses_only_in_numerator_isomorphisms,
+                fully_numerical_substitution_when_comparing_numerators,
+                compare_canonized_numerator,
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
         })
@@ -456,6 +466,8 @@ impl PythonWorker {
         selected_graphs: Option<Vec<String>>,
         vetoed_graphs: Option<Vec<String>>,
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
+        global_prefactor_color: Option<String>,
+        global_prefactor_colorless: Option<String>,
     ) -> PyResult<Vec<String>> {
         if self.model.is_empty() {
             return Err(exceptions::PyException::new_err(
@@ -466,10 +478,19 @@ impl PythonWorker {
 
         let diagram_generator = FeynGen::new(feyngen_options);
 
+        let mut global_prefactor = GlobalPrefactor::default();
+        if let Some(global_prefactor_color) = global_prefactor_color {
+            global_prefactor.color = Atom::parse(&global_prefactor_color)
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        }
+        if let Some(global_prefactor_colorless) = global_prefactor_colorless {
+            global_prefactor.colorless = Atom::parse(&global_prefactor_colorless)
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        }
         let diagrams = diagram_generator
             .generate(
                 &self.model,
-                numerator_aware_isomorphism_grouping
+                &numerator_aware_isomorphism_grouping
                     .map(|o| o.grouping_options.clone())
                     .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping),
                 filter_self_loop.unwrap_or(false),
@@ -477,6 +498,7 @@ impl PythonWorker {
                 selected_graphs,
                 vetoed_graphs,
                 loop_momentum_bases,
+                global_prefactor,
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         Ok(diagrams

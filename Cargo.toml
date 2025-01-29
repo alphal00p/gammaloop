@@ -43,6 +43,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [dependencies]
 # These will be patched
 symbolica = { version = "0.14.0" }
+
 spenso = { version = "0.4.0", features = ["shadowing"] }
 linnet = {git =  "https://github.com/alphal00p/linnet",features = ["symbolica","drawing"]}
 
@@ -141,4 +142,4 @@ no_python = []
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "e93679f3f77c24017b73cce527087a1bce52bbbf" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "2b5d8bf455dde5849ad6897731cb53430116aa17" }

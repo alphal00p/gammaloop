@@ -9,6 +9,7 @@ import yaml
 import gammaloop._gammaloop as gl_rust
 from gammaloop.misc.common import logger
 
+
 class MalformedProcessError(GammaLoopError):
     pass
 
@@ -26,7 +27,7 @@ class Process(object):
                  self_energy_filter: gl_rust.SelfEnergyFilterOptions | None = None,
                  tadpole_filter: gl_rust.TadpolesFilterOptions | None = None,
                  zero_snail_filter: gl_rust.SnailFilterOptions | None = None,
-                 max_n_bridges: int | None = None
+                 max_n_bridges: int | None = None,
                  ):
         self.initial_states = initial_particles
         self.final_states = final_particles
@@ -85,7 +86,8 @@ class Process(object):
         )
         if not short:
             if self.particle_vetos is not None:
-                res.append(f"no__{'_'.join([p.name.lower() for p in self.particle_vetos])}")
+                res.append(
+                    f"no__{'_'.join([p.name.lower() for p in self.particle_vetos])}")
             if self.amplitude_orders is not None:
                 res.append(
                     '__'.join([f"{k}_eq_{v}" for k, v in self.amplitude_orders.items()]))
@@ -204,7 +206,13 @@ class Process(object):
                 cross_section_filters=self.cross_section_filters
             ),
             gl_rust.NumeratorAwareGroupingOption(
-                generation_args.numerator_aware_isomorphism_grouping),
+                generation_args.numerator_aware_isomorphism_grouping,
+                generation_args.compare_canonized_numerator,
+                generation_args.number_of_samples_for_numerator_comparisons,
+                generation_args.consider_internal_masses_only_in_numerator_isomorphisms,
+                generation_args.fully_numerical_substitution_when_comparing_numerators,
+                generation_args.numerical_samples_seed
+            ),
             generation_args.filter_self_loop,
             generation_args.graph_prefix,
             generation_args.select_graphs,
@@ -448,7 +456,8 @@ class Process(object):
                             try:
                                 veto_particle = model.get_particle(t)
                                 if veto_particle.pdg_code < 0:
-                                    logger.warning("Particle veto %s in process definition is not a particle but an antiparticle. Automatically converting to particle.", veto_particle.name)
+                                    logger.warning(
+                                        "Particle veto %s in process definition is not a particle but an antiparticle. Automatically converting to particle.", veto_particle.name)
                                     veto_particle = veto_particle.get_anti_particle(
                                         model)
                             except KeyError:

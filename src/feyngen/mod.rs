@@ -1,6 +1,7 @@
 pub mod diagram_generator;
 
 use ahash::{AHashMap, HashMap};
+use diagram_generator::EdgeColor;
 use smartstring::{LazyCompact, SmartString};
 use std::{fmt, str::FromStr};
 use symbolica::graph::Graph as SymbolicaGraph;
@@ -14,14 +15,51 @@ pub enum FeynGenError {
     LoopMomentumBasisError(String),
     #[error("Could not convert symbolica graph symmetry factor to an integer: {0}")]
     SymmetryFactorError(String),
+    #[error("Could not numerically evaluate numerator: {0}")]
+    NumeratorEvaluationError(String),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+
+pub struct GraphGroupingOptions {
+    pub numerical_sample_seed: u16,
+    pub number_of_numerical_samples: usize,
+    pub differentiate_particle_masses_only: bool,
+    pub fully_numerical_substitution_when_comparing_numerators: bool,
+    pub test_canonized_numerator: bool,
+}
+
+impl Default for GraphGroupingOptions {
+    fn default() -> Self {
+        Self {
+            numerical_sample_seed: 3,
+            number_of_numerical_samples: 5,
+            differentiate_particle_masses_only: true,
+            fully_numerical_substitution_when_comparing_numerators: true,
+            test_canonized_numerator: false,
+        }
+    }
+}
+
+impl fmt::Display for GraphGroupingOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "differentiate_masses_only={}, test_canonized_numerator={}, #samples={}, seed={}",
+            self.numerical_sample_seed,
+            self.number_of_numerical_samples,
+            self.differentiate_particle_masses_only,
+            self.test_canonized_numerator
+        )
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum NumeratorAwareGraphGroupingOption {
     NoGrouping,
     OnlyDetectZeroes,
-    GroupIdenticalGraphUpToSign,
-    GroupIdenticalGraphUpToScalarRescaling,
+    GroupIdenticalGraphUpToSign(GraphGroupingOptions),
+    GroupIdenticalGraphUpToScalarRescaling(GraphGroupingOptions),
 }
 
 impl fmt::Display for NumeratorAwareGraphGroupingOption {
@@ -30,11 +68,11 @@ impl fmt::Display for NumeratorAwareGraphGroupingOption {
             f,
             "{}",
             match self {
-                Self::NoGrouping => "No grouping",
-                Self::OnlyDetectZeroes => "Only detect zero numerators",
-                Self::GroupIdenticalGraphUpToSign => "Group identical graphs up to a sign",
-                Self::GroupIdenticalGraphUpToScalarRescaling => {
-                    "Group identical graphs up to a scalar rescaling"
+                Self::NoGrouping => "no grouping",
+                Self::OnlyDetectZeroes => "only detect zero numerators",
+                Self::GroupIdenticalGraphUpToSign(_opts) => "up to a sign",
+                Self::GroupIdenticalGraphUpToScalarRescaling(_opts) => {
+                    "up to a scalar rescaling"
                 }
             }
         )
@@ -48,15 +86,80 @@ impl FromStr for NumeratorAwareGraphGroupingOption {
         match s {
             "no_grouping" => Ok(Self::NoGrouping),
             "only_detect_zeroes" => Ok(Self::OnlyDetectZeroes),
-            "group_identical_graphs_up_to_sign" => Ok(Self::GroupIdenticalGraphUpToSign),
-            "group_identical_graphs_up_to_scalar_rescaling" => {
-                Ok(Self::GroupIdenticalGraphUpToScalarRescaling)
-            }
+            "group_identical_graphs_up_to_sign" => Ok(Self::GroupIdenticalGraphUpToSign(
+                GraphGroupingOptions::default(),
+            )),
+            "group_identical_graphs_up_to_scalar_rescaling" => Ok(
+                Self::GroupIdenticalGraphUpToScalarRescaling(GraphGroupingOptions::default()),
+            ),
             _ => Err(FeynGenError::GenericError(format!(
                 "Invalid grouping option: {}",
                 s
             ))),
         }
+    }
+}
+
+impl NumeratorAwareGraphGroupingOption {
+    pub fn set_options(&mut self) -> Option<&mut GraphGroupingOptions> {
+        match self {
+            Self::NoGrouping => None,
+            Self::OnlyDetectZeroes => None,
+            Self::GroupIdenticalGraphUpToSign(opts) => Some(opts),
+            Self::GroupIdenticalGraphUpToScalarRescaling(opts) => Some(opts),
+        }
+    }
+
+    pub fn get_options(&self) -> Option<&GraphGroupingOptions> {
+        match self {
+            Self::NoGrouping => None,
+            Self::OnlyDetectZeroes => None,
+            Self::GroupIdenticalGraphUpToSign(opts) => Some(opts),
+            Self::GroupIdenticalGraphUpToScalarRescaling(opts) => Some(opts),
+        }
+    }
+
+    pub fn description(&self) -> String {
+        format!(
+            "{}{}",
+            self,
+            self.get_options().map_or("".into(), |o| format!("({})", o))
+        )
+    }
+
+    pub fn new_with_attributes(
+        strategy: &str,
+        seed: Option<u16>,
+        num_samples: Option<usize>,
+        differentiate_particle_masses_only: Option<bool>,
+        fully_numerical_substitution_when_comparing_numerators: Option<bool>,
+        test_canonized_numerator: Option<bool>,
+    ) -> Result<Self, FeynGenError> {
+        let mut opt = NumeratorAwareGraphGroupingOption::from_str(strategy)?;
+        let grouping_options = opt.set_options();
+        if let Some(grouping_options) = grouping_options {
+            if let Some(seed) = seed {
+                grouping_options.numerical_sample_seed = seed;
+            }
+            if let Some(num_samples) = num_samples {
+                grouping_options.number_of_numerical_samples = num_samples;
+            }
+            if let Some(differentiate_particle_masses_only) = differentiate_particle_masses_only {
+                grouping_options.differentiate_particle_masses_only =
+                    differentiate_particle_masses_only;
+            }
+            if let Some(test_canonized_numerator) = test_canonized_numerator {
+                grouping_options.test_canonized_numerator = test_canonized_numerator;
+            }
+            if let Some(fully_numerical_substitution_when_comparing_numerators) =
+                fully_numerical_substitution_when_comparing_numerators
+            {
+                grouping_options.fully_numerical_substitution_when_comparing_numerators =
+                    fully_numerical_substitution_when_comparing_numerators;
+            }
+        }
+
+        Ok(opt)
     }
 }
 
@@ -95,7 +198,7 @@ impl FromStr for GenerationType {
 }
 
 pub fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
-    graph: &SymbolicaGraph<NodeColor, &str>,
+    graph: &SymbolicaGraph<NodeColor, EdgeColor>,
 ) -> AHashMap<SmartString<LazyCompact>, usize> {
     let mut coupling_orders = AHashMap::default();
     for node in graph.nodes() {
@@ -167,7 +270,7 @@ impl FeynGenFilters {
     #[allow(clippy::type_complexity)]
     pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions>(
         &self,
-        graphs: &mut Vec<(SymbolicaGraph<NodeColor, &str>, String)>,
+        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, String)>,
     ) -> Result<(), FeynGenError> {
         for filter in self.0.iter() {
             #[allow(clippy::single_match)]

@@ -3,10 +3,7 @@ use spenso::{
     complex::Complex,
     data::{DenseTensor, StorageTensor},
     iterators::IteratableTensor,
-    parametric::{
-        atomcore::{PatternReplacement, TensorAtomMaps},
-        ParamTensor,
-    },
+    parametric::{atomcore::TensorAtomMaps, ParamTensor},
     shadowing::ETS,
     structure::{
         representation::{BaseRepName, Bispinor, Minkowski},
@@ -22,12 +19,8 @@ use std::{
 };
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::{
-        finite_field::{FiniteField, FiniteFieldCore, Mersenne64, PrimeIteratorU64, Zp64},
-        rational::Rational,
-        Field,
-    },
-    fun, symb,
+    domains::rational::Rational,
+    fun,
 };
 
 use crate::{
@@ -767,38 +760,6 @@ fn prefactor() {
 }
 
 #[test]
-fn one_loop_lbl_concretize() {
-    let (_model, amplitude, _path) = load_amplitude_output(
-        &("TEST_AMPLITUDE_".to_string() + "physical_1L_6photons" + "/GL_OUTPUT"),
-        true,
-    );
-
-    let graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    let mut feyn = Numerator::default()
-        .from_graph(&graph.bare_graph, &GlobalPrefactor::default())
-        .color_simplify();
-
-    assert!(feyn.validate_against_branches(123));
-
-    let mut feyn = feyn.parse();
-
-    let reps = feyn.random_concretize_reps(111);
-
-    println!(
-        "{}",
-        feyn.apply_reps(&reps)
-            .contract::<Rational>(ContractionSettings::Normal)
-            .unwrap()
-            .state
-            .tensor
-            .scalar()
-            .unwrap()
-            .expand()
-    );
-}
-
-#[test]
 fn gamma_simplify_one() {
     fn gamma(mu: usize, i: usize, j: usize) -> Atom {
         let mink = Minkowski::rep(4);
@@ -947,16 +908,49 @@ fn one_loop_lbl() {
     println!("initial{:+}", feyn.get_single_atom().unwrap().0);
     println!(
         "canonized:{:+}",
-        feyn.cannonize().unwrap().get_single_atom().unwrap().0
+        feyn.canonize().unwrap().get_single_atom().unwrap().0
     );
 
     println!(
         "canonized with color:{:+}",
         feyn.color_simplify()
-            .cannonize()
+            .canonize()
             .unwrap()
             .get_single_atom()
             .unwrap()
             .0
+    );
+}
+
+#[test]
+fn one_loop_lbl_concretize() {
+    let (_model, amplitude, _path) = load_amplitude_output(
+        &("TEST_AMPLITUDE_".to_string() + "physical_1L_6photons" + "/GL_OUTPUT"),
+        true,
+    );
+
+    let graph = amplitude.amplitude_graphs[0].graph.clone();
+
+    let feyn = Numerator::default()
+        .from_graph(&graph.bare_graph, &GlobalPrefactor::default())
+        .color_simplify()
+        .parse();
+
+    let reps = feyn.random_concretize_reps(None, true);
+    let rep_views = reps
+        .iter()
+        .map(|(a, b)| (a.as_view(), b.as_view()))
+        .collect::<Vec<_>>();
+
+    println!(
+        "{}",
+        feyn.apply_reps(rep_views)
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .state
+            .tensor
+            .scalar()
+            .unwrap()
+            .expand()
     );
 }

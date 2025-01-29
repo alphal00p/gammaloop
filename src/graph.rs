@@ -7,7 +7,10 @@ use crate::{
         expression::CFFExpression,
         generation::generate_cff_expression,
     },
-    feyngen::{diagram_generator::NodeColorWithVertexRule, FeynGenError},
+    feyngen::{
+        diagram_generator::{EdgeColor, NodeColorWithVertexRule},
+        FeynGenError,
+    },
     gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
@@ -707,7 +710,7 @@ impl Vertex {
                         pos
                     } else {
                         return Err(FeynGenError::GenericError(
-                                format!("Could not match some particles vertex ({}) were matched with the ones in the interaction info ({})",
+                                format!("Could not match some particles vertex ({}). It is incompatible with the ones in the interaction info ({})",
                                     edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.name.clone()).join(","),
                                     i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
                                 ),
@@ -773,7 +776,7 @@ impl Vertex {
             .into_iter()
             .reduce(|acc, tensor| acc.contract(&tensor).unwrap())
             .unwrap()
-            .get_owned(&[])
+            .get_owned([])
             .unwrap()
             .clone();
 
@@ -992,7 +995,7 @@ pub struct Shifts {
 
 impl BareGraph {
     pub fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
-        self.generate_lmb_replacement_rules()
+        self.generate_lmb_replacement_rules("Q<i>(x<j>__)", "K<i>(x<j>__)", "P<i>(x<j>__)")
             .iter()
             .map(|(lhs, rhs)| {
                 (
@@ -1294,10 +1297,33 @@ impl BareGraph {
         g
     }
 
+    /*
+    pub fn generate_lmb_replacements(&self) {
+        let loop_basis = (0..self.loop_momentum_basis.basis.len())
+            .map(|i_k| Atom::parse(&format!("K{}", i_k)).unwrap())
+            .collect::<Vec<_>>();
+        for (i_e, e) in self.edges.iter().enumerate() {
+            i_e = self.edge_name_to_position.get(e.name).unwrap();
+
+            self.loop_momentum_basis.edge_signatures[i_e]
+                .internal
+                .apply(basis);
+            let mom = Atom::parse(&format!("Q{}", i)).unwrap();
+            let mass = e
+                .particle
+                .mass
+                .expression
+                .clone()
+                .unwrap_or(Atom::new_num(0));
+            self.loop_momentum_basis.edge_signatures[i].external = vec![mom, mass];
+        }
+    }
+    */
+
     pub fn from_symbolica_graph(
         model: &model::Model,
         name: String,
-        graph: &SymbolicaGraph<NodeColorWithVertexRule, &str>,
+        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         symmetry_factor: String,
         external_connections: Vec<(Option<usize>, Option<usize>)>,
         forced_lmb: Option<Vec<SmartString<LazyCompact>>>,
@@ -1337,7 +1363,7 @@ impl BareGraph {
         for (i_n, n) in graph_nodes.iter().enumerate() {
             if n.edges.len() == 1 {
                 let external_edge = &mut graph_edges[n.edges[0]];
-                let mut particle = model.get_particle(&external_edge.data.into());
+                let mut particle = model.get_particle_from_pdg(external_edge.data.pdg);
                 let edge_type_from_symbolica = if graph_adj_matrix
                     .get(&external_edge.vertices.0)
                     .unwrap()
@@ -1454,7 +1480,10 @@ impl BareGraph {
                 if let Some((edge_direction, particle_name)) = external_edges.get(&i_e) {
                     (*edge_direction, model.get_particle(particle_name))
                 } else {
-                    (EdgeType::Virtual, model.get_particle(&edge.data.into()))
+                    (
+                        EdgeType::Virtual,
+                        model.get_particle_from_pdg(edge.data.pdg),
+                    )
                 };
 
             let propagator: Arc<model::Propagator> =
@@ -1574,10 +1603,24 @@ impl BareGraph {
         // Set the half-edge graph representation
         g.hedge_representation = HedgeGraph::from(&g);
 
+        g.set_loop_momentum_basis(&forced_lmb)?;
+
+        g.generate_vertex_slots(model);
+
+        // panic!("{:?}", g.edge_name_to_position);
+        g.generate_internal_indices_for_edges();
+
+        Ok(g)
+    }
+
+    pub fn set_loop_momentum_basis(
+        &mut self,
+        forced_lmb: &Option<Vec<SmartString<LazyCompact>>>,
+    ) -> Result<(), FeynGenError> {
         let lmb_basis = if let Some(user_selected_lmb) = forced_lmb {
             let mut user_basis = vec![];
-            for e_lmb in &user_selected_lmb {
-                if let Some(e_pos) = g.edge_name_to_position.get(e_lmb) {
+            for e_lmb in user_selected_lmb {
+                if let Some(e_pos) = self.edge_name_to_position.get(e_lmb) {
                     user_basis.push(*e_pos);
                 } else {
                     return Err(FeynGenError::LoopMomentumBasisError(format!(
@@ -1598,17 +1641,17 @@ impl BareGraph {
             //             .unwrap()
             //     })
             //     .collect::<Vec<_>>()
-            let spanning_tree = g.hedge_representation.cycle_basis().1;
+            let spanning_tree = self.hedge_representation.cycle_basis().1;
             // println!("hedge graph: \n{}", g.hedge_representation.base_dot());
-            // let spanning_tree_half_edge_node = g
+            // let spanning_tree_half_edge_node = sefl
             //     .hedge_representation
             //     .nesting_node_from_subgraph(spanning_tree.clone());
             // println!(
             //     "spanning tree: \n{}",
-            //     g.hedge_representation.dot(&spanning_tree_half_edge_node)
+            //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
             // );
-            g.hedge_representation
-                .iter_internal_edge_data(&spanning_tree.tree.complement(&g.hedge_representation))
+            self.hedge_representation
+                .iter_internal_edge_data(&spanning_tree.tree.complement(&self.hedge_representation))
                 .map(|e| *e.data.unwrap())
                 .collect::<Vec<_>>()
         };
@@ -1620,7 +1663,7 @@ impl BareGraph {
             "Loop momentum basis selected: {}",
             lmb_basis
                 .iter()
-                .map(|i_e| g.edges[*i_e].clone().name)
+                .map(|i_e| self.edges[*i_e].clone().name)
                 .collect::<Vec<_>>()
                 .join(", ")
         );
@@ -1628,25 +1671,19 @@ impl BareGraph {
             basis: lmb_basis,
             edge_signatures: vec![],
         };
-        lmb.set_edge_signatures(&g).map_err(|e| {
+        lmb.set_edge_signatures(self).map_err(|e| {
             FeynGenError::LoopMomentumBasisError(format!(
                 "{} | Error: {}",
                 lmb.basis
                     .iter()
-                    .map(|i_e| format!("{}", g.edges[*i_e].name))
+                    .map(|i_e| format!("{}", self.edges[*i_e].name))
                     .collect::<Vec<_>>()
                     .join(", "),
                 e
             ))
         })?;
-        g.loop_momentum_basis = lmb;
-
-        g.generate_vertex_slots(model);
-
-        // panic!("{:?}", g.edge_name_to_position);
-        g.generate_internal_indices_for_edges();
-
-        Ok(g)
+        self.loop_momentum_basis = lmb;
+        Ok(())
     }
 
     pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
@@ -1953,32 +1990,71 @@ impl BareGraph {
         self.edges.iter().map(|e| e.edge_type).collect()
     }
 
-    pub fn generate_lmb_replacement_rules(&self) -> Vec<(Atom, Atom)> {
-        self.loop_momentum_basis_replacement_rule(&self.loop_momentum_basis)
+    pub fn generate_lmb_replacement_rules(
+        &self,
+        q_format: &str,
+        k_format: &str,
+        p_format: &str,
+    ) -> Vec<(Atom, Atom)> {
+        self.loop_momentum_basis_replacement_rule(
+            &self.loop_momentum_basis,
+            q_format,
+            k_format,
+            p_format,
+        )
     }
 
-    fn loop_momentum_basis_replacement_rule(&self, lmb: &LoopMomentumBasis) -> Vec<(Atom, Atom)> {
+    fn loop_momentum_basis_replacement_rule(
+        &self,
+        lmb: &LoopMomentumBasis,
+        q_format: &str,
+        k_format: &str,
+        p_format: &str,
+    ) -> Vec<(Atom, Atom)> {
         let mut rule = vec![];
 
         for (i, signature) in lmb.edge_signatures.iter().enumerate() {
             rule.push((
-                Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
-                self.replacement_rule_from_signature(i, signature),
+                Atom::parse(
+                    &q_format
+                        .replace("<i>", &format!("{}", i))
+                        .replace("<j>", &format!("{}", i)),
+                )
+                .unwrap(),
+                self.replacement_rule_from_signature(i, signature, k_format, p_format),
             ));
         }
 
         rule
     }
 
-    fn replacement_rule_from_signature(&self, index: usize, signature: &LoopExtSignature) -> Atom {
+    fn replacement_rule_from_signature(
+        &self,
+        index: usize,
+        signature: &LoopExtSignature,
+        k_format: &str,
+        p_format: &str,
+    ) -> Atom {
         let mut acc = Atom::new_num(0);
         for (i_l, &sign) in signature.internal.iter().enumerate() {
-            let k = sign * Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+            let k = sign
+                * Atom::parse(
+                    &k_format
+                        .replace("<i>", &format!("{}", i_l))
+                        .replace("<j>", &format!("{}", index)),
+                )
+                .unwrap();
             acc = &acc + &k;
         }
 
         for (i_e, &sign) in signature.external.iter().enumerate() {
-            let p = sign * Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+            let p = sign
+                * Atom::parse(
+                    &p_format
+                        .replace("<i>", &format!("{}", i_e))
+                        .replace("<j>", &format!("{}", index)),
+                )
+                .unwrap();
             acc = &acc + &p;
         }
         acc
