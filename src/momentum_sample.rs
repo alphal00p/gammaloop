@@ -17,7 +17,25 @@ pub struct LoopIndex(pub usize);
 #[derive(From, Into, Copy, Clone, Hash, Eq, Ord, PartialEq, PartialOrd, Encode, Decode, Debug)]
 pub struct ExternalIndex(pub usize);
 
-pub type LoopMomenta<T> = TiVec<LoopIndex, ThreeMomentum<T>>;
+#[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LoopMomenta<T>(Vec<ThreeMomentum<T>>);
+
+impl<T> LoopMomenta<T> {
+    fn iter(&self) -> std::slice::Iter<'_, ThreeMomentum<T>> {
+        self.0.iter()
+    }
+
+    fn first(&self) -> Option<&ThreeMomentum<T>> {
+        self.0.first()
+    }
+}
+
+impl<T> FromIterator<ThreeMomentum<T>> for LoopMomenta<T> {
+    fn from_iter<I: IntoIterator<Item = ThreeMomentum<T>>>(iter: I) -> Self {
+        LoopMomenta(iter.into_iter().collect())
+    }
+}
+
 pub type ExternalThreeMomenta<T> = TiVec<ExternalIndex, ThreeMomentum<T>>;
 pub type ExternalFourMomenta<T> = TiVec<ExternalIndex, FourMomentum<T>>;
 pub type PolarizationVectors<T> = TiVec<ExternalIndex, Polarization<T>>; // should be the same length as #externals
@@ -222,7 +240,7 @@ impl<T: FloatLike> MomentumSample<T> {
     pub fn loop_mom_pair(&self) -> (&LoopMomenta<F<T>>, Option<&LoopMomenta<F<T>>>) {
         (
             &self.sample.loop_moms,
-            self.rotated_sample.as_ref().map(|s| s.loop_moms.as_ref()),
+            self.rotated_sample.as_ref().map(|s| &s.loop_moms),
         )
     }
 
