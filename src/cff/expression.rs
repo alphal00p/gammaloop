@@ -21,7 +21,7 @@ use std::{cell::RefCell, fmt::Debug, ops::Index, path::PathBuf};
 use symbolica::{
     atom::{Atom, AtomView},
     domains::{float::NumericalFloatLike, rational::Rational},
-    evaluate::{EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap},
+    evaluate::{EvalTree, ExportedCode, ExpressionEvaluator, FunctionMap, InlineASM},
 };
 use typed_index_collections::TiVec;
 
@@ -606,7 +606,7 @@ impl CFFExpression {
                 self.build_joint_symbolica_evaluator::<T>(params, export_settings.cpe_rounds_cff);
 
             let source_string = if export_settings.gammaloop_compile_options.inline_asm {
-                joint.export_asm_str("joint", true)
+                joint.export_asm_str("joint", true, InlineASM::X64)
             } else {
                 joint.export_cpp_str("joint", true)
             };
@@ -622,6 +622,7 @@ impl CFFExpression {
                     orientation_evaluator.export_asm_str(
                         &format!("orientation_{}", orientation_id),
                         !export_settings.compile_cff && orientation_id == 0,
+                        InlineASM::X64,
                     )
                 } else {
                     orientation_evaluator.export_cpp_str(

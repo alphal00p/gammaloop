@@ -1113,31 +1113,12 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 
         let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
 
-        let indices = sorted.iter().map(|(a, _)| a.as_view()).collect::<Vec<_>>();
-        let groups = sorted.iter().map(|(_, b)| b.as_view()).collect::<Vec<_>>();
         let color = self.state.color.clone(); //map_data_ref_result(|a| a.0.canonize_tensors(&indices, None).map(|a| a.into()))?;
 
-        let colorless = self.state.colorless.map_data_ref_result(|a| {
-            // println!("canonizing atom: {}", a);
-            // println!(
-            //     "with indices: {}",
-            //     indices
-            //         .iter()
-            //         .map(|a| a.to_canonical_string())
-            //         .collect::<Vec<_>>()
-            //         .join(",")
-            // );
-            // println!(
-            //     "and groups: {}",
-            //     groups
-            //         .iter()
-            //         .map(|a| a.to_canonical_string())
-            //         .collect::<Vec<_>>()
-            //         .join(",")
-            // );
-            a.0.canonize_tensors(&indices, Some(&groups))
-                .map(|a| a.into())
-        })?;
+        let colorless = self
+            .state
+            .colorless
+            .map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
 
         Ok(Self {
             state: SymbolicExpression {

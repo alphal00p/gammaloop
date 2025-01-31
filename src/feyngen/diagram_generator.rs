@@ -1,4 +1,3 @@
-use indicatif::ParallelProgressIterator;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 use log::warn;

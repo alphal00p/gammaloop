@@ -923,6 +923,81 @@ fn one_loop_lbl() {
 }
 
 #[test]
+
+fn bug_check() {
+    let a = Atom::parse("-1/9*𝑖*ee^2*G^2*(-TR+TR*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))").unwrap();
+    //let b = Atom::parse("-1/9*𝑖*ee^2*G^2*(-TR+TR*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))").unwrap();
+    let b = a.clone() * -1;
+    println!("a/b={}  TT", a / b);
+}
+
+#[test]
+fn bug_check_b() {
+    let a = Atom::parse(
+         "-4/9*ee^2*yt^2*G^4*(MT*id(bis(4,2),bis(4,5))+γ(mink(4,41),bis(4,2),bis(4,5))*K(0,mink(4,41)))*(MT*id(bis(4,3),bis(4,8))+γ(mink(4,43),bis(4,8),bis(4,3))*K(1,mink(4,43)))*(MT*id(bis(4,4),bis(4,7))-γ(mink(4,44),bis(4,4),bis(4,7))*K(1,mink(4,44)))*(MT*id(bis(4,6),bis(4,15))+γ(mink(4,46),bis(4,6),bis(4,15))*K(2,mink(4,46)))*(MT*id(bis(4,9),bis(4,12))-(K(2,mink(4,48))-K(3,mink(4,48)))*γ(mink(4,48),bis(4,12),bis(4,9)))*(MT*id(bis(4,10),bis(4,13))+(P(0,mink(4,50))+K(2,mink(4,50))-K(3,mink(4,50)))*γ(mink(4,50),bis(4,10),bis(4,13)))*(MT*id(bis(4,11),bis(4,14))-(P(0,mink(4,51))+K(2,mink(4,51)))*γ(mink(4,51),bis(4,14),bis(4,11)))*(ProjM(bis(4,3),bis(4,2))+ProjP(bis(4,3),bis(4,2)))*(ProjM(bis(4,5),bis(4,4))+ProjP(bis(4,5),bis(4,4)))*(-(-K(1,mink(4,6))-K(2,mink(4,6)))*Metric(mink(4,5),mink(4,7))+(-K(1,mink(4,7))-K(2,mink(4,7)))*Metric(mink(4,5),mink(4,6))+(K(1,mink(4,5))+K(2,mink(4,5))-K(3,mink(4,5)))*Metric(mink(4,6),mink(4,7))-(K(1,mink(4,7))+K(2,mink(4,7))-K(3,mink(4,7)))*Metric(mink(4,5),mink(4,6))+Metric(mink(4,5),mink(4,7))*K(3,mink(4,6))-Metric(mink(4,6),mink(4,7))*K(3,mink(4,5)))*sqrt(2)^-2*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,5))*Metric(mink(4,3),mink(4,6))*Metric(mink(4,4),mink(4,7))*id(mink(4,0),mink(4,9))*id(mink(4,1),mink(4,8))*γ(mink(4,2),bis(4,7),bis(4,6))*γ(mink(4,3),bis(4,9),bis(4,8))*γ(mink(4,4),bis(4,11),bis(4,10))*γ(mink(4,8),bis(4,13),bis(4,12))*γ(mink(4,9),bis(4,15),bis(4,14))",
+     )
+     .unwrap();
+    let indices = [
+        ("mink(4,0)", "m"),
+        ("mink(4,1)", "m"),
+        ("mink(4,2)", "m"),
+        ("mink(4,3)", "m"),
+        ("mink(4,4)", "m"),
+        ("mink(4,5)", "m"),
+        ("mink(4,6)", "m"),
+        ("mink(4,7)", "m"),
+        ("mink(4,8)", "m"),
+        ("mink(4,9)", "m"),
+        ("mink(4,41)", "m"),
+        ("mink(4,43)", "m"),
+        ("mink(4,44)", "m"),
+        ("mink(4,46)", "m"),
+        ("mink(4,48)", "m"),
+        ("mink(4,50)", "m"),
+        ("mink(4,51)", "m"),
+        ("bis(4,2)", "b"),
+        ("bis(4,3)", "b"),
+        ("bis(4,4)", "b"),
+        ("bis(4,5)", "b"),
+        ("bis(4,6)", "b"),
+        ("bis(4,7)", "b"),
+        ("bis(4,8)", "b"),
+        ("bis(4,9)", "b"),
+        ("bis(4,10)", "b"),
+        ("bis(4,11)", "b"),
+        ("bis(4,12)", "b"),
+        ("bis(4,13)", "b"),
+        ("bis(4,14)", "b"),
+        ("bis(4,15)", "b"),
+    ]
+    .iter()
+    .map(|(a, g)| (Atom::parse(a).unwrap(), g))
+    .collect::<Vec<_>>();
+
+    println!("res={}", a.canonize_tensors(&indices).unwrap());
+}
+
+#[test]
+fn bug_check_a() {
+    let a = Atom::parse(
+        "-(-K(1,mink(4,6))-K(2,mink(4,6)))*Metric(mink(4,5),mink(4,7))
+ +(-K(1,mink(4,7))-K(2,mink(4,7)))*Metric(mink(4,5),mink(4,6))
+ +(K(1,mink(4,5))+K(2,mink(4,5))-K(3,mink(4,5)))*Metric(mink(4,6),mink(4,7))
+ -(K(1,mink(4,7))+K(2,mink(4,7))-K(3,mink(4,7)))*Metric(mink(4,5),mink(4,6))
+ +Metric(mink(4,5),mink(4,7))*K(3,mink(4,6))
+ -Metric(mink(4,6),mink(4,7))*K(3,mink(4,5))",
+    )
+    .unwrap();
+    let indices: [(Atom, &str); 3] = [
+        (Atom::parse("mink(4,5)").unwrap(), "m"),
+        (Atom::parse("mink(4,6)").unwrap(), "m"),
+        (Atom::parse("mink(4,7)").unwrap(), "m"),
+    ];
+
+    println!("res={}", a.canonize_tensors(&indices).unwrap());
+}
+
+#[test]
 fn one_loop_lbl_concretize() {
     let (_model, amplitude, _path) = load_amplitude_output(
         &("TEST_AMPLITUDE_".to_string() + "physical_1L_6photons" + "/GL_OUTPUT"),
