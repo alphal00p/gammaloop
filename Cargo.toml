@@ -66,6 +66,7 @@ rand = { version = "0.8", features = ["small_rng"] }
 rayon = "1.5"
 tabled = "0.7"
 indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
+
 enum_dispatch = "*"
 git-version = "0.3"
 colored = "*"

@@ -1503,6 +1503,8 @@ impl Numerator<ColorSimplified> {
 
     pub fn parse(self) -> Numerator<Network> {
         debug!("Parsing color simplified numerator into network");
+        // println!("colorless: {}", self.state.colorless);
+        // println!("color: {}", self.state.color);
         let state = self.state.parse();
 
         // debug!("");

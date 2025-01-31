@@ -146,10 +146,10 @@ class TestProcessGeneration:
             "import_model sm"))
         tests = [
             # Only d, g and a as particle contents
-            ('a > d d~ [{{1}}] | d g a', 1),
-            ('a > d d~ g [{{2}}] | d g a', 3),
+            ('a > d d~ [{{1}}] | d g a -num_grouping only_detect_zeroes', 1),
+            ('a > d d~ g [{{2}}] | d g a -num_grouping only_detect_zeroes', 3),
             ('a > d d~ g [{{2}}] | d g a --symmetrize_left_right_states', 2),
-            ('a > d d~ z [{{2}}] | d g a', 0),
+            ('a > d d~ z [{{2}}] | d g a -num_grouping only_detect_zeroes', 0),
             # Full particle contents
             ('a > d d~ [{{1}}] --symmetrize_left_right_states', 1),
             ('a > d d~ [{{2}}] --symmetrize_left_right_states', 9),

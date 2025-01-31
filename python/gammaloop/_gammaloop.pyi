@@ -14,7 +14,7 @@ class NumeratorAwareGroupingOption:
 
     @classmethod
     def __new__(_cls,
-                numerator_aware_grouping_option: Optional[str] = "only_detect_zeroes",
+                numerator_aware_grouping_option: Optional[str] = "group_identical_graphs_up_to_scalar_rescaling",
                 compare_canonized_numerator: Optional[bool] = False,
                 number_of_samples_for_numerator_comparisons: Optional[int] = 5,
                 consider_internal_masses_only_in_numerator_isomorphisms: Optional[bool] = True,
@@ -114,6 +114,9 @@ class Worker:
                           vetoed_graphs: Optional[list[str]] = None,
                           loop_momentum_bases: Optional[dict[str,
                                                              list[str]]] = None,
+                          global_prefactor_color: Optional[str] = None,
+                          global_prefactor_colorless: Optional[str] = None,
+                          num_threads: Optional[int] = None,
                           ) -> list[str]:
         """ Generates diagrams according to the options given in argument and returns their yaml string representation. """
 

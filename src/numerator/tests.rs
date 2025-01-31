@@ -1,14 +1,14 @@
 use brotli::CompressorWriter;
 use spenso::{
     complex::Complex,
-    data::{DenseTensor, StorageTensor},
+    data::{DataTensor, DenseTensor, StorageTensor},
     iterators::IteratableTensor,
     parametric::{atomcore::TensorAtomMaps, ParamTensor},
     shadowing::ETS,
     structure::{
         representation::{BaseRepName, Bispinor, Minkowski},
         slot::IsAbstractSlot,
-        HasStructure,
+        HasStructure, ScalarTensor,
     },
     upgrading_arithmetic::FallibleSub,
 };
@@ -36,8 +36,8 @@ use crate::{
 };
 
 use super::{
-    Evaluate, EvaluatorOptions, GammaSimplified, Numerator, NumeratorCompileOptions,
-    NumeratorEvaluatorOptions, UnInit,
+    Color, Evaluate, EvaluatorOptions, GammaSimplified, Numerator, NumeratorCompileOptions,
+    NumeratorEvaluatorOptions, SymbolicExpression, UnInit,
 };
 
 #[ignore]
@@ -953,4 +953,40 @@ fn one_loop_lbl_concretize() {
             .unwrap()
             .expand()
     );
+}
+
+#[test]
+fn test_wrong_structure() {
+    let expr = "1/9*𝑖*ee^4*sw^-2*CKM1x1
+        *(
+            -Metric(mink(4,2),mink(4,3))+MW^-2*(-K(0,mink(4,1))-K(1,mink(4,1)))*(-K(0,mink(4,2))-K(1,mink(4,2)))
+        )
+        *(
+            -P(0,mink(4,27))-K(1,mink(4,27))
+        )*sqrt(2)^-2
+        *ProjM(bis(4,indexid(-1)),bis(4,2))
+        *ProjM(bis(4,indexid(-1)),bis(4,4))
+        *id(mink(4,0),mink(4,5))
+        *id(mink(4,1),mink(4,4))
+        *γ(mink(4,4),bis(4,7),bis(4,6))
+        *γ(mink(4,5),bis(4,9),bis(4,8))
+        *γ(mink(4,23),bis(4,4),bis(4,3))
+        *γ(mink(4,25),bis(4,2),bis(4,9))
+        *γ(mink(4,26),bis(4,6),bis(4,5))
+        *γ(mink(4,27),bis(4,8),bis(4,7))
+        *γ(mink(4,2),bis(4,3),bis(4,indexid(-1)))
+        *γ(mink(4,3),bis(4,5),bis(4,indexid(-1)))
+        *complexconjugate(CKM1x1)
+        *ϵ(0,mink(4,0))
+        *ϵ(0,mink(4,1))
+        *K(0,mink(4,23))
+        *K(1,mink(4,25))
+        *K(1,mink(4,26))";
+    let spenso_expr = SymbolicExpression::<Color> {
+        colorless: DataTensor::new_scalar(Atom::parse(expr).unwrap().into()),
+        color: DataTensor::new_scalar(Atom::parse("Nc").unwrap().into()),
+        state: Default::default(),
+    };
+    let net = Numerator::<SymbolicExpression<Color>> { state: spenso_expr };
+    net.parse();
 }

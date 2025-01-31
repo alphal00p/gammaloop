@@ -778,17 +778,19 @@ class GammaLoop(object):
     generate_parser.add_argument(
         'process', metavar='process', type=str, nargs="+", help='Process to generate.')
     generate_parser.add_argument('--clear_existing_processes', '-clear', default=False, action='store_true',
-                                 help='Filter tadpole diagrams.')
+                                 help='Clear existing processes stored before adding this one..')
+    generate_parser.add_argument('--num_threads', '-nt', default=None, type=int,
+                                 help='Number of threads to parallelize the generation on. (default: all available cores)')
     generate_parser.add_argument('--graph_prefix', '-gp', type=str, default="GL",
                                  help='Graph name prefix. default: "GL"')
     generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
                                  help='Specify the maximum number of bridges for the graphs to generate. Set negative to disable. (default: 0)')
     generate_parser.add_argument('--filter_self_loop', default=False, action=BooleanOptionalAction,
                                  help='Filter all self-loops directly during generation.')
-    generate_parser.add_argument('--numerator_aware_isomorphism_grouping', '-num_grouping', default="only_detect_zeroes", type=str,
+    generate_parser.add_argument('--numerator_aware_isomorphism_grouping', '-num_grouping', default="group_identical_graphs_up_to_scalar_rescaling", type=str,
                                  choices=["no_grouping", "only_detect_zeroes", "group_identical_graphs_up_to_sign",
                                           "group_identical_graphs_up_to_scalar_rescaling"],
-                                 help='Group identical diagrams after generation and including numerator (default: only_detect_zeroes, otherwise slow)')
+                                 help='Group identical diagrams after generation and including numerator (default: group_identical_graphs_up_to_scalar_rescaling)')
     # Tadpole filter
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')
@@ -893,7 +895,10 @@ class GammaLoop(object):
                     Colour.GREEN, self.process, Colour.END)
         t_start = time.time()
         all_graphs: list[Graph] = self.process.generate_diagrams(
-            self.rust_worker, self.model, args)
+            self.rust_worker, self.model, args,
+            self.config.get_setting("global_prefactor.color"),
+            self.config.get_setting("global_prefactor.colorless"),
+        )
         if len(all_graphs) > 0:
             logger.info("A total of %s%s%s graphs%s have been generated in %s%s%s.",
                         Colour.GREEN, Colour.BOLD, len(all_graphs), Colour.END,

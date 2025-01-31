@@ -1,14 +1,16 @@
 use indicatif::ParallelProgressIterator;
 use indicatif::ProgressBar;
-use indicatif::ProgressStyle;
+use indicatif::{ParallelProgressIterator, ProgressStyle};
 use log::warn;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
+use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use spenso::structure::representation::ExtendibleReps;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use symbolica::atom::AtomView;
 use symbolica::atom::Symbol;
 use symbolica::domains::finite_field::PrimeIteratorU64;
@@ -39,6 +41,7 @@ use crate::numerator::Color;
 use crate::numerator::GlobalPrefactor;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
+use crate::utils;
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     graph::BareGraph,
@@ -1017,63 +1020,85 @@ impl FeynGen {
     fn group_isomorphic_graphs_after_node_color_change<NC>(
         graphs: &HashMap<SymbolicaGraph<NC, EdgeColor>, Atom>,
         node_colors_to_change: &HashMap<i32, i32>,
+        pool: &rayon::ThreadPool,
+        progress_bar_style: &ProgressStyle,
     ) -> HashMap<SymbolicaGraph<NC, EdgeColor>, Atom>
     where
-        NC: NodeColorFunctions + Clone + PartialOrd + Ord + Eq + std::hash::Hash,
+        NC: NodeColorFunctions + Clone + PartialOrd + Ord + Eq + std::hash::Hash + Send + Sync,
     {
         #[allow(clippy::type_complexity)]
-        let mut iso_buckets: HashMap<
-            SymbolicaGraph<NC, EdgeColor>,
-            (usize, (SymbolicaGraph<NC, EdgeColor>, Vec<usize>, Atom)),
-        > = HashMap::default();
+        let iso_buckets: Arc<
+            Mutex<
+                HashMap<
+                    SymbolicaGraph<NC, EdgeColor>,
+                    (usize, (SymbolicaGraph<NC, EdgeColor>, Vec<usize>, Atom)),
+                >,
+            >,
+        > = Arc::new(Mutex::new(HashMap::default()));
 
-        for (g, symmetry_factor) in graphs.iter() {
-            let mut g_node_color_modified = g.clone();
-            let mut modifications: Vec<(usize, i32)> = vec![];
-            for (i_n, node) in g.nodes().iter().enumerate() {
-                for (src_node_color, trgt_node_color) in node_colors_to_change {
-                    if node.data.get_external_tag() == *src_node_color {
-                        modifications.push((i_n, *trgt_node_color));
+        let iso_buckets_clone = iso_buckets.clone();
+        let bar = ProgressBar::new(graphs.len() as u64);
+        bar.set_style(progress_bar_style.clone());
+        bar.set_message("Grouping isomorphic topologies including external leg symmetrization...");
+        pool.install(|| {
+            graphs
+                .par_iter()
+                .progress_with(bar.clone())
+                .for_each(|(g, symmetry_factor)| {
+                    let mut g_node_color_modified = g.clone();
+                    let mut modifications: Vec<(usize, i32)> = vec![];
+                    for (i_n, node) in g.nodes().iter().enumerate() {
+                        for (src_node_color, trgt_node_color) in node_colors_to_change {
+                            if node.data.get_external_tag() == *src_node_color {
+                                modifications.push((i_n, *trgt_node_color));
+                            }
+                        }
                     }
-                }
-            }
-            for (i_n, new_color) in modifications {
-                let mut node_data = g.nodes()[i_n].data.clone();
-                node_data.set_external_tag(new_color);
-                g_node_color_modified.set_node_data(i_n, node_data);
-            }
-            let canonized_g = g_node_color_modified.canonize();
-            let ext_ordering = g
-                .nodes()
-                .iter()
-                .filter_map(|n| {
-                    if n.data.get_external_tag() > 0 {
-                        Some(*n.edges.first().unwrap())
-                    } else {
-                        None
+                    for (i_n, new_color) in modifications {
+                        let mut node_data = g.nodes()[i_n].data.clone();
+                        node_data.set_external_tag(new_color);
+                        g_node_color_modified.set_node_data(i_n, node_data);
                     }
-                })
-                .collect::<Vec<_>>();
-            if let Some((count, (other_g, external_ordering, sym_fact))) =
-                iso_buckets.get_mut(&canonized_g.graph)
-            {
-                // Make sure to pick a representative with a canonical external ordering so that additional flavour grouping afterwards is possible
-                if ext_ordering < *external_ordering {
-                    *external_ordering = ext_ordering;
-                    *other_g = g.clone();
-                }
-                *count += 1;
+                    let canonized_g = g_node_color_modified.canonize();
+                    let ext_ordering = g
+                        .nodes()
+                        .iter()
+                        .filter_map(|n| {
+                            if n.data.get_external_tag() > 0 {
+                                Some(*n.edges.first().unwrap())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
 
-                assert!(sym_fact == symmetry_factor);
-            } else {
-                iso_buckets.insert(
-                    canonized_g.graph,
-                    (1, (g.clone(), ext_ordering, symmetry_factor.clone())),
-                );
-            }
-        }
+                    {
+                        let mut iso_buckets_guard = iso_buckets_clone.lock().unwrap();
 
-        iso_buckets
+                        if let Some((count, (other_g, external_ordering, sym_fact))) =
+                            iso_buckets_guard.get_mut(&canonized_g.graph)
+                        {
+                            // Make sure to pick a representative with a canonical external ordering so that additional flavour grouping afterwards is possible
+                            if ext_ordering < *external_ordering {
+                                *external_ordering = ext_ordering;
+                                *other_g = g.clone();
+                            }
+                            *count += 1;
+
+                            assert!(sym_fact == symmetry_factor);
+                        } else {
+                            iso_buckets_guard.insert(
+                                canonized_g.graph,
+                                (1, (g.clone(), ext_ordering, symmetry_factor.clone())),
+                            );
+                        }
+                    }
+                });
+        });
+        bar.finish_and_clear();
+
+        let iso_buckets_guard = iso_buckets.lock().unwrap();
+        iso_buckets_guard
             .iter()
             .map(
                 |(_canonized_g, (count, (g, _external_ordering, symmetry_factor)))| {
@@ -1504,15 +1529,30 @@ impl FeynGen {
         vetoed_graphs: Option<Vec<String>>,
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
         numerator_global_prefactor: GlobalPrefactor,
+        num_threads: Option<usize>,
     ) -> Result<Vec<BareGraph>, FeynGenError> {
         let progress_bar_style = ProgressStyle::with_template(
             "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
         )
         .unwrap();
 
+        // Build a custom ThreadPool. If `Some(threads)` is given, use that;
+        // otherwise, default to the number of logical CPUs on the system.
+        let pool = match num_threads {
+            Some(threads) => ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .expect("Failed to build custom Rayon ThreadPool"),
+            None => ThreadPoolBuilder::new()
+                .build()
+                .expect("Failed to build default Rayon ThreadPool"),
+        };
+
         debug!(
-            "Generating Feynman diagrams for model {} and process:\n{}",
-            model.name, self.options
+            "Generating Feynman diagrams over {} cores for model {} and process:\n{}",
+            pool.current_num_threads(),
+            model.name,
+            self.options
         );
 
         let filters = match self.options.generation_type {
@@ -1666,8 +1706,18 @@ impl FeynGen {
             "generation_vertex_signatures = {:?}",
             vertex_signatures_for_generation
         );
+
         debug!("feygen options: {:?}", self);
-        info!("Starting Feynman graph generation with Symbolica...");
+
+        // Record the start time
+        let start = Instant::now();
+        let mut last_step = start;
+        info!(
+            "{} | Δ={} | {:<95}",
+            format!("{:<6}", utils::format_wdhms(0)).blue().bold(),
+            format!("{:<6}", utils::format_wdhms(0)).blue(),
+            "Starting Feynman graph generation with Symbolica..."
+        );
         let mut graphs = SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
@@ -1676,13 +1726,20 @@ impl FeynGen {
             filters.get_max_bridge(),
             !filter_self_loop,
         );
+
         // Immediately drop lower loop count contributions
         graphs.retain(|g, _| g.num_loops() >= self.options.loop_count_range.0);
+        let mut step = Instant::now();
         info!(
-            "{:<95}{}",
+            "{} | Δ={} | {:<95}{}",
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                .blue()
+                .bold(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
             "Number of graphs resulting from Symbolica generation:",
             format!("{}", graphs.len()).green().bold()
         );
+        last_step = step;
 
         let unoriented_final_state_particles = if self.options.generation_type
             == GenerationType::CrossSection
@@ -1705,14 +1762,32 @@ impl FeynGen {
         };
 
         if !unoriented_final_state_particles.is_empty() {
-            graphs.retain(|g, _symmetry_factor| {
-                FeynGen::contains_particles(g, unoriented_final_state_particles.as_slice())
+            let bar = ProgressBar::new(graphs.len() as u64);
+            bar.set_style(progress_bar_style.clone());
+            bar.set_message("Enforcing particle content...");
+            pool.install(|| {
+                graphs = graphs
+                    .par_iter()
+                    .progress_with(bar.clone())
+                    .filter(|(g, _symmetry_factor)| {
+                        FeynGen::contains_particles(g, unoriented_final_state_particles.as_slice())
+                    })
+                    .map(|(g, sf)| (g.clone(), sf.clone()))
+                    .collect::<HashMap<_, _>>()
             });
+            bar.finish_and_clear();
+
+            step = Instant::now();
             info!(
-                "{:<95}{}",
+                "{} | Δ={} | {:<95}{}",
+                format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                    .blue()
+                    .bold(),
+                format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
                 "Number of graphs retained after enforcing supergraph particle content:",
                 format!("{}", graphs.len()).green()
             );
+            last_step = step;
         }
 
         let tadpole_filter = filters
@@ -1752,15 +1827,26 @@ impl FeynGen {
             || external_self_energy_filter.is_some()
             || zero_snails_filter.is_some()
         {
-            graphs.retain(|g, _symmetry_factor| {
-                !FeynGen::veto_special_topologies(
-                    model,
-                    g,
-                    external_self_energy_filter,
-                    tadpole_filter,
-                    zero_snails_filter,
-                )
+            let bar = ProgressBar::new(graphs.len() as u64);
+            bar.set_style(progress_bar_style.clone());
+            bar.set_message("Vetoing special topologies...");
+            pool.install(|| {
+                graphs = graphs
+                    .par_iter()
+                    .progress_with(bar.clone())
+                    .filter(|(g, _symmetry_factor)| {
+                        !FeynGen::veto_special_topologies(
+                            model,
+                            g,
+                            external_self_energy_filter,
+                            tadpole_filter,
+                            zero_snails_filter,
+                        )
+                    })
+                    .map(|(g, sf)| (g.clone(), sf.clone()))
+                    .collect::<HashMap<_, _>>()
             });
+            bar.finish_and_clear();
         }
 
         // Re-interpret the symmetry factor as a multiplier where the symbolica factor from symbolica appears in the denominator
@@ -1774,11 +1860,17 @@ impl FeynGen {
             })
             .collect::<HashMap<_, _>>();
 
+        step = Instant::now();
         info!(
-            "{:<95}{}",
+            "{} | Δ={} | {:<95}{}",
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                .blue()
+                .bold(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
             "Number of graphs retained after removal of vetoed topologies:",
             format!("{}", graphs.len()).green()
         );
+        last_step = step;
 
         #[allow(clippy::type_complexity)]
         let mut node_colors: HashMap<
@@ -1800,21 +1892,63 @@ impl FeynGen {
                 ));
             }
         }
+
+        let bar = ProgressBar::new(graphs.len() as u64);
+        bar.set_style(progress_bar_style.clone());
+        bar.set_message("Assigning interactions to vertices...");
+        let mut processed_graphs = vec![];
+        let lists_of_entries = pool.install(|| {
+            graphs
+                .par_iter()
+                .progress_with(bar.clone())
+                .map(|(g, symmetry_factor)| {
+                    FeynGen::assign_node_colors(model, g, &node_colors).map(|colored_graphs| {
+                        colored_graphs
+                            .iter()
+                            .map(|(colored_g, multiplicity)| {
+                                (
+                                    colored_g.canonize().graph,
+                                    (Atom::new_num(*multiplicity as i64) * symmetry_factor)
+                                        .to_canonical_string(),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect::<Result<Vec<_>, FeynGenError>>()
+        })?;
+        bar.finish_and_clear();
+
+        for entries in lists_of_entries {
+            processed_graphs.extend(entries);
+        }
         processed_graphs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
+        step = Instant::now();
         info!(
-            "{:<95}{}",
+            "{} | Δ={} | {:<95}{}",
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                .blue()
+                .bold(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
             "Number of graphs after vertex info assignment:",
             format!("{}", processed_graphs.len()).green()
         );
+        last_step = step;
 
-        filters.apply_filters(&mut processed_graphs)?;
+        filters.apply_filters(&mut processed_graphs, &pool, &progress_bar_style)?;
 
+        step = Instant::now();
         info!(
-            "{:<95}{}",
+            "{} | Δ={} | {:<95}{}",
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                .blue()
+                .bold(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
             "Number of graphs after all complete graphs filters are applied:",
             format!("{}", processed_graphs.len()).green()
         );
+        last_step = step;
 
         let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
 
@@ -1830,24 +1964,35 @@ impl FeynGen {
             let bar = ProgressBar::new(processed_graphs.len() as u64);
             bar.set_style(progress_bar_style.clone());
             bar.set_message("Applying fast Cutkosky cut filter...");
-            bar.enable_steady_tick(Duration::from_millis(100));
-            processed_graphs.retain(|(g, _symmetry_factor)| {
-                bar.inc(1);
-                self.contains_cut_fast(
-                    model,
-                    g,
-                    n_unresolved,
-                    &unresolved_type,
-                    unoriented_final_state_particles.as_slice(),
-                )
+            pool.install(|| {
+                processed_graphs = processed_graphs
+                    .par_iter()
+                    .progress_with(bar.clone())
+                    .filter(|(g, _symmetry_factor)| {
+                        self.contains_cut_fast(
+                            model,
+                            g,
+                            n_unresolved,
+                            &unresolved_type,
+                            unoriented_final_state_particles.as_slice(),
+                        )
+                    })
+                    .map(|(g, sf)| (g.clone(), sf.clone()))
+                    .collect::<Vec<_>>()
             });
             bar.finish_and_clear();
 
+            step = Instant::now();
             info!(
-                "{:<95}{}",
+                "{} | Δ={} | {:<95}{}",
+                format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                    .blue()
+                    .bold(),
+                format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
                 "Number of graphs after fast Cutkosky cut filter is applied:",
                 format!("{}", processed_graphs.len()).green()
             );
+            last_step = step;
         }
 
         // This secondary cutkosky cut filter is always necessary as the fast one can have false positives
@@ -1872,19 +2017,28 @@ impl FeynGen {
             let bar = ProgressBar::new(processed_graphs.len() as u64);
             bar.set_style(progress_bar_style.clone());
             bar.set_message("Applying secondary exact Cutkosky cut filter...");
-            bar.enable_steady_tick(Duration::from_millis(100));
 
-            processed_graphs = processed_graphs
-                .into_par_iter()
-                .filter(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type))
-                .progress_with(bar)
-                .collect();
+            pool.install(|| {
+                processed_graphs = processed_graphs
+                    .par_iter()
+                    .progress_with(bar.clone())
+                    .filter(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type))
+                    .map(|(g, sf)| (g.clone(), sf.clone()))
+                    .collect::<Vec<_>>()
+            });
+            bar.finish_and_clear();
 
+            step = Instant::now();
             info!(
-                "{:<95}{}",
+                "{} | Δ={} | {:<95}{}",
+                format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                    .blue()
+                    .bold(),
+                format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
                 "Number of graphs after exact Cutkosky cut filter is applied:",
                 format!("{}", processed_graphs.len()).green()
             );
+            last_step = step;
         }
 
         // Now account for initial state symmetry by further grouping contributions
@@ -1945,222 +2099,300 @@ impl FeynGen {
                     .map(|(g, m)| (g.clone(), Atom::parse(m).unwrap()))
                     .collect::<HashMap<_, _>>(),
                 &node_colors_for_canonicalization_left_right,
+                &pool,
+                &progress_bar_style,
             )
             .iter()
             .map(|(g, m)| (g.clone(), m.to_canonical_string()))
             .collect::<Vec<_>>();
         }
 
+        step = Instant::now();
         info!(
-            "{:<95}{}",
+            "{} | Δ={} | {:<95}{}",
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                .blue()
+                .bold(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
             "Number of graphs after symmetrization of external states:",
             format!("{}", processed_graphs.len()).green()
         );
+        last_step = step;
 
-        #[allow(clippy::type_complexity)]
-        let mut pooled_bare_graphs: HashMap<
-            SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
-            Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
-        > = HashMap::default();
-
-        let mut canonized_processed_graphs = processed_graphs
-            .iter()
-            .map(|(g, symmetry_factor)| {
-                let manually_canonalize_initial_final_swap = self.options.generation_type
-                    == GenerationType::CrossSection
-                    && self.options.symmetrize_left_right_states;
-                let (mut canonical_repr, mut sorted_g) = self
-                    .canonicalize_edge_and_vertex_ordering(
-                        model,
-                        g,
-                        &node_colors_for_canonicalization_left_right,
-                        numerator_aware_isomorphism_grouping,
-                        manually_canonalize_initial_final_swap,
-                    );
-                // If we are symmetrizing the left-right states in the context of a cross-section, the canonaliztion above
-                // has canonized the choice of which nodes to assign to the initial and final state.
-                // We now do a second pass to canonalize the vertex ordering for that particular choice.
-                if manually_canonalize_initial_final_swap {
-                    (canonical_repr, sorted_g) = self.canonicalize_edge_and_vertex_ordering(
-                        model,
-                        &sorted_g,
-                        &node_colors_for_canonicalization_left_right,
-                        numerator_aware_isomorphism_grouping,
-                        false,
-                    );
-                }
-                (canonical_repr, sorted_g, symmetry_factor.clone())
-            })
-            .collect::<Vec<_>>();
+        let bar = ProgressBar::new(graphs.len() as u64);
+        bar.set_style(progress_bar_style.clone());
+        bar.set_message("Canonalizing edge and ndoes ordering of selected graphs, including leg symmetrization...");
+        let mut canonized_processed_graphs = pool.install(|| {
+            processed_graphs
+                .par_iter()
+                .progress_with(bar.clone())
+                .map(|(g, symmetry_factor)| {
+                    let manually_canonalize_initial_final_swap = self.options.generation_type
+                        == GenerationType::CrossSection
+                        && self.options.symmetrize_left_right_states;
+                    let (mut canonical_repr, mut sorted_g) = self
+                        .canonicalize_edge_and_vertex_ordering(
+                            model,
+                            g,
+                            &node_colors_for_canonicalization_left_right,
+                            numerator_aware_isomorphism_grouping,
+                            manually_canonalize_initial_final_swap,
+                        );
+                    // If we are symmetrizing the left-right states in the context of a cross-section, the canonaliztion above
+                    // has canonized the choice of which nodes to assign to the initial and final state.
+                    // We now do a second pass to canonalize the vertex ordering for that particular choice.
+                    if manually_canonalize_initial_final_swap {
+                        (canonical_repr, sorted_g) = self.canonicalize_edge_and_vertex_ordering(
+                            model,
+                            &sorted_g,
+                            &node_colors_for_canonicalization_left_right,
+                            numerator_aware_isomorphism_grouping,
+                            false,
+                        );
+                    }
+                    (canonical_repr, sorted_g, symmetry_factor.clone())
+                })
+                .collect::<Vec<_>>()
+        });
+        bar.finish_and_clear();
 
         canonized_processed_graphs.sort_by(|a, b| (a.1).partial_cmp(&b.1).unwrap());
 
-        let bar = ProgressBar::new(processed_graphs.len() as u64);
-        let mut n_zeroes = 0;
-        let mut n_groupings = 0;
+        let n_zeroes = Arc::new(Mutex::new(0));
+        let n_zeroes_clone = n_zeroes.clone();
+        let n_groupings = Arc::new(Mutex::new(0));
+        let n_groupings_clone = n_groupings.clone();
+        #[allow(clippy::type_complexity)]
+        let pooled_bare_graphs: Arc<
+            Mutex<
+                HashMap<
+                    SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
+                    Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
+                >,
+            >,
+        > = Arc::new(Mutex::new(HashMap::default()));
+        let pooled_bare_graphs_clone = pooled_bare_graphs.clone();
+
+        let bar = ProgressBar::new(canonized_processed_graphs.len() as u64);
         bar.set_style(progress_bar_style.clone());
-        //bar.enable_steady_tick(Duration::from_millis(100));
-        for (i_g, (canonical_repr, g, symmetry_factor)) in
-            canonized_processed_graphs.iter().enumerate()
-        {
-            bar.inc(1);
-            bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
-                "#zeros".green(),
-                format!("{}",n_zeroes).green().bold(),
-                "#groupings".green(),
-                format!("{}",n_groupings).green().bold(),
-            ));
-
-            let graph_name = format!("{}{}", graph_prefix, i_g);
-            if let Some(selected_graphs) = &selected_graphs {
-                if !selected_graphs.contains(&graph_name) {
-                    continue;
-                }
-            }
-            if let Some(vetoed_graphs) = &vetoed_graphs {
-                if vetoed_graphs.contains(&graph_name) {
-                    continue;
-                }
-            }
-            // println!("graph #{} = \n{}", i_g, canonical_repr.to_dot());
-
-            let bare_graph = BareGraph::from_symbolica_graph(
-                model,
-                graph_name,
-                g,
-                symmetry_factor.clone(),
-                external_connections.clone(),
-                None,
-            )?;
-            // println!("BARE GRAPH #{}:\n{}", i_g, bare_graph.dot());
-            // When disabling numerator-aware graph isomorphism, each graph is added separately
-            if matches!(
-                numerator_aware_isomorphism_grouping,
-                NumeratorAwareGraphGroupingOption::NoGrouping
-            ) {
-                match pooled_bare_graphs.entry(canonical_repr.clone()) {
-                    Entry::Vacant(entry) => {
-                        entry.insert(vec![(i_g, None, bare_graph)]);
-                    }
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().push((i_g, None, bare_graph));
-                    }
-                }
-            } else {
-                let numerator =
-                    Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
-                let numerator_color_simplified: Numerator<SymbolicExpression<Color>> =
-                    numerator.color_simplify();
-                if numerator_color_simplified
-                    .get_single_atom()
-                    .unwrap()
-                    .0
-                    .is_zero()
-                {
-                    n_zeroes += 1;
-                    continue;
-                }
-                if matches!(
-                    numerator_aware_isomorphism_grouping,
-                    NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
-                ) {
-                    match pooled_bare_graphs.entry(canonical_repr.clone()) {
-                        Entry::Vacant(entry) => {
-                            entry.insert(vec![(i_g, None, bare_graph)]);
-                        }
-                        Entry::Occupied(mut entry) => {
-                            entry.get_mut().push((i_g, None, bare_graph));
+        bar.set_message(format!(
+            "Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+            "#zeros".green(),
+            format!("{}", 0).green().bold(),
+            "#groupings".green(),
+            format!("{}", 0).green().bold(),
+        ));
+        pool.install(|| {
+            canonized_processed_graphs
+                .par_iter()
+                .progress_with(bar.clone())
+                .enumerate()
+                .map(|(i_g, (canonical_repr, g, symmetry_factor))| {
+                    let graph_name = format!("{}{}", graph_prefix, i_g);
+                    if let Some(selected_graphs) = &selected_graphs {
+                        if !selected_graphs.contains(&graph_name) {
+                            return Ok(())
                         }
                     }
-                } else {
-                    // println!(
-                    //     "I have:\n{}",
-                    //     numerator_color_simplified
-                    //         .clone()
-                    //         .parse()
-                    //         .contract(ContractionSettings::<Rational>::Normal)
-                    //         .unwrap()
-                    //         .state
-                    //         .tensor
-                    //         .iter_flat()
-                    //         .map(|(id, d)| format!("{}: {}", id, d))
-                    //         .collect::<Vec<_>>()
-                    //         .join("\n")
-                    // );
-                    let numerator_data = Some(
-                        ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
-                            i_g,
-                            &bare_graph,
-                            numerator_color_simplified,
-                            numerator_aware_isomorphism_grouping,
-                        )?,
-                    );
-                    // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
-
-                    match pooled_bare_graphs.entry(canonical_repr.clone()) {
-                        Entry::Vacant(entry) => {
-                            entry.insert(vec![(i_g, numerator_data, bare_graph)]);
+                    if let Some(vetoed_graphs) = &vetoed_graphs {
+                        if vetoed_graphs.contains(&graph_name) {
+                            return Ok(())
                         }
-                        Entry::Occupied(mut entry) => {
-                            let mut found_match = false;
-                            for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
-                                if let Some(ratio) = FeynGen::compare_numerator_tensors(
-                                    numerator_aware_isomorphism_grouping,
-                                    numerator_data.as_ref().unwrap(),
-                                    other_numerator.as_ref().unwrap(),
-                                ) {
-                                    n_groupings += 1;
-                                    found_match = true;
-                                    other_graph.overall_factor =
-                                        (Atom::parse(other_graph.overall_factor.as_str()).unwrap()
-                                            + ratio
-                                                * Atom::parse(bare_graph.overall_factor.as_str())
-                                                    .unwrap())
-                                        .expand()
-                                        .to_canonical_string();
+                    }
+
+                    let bare_graph = BareGraph::from_symbolica_graph(
+                        model,
+                        graph_name,
+                        g,
+                        symmetry_factor.clone(),
+                        external_connections.clone(),
+                        None,
+                    )?;
+                    // When disabling numerator-aware graph isomorphism, each graph is added separately
+                    if matches!(
+                        numerator_aware_isomorphism_grouping,
+                        NumeratorAwareGraphGroupingOption::NoGrouping
+                    ) {
+                        {
+                            let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
+                            match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
+                                Entry::Vacant(entry) => {
+                                    entry.insert(vec![(i_g, None, bare_graph)]);
+                                }
+                                Entry::Occupied(mut entry) => {
+                                    entry.get_mut().push((i_g, None, bare_graph));
                                 }
                             }
-                            if !found_match {
-                                entry.get_mut().push((i_g, numerator_data, bare_graph));
+                        }
+                    } else {
+                        let numerator =
+                            Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
+                        let numerator_color_simplified: Numerator<SymbolicExpression<Color>> =
+                            numerator.color_simplify();
+                        if numerator_color_simplified
+                            .get_single_atom()
+                            .unwrap()
+                            .0
+                            .is_zero()
+                        {
+                            {
+                                let mut n_zeroes_value = n_zeroes_clone.lock().unwrap();
+                                let n_groupings_value = n_groupings_clone.lock().unwrap();
+                                *n_zeroes_value += 1;
+                                bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                    "#zeros".green(),
+                                    format!("{}",n_zeroes_value).green().bold(),
+                                    "#groupings".green(),
+                                    format!("{}",n_groupings_value).green().bold(),
+                                ));
+                            }
+                            return Ok(())
+                        }
+                        if matches!(
+                            numerator_aware_isomorphism_grouping,
+                            NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
+                        ) {
+                            {
+                                let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
+
+                                match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
+                                    Entry::Vacant(entry) => {
+                                        entry.insert(vec![(i_g, None, bare_graph)]);
+                                    }
+                                    Entry::Occupied(mut entry) => {
+                                        entry.get_mut().push((i_g, None, bare_graph));
+                                    }
+                                }
+                            }
+                        } else {
+                            // println!(
+                            //     "I have:\n{}",
+                            //     numerator_color_simplified
+                            //         .clone()
+                            //         .parse()
+                            //         .contract(ContractionSettings::<Rational>::Normal)
+                            //         .unwrap()
+                            //         .state
+                            //         .tensor
+                            //         .iter_flat()
+                            //         .map(|(id, d)| format!("{}: {}", id, d))
+                            //         .collect::<Vec<_>>()
+                            //         .join("\n")
+                            // );
+                            let numerator_data = Some(
+                                ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
+                                    i_g,
+                                    &bare_graph,
+                                    numerator_color_simplified,
+                                    numerator_aware_isomorphism_grouping,
+                                )?,
+                            );
+                            // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
+                            {
+                                let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
+
+                                match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
+                                    Entry::Vacant(entry) => {
+                                        entry.insert(vec![(i_g, numerator_data, bare_graph)]);
+                                    }
+                                    Entry::Occupied(mut entry) => {
+                                        let mut found_match = false;
+                                        for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
+                                            if let Some(ratio) = FeynGen::compare_numerator_tensors(
+                                                numerator_aware_isomorphism_grouping,
+                                                numerator_data.as_ref().unwrap(),
+                                                other_numerator.as_ref().unwrap(),
+                                            ) {
+                                                {
+                                                    let n_zeroes_value = n_zeroes_clone.lock().unwrap();
+                                                    let mut n_groupings_value =
+                                                        n_groupings_clone.lock().unwrap();
+                                                    *n_groupings_value += 1;
+                                                    bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                                        "#zeros".green(),
+                                                        format!("{}",n_zeroes_value).green().bold(),
+                                                        "#groupings".green(),
+                                                        format!("{}",n_groupings_value).green().bold(),
+                                                    ));
+                                                }
+                                                found_match = true;
+                                                other_graph.overall_factor =
+                                                    (Atom::parse(other_graph.overall_factor.as_str())
+                                                        .unwrap()
+                                                        + ratio
+                                                            * Atom::parse(
+                                                                bare_graph.overall_factor.as_str(),
+                                                            )
+                                                            .unwrap())
+                                                    .expand()
+                                                    .to_canonical_string();
+                                            }
+                                        }
+                                        if !found_match {
+                                            entry.get_mut().push((i_g, numerator_data, bare_graph));
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
-        }
+                    Ok(())
+
+                }).collect::<Result<Vec<()>, FeynGenError>>()
+        })?;
         bar.finish_and_clear();
 
-        let mut n_cancellations = 0;
-        let mut bare_graphs = pooled_bare_graphs
-            .values()
-            .flatten()
-            .filter_map(|(graph_id, _numerator, graph)| {
-                if Atom::parse(&graph.overall_factor)
-                    .unwrap()
-                    .expand()
-                    .is_zero()
-                {
-                    n_cancellations += 1;
-                    None
-                } else {
-                    Some((*graph_id, graph.clone()))
-                }
-            })
-            .collect::<Vec<_>>();
+        let mut n_cancellations: i32 = 0;
+        let (mut bare_graphs, pooled_bare_graphs_len) = {
+            let pooled_bare_graphs_lock = pooled_bare_graphs.lock().unwrap();
+
+            (
+                pooled_bare_graphs_lock
+                    .values()
+                    .flatten()
+                    .filter_map(|(graph_id, _numerator, graph)| {
+                        if Atom::parse(&graph.overall_factor)
+                            .unwrap()
+                            .expand()
+                            .is_zero()
+                        {
+                            n_cancellations += 1;
+                            None
+                        } else {
+                            Some((*graph_id, graph.clone()))
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+                pooled_bare_graphs_lock.len(),
+            )
+        };
         bare_graphs.sort_by(|a: &(usize, BareGraph), b| (a.0).cmp(&b.0));
 
+        let (n_zeroes_value, n_groupings_value) = {
+            (
+                *n_zeroes_clone.lock().unwrap(),
+                *n_groupings_clone.lock().unwrap(),
+            )
+        };
+        step = Instant::now();
         info!(
-            "{:<95}{} ({} isomorphically unique graph{}, {} zero{}, {} grouped and {} cancellation{})",
+            "{} | Δ={} | {:<95}{} ({} isomorphically unique graph{}, {} zero{}, {} grouped and {} cancellation{})",
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start)).blue().bold(),
+            format!(
+                "{:<6}",
+                utils::format_wdhms_from_duration(step - last_step)
+            )
+            .blue(),
             format!(
                 "Number of graphs after numerator-aware grouping with strategy '{}':",
                 numerator_aware_isomorphism_grouping
             ),
             format!("{}", bare_graphs.len()).green().bold(),
-            format!("{}", pooled_bare_graphs.len()).blue().bold(),
-            if pooled_bare_graphs.len() > 1 { "s" } else { "" },
-            format!("{}", n_zeroes).blue().bold(),
-            if n_zeroes > 1 { "s" } else { "" },
-            format!("{}", n_groupings).blue().bold(),
+            format!("{}", pooled_bare_graphs_len).blue().bold(),
+            if pooled_bare_graphs_len > 1 { "s" } else { "" },
+            format!("{}", n_zeroes_value).blue().bold(),
+            if n_zeroes_value > 1 { "s" } else { "" },
+            format!("{}", n_groupings_value).blue().bold(),
             format!("{}", n_cancellations).blue().bold(),
             if n_cancellations > 1 { "s" } else { "" },
         );

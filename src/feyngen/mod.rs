@@ -2,6 +2,9 @@ pub mod diagram_generator;
 
 use ahash::{AHashMap, HashMap};
 use diagram_generator::EdgeColor;
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::ParallelIterator;
 use smartstring::{LazyCompact, SmartString};
 use std::{fmt, str::FromStr};
 use symbolica::graph::Graph as SymbolicaGraph;
@@ -268,22 +271,34 @@ impl FeynGenFilters {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions>(
+    pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone>(
         &self,
         graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, String)>,
+        pool: &rayon::ThreadPool,
+        progress_bar_style: &ProgressStyle,
     ) -> Result<(), FeynGenError> {
         for filter in self.0.iter() {
-            #[allow(clippy::single_match)]
             match filter {
                 FeynGenFilter::CouplingOrders(orders) => {
-                    graphs.retain(|(g, _)| {
-                        let graph_coupling_orders = get_coupling_orders(g);
-                        orders.iter().all(|(k, v)| {
-                            graph_coupling_orders
-                                .get(&SmartString::from(k))
-                                .map_or(0 == *v, |o| *o == *v)
-                        })
+                    let bar = ProgressBar::new(graphs.len() as u64);
+                    bar.set_style(progress_bar_style.clone());
+                    bar.set_message("Applying coupling orders constraints...");
+                    pool.install(|| {
+                        *graphs = graphs
+                            .par_iter_mut()
+                            .progress_with(bar.clone())
+                            .filter(|(g, _)| {
+                                let graph_coupling_orders = get_coupling_orders(g);
+                                orders.iter().all(|(k, v)| {
+                                    graph_coupling_orders
+                                        .get(&SmartString::from(k))
+                                        .map_or(0 == *v, |o| *o == *v)
+                                })
+                            })
+                            .map(|(g, sf)| (g.clone(), sf.clone()))
+                            .collect::<Vec<_>>()
                     });
+                    bar.finish_and_clear();
                 }
                 FeynGenFilter::LoopCountRange((loop_count_min, loop_count_max)) => {
                     graphs.retain(|(g, _)| {

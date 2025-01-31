@@ -149,7 +149,8 @@ class Process(object):
 
         return ' '.join(process_str_pieces)
 
-    def generate_diagrams(self, gl_worker: gl_rust.Worker, model: Model, generation_args: Namespace) -> list[Graph]:
+    def generate_diagrams(self, gl_worker: gl_rust.Worker, model: Model, generation_args: Namespace,
+                          global_prefactor_color: str, global_prefactor_colorless: str) -> list[Graph]:
 
         if generation_args.amplitude:
             loop_count_range = self.amplitude_loop_count
@@ -218,6 +219,9 @@ class Process(object):
             generation_args.select_graphs,
             generation_args.veto_graphs,
             generation_args.loop_momentum_bases,
+            global_prefactor_color,
+            global_prefactor_colorless,
+            generation_args.num_threads
         )
 
         return [Graph.from_serializable_dict(model, yaml.safe_load(graph_str)) for graph_str in all_graphs]

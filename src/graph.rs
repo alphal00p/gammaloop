@@ -1343,7 +1343,6 @@ impl BareGraph {
                 .or_default()
                 .push(e.vertices.0);
         }
-
         // Fix external edge directions, as for now *particle* fermion flow is observed, but we instead want:
         // > incoming antiparticles to be actually incoming (*particle* fermion flow would be outgoing)
         // > outgoing antiparticles to be actually outgoing (*particle* fermion flow would be incoming)
@@ -1401,7 +1400,6 @@ impl BareGraph {
                 external_edges.insert(n.edges[0], (physical_edge_type, particle.name.clone()));
             }
         }
-
         // First build vertices
         let mut vertices: Vec<Vertex> = vec![];
         let mut vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
@@ -1538,7 +1536,7 @@ impl BareGraph {
             g.edge_name_to_position.insert(e.name.clone(), i_e);
         }
 
-        debug!("Loaded graph: {}", g.dot());
+        //debug!("Loaded graph: {}", g.dot());
         g.external_edges = g
             .edges
             .iter()

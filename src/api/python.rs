@@ -352,7 +352,7 @@ impl PyNumeratorAwareGroupingOption {
         Ok(PyNumeratorAwareGroupingOption {
             grouping_options: NumeratorAwareGraphGroupingOption::new_with_attributes(
                 numerator_aware_grouping_option
-                    .unwrap_or("only_detect_zeroes".into())
+                    .unwrap_or("group_identical_graphs_up_to_scalar_rescaling".into())
                     .as_str(),
                 numerical_samples_seed,
                 number_of_samples_for_numerator_comparisons,
@@ -468,6 +468,7 @@ impl PythonWorker {
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
         global_prefactor_color: Option<String>,
         global_prefactor_colorless: Option<String>,
+        num_threads: Option<usize>,
     ) -> PyResult<Vec<String>> {
         if self.model.is_empty() {
             return Err(exceptions::PyException::new_err(
@@ -499,6 +500,7 @@ impl PythonWorker {
                 vetoed_graphs,
                 loop_momentum_bases,
                 global_prefactor,
+                num_threads,
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         Ok(diagrams
