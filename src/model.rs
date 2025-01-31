@@ -1,6 +1,6 @@
 use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
-use crate::numerator::ufo::UFO;
+use crate::numerator::ufo::{preprocess_ufo_spin_wrapped, UFO};
 use crate::utils::{self, FloatLike, F};
 use linnet::half_edge::drawing::Decoration;
 
@@ -9,6 +9,7 @@ use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
 use itertools::Itertools;
 
+use libc::CR0;
 // use log::{info, trace};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
@@ -37,6 +38,7 @@ use spenso::{
 };
 use std::fmt::{Display, Formatter};
 use std::fs;
+use symbolica::coefficient::CoefficientView;
 use symbolica::evaluate::FunctionMap;
 
 use eyre::Result;
@@ -174,12 +176,11 @@ impl ColorStructure {
     }
 
     pub fn number_of_dummies(&self) -> usize {
-        let mut count = 0;
-
-        for a in &self.color_structure {
-            count += Self::number_of_dummies_in_atom(a.as_view());
-        }
-        count
+        self.color_structure
+            .iter()
+            .map(|a| VertexRule::n_dummy_atom(a))
+            .max()
+            .unwrap_or(0)
     }
 }
 
@@ -336,10 +337,12 @@ impl VertexRule {
 
         shifts.colordummy += n_color_dummies;
 
-        let mut n_lorentz_dummies = 0;
-        for a in &self.lorentz_structures {
-            n_lorentz_dummies += a.number_of_dummies();
-        }
+        let n_lorentz_dummies = self
+            .lorentz_structures
+            .iter()
+            .map(|a| Self::n_dummy_atom(&a.structure))
+            .max()
+            .unwrap_or(0);
 
         for a in 0..n_lorentz_dummies {
             lorentz_and_spin.push((shifts.lorentzdummy + a).into());
@@ -351,6 +354,53 @@ impl VertexRule {
             lorentz_and_spin,
             color,
         }
+    }
+
+    fn n_dummy_atom(atom: &Atom) -> usize {
+        let atom = preprocess_ufo_spin_wrapped(atom.clone());
+        let indexidpat = Pattern::parse("indexid(x_)").unwrap();
+        atom.pattern_match(&indexidpat, None, None)
+            .into_iter()
+            .filter_map(|a| {
+                if let AtomView::Num(n) = a[&GS.x_].as_view() {
+                    let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
+                        if b == 1 {
+                            a
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    };
+                    if e < 0 {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .min()
+            .unwrap_or(0)
+            .abs() as usize
+    }
+
+    pub fn n_dummies(&self) -> (usize, usize) {
+        let n_color_dummies = self
+            .color_structures
+            .color_structure
+            .iter()
+            .map(|a| Self::n_dummy_atom(a))
+            .max()
+            .unwrap_or(0);
+        let n_lorentz_dummies = self
+            .lorentz_structures
+            .iter()
+            .map(|a| Self::n_dummy_atom(&a.structure))
+            .max()
+            .unwrap_or(0);
+        (n_color_dummies, n_lorentz_dummies)
     }
 
     pub fn generate_vertex_slots(&self, mut shifts: Shifts) -> (VertexSlots, Shifts) {
@@ -1312,21 +1362,7 @@ impl LorentzStructure {
     }
 
     pub fn number_of_dummies(&self) -> usize {
-        let mut count = 0;
-        if let AtomView::Mul(m) = self.structure.as_view() {
-            for a in m {
-                if let AtomView::Fun(f) = a {
-                    for a in f {
-                        if let Ok(i) = i64::try_from(a) {
-                            if i < 0 {
-                                count += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        count / 2
+        VertexRule::n_dummy_atom(&self.structure)
     }
 }
 

@@ -13,7 +13,7 @@ use crate::{
     },
     gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
-    model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
+    model::{self, ColorStructure, EdgeSlots, LorentzStructure, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     numerator::{
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
@@ -25,7 +25,7 @@ use crate::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm::{self, CounterTerm},
     },
-    utils::{self, sorted_vectorize, FloatLike, F},
+    utils::{self, sorted_vectorize, FloatLike, F, GS},
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
@@ -51,6 +51,7 @@ use spenso::{
     complex::Complex,
     contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor},
+    parametric::atomcore::PatternReplacement,
     scalar::Scalar,
     shadowing::{Shadowable, ETS},
     structure::{
@@ -78,17 +79,18 @@ use std::{
 };
 
 use symbolica::{
-    atom::AtomCore,
-    graph::Graph as SymbolicaGraph,
-    printer::{AtomPrinter, PrintOptions},
-};
-use symbolica::{
     atom::{Atom, Symbol},
-    domains::{float::NumericalFloatLike, rational::Rational},
+    coefficient::CoefficientView,
+    domains::{float::NumericalFloatLike, integer::Integer, rational::Rational},
     fun,
     id::{Pattern, Replacement},
     state::State,
     symb,
+};
+use symbolica::{
+    atom::{AtomCore, AtomView},
+    graph::Graph as SymbolicaGraph,
+    printer::{AtomPrinter, PrintOptions},
 };
 //use symbolica::{atom::Symbol,state::State};
 //pub mod half_edge;
@@ -303,6 +305,23 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                     atom = atom.replace_all_multiple(&replacements);
                 }
+
+                let n_dummies = ls.number_of_dummies();
+                for i in 0..n_dummies {
+                    let pat: Pattern = Atom::parse(&format!("indexid({})", -1 - i as i64))
+                        .unwrap()
+                        .to_pattern();
+
+                    atom = atom.replace_all(
+                        &pat,
+                        Atom::new_num(
+                            usize::from(vertex_slots.internal_dummy.lorentz_and_spin[i]) as i64
+                        )
+                        .to_pattern(),
+                        None,
+                        None,
+                    );
+                }
                 atom
             })
             .collect_vec();
@@ -484,6 +503,9 @@ pub struct Edge {
 }
 
 impl Edge {
+    pub fn n_dummies(&self) -> usize {
+        5
+    }
     pub fn from_serializable_edge(
         model: &model::Model,
         graph: &BareGraph,
@@ -578,14 +600,14 @@ impl Edge {
                 if self.particle.is_antiparticle() {
                     atom = atom.replace_all(
                         &pfun,
-                        Pattern::parse(&format!("-Q({},mink(4,x_))", num)).unwrap(),
+                        Pattern::parse(&format!("-Q({},mink(4,indexid(x_)))", num)).unwrap(),
                         None,
                         None,
                     );
                 } else {
                     atom = atom.replace_all(
                         &pfun,
-                        Pattern::parse(&format!("Q({},mink(4,x_))", num)).unwrap(),
+                        Pattern::parse(&format!("Q({},mink(4,indexid(x_)))", num)).unwrap(),
                         None,
                         None,
                     );
@@ -618,6 +640,32 @@ impl Edge {
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom);
+                let indexidpat = Pattern::parse("indexid(x_)").unwrap();
+
+                let dummies: HashSet<_> = atom
+                    .pattern_match(&indexidpat, None, None)
+                    .into_iter()
+                    .filter_map(|a| {
+                        if let AtomView::Num(n) = a[&GS.x_].as_view() {
+                            let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
+                                if b == 1 {
+                                    a
+                                } else {
+                                    0
+                                }
+                            } else {
+                                0
+                            };
+                            if e < 0 {
+                                Some(e)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
                 let (replacements_in, mut replacements_out) = if self.particle.is_antiparticle() {
                     (in_slots.replacements(2), out_slots.replacements(1))
@@ -625,10 +673,10 @@ impl Edge {
                     (in_slots.replacements(1), out_slots.replacements(2))
                 };
 
-                replacements_out.push(Replacement::new(
-                    Atom::parse("indexid(x_)").unwrap().to_pattern(),
-                    Atom::parse("x_").unwrap().to_pattern(),
-                ));
+                // replacements_out.push(Replacement::new(
+                //     Atom::parse("indexid(x_)").unwrap().to_pattern(),
+                //     Atom::parse("x_").unwrap().to_pattern(),
+                // ));
 
                 let mut color_atom = Atom::new_num(1);
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
@@ -642,9 +690,41 @@ impl Edge {
                     .chain(replacements_out)
                     .collect();
 
+                let atom = atom.replace_all_multiple(&reps);
+                let color_atom = color_atom.replace_all_multiple(&reps);
+
+                let indexid_reps: Vec<_> = dummies
+                    .into_iter()
+                    .enumerate()
+                    .sorted()
+                    .map(|(i, d)| {
+                        Replacement::new(
+                            Atom::parse(&format!("indexid({})", d))
+                                .unwrap()
+                                .to_pattern(),
+                            Atom::parse(&format!("{}", self.internal_index[i + 1]))
+                                .unwrap()
+                                .to_pattern(),
+                        )
+                    })
+                    .collect();
+
+                let atom = atom.replace_all_multiple(&indexid_reps);
+                let color_atom = color_atom.replace_all_multiple(&indexid_reps);
+
                 [
-                    atom.replace_all_multiple(&reps),
-                    color_atom.replace_all_multiple(&reps),
+                    atom.replace_all(
+                        &Pattern::parse("indexid(x_)").unwrap(),
+                        Atom::new_var(GS.x_).to_pattern(),
+                        None,
+                        None,
+                    ),
+                    color_atom.replace_all(
+                        &Pattern::parse("indexid(x_)").unwrap(),
+                        Atom::new_var(GS.x_).to_pattern(),
+                        None,
+                        None,
+                    ),
                 ]
             }
         }

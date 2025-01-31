@@ -6,6 +6,12 @@
   "shell": {
     "program": "bash"
   },
+  "inlay_hints": {
+    "enabled": true,
+    "show_type_hints": true,
+    "show_parameter_hints": false,
+    "show_other_hints": true
+  },
   "lsp": {
     "rust-analyzer": {
       "initialization_options": {
@@ -14,7 +20,7 @@
           "maxLength": null,
           "lifetimeElisionHints": {
             "useParameterNames": true,
-            "enable": "skip_trivial"
+            "enable": "never"
           },
           "closureReturnTypeHints": {
             "enable": "always"
@@ -32,7 +38,7 @@
         "check": {
           "onSave": true,
           "features": [],
-          "command": "clippy"
+          "command": "check"
         }
       }
     }

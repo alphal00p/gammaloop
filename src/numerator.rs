@@ -2547,8 +2547,8 @@ impl Numerator<Network> {
                         b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
                     }
                     b = b.expand();
-                    let mut re = 0;
-                    let mut im = 0;
+                    let mut re = Rational::zero();
+                    let mut im = Rational::zero();
                     for (var, coeff) in b.coefficient_list::<u8,_>(&[Atom::new_var(Atom::I)]).iter() {
                         let c = coeff.try_into().map_err(|e| {
                             FeynGenError::NumeratorEvaluationError(format!(
@@ -2567,7 +2567,7 @@ impl Numerator<Network> {
                             )));
                         }
                     }
-                    Ok(Complex::<Integer>::new(Integer::new(re), Integer::new(im)))
+                    Ok(Complex::<Rational>::new(re, im))
                 })
                 .unwrap()
             });
