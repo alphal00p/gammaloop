@@ -156,7 +156,7 @@ class TestProcessGeneration:
             # Only 1-flavour pure QCD corrections
             ('a > d d~ | d g ghG a QED^2=2 [{{1}}] --symmetrize_left_right_states', 1),
             ('a > d d~ | d g ghG a QED^2=2 [{{2}} QCD=1] --symmetrize_left_right_states', 2),
-            ('a > d d~ | d g ghG a QED^2=2 [{{3}} QCD=2] --symmetrize_left_right_states', 19),
+            ('a > d d~ | d g ghG a QED^2=2 [{{3}} QCD=2] --symmetrize_left_right_states', 17),
             ('a > d d~ | d g ghG a QED^2=2 [{{4}} QCD=3] --symmetrize_left_right_states', 258),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
@@ -168,9 +168,9 @@ class TestProcessGeneration:
             "import_model sm"))
         tests = [
             # Full particle contents
-            ('a > d d~ [{{3}}] --symmetrize_left_right_states', 658),
+            ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 658),
             # Only 1-flavour pure QCD corrections
-            ('a > d d~ | d g ghG a QED^2=2 [{{5}}] --symmetrize_left_right_states', 5016),
+            ('a > d d~ | d g ghG a QED^2=2 [{{5}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 5016),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
@@ -180,9 +180,9 @@ class TestProcessGeneration:
             "import_model sm-full"))
         tests = [
             # Full particle contents
-            ('a > d d~ [{{1}}] --symmetrize_left_right_states', 1),
-            ('a > d d~ [{{2}}] --symmetrize_left_right_states', 25),
-            ('a > d d~ [{{3}}] --symmetrize_left_right_states', 4060),
+            ('a > d d~ [{{1}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 1),
+            ('a > d d~ [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 25),
+            ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 4060),
             ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping no_grouping', 4142),
         ]
         TestProcessGeneration.run_tests(gloop, tests)

@@ -12,9 +12,10 @@ from pprint import pformat
 import yaml  # type: ignore
 import shutil
 import copy
+import logging
 import pydot
 from gammaloop import __version__
-from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GIT_REVISION, GammaLoopWarning
+from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GL_CONSOLE_HANDLER, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GIT_REVISION, GammaLoopWarning
 from gammaloop.misc.utils import Colour, verbose_yaml_dump, format_elapsed
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
@@ -468,6 +469,7 @@ class GammaLoop(object):
 
         # Initialize a gammaloop rust engine worker which will be used throughout the session
         self.rust_worker: gl_rust.Worker = gl_rust.Worker()
+
         logger.debug('Starting interface of GammaLoop v%s%s',
                      __version__,
                      (f' (git rev.: {GIT_REVISION})' if GIT_REVISION is not None else ''))
@@ -791,6 +793,8 @@ class GammaLoop(object):
                                  choices=["no_grouping", "only_detect_zeroes", "group_identical_graphs_up_to_sign",
                                           "group_identical_graphs_up_to_scalar_rescaling"],
                                  help='Group identical diagrams after generation and including numerator (default: group_identical_graphs_up_to_scalar_rescaling)')
+    generate_parser.add_argument('--number_of_fermion_loops', '-nfl', default=None, type=int,
+                                 help='Number of fermion loops to consider in the amplitude generation. (default: any)')
     # Tadpole filter
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')

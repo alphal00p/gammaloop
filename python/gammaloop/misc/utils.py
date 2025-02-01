@@ -13,6 +13,7 @@ from pprint import pformat
 
 import gammaloop.misc.common as common
 from gammaloop.misc import LOGGING_PREFIX_FORMAT
+import gammaloop._gammaloop as gl_rust
 
 from symbolica import Expression as SBE  # type: ignore # pylint: disable=import-error # nopep8
 import symbolica as sb  # pylint: disable=import-error # type: ignore # nopep8
@@ -264,6 +265,7 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
     file_formatter = GammaLoopCustomFormatter(file_format)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
+
     console_handler.setFormatter(console_formatter)
     logging.getLogger().handlers = []
     logging.getLogger().addHandler(console_handler)
@@ -282,6 +284,10 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
         logging.getLogger().addHandler(error_file_handler)
 
     logging.getLogger().setLevel(logging.DEBUG)
+
+    gl_rust.setup_rust_logging(logging.getLevelName(
+        console_handler.level), LOGGING_PREFIX_FORMAT)
+
     return console_handler
 
 

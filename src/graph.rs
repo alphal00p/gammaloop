@@ -13,7 +13,7 @@ use crate::{
     },
     gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
-    model::{self, ColorStructure, EdgeSlots, LorentzStructure, Model, Particle, VertexSlots},
+    model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     numerator::{
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
@@ -51,7 +51,6 @@ use spenso::{
     complex::Complex,
     contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor},
-    parametric::atomcore::PatternReplacement,
     scalar::Scalar,
     shadowing::{Shadowable, ETS},
     structure::{
@@ -81,7 +80,7 @@ use std::{
 use symbolica::{
     atom::{Atom, Symbol},
     coefficient::CoefficientView,
-    domains::{float::NumericalFloatLike, integer::Integer, rational::Rational},
+    domains::{float::NumericalFloatLike, rational::Rational},
     fun,
     id::{Pattern, Replacement},
     state::State,
@@ -644,7 +643,6 @@ impl Edge {
 
                 let dummies: HashSet<_> = atom
                     .pattern_match(&indexidpat, None, None)
-                    .into_iter()
                     .filter_map(|a| {
                         if let AtomView::Num(n) = a[&GS.x_].as_view() {
                             let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
@@ -667,7 +665,7 @@ impl Edge {
                     })
                     .collect();
 
-                let (replacements_in, mut replacements_out) = if self.particle.is_antiparticle() {
+                let (replacements_in, replacements_out) = if self.particle.is_antiparticle() {
                     (in_slots.replacements(2), out_slots.replacements(1))
                 } else {
                     (in_slots.replacements(1), out_slots.replacements(2))

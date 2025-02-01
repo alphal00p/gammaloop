@@ -270,6 +270,16 @@ impl FeynGenFilters {
         })
     }
 
+    pub fn get_fermion_loop_count_range(&self) -> Option<(usize, usize)> {
+        self.0.iter().find_map(|f: &FeynGenFilter| {
+            if let FeynGenFilter::FermionLoopCountRange(o) = f {
+                Some(*o)
+            } else {
+                None
+            }
+        })
+    }
+
     #[allow(clippy::type_complexity)]
     pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone>(
         &self,
@@ -310,6 +320,7 @@ impl FeynGenFilters {
                 | FeynGenFilter::SelfEnergyFilter(_)
                 | FeynGenFilter::TadpolesFilter(_)
                 | FeynGenFilter::ZeroSnailsFilter(_)
+                | FeynGenFilter::FermionLoopCountRange(_)
                 | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
             }
         }
@@ -433,6 +444,7 @@ pub enum FeynGenFilter {
     CouplingOrders(HashMap<String, usize>),
     LoopCountRange((usize, usize)),
     PerturbativeOrders(HashMap<String, usize>),
+    FermionLoopCountRange((usize, usize)),
 }
 
 impl fmt::Display for FeynGenFilter {
@@ -470,6 +482,10 @@ impl fmt::Display for FeynGenFilter {
                 ),
                 Self::LoopCountRange((loop_count_min, loop_count_max)) =>
                     format!("LoopCountRange({{{},{}}})", loop_count_min, loop_count_max),
+                Self::FermionLoopCountRange((loop_count_min, loop_count_max)) => format!(
+                    "FermionLoopCountRange({{{},{}}})",
+                    loop_count_min, loop_count_max
+                ),
             }
         )
     }

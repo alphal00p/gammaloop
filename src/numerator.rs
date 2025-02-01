@@ -64,7 +64,6 @@ use spenso::{
     },
 };
 use symbolica::domains::finite_field::PrimeIteratorU64;
-use symbolica::domains::integer::Integer;
 use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
 use symbolica::printer::{AtomPrinter, PrintOptions};

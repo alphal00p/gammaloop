@@ -27,6 +27,7 @@ class Process(object):
                  self_energy_filter: gl_rust.SelfEnergyFilterOptions | None = None,
                  tadpole_filter: gl_rust.TadpolesFilterOptions | None = None,
                  zero_snail_filter: gl_rust.SnailFilterOptions | None = None,
+                 fermion_loop_count_range: tuple[int, int] | None = None,
                  max_n_bridges: int | None = None,
                  ):
         self.initial_states = initial_particles
@@ -46,6 +47,7 @@ class Process(object):
             max_number_of_bridges=max_n_bridges,
             coupling_orders=amplitude_orders,
             loop_count_range=amplitude_loop_count,
+            fermion_loop_count_range=fermion_loop_count_range
         )
 
         # Adjust amplitude and cross-section orders given the perturbative orders
@@ -74,6 +76,7 @@ class Process(object):
             perturbative_orders=self.perturbative_orders,
             coupling_orders=cross_section_orders,
             loop_count_range=cross_section_loop_count,
+            fermion_loop_count_range=fermion_loop_count_range
         )
 
     def process_shell_name(self, short=True) -> str:
@@ -526,5 +529,7 @@ class Process(object):
                 veto_snails_attached_to_massless_lines=process_args.veto_snails_attached_to_massless_lines,
                 veto_only_scaleless_snails=process_args.veto_only_scaleless_snails
             ),
-            max_n_bridges=process_args.max_n_bridges
+            max_n_bridges=process_args.max_n_bridges,
+            fermion_loop_count_range=(None if process_args.number_of_fermion_loops is None else (
+                process_args.number_of_fermion_loops, process_args.number_of_fermion_loops))
         )

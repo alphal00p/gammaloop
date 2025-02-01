@@ -18,19 +18,22 @@ use crate::{
     ExportSettings, HasIntegrand, Settings,
 };
 use ahash::HashMap;
-use colored::Colorize;
+use chrono::{Datelike, Local, Timelike};
+use colored::{ColoredString, Colorize};
 use feyngen::{
     FeynGenFilter, GenerationType, SelfEnergyFilterOptions, SnailFilterOptions,
     TadpolesFilterOptions,
 };
 use git_version::git_version;
 use itertools::{self, Itertools};
-use log::{debug, info, warn};
+use log::{debug, info, warn, LevelFilter};
+use pyo3::types::PyDict;
 use spenso::complex::Complex;
 use std::{
     fs,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::{LazyLock, Mutex},
 };
 use symbolica::{atom::Atom, printer::PrintOptions};
 const GIT_VERSION: &str = git_version!();
@@ -46,7 +49,29 @@ use pyo3::{
     wrap_pyfunction, FromPyObject, IntoPy, PyObject, PyRef, PyResult, Python,
 };
 
-use pyo3_log;
+//use pyo3_log;
+
+pub enum LogFormat {
+    Long,
+    Short,
+    Min,
+    None,
+}
+impl FromStr for LogFormat {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "long" => Ok(LogFormat::Long),
+            "short" => Ok(LogFormat::Short),
+            "min" => Ok(LogFormat::Min),
+            "none" => Ok(LogFormat::None),
+            _ => Err(format!("Unknown log format: {}", s)),
+        }
+    }
+}
+
+pub static LOG_LEVEL: LazyLock<Mutex<Option<LevelFilter>>> = LazyLock::new(|| Mutex::new(None));
+pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));
 
 #[pyfunction]
 #[pyo3(name = "rust_cli")]
@@ -73,11 +98,122 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
     .map_err(|e| exceptions::PyException::new_err(e.to_string()))
 }
 
+pub fn format_level(level: log::Level) -> ColoredString {
+    match level {
+        log::Level::Error => format!("{:<8}", "ERROR").red(),
+        log::Level::Warn => format!("{:<8}", "WARNING").yellow(),
+        log::Level::Info => format!("{:<8}", "INFO").into(),
+        log::Level::Debug => format!("{:<8}", "DEBUG").bright_black(),
+        log::Level::Trace => format!("{:<8}", "TRACE").into(),
+    }
+}
+
+pub fn format_target(target: String, level: log::Level) -> ColoredString {
+    let split_targets = target.split("::").collect::<Vec<_>>();
+    //[-2..].iter().join("::");
+    let start = split_targets.len().saturating_sub(2);
+    let mut shortened_path = split_targets[start..].join("::");
+    if level > log::Level::Debug && shortened_path.len() > 20 {
+        shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
+    }
+    format!("{:<20}", shortened_path).bright_blue()
+}
+
+#[pyfunction]
+#[pyo3(name = "setup_rust_logging")]
+fn setup_logging(level: String, format: String) -> PyResult<()> {
+    let log_format_guard = &mut *LOG_FORMAT.lock().unwrap();
+    *log_format_guard = LogFormat::from_str(&format).map_err(exceptions::PyException::new_err)?;
+
+    let level = convert_log_level(&level);
+    if (*LOG_LEVEL.lock().unwrap()).is_none() {
+        // Configure logger at runtime
+        fern::Dispatch::new()
+            .filter(|metadata| metadata.level() <= (*LOG_LEVEL.lock().unwrap()).unwrap())
+            // Perform allocation-free log formatting
+            .format(|out, message, record| {
+                let now = Local::now();
+                match *LOG_FORMAT.lock().unwrap() {
+                    LogFormat::Long => out.finish(format_args!(
+                        "[{}] @{} {}: {}",
+                        format!(
+                            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+                            now.year(),
+                            now.month(),
+                            now.day(),
+                            now.hour(),
+                            now.minute(),
+                            now.second(),
+                            now.timestamp_subsec_millis()
+                        )
+                        .bright_green(),
+                        format_target(record.target().into(), record.level()),
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::Short => out.finish(format_args!(
+                        "[{}] {}: {}",
+                        format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second())
+                            .bright_green(),
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::Min => out.finish(format_args!(
+                        "{}: {}",
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::None => out.finish(format_args!("{}", message)),
+                }
+            })
+            // Output to stdout, files, and other Dispatch configurations
+            .chain(std::io::stdout())
+            .chain(fern::log_file("gammaloop_rust_output.log")?)
+            // Apply globally
+            .apply()
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    }
+    let log_level_guard = &mut *LOG_LEVEL.lock().unwrap();
+    *log_level_guard = Some(level);
+
+    Ok(())
+}
+
+pub fn get_python_log_level() -> Result<String, pyo3::PyErr> {
+    Python::with_gil(|py| {
+        let py_code = r#"
+def get_gamma_loop_log_level():
+    import logging
+    return logging.getLevelName(logging.getLogger('GammaLoop').level)
+"#;
+        let locals = PyDict::new_bound(py);
+        py.run_bound(py_code, None, Some(&locals))?;
+        let log_level: String = locals
+            .get_item("get_gamma_loop_log_level")?
+            .unwrap()
+            .call0()?
+            .extract()?;
+        Ok(log_level)
+    })
+}
+
+pub fn convert_log_level(level: &str) -> LevelFilter {
+    match level {
+        "DEBUG" => LevelFilter::Debug,
+        "INFO" => LevelFilter::Info,
+        "WARNING" => LevelFilter::Warn,
+        "ERROR" => LevelFilter::Error,
+        "CRITICAL" => LevelFilter::Error, // No direct mapping for CRITICAL, map to ERROR
+        "TRACE" => LevelFilter::Trace,    // Python does not have TRACE, but we allow it
+        _ => LevelFilter::Trace,          // Default to TRACE if unknown
+    }
+}
+
 #[pymodule]
 #[pyo3(name = "_gammaloop")]
 fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
-    // TODO: Verify that indeed Python logger level is used in that case.
-    pyo3_log::init();
+    pyo3_pylogger::register("GammaLoopRust");
+
     crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
     m.add_class::<PyFeynGenFilters>()?;
@@ -88,6 +224,7 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyNumeratorAwareGroupingOption>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
+    m.add_wrapped(wrap_pyfunction!(setup_logging))?;
     Ok(())
 }
 
@@ -234,6 +371,7 @@ impl PyFeynGenFilters {
         perturbative_orders: Option<HashMap<String, usize>>,
         coupling_orders: Option<HashMap<String, usize>>,
         loop_count_range: Option<(usize, usize)>,
+        fermion_loop_count_range: Option<(usize, usize)>,
     ) -> PyResult<PyFeynGenFilters> {
         let mut filters = Vec::new();
         if let Some(self_energy_filter) = self_energy_filter {
@@ -265,6 +403,11 @@ impl PyFeynGenFilters {
         }
         if let Some(loop_count_range) = loop_count_range {
             filters.push(FeynGenFilter::LoopCountRange(loop_count_range));
+        }
+        if let Some(fermion_loop_count_range) = fermion_loop_count_range {
+            filters.push(FeynGenFilter::FermionLoopCountRange(
+                fermion_loop_count_range,
+            ));
         }
         Ok(PyFeynGenFilters { filters })
     }

@@ -9,7 +9,6 @@ use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
 use itertools::Itertools;
 
-use libc::CR0;
 // use log::{info, trace};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
@@ -178,7 +177,7 @@ impl ColorStructure {
     pub fn number_of_dummies(&self) -> usize {
         self.color_structure
             .iter()
-            .map(|a| VertexRule::n_dummy_atom(a))
+            .map(VertexRule::n_dummy_atom)
             .max()
             .unwrap_or(0)
     }
@@ -360,7 +359,6 @@ impl VertexRule {
         let atom = preprocess_ufo_spin_wrapped(atom.clone());
         let indexidpat = Pattern::parse("indexid(x_)").unwrap();
         atom.pattern_match(&indexidpat, None, None)
-            .into_iter()
             .filter_map(|a| {
                 if let AtomView::Num(n) = a[&GS.x_].as_view() {
                     let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
@@ -383,7 +381,7 @@ impl VertexRule {
             })
             .min()
             .unwrap_or(0)
-            .abs() as usize
+            .unsigned_abs() as usize
     }
 
     pub fn n_dummies(&self) -> (usize, usize) {
@@ -391,7 +389,7 @@ impl VertexRule {
             .color_structures
             .color_structure
             .iter()
-            .map(|a| Self::n_dummy_atom(a))
+            .map(Self::n_dummy_atom)
             .max()
             .unwrap_or(0);
         let n_lorentz_dummies = self
@@ -643,6 +641,10 @@ impl Particle {
             }
             _ => Decoration::None,
         }
+    }
+
+    pub fn is_fermion(&self) -> bool {
+        self.spin % 2 == 0
     }
 }
 

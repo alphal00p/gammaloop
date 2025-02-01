@@ -1,6 +1,7 @@
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
-use log::warn;
+
+use log::{error, warn};
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
@@ -712,6 +713,12 @@ impl FeynGen {
     where
         NodeColor: NodeColorFunctions + Clone,
     {
+        error!("");
+        error!("{}","⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠".red());
+        error!("{}","⚠ Using slow alledgedly exact Cutkosky cut checker. It is currently BUGGED, so do not rely on results. ⚠".red());
+        error!("{}","⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠".red());
+        error!("");
+
         #[allow(clippy::too_many_arguments)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
@@ -933,10 +940,12 @@ impl FeynGen {
                 .entry(e.vertices.0)
                 .or_default()
                 .push((i_e, e.vertices.1));
-            adj_list
-                .entry(e.vertices.1)
-                .or_default()
-                .push((i_e, e.vertices.0));
+            if e.vertices.0 != e.vertices.1 {
+                adj_list
+                    .entry(e.vertices.1)
+                    .or_default()
+                    .push((i_e, e.vertices.0));
+            }
         }
 
         let left_initial_state_positions = (1..=n_initial_states)
@@ -1141,87 +1150,75 @@ impl FeynGen {
 
         let mut new_node_data = vec![];
         let mut new_edge_data = vec![];
-        for (i_e, e) in graph.edges().iter().enumerate() {
-            // All edges supposed to be incoming at this stage
-            assert!(graph.nodes()[e.vertices.1].data.external_tag == 0);
-            let p = model.get_particle_from_pdg(e.data.pdg);
-            let external_tag = graph.nodes()[e.vertices.0].data.external_tag;
-            let is_initial_state = external_tag <= self.options.initial_pdgs.len() as i32;
-            let container = if is_initial_state {
-                &mut initial_pdgs
-            } else {
-                &mut final_pdgs
-            };
-            if external_tag != 0 {
-                let pdg_code = if is_initial_state {
-                    p.pdg_code
+
+        // We do two passes, first assigning "specified externals" only (i.e. with tags > 0) and finally the remaining non specified ones (tags < 0)
+        for distribute_assigned_externals_only in [true, false] {
+            for (i_e, e) in graph.edges().iter().enumerate() {
+                // All edges supposed to be incoming at this stage
+                assert!(graph.nodes()[e.vertices.1].data.external_tag == 0);
+                let p = model.get_particle_from_pdg(e.data.pdg);
+                let external_tag = graph.nodes()[e.vertices.0].data.external_tag;
+                let is_initial_state = external_tag <= self.options.initial_pdgs.len() as i32;
+                let container = if is_initial_state {
+                    &mut initial_pdgs
                 } else {
-                    p.get_anti_particle(model).pdg_code
+                    &mut final_pdgs
                 };
-                if self.options.symmetrize_left_right_states {
-                    let matched_external_pos = all_pdgs
-                        .iter()
-                        .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
-                        .unwrap();
-                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
-                    let new_external_tag = all_pdgs[matched_external_pos].1 as i32;
-                    // If we swapped initial and final state assignment, then we must also flip the pdg code of the corresponding half-edges
-                    if (new_external_tag > initial_pdgs.len() as i32
-                        && new_data.external_tag <= initial_pdgs.len() as i32)
-                        || (new_external_tag <= initial_pdgs.len() as i32
-                            && new_data.external_tag > initial_pdgs.len() as i32)
-                    {
-                        let mut e_data = e.data.clone();
-                        e_data.pdg = model
-                            .get_particle_from_pdg(e_data.pdg)
-                            .get_anti_particle(model)
-                            .pdg_code;
-                        new_edge_data.push((i_e, e_data));
+                if distribute_assigned_externals_only && external_tag > 0 {
+                    if self.options.symmetrize_left_right_states {
+                        let matched_external_pos = all_pdgs
+                            .iter()
+                            .position(|(&_pdg, i_ext)| (*i_ext as i32) == external_tag)
+                            .unwrap();
+                        all_pdgs.remove(matched_external_pos);
+                    } else {
+                        let matched_external_pos = container
+                            .iter()
+                            .position(|(&_pdg, i_ext)| (*i_ext as i32) == external_tag)
+                            .unwrap();
+                        container.remove(matched_external_pos);
                     }
-                    new_data.set_external_tag(new_external_tag);
-                    new_node_data.push((e.vertices.0, new_data));
-                    all_pdgs.remove(matched_external_pos);
-                } else {
-                    let matched_external_pos = container
-                        .iter()
-                        .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
-                        .unwrap();
-                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
-                    new_data.set_external_tag(container[matched_external_pos].1 as i32);
-                    new_node_data.push((e.vertices.0, new_data));
-                    container.remove(matched_external_pos);
+                } else if external_tag < 0 {
+                    let pdg_code = if is_initial_state {
+                        p.pdg_code
+                    } else {
+                        p.get_anti_particle(model).pdg_code
+                    };
+                    if self.options.symmetrize_left_right_states {
+                        let matched_external_pos: usize = all_pdgs
+                            .iter()
+                            .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
+                            .unwrap();
+                        let mut new_data = graph.nodes()[e.vertices.0].data.clone();
+                        let new_external_tag = all_pdgs[matched_external_pos].1 as i32;
+                        // If we swapped initial and final state assignment, then we must also flip the pdg code of the corresponding half-edges
+                        if (new_external_tag > initial_pdgs.len() as i32
+                            && new_data.external_tag <= initial_pdgs.len() as i32)
+                            || (new_external_tag <= initial_pdgs.len() as i32
+                                && new_data.external_tag > initial_pdgs.len() as i32)
+                        {
+                            let mut e_data = e.data.clone();
+                            e_data.pdg = model
+                                .get_particle_from_pdg(e_data.pdg)
+                                .get_anti_particle(model)
+                                .pdg_code;
+                            new_edge_data.push((i_e, e_data));
+                        }
+                        new_data.set_external_tag(new_external_tag);
+                        new_node_data.push((e.vertices.0, new_data));
+                        all_pdgs.remove(matched_external_pos);
+                    } else {
+                        let matched_external_pos = container
+                            .iter()
+                            .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
+                            .unwrap();
+                        let mut new_data = graph.nodes()[e.vertices.0].data.clone();
+                        new_data.set_external_tag(container[matched_external_pos].1 as i32);
+                        new_node_data.push((e.vertices.0, new_data));
+                        container.remove(matched_external_pos);
+                    }
                 }
             }
-            /*
-            let external_tag = graph.nodes()[e.vertices.1].data.external_tag;
-            if external_tag != 0 {
-                // let pdg_code = if is_initial_state {
-                //     p.get_anti_particle(model).pdg_code
-                // } else {
-                //     p.pdg_code
-                // };
-                let pdg_code = p.get_anti_particle(model).pdg_code;
-                if self.options.symmetrize_left_right_states {
-                    let matched_external_pos = all_pdgs
-                        .iter()
-                        .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
-                        .unwrap();
-                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
-                    new_data.set_external_tag(all_pdgs[matched_external_pos].1 as i32);
-                    new_node_data.push((e.vertices.0, new_data));
-                    all_pdgs.remove(matched_external_pos);
-                } else {
-                    let matched_external_pos = container
-                        .iter()
-                        .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
-                        .unwrap();
-                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
-                    new_data.set_external_tag(container[matched_external_pos].1 as i32);
-                    new_node_data.push((e.vertices.0, new_data));
-                    container.remove(matched_external_pos);
-                }
-            }
-             */
         }
 
         for (node_pos, new_data) in new_node_data {
@@ -1381,89 +1378,6 @@ impl FeynGen {
                         && input_graph_node_pos_to_can_graph_node_pos[e.vertices.0]
                             > input_graph_node_pos_to_can_graph_node_pos[e.vertices.1]);
 
-                // let is_flipped = if input_graph_nodes[e.vertices.0].data.external_tag > 0 {
-                //     false
-                // } else if input_graph_nodes[e.vertices.1].data.external_tag > 0 {
-                //     // let (node_data_in, node_data_out) = (
-                //     //     input_graph_nodes[e.vertices.0].data.clone(),
-                //     //     input_graph_nodes[e.vertices.1].data.clone(),
-                //     // );
-                //     // sorted_g.set_node_data(e.vertices.0, node_data_out);
-                //     // sorted_g.set_node_data(e.vertices.1, node_data_in);
-                //     true
-                // } else {
-                //     canonized_skeletton.vertex_map[e.vertices.0]
-                //         > canonized_skeletton.vertex_map[e.vertices.1]
-                // };
-                /*
-                let is_flipped = if input_graph_nodes[e.vertices.0].data.external_tag > 0 {
-                    let (node_data_in, node_data_out) = (
-                        input_graph_nodes[e.vertices.0].data.clone(),
-                        input_graph_nodes[e.vertices.1].data.clone(),
-                    );
-                    if input_graph_nodes[e.vertices.0].data.external_tag
-                        > self.options.initial_pdgs.len() as i32
-                    {
-                        sorted_g.set_node_data(e.vertices.0, node_data_out);
-                        sorted_g.set_node_data(e.vertices.1, node_data_in);
-                        true
-                    } else {
-                        false
-                    }
-                } else if input_graph_nodes[e.vertices.1].data.external_tag > 0 {
-                    let (node_data_in, node_data_out) = (
-                        input_graph_nodes[e.vertices.0].data.clone(),
-                        input_graph_nodes[e.vertices.1].data.clone(),
-                    );
-                    if input_graph_nodes[e.vertices.0].data.external_tag
-                        <= self.options.initial_pdgs.len() as i32
-                    {
-                        sorted_g.set_node_data(e.vertices.0, node_data_out);
-                        sorted_g.set_node_data(e.vertices.1, node_data_in);
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    canonized_skeletton.vertex_map[e.vertices.0]
-                        > canonized_skeletton.vertex_map[e.vertices.1]
-                };
-                */
-                /*
-                let p_is_antiparticle = !p.is_self_antiparticle() && p.is_antiparticle();
-                #[allow(clippy::collapsible_else_if)]
-                let is_flipped = if input_graph_nodes[e.vertices.0].data.external_tag > 0 {
-                    if input_graph_nodes[e.vertices.0].data.external_tag
-                        <= self.options.initial_pdgs.len() as i32
-                    {
-                        false // p_is_antiparticle
-                    } else {
-                        true // !p_is_antiparticle
-                    }
-                } else if input_graph_nodes[e.vertices.1].data.external_tag > 0 {
-                    if input_graph_nodes[e.vertices.1].data.external_tag
-                        > self.options.initial_pdgs.len() as i32
-                    {
-                        false // p_is_antiparticle
-                    } else {
-                        true // !p_is_antiparticle
-                    }
-                } else {
-                    canonized_skeletton.vertex_map[e.vertices.0]
-                        > canonized_skeletton.vertex_map[e.vertices.1]
-                };
-                */
-                /*
-                let is_flipped = if input_graph_nodes[e.vertices.0].data.external_tag > 0
-                    || input_graph_nodes[e.vertices.1].data.external_tag > 0
-                {
-                    canonized_skeletton.vertex_map[e.vertices.0]
-                        > canonized_skeletton.vertex_map[e.vertices.1]
-                } else {
-                    false
-                };
-                 */
-
                 let mut particle = if is_flipped {
                     model
                         .get_particle_from_pdg(e.data.pdg)
@@ -1515,6 +1429,95 @@ impl FeynGen {
         self.canonize_external_momenta_assignment(model, &mut sorted_g);
 
         (canonized_skeletton.graph.to_owned(), sorted_g)
+    }
+
+    pub fn count_closed_fermion_loops(
+        &self,
+        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        model: &Model,
+    ) -> Result<usize, FeynGenError> {
+        let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
+        for (i_e, e) in graph.edges().iter().enumerate() {
+            // Build an adjacency list including only fermions
+            if !model.get_particle_from_pdg(e.data.pdg).is_fermion() {
+                continue;
+            }
+            adj_map
+                .entry(e.vertices.0)
+                .or_default()
+                .push((i_e, e.vertices.1));
+            if e.vertices.0 != e.vertices.1 {
+                adj_map
+                    .entry(e.vertices.1)
+                    .or_default()
+                    .push((i_e, e.vertices.0));
+            }
+        }
+
+        fn follow_chain(
+            current_node: usize,
+            abs_pdg: usize,
+            graph_edges: &[symbolica::graph::Edge<EdgeColor>],
+            vetos: &mut Vec<bool>,
+            adj_map: &HashMap<usize, Vec<(usize, usize)>>,
+        ) -> Result<usize, FeynGenError> {
+            if let Some(connected_edges) = adj_map.get(&current_node) {
+                let targets = connected_edges
+                    .iter()
+                    .filter_map(|(i_e, next_node)| {
+                        if !vetos[*i_e] && graph_edges[*i_e].data.pdg.unsigned_abs() == abs_pdg {
+                            Some((i_e, next_node))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                if targets.is_empty() {
+                    Ok(current_node)
+                } else if targets.len() == 1 {
+                    let (&next_edge, &next_node) = targets.first().unwrap();
+                    vetos[next_edge] = true;
+                    return follow_chain(next_node, abs_pdg, graph_edges, vetos, adj_map);
+                } else {
+                    return Err(FeynGenError::GenericError(
+                        "GammaLoop does not support four-fermion vertices of identical flavours yet".to_string()
+                    ));
+                }
+            } else {
+                Ok(current_node)
+            }
+        }
+
+        let mut vetoed_edges: Vec<bool> = graph
+            .edges()
+            .iter()
+            .map(|e| !model.get_particle_from_pdg(e.data.pdg).is_fermion())
+            .collect();
+        let mut n_fermion_loops = 0;
+        for (i_e, e) in graph.edges().iter().enumerate() {
+            if vetoed_edges[i_e] {
+                continue;
+            }
+            vetoed_edges[i_e] = true;
+            let left_trail_end = follow_chain(
+                e.vertices.0,
+                e.data.pdg.unsigned_abs(),
+                graph.edges(),
+                &mut vetoed_edges,
+                &adj_map,
+            )?;
+            let right_trail_end = follow_chain(
+                e.vertices.1,
+                e.data.pdg.unsigned_abs(),
+                graph.edges(),
+                &mut vetoed_edges,
+                &adj_map,
+            )?;
+            if left_trail_end == right_trail_end {
+                n_fermion_loops += 1;
+            }
+        }
+        Ok(n_fermion_loops)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1811,7 +1814,7 @@ impl FeynGen {
                 }
             })
             .next();
-        let zero_snails_filter = filters
+        let zero_snails_filter: Option<&SnailFilterOptions> = filters
             .0
             .iter()
             .filter_map(|f| {
@@ -1949,6 +1952,58 @@ impl FeynGen {
         );
         last_step = step;
 
+        let fermion_loop_count_range_filter = filters.get_fermion_loop_count_range();
+
+        let bar = ProgressBar::new(processed_graphs.len() as u64);
+        bar.set_style(progress_bar_style.clone());
+        bar.set_message(
+            "Analyzing closed fermion chains to capture antisymmetry and apply fermion filters...",
+        );
+        processed_graphs = pool.install(|| {
+            processed_graphs
+                .iter()
+                .filter_map(|(g, symmetry_factor)| {
+                    match self.count_closed_fermion_loops(g, model) {
+                        Ok(n_closed_fermion_loops) => {
+                            let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
+                                (Atom::new_num(-1) * Atom::parse(symmetry_factor).unwrap())
+                                    .to_canonical_string()
+                            } else {
+                                symmetry_factor.clone()
+                            };
+                            if let Some((min_n_fermion_loops, max_n_fermion_loops)) =
+                                fermion_loop_count_range_filter
+                            {
+                                if n_closed_fermion_loops >= min_n_fermion_loops
+                                    && n_closed_fermion_loops <= max_n_fermion_loops
+                                {
+                                    Some(Ok((g.clone(), new_symmetry_factor)))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                Some(Ok((g.clone(), new_symmetry_factor)))
+                            }
+                        }
+                        Err(e) => Some(Err(e)),
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })?;
+        bar.finish_and_clear();
+
+        step = Instant::now();
+        info!(
+            "{} | Δ={} | {:<95}{}",
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                .blue()
+                .bold(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
+            "Number of graphs after closed fermion chains analysis:",
+            format!("{}", processed_graphs.len()).green()
+        );
+        last_step = step;
+
         let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
 
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
@@ -2047,6 +2102,18 @@ impl FeynGen {
         let mut node_colors_for_canonicalization_left_right: HashMap<i32, i32> = HashMap::default();
         if self.options.symmetrize_initial_states {
             for initial_color in 1..=self.options.initial_pdgs.len() {
+                if self.options.generation_type == GenerationType::Amplitude {
+                    // Always ignore external fermions symmetrization for amplitudes since we do not implement
+                    // minus signs for fermion exchange statistics in the amplitude generation at this point
+                    if model
+                        .get_particle_from_pdg(
+                            self.options.initial_pdgs[initial_color - 1] as isize,
+                        )
+                        .is_fermion()
+                    {
+                        continue;
+                    }
+                }
                 let trgt_color = if self.options.symmetrize_left_right_states {
                     -1
                 } else {
@@ -2080,6 +2147,17 @@ impl FeynGen {
             for final_color in self.options.initial_pdgs.len() + 1
                 ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
             {
+                // Always ignore external fermions symmetrization for amplitudes since we do not implement
+                // minus signs for fermion exchange statistics in the amplitude generation at this point
+                if model
+                    .get_particle_from_pdg(
+                        self.options.final_pdgs[final_color - self.options.initial_pdgs.len() - 1]
+                            as isize,
+                    )
+                    .is_fermion()
+                {
+                    continue;
+                }
                 let trgt_color = if self.options.symmetrize_left_right_states {
                     -1
                 } else {
@@ -2841,6 +2919,13 @@ impl ProcessedNumeratorForComparison {
                         }
                     }
                 }
+
+                // Make sure to normalize the replacements
+                lmb_replacements = lmb_replacements
+                    .iter()
+                    .map(|(src, trgt)| (src.expand(), trgt.expand()))
+                    .collect::<Vec<_>>();
+
                 //lmb_replacements.push((Atom::parse("MB").unwrap(), Atom::Zero));
                 // let test: Atom = Atom::parse("-1/9*𝑖*ee^2*G^2*(MB*id(bis(4,2),bis(4,5))+γ(mink(4,25),bis(4,2),bis(4,5))*Q(2,mink(4,25)))*(MB*id(bis(4,3),bis(4,8))-γ(mink(4,27),bis(4,8),bis(4,3))*Q(4,mink(4,27)))*(MB*id(bis(4,4),bis(4,7))+γ(mink(4,28),bis(4,4),bis(4,7))*Q(5,mink(4,28)))*(MB*id(bis(4,6),bis(4,9))+γ(mink(4,29),bis(4,6),bis(4,9))*Q(6,mink(4,29)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,0),mink(4,5))*id(mink(4,1),mink(4,4))*γ(mink(4,2),bis(4,3),bis(4,2))*γ(mink(4,3),bis(4,5),bis(4,4))*γ(mink(4,4),bis(4,7),bis(4,6))*γ(mink(4,5),bis(4,9),bis(4,8))").unwrap();
                 // let reps = lmb_replacements

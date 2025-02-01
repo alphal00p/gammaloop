@@ -71,6 +71,7 @@ class FeynGenFilters:
                 perturbative_orders: Optional[dict[str, int]] = None,
                 coupling_orders: Optional[dict[str, int]] = {},
                 loop_count_range: Optional[tuple[int, int]] = None,
+                fermion_loop_count_range: Optional[tuple[int, int]] = None,
                 ) -> FeynGenFilters:
         """ Creates a new set of diagram generation filters. """
 
@@ -90,6 +91,10 @@ class FeynGenOptions:
                 cross_section_filters: Optional[FeynGenFilters] = None,
                 ) -> FeynGenOptions:
         """ Creates options for steering diagram generation.  """
+
+
+def setup_rust_logging(level: str, format: str) -> None:
+    """ Setup logging for the rust backend. """
 
 
 class Worker:

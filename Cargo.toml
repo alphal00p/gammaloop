@@ -111,6 +111,10 @@ brotli = "7.0.0"
 cgmath = "0.18.0"
 argmin = "0.10.0"
 by_address = "1.2.1"
+pyo3-pylogger = "0.3.0"
+fern = "0.7.1"
+humantime = "2.1.0"
+chrono = "0.4.39"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
