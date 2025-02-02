@@ -1483,8 +1483,9 @@ impl Numerator<ColorSimplified> {
 
     pub fn parse(self) -> Numerator<Network> {
         debug!("Parsing color simplified numerator into network");
-        // println!("colorless: {}", self.state.colorless);
-        // println!("color: {}", self.state.color);
+
+        // debug!("colorless: {}", self.state.colorless);
+        // debug!("color: {}", self.state.color);
         let state = self.state.parse();
 
         // debug!("");
@@ -2483,6 +2484,17 @@ impl Numerator<SymbolicExpression<Color>> {
                 }
                 //let b = a.0.replace_all_multiple(&reps).into();
                 // println!("AFTER: {}", b);
+                // Expand each inner level
+                b = b.replace_map(&|term, ctx, out| {
+                    if ctx.function_level == 0
+                        && ctx.parent_type == Some(symbolica::atom::AtomType::Mul)
+                    {
+                        *out = term.expand();
+                        true
+                    } else {
+                        false
+                    }
+                });
                 b.into()
             }),
             color: self.state.color.map_data_ref_self(|a| {
@@ -2491,6 +2503,16 @@ impl Numerator<SymbolicExpression<Color>> {
                 for (src, trgt) in rep_atoms.iter() {
                     b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
                 }
+                b = b.replace_map(&|term, ctx, out| {
+                    if ctx.function_level == 0
+                        && ctx.parent_type == Some(symbolica::atom::AtomType::Mul)
+                    {
+                        *out = term.expand();
+                        true
+                    } else {
+                        false
+                    }
+                });
                 //let b = a.0.replace_all_multiple(&reps).into();
                 // println!("AFTER: {}", b);
                 b.into()
@@ -2556,7 +2578,29 @@ impl Numerator<Network> {
                 graph: g,
                 scalar: self.state.net.scalar.clone(),
             };
+
             net.contract();
+
+            /* TEMPORARY INCORRECT HACKED FIX
+            if !net.result().unwrap().0.is_scalar() {
+                return Err(FeynGenError::NumeratorEvaluationError(
+                    "Could not simplify numerator to a scalar.".into(),
+                ));
+            } else {
+                let mut res = net.scalar.unwrap_or(Atom::new_num(1).into()).0;
+                for (_node_id, node) in net.graph.nodes.iter() {
+                    if let Some(s) = node.clone().scalar() {
+                        res = res * (Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I)
+                    } else {
+                        return Err(FeynGenError::NumeratorEvaluationError(
+                            "Could not simplify numerator to a scalar.".into(),
+                        ));
+                    }
+                }
+                return Ok(res.expand());
+            }
+            */
+
             let result_tensor = net
                 .result_tensor_ref()
                 .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;

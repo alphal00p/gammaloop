@@ -180,9 +180,9 @@ class TestProcessGeneration:
             "import_model sm-full"))
         tests = [
             # Full particle contents
-            ('a > d d~ [{{1}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 1),
-            ('a > d d~ [{{2}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 25),
-            ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 4060),
+            ('a > d d~ [{{1}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 1),
+            ('a > d d~ [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 25),
+            ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 4060),
             ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping no_grouping', 4142),
         ]
         TestProcessGeneration.run_tests(gloop, tests)

@@ -2755,60 +2755,6 @@ impl FeynGen {
             }
         }
     }
-
-    /*
-    pub fn remove_external_polarization_vectors(
-        numerator: symbolica::atom::AtomView,
-    ) -> (Atom, AHashMap<Atom, Vec<Atom>>) {
-        let mut new_numerator = numerator.to_owned();
-        let arc_mutex_external_indices = Arc::new(std::sync::Mutex::new(AHashMap::new()));
-        for pol_head in crate::momentum::POLARIZATION_TYPES {
-            let arc_mutex_external_indices_sent = arc_mutex_external_indices.clone();
-            let pattern = fun!(symb!(pol_head.to_string()), symb!("args__")).to_pattern();
-            new_numerator = numerator.replace_all(
-                &pattern,
-                symbolica::id::Pattern::Transformer(Box::new((
-                    Some(Atom::new_num(1).to_pattern()),
-                    vec![symbolica::transformer::Transformer::Map(Box::new(
-                        move |a_in: symbolica::atom::AtomView, a_out: &mut Atom| {
-                            if let symbolica::atom::AtomView::Fun(s) = a_in {
-                                let mut args_iter = s.to_slice().iter();
-                                // Skip the first argument
-                                args_iter.next();
-                                args_iter.for_each(|idx| {
-                                    if let Some(m) = idx
-                                        .pattern_match(
-                                            &Atom::parse("idxType_(idx_)").unwrap().to_pattern(),
-                                            None,
-                                            None,
-                                        )
-                                        .next()
-                                    {
-                                        arc_mutex_external_indices_sent
-                                            .lock()
-                                            .unwrap()
-                                            .entry(m[symb!("idxType_")])
-                                            .or_insert_with(|| vec![])
-                                            .push(m[symb!("idx_")]);
-                                    }
-                                });
-                            }
-                            *a_out = a_in.to_owned();
-                            Ok(())
-                        },
-                    ))],
-                ))),
-                None,
-                None,
-            );
-        }
-        let external_indices = arc_mutex_external_indices.lock().unwrap().clone();
-        for (idx_type, idxs) in external_indices.iter_mut() {
-            idxs.sort();
-        }
-        (new_numerator, external_indices)
-    }
-     */
 }
 
 struct ProcessedNumeratorForComparison {
@@ -2990,7 +2936,6 @@ impl ProcessedNumeratorForComparison {
                         // panic!("stop");
 
                         // println!("----");
-
                         if let Some(grouping_options) =
                             numerator_aware_isomorphism_grouping.get_options()
                         {

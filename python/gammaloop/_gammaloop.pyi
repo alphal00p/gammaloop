@@ -15,7 +15,7 @@ class NumeratorAwareGroupingOption:
     @classmethod
     def __new__(_cls,
                 numerator_aware_grouping_option: Optional[str] = "group_identical_graphs_up_to_scalar_rescaling",
-                compare_canonized_numerator: Optional[bool] = False,
+                compare_canonized_numerator: Optional[bool] = True,
                 number_of_samples_for_numerator_comparisons: Optional[int] = 5,
                 consider_internal_masses_only_in_numerator_isomorphisms: Optional[bool] = True,
                 substitute_numerical_masses_when_comparing_numerators: Optional[bool] = False,
