@@ -1538,7 +1538,7 @@ impl PolySplit {
                         a.0.as_view(),
                     )
                     .unwrap();
-                net.contract();
+                net.contract().unwrap();
                 net.to_fully_parametric()
                     .result_tensor_smart()
                     .unwrap()
@@ -1567,7 +1567,7 @@ impl PolySplit {
                         a.0.as_view(),
                     )
                     .unwrap();
-                net.contract();
+                net.contract().unwrap();
                 net.to_fully_parametric()
                     .result_tensor_smart()
                     .unwrap()
@@ -2414,7 +2414,7 @@ impl Network {
                 unimplemented!("cannot because of attached dummy lifetime...")
             }
             ContractionSettings::Normal => {
-                self.net.contract();
+                self.net.contract().unwrap();
                 let tensor = self
                     .net
                     .result_tensor_smart()?
@@ -2579,33 +2579,8 @@ impl Numerator<Network> {
                 scalar: self.state.net.scalar.clone(),
             };
 
-            // println!("net:{}", net.rich_graph().dot_nodes());
-            println!("contracting");
-            net.contract();
+            net.contract().unwrap();
 
-            /* TEMPORARY INCORRECT HACKED FIX
-            if !net.result().unwrap().0.is_scalar() {
-                return Err(FeynGenError::NumeratorEvaluationError(
-                    "Could not simplify numerator to a scalar.".into(),
-                ));
-            } else {
-                let mut res = net.scalar.unwrap_or(Atom::new_num(1).into()).0;
-                for (_node_id, node) in net.graph.nodes.iter() {
-                    if let Some(s) = node.clone().scalar() {
-                        res = res * (Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I)
-                    } else {
-                        return Err(FeynGenError::NumeratorEvaluationError(
-                            "Could not simplify numerator to a scalar.".into(),
-                        ));
-                    }
-                }
-                return Ok(res.expand());
-            }
-            */
-
-            // println!("net contracted:{}", net.rich_graph().dot_nodes());
-
-            println!("contracted");
             let (result_tensor, scalar) = net
                 .result()
                 .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;

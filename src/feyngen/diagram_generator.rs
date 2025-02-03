@@ -2929,6 +2929,10 @@ impl ProcessedNumeratorForComparison {
 
                 let (sample_points, sample_evaluations) =
                     if group_options.number_of_numerical_samples > 0 {
+                        println!(
+                            "parsing{}",
+                            processed_numerator.get_single_atom().unwrap().0
+                        );
                         let parsed_numerator = processed_numerator.parse();
 
                         // println!(
