@@ -155,23 +155,24 @@ impl ColorStructure {
     }
 
     pub fn number_of_dummies_in_atom(a: AtomView) -> usize {
-        let mut count = 0;
+        // let mut count = 0;
 
-        if let AtomView::Mul(m) = a {
-            for a in m {
-                if let AtomView::Fun(f) = a {
-                    for a in f {
-                        if let Ok(i) = i64::try_from(a) {
-                            if i < 0 {
-                                count += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // if let AtomView::Mul(m) = a {
+        //     for a in m {
+        //         if let AtomView::Fun(f) = a {
+        //             for a in f {
+        //                 if let Ok(i) = i64::try_from(a) {
+        //                     if i < 0 {
+        //                         count += 1;
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
-        count / 2
+        // count / 2
+        VertexRule::n_dummy_atom(&a.to_owned())
     }
 
     pub fn number_of_dummies(&self) -> usize {

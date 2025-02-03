@@ -2579,6 +2579,8 @@ impl Numerator<Network> {
                 scalar: self.state.net.scalar.clone(),
             };
 
+            // println!("net:{}", net.rich_graph().dot_nodes());
+            println!("contracting");
             net.contract();
 
             /* TEMPORARY INCORRECT HACKED FIX
@@ -2601,11 +2603,14 @@ impl Numerator<Network> {
             }
             */
 
-            let result_tensor = net
-                .result_tensor_ref()
+            // println!("net contracted:{}", net.rich_graph().dot_nodes());
+
+            println!("contracted");
+            let (result_tensor, scalar) = net
+                .result()
                 .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
             if let Some(s) = result_tensor.clone().scalar() {
-                let factor = net.scalar.unwrap_or(Atom::new_num(1).into()).0;
+                let factor = scalar.unwrap_or(Atom::new_num(1).into()).0;
                 let res = (Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I) * factor;
                 Ok(res.expand())
             } else {

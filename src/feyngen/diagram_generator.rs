@@ -2375,11 +2375,13 @@ impl FeynGen {
                                     Entry::Occupied(mut entry) => {
                                         let mut found_match = false;
                                         for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
+                                            println!("comparing numerators");
                                             if let Some(ratio) = FeynGen::compare_numerator_tensors(
                                                 numerator_aware_isomorphism_grouping,
                                                 numerator_data.as_ref().unwrap(),
                                                 other_numerator.as_ref().unwrap(),
                                             ) {
+                                                println!("comparison generated");
                                                 {
                                                     let n_zeroes_value = n_zeroes_clone.lock().unwrap();
                                                     let mut n_groupings_value =
