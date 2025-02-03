@@ -1294,6 +1294,10 @@ impl ColorSimplified {
                 &tr * fun!(ETS.id, a_, b_),
             ),
             (
+                fun!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_)).pow(Atom::new_num(2)),
+                &tr * fun!(ETS.id, a_, a_),
+            ),
+            (
                 fun!(UFO.t, &e_, a_, b_) * fun!(UFO.t, &e_, c_, d_),
                 &tr * (fun!(ETS.id, a_, d_) * fun!(ETS.id, c_, b_)
                     - (fun!(ETS.id, a_, b_) * fun!(ETS.id, c_, d_) / &nc)),
@@ -1311,39 +1315,51 @@ impl ColorSimplified {
                     coad.pattern(&b_),
                     coad.pattern(&c_)
                 ),
-                (fun!(
-                    UFO.t,
-                    coad.pattern(&a_),
-                    cof.pattern(&fun!(i, a_, b_, c_)),
-                    coaf.pattern(&fun!(j, a_, b_, c_))
-                ) * fun!(
-                    UFO.t,
-                    coad.pattern(&b_),
-                    cof.pattern(&fun!(j, a_, b_, c_)),
-                    coaf.pattern(&fun!(k, a_, b_, c_))
-                ) * fun!(
-                    UFO.t,
-                    coad.pattern(&c_),
-                    cof.pattern(&fun!(k, a_, b_, c_)),
-                    coaf.pattern(&fun!(i, a_, b_, c_))
-                ) - fun!(
-                    UFO.t,
-                    coad.pattern(&a_),
-                    cof.pattern(&fun!(j, a_, b_, c_)),
-                    coaf.pattern(&fun!(k, a_, b_, c_))
-                ) * fun!(
-                    UFO.t,
-                    coad.pattern(&b_),
-                    cof.pattern(&fun!(i, a_, b_, c_)),
-                    coaf.pattern(&fun!(j, a_, b_, c_))
-                ) * fun!(
-                    UFO.t,
-                    coad.pattern(&c_),
-                    cof.pattern(&fun!(k, a_, b_, c_)),
-                    coaf.pattern(&fun!(i, a_, b_, c_))
-                )) / &tr,
+                &nc * (&nc * &nc - 1),
             ),
         ];
+
+        let frep = [Replacement::new(
+            fun!(
+                UFO.f,
+                coad.pattern(&a_),
+                coad.pattern(&b_),
+                coad.pattern(&c_)
+            )
+            .to_pattern(),
+            ((fun!(
+                UFO.t,
+                coad.pattern(&a_),
+                cof.pattern(&fun!(i, a_, b_, c_)),
+                coaf.pattern(&fun!(j, a_, b_, c_))
+            ) * fun!(
+                UFO.t,
+                coad.pattern(&b_),
+                cof.pattern(&fun!(j, a_, b_, c_)),
+                coaf.pattern(&fun!(k, a_, b_, c_))
+            ) * fun!(
+                UFO.t,
+                coad.pattern(&c_),
+                cof.pattern(&fun!(k, a_, b_, c_)),
+                coaf.pattern(&fun!(i, a_, b_, c_))
+            ) - fun!(
+                UFO.t,
+                coad.pattern(&a_),
+                cof.pattern(&fun!(j, a_, b_, c_)),
+                coaf.pattern(&fun!(k, a_, b_, c_))
+            ) * fun!(
+                UFO.t,
+                coad.pattern(&b_),
+                cof.pattern(&fun!(i, a_, b_, c_)),
+                coaf.pattern(&fun!(j, a_, b_, c_))
+            ) * fun!(
+                UFO.t,
+                coad.pattern(&c_),
+                cof.pattern(&fun!(k, a_, b_, c_)),
+                coaf.pattern(&fun!(i, a_, b_, c_))
+            )) / &tr)
+                .to_pattern(),
+        )];
 
         let settings = MatchSettings {
             rhs_cache_size: 0,
@@ -1357,11 +1373,13 @@ impl ColorSimplified {
             .collect();
 
         let mut atom = Atom::new_num(0);
+        expression.0 = expression.0.replace_all_multiple(&frep);
 
         while expression
             .0
             .replace_all_multiple_into(&replacements, &mut atom)
         {
+            expression.0 = expression.0.replace_all_multiple(&frep);
             std::mem::swap(&mut expression.0, &mut atom);
             expression.0 = expression.0.expand();
         }
