@@ -2375,13 +2375,11 @@ impl FeynGen {
                                     Entry::Occupied(mut entry) => {
                                         let mut found_match = false;
                                         for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
-                                            println!("comparing numerators");
                                             if let Some(ratio) = FeynGen::compare_numerator_tensors(
                                                 numerator_aware_isomorphism_grouping,
                                                 numerator_data.as_ref().unwrap(),
                                                 other_numerator.as_ref().unwrap(),
                                             ) {
-                                                println!("comparison generated");
                                                 {
                                                     let n_zeroes_value = n_zeroes_clone.lock().unwrap();
                                                     let mut n_groupings_value =
@@ -2757,6 +2755,20 @@ impl FeynGen {
             }
         }
     }
+
+    pub fn substitute_color_factors(expr: AtomView) -> Atom {
+        let replacements = vec![
+            (Atom::parse("Nc").unwrap(), Atom::new_num(3)),
+            (Atom::parse("TR").unwrap(), Atom::parse("1/2").unwrap()),
+            (Atom::parse("CA").unwrap(), Atom::parse("3").unwrap()),
+            (Atom::parse("CF").unwrap(), Atom::parse("4/3").unwrap()),
+        ];
+        let mut res = expr.to_owned();
+        for (src, trgt) in replacements {
+            res = res.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+        }
+        res.expand()
+    }
 }
 
 struct ProcessedNumeratorForComparison {
@@ -2929,10 +2941,6 @@ impl ProcessedNumeratorForComparison {
 
                 let (sample_points, sample_evaluations) =
                     if group_options.number_of_numerical_samples > 0 {
-                        println!(
-                            "parsing{}",
-                            processed_numerator.get_single_atom().unwrap().0
-                        );
                         let parsed_numerator = processed_numerator.parse();
 
                         // println!(
@@ -2963,11 +2971,23 @@ impl ProcessedNumeratorForComparison {
                                         .iter()
                                         .map(|(a, b)| (a.as_view(), b.as_view()))
                                         .collect::<Vec<_>>();
-                                    parsed_numerator.evaluate_with_replacements(
+                                    let mut res = parsed_numerator.evaluate_with_replacements(
                                         reps,
                                         grouping_options
                                             .fully_numerical_substitution_when_comparing_numerators,
-                                    )
+                                    );
+                                    res = res.map(|a| {
+                                        FeynGen::substitute_color_factors(a.as_atom_view())
+                                    });
+                                    // println!(
+                                    //     "Sample evaluation for diagram #{}:\n{}",
+                                    //     diagram_id,
+                                    //     res.iter()
+                                    //         .map(|av| av.to_canonical_string())
+                                    //         .collect::<Vec<_>>()
+                                    //         .join("\n")
+                                    // );
+                                    res
                                 })
                                 .collect::<Result<Vec<_>, _>>()?;
                             (Some(sample_points), Some(sample_evaluations))

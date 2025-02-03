@@ -289,6 +289,7 @@ class GammaLoopConfiguration(object):
                     cur_path=cur_path + [key,], root_dict=value)
 
     def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any] | None, updater: Any) -> None:
+
         for key, value in updater.items():
             if root_path == '':
                 setting_path = key
@@ -356,7 +357,7 @@ class GammaLoopConfiguration(object):
                     f"No settings '{path}' in gammaloop configuration.")
             context = context[key]
         if path != '' and isinstance(new_setting, dict):
-            context[p_split[-1]] = new_setting
+            context[p_split[-1]].update(new_setting)
         else:
             if path != '':
                 context = context[p_split[-1]]

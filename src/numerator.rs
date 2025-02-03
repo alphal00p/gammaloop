@@ -2483,7 +2483,7 @@ impl TypedNumeratorState for Network {
 impl Numerator<SymbolicExpression<Color>> {
     pub fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
         // println!(
-        //     "REPLACEMENTS FUFU:\n{}",
+        //     "REPLACEMENTS:\n{}",
         //     rep_atoms
         //         .iter()
         //         .map(|(a, b)| format!("{} -> {}", a, b))
