@@ -1314,7 +1314,8 @@ impl ColorSimplified {
                     coad.pattern(&a_),
                     coad.pattern(&b_),
                     coad.pattern(&c_)
-                ),
+                )
+                .pow(Atom::new_num(2)),
                 &nc * (&nc * &nc - 1),
             ),
         ];
@@ -1373,14 +1374,13 @@ impl ColorSimplified {
             .collect();
 
         let mut atom = Atom::new_num(0);
-        expression.0 = expression.0.replace_all_multiple(&frep);
 
         while expression
             .0
             .replace_all_multiple_into(&replacements, &mut atom)
         {
-            expression.0 = expression.0.replace_all_multiple(&frep);
             std::mem::swap(&mut expression.0, &mut atom);
+            expression.0 = expression.0.replace_all_multiple(&frep);
             expression.0 = expression.0.expand();
         }
 
