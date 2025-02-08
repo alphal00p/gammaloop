@@ -155,6 +155,10 @@ class Process(object):
     def generate_diagrams(self, gl_worker: gl_rust.Worker, model: Model, generation_args: Namespace,
                           global_prefactor_color: str, global_prefactor_colorless: str) -> list[Graph]:
 
+        if generation_args.number_of_samples_for_numerator_comparisons == 1:
+            raise GammaLoopError(
+                "The specified option 'number_of_samples_for_numerator_comparisons' must be > 1 or set to zero for disabling numberical numerator comparisons.")
+
         if generation_args.amplitude:
             loop_count_range = self.amplitude_loop_count
         else:
@@ -187,10 +191,7 @@ class Process(object):
                     "Symmetrization of left and right states for amplitudes requires also enabling final-state symmetrization.")
         else:
             if generation_args.symmetrize_initial_states is None:
-                generation_args.symmetrize_initial_states = True
-            elif (not generation_args.symmetrize_initial_states) and generation_args.symmetrize_left_right_states:
-                raise GammaLoopError(
-                    "Symmetrization of left and right states for cross-section generation requires also enabling initial-state symmetrization.")
+                generation_args.symmetrize_initial_states = False
             if generation_args.symmetrize_final_states is None:
                 generation_args.symmetrize_final_states = True
             elif not generation_args.symmetrize_final_states:

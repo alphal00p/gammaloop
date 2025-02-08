@@ -113,7 +113,7 @@ pub fn format_target(target: String, level: log::Level) -> ColoredString {
     //[-2..].iter().join("::");
     let start = split_targets.len().saturating_sub(2);
     let mut shortened_path = split_targets[start..].join("::");
-    if level > log::Level::Debug && shortened_path.len() > 20 {
+    if level < log::Level::Debug && shortened_path.len() > 20 {
         shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
     }
     format!("{:<20}", shortened_path).bright_blue()

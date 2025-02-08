@@ -1470,7 +1470,10 @@ impl BareGraph {
                     external_edge.vertices = (external_edge.vertices.1, external_edge.vertices.0);
                     particle = particle.get_anti_particle(model);
                 }
-
+                assert!(
+                    n.data.external_tag > 0,
+                    "External tag is not positive in Feyngen.",
+                );
                 external_nodes.insert(
                     n.data.external_tag as usize,
                     (i_n, physical_edge_type, particle.name.clone()),
@@ -1602,6 +1605,7 @@ impl BareGraph {
             symbolica_edge_position_to_edge_name.insert(i_e, name.into());
             g.edges.push(edge);
         }
+
         // Sort edges with external first according to their definition in the process
         g.edges.sort_by(|a, b| {
             let a_priority = edges_sorting_priority.get(&a.name).unwrap();
@@ -1666,15 +1670,16 @@ impl BareGraph {
             vertex.order_edges_following_interaction(current_vertex_edge_order)?;
         }
 
-        g.external_connections = external_connections
+        let bare_graph_external_connections = external_connections
             .iter()
             .map(|(v1, v2)| {
                 (
-                    v1.map(|leg_id| external_nodes.get(&leg_id).unwrap().0),
-                    v2.map(|leg_id| external_nodes.get(&leg_id).unwrap().0),
+                    v1.map(|leg_id| g.external_edges[leg_id - 1]),
+                    v2.map(|leg_id| g.external_edges[leg_id - 1]),
                 )
             })
             .collect::<Vec<_>>();
+        g.external_connections = bare_graph_external_connections;
 
         // Set the half-edge graph representation
         g.hedge_representation = HedgeGraph::from(&g);
