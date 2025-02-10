@@ -196,6 +196,7 @@
           ghostscript
           graphviz
           mupdf
+          graphviz
           poppler_utils
           rust-analyzer
           maturin

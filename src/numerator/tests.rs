@@ -31,7 +31,7 @@ use crate::{
     momentum::{Dep, ExternalMomenta, Helicity},
     numerator::{ufo::UFO, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
     tests_from_pytest::{load_amplitude_output, sample_generator, test_export_settings},
-    utils::{ApproxEq, F, GS},
+    utils::{ApproxEq, F},
     Externals, RotationSetting, Settings,
 };
 
@@ -790,7 +790,7 @@ fn gamma_simplify_one() {
         //     .tensor;
         let g_simp = GammaSimplified::gamma_symplify_impl(atom.into()).0;
 
-        let g_simp_t = Network::parse_impl(g_simp.as_view())
+        let _g_simp_t = Network::parse_impl(g_simp.as_view())
             .contract::<Rational>(ContractionSettings::Normal)
             .unwrap()
             .tensor;

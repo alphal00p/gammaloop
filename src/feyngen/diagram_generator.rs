@@ -2,7 +2,6 @@ use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
 use log::{error, warn};
-use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -274,12 +273,7 @@ impl FeynGen {
                 g.add_node(colored_node);
             }
             for edge in graph.edges() {
-                _ = g.add_edge(
-                    edge.vertices.0,
-                    edge.vertices.1,
-                    edge.directed,
-                    edge.data.clone(),
-                );
+                _ = g.add_edge(edge.vertices.0, edge.vertices.1, edge.directed, edge.data);
             }
             colored_graphs.push(g);
         }
@@ -1225,7 +1219,7 @@ impl FeynGen {
                     let new_external_tag = all_pdgs[matched_position].1 as i32;
                     // If we swapped initial and final state assignment, then we must also flip the pdg code of the corresponding half-edges
                     if is_initial_state != is_initial_match {
-                        let mut e_data = e.data.clone();
+                        let mut e_data = e.data;
                         e_data.pdg = model
                             .get_particle_from_pdg(e_data.pdg)
                             .get_anti_particle(model)
@@ -1254,7 +1248,7 @@ impl FeynGen {
                             || (new_external_tag <= initial_pdgs.len() as i32
                                 && new_data.external_tag > initial_pdgs.len() as i32)
                         {
-                            let mut e_data = e.data.clone();
+                            let mut e_data = e.data;
                             e_data.pdg = model
                                 .get_particle_from_pdg(e_data.pdg)
                                 .get_anti_particle(model)
@@ -2069,7 +2063,7 @@ impl FeynGen {
         let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
 
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
-        const MAX_FAST_CUTKOSKY_PARTICLES: usize = 6;
+        const MAX_FAST_CUTKOSKY_PARTICLES: usize = 1;
         let mut applied_fast_cutksosky_cut_filter = false;
         if self.options.generation_type == GenerationType::CrossSection
             && !self.options.final_pdgs.is_empty()

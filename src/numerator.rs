@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::fs;
 use std::path::PathBuf;
@@ -72,7 +71,7 @@ use symbolica::state::Workspace;
 use crate::numerator::ufo::UFO;
 use symbolica::atom::{AtomCore, AtomView, Symbol};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
-use symbolica::id::{Context, Match, MatchSettings, PatternOrMap};
+use symbolica::id::{Context, Match, MatchSettings};
 
 use symbolica::{
     atom::{Atom, FunctionBuilder},
@@ -1416,7 +1415,7 @@ pub type Gloopoly =
 impl Numerator<ColorSimplified> {
     pub fn validate_against_branches(&self, seed: usize) -> bool {
         let gamma = self.clone().gamma_simplify().parse();
-        let mut nogamma = self.clone().parse();
+        let nogamma = self.clone().parse();
         let mut iter = PrimeIteratorU64::new(seed as u64);
         let reps = nogamma.random_concretize_reps(Some(&mut iter), false);
 
@@ -2157,13 +2156,13 @@ impl GammaSimplified {
         expr.0 = expr.0.expand();
         expr.replace_all_multiple_repeat_mut(&reps);
 
-        let pat = fun!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
+        let _pat = fun!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
         // let patodd = (-2 * fun!(gamma_chain, GS.a___, GS.b_)).to_pattern();
         // let pateven = (2 * (fun!(gamma_chain, GS.b_, GS.a___))).to_pattern();
 
         // let rhs = PatternOrMap::Map(Box::new(move |m| m.));
         //
-        fn gamma_chain_perm(arg: AtomView, context: &Context, out: &mut Atom) -> bool {
+        fn gamma_chain_perm(arg: AtomView, _context: &Context, out: &mut Atom) -> bool {
             let gamma_chain = symb!("gamma_chain");
             let mut found = false;
             if let AtomView::Fun(f) = arg {
@@ -2231,7 +2230,7 @@ impl GammaSimplified {
         //     None,
         // );
         //
-        fn gamma_tracer(arg: AtomView, context: &Context, out: &mut Atom) -> bool {
+        fn gamma_tracer(arg: AtomView, _context: &Context, out: &mut Atom) -> bool {
             let gamma_trace = symb!("gamma_trace");
 
             let mut found = false;
