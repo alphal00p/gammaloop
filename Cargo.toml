@@ -45,10 +45,9 @@ criterion = { version = "0.5", features = ["html_reports"] }
 symbolica = { version = "0.14.0" }
 
 spenso = { version = "0.4.0", features = ["shadowing"] }
-linnet = { git = "https://github.com/alphal00p/linnet", features = [
-    "symbolica",
-    "drawing",
-] }
+
+linnet = {git =  "https://github.com/alphal00p/linnet",features = ["symbolica","drawing"],branch="refactor"}
+
 
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }

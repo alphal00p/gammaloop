@@ -4,7 +4,9 @@ use bitvec::vec::BitVec;
 use color_eyre::Result;
 use hyperdual::Num;
 use linnet::half_edge::{
-    subgraph::{cycle::SignedCycle, Inclusion, OrientedCut, SubGraph, SubGraphOps},
+    subgraph::{
+        self, cycle::SignedCycle, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphOps,
+    },
     EdgeData, EdgeId, Hedge, HedgeGraph, HedgeVec, Involution, Orientation, Parent, TraversalTree,
 };
 use symbolica::atom::{representation::InlineNum, Atom};
@@ -36,6 +38,7 @@ impl<S: NumeratorState> Graph<S> {
 
 pub trait FeynmanGraph {
     fn new_lmb(&self) -> HedgeLMB;
+    fn num_virtual_edges(&self, subgraph: BitVec) -> usize;
 }
 
 pub struct HedgeLMB {
@@ -155,6 +158,11 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
             });
 
         HedgeLMB { tree, lmb_basis }
+    }
+
+    fn num_virtual_edges(&self, subgraph: BitVec) -> usize {
+        let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(subgraph, self);
+        self.count_internal_edges(&internal_subgraph)
     }
 }
 

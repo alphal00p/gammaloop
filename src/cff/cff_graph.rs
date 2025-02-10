@@ -1,11 +1,13 @@
 use ahash::{HashMap, HashSet, HashSetExt};
 use itertools::Itertools;
+use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex, HedgeError, HedgeGraph};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
 use crate::{
     cff::hsurface::Hsurface,
-    graph::{BareGraph, EdgeType},
+    graph::{BareGraph, Edge, EdgeType, Vertex},
+    new_graph,
 };
 
 use super::{
@@ -118,7 +120,7 @@ impl CFFVertex {
             .chain(self.outgoing_edges.iter_mut())
     }
 
-    fn has_edge(&self, edge_id: usize) -> bool {
+    fn has_edge(&self, edge_id: EdgeIndex) -> bool {
         self.iter_all_edges().any(|edge| edge.edge_id == edge_id)
     }
 }
@@ -162,7 +164,7 @@ impl VertexSet {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct CFFEdge {
-    edge_id: usize,
+    edge_id: EdgeIndex,
     edge_type: CFFEdgeType,
 }
 
@@ -263,7 +265,7 @@ impl CFFGenerationGraph {
             let vertex_set = VertexSet::from_usize(*incoming_vertex);
             let cff_vertex = unique_vertices.get_mut(&vertex_set).unwrap();
             let incoming_edge = CFFEdge {
-                edge_id,
+                edge_id: EdgeIndex::from(edge_id),
                 edge_type: *edge_type,
             };
             cff_vertex.incoming_edges.push(incoming_edge);
@@ -273,7 +275,7 @@ impl CFFGenerationGraph {
         for (edge_id, (left, right)) in edges.iter().enumerate() {
             let edge_id = edge_id + incoming_vertices.len();
             let cff_edge = CFFEdge {
-                edge_id,
+                edge_id: EdgeIndex::from(edge_id),
                 edge_type: CFFEdgeType::Virtual,
             };
 
@@ -676,6 +678,21 @@ impl CFFGenerationGraph {
             (Some(children), surface)
         } else {
             (None, surface)
+        }
+    }
+
+    pub fn new_new(graph: &HedgeGraph<Edge, Vertex>, global_orientation: HedgeVec<bool>) -> Self {
+        let mut vertices = (0..graph.n_nodes())
+            .map(|id| CFFVertex::new(id))
+            .collect_vec();
+
+        for (_, edge_id, edge_data) in graph.iter_edges(&graph.full_filter()) {
+            let orientation_of_edge = global_orientation[edge_id];
+        }
+
+        Self {
+            vertices,
+            global_orientation,
         }
     }
 

@@ -1,6 +1,8 @@
 use crate::cff::expression::CFFFloat;
 use crate::momentum::{FourMomentum, Signature, ThreeMomentum};
+use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex};
 use crate::numerator::NumeratorEvaluateFloat;
+use crate::signature::ExternalSignature;
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use bincode::{Decode, Encode};
@@ -2015,13 +2017,13 @@ pub fn compute_shift_part<T: FloatLike>(
 }
 
 pub fn compute_t_part_of_shift_part<T: FloatLike>(
-    external_signature: &Signature,
-    external_moms: &[FourMomentum<F<T>>],
+    external_signature: &ExternalSignature,
+    external_moms: &ExternalFourMomenta<F<T>>,
 ) -> F<T> {
     // external_signature.panic_validate_basis(external_moms);
     external_signature
         .apply_iter(external_moms.iter().map(|m| m.temporal.value.clone()))
-        .unwrap_or(external_moms[0].temporal.value.zero())
+        .unwrap_or(external_moms[ExternalIndex(0)].temporal.value.zero())
 }
 
 // Bilinear form for E-surface defined as sqrt[(k+p1)^2+m1sq] + sqrt[(k+p2)^2+m2sq] + e_shift

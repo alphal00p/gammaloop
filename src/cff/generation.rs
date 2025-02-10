@@ -1,3 +1,4 @@
+use crate::graph::EdgeType;
 use crate::{
     cff::{
         esurface::add_external_shifts,
@@ -6,13 +7,17 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
-    graph::BareGraph,
+    graph::{BareGraph, Edge, EdgeType, Vertex},
+    new_graph::{self, FeynmanGraph},
 };
 use ahash::HashMap;
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
+use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::HedgeGraph;
 use std::fmt::Debug;
+use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
 
@@ -147,6 +152,34 @@ fn get_orientations(graph: &BareGraph) -> Vec<CFFGenerationGraph> {
             CFFGenerationGraph::new(graph, orientation_of_virtuals)
         })
         .collect()
+}
+fn new_get_orientations(graph: &HedgeGraph<Edge, Vertex>) -> Vec<CFFGenerationGraph> {
+    let num_virtual_edges = graph.num_virtual_edges(graph.full_filter());
+    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
+
+    let global_orientations = virtual_possible_orientations
+        .map(|orientation_of_virtuals| {
+            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
+
+            let global_orientation = graph
+                .iter_all_edges()
+                .map(|(_, _, data)| match data.data.edge_type {
+                    EdgeType::Virtual => orientation_of_virtuals
+                        .next()
+                        .expect("unable to reconstruct global orientation"),
+                    EdgeType::Incoming => true,
+                    EdgeType::Outgoing => true,
+                })
+                .collect::<TiVec<EdgeIndex, _>>();
+
+            assert!(
+                orientation_of_virtuals.next().is_none(),
+                "did not saturate virtual orientations when constructing global orientation"
+            );
+        })
+        .collect_vec();
+
+    CFFGenerationGraph::new(graph, global_orientations)
 }
 
 pub fn generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Report> {

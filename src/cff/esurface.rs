@@ -6,6 +6,8 @@ use colored::Colorize;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
+use linnet::half_edge::hedgevec::HedgeVec;
+use linnet::half_edge::involution::EdgeIndex;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
@@ -14,8 +16,9 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
 
 use crate::debug_info::DEBUG_LOGGER;
-use crate::graph::{Graph, LoopMomentumBasis};
+use crate::graph::{Graph, LoopMomentumBasis, NewLoopMomentumBasis};
 use crate::momentum::{FourMomentum, Signature, ThreeMomentum};
+use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta};
 use crate::numerator::NumeratorState;
 use crate::utils::{
     compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, FloatLike, F,
@@ -27,18 +30,17 @@ use super::surface::{self, Surface};
 /// Core esurface struct
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Esurface {
-    pub energies: Vec<usize>,
-    pub sub_orientation: Vec<bool>,
+    pub energies: Vec<EdgeIndex>,
     pub external_shift: ExternalShift,
     pub circled_vertices: VertexSet,
 }
 
 impl Surface for Esurface {
-    fn get_positive_energies(&self) -> impl Iterator<Item = &usize> {
+    fn get_positive_energies(&self) -> impl Iterator<Item = &EdgeIndex> {
         self.energies.iter()
     }
 
-    fn get_external_shift(&self) -> impl Iterator<Item = &(usize, i64)> {
+    fn get_external_shift(&self) -> impl Iterator<Item = &(EdgeIndex, i64)> {
         self.external_shift.iter()
     }
 }
@@ -56,14 +58,16 @@ impl Esurface {
         let symbolic_energies = self
             .energies
             .iter()
-            .map(|i| Atom::parse(&format!("E{}", i)).unwrap())
+            .map(|i| Atom::parse(&format!("E{}", Into::<usize>::into(*i))).unwrap())
             .collect_vec();
 
         let symbolic_shift = self
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::parse(&format!("p{}", i)).unwrap() * &Atom::new_num(*sign) + &sum
+                Atom::parse(&format!("p{}", Into::<usize>::into(*i))).unwrap()
+                    * &Atom::new_num(*sign)
+                    + &sum
             });
 
         let builder_atom = Atom::new();
@@ -77,13 +81,13 @@ impl Esurface {
     /// Compute the value of the esurface from an energy cache that can be computed from the underlying graph
     /// This is the fastest way to compute the value of all esurfaces in a full evaluation
     #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
+    pub fn compute_value<T: FloatLike>(&self, energy_cache: &HedgeVec<F<T>>) -> F<T> {
         surface::compute_value(self, energy_cache)
     }
 
     /// Only compute the shift part, useful for existence checks
     #[inline]
-    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
+    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &HedgeVec<F<T>>) -> F<T> {
         surface::compute_shift_part(self, energy_cache)
     }
 
@@ -92,10 +96,10 @@ impl Esurface {
     #[inline]
     pub fn compute_from_momenta<T: FloatLike>(
         &self,
-        lmb: &LoopMomentumBasis,
-        real_mass_vector: &[F<T>],
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        lmb: &NewLoopMomentumBasis,
+        real_mass_vector: &HedgeVec<F<T>>,
+        loop_moms: &LoopMomenta<ThreeMomentum<F<T>>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
         let spatial_part_of_externals = external_moms
             .iter()
@@ -113,7 +117,7 @@ impl Esurface {
                 (momentum.norm_squared() + mass * mass).sqrt()
             })
             .reduce(|acc, x| acc + x)
-            .unwrap_or_else(|| loop_moms[0].px.zero());
+            .unwrap_or_else(|| loop_moms[LoopIndex(0)].px.zero());
 
         energy_sum + self.compute_shift_part_from_momenta(lmb, external_moms)
     }
@@ -122,8 +126,8 @@ impl Esurface {
     #[inline]
     pub fn compute_shift_part_from_momenta<T: FloatLike>(
         &self,
-        lmb: &LoopMomentumBasis,
-        external_moms: &[FourMomentum<F<T>>],
+        lmb: &NewLoopMomentumBasis,
+        external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
         self.external_shift
             .iter()
@@ -133,7 +137,7 @@ impl Esurface {
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
             .reduce(|acc, x| acc + x)
-            .unwrap_or_else(|| external_moms[0].temporal.value.zero())
+            .unwrap_or_else(|| external_moms[ExternalIndex(0)].temporal.value.zero())
     }
 
     #[inline]
@@ -257,7 +261,7 @@ impl Esurface {
         todo!()
     }
 
-    pub fn canonicalize_shift(&mut self, dep_mom: usize, dep_mom_expr: &ExternalShift) {
+    pub fn canonicalize_shift(&mut self, dep_mom: EdgeIndex, dep_mom_expr: &ExternalShift) {
         if let Some(dep_mom_pos) = self
             .external_shift
             .iter()
@@ -279,7 +283,7 @@ pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
 pub fn compute_esurface_cache<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
-    energy_cache: &[F<T>],
+    energy_cache: &HedgeVec<F<T>>,
 ) -> EsurfaceCache<F<T>> {
     esurfaces
         .iter()
@@ -550,7 +554,7 @@ pub fn generate_esurface_data<S: NumeratorState>(
     })
 }
 
-pub type ExternalShift = Vec<(usize, i64)>;
+pub type ExternalShift = Vec<(EdgeIndex, i64)>;
 
 /// add two external shifts, eliminates zero signs and sorts
 pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> ExternalShift {

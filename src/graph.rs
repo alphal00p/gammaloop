@@ -15,6 +15,7 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
+    momentum_sample::LoopIndex,
     numerator::{
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
         AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo, GammaAlgebraMode,
@@ -29,7 +30,9 @@ use crate::{
     ProcessSettings, Settings, TropicalSubgraphTableSettings,
 };
 
-use linnet::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder};
+use linnet::half_edge::{
+    hedgevec::HedgeVec, involution::EdgeIndex, subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder,
+};
 
 use ahash::{HashSet, RandomState};
 
@@ -62,6 +65,7 @@ use spenso::{
         CastStructure, HasStructure, NamedStructure, ScalarTensor, ToSymbolic, VecStructure,
     },
 };
+use typed_index_collections::TiVec;
 use uuid::Uuid;
 
 use core::panic;
@@ -3808,6 +3812,11 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 pub struct LoopMomentumBasis {
     pub basis: Vec<usize>,
     pub edge_signatures: Vec<LoopExtSignature>,
+}
+
+pub struct NewLoopMomentumBasis {
+    pub basis: TiVec<LoopIndex, EdgeIndex>,
+    pub edge_signatures: HedgeVec<signature::LoopExtSignature>,
 }
 
 #[derive(

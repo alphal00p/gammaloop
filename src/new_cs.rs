@@ -21,16 +21,16 @@ use crate::{
     ProcessSettings,
 };
 
-struct ProcessDefinition {
+pub struct ProcessDefinition {
     pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
     pub final_pdgs: Vec<i64>,
 }
-struct Process<S: NumeratorState = PythonState> {
+pub struct Process<S: NumeratorState = PythonState> {
     pub definition: ProcessDefinition,
     pub collection: ProcessCollection<S>,
 }
 
-struct GenerationOptions {
+pub struct GenerationOptions {
     pub feyngen_options: FeynGenOptions,
     pub numerator_aware_isomorphism_grouping: NumeratorAwareGraphGroupingOption,
     pub filter_self_loop: bool,
@@ -41,7 +41,8 @@ struct GenerationOptions {
 }
 
 // should produce e+e- -> d d~ g
-fn test_process() -> GenerationOptions {
+#[cfg(test)]
+fn test_process_cross_section() -> GenerationOptions {
     let feyngen_options = FeynGenOptions {
         amplitude_filters: FeynGenFilters(vec![]),
         cross_section_filters: FeynGenFilters(vec![
@@ -56,6 +57,35 @@ fn test_process() -> GenerationOptions {
         symmetrize_initial_states: false,
         symmetrize_left_right_states: false,
         loop_count_range: (2, 2),
+    };
+
+    GenerationOptions {
+        feyngen_options,
+        numerator_aware_isomorphism_grouping: NumeratorAwareGraphGroupingOption::OnlyDetectZeroes,
+        filter_self_loop: true,
+        graph_prefix: "GL".to_string(),
+        selected_graphs: None,
+        vetoed_graphs: None,
+        loop_momentum_bases: None,
+    }
+}
+
+#[cfg(test)]
+fn test_process_amplitude() -> GenerationOptions {
+    let feyngen_options = FeynGenOptions {
+        amplitude_filters: FeynGenFilters(vec![
+            FeynGenFilter::SelfEnergyFilter(SelfEnergyFilterOptions::default()),
+            FeynGenFilter::TadpolesFilter(TadpolesFilterOptions::default()),
+            FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions::default()),
+        ]),
+        cross_section_filters: FeynGenFilters(vec![]),
+        generation_type: GenerationType::Amplitude,
+        initial_pdgs: vec![22, 22],
+        final_pdgs: vec![22, 22],
+        symmetrize_final_states: true,
+        symmetrize_initial_states: true,
+        symmetrize_left_right_states: false,
+        loop_count_range: (1, 1),
     };
 
     GenerationOptions {
@@ -167,6 +197,12 @@ struct ExportSettings {
     root_folder: PathBuf,
 }
 
+impl Default for ProcessList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // Python Api
 impl ProcessList {
     /// Generates a new empty process list
@@ -196,7 +232,7 @@ impl ProcessList {
     }
 }
 
-enum ProcessCollection<S: NumeratorState = PythonState> {
+pub enum ProcessCollection<S: NumeratorState = PythonState> {
     Amplitudes(Vec<Amplitude<S>>),
     CrossSections(Vec<CrossSection<S>>),
 }
@@ -211,7 +247,7 @@ impl<S: NumeratorState> ProcessCollection<S> {
     }
 }
 
-struct Amplitude<S: NumeratorState = PythonState> {
+pub struct Amplitude<S: NumeratorState = PythonState> {
     graphs: Vec<Graph<S>>,
 }
 
@@ -226,7 +262,7 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(())
     }
 }
-struct CrossSection<S: NumeratorState = PythonState> {
+pub struct CrossSection<S: NumeratorState = PythonState> {
     supergraphs: Vec<CrossSectionGraph<S>>,
 }
 
@@ -242,9 +278,18 @@ pub struct CrossSectionCut {
 }
 
 #[test]
-fn test_new_structure() {
+fn test_new_structure_cross_section() {
     let model = crate::tests_from_pytest::load_generic_model("sm");
-    let generation_options = test_process();
+    let generation_options = test_process_cross_section();
+
+    let mut process_list = ProcessList::new();
+    process_list.generate(generation_options, &model).unwrap();
+}
+
+#[test]
+fn test_new_structure_ampltiude() {
+    let model = crate::tests_from_pytest::load_generic_model("sm");
+    let generation_options = test_process_amplitude();
 
     let mut process_list = ProcessList::new();
     process_list.generate(generation_options, &model).unwrap();
