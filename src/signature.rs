@@ -1,7 +1,6 @@
-use crate::integrate::UserData;
 use crate::momentum::{FourMomentum, SignOrZero};
 use crate::momentum_sample::{ExternalIndex, LoopIndex};
-use bincode::{Decode, Encode};
+use bincode::{BorrowDecode, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use spenso::contraction::RefZero;
 use std::fmt::Display;
@@ -12,6 +11,34 @@ use typed_index_collections::TiVec;
 pub struct SignatureLike<T: From<usize>>(TiVec<T, SignOrZero>);
 pub type LoopSignature = SignatureLike<LoopIndex>;
 pub type ExternalSignature = SignatureLike<ExternalIndex>;
+
+// manual implementations because TiVec is not Encode/Devode
+impl<T: Encode + From<usize>> Encode for SignatureLike<T> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.0.raw.encode(encoder)
+    }
+}
+
+impl<'de, Context, T: Decode<Context> + From<usize>> BorrowDecode<'de, Context>
+    for SignatureLike<T>
+{
+    fn borrow_decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(SignatureLike(Vec::decode(decoder)?.into()))
+    }
+}
+
+impl<Context, T: Decode<Context> + From<usize>> Decode<Context> for SignatureLike<T> {
+    fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(SignatureLike(Vec::decode(decoder)?.into()))
+    }
+}
 
 pub struct NewLoopExtSignature {
     pub internal: LoopSignature,
@@ -188,6 +215,21 @@ where
         for (&sign, t) in self.0.iter().zip(basis.iter().cloned()) {
             result += sign * t;
         }
+        result
+    }
+
+    pub fn apply_typed<O, I, V>(&self, basis: &V) -> O
+    where
+        V: Index<I, Output = O>,
+        O: RefZero + Neg<Output = O> + AddAssign<O> + Clone,
+        I: From<usize>,
+        usize: From<I>,
+    {
+        let mut result = basis[I::from(0)].ref_zero();
+        for (&sign, i) in self.0.iter().zip(0..) {
+            result += sign * basis[I::from(i)].clone();
+        }
+
         result
     }
 

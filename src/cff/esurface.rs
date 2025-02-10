@@ -19,7 +19,9 @@ use crate::debug_info::DEBUG_LOGGER;
 use crate::graph::{Graph, LoopMomentumBasis, NewLoopMomentumBasis};
 use crate::momentum::{FourMomentum, Signature, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta};
+use crate::new_graph;
 use crate::numerator::NumeratorState;
+use crate::signature::ExternalSignature;
 use crate::utils::{
     compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, FloatLike, F,
 };
@@ -144,11 +146,11 @@ impl Esurface {
     pub fn compute_self_and_r_derivative<T: FloatLike>(
         &self,
         radius: &F<T>,
-        shifted_unit_loops: &[ThreeMomentum<F<T>>],
-        center: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
-        lmb: &LoopMomentumBasis,
-        real_mass_vector: &[F<T>],
+        shifted_unit_loops: &LoopMomenta<F<T>>,
+        center: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &NewLoopMomentumBasis,
+        real_mass_vector: &HedgeVec<F<T>>,
     ) -> (F<T>, F<T>) {
         let spatial_part_of_externals = external_moms
             .iter()
@@ -157,7 +159,7 @@ impl Esurface {
 
         let loops = shifted_unit_loops
             .iter()
-            .zip(center)
+            .zip(center.iter())
             .map(|(loop_mom, center)| loop_mom * radius + center)
             .collect_vec();
 
@@ -191,11 +193,11 @@ impl Esurface {
     #[inline]
     pub fn get_radius_guess<T: FloatLike>(
         &self,
-        unit_loops: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
-        lmb: &LoopMomentumBasis,
+        unit_loops: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &NewLoopMomentumBasis,
     ) -> (F<T>, F<T>) {
-        let const_builder = &unit_loops[0].px;
+        let const_builder = &unit_loops[LoopIndex(0)].px;
 
         let esurface_shift = self.compute_shift_part_from_momenta(lmb, external_moms);
 
@@ -221,7 +223,7 @@ impl Esurface {
     }
 
     /// Write out the esurface expression in a given lmb
-    pub fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
+    pub fn string_format_in_lmb(&self, lmb: &NewLoopMomentumBasis) -> String {
         let mut energy_sum = self
             .energies
             .iter()
@@ -316,8 +318,8 @@ const EXISTENCE_THRESHOLD: F<f64> = F(1.0e-7);
 pub fn get_existing_esurfaces<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
     esurface_derived_data: &EsurfaceDerivedData,
-    externals: &[FourMomentum<F<T>>],
-    lmb: &LoopMomentumBasis,
+    externals: &ExternalFourMomenta<F<T>>,
+    lmb: &NewLoopMomentumBasis,
     debug: usize,
     e_cm: F<f64>,
 ) -> ExistingEsurfaces {
@@ -426,7 +428,7 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
 pub struct EsurfaceData {
     cut_momentum_basis: usize,
     mass_sum_squared: F<f64>,
-    shift_signature: Signature,
+    shift_signature: ExternalSignature,
 }
 
 impl EsurfaceData {
@@ -453,13 +455,11 @@ impl EsurfaceData {
 }
 
 pub fn generate_esurface_data<S: NumeratorState>(
-    graph: &Graph<S>,
+    graph: &new_graph::Graph<S>,
     esurfaces: &EsurfaceCollection,
 ) -> Result<EsurfaceDerivedData, Report> {
     let lmbs = graph
         .derived_data
-        .as_ref()
-        .unwrap()
         .loop_momentum_bases
         .as_ref()
         .ok_or_else(|| {

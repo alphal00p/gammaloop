@@ -1,8 +1,8 @@
 use crate::cff::expression::CFFFloat;
-use crate::momentum::{FourMomentum, Signature, ThreeMomentum};
-use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex};
+use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::numerator::NumeratorEvaluateFloat;
-use crate::signature::ExternalSignature;
+use crate::signature::{ExternalSignature, LoopSignature};
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use bincode::{Decode, Encode};
@@ -2003,17 +2003,18 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
 }
 
 pub fn compute_loop_part<T: FloatLike>(
-    loop_signature: &Signature,
-    loop_moms: &[ThreeMomentum<F<T>>],
+    loop_signature: &LoopSignature,
+    loop_moms: &LoopMomenta<F<T>>,
 ) -> ThreeMomentum<F<T>> {
-    loop_signature.apply(loop_moms)
+    loop_signature.apply_typed(loop_moms)
 }
 
 pub fn compute_shift_part<T: FloatLike>(
-    external_signature: &Signature,
-    external_moms: &[FourMomentum<F<T>>],
+    external_signature: &ExternalSignature,
+    external_moms: &ExternalFourMomenta<F<T>>,
 ) -> FourMomentum<F<T>> {
-    external_signature.apply(external_moms)
+    external_signature
+        .apply_typed::<FourMomentum<F<T>>, ExternalIndex, ExternalFourMomenta<F<T>>>(external_moms)
 }
 
 pub fn compute_t_part_of_shift_part<T: FloatLike>(

@@ -15,7 +15,22 @@ use uuid::Uuid;
 
 #[derive(From, Into, Copy, Clone, Hash, Eq, Ord, PartialEq, PartialOrd, Encode, Decode, Debug)]
 pub struct LoopIndex(pub usize);
-#[derive(From, Into, Copy, Clone, Hash, Eq, Ord, PartialEq, PartialOrd, Encode, Decode, Debug)]
+#[derive(
+    From,
+    Into,
+    Copy,
+    Clone,
+    Hash,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Encode,
+    Decode,
+    Debug,
+    Serialize,
+    Deserialize,
+)]
 pub struct ExternalIndex(pub usize);
 
 #[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -24,12 +39,21 @@ pub struct LoopMomenta<T>(Vec<ThreeMomentum<T>>);
 pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
 
 impl<T> LoopMomenta<T> {
-    fn iter(&self) -> std::slice::Iter<'_, ThreeMomentum<T>> {
+    pub fn iter(&self) -> std::slice::Iter<'_, ThreeMomentum<T>> {
         self.0.iter()
     }
 
-    fn first(&self) -> Option<&ThreeMomentum<T>> {
+    pub fn first(&self) -> Option<&ThreeMomentum<T>> {
         self.0.first()
+    }
+}
+
+impl<T> IntoIterator for LoopMomenta<T> {
+    type Item = ThreeMomentum<T>;
+    type IntoIter = std::vec::IntoIter<ThreeMomentum<T>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 

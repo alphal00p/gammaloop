@@ -19,10 +19,10 @@ use crate::{
 };
 
 pub struct Graph<S: NumeratorState = PythonState> {
-    multiplicity: Atom,
-    underlying: HedgeGraph<Edge, Vertex>,
-    loop_momentum_basis: HedgeLMB,
-    derived_data: DerivedGraphData<S>,
+    pub multiplicity: Atom,
+    pub underlying: HedgeGraph<Edge, Vertex>,
+    pub loop_momentum_basis: HedgeLMB,
+    pub derived_data: DerivedGraphData<S>,
 }
 
 impl<S: NumeratorState> Graph<S> {
