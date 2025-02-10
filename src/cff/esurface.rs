@@ -16,8 +16,8 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
 
 use crate::debug_info::DEBUG_LOGGER;
-use crate::graph::{Graph, LoopMomentumBasis, NewLoopMomentumBasis};
-use crate::momentum::{FourMomentum, Signature, ThreeMomentum};
+use crate::graph::NewLoopMomentumBasis;
+use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta};
 use crate::new_graph;
 use crate::numerator::NumeratorState;
@@ -466,6 +466,10 @@ pub fn generate_esurface_data<S: NumeratorState>(
             eyre!("Could not generate esurface data, loop momentum bases not generated.")
         })?;
 
+    let edge_masses = graph
+        .underlying
+        .new_hedgevec(&|edge, edge_index| edge.particle.mass.value);
+
     let data = esurfaces
         .iter()
         .map(|esurface| {
@@ -490,7 +494,7 @@ pub fn generate_esurface_data<S: NumeratorState>(
             let mass_sum: F<f64> = esurface
                 .energies
                 .iter()
-                .map(|&i| graph.bare_graph.edges[i].particle.mass.value)
+                .map(|&i| edge_masses[i])
                 .filter(|mass| mass.is_some())
                 .map(|mass| mass.unwrap_or_else(|| unreachable!()).re)
                 .reduce(|acc, x| acc + x)
@@ -578,6 +582,11 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
 
 #[cfg(test)]
 mod tests {
+    use linnet::half_edge::{
+        builder::HedgeGraphBuilder,
+        involution::{EdgeIndex, Orientation},
+        HedgeGraph, NodeIndex,
+    };
     use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
@@ -587,19 +596,32 @@ mod tests {
 
     use super::add_external_shifts;
 
+    fn dummy_hedge_graph(num_edges: usize) -> HedgeGraph<(), ()> {
+        let mut graph = HedgeGraphBuilder::new();
+        graph.add_node(());
+
+        for _ in 0..num_edges {
+            graph.add_edge(NodeIndex(0), NodeIndex(0), (), Orientation::Default);
+        }
+
+        graph.build()
+    }
+
     #[test]
     fn test_esurface() {
-        let energies_cache = [F(1.), F(2.), F(3.), F(4.), F(5.)];
-        let energies = vec![0, 1, 2];
+        let dummy_graph = dummy_hedge_graph(5);
 
-        let external_shift = vec![(3, 1), (4, 1)];
+        let energies_cache = dummy_graph
+            .new_hedgevec_from_iter([F(1.), F(2.), F(3.), F(4.), F(5.)])
+            .unwrap();
 
-        let sub_orientation = vec![true, false, true];
+        let energies = vec![EdgeIndex::from(0), EdgeIndex::from(1), EdgeIndex::from(2)];
+
+        let external_shift = vec![(EdgeIndex::from(3), 1), (EdgeIndex::from(4), 1)];
 
         let dummy_circled_vertices = VertexSet::dummy();
 
         let mut esurface = Esurface {
-            sub_orientation: sub_orientation.clone(),
             energies,
             external_shift,
             circled_vertices: dummy_circled_vertices,
@@ -608,18 +630,24 @@ mod tests {
         let res = esurface.compute_value(&energies_cache);
         assert_eq!(res.0, 15.);
 
-        let canon_shift = vec![(1, -1), (2, -1), (3, -1)];
-        esurface.canonicalize_shift(4, &canon_shift);
+        let canon_shift = vec![
+            (EdgeIndex::from(1), -1),
+            (EdgeIndex::from(2), -1),
+            (EdgeIndex::from(3), -1),
+        ];
+        esurface.canonicalize_shift(EdgeIndex::from(4), &canon_shift);
 
-        assert_eq!(esurface.external_shift, vec![(1, -1), (2, -1)]);
+        assert_eq!(
+            esurface.external_shift,
+            vec![(EdgeIndex::from(1), -1), (EdgeIndex::from(2), -1)]
+        );
 
-        let energies = vec![0, 2];
+        let energies = vec![EdgeIndex::from(0), EdgeIndex::from(2)];
 
-        let external_shift = vec![(1, -1)];
+        let external_shift = vec![(EdgeIndex::from(1), -1)];
 
         let esurface = Esurface {
             energies,
-            sub_orientation: sub_orientation.clone(),
             external_shift,
             circled_vertices: dummy_circled_vertices,
         };
@@ -630,11 +658,10 @@ mod tests {
 
     #[test]
     fn test_to_atom() {
-        let external_shift = vec![(1, -1)];
+        let external_shift = vec![(EdgeIndex::from(1), -1)];
 
         let esurface = Esurface {
-            sub_orientation: vec![true, true],
-            energies: vec![2, 3],
+            energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
             circled_vertices: VertexSet::dummy(),
         };
@@ -649,34 +676,49 @@ mod tests {
 
     #[test]
     fn test_add_external_shifts() {
-        let shift_1 = vec![(0, 1), (1, 1), (2, -1)];
-        let shift_2 = vec![(1, -1), (2, 1)];
+        let shift_1 = vec![
+            (EdgeIndex::from(0), 1),
+            (EdgeIndex::from(1), 1),
+            (EdgeIndex::from(2), -1),
+        ];
+        let shift_2 = vec![(EdgeIndex::from(1), -1), (EdgeIndex::from(2), 1)];
 
         let add = add_external_shifts(&shift_1, &shift_2);
 
-        assert_eq!(add, vec![(0, 1)]);
+        assert_eq!(add, vec![(EdgeIndex::from(0), 1)]);
 
-        let shift_3 = vec![(3, 1), (4, -1)];
-        let shift_4 = vec![(0, 1), (1, 1), (2, 1), (4, 1)];
+        let shift_3 = vec![(EdgeIndex::from(3), 1), (EdgeIndex::from(4), -1)];
+        let shift_4 = vec![
+            (EdgeIndex::from(0), 1),
+            (EdgeIndex::from(1), 1),
+            (EdgeIndex::from(2), 1),
+            (EdgeIndex::from(4), 1),
+        ];
 
         let add = add_external_shifts(&shift_3, &shift_4);
 
-        assert_eq!(add, vec![(0, 1), (1, 1), (2, 1), (3, 1)]);
+        assert_eq!(
+            add,
+            vec![
+                (EdgeIndex::from(0), 1),
+                (EdgeIndex::from(1), 1),
+                (EdgeIndex::from(2), 1),
+                (EdgeIndex::from(3), 1)
+            ]
+        );
     }
 
     #[test]
     fn test_esurface_equality() {
         let esurface_1 = Esurface {
-            energies: vec![3, 5],
-            sub_orientation: vec![true, false],
-            external_shift: vec![(0, 1), (1, 1)],
+            energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
+            external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
             circled_vertices: VertexSet::dummy(),
         };
 
         let esurface_2 = Esurface {
-            energies: vec![3, 5],
-            sub_orientation: vec![true, false],
-            external_shift: vec![(0, 1), (1, 1)],
+            energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
+            external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
             circled_vertices: VertexSet::from_usize(1),
         };
 
