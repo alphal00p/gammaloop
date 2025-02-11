@@ -179,4 +179,47 @@ fn cut_content() {
     double_double_triangle
         .add_edge(v12, v3, true, eplus)
         .unwrap();
+
+    let mut coupling = HashMap::new();
+    coupling.insert("QED".into(), 6);
+    let mut pert = HashMap::new();
+    pert.insert("QCD".into(), 2);
+    let filters = FeynGen::new(FeynGenOptions {
+        generation_type: GenerationType::CrossSection,
+        initial_pdgs: vec![-11, 11],
+        final_pdgs: vec![5, -5, 25],
+        loop_count_range: (4, 4),
+        symmetrize_initial_states: true,
+        symmetrize_final_states: true,
+        symmetrize_left_right_states: true,
+        amplitude_filters: FeynGenFilters(vec![
+            FeynGenFilter::SelfEnergyFilter(Default::default()),
+            FeynGenFilter::ParticleVeto(vec![
+                23, 24, 9000001, 9000002, 9000003, 9000004, 12, 14, 16, 2, 4, 6, 3, 250, 251, 13,
+                15,
+            ]),
+            FeynGenFilter::TadpolesFilter(Default::default()),
+            FeynGenFilter::ZeroSnailsFilter(Default::default()),
+        ]),
+        cross_section_filters: FeynGenFilters(vec![
+            FeynGenFilter::SelfEnergyFilter(Default::default()),
+            FeynGenFilter::ParticleVeto(vec![
+                23, 24, 9000001, 9000002, 9000003, 9000004, 12, 14, 16, 2, 4, 6, 3, 250, 251, 13,
+                15,
+            ]),
+            FeynGenFilter::TadpolesFilter(Default::default()),
+            FeynGenFilter::ZeroSnailsFilter(Default::default()),
+            FeynGenFilter::PerturbativeOrders(pert),
+            FeynGenFilter::CouplingOrders(coupling),
+            FeynGenFilter::LoopCountRange((4, 4)),
+        ]),
+    });
+
+    let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
+    assert!(!filters.contains_cut(
+        &model,
+        &double_double_triangle,
+        n_unresolved,
+        &unresolved_type
+    ));
 }
