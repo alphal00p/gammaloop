@@ -13,6 +13,7 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use gat_lending_iterator::LendingIterator;
 use itertools::Itertools;
+use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex};
 use log::info;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -41,11 +42,11 @@ use super::{
 };
 
 pub trait CFFFloat<T: FloatLike> {
-    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<T>], &Settings) -> Vec<F<T>>;
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&HedgeVec<F<T>>, &Settings) -> Vec<F<T>>;
 }
 
 impl CFFFloat<f64> for f64 {
-    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&[F<f64>], &Settings) -> Vec<F<f64>> {
+    fn get_evaluator(cff: &CFFExpression) -> impl Fn(&HedgeVec<F<f64>>, &Settings) -> Vec<F<f64>> {
         |energy_cache, settings| {
             if cff.compiled.is_some() {
                 cff.compiled_evaluate_orientations(energy_cache, settings)
@@ -59,7 +60,7 @@ impl CFFFloat<f64> for f64 {
 impl CFFFloat<VarFloat<113>> for VarFloat<113> {
     fn get_evaluator(
         cff: &CFFExpression,
-    ) -> impl Fn(&[F<VarFloat<113>>], &Settings) -> Vec<F<VarFloat<113>>> {
+    ) -> impl Fn(&HedgeVec<F<VarFloat<113>>>, &Settings) -> Vec<F<VarFloat<113>>> {
         |energy_cache, settings| cff.eager_evaluate_orientations(energy_cache, settings)
     }
 }
@@ -93,12 +94,12 @@ impl CFFExpression {
     #[inline]
     pub fn evaluate_orientations<T: FloatLike + CFFFloat<T>>(
         &self,
-        energy_cache: &[F<T>],
+        energy_cache: &HedgeVec<F<T>>,
         settings: &Settings,
     ) -> Vec<F<T>> {
         if settings.general.debug > 0 {
             DEBUG_LOGGER.write("esurface_equation", &self.esurfaces);
-            DEBUG_LOGGER.write("onshell_energies", &energy_cache);
+            // DEBUG_LOGGER.write("onshell_energies", &energy_cache);
         }
 
         T::get_evaluator(self)(energy_cache, settings)
@@ -107,7 +108,7 @@ impl CFFExpression {
     #[inline]
     fn eager_evaluate_orientations<T: FloatLike>(
         &self,
-        energy_cache: &[F<T>],
+        energy_cache: &HedgeVec<F<T>>,
         settings: &Settings,
     ) -> Vec<F<T>> {
         let esurface_cache = self.compute_esurface_cache(energy_cache);
@@ -142,7 +143,7 @@ impl CFFExpression {
     #[inline]
     fn compiled_evaluate_orientations(
         &self,
-        energy_cache: &[F<f64>],
+        energy_cache: &HedgeVec<F<f64>>,
         settings: &Settings,
     ) -> Vec<F<f64>> {
         let res = self.compiled.evaluate_orientations(energy_cache, settings);
@@ -176,19 +177,27 @@ impl CFFExpression {
     }
 
     #[inline]
-    pub fn evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], settings: &Settings) -> F<T> {
+    pub fn evaluate<T: FloatLike>(
+        &self,
+        energy_cache: &HedgeVec<F<T>>,
+        settings: &Settings,
+    ) -> F<T> {
         self.evaluate_orientations(energy_cache, settings)
             .into_iter()
             .reduce(|acc, x| &acc + &x)
-            .unwrap_or_else(|| energy_cache[0].zero())
+            .unwrap_or_else(|| energy_cache[EdgeIndex::from(0)].zero())
     }
 
     #[inline]
-    pub fn eager_evaluate<T: FloatLike>(&self, energy_cache: &[F<T>], settings: &Settings) -> F<T> {
+    pub fn eager_evaluate<T: FloatLike>(
+        &self,
+        energy_cache: &HedgeVec<F<T>>,
+        settings: &Settings,
+    ) -> F<T> {
         self.eager_evaluate_orientations(energy_cache, settings)
             .into_iter()
             .reduce(|acc, x| &acc + &x)
-            .unwrap_or_else(|| energy_cache[0].zero())
+            .unwrap_or_else(|| energy_cache[EdgeIndex::from(0)].zero())
     }
 
     #[inline]
@@ -216,7 +225,7 @@ impl CFFExpression {
     pub fn evaluate_orientations_from_esurface_cache<T: FloatLike>(
         &self,
         esurface_cache: &EsurfaceCache<F<T>>,
-        energy_cache: &[F<T>],
+        energy_cache: &HedgeVec<F<T>>,
     ) -> Vec<F<T>> {
         let hsurface_cache = compute_hsurface_cache(&self.hsurfaces, energy_cache);
         self.evaluate_orientations_from_caches(esurface_cache, &hsurface_cache)
@@ -238,18 +247,18 @@ impl CFFExpression {
     pub fn evalauate_from_esurface_cache<T: FloatLike>(
         &self,
         esurface_cache: &EsurfaceCache<F<T>>,
-        energy_cache: &[F<T>],
+        energy_cache: &HedgeVec<F<T>>,
     ) -> F<T> {
         self.evaluate_orientations_from_esurface_cache(esurface_cache, energy_cache)
             .into_iter()
             .reduce(|acc, x| &acc + &x)
-            .unwrap_or_else(|| energy_cache[0].zero())
+            .unwrap_or_else(|| energy_cache[EdgeIndex::from(0)].zero())
     }
 
     #[inline]
     pub fn compute_esurface_cache<T: FloatLike>(
         &self,
-        energy_cache: &[F<T>],
+        energy_cache: &HedgeVec<F<T>>,
     ) -> EsurfaceCache<F<T>> {
         compute_esurface_cache(&self.esurfaces, energy_cache)
     }
@@ -257,7 +266,7 @@ impl CFFExpression {
     #[inline]
     pub fn compute_hsurface_cache<T: FloatLike>(
         &self,
-        energy_cache: &[F<T>],
+        energy_cache: &HedgeVec<F<T>>,
     ) -> HsurfaceCache<F<T>> {
         compute_hsurface_cache(&self.hsurfaces, energy_cache)
     }
@@ -779,7 +788,7 @@ impl CFFLimit {
         numerator: &mut Numerator<Evaluators>,
         numerator_sample: &DefaultSample<T>,
         esurface_cache: &EsurfaceCache<F<T>>,
-        energy_cache: &[F<T>],
+        energy_cache: &HedgeVec<F<T>>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         let (numerator_sample, tag) = numerator_sample.numerator_sample(settings);
@@ -816,7 +825,7 @@ impl CFFLimit {
             RepeatingIteratorTensorOrScalar::Scalars(mut num) => {
                 let mut term = 0;
                 let mut _terms_evaluated = 0;
-                let mut sum = Complex::new_re(energy_cache[0].zero());
+                let mut sum = Complex::new_re(energy_cache[EdgeIndex::from(0)].zero());
 
                 while let Some(num) = num.next() {
                     let term_in_residue = self.orientations_in_limit.1.contains(&TermId(term));
@@ -906,22 +915,27 @@ struct CompiledCFFExpressionMetaData {
 impl CompiledCFFExpression {
     pub fn evaluate_orientations(
         &self,
-        energy_cache: &[F<f64>],
+        energy_cache: &HedgeVec<F<f64>>,
         settings: &Settings,
     ) -> Vec<F<f64>> {
+        let energy_cache_vec = energy_cache
+            .into_iter()
+            .map(|(_id, energy)| *energy)
+            .collect_vec();
+
         let expr = self.unwrap();
         let mut out = vec![F(0.0); expr.metadata.num_orientations];
         match &expr.joint {
-            Some(evaluator) => evaluator.borrow_mut().evaluate(energy_cache, &mut out),
+            Some(evaluator) => evaluator.borrow_mut().evaluate(&energy_cache_vec, &mut out),
             None => match &settings.general.force_orientations {
                 None => {
                     for (id, out_elem) in out.iter_mut().enumerate() {
-                        *out_elem = self.evaluate_one_orientation(id.into(), energy_cache);
+                        *out_elem = self.evaluate_one_orientation(id.into(), &energy_cache_vec);
                     }
                 }
                 Some(orientations) => {
                     for id in orientations.iter() {
-                        out[*id] = self.evaluate_one_orientation((*id).into(), energy_cache);
+                        out[*id] = self.evaluate_one_orientation((*id).into(), &energy_cache_vec);
                     }
                 }
             },
