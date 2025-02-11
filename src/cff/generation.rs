@@ -156,29 +156,30 @@ fn new_get_orientations(graph: &HedgeGraph<Edge, Vertex>) -> Vec<CFFGenerationGr
     let num_virtual_edges = graph.num_virtual_edges(graph.full_filter());
     let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
 
-    let global_orientations = virtual_possible_orientations
+    virtual_possible_orientations
         .map(|orientation_of_virtuals| {
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .iter_all_edges()
-                .map(|(_, _, data)| match data.data.edge_type {
-                    EdgeType::Virtual => orientation_of_virtuals
-                        .next()
-                        .expect("unable to reconstruct global orientation"),
-                    EdgeType::Incoming => true,
-                    EdgeType::Outgoing => true,
-                })
-                .collect::<TiVec<EdgeIndex, _>>();
+                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(_, __, edge)| {
+                    match edge.data.edge_type {
+                        EdgeType::Virtual => orientation_of_virtuals
+                            .next()
+                            .expect("unable to reconstruct global orientation"),
+                        EdgeType::Incoming => true,
+                        EdgeType::Outgoing => true,
+                    }
+                }))
+                .expect("unable to construct global orientation");
 
             assert!(
                 orientation_of_virtuals.next().is_none(),
                 "did not saturate virtual orientations when constructing global orientation"
             );
-        })
-        .collect_vec();
 
-    CFFGenerationGraph::new(graph, global_orientations)
+            CFFGenerationGraph::new_new(graph, global_orientation)
+        })
+        .collect_vec()
 }
 
 pub fn generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Report> {
@@ -243,7 +244,7 @@ fn generate_cff_from_orientations(
     optional_esurface_cache: Option<EsurfaceCollection>,
     optional_hsurface_cache: Option<HsurfaceCollection>,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: usize,
+    dep_mom: EdgeIndex,
     dep_mom_expr: &ExternalShift,
 ) -> Result<CFFExpression, Report> {
     let esurface_cache = if let Some(cache) = optional_esurface_cache {
@@ -346,7 +347,7 @@ fn generate_tree_for_orientation(
     term_id: usize,
     generator_cache: &mut GeneratorCache,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: usize,
+    dep_mom: EdgeIndex,
     dep_mom_expr: &ExternalShift,
 ) -> Tree<GenerationData> {
     let mut tree = Tree::from_root(GenerationData::Data {
@@ -371,7 +372,7 @@ fn advance_tree(
     term_id: usize,
     generator_cache: &mut GeneratorCache,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: usize,
+    dep_mom: EdgeIndex,
     dep_mom_expr: &ExternalShift,
 ) -> Option<()> {
     let bottom_layer = tree
@@ -568,11 +569,7 @@ mod tests_cff {
                     }
                 }
 
-                CFFGenerationGraph::from_vec(
-                    new_edges,
-                    incoming_vertices.clone(),
-                    orientation_vector,
-                )
+                CFFGenerationGraph::from_vec(new_edges, incoming_vertices.clone())
             })
             .filter(|graph| !graph.has_directed_cycle_initial())
             .collect_vec()

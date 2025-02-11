@@ -1,6 +1,6 @@
 use ahash::{HashMap, HashSet, HashSetExt};
 use itertools::Itertools;
-use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex, HedgeError, HedgeGraph};
+use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex, HedgeGraph};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
@@ -185,6 +185,7 @@ enum VertexType {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CFFGenerationGraph {
     vertices: Vec<CFFVertex>,
+    pub global_orientation: HedgeVec<bool>,
 }
 
 impl PartialEq for CFFGenerationGraph {
@@ -231,6 +232,7 @@ impl CFFGenerationGraph {
     pub fn from_vec(
         edges: Vec<(usize, usize)>,
         incoming_vertices: Vec<(usize, CFFEdgeType)>,
+        orientation: Option<HedgeVec<bool>>,
     ) -> Self {
         let edges = edges
             .into_iter()
@@ -454,6 +456,7 @@ impl CFFGenerationGraph {
 
         CFFGenerationGraph {
             vertices: new_vertices,
+            global_orientation: self.global_orientation.clone(),
         }
     }
 
@@ -666,17 +669,23 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub fn new_new(graph: &HedgeGraph<Edge, Vertex>, global_orientation: &HedgeVec<bool>) -> Self {
-        let mut vertices = (0..graph.n_nodes())
-            .map(|id| CFFVertex::new(id))
-            .collect_vec();
+    pub fn new_new(graph: &HedgeGraph<Edge, Vertex>, global_orientation: HedgeVec<bool>) -> Self {
+        let vertices =
+            graph
+                .iter_nodes()
+                .enumerate()
+                .map(|(cff_vertex_id, (hedge_node, vertex))| {
+                    let mut vertex_id = CFFVertex::new(cff_vertex_id);
 
-        for (_, edge_id, edge_data) in graph.iter_edges(&graph.full_filter()) {
-            let orientation_of_edge = global_orientation[edge_id];
+                    for (_, edge, edge_data) in graph.iter_edges(&hedge_node.hairs) {
+                        CFFEdge {}
+                    }
+                });
+
+        Self {
+            vertices,
+            global_orientation,
         }
-
-        todo!();
-        Self { vertices }
     }
 
     pub fn new(graph: &BareGraph, virtual_orientation: Vec<bool>) -> Self {
@@ -778,7 +787,12 @@ impl CFFGenerationGraph {
             }
         }
 
-        Self { vertices }
+        unimplemented!("deprecated")
+
+        // Self {
+        //     vertices,
+        //     global_orientation,
+        // }
     }
 
     pub fn generate_cut(&self, circled_vertices: VertexSet) -> (Self, Self) {
@@ -796,9 +810,15 @@ impl CFFGenerationGraph {
             left.push(vertices.remove(vertex_position));
         }
 
-        let mut left_graph = CFFGenerationGraph { vertices: left };
+        let mut left_graph = CFFGenerationGraph {
+            vertices: left,
+            global_orientation: self.global_orientation.clone(),
+        };
 
-        let mut right_graph = CFFGenerationGraph { vertices };
+        let mut right_graph = CFFGenerationGraph {
+            vertices,
+            global_orientation: self.global_orientation.clone(),
+        };
 
         let edges_of_left_graph = left_graph.get_edges();
 
@@ -874,7 +894,7 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
 
         assert_eq!(cff_triangle.vertices.len(), 3);
         println!("node count test passed");
@@ -912,7 +932,7 @@ mod test {
 
         let vertex_sets = [VertexSet::from_usize(0), VertexSet::from_usize(1)];
 
-        let cff_line = CFFGenerationGraph::from_vec(line, incoming_vertices);
+        let cff_line = CFFGenerationGraph::from_vec(line, incoming_vertices, None);
         assert_eq!(cff_line.vertices.len(), 2);
 
         assert!(cff_line.are_adjacent(&vertex_sets[0], &vertex_sets[1]));
@@ -929,7 +949,7 @@ mod test {
 
         let v = (0..=5).map(VertexSet::from_usize).collect::<Vec<_>>();
 
-        let cff_double_box = CFFGenerationGraph::from_vec(double_box, incoming_vertices);
+        let cff_double_box = CFFGenerationGraph::from_vec(double_box, incoming_vertices, None);
 
         assert_eq!(cff_double_box.vertices.len(), 6);
         println!("node count test passed");
@@ -989,7 +1009,7 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
         let other_vertex = cff_triangle.get_vertex_that_is_not_v(&vertex_sets[0]);
         assert_ne!(other_vertex.vertex_set, vertex_sets[0]);
     }
@@ -1004,7 +1024,7 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
 
         let neighbours = cff_triangle.get_directed_neighbours(&vertex_sets[0]);
         assert_eq!(neighbours.len(), 1);
@@ -1023,7 +1043,7 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
         assert!(cff_triangle.has_directed_cycle(&vertex_sets[0]));
 
         let triangle = vec![(0, 1), (1, 2), (0, 2)];
@@ -1035,7 +1055,7 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
         assert!(!cff_triangle.has_directed_cycle(&vertex_sets[0]));
     }
 
@@ -1050,7 +1070,7 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
         assert!(cff_triangle.has_connected_complement(&vertex_sets[0]));
         assert!(cff_triangle.has_connected_complement(&vertex_sets[1]));
         assert!(cff_triangle.has_connected_complement(&vertex_sets[2]));
@@ -1069,7 +1089,8 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_double_bubble = CFFGenerationGraph::from_vec(double_bubble, incoming_vertices);
+        let cff_double_bubble =
+            CFFGenerationGraph::from_vec(double_bubble, incoming_vertices, None);
 
         assert!(cff_double_bubble.has_connected_complement(&vertex_sets[0]));
         assert!(!cff_double_bubble.has_connected_complement(&vertex_sets[1]));
@@ -1081,7 +1102,8 @@ mod test {
 
         let vertex_sets = [VertexSet::from_usize(0), VertexSet::from_usize(1)];
 
-        let cff_single_bubble = CFFGenerationGraph::from_vec(single_bubble, incoming_vertices);
+        let cff_single_bubble =
+            CFFGenerationGraph::from_vec(single_bubble, incoming_vertices, None);
 
         assert!(cff_single_bubble.has_connected_complement(&vertex_sets[0]));
         assert!(cff_single_bubble.has_connected_complement(&vertex_sets[1]));
@@ -1099,7 +1121,7 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
 
         assert_eq!(
             cff_triangle.get_vertex_type(&vertex_sets[0]),
@@ -1125,7 +1147,7 @@ mod test {
             VertexSet::from_usize(2),
         ];
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
 
         let source_sink_candidates = cff_triangle.get_source_sink_candidate_list();
         assert_eq!(source_sink_candidates.len(), 2);
@@ -1144,7 +1166,7 @@ mod test {
         let incoming_vertices = (0..2).map(|i| (i, CFFEdgeType::External)).collect_vec();
         let vertex_set = [VertexSet::from_usize(0), VertexSet::from_usize(1)];
 
-        let cff_bubble = CFFGenerationGraph::from_vec(bubble, incoming_vertices);
+        let cff_bubble = CFFGenerationGraph::from_vec(bubble, incoming_vertices, None);
 
         let source_sink_candidates = cff_bubble.get_source_sink_candidate_list();
         let source_sink_candidates = source_sink_candidates
@@ -1172,7 +1194,7 @@ mod test {
 
         let joined_vertex = vertex_set[0].join(&vertex_set[1]);
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
 
         let contracted_graph = cff_triangle.contract_vertices(&vertex_set[0], &vertex_set[1]);
 
@@ -1197,8 +1219,7 @@ mod test {
             VertexSet::from_usize(3),
         ];
 
-        let dummy_orientation = vec![true; box_like.len() + incoming_vertices.len()];
-        let cff_box = CFFGenerationGraph::from_vec(box_like, incoming_vertices);
+        let cff_box = CFFGenerationGraph::from_vec(box_like, incoming_vertices, None);
 
         let joined_vertex = vertex_set[0].join(&vertex_set[1]);
         let contracted_box = cff_box.contract_vertices(&vertex_set[0], &vertex_set[1]);
@@ -1214,7 +1235,7 @@ mod test {
         let triangle = vec![(0, 1), (2, 1), (0, 2)];
         let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
 
         let edges = cff_triangle.get_edges();
         let comp_edges = (0..6).map(EdgeIndex::from).collect::<Vec<EdgeIndex>>();
@@ -1228,7 +1249,7 @@ mod test {
         let triangle = vec![(0, 1), (2, 1), (0, 2)];
         let incoming_vertices = (0..3).map(|i| (i, CFFEdgeType::External)).collect_vec();
 
-        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices);
+        let cff_triangle = CFFGenerationGraph::from_vec(triangle, incoming_vertices, None);
 
         for edge in (0..6).map(EdgeIndex::from) {
             assert!(cff_triangle.has_edge(edge))
@@ -1245,7 +1266,7 @@ mod test {
         let incoming_vertices = (0..4).map(|i| (i, CFFEdgeType::External)).collect_vec();
         let incoming_vertices_len = incoming_vertices.len();
 
-        let cff_box = CFFGenerationGraph::from_vec(box_edges, incoming_vertices);
+        let cff_box = CFFGenerationGraph::from_vec(box_edges, incoming_vertices, None);
 
         let vertex_sets = [
             VertexSet::from_usize(0),
