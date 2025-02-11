@@ -56,7 +56,7 @@ use rayon::vec;
 use serde::{self, Deserialize, Serialize};
 use spenso::complex::{Complex, SymbolicaComplex};
 use spenso::network::TensorNetwork;
-use spenso::structure::{representation::Lorentz, representation::RepName, slot::IsAbstractSlot};
+use spenso::structure::{representation::Minkowski, representation::RepName, slot::IsAbstractSlot};
 use statrs::function::evaluate;
 use std::collections::HashMap;
 use std::f32::consts::E;
@@ -74,7 +74,7 @@ use symbolica::id::{
     Replacement,
 };
 use symbolica::state::{State, Workspace};
-use symbolica::{self, fun, symb};
+use symbolica::{self, function, symb};
 use typed_index_collections::TiVec;
 
 #[allow(unused)]

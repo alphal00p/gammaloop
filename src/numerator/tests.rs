@@ -20,7 +20,7 @@ use std::{
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
-    fun,
+    function,
 };
 
 use crate::{
@@ -765,7 +765,7 @@ fn gamma_simplify_one() {
         let mink = Minkowski::rep(4);
         let bis = Bispinor::rep(4);
 
-        fun!(
+        function!(
             ETS.gamma,
             mink.new_slot(mu).to_atom(),
             bis.new_slot(i).to_atom(),
@@ -776,7 +776,7 @@ fn gamma_simplify_one() {
     fn metric(mu: usize, nu: usize) -> Atom {
         let mink = Minkowski::rep(4);
 
-        fun!(
+        function!(
             ETS.metric,
             mink.new_slot(mu).to_atom(),
             mink.new_slot(nu).to_atom()

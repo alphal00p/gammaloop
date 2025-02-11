@@ -22,7 +22,7 @@ use symbolica::atom::AtomView;
 use symbolica::atom::Symbol;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
-use symbolica::fun;
+use symbolica::function;
 use symbolica::symb;
 
 use ahash::AHashMap;
@@ -2643,7 +2643,7 @@ impl FeynGen {
                     .map(Symbol::new)
                 {
                     if ratio
-                        .pattern_match(&fun!(head, symb!("args__")).to_pattern(), None, None)
+                        .pattern_match(&function!(head, symb!("args__")).to_pattern(), None, None)
                         .next()
                         .is_some()
                     {
@@ -3190,10 +3190,10 @@ impl ProcessedNumeratorForComparison {
         let reps = Arc::new(Mutex::new(vec![]));
 
         if !fully_numerical_substitution {
-            let variable = fun!(
+            let variable = function!(
                 GS.f_,
                 Atom::new_var(GS.y_),
-                fun!(symb!("cind"), Atom::new_var(GS.x_))
+                function!(symb!("cind"), Atom::new_var(GS.x_))
             );
             let pat = variable.to_pattern();
 

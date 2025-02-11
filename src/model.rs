@@ -53,7 +53,7 @@ use crate::utils::GS;
 use spenso::complex::Complex;
 use spenso::shadowing::ETS;
 use symbolica::domains::float::NumericalFloatLike;
-use symbolica::fun;
+use symbolica::function;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 
 #[allow(unused)]
@@ -63,7 +63,7 @@ pub fn normalise_complex(atom: &Atom) -> Atom {
 
     let comp_id = Symbol::new("complex");
 
-    let complexfn = fun!(comp_id, re, im).to_pattern();
+    let complexfn = function!(comp_id, re, im).to_pattern();
 
     let i = Atom::new_var(Atom::I);
     let complexpanded = &re + i * &im;

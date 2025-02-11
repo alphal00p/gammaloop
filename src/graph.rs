@@ -81,7 +81,7 @@ use symbolica::{
     atom::{Atom, Symbol},
     coefficient::CoefficientView,
     domains::{float::NumericalFloatLike, rational::Rational},
-    fun,
+    function,
     id::{Pattern, Replacement},
     state::State,
     symb,
@@ -340,9 +340,10 @@ impl HasVertexInfo for InteractionVertexInfo {
                     self.vertex_rule.particles.iter().map(|s| s.color).collect();
 
                 for (i, s) in spins.iter().enumerate() {
-                    let id1 =
-                        fun!(UFO.identity, Atom::new_num((i + 1) as i32), symb!("x_")).to_pattern();
-                    let id2 = fun!(ETS.id, symb!("x_"), Atom::new_num((i + 1) as i32)).to_pattern();
+                    let id1 = function!(UFO.identity, Atom::new_num((i + 1) as i32), symb!("x_"))
+                        .to_pattern();
+                    let id2 =
+                        function!(ETS.id, symb!("x_"), Atom::new_num((i + 1) as i32)).to_pattern();
 
                     let ind = match s {
                         1 => Euclidean::slot(1, i + 1).to_symbolic_wrapped(),
@@ -358,14 +359,14 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                     atom = atom.replace_all(
                         &id1,
-                        fun!(ETS.id, ind, symb!("x_")).to_pattern(),
+                        function!(ETS.id, ind, symb!("x_")).to_pattern(),
                         None,
                         None,
                     );
 
                     atom = atom.replace_all(
                         &id2,
-                        fun!(ETS.id, symb!("x_"), ind).to_pattern(),
+                        function!(ETS.id, symb!("x_"), ind).to_pattern(),
                         None,
                         None,
                     );

@@ -196,7 +196,6 @@
           ghostscript
           graphviz
           mupdf
-          graphviz
           poppler_utils
           rust-analyzer
           maturin
@@ -204,9 +203,4 @@
       };
     });
 
-  # Avoid re-direction warnings
-  inputs.hyperdual = {
-    url = "git+https://gitlab.com/benruijl/hyperdual.git";
-    flake = false;
-  };
 }

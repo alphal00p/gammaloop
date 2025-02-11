@@ -87,25 +87,30 @@ fn cut_content() {
     let v5 = graph.add_node(bba.clone());
     let v6 = graph.add_node(epema.clone());
     let v7 = graph.add_node(epema.clone());
-    let v8 = graph.add_node(NodeColorWithVertexRule {
+    let e1 = NodeColorWithVertexRule {
         external_tag: 1,
         vertex_rule: dummy_external_vertex_rule.clone(),
-    });
-    let v9 = graph.add_node(NodeColorWithVertexRule {
-        external_tag: 2,
-        vertex_rule: dummy_external_vertex_rule.clone(),
-    });
-    let v10 = graph.add_node(NodeColorWithVertexRule {
-        external_tag: 3,
-        vertex_rule: dummy_external_vertex_rule.clone(),
-    });
-    let v11 = graph.add_node(NodeColorWithVertexRule {
-        external_tag: 4,
-        vertex_rule: dummy_external_vertex_rule.clone(),
-    });
+    };
+    let mut e2 = e1.clone();
+    e2.external_tag = 2;
+    let mut e3 = e1.clone();
+    e3.external_tag = 3;
+    let mut e4 = e1.clone();
+    e4.external_tag = 4;
+
+    let v8 = graph.add_node(e1.clone());
+    let v9 = graph.add_node(e2.clone());
+    let v10 = graph.add_node(e3.clone());
+    let v11 = graph.add_node(e4.clone());
 
     let h = EdgeColor::from_particle(model.get_particle(&"H".to_string().into()));
+
     let b = EdgeColor::from_particle(model.get_particle(&"b".to_string().into()));
+    let bbar = EdgeColor::from_particle(
+        model
+            .get_particle(&"b".to_string().into())
+            .get_anti_particle(&model),
+    );
     let g = EdgeColor::from_particle(model.get_particle(&"g".to_string().into()));
     let a = EdgeColor::from_particle(model.get_particle(&"a".to_string().into()));
     let eplus = EdgeColor::from_particle(model.get_particle(&"e+".to_string().into()));
@@ -127,4 +132,51 @@ fn cut_content() {
 
     let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
     assert!(!filters.contains_cut(&model, &graph, n_unresolved, &unresolved_type));
+
+    let mut double_double_triangle = Graph::new();
+    let v0 = double_double_triangle.add_node(e1.clone());
+    let v1 = double_double_triangle.add_node(e2.clone());
+    let v2 = double_double_triangle.add_node(e3.clone());
+    let v3 = double_double_triangle.add_node(e4.clone());
+
+    let v4 = double_double_triangle.add_node(bba.clone());
+    let v5 = double_double_triangle.add_node(bba.clone());
+    let v6 = double_double_triangle.add_node(bbH.clone());
+    let v7 = double_double_triangle.add_node(bbH.clone());
+    let v8 = double_double_triangle.add_node(bbg.clone());
+    let v9 = double_double_triangle.add_node(bbg.clone());
+    let v10 = double_double_triangle.add_node(bbg.clone());
+    let v11 = double_double_triangle.add_node(bbg.clone());
+    let v12 = double_double_triangle.add_node(epema.clone());
+    let v13 = double_double_triangle.add_node(epema.clone());
+
+    double_double_triangle
+        .add_edge(v0, v13, true, eplus)
+        .unwrap();
+    double_double_triangle
+        .add_edge(v1, v13, true, eminus)
+        .unwrap();
+    double_double_triangle.add_edge(v4, v13, false, a).unwrap();
+    double_double_triangle
+        .add_edge(v4, v11, true, bbar)
+        .unwrap();
+    double_double_triangle.add_edge(v4, v10, true, b).unwrap();
+    double_double_triangle.add_edge(v10, v11, false, g).unwrap();
+    double_double_triangle.add_edge(v6, v11, true, b).unwrap();
+    double_double_triangle
+        .add_edge(v6, v10, true, bbar)
+        .unwrap();
+    double_double_triangle.add_edge(v6, v7, true, h).unwrap();
+    double_double_triangle.add_edge(v7, v8, true, bbar).unwrap();
+    double_double_triangle.add_edge(v7, v9, true, b).unwrap();
+    double_double_triangle.add_edge(v5, v8, true, b).unwrap();
+    double_double_triangle.add_edge(v5, v9, true, bbar).unwrap();
+    double_double_triangle.add_edge(v8, v9, true, g).unwrap();
+    double_double_triangle.add_edge(v5, v12, true, a).unwrap();
+    double_double_triangle
+        .add_edge(v12, v2, true, eminus)
+        .unwrap();
+    double_double_triangle
+        .add_edge(v12, v3, true, eplus)
+        .unwrap();
 }

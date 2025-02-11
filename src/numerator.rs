@@ -75,7 +75,7 @@ use symbolica::id::{Context, Match, MatchSettings};
 
 use symbolica::{
     atom::{Atom, FunctionBuilder},
-    fun, symb,
+    function, symb,
 };
 use symbolica::{
     domains::float::NumericalFloatLike,
@@ -888,7 +888,7 @@ impl Numerator<Global> {
 
     fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
         ColorSimplified::isolate_color(&mut expression);
-        let color_pat = fun!(GS.color_wrap, GS.x_).to_pattern();
+        let color_pat = function!(GS.color_wrap, GS.x_).to_pattern();
 
         let color_simplified = {
             let pat = expression
@@ -1102,9 +1102,12 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
         self.state.colorless.iter_flat().for_each(|(_, v)| {
             for p in &pats {
                 for a in
-                    v.0.pattern_match(&fun!(*p, GS.x_, GS.y_).to_pattern(), None, None)
+                    v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
                 {
-                    indices_map.insert(fun!(*p, a[&GS.x_], a[&GS.y_]), fun!(*p, a[&GS.x_]));
+                    indices_map.insert(
+                        function!(*p, a[&GS.x_], a[&GS.y_]),
+                        function!(*p, a[&GS.x_]),
+                    );
                 }
             }
         });
@@ -1242,73 +1245,73 @@ impl ColorSimplified {
         let nc = Atom::new_var(symb!("Nc"));
         let reps = vec![
             (
-                fun!(f_, a___, cof.pattern(&b_), c___)
-                    * fun!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
-                fun!(f_, a___, cof.pattern(&c_), c___),
+                function!(f_, a___, cof.pattern(&b_), c___)
+                    * function!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
+                function!(f_, a___, cof.pattern(&c_), c___),
             ),
             // (
-            //     fun!(f_, a___, cof.pattern(&c_), c___)
-            //         * fun!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
-            //     fun!(f_, a___, cof.pattern(&b_), c___),
+            //     function!(f_, a___, cof.pattern(&c_), c___)
+            //         * function!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
+            //     function!(f_, a___, cof.pattern(&b_), c___),
             // ),
             (
-                fun!(f_, a___, coaf.pattern(&b_), c___)
-                    * fun!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
-                fun!(f_, a___, coaf.pattern(&c_), c___),
+                function!(f_, a___, coaf.pattern(&b_), c___)
+                    * function!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
+                function!(f_, a___, coaf.pattern(&c_), c___),
             ),
             // (
-            //     fun!(f_, a___, coaf.pattern(&c_), c___)
-            //         * fun!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
-            //     fun!(f_, a___, coaf.pattern(&b_), c___),
+            //     function!(f_, a___, coaf.pattern(&c_), c___)
+            //         * function!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
+            //     function!(f_, a___, coaf.pattern(&b_), c___),
             // ),
             (
-                fun!(f_, a___, coad.pattern(&b_), c___)
-                    * fun!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
-                fun!(f_, a___, coad.pattern(&a_), c___),
+                function!(f_, a___, coad.pattern(&b_), c___)
+                    * function!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
+                function!(f_, a___, coad.pattern(&a_), c___),
             ),
             (
-                fun!(f_, a___, coad.pattern(&a_), c___)
-                    * fun!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
-                fun!(f_, a___, coad.pattern(&b_), c___),
+                function!(f_, a___, coad.pattern(&a_), c___)
+                    * function!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
+                function!(f_, a___, coad.pattern(&b_), c___),
             ),
             (
-                fun!(ETS.id, coaf.pattern(&a_), cof.pattern(&a_)),
+                function!(ETS.id, coaf.pattern(&a_), cof.pattern(&a_)),
                 nc.clone(),
             ),
             (
-                fun!(ETS.id, cof.pattern(&a_), coaf.pattern(&a_)),
+                function!(ETS.id, cof.pattern(&a_), coaf.pattern(&a_)),
                 nc.clone(),
             ),
             (
-                fun!(ETS.id, coad.pattern(&a_), coad.pattern(&a_)),
+                function!(ETS.id, coad.pattern(&a_), coad.pattern(&a_)),
                 (&nc * &nc) - 1,
             ),
             (
-                fun!(UFO.t, a_, cof.pattern(&b_), coaf.pattern(&b_)),
+                function!(UFO.t, a_, cof.pattern(&b_), coaf.pattern(&b_)),
                 Atom::new_num(0),
             ),
             (
-                fun!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_))
-                    * fun!(UFO.t, b_, cof.pattern(&e_), coaf.pattern(&c_)),
-                &tr * fun!(ETS.id, a_, b_),
+                function!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_))
+                    * function!(UFO.t, b_, cof.pattern(&e_), coaf.pattern(&c_)),
+                &tr * function!(ETS.id, a_, b_),
             ),
             (
-                fun!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_)).pow(Atom::new_num(2)),
-                &tr * fun!(ETS.id, a_, a_),
+                function!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_)).pow(Atom::new_num(2)),
+                &tr * function!(ETS.id, a_, a_),
             ),
             (
-                fun!(UFO.t, &e_, a_, b_) * fun!(UFO.t, &e_, c_, d_),
-                &tr * (fun!(ETS.id, a_, d_) * fun!(ETS.id, c_, b_)
-                    - (fun!(ETS.id, a_, b_) * fun!(ETS.id, c_, d_) / &nc)),
+                function!(UFO.t, &e_, a_, b_) * function!(UFO.t, &e_, c_, d_),
+                &tr * (function!(ETS.id, a_, d_) * function!(ETS.id, c_, b_)
+                    - (function!(ETS.id, a_, b_) * function!(ETS.id, c_, d_) / &nc)),
             ),
             (
-                fun!(UFO.t, i_, a_, coaf.pattern(&b_))
-                    * fun!(UFO.t, e_, cof.pattern(&b_), coaf.pattern(&c_))
-                    * fun!(UFO.t, i_, cof.pattern(&c_), d_),
-                -(&tr / &nc) * fun!(UFO.t, e_, a_, d_),
+                function!(UFO.t, i_, a_, coaf.pattern(&b_))
+                    * function!(UFO.t, e_, cof.pattern(&b_), coaf.pattern(&c_))
+                    * function!(UFO.t, i_, cof.pattern(&c_), d_),
+                -(&tr / &nc) * function!(UFO.t, e_, a_, d_),
             ),
             (
-                fun!(
+                function!(
                     UFO.f,
                     coad.pattern(&a_),
                     coad.pattern(&b_),
@@ -1320,43 +1323,43 @@ impl ColorSimplified {
         ];
 
         let frep = [Replacement::new(
-            fun!(
+            function!(
                 UFO.f,
                 coad.pattern(&a_),
                 coad.pattern(&b_),
                 coad.pattern(&c_)
             )
             .to_pattern(),
-            ((fun!(
+            ((function!(
                 UFO.t,
                 coad.pattern(&a_),
-                cof.pattern(&fun!(i, a_, b_, c_)),
-                coaf.pattern(&fun!(j, a_, b_, c_))
-            ) * fun!(
+                cof.pattern(&function!(i, a_, b_, c_)),
+                coaf.pattern(&function!(j, a_, b_, c_))
+            ) * function!(
                 UFO.t,
                 coad.pattern(&b_),
-                cof.pattern(&fun!(j, a_, b_, c_)),
-                coaf.pattern(&fun!(k, a_, b_, c_))
-            ) * fun!(
+                cof.pattern(&function!(j, a_, b_, c_)),
+                coaf.pattern(&function!(k, a_, b_, c_))
+            ) * function!(
                 UFO.t,
                 coad.pattern(&c_),
-                cof.pattern(&fun!(k, a_, b_, c_)),
-                coaf.pattern(&fun!(i, a_, b_, c_))
-            ) - fun!(
+                cof.pattern(&function!(k, a_, b_, c_)),
+                coaf.pattern(&function!(i, a_, b_, c_))
+            ) - function!(
                 UFO.t,
                 coad.pattern(&a_),
-                cof.pattern(&fun!(j, a_, b_, c_)),
-                coaf.pattern(&fun!(k, a_, b_, c_))
-            ) * fun!(
+                cof.pattern(&function!(j, a_, b_, c_)),
+                coaf.pattern(&function!(k, a_, b_, c_))
+            ) * function!(
                 UFO.t,
                 coad.pattern(&b_),
-                cof.pattern(&fun!(i, a_, b_, c_)),
-                coaf.pattern(&fun!(j, a_, b_, c_))
-            ) * fun!(
+                cof.pattern(&function!(i, a_, b_, c_)),
+                coaf.pattern(&function!(j, a_, b_, c_))
+            ) * function!(
                 UFO.t,
                 coad.pattern(&c_),
-                cof.pattern(&fun!(k, a_, b_, c_)),
-                coaf.pattern(&fun!(i, a_, b_, c_))
+                cof.pattern(&function!(k, a_, b_, c_)),
+                coaf.pattern(&function!(i, a_, b_, c_))
             )) / &tr)
                 .to_pattern(),
         )];
@@ -1652,7 +1655,7 @@ impl PolySplit {
                 .unwrap()
                 .push(monomial.coefficient.clone());
 
-            mul_h = mul_h * fun!(coef, Atom::new_num((i + shift) as i64));
+            mul_h = mul_h * function!(coef, Atom::new_num((i + shift) as i64));
             add = add + mul_h.as_view();
         }
 
@@ -1766,7 +1769,7 @@ impl Numerator<PolyContracted> {
 
     pub fn to_contracted(self) -> Numerator<Contracted> {
         let coefs: Vec<_> = (0..self.state.coef_map.len())
-            .map(|i| fun!(GS.coeff, Atom::new_num(i as i64)).to_pattern())
+            .map(|i| function!(GS.coeff, Atom::new_num(i as i64)).to_pattern())
             .collect();
 
         let coefs_reps: Vec<_> = self.state.coef_map.iter().map(|a| a.to_pattern()).collect();
@@ -2094,13 +2097,13 @@ impl GammaSimplified {
         expr.0 = expr.0.expand();
         // let pats: Vec<_> = [
         //     (
-        //         fun!(ETS.id, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
-        //         fun!(GS.f_, GS.d___, GS.a_, GS.c___),
+        //         function!(ETS.id, GS.a_, GS.b_) * function!(GS.f_, GS.d___, GS.b_, GS.c___),
+        //         function!(GS.f_, GS.d___, GS.a_, GS.c___),
         //     ),
         //     (
-        //         fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
-        //             * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-        //         fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+        //         function!(ETS.metric, mink(GS.a_), mink(GS.b_))
+        //             * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+        //         function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
         //     ),
         // ]
         // .iter()
@@ -2113,38 +2116,42 @@ impl GammaSimplified {
         let gamma_trace = symb!("gamma_trace");
         let reps: Vec<_> = [
             (
-                fun!(ETS.id, GS.a_, GS.b_) * fun!(GS.f_, GS.d___, GS.b_, GS.c___),
-                fun!(GS.f_, GS.d___, GS.a_, GS.c___),
+                function!(ETS.id, GS.a_, GS.b_) * function!(GS.f_, GS.d___, GS.b_, GS.c___),
+                function!(GS.f_, GS.d___, GS.a_, GS.c___),
             ),
             (
-                fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
-                    * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-                fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+                function!(ETS.metric, mink(GS.a_), mink(GS.b_))
+                    * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+                function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
             ),
             (
-                fun!(UFO.projp, GS.a_, GS.b_),
-                (fun!(ETS.id, GS.a_, GS.b_) - fun!(ETS.gamma5, GS.a_, GS.b_)) / 2,
+                function!(UFO.projp, GS.a_, GS.b_),
+                (function!(ETS.id, GS.a_, GS.b_) - function!(ETS.gamma5, GS.a_, GS.b_)) / 2,
             ),
             (
-                fun!(UFO.projm, GS.a_, GS.b_),
-                (fun!(ETS.id, GS.a_, GS.b_) + fun!(ETS.gamma5, GS.a_, GS.b_)) / 2,
+                function!(UFO.projm, GS.a_, GS.b_),
+                (function!(ETS.id, GS.a_, GS.b_) + function!(ETS.gamma5, GS.a_, GS.b_)) / 2,
             ),
             (
-                fun!(ETS.gamma, GS.a_, GS.b_, GS.c_) * fun!(ETS.gamma, GS.d_, GS.c_, GS.e_),
-                fun!(gamma_chain, GS.a_, GS.d_, GS.b_, GS.e_),
+                function!(ETS.gamma, GS.a_, GS.b_, GS.c_)
+                    * function!(ETS.gamma, GS.d_, GS.c_, GS.e_),
+                function!(gamma_chain, GS.a_, GS.d_, GS.b_, GS.e_),
             ),
-            (fun!(ETS.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
+            (function!(ETS.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
             (
-                fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(gamma_chain, GS.b__, GS.b_, GS.c_),
-                fun!(gamma_chain, GS.a__, GS.b__, GS.a_, GS.c_),
-            ),
-            (
-                fun!(gamma_chain, GS.a__, GS.a_, GS.b_) * fun!(ETS.gamma, GS.y_, GS.b_, GS.c_),
-                fun!(gamma_chain, GS.a__, GS.y_, GS.a_, GS.c_),
+                function!(gamma_chain, GS.a__, GS.a_, GS.b_)
+                    * function!(gamma_chain, GS.b__, GS.b_, GS.c_),
+                function!(gamma_chain, GS.a__, GS.b__, GS.a_, GS.c_),
             ),
             (
-                fun!(ETS.gamma, GS.a_, GS.a_, GS.b_) * fun!(gamma_chain, GS.y__, GS.b_, GS.c_),
-                fun!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_),
+                function!(gamma_chain, GS.a__, GS.a_, GS.b_)
+                    * function!(ETS.gamma, GS.y_, GS.b_, GS.c_),
+                function!(gamma_chain, GS.a__, GS.y_, GS.a_, GS.c_),
+            ),
+            (
+                function!(ETS.gamma, GS.a_, GS.a_, GS.b_)
+                    * function!(gamma_chain, GS.y__, GS.b_, GS.c_),
+                function!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_),
             ),
         ]
         .iter()
@@ -2156,9 +2163,9 @@ impl GammaSimplified {
         expr.0 = expr.0.expand();
         expr.replace_all_multiple_repeat_mut(&reps);
 
-        let _pat = fun!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
-        // let patodd = (-2 * fun!(gamma_chain, GS.a___, GS.b_)).to_pattern();
-        // let pateven = (2 * (fun!(gamma_chain, GS.b_, GS.a___))).to_pattern();
+        let _pat = function!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
+        // let patodd = (-2 * function!(gamma_chain, GS.a___, GS.b_)).to_pattern();
+        // let pateven = (2 * (function!(gamma_chain, GS.b_, GS.a___))).to_pattern();
 
         // let rhs = PatternOrMap::Map(Box::new(move |m| m.));
         //
@@ -2176,7 +2183,7 @@ impl GammaSimplified {
 
                     if args[len - 3] == args[0] {
                         if len == 4 {
-                            *out = fun!(ETS.id, args[len - 2], args[len - 1]) * 4;
+                            *out = function!(ETS.id, args[len - 2], args[len - 1]) * 4;
                             return true;
                         } else if len % 2 == 0 {
                             let mut gcn = FunctionBuilder::new(gamma_chain);
@@ -2216,16 +2223,16 @@ impl GammaSimplified {
         }
 
         expr.replace_all_repeat_mut(
-            &(fun!(gamma_chain, GS.a__, GS.x_, GS.x_).to_pattern()),
-            fun!(gamma_trace, GS.a__).to_pattern(),
+            &(function!(gamma_chain, GS.a__, GS.x_, GS.x_).to_pattern()),
+            function!(gamma_trace, GS.a__).to_pattern(),
             None,
             None,
         );
 
         // //Chisholm identity:
         // expr.replace_all_repeat_mut(
-        //     &(fun!(ETS.gamma, GS.a_, GS.x_, GS.y_) * fun!(gamma_trace, GS.a_, GS.a__)).to_pattern(),
-        //     (fun!(gamma_chain, GS.a__)).to_pattern(),
+        //     &(function!(ETS.gamma, GS.a_, GS.x_, GS.y_) * function!(gamma_trace, GS.a_, GS.a__)).to_pattern(),
+        //     (function!(gamma_chain, GS.a__)).to_pattern(),
         //     None,
         //     None,
         // );
@@ -2258,7 +2265,7 @@ impl GammaSimplified {
                             Atom::new_num(4)
                             // Atom::new_var(GS.dim)
                         } else {
-                            fun!(ETS.metric, args[0], args[i])
+                            function!(ETS.metric, args[0], args[i])
                         };
                         if args.len() == 2 {
                             sum = sum + metric * sign * 4;
@@ -2286,16 +2293,16 @@ impl GammaSimplified {
 
         let reps: Vec<_> = [
             (
-                fun!(ETS.metric, mink(GS.a_), mink(GS.b_))
-                    * fun!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-                fun!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+                function!(ETS.metric, mink(GS.a_), mink(GS.b_))
+                    * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+                function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
             ),
             (
-                fun!(ETS.metric, mink(GS.a_), mink(GS.b_)).pow(Atom::new_num(2)),
+                function!(ETS.metric, mink(GS.a_), mink(GS.b_)).pow(Atom::new_num(2)),
                 Atom::new_num(4),
             ),
             (
-                fun!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
+                function!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
                 Atom::new_num(16),
             ),
         ]
@@ -2639,10 +2646,10 @@ impl Numerator<Network> {
 
     //     let mut reps = vec![];
 
-    //     let pat = fun!(
+    //     let pat = function!(
     //         GS.f_,
     //         Atom::new_var(GS.y___),
-    //         fun!(symb!("cind"), Atom::new_var(GS.x_))
+    //         function!(symb!("cind"), Atom::new_var(GS.x_))
     //     )
     //     .to_pattern();
 
@@ -2650,10 +2657,10 @@ impl Numerator<Network> {
     //         for (_, a) in d.tensor.iter_flat() {
     //             for m in a.pattern_match(&pat, None, None) {
     //                 if let Atom::Var(f) = m[&GS.f_].to_atom() {
-    //                     let mat = fun!(
+    //                     let mat = function!(
     //                         f.get_symbol(),
     //                         m[&GS.y___].to_atom(),
-    //                         fun!(symb!("cind"), m[&GS.x_].to_atom())
+    //                         function!(symb!("cind"), m[&GS.x_].to_atom())
     //                     );
     //                     // println!("{mat}");
 
@@ -2686,10 +2693,10 @@ impl Numerator<Network> {
         let mut reps = vec![];
 
         if !fully_numerical_substitution {
-            let variable = fun!(
+            let variable = function!(
                 GS.f_,
                 Atom::new_var(GS.y_),
-                fun!(symb!("cind"), Atom::new_var(GS.x_))
+                function!(symb!("cind"), Atom::new_var(GS.x_))
             );
             let pat = variable.to_pattern();
 
@@ -2709,7 +2716,7 @@ impl Numerator<Network> {
                             continue;
                         }
                         let mut found_it = false;
-                        let pat = fun!(s, symb!("x__")).to_pattern();
+                        let pat = function!(s, symb!("x__")).to_pattern();
                         for m in a.pattern_match(&pat, None, None) {
                             reps.push(pat.replace_wildcards(&m));
                             found_it = true;
