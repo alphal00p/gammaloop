@@ -1,4 +1,3 @@
-use crate::graph::EdgeType;
 use crate::{
     cff::{
         esurface::add_external_shifts,
