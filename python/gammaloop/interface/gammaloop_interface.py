@@ -804,7 +804,7 @@ class GammaLoop(object):
     generate_parser.add_argument('--veto_tadpole_attached_to_massless', dest='veto_tadpoles_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams attached to massive lines.')
     generate_parser.add_argument('--veto_scaleless_tadpole', dest='veto_only_scaleless_tadpoles', default=None, action=BooleanOptionalAction,
-                                 help='Filter scalless tadpole diagrams.')
+                                 help='Filter scaleless! tadpole diagrams.')
     # Snail filter
     generate_parser.add_argument('--filter_snails', default=None, action=BooleanOptionalAction,
                                  help='Filter snail diagrams.')
@@ -813,7 +813,7 @@ class GammaLoop(object):
     generate_parser.add_argument('--veto_snail_attached_to_massless', dest='veto_snails_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter snail diagrams attached to massive lines.')
     generate_parser.add_argument('--veto_scaleless_snail', dest='veto_only_scaleless_snails', default=None, action=BooleanOptionalAction,
-                                 help='Filter scalless snail diagrams.')
+                                 help='Filter scaleless! snail diagrams.')
     # Selfenergy filter
     generate_parser.add_argument('--filter_selfenergies', default=None, action=BooleanOptionalAction,
                                  help='Filter out (external) self energy contributions.')
@@ -822,7 +822,7 @@ class GammaLoop(object):
     generate_parser.add_argument('--veto_selfenergy_of_massless_lines', dest='veto_self_energy_of_massless_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter snail diagrams attached to massive lines.')
     generate_parser.add_argument('--veto_scaleless_selfenergy', dest='veto_only_scaleless_self_energy', default=None, action=BooleanOptionalAction,
-                                 help='Filter scalless tadpole diagrams.')
+                                 help='Filter scaleless! tadpole diagrams.')
     # Symmetrization options
     generate_parser.add_argument('--symmetrize_initial_states', default=None, action=BooleanOptionalAction,
                                  help='Symmetrize initial states in diagram generation. (default: Automatic)')

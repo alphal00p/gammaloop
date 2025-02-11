@@ -389,10 +389,13 @@ impl FeynGen {
             .map(|n| n.data.external_tag)
             .max()
             .unwrap_or(0) as usize;
-        if max_external == 0 {
-            // Do not implement any veto for vacuum graphs
-            return false;
-        }
+
+        // Special topology filter should be working for vaccuum topologies too
+        // if max_external == 0 {
+        //     // Do not implement any veto for vacuum graphs
+        //     return false;
+        // }
+
         let max_external_node_position = graph
             .nodes()
             .iter()
@@ -608,23 +611,30 @@ impl FeynGen {
         for (back_edge_start_node_index, _back_edge_position_in_list, _chain_id) in
             vacuum_attachments.iter().chain(self_loops.iter())
         {
-            let mut first_tree_attachment_node_index = *back_edge_start_node_index;
-            while external_momenta_routing[first_tree_attachment_node_index].is_empty() {
-                first_tree_attachment_node_index =
-                    spanning_tree.nodes[first_tree_attachment_node_index].parent;
-            }
-            let attachment_edge = &graph_edges[FeynGen::find_edge_position(
-                graph,
-                (
-                    first_tree_attachment_node_index,
-                    spanning_tree.nodes[first_tree_attachment_node_index].parent,
-                ),
-                false,
-            )
-            .unwrap_or_else(|| {
-                panic!("Could not find edge between bridge node parent and grandparent")
-            })];
-            let attachment_particle = model.get_particle_from_pdg(attachment_edge.data.pdg);
+            let attachment_particle_is_massive = if max_external == 0 {
+                let mut first_tree_attachment_node_index = *back_edge_start_node_index;
+                while external_momenta_routing[first_tree_attachment_node_index].is_empty() {
+                    first_tree_attachment_node_index =
+                        spanning_tree.nodes[first_tree_attachment_node_index].parent;
+                }
+                let attachment_edge = &graph_edges[FeynGen::find_edge_position(
+                    graph,
+                    (
+                        first_tree_attachment_node_index,
+                        spanning_tree.nodes[first_tree_attachment_node_index].parent,
+                    ),
+                    false,
+                )
+                .unwrap_or_else(|| {
+                    panic!("Could not find edge between bridge node parent and grandparent")
+                })];
+
+                model
+                    .get_particle_from_pdg(attachment_edge.data.pdg)
+                    .is_massive()
+            } else {
+                true
+            };
 
             if !tree_bridge_node_indices.contains(back_edge_start_node_index) {
                 // Tadpole
@@ -641,7 +651,7 @@ impl FeynGen {
                         );
                     } else {
                         #[allow(clippy::unnecessary_unwrap)]
-                        if attachment_particle.is_massive() {
+                        if attachment_particle_is_massive {
                             if veto_tadpole_options.veto_tadpoles_attached_to_massive_lines {
                                 return true;
                             }
@@ -670,7 +680,7 @@ impl FeynGen {
                         );
                     } else {
                         #[allow(clippy::unnecessary_unwrap)]
-                        if attachment_particle.is_massive() {
+                        if attachment_particle_is_massive {
                             if veto_snails_options.veto_snails_attached_to_massive_lines {
                                 return true;
                             }
@@ -2063,7 +2073,7 @@ impl FeynGen {
         let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
 
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
-        const MAX_FAST_CUTKOSKY_PARTICLES: usize = 1;
+        const MAX_FAST_CUTKOSKY_PARTICLES: usize = 6;
         let mut applied_fast_cutksosky_cut_filter = false;
         if self.options.generation_type == GenerationType::CrossSection
             && !self.options.final_pdgs.is_empty()

@@ -499,6 +499,12 @@ class Process(object):
             else:
                 if len(final_particles) == 0:
                     enable_filters = False
+
+        if not enable_filters:
+            # For vaccuum-like graphs, the user will typically expect the number of bridges to be forced to zero
+            if process_args.max_n_bridges is None:
+                process_args.max_n_bridges = 0
+
         if process_args.filter_tadpoles is None:
             process_args.filter_tadpoles = enable_filters
         if process_args.filter_snails is None:
