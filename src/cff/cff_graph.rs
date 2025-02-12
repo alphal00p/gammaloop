@@ -5,14 +5,12 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Flow, HedgePair, Orientation},
     HedgeGraph,
 };
-use petgraph::Undirected;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
 use crate::{
     cff::hsurface::Hsurface,
-    graph::{BareGraph, Edge, EdgeType, Vertex},
-    new_graph,
+    graph::{BareGraph, EdgeType},
 };
 
 use super::{
@@ -190,7 +188,7 @@ enum VertexType {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CFFGenerationGraph {
     vertices: Vec<CFFVertex>,
-    pub global_orientation: HedgeVec<bool>,
+    pub global_orientation: HedgeVec<Orientation>,
 }
 
 impl PartialEq for CFFGenerationGraph {
@@ -237,7 +235,7 @@ impl CFFGenerationGraph {
     pub fn from_vec(
         edges: Vec<(usize, usize)>,
         incoming_vertices: Vec<(usize, CFFEdgeType)>,
-        orientation: Option<HedgeVec<bool>>,
+        orientation: Option<HedgeVec<Orientation>>,
     ) -> Self {
         use crate::utils;
 
@@ -297,7 +295,7 @@ impl CFFGenerationGraph {
         let global_orientation = match orientation {
             Some(orientation) => orientation,
             None => utils::dummy_hedge_graph(total_num_edges)
-                .new_hedgevec_from_iter(vec![true; total_num_edges])
+                .new_hedgevec_from_iter(vec![Orientation::Default; total_num_edges])
                 .unwrap(),
         };
 

@@ -3816,7 +3816,7 @@ pub struct LoopMomentumBasis {
 
 pub struct NewLoopMomentumBasis {
     pub basis: TiVec<LoopIndex, EdgeIndex>,
-    pub edge_signatures: HedgeVec<signature::LoopExtSignature>,
+    pub edge_signatures: HedgeVec<crate::signature::LoopExtSignature>,
 }
 
 #[derive(

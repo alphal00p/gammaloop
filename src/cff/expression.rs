@@ -13,7 +13,10 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use gat_lending_iterator::LendingIterator;
 use itertools::Itertools;
-use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex};
+use linnet::half_edge::{
+    hedgevec::HedgeVec,
+    involution::{EdgeIndex, Orientation},
+};
 use log::info;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -67,7 +70,7 @@ impl CFFFloat<VarFloat<113>> for VarFloat<113> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrientationExpression {
-    pub orientation: HedgeVec<bool>,
+    pub orientation: HedgeVec<Orientation>,
     pub dag: CFFGenerationGraph,
     pub expression: Tree<CFFExpressionNode>,
 }
