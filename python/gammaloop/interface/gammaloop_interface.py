@@ -868,9 +868,6 @@ class GammaLoop(object):
         else:
             args = input_args
 
-        if args.max_n_bridges is not None and args.max_n_bridges < 0:
-            args.max_n_bridges = None
-
         if args.clear_existing_processes:
             if args.amplitude:
                 self.amplitudes.clear()

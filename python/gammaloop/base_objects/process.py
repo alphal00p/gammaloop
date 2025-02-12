@@ -517,6 +517,11 @@ class Process(object):
         if process_args.filter_selfenergies is None:
             process_args.filter_selfenergies = not is_vaccuum_topology
 
+        if process_args.number_of_factorized_loop_subtopologies is not None and process_args.number_of_factorized_loop_subtopologies < 0:
+            process_args.number_of_factorized_loop_subtopologies = None
+        if process_args.max_n_bridges is not None and process_args.max_n_bridges < 0:
+            process_args.max_n_bridges = None
+
         return Process(
             initial_particles,
             final_particles,

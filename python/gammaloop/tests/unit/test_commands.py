@@ -257,15 +257,15 @@ class TestProcessGeneration:
         gloop.run(CommandList.from_string(
             "import_model sm"))
         tests = [
-            # ('a > d d~ | d a ghg g QED^2=2 [{{2}}] -num_grouping only_detect_zeroes', 3),
-            # ('a > b b~ h | d b h a ghg g QED^2=4 [{{2}}] -num_grouping only_detect_zeroes', 3),
-            # ('a > b b~ h | d b h a ghg g QED^2=4 [{{3}} QCD=1] -num_grouping only_detect_zeroes', 30),
-            # ('a > b b~ h | d b h a ghg g QED^2=4 [{{4}} QCD=2] -num_grouping only_detect_zeroes', 594),
+            ('a > d d~ | d a ghg g QED^2=2 [{{2}}] -num_grouping only_detect_zeroes', 3),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{2}}] -num_grouping only_detect_zeroes', 3),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{3}} QCD=1] -num_grouping only_detect_zeroes', 30),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{4}} QCD=2] -num_grouping only_detect_zeroes', 594),
             # # Enable left-right-symmetry and grouping
-            # ('a > d d~ | d a ghg g QED^2=2 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2),
-            # ('a > b b~ h | d b h a ghg g QED^2=4 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2),
-            # ('a > b b~ h | d b h a ghg g QED^2=4 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 11),
-            # ('a > b b~ h | d b h a ghg g QED^2=4 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 166),
+            ('a > d d~ | d a ghg g QED^2=2 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 11),
+            ('a > b b~ h | d b h a ghg g QED^2=4 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 166),
             ('a > b b~ h | b h a ghg g QED^2=4 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 151),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
@@ -278,9 +278,11 @@ class TestProcessGeneration:
             ('a a > t t~ | a t g b ghg QED=2 [{0} QCD=0] -a -num_grouping only_detect_zeroes', 2),
             ('a a > t t~ | a t g b ghg QED=2 [{1} QCD=1] -a -num_grouping only_detect_zeroes', 8),
             ('a a > t t~ | a t g b ghg QED=2 [{2} QCD=2] -a -num_grouping only_detect_zeroes', 144),
+            ('a a > t t~ | a t g b ghg QED=2 [{3} QCD=3] -a -num_grouping only_detect_zeroes', 3319),
             ('a a > t t~ | a t g b ghg QED=2 [{0} QCD=0] -a --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 1),
             ('a a > t t~ | a t g b ghg QED=2 [{1} QCD=1] -a --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 4),
             ('a a > t t~ | a t g b ghg QED=2 [{2} QCD=2] -a --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 58),
+            ('a a > t t~ | a t g b ghg QED=2 [{3} QCD=3] -a --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 1184),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
@@ -300,6 +302,48 @@ class TestProcessGeneration:
             ('a a > t t~ | a t g b ghg QED^2=4 [{{3}} QCD=2] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 74),
             ('a a > t t~ | a t g ghg QED^2=4 [{{3}} QCD=2] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 65),
 
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    def test_vaccuum_amplitude_generation(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        tests = [
+            # Including all graphs
+            ('{} > {} | g ghg t u d QED=0 [{2}] -a -num_grouping only_detect_zeroes --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 6),
+            ('{} > {} | g ghg t u d QED=0 [{2}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 5),
+            ('{} > {} | g ghg t u d QED=0 [{3}] -a -num_grouping only_detect_zeroes --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 36),
+            ('{} > {} | g ghg t u d QED=0 [{3}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 27),
+            ('{} > {} | g ghg t u d QED=0 [{4}] -a -num_grouping only_detect_zeroes --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 264),
+            ('{} > {} | g ghg t u d QED=0 [{4}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 179),
+            # Only non-factorizable ones
+            ('{} > {} | g ghg t u d QED=0 [{2}] -a -num_grouping only_detect_zeroes --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 5),
+            ('{} > {} | g ghg t u d QED=0 [{2}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 4),
+            ('{} > {} | g ghg t u d QED=0 [{3}] -a -num_grouping only_detect_zeroes --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 29),
+            ('{} > {} | g ghg t u d QED=0 [{3}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 21),
+            ('{} > {} | g ghg t u d QED=0 [{4}] -a -num_grouping only_detect_zeroes --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 212),
+            ('{} > {} | g ghg t u d QED=0 [{4}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 138),
+            # ('{} > {} | g ghg t u d QED=0 [{5}] -a -num_grouping only_detect_zeroes --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 2560),
+            # ('{} > {} | g ghg t u d QED=0 [{5}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 1438),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    def test_vaccuum_amplitude_generation_full_sm(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm-full"))
+        tests = [
+            # Including all graphs
+            ('{} > {} [{2}] -a -num_grouping only_detect_zeroes --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 448),
+            # ('{} > {} [{2}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 0),
+            ('{} > {} [{3}] -a -num_grouping only_detect_zeroes --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 36362),
+            # ('{} > {} [{3}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 0),
+            # Only non-factorizable ones
+            ('{} > {} [{2}] -a -num_grouping only_detect_zeroes --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 92),
+            # ('{} > {} [{2}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 0),
+            ('{} > {} [{3}] -a -num_grouping only_detect_zeroes --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 3085),
+            # ('{} > {} [{3}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 0),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
@@ -348,8 +392,7 @@ class TestProcessGeneration:
             # For fun, symmetrize it all
             ('g g > g g g | g ghg a QED=0 [QCD=1] -a --symmetrize_initial_states --symmetrize_final_states -num_grouping group_identical_graphs_up_to_sign', 239),
             ('g g > g g g | g ghg a QED=0 [QCD=1] -a --symmetrize_left_right_states --symmetrize_initial_states --symmetrize_final_states -num_grouping group_identical_graphs_up_to_sign', 67),
-            # MadLoop says that there should be 905 graphs, but we got 915, so we're missing 10 groupings with current implementation
-            ('g g > g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 915),
+            ('g g > g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 905),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 

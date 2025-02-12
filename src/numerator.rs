@@ -47,7 +47,7 @@ use spenso::structure::abstract_index::DOWNIND;
 use spenso::structure::concrete_index::ExpandedIndex;
 
 use spenso::structure::representation::{
-    BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, ExtendibleReps, Minkowski,
+    BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Minkowski,
 };
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
@@ -673,6 +673,25 @@ impl Numerator<UnInit> {
         );
         Numerator { state }
     }
+
+    pub fn from_global_color(
+        self,
+        global: Atom,
+        // _graph: &BareGraph,
+        prefactor: &GlobalPrefactor,
+    ) -> Numerator<Global> {
+        debug!("Setting global numerator");
+        let state = {
+            let mut global = global;
+            global = global * &prefactor.color * &prefactor.colorless;
+            Global::new_color(global.into())
+        };
+        debug!(
+            "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
+            state.color, state.colorless
+        );
+        Numerator { state }
+    }
 }
 
 #[allow(clippy::default_constructed_unit_structs)]
@@ -745,6 +764,9 @@ impl<E: ExpressionState> SymbolicExpression<E> {
     pub fn new(expression: SerializableAtom) -> Self {
         E::new(expression)
     }
+    pub fn new_color(expression: SerializableAtom) -> Self {
+        E::new_color(expression)
+    }
 }
 
 pub trait ExpressionState:
@@ -756,6 +778,14 @@ pub trait ExpressionState:
         SymbolicExpression {
             colorless: DataTensor::new_scalar(expression),
             color: DataTensor::new_scalar(Atom::new_num(1).into()),
+            state: Self::default(),
+        }
+    }
+
+    fn new_color(expression: SerializableAtom) -> SymbolicExpression<Self> {
+        SymbolicExpression {
+            color: DataTensor::new_scalar(expression),
+            colorless: DataTensor::new_scalar(Atom::new_num(1).into()),
             state: Self::default(),
         }
     }
@@ -877,7 +907,10 @@ impl Numerator<Global> {
                 .state
                 .colorless
                 .map_data(Self::color_simplify_global_impl),
-            color: self.state.color,
+            color: self
+                .state
+                .color
+                .map_data(ColorSimplified::color_symplify_impl),
             state: Default::default(),
         };
         debug!(
@@ -1130,9 +1163,18 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
             ColorSextet::selfless_symbol(),
         ];
 
+        let mut color = self.state.color.map_data_ref(|a| {
+            SerializableAtom::from(a.0.replace_all(
+                &function!(symb!(DOWNIND), GS.x__).to_pattern(),
+                Atom::new_var(GS.x__).to_pattern(),
+                None,
+                None,
+            ))
+        });
+
         let mut indices_map = AHashMap::new();
 
-        self.state.color.iter_flat().for_each(|(_, v)| {
+        color.iter_flat().for_each(|(_, v)| {
             for p in pats.iter().chain(&dualizablepats) {
                 for a in
                     v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
@@ -1143,27 +1185,22 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
                     );
                 }
             }
-
-            for p in &dualizablepats {
-                for a in v.0.pattern_match(
-                    &function!(symb!(DOWNIND), function!(*p, GS.x_, GS.y_)).to_pattern(),
-                    None,
-                    None,
-                ) {
-                    indices_map.insert(
-                        function!(symb!(DOWNIND), function!(*p, a[&GS.x_], a[&GS.y_])),
-                        function!(symb!(DOWNIND), function!(*p, a[&GS.x_])),
-                    );
-                }
-            }
         });
 
         let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
+        // println!(
+        //     "indices sorted [{}]",
+        //     sorted
+        //         .iter()
+        //         .map(|(a, b)| format!(
+        //             "(Atom::parse(\"{}\").unwrap(),Atom::parse(\"{}\").unwrap())",
+        //             a, b
+        //         ))
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
 
-        let color = self
-            .state
-            .color
-            .map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
+        color = color.map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
 
         let colorless = self.state.colorless.clone();
         Ok(Self {
@@ -1393,16 +1430,16 @@ impl ColorSimplified {
             ) - function!(
                 UFO.t,
                 coad.pattern(&a_),
-                cof.pattern(&function!(j, a_, b_, c_)),
-                coaf.pattern(&function!(k, a_, b_, c_))
-            ) * function!(
-                UFO.t,
-                coad.pattern(&b_),
                 cof.pattern(&function!(i, a_, b_, c_)),
                 coaf.pattern(&function!(j, a_, b_, c_))
             ) * function!(
                 UFO.t,
                 coad.pattern(&c_),
+                cof.pattern(&function!(j, a_, b_, c_)),
+                coaf.pattern(&function!(k, a_, b_, c_))
+            ) * function!(
+                UFO.t,
+                coad.pattern(&b_),
                 cof.pattern(&function!(k, a_, b_, c_)),
                 coaf.pattern(&function!(i, a_, b_, c_))
             )) / &tr)
@@ -1424,11 +1461,17 @@ impl ColorSimplified {
         // for r in &replacements {
         //     println!("{r}")
         // }
-        while expression
-            .0
-            .replace_all_multiple_into(&replacements, &mut atom)
+
+        let mut first = true;
+        while first
+            || expression
+                .0
+                .replace_all_multiple_into(&replacements, &mut atom)
         {
-            std::mem::swap(&mut expression.0, &mut atom);
+            if !first {
+                std::mem::swap(&mut expression.0, &mut atom)
+            };
+            first = false;
             expression.0 = expression.0.replace_all_multiple(&frep);
             expression.0 = expression.0.expand();
         }
@@ -2302,6 +2345,7 @@ impl GammaSimplified {
                         let sign = if i % 2 == 0 { -1 } else { 1 };
 
                         let mut gcn = FunctionBuilder::new(gamma_trace);
+                        #[allow(clippy::needless_range_loop)]
                         for j in 1..args.len() {
                             if i != j {
                                 gcn = gcn.add_arg(args[j]);
@@ -2533,7 +2577,7 @@ impl TypedNumeratorState for Network {
     }
 }
 
-impl Numerator<SymbolicExpression<Color>> {
+impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
     pub fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
         // println!(
         //     "REPLACEMENTS:\n{}",
@@ -2547,7 +2591,7 @@ impl Numerator<SymbolicExpression<Color>> {
         //     .iter()
         //     .map(|(l, r)| Replacement::new(l.to_pattern(), r.to_pattern()))
         //     .collect::<Vec<_>>();
-        let expr = SymbolicExpression::<Color> {
+        let expr = SymbolicExpression::<T> {
             colorless: self.state.colorless.map_data_ref_self(|a| {
                 let mut b: Atom = a.0.clone();
                 for (src, trgt) in rep_atoms.iter() {

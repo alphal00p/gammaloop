@@ -45,10 +45,10 @@ use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
 use crate::momentum::SignOrZero;
-use crate::numerator::GlobalPrefactor;
+use crate::numerator::AtomStructure;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
-use crate::numerator::{AtomStructure, Color};
+use crate::numerator::{ExpressionState, GlobalPrefactor};
 use crate::utils::{self, GS};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
@@ -2423,10 +2423,9 @@ impl FeynGen {
 
         canonized_processed_graphs.sort_by(|a, b| (a.1).partial_cmp(&b.1).unwrap());
 
-        let n_zeroes = Arc::new(Mutex::new(0));
-        let n_zeroes_clone = n_zeroes.clone();
+        let n_zeroes_color = Arc::new(Mutex::new(0));
+        let n_zeroes_lorentz = Arc::new(Mutex::new(0));
         let n_groupings = Arc::new(Mutex::new(0));
-        let n_groupings_clone = n_groupings.clone();
         #[allow(clippy::type_complexity)]
         let pooled_bare_graphs: Arc<
             Mutex<
@@ -2492,8 +2491,11 @@ impl FeynGen {
                     } else {
                         let numerator =
                             Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
-                        let numerator_color_simplified: Numerator<SymbolicExpression<Color>> =
-                            numerator.color_simplify();
+
+                        let numerator_color_simplified =
+                            numerator.clone().color_simplify().canonize_color().unwrap();
+                        // let numerator_color_simplified: Numerator<SymbolicExpression<Color>> =
+                        //     numerator.color_simplify();
                         if numerator_color_simplified
                             .get_single_atom()
                             .unwrap()
@@ -2501,12 +2503,13 @@ impl FeynGen {
                             .is_zero()
                         {
                             {
-                                let mut n_zeroes_value = n_zeroes_clone.lock().unwrap();
-                                let n_groupings_value = n_groupings_clone.lock().unwrap();
-                                *n_zeroes_value += 1;
+                                let mut n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                *n_zeroes_color_value += 1;
+                                let n_groupings_value = n_groupings.lock().unwrap();
+                                let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
                                 bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
                                     "#zeros".green(),
-                                    format!("{}",n_zeroes_value).green().bold(),
+                                    format!("{}",*n_zeroes_color_value + *n_zeroes_lorentz_value).green().bold(),
                                     "#groupings".green(),
                                     format!("{}",n_groupings_value).green().bold(),
                                 ));
@@ -2552,6 +2555,26 @@ impl FeynGen {
                                     numerator_aware_isomorphism_grouping,
                                 )?,
                             );
+
+                            // Test if Lorentz evaluations are zero
+                            if let Some(all_evals) = numerator_data.as_ref().unwrap().sample_evaluations.as_ref() {
+                                if all_evals.iter().all(|eval| eval.is_zero()) {
+                                    {
+                                        let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                        let mut n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
+                                        *n_zeroes_lorentz_value += 1;
+                                        let n_groupings_value = n_groupings.lock().unwrap();
+                                        bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                            "#zeros".green(),
+                                            format!("{}",*n_zeroes_color_value + *n_zeroes_lorentz_value).green().bold(),
+                                            "#groupings".green(),
+                                            format!("{}",n_groupings_value).green().bold(),
+                                        ));
+                                    }
+                                    return Ok(())
+                                }
+                            }
+
                             // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
                             {
                                 let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
@@ -2569,13 +2592,14 @@ impl FeynGen {
                                                 other_numerator.as_ref().unwrap(),
                                             ) {
                                                 {
-                                                    let n_zeroes_value = n_zeroes_clone.lock().unwrap();
+                                                    let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                                    let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
                                                     let mut n_groupings_value =
-                                                        n_groupings_clone.lock().unwrap();
+                                                        n_groupings.lock().unwrap();
                                                     *n_groupings_value += 1;
                                                     bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
                                                         "#zeros".green(),
-                                                        format!("{}",n_zeroes_value).green().bold(),
+                                                        format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
                                                         "#groupings".green(),
                                                         format!("{}",n_groupings_value).green().bold(),
                                                     ));
@@ -2633,15 +2657,16 @@ impl FeynGen {
         };
         bare_graphs.sort_by(|a: &(usize, BareGraph), b| (a.0).cmp(&b.0));
 
-        let (n_zeroes_value, n_groupings_value) = {
+        let (n_zeroes_color_value, n_zeroes_lorentz_value, n_groupings_value) = {
             (
-                *n_zeroes_clone.lock().unwrap(),
-                *n_groupings_clone.lock().unwrap(),
+                *n_zeroes_color.lock().unwrap(),
+                *n_zeroes_lorentz.lock().unwrap(),
+                *n_groupings.lock().unwrap(),
             )
         };
         step = Instant::now();
         info!(
-            "{} | Δ={} | {:<95}{} ({} isomorphically unique graph{}, {} zero{}, {} grouped and {} cancellation{})",
+            "{} | Δ={} | {:<95}{} ({} isomorphically unique graph{}, {} color zero{}, {} lorentz zero{}, {} grouped and {} cancellation{})",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start)).blue().bold(),
             format!(
                 "{:<6}",
@@ -2655,8 +2680,10 @@ impl FeynGen {
             format!("{}", bare_graphs.len()).green().bold(),
             format!("{}", pooled_bare_graphs_len).blue().bold(),
             if pooled_bare_graphs_len > 1 { "s" } else { "" },
-            format!("{}", n_zeroes_value).blue().bold(),
-            if n_zeroes_value > 1 { "s" } else { "" },
+            format!("{}", n_zeroes_color_value).blue().bold(),
+            if n_zeroes_color_value > 1 { "s" } else { "" },
+            format!("{}", n_zeroes_lorentz_value).blue().bold(),
+            if n_zeroes_lorentz_value > 1 { "s" } else { "" },
             format!("{}", n_groupings_value).blue().bold(),
             format!("{}", n_cancellations).blue().bold(),
             if n_cancellations > 1 { "s" } else { "" },
@@ -2695,34 +2722,41 @@ impl FeynGen {
         numerator_a: &ProcessedNumeratorForComparison,
         numerator_b: &ProcessedNumeratorForComparison,
     ) -> Option<Atom> {
-        fn analyze_ratios(ratios: &HashSet<Atom>) -> Option<Atom> {
+        fn analyze_ratios(ratios: &HashSet<Option<Atom>>) -> Option<Atom> {
             if ratios.len() > 1 {
                 None
             } else {
                 let ratio = ratios.iter().next().unwrap().to_owned();
-                for head in ExtendibleReps::BUILTIN_SELFDUAL_NAMES
-                    .iter()
-                    .chain(ExtendibleReps::BUILTIN_DUALIZABLE_NAMES.iter())
-                    .chain(["Q"].iter())
-                    .map(Symbol::new)
-                {
-                    if ratio
-                        .pattern_match(&function!(head, symb!("args__")).to_pattern(), None, None)
+                if let Some(r) = ratio {
+                    for head in ExtendibleReps::BUILTIN_SELFDUAL_NAMES
+                        .iter()
+                        .chain(ExtendibleReps::BUILTIN_DUALIZABLE_NAMES.iter())
+                        .chain(["Q"].iter())
+                        .map(Symbol::new)
+                    {
+                        if r.pattern_match(
+                            &function!(head, symb!("args__")).to_pattern(),
+                            None,
+                            None,
+                        )
                         .next()
                         .is_some()
-                    {
-                        return None;
+                        {
+                            return None;
+                        }
                     }
+                    Some(r)
+                } else {
+                    None
                 }
-                Some(ratio)
             }
         }
 
         fn analyze_diff_and_sum(a: AtomView, b: AtomView) -> Option<Atom> {
-            if (a - b).expand_num().collect_num().is_zero() {
+            if (a - b).expand().is_zero() {
                 return Some(Atom::new_num(1));
             }
-            if (a + b).expand_num().collect_num().is_zero() {
+            if (a + b).expand().is_zero() {
                 return Some(Atom::new_num(-1));
             }
             None
@@ -2750,15 +2784,19 @@ impl FeynGen {
                         numerator_a.canonized_numerator.as_ref(),
                         numerator_b.canonized_numerator.as_ref(),
                     ) {
-                        let mut ratios = HashSet::<Atom>::default();
+                        let mut ratios = HashSet::<Option<Atom>>::default();
                         let r = if canonized_num_a == canonized_num_b {
-                            Atom::new_num(1)
+                            Some(Atom::new_num(1))
                         } else if *canonized_num_a == canonized_num_b * Atom::new_num(-1) {
-                            Atom::new_num(-1)
+                            Some(Atom::new_num(-1))
+                        } else if canonized_num_b.is_zero() {
+                            None
                         } else {
-                            (canonized_num_a.as_view() / canonized_num_b.as_view())
-                                .expand_num()
-                                .collect_num()
+                            Some(
+                                (canonized_num_a.as_view() / canonized_num_b.as_view())
+                                    .expand_num()
+                                    .collect_num(),
+                            )
                         };
                         ratios.insert(r);
                         // println!(
@@ -2780,14 +2818,14 @@ impl FeynGen {
                         //         .join(",")
                         // );
                         if let Some(ratio) = analyze_ratios(&ratios) {
-                            debug!(
-                                "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
-                                numerator_b.diagram_id,
-                                numerator_a.diagram_id,
-                                numerator_a.diagram_id,
-                                numerator_b.diagram_id,
-                                ratio
-                            );
+                            // debug!(
+                            //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
+                            //     numerator_b.diagram_id,
+                            //     numerator_a.diagram_id,
+                            //     numerator_a.diagram_id,
+                            //     numerator_b.diagram_id,
+                            //     ratio
+                            // );
                             return Some(ratio);
                         }
                     }
@@ -2827,10 +2865,19 @@ impl FeynGen {
                             let ratios = evaluations_a
                                 .iter()
                                 .zip(evaluations_b.iter())
-                                .map(|(a, b)| (a / b).expand_num().collect_num())
+                                .map(|(a, b)| {
+                                    if a == b {
+                                        Some(Atom::new_num(1))
+                                    } else if *a == b * Atom::new_num(-1) {
+                                        Some(Atom::new_num(-1))
+                                    } else if b.is_zero() {
+                                        None
+                                    } else {
+                                        Some((a / b).expand())
+                                    }
+                                })
                                 .collect::<HashSet<_>>();
-                            // if numerator_a.diagram_id == 22 || numerator_b.diagram_id == 22 {
-                            //     println!(
+                            // println!(
                             //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
                             //     numerator_b.diagram_id,
                             //     numerator_a.diagram_id,
@@ -2840,7 +2887,6 @@ impl FeynGen {
                             //         .collect::<Vec<_>>()
                             //         .join("\n")
                             // );
-                            // }
                             if let Some(ratio) = analyze_ratios(&ratios) {
                                 //     debug!(
                                 //     "Combining graph #{} with #{} using numerical evaluation, with ratio #{}/#{}={}",
@@ -2887,14 +2933,14 @@ impl FeynGen {
                             canonized_num_a.as_view(),
                             canonized_num_b.as_view(),
                         ) {
-                            debug!(
-                            "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
-                            numerator_b.diagram_id,
-                            numerator_a.diagram_id,
-                            numerator_a.diagram_id,
-                            numerator_b.diagram_id,
-                            ratio
-                        );
+                            //     debug!(
+                            //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
+                            //     numerator_b.diagram_id,
+                            //     numerator_a.diagram_id,
+                            //     numerator_a.diagram_id,
+                            //     numerator_b.diagram_id,
+                            //     ratio
+                            // );
                             return Some(ratio);
                         }
                     }
@@ -2914,11 +2960,40 @@ impl FeynGen {
                         ),
                     ) {
                         if compare_sample_points(sample_points_a, sample_points_b) {
+                            // println!(
+                            //     "Sample evaluations a:\n{}",
+                            //     evaluations_a
+                            //         .iter()
+                            //         .map(|av| av.to_canonical_string())
+                            //         .collect::<Vec<_>>()
+                            //         .join("\n")
+                            // );
+                            // println!(
+                            //     "Sample evaluations b:\n{}",
+                            //     evaluations_b
+                            //         .iter()
+                            //         .map(|av| av.to_canonical_string())
+                            //         .collect::<Vec<_>>()
+                            //         .join("\n")
+                            // );
+
                             let ratios = evaluations_a
                                 .iter()
                                 .zip(evaluations_b.iter())
                                 .map(|(a, b)| analyze_diff_and_sum(a.as_view(), b.as_view()))
                                 .collect::<HashSet<_>>();
+
+                            // println!(
+                            //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                            //     numerator_b.diagram_id,
+                            //     numerator_a.diagram_id,
+                            //     ratios
+                            //         .iter()
+                            //         .map(|av| av.as_ref().unwrap().to_canonical_string())
+                            //         .collect::<Vec<_>>()
+                            //         .join("\n")
+                            // );
+
                             if ratios.len() == 1 {
                                 if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
                                     debug!(
@@ -2965,10 +3040,10 @@ struct ProcessedNumeratorForComparison {
 }
 
 impl ProcessedNumeratorForComparison {
-    fn from_numerator_symbolic_expression(
+    fn from_numerator_symbolic_expression<T: Copy + Default + ExpressionState>(
         diagram_id: usize,
         bare_graph: &BareGraph,
-        numerator: Numerator<SymbolicExpression<Color>>,
+        numerator: Numerator<SymbolicExpression<T>>,
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
     ) -> Result<Self, FeynGenError> {
         // println!("----");
@@ -3188,7 +3263,7 @@ impl ProcessedNumeratorForComparison {
                             diagram_id,
                             sample_evaluations
                                 .iter()
-                                .map(|av| av.to_canonical_string())
+                                .map(|av| av.to_string())
                                 .collect::<Vec<_>>()
                                 .join("\n")
                         );
@@ -3377,12 +3452,21 @@ impl ProcessedNumeratorForComparison {
                         scalar: tn.scalar.clone().map(|a| a.0),
                     };
                     tn_complex.contract().map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
-                    let (tn_res, tn_scalar) = tn_complex
-                        .result()
-                        .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
-                    Ok(tn_res.scalar().map(|s| {
-                        Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I
-                    }).unwrap()*tn_scalar.unwrap_or(Atom::new_num(1)))
+                    //println!("tn_complex: {}", tn_complex);
+                    match tn_complex.result() {
+                        Ok((tn_res, tn_scalar)) => Ok(tn_res.to_bare_dense().scalar().map(|s| {
+                            Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I
+                        }).unwrap()*tn_scalar.unwrap_or(Atom::new_num(1))),
+                        Err(spenso::network::TensorNetworkError::NoNodes) => {
+                            let s = tn_complex
+                            .scalar
+                            .as_ref()
+                            .ok_or(spenso::network::TensorNetworkError::NoScalar).map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?
+                            .clone();
+                            Ok(s)
+                        }
+                        Err(e) => Err(FeynGenError::NumeratorEvaluationError(e.to_string())),
+                    }
                 },
             )
         }

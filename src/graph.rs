@@ -1649,14 +1649,17 @@ impl BareGraph {
             let mut current_vertex_edge_order = vec![];
             for e_pos in &vertex.edges {
                 let edge = &g.edges[*e_pos];
+                // For a self-loop, the particle must be counted twice.
                 if edge.vertices[0] == edge.vertices[1] {
                     if !edge.particle.is_self_antiparticle() {
-                        return Err(FeynGenError::GenericError(format!(
-                            "Self-loop of edge {} *must* be a self-antiparticle",
-                            edge.name
-                        )));
+                        // return Err(FeynGenError::GenericError(format!(
+                        //     "Self-loop of edge {} *must* be a self-antiparticle",
+                        //     edge.name
+                        // )));
+                        current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
+                        current_vertex_edge_order
+                            .push((*e_pos, edge.particle.get_anti_particle(model).clone()));
                     } else {
-                        // For a self-loop, the particle must be counted twice.
                         current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
                         current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
                     }
@@ -1940,14 +1943,8 @@ impl BareGraph {
                 (acc, new_shifts)
             });
         self.shifts = s;
-        let mut i = 0;
         for slot in &mut v {
-            i += 1;
             slot.shift_internals(&self.shifts);
-            println!("slot{i}",);
-            for e in &slot.edge_slots {
-                println!("{e}");
-            }
         }
 
         self.vertex_slots = v;

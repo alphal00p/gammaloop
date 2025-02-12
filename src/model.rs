@@ -1,6 +1,6 @@
 use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
-use crate::numerator::ufo::{preprocess_ufo_spin_wrapped, UFO};
+use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F};
 use linnet::half_edge::drawing::Decoration;
 
