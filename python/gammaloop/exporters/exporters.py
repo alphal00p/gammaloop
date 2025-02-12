@@ -169,7 +169,7 @@ class GammaLoopExporter(object):
                             direction = -1
                         case _:
                             raise GammaLoopError(
-                                f"Invalid external connection. Connection element: {conn}. Corresponding edge: {v2.edges[0]}")
+                                f"Invalid external connection. Connection element: {conn}. Corresponding edge: {v2.edges[0].name}")
                     mass = self.gammaloop.model.get_parameter(
                         v2.vertex_info.get_particles()[0].mass.name).value
 
@@ -209,7 +209,8 @@ class GammaLoopExporter(object):
                 case _:
                     raise GammaLoopError("Invalid external connection.")
         if len(conf) == 0:
-            raise GammaLoopError("Invalid external connection.")
+            # Vaccuum graph case
+            return (1.0, [], [])
 
         # ensure some phase-space available
         if e_cm <= sum(m for (_es, m, _dir) in conf):

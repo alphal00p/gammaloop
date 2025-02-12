@@ -321,6 +321,7 @@ impl FeynGenFilters {
                 | FeynGenFilter::TadpolesFilter(_)
                 | FeynGenFilter::ZeroSnailsFilter(_)
                 | FeynGenFilter::FermionLoopCountRange(_)
+                | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
                 | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
             }
         }
@@ -445,6 +446,7 @@ pub enum FeynGenFilter {
     LoopCountRange((usize, usize)),
     PerturbativeOrders(HashMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
+    FactorizedLoopTopologiesCountRange((usize, usize)),
 }
 
 impl fmt::Display for FeynGenFilter {
@@ -486,6 +488,11 @@ impl fmt::Display for FeynGenFilter {
                     "FermionLoopCountRange({{{},{}}})",
                     loop_count_min, loop_count_max
                 ),
+                Self::FactorizedLoopTopologiesCountRange((loop_count_min, loop_count_max)) =>
+                    format!(
+                        "NFactorizableLoopRange({{{},{}}})",
+                        loop_count_min, loop_count_max
+                    ),
             }
         )
     }

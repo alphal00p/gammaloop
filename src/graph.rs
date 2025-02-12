@@ -354,7 +354,7 @@ impl HasVertexInfo for InteractionVertexInfo {
                         6 => ColorSextet::slot(6, i + 1).to_symbolic_wrapped(),
                         -6 => ColorSextet::slot(6, i + 1).dual().to_symbolic_wrapped(),
                         8 => ColorAdjoint::slot(8, i + 1).to_symbolic_wrapped(),
-                        i => panic!("Color {i}not supported "),
+                        i => panic!("Color {i} not supported "),
                     };
 
                     atom = atom.replace_all(
@@ -1675,8 +1675,18 @@ impl BareGraph {
             .iter()
             .map(|(v1, v2)| {
                 (
-                    v1.map(|leg_id| g.external_edges[leg_id - 1]),
-                    v2.map(|leg_id| g.external_edges[leg_id - 1]),
+                    v1.map(|leg_id| {
+                        assert!(
+                            g.edges[g.external_edges[leg_id - 1]].edge_type == EdgeType::Incoming
+                        );
+                        g.edges[g.external_edges[leg_id - 1]].vertices[0]
+                    }),
+                    v2.map(|leg_id| {
+                        assert!(
+                            g.edges[g.external_edges[leg_id - 1]].edge_type == EdgeType::Outgoing
+                        );
+                        g.edges[g.external_edges[leg_id - 1]].vertices[1]
+                    }),
                 )
             })
             .collect::<Vec<_>>();

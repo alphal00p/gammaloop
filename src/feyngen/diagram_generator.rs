@@ -1,7 +1,7 @@
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
-use log::{error, warn};
+use log::warn;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -340,6 +340,7 @@ impl FeynGen {
         veto_self_energy: Option<&SelfEnergyFilterOptions>,
         veto_tadpole: Option<&TadpolesFilterOptions>,
         veto_snails: Option<&SnailFilterOptions>,
+        factorized_loop_topologies_count_range: Option<&(usize, usize)>,
     ) -> bool {
         if graph.nodes().iter().any(|n| n.data.external_tag < 0) {
             panic!("External tag must be positive, but found negative as obtained when performing external state symmetrization");
@@ -376,7 +377,11 @@ impl FeynGen {
                     .join("\n")
             );
         }
-        if veto_self_energy.is_none() && veto_tadpole.is_none() && veto_snails.is_none() {
+        if veto_self_energy.is_none()
+            && veto_tadpole.is_none()
+            && veto_snails.is_none()
+            && factorized_loop_topologies_count_range.is_none()
+        {
             return false;
         }
         let graph_nodes: &[symbolica::graph::Node<NodeColorWithoutVertexRule>] = graph.nodes();
@@ -445,6 +450,7 @@ impl FeynGen {
         if debug {
             debug!("node_children={:?}", node_children);
         }
+
         let mut external_momenta_routing: Vec<Vec<usize>> = vec![vec![]; spanning_tree.nodes.len()];
         for (i_n, node) in graph.nodes().iter().enumerate() {
             if (node.edges.len() != 1)
@@ -481,11 +487,13 @@ impl FeynGen {
         let mut vacuum_attachments: HashSet<(usize, usize, usize)> = HashSet::default();
         // Tuple format: (back_edge_start_node_position, back_edge_position_in_list, chain_id)
         let mut self_loops: HashSet<(usize, usize, usize)> = HashSet::default();
+        let mut n_factorizable_loops = 0;
         for &i_n in &spanning_tree.order {
             let node = &spanning_tree.nodes[i_n];
             for (i_back_edge, &back_edge) in node.back_edges.iter().enumerate() {
                 let i_chain = i_n;
                 if back_edge == i_n {
+                    n_factorizable_loops += 1;
                     self_loops.insert((i_n, i_back_edge, i_chain));
                     continue;
                 }
@@ -494,6 +502,9 @@ impl FeynGen {
                 let mut is_valid_chain = true;
                 'follow_chain: loop {
                     if curr_chain_node == i_n {
+                        if i_back_edge > 0 {
+                            n_factorizable_loops += 1;
+                        }
                         break 'follow_chain;
                     }
                     let moms = &external_momenta_routing[curr_chain_node];
@@ -557,7 +568,24 @@ impl FeynGen {
             debug!("self_energy_attachments={:?}", self_energy_attachments);
             debug!("vacuum_attachments={:?}", vacuum_attachments);
             debug!("self_loops={:?}", self_loops);
+            debug!("n_factorizable_loops={:?}", n_factorizable_loops);
         }
+
+        if let Some((min_n_fact_loops, max_n_fact_loops)) =
+            factorized_loop_topologies_count_range.as_ref()
+        {
+            if n_factorizable_loops < *min_n_fact_loops || n_factorizable_loops > *max_n_fact_loops
+            {
+                if debug {
+                    debug!(
+                        "Vetoing graph due to having a number of factorizable loops ({}) outside the range [{}, {}]",
+                        n_factorizable_loops, min_n_fact_loops, max_n_fact_loops
+                    );
+                }
+                return true;
+            }
+        }
+
         let mut tree_bridge_node_indices: HashSet<usize> = HashSet::default();
         for (i_n, node) in spanning_tree.nodes.iter().enumerate() {
             if node.chain_id.is_none()
@@ -608,10 +636,10 @@ impl FeynGen {
             }
         }
         // For vaccuum attachments, we must differentiate if there are snails (start node is a tree bridge) or tadpoles (start node *is not* a tree bridge)
-        for (back_edge_start_node_index, _back_edge_position_in_list, _chain_id) in
+        for (back_edge_start_node_index, back_edge_position_in_list, chain_id) in
             vacuum_attachments.iter().chain(self_loops.iter())
         {
-            let attachment_particle_is_massive = if max_external == 0 {
+            let attachment_particle_is_massive = if max_external > 0 {
                 let mut first_tree_attachment_node_index = *back_edge_start_node_index;
                 while external_momenta_routing[first_tree_attachment_node_index].is_empty() {
                     first_tree_attachment_node_index =
@@ -642,7 +670,7 @@ impl FeynGen {
                     if debug {
                         debug!(
                             "Vetoing tadpole for back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
-                            back_edge_start_node_index, _back_edge_position_in_list, _chain_id, veto_tadpole_options
+                            back_edge_start_node_index, back_edge_position_in_list, chain_id, veto_tadpole_options
                         );
                     }
                     if veto_tadpole_options.veto_only_scaleless_tadpoles {
@@ -670,7 +698,7 @@ impl FeynGen {
                     if debug {
                         debug!(
                             "Vetoing snail for back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
-                            back_edge_start_node_index, _back_edge_position_in_list, _chain_id, veto_snails_options
+                            back_edge_start_node_index, back_edge_position_in_list, chain_id, veto_snails_options
                         );
                     }
                     #[allow(clippy::unnecessary_unwrap)]
@@ -726,12 +754,6 @@ impl FeynGen {
     where
         NodeColor: NodeColorFunctions + Clone,
     {
-        error!("");
-        error!("{}","⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠".red());
-        error!("{}","⚠ Using slow alledgedly exact Cutkosky cut checker. It is currently BUGGED, so do not rely on results. ⚠".red());
-        error!("{}","⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠⚠".red());
-        error!("");
-
         #[allow(clippy::too_many_arguments)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
@@ -1375,13 +1397,21 @@ impl FeynGen {
                 } else {
                     model.get_particle_from_pdg(edge.data.pdg)
                 };
+
+                // WARNING: It is important to note that the colouring choice below dictates what representative diagram (i.e. "sorted_g") will be used
+                // for performing numerical comparisons for grouping isomorphic graphs. If we do not include the spin in the colouring, we may incorrectly
+                // sort two isomorphic graphs with and interchange of massless quarks and gluons which will prevent their grouping (final result still correct, but more diagrams).
+                // This is avoided by including the spin in the color, which will prevent massless quark and gluons from ever being interchanged.
+                // Of course, even then, it could be that we pick two sorted representatives that are not isomorphic, even though there exist a different isomorphic skeletton graph
+                // which would have given a match when doing the numerical comparison. In the SM, this should never happen, and for BSM we can afford to lose some grouping.
+                // The only way to avoid this would be to numerically test all isomorphic permutations of the skeletton graph, which is prohibitive.
                 skeletton_graph
                     .add_edge(
                         remapped_edge_vertices.0,
                         remapped_edge_vertices.1,
                         is_edge_external, //edge.directed && is_edge_external,
                         if color_according_to_mass && !is_edge_external {
-                            particle.mass.to_string()
+                            format!("{} | {}", particle.mass, particle.spin)
                         } else {
                             particle.name.to_string()
                         },
@@ -1891,9 +1921,22 @@ impl FeynGen {
                 }
             })
             .next();
+        let factorized_loop_topologies_count_range = filters
+            .0
+            .iter()
+            .filter_map(|f| {
+                if let FeynGenFilter::FactorizedLoopTopologiesCountRange(range) = f {
+                    Some(range)
+                } else {
+                    None
+                }
+            })
+            .next();
+
         if tadpole_filter.is_some()
             || external_self_energy_filter.is_some()
             || zero_snails_filter.is_some()
+            || factorized_loop_topologies_count_range.is_some()
         {
             let bar = ProgressBar::new(graphs.len() as u64);
             bar.set_style(progress_bar_style.clone());
@@ -1909,6 +1952,7 @@ impl FeynGen {
                             external_self_energy_filter,
                             tadpole_filter,
                             zero_snails_filter,
+                            factorized_loop_topologies_count_range,
                         )
                     })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -2223,6 +2267,16 @@ impl FeynGen {
                         }
                     }
                     (false, true, false) => {
+                        for final_color in self.options.initial_pdgs.len() + 1
+                            ..=2 * self.options.initial_pdgs.len()
+                        {
+                            node_colors_for_canonicalization.insert(final_color as i32, -3);
+                        }
+                    }
+                    (true, true, false) => {
+                        for initial_color in 1..=self.options.initial_pdgs.len() {
+                            node_colors_for_canonicalization.insert(initial_color as i32, -2);
+                        }
                         for final_color in self.options.initial_pdgs.len() + 1
                             ..=2 * self.options.initial_pdgs.len()
                         {
@@ -2685,12 +2739,6 @@ impl FeynGen {
                     sp_a.len() == sp_b.len() && sp_a.iter().zip(sp_b.iter()).all(|(a, b)| a == b)
                 })
         }
-        // if numerator_a.diagram_id == 22 || numerator_b.diagram_id == 22 {
-        //     println!(
-        //         "STARTING COMPARISON of diag #{} and #{}",
-        //         numerator_b.diagram_id, numerator_a.diagram_id,
-        //     );
-        // }
         match numerator_aware_isomorphism_grouping {
             NumeratorAwareGraphGroupingOption::NoGrouping
             | NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => None,
@@ -2715,11 +2763,13 @@ impl FeynGen {
                         ratios.insert(r);
                         // println!(
                         //     "Canonalized numerator of diagiaram #{}: {}",
-                        //     numerator_a.diagram_id, numerator_a.canonized_numerator
+                        //     numerator_a.diagram_id,
+                        //     numerator_a.canonized_numerator.as_ref().unwrap()
                         // );
                         // println!(
                         //     "Canonalized numerator of diagiaram #{}: {}",
-                        //     numerator_b.diagram_id, numerator_b.canonized_numerator
+                        //     numerator_b.diagram_id,
+                        //     numerator_b.canonized_numerator.as_ref().unwrap().clone()
                         // );
                         // println!(
                         //     "ratio from canonalized numerators: {:?}",
@@ -2967,9 +3017,13 @@ impl ProcessedNumeratorForComparison {
                 // }
                 // Force "final-state" momenta and pol vectors to be identical to external momenta
                 for (i_ext, connection) in bare_graph.external_connections.iter().enumerate() {
-                    if let (Some(left_edge_pos), Some(right_edge_pos)) = connection {
-                        let right_edge = &bare_graph.edges[*right_edge_pos];
-                        let left_edge = &bare_graph.edges[*left_edge_pos];
+                    if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
+                        connection
+                    {
+                        let left_edge = &bare_graph.edges
+                            [bare_graph.vertices[*left_external_node_pos].edges[0]];
+                        let right_edge = &bare_graph.edges
+                            [bare_graph.vertices[*right_external_node_pos].edges[0]];
                         let connected_external_id = bare_graph.external_connections.len() + i_ext;
                         for rep in lmb_replacements.iter_mut() {
                             rep.1 = rep.1.replace_all(
@@ -3023,14 +3077,6 @@ impl ProcessedNumeratorForComparison {
                     .collect::<Vec<_>>();
 
                 //lmb_replacements.push((Atom::parse("MB").unwrap(), Atom::Zero));
-                // let test: Atom = Atom::parse("-1/9*𝑖*ee^2*G^2*(MB*id(bis(4,2),bis(4,5))+γ(mink(4,25),bis(4,2),bis(4,5))*Q(2,mink(4,25)))*(MB*id(bis(4,3),bis(4,8))-γ(mink(4,27),bis(4,8),bis(4,3))*Q(4,mink(4,27)))*(MB*id(bis(4,4),bis(4,7))+γ(mink(4,28),bis(4,4),bis(4,7))*Q(5,mink(4,28)))*(MB*id(bis(4,6),bis(4,9))+γ(mink(4,29),bis(4,6),bis(4,9))*Q(6,mink(4,29)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,0),mink(4,5))*id(mink(4,1),mink(4,4))*γ(mink(4,2),bis(4,3),bis(4,2))*γ(mink(4,3),bis(4,5),bis(4,4))*γ(mink(4,4),bis(4,7),bis(4,6))*γ(mink(4,5),bis(4,9),bis(4,8))").unwrap();
-                // let reps = lmb_replacements
-                //     .iter()
-                //     .map(|(l, r)| Replacement::new(l.to_pattern(), r.to_pattern()))
-                //     .collect::<Vec<_>>();
-                // let test2 = test.replace_all_multiple(&reps);
-                // println!("BEFORE: {}", test);
-                // println!("AFTER: {}", test2);
                 // println!(
                 //     "BEFORE: {}",
                 //     processed_numerator.get_single_atom().unwrap().0
@@ -3126,7 +3172,6 @@ impl ProcessedNumeratorForComparison {
                                     .iter()
                                     .map(|(a, b)| (a.as_view(), b.as_view()))
                                     .collect::<Vec<_>>();
-
                                 let res = Self::evaluate_with_replacements(
                                     &decomposed_parametric_net,
                                     &reps,
@@ -3197,7 +3242,7 @@ impl ProcessedNumeratorForComparison {
         let mut prime = prime_iterator
             .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
 
-        let reps = Arc::new(Mutex::new(vec![]));
+        let mut reps = HashSet::<_>::default();
 
         if !fully_numerical_substitution {
             let variable = function!(
@@ -3213,9 +3258,7 @@ impl ProcessedNumeratorForComparison {
                         for (_, a) in param_tn.iter_flat() {
                             for m in a.pattern_match(&pat, None, None) {
                                 {
-                                    let mut reps_lock: std::sync::MutexGuard<Vec<Atom>> =
-                                        reps.lock().unwrap();
-                                    reps_lock.push(pat.replace_wildcards(&m));
+                                    reps.insert(pat.replace_wildcards(&m));
                                 }
                             }
                         }
@@ -3227,42 +3270,54 @@ impl ProcessedNumeratorForComparison {
                 for (_n, d) in tn.graph.nodes.iter() {
                     if let Ok(param_tn) = d.clone().try_into_parametric().to_owned() {
                         for (_, a) in param_tn.tensor.iter_flat() {
-                            a.replace_map(&|view, context, _| {
+                            let res = a.replace_map(&|view: AtomView, context, term| {
                                 assert!(context.function_level == 0);
-
-                                let mut reps_lock: std::sync::MutexGuard<Vec<Atom>> =
-                                    reps.lock().unwrap();
                                 match view {
                                     AtomView::Var(s) => {
-                                        if s.get_symbol() != Atom::I {
-                                            reps_lock.push(s.as_view().to_owned());
-                                        }
+                                        *term = function!(
+                                            Symbol::new("MARKER_TO_REPLACE"),
+                                            s.as_view().to_owned()
+                                        );
                                         true
                                     }
                                     AtomView::Fun(f) => {
-                                        reps_lock.push(f.as_view().to_owned());
+                                        *term = function!(
+                                            Symbol::new("MARKER_TO_REPLACE"),
+                                            f.as_view().to_owned()
+                                        );
                                         true
                                     }
                                     AtomView::Pow(p) => {
-                                        reps_lock.push(p.as_view().to_owned());
-                                        true
+                                        let (_, exp) = p.get_base_exp();
+                                        match exp.to_owned() {
+                                            Atom::Num(_) => false,
+                                            _ => {
+                                                *term = function!(
+                                                    Symbol::new("MARKER_TO_REPLACE"),
+                                                    p.as_view().to_owned()
+                                                );
+                                                true
+                                            }
+                                        }
                                     }
                                     _ => false,
                                 }
                             });
+                            for m in res.pattern_match(
+                                &function!(Symbol::new("MARKER_TO_REPLACE"), Atom::new_var(GS.x_))
+                                    .to_pattern(),
+                                None,
+                                None,
+                            ) {
+                                reps.insert(m.get(&GS.x_).unwrap().to_owned());
+                            }
                         }
                     }
                 }
             }
         }
 
-        let reps_lock = reps.lock().unwrap();
-        let mut reps = reps_lock
-            .iter()
-            .collect::<HashSet<_>>()
-            .iter()
-            .map(|&a| a.to_owned())
-            .collect::<Vec<_>>();
+        let mut reps = reps.iter().map(|a| a.to_owned()).collect::<Vec<_>>();
         reps.sort();
         reps.iter()
             .map(|a: &Atom| (a.clone(), prime.next().unwrap()))

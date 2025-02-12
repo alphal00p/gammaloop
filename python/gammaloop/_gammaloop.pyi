@@ -72,6 +72,7 @@ class FeynGenFilters:
                 coupling_orders: Optional[dict[str, int]] = {},
                 loop_count_range: Optional[tuple[int, int]] = None,
                 fermion_loop_count_range: Optional[tuple[int, int]] = None,
+                factorized_loop_topologies_count_range: Optional[tuple[int, int]] = None,
                 ) -> FeynGenFilters:
         """ Creates a new set of diagram generation filters. """
 

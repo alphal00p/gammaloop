@@ -372,6 +372,7 @@ impl PyFeynGenFilters {
         coupling_orders: Option<HashMap<String, usize>>,
         loop_count_range: Option<(usize, usize)>,
         fermion_loop_count_range: Option<(usize, usize)>,
+        factorized_loop_topologies_count_range: Option<(usize, usize)>,
     ) -> PyResult<PyFeynGenFilters> {
         let mut filters = Vec::new();
         if let Some(self_energy_filter) = self_energy_filter {
@@ -407,6 +408,12 @@ impl PyFeynGenFilters {
         if let Some(fermion_loop_count_range) = fermion_loop_count_range {
             filters.push(FeynGenFilter::FermionLoopCountRange(
                 fermion_loop_count_range,
+            ));
+        }
+        if let Some(factorized_loop_topologies_count_range) = factorized_loop_topologies_count_range
+        {
+            filters.push(FeynGenFilter::FactorizedLoopTopologiesCountRange(
+                factorized_loop_topologies_count_range,
             ));
         }
         Ok(PyFeynGenFilters { filters })

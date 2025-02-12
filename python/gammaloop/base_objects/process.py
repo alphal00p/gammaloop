@@ -28,6 +28,8 @@ class Process(object):
                  tadpole_filter: gl_rust.TadpolesFilterOptions | None = None,
                  zero_snail_filter: gl_rust.SnailFilterOptions | None = None,
                  fermion_loop_count_range: tuple[int, int] | None = None,
+                 factorized_loop_topologies_count_range: tuple[int,
+                                                               int] | None = None,
                  max_n_bridges: int | None = None,
                  ):
         self.initial_states = initial_particles
@@ -47,7 +49,8 @@ class Process(object):
             max_number_of_bridges=max_n_bridges,
             coupling_orders=amplitude_orders,
             loop_count_range=amplitude_loop_count,
-            fermion_loop_count_range=fermion_loop_count_range
+            fermion_loop_count_range=fermion_loop_count_range,
+            factorized_loop_topologies_count_range=factorized_loop_topologies_count_range
         )
 
         # Adjust amplitude and cross-section orders given the perturbative orders
@@ -492,25 +495,27 @@ class Process(object):
 
         # Adjust filter default values
         # Disable these filter for vacuum generation
-        enable_filters = True
+        is_vaccuum_topology = False
         if len(initial_particles) == 0:
             if not process_args.amplitude:
-                enable_filters = False
+                is_vaccuum_topology = True
             else:
                 if len(final_particles) == 0:
-                    enable_filters = False
+                    is_vaccuum_topology = True
 
-        if not enable_filters:
+        if is_vaccuum_topology:
             # For vaccuum-like graphs, the user will typically expect the number of bridges to be forced to zero
             if process_args.max_n_bridges is None:
                 process_args.max_n_bridges = 0
+            if process_args.number_of_factorized_loop_subtopologies is None:
+                process_args.number_of_factorized_loop_subtopologies = 1
 
         if process_args.filter_tadpoles is None:
-            process_args.filter_tadpoles = enable_filters
+            process_args.filter_tadpoles = not is_vaccuum_topology
         if process_args.filter_snails is None:
-            process_args.filter_snails = enable_filters
+            process_args.filter_snails = not is_vaccuum_topology
         if process_args.filter_selfenergies is None:
-            process_args.filter_selfenergies = enable_filters
+            process_args.filter_selfenergies = not is_vaccuum_topology
 
         return Process(
             initial_particles,
@@ -538,5 +543,7 @@ class Process(object):
             ),
             max_n_bridges=process_args.max_n_bridges,
             fermion_loop_count_range=(None if process_args.number_of_fermion_loops is None else (
-                process_args.number_of_fermion_loops, process_args.number_of_fermion_loops))
+                process_args.number_of_fermion_loops, process_args.number_of_fermion_loops)),
+            factorized_loop_topologies_count_range=(None if process_args.number_of_factorized_loop_subtopologies is None else (
+                process_args.number_of_factorized_loop_subtopologies, process_args.number_of_factorized_loop_subtopologies))
         )

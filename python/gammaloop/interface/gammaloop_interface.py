@@ -796,6 +796,8 @@ class GammaLoop(object):
                                  help='Group identical diagrams after generation and including numerator (default: group_identical_graphs_up_to_scalar_rescaling)')
     generate_parser.add_argument('--number_of_fermion_loops', '-nfl', default=None, type=int,
                                  help='Number of fermion loops to consider in the amplitude generation. (default: any)')
+    generate_parser.add_argument('--number_of_factorized_loop_subtopologies', '-nfactl', default=None, type=int,
+                                 help='Number of factorizable loops (seoarated graph ears) to consider in the amplitude generation. (default: any)')
     # Tadpole filter
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')

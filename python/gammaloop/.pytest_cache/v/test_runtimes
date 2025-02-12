@@ -98,5 +98,6 @@
   "tests/unit/test_commands.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets_with_grouping": 9.697644208557904,
   "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_sm_h_n_j": 171.95000420790166,
   "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_amplitude_1l_sm_jets": 55.518137665465474,
-  "tests/unit/test_objects.py::TestProcess::test_process_parsing": 0.0164470411837101
+  "tests/unit/test_objects.py::TestProcess::test_process_parsing": 0.0164470411837101,
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_aa_ttx_amplitude": 2.1212199172005057
 }
