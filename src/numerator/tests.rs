@@ -1,4 +1,5 @@
 use brotli::CompressorWriter;
+use insta::assert_snapshot;
 use spenso::{
     complex::Complex,
     data::{DataTensor, DenseTensor, StorageTensor},
@@ -25,12 +26,17 @@ use symbolica::{
 
 use crate::{
     cross_section::Amplitude,
+    feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     gammaloop_integrand::DefaultSample,
     graph::{BareGraph, Graph},
     model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
-    numerator::{ufo::UFO, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
-    tests_from_pytest::{load_amplitude_output, sample_generator, test_export_settings},
+    numerator::{
+        ufo::UFO, ColorSimplified, ContractionSettings, ExtraInfo, GlobalPrefactor, Network,
+    },
+    tests_from_pytest::{
+        load_amplitude_output, load_generic_model, sample_generator, test_export_settings,
+    },
     utils::{ApproxEq, F},
     Externals, RotationSetting, Settings,
 };
@@ -908,13 +914,17 @@ fn one_loop_lbl() {
     println!("initial{:+}", feyn.get_single_atom().unwrap().0);
     println!(
         "canonized:{:+}",
-        feyn.canonize().unwrap().get_single_atom().unwrap().0
+        feyn.canonize_lorentz()
+            .unwrap()
+            .get_single_atom()
+            .unwrap()
+            .0
     );
 
     println!(
         "canonized with color:{:+}",
         feyn.color_simplify()
-            .canonize()
+            .canonize_lorentz()
             .unwrap()
             .get_single_atom()
             .unwrap()
@@ -1064,4 +1074,62 @@ fn test_wrong_structure() {
     };
     let net = Numerator::<SymbolicExpression<Color>> { state: spenso_expr };
     net.parse();
+}
+
+#[test]
+fn color_simple() {
+    println!("{}",ColorSimplified::color_symplify_impl(Atom::parse("(-1*T(coad(8,0),cof(3,j(17,18,19)),dind(cof(3,k(17,18,19))))*T(coad(8,1),cof(3,11),dind(cof(3,j(17,18,19))))*T(coad(8,2),cof(3,5),dind(cof(3,14)))*T(coad(8,3),cof(3,14),dind(cof(3,11)))*T(coad(8,4),cof(3,k(17,18,19)),dind(cof(3,5)))+T(coad(8,0),cof(3,11),dind(cof(3,j(17,18,19))))*T(coad(8,1),cof(3,j(17,18,19)),dind(cof(3,k(17,18,19))))*T(coad(8,2),cof(3,5),dind(cof(3,14)))*T(coad(8,3),cof(3,14),dind(cof(3,11)))*T(coad(8,4),cof(3,k(17,18,19)),dind(cof(3,5))))").unwrap().into()))
+}
+
+#[test]
+fn dumb_four_gluon() {
+    let model = load_generic_model("sm");
+
+    let gggg = NodeColorWithVertexRule {
+        external_tag: 0,
+        vertex_rule: model.get_vertex_rule(&"V_37".into()),
+    };
+    let mut four_gluon = symbolica::graph::Graph::new();
+    let v = four_gluon.add_node(gggg);
+    let g = EdgeColor::from_particle(model.get_particle(&"g".to_string().into()));
+
+    four_gluon.add_edge(v, v, false, g).unwrap();
+    four_gluon.add_edge(v, v, false, g).unwrap();
+
+    let graph = BareGraph::from_symbolica_graph(
+        &model,
+        "gggg".into(),
+        &four_gluon,
+        "1".into(),
+        vec![],
+        None,
+    )
+    .unwrap();
+
+    let num = Numerator::default().from_graph(&graph, &GlobalPrefactor::default());
+    // println!("{}", num.state.color);
+    // println!("{}", num.state.colorless);
+
+    let colorsimp = num.color_simplify();
+    // println!("{}", colorsimp.state.color);
+
+    let gamma = colorsimp.clone().gamma_simplify();
+    // println!("{}", gamma.state.colorless);
+
+    let gammasingle = gamma.get_single_atom().unwrap();
+
+    // println!("{}", gammasingle.0.expand());
+
+    let expanded = colorsimp
+        .parse()
+        .contract::<Rational>(ContractionSettings::Normal)
+        .unwrap()
+        .state
+        .tensor
+        .scalar()
+        .unwrap()
+        .expand();
+
+    assert!((&expanded - gammasingle.0).expand().is_zero());
+    assert_snapshot!(expanded.to_canonical_string());
 }

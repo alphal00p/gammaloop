@@ -229,7 +229,7 @@ impl std::hash::Hash for VertexRule {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VertexSlots {
-    edge_slots: Vec<EdgeSlots<Minkowski>>,
+    pub(crate) edge_slots: Vec<EdgeSlots<Minkowski>>,
     pub coupling_indices: Option<[Slot<Euclidean>; 2]>, //None for external vertices
     pub internal_dummy: DummyIndices,
 }
@@ -357,9 +357,10 @@ impl VertexRule {
     }
 
     fn n_dummy_atom(atom: &Atom) -> usize {
-        let atom = preprocess_ufo_spin_wrapped(atom.clone());
-        let indexidpat = Pattern::parse("indexid(x_)").unwrap();
-        atom.pattern_match(&indexidpat, None, None)
+        let pat = function!(GS.f_, GS.x___, GS.x_, GS.y___).to_pattern();
+
+        let n_dummy = atom
+            .pattern_match(&pat, None, None)
             .filter_map(|a| {
                 if let AtomView::Num(n) = a[&GS.x_].as_view() {
                     let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
@@ -382,7 +383,8 @@ impl VertexRule {
             })
             .min()
             .unwrap_or(0)
-            .unsigned_abs() as usize
+            .unsigned_abs() as usize;
+        n_dummy
     }
 
     pub fn n_dummies(&self) -> (usize, usize) {

@@ -385,10 +385,8 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                     atom = atom.replace_all(
                         &pat,
-                        Atom::new_num(usize::from(
-                            vertex_slots.internal_dummy.color[i + color_dummy_shift],
-                        ) as i64)
-                        .to_pattern(),
+                        Atom::new_num(usize::from(vertex_slots.internal_dummy.color[i]) as i64)
+                            .to_pattern(),
                         None,
                         None,
                     );
@@ -559,14 +557,17 @@ impl Edge {
 
     pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
         let local_pos_in_sink_vertex =
-            graph.vertices[self.vertices[0]].get_local_edge_position(self, graph);
+            graph.vertices[self.vertices[0]].get_local_edge_position(self, graph, false);
 
         graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
     }
 
     pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
-        let local_pos_in_sink_vertex =
-            graph.vertices[self.vertices[1]].get_local_edge_position(self, graph);
+        let local_pos_in_sink_vertex = graph.vertices[self.vertices[1]].get_local_edge_position(
+            self,
+            graph,
+            self.vertices[0] == self.vertices[1],
+        );
 
         graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
     }
@@ -759,12 +760,15 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub fn get_local_edge_position(&self, edge: &Edge, graph: &BareGraph) -> usize {
-        let global_id: usize = graph.edge_name_to_position[&edge.name];
+    pub fn get_local_edge_position(&self, edge: &Edge, graph: &BareGraph, skip_one: bool) -> usize {
+        let global_id = graph.edge_name_to_position[&edge.name];
+        let skip_n = if skip_one { 1 } else { 0 };
+
         self.edges
             .iter()
             .enumerate()
-            .find(|(_, &e)| e == global_id)
+            .filter(|(_, &e)| e == global_id)
+            .nth(skip_n)
             .unwrap()
             .0
     }
@@ -1936,8 +1940,14 @@ impl BareGraph {
                 (acc, new_shifts)
             });
         self.shifts = s;
+        let mut i = 0;
         for slot in &mut v {
+            i += 1;
             slot.shift_internals(&self.shifts);
+            println!("slot{i}",);
+            for e in &slot.edge_slots {
+                println!("{e}");
+            }
         }
 
         self.vertex_slots = v;

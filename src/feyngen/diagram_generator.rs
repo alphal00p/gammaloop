@@ -3111,7 +3111,7 @@ impl ProcessedNumeratorForComparison {
                 let canonized_numerator = if group_options.test_canonized_numerator {
                     Some(
                         processed_numerator
-                            .canonize()
+                            .canonize_lorentz()
                             .unwrap()
                             .get_single_atom()
                             .unwrap()

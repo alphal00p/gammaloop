@@ -43,10 +43,11 @@ use spenso::parametric::{
     SerializableCompiledEvaluator, TensorSet,
 };
 use spenso::shadowing::ETS;
+use spenso::structure::abstract_index::DOWNIND;
 use spenso::structure::concrete_index::ExpandedIndex;
 
 use spenso::structure::representation::{
-    BaseRepName, ColorAdjoint, ColorFundamental, ExtendibleReps, Minkowski,
+    BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, ExtendibleReps, Minkowski,
 };
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
@@ -1086,16 +1087,8 @@ impl AppliedFeynmanRule {
 }
 
 impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
-    pub fn canonize(&self) -> Result<Self, String> {
-        let pats: Vec<_> = ExtendibleReps::BUILTIN_SELFDUAL_NAMES
-            .iter()
-            .map(Symbol::new)
-            .chain(
-                ExtendibleReps::BUILTIN_DUALIZABLE_NAMES
-                    .iter()
-                    .map(Symbol::new),
-            )
-            .collect();
+    pub fn canonize_lorentz(&self) -> Result<Self, String> {
+        let pats: Vec<_> = vec![Minkowski::selfless_symbol(), Bispinor::selfless_symbol()];
 
         let mut indices_map = AHashMap::new();
 
@@ -1121,6 +1114,58 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
             .colorless
             .map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
 
+        Ok(Self {
+            state: SymbolicExpression {
+                colorless,
+                color,
+                state: T::default(),
+            },
+        })
+    }
+
+    pub fn canonize_color(&self) -> Result<Self, String> {
+        let pats: Vec<_> = vec![ColorAdjoint::selfless_symbol()];
+        let dualizablepats: Vec<_> = vec![
+            ColorFundamental::selfless_symbol(),
+            ColorSextet::selfless_symbol(),
+        ];
+
+        let mut indices_map = AHashMap::new();
+
+        self.state.color.iter_flat().for_each(|(_, v)| {
+            for p in pats.iter().chain(&dualizablepats) {
+                for a in
+                    v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
+                {
+                    indices_map.insert(
+                        function!(*p, a[&GS.x_], a[&GS.y_]),
+                        function!(*p, a[&GS.x_]),
+                    );
+                }
+            }
+
+            for p in &dualizablepats {
+                for a in v.0.pattern_match(
+                    &function!(symb!(DOWNIND), function!(*p, GS.x_, GS.y_)).to_pattern(),
+                    None,
+                    None,
+                ) {
+                    indices_map.insert(
+                        function!(symb!(DOWNIND), function!(*p, a[&GS.x_], a[&GS.y_])),
+                        function!(symb!(DOWNIND), function!(*p, a[&GS.x_])),
+                    );
+                }
+            }
+        });
+
+        let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
+
+        let color = self
+            .state
+            .color
+            .map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
+
+        let colorless = self.state.colorless.clone();
         Ok(Self {
             state: SymbolicExpression {
                 colorless,
@@ -1376,7 +1421,9 @@ impl ColorSimplified {
             .collect();
 
         let mut atom = Atom::new_num(0);
-
+        // for r in &replacements {
+        //     println!("{r}")
+        // }
         while expression
             .0
             .replace_all_multiple_into(&replacements, &mut atom)
