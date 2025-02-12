@@ -67,7 +67,7 @@ impl CFFFloat<VarFloat<113>> for VarFloat<113> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrientationExpression {
-    pub orientation: Vec<bool>,
+    pub orientation: HedgeVec<bool>,
     pub dag: CFFGenerationGraph,
     pub expression: Tree<CFFExpressionNode>,
 }
@@ -496,33 +496,32 @@ impl CFFExpression {
         temp_dep_mom: usize,
         temp_dep_mom_expr: &ExternalShift,
     ) -> Result<CFFLimit, String> {
-        let circling = self.esurfaces[esurface_id].circled_vertices;
+        //let terms_with_esurface = self
+        //    .iter_term_ids()
+        //    .filter(|&term_id| self.term_has_esurface(term_id, esurface_id));
 
-        let terms_with_esurface = self
-            .iter_term_ids()
-            .filter(|&term_id| self.term_has_esurface(term_id, esurface_id));
+        //let ((dag_left, dag_right), orientations_in_limit) = terms_with_esurface
+        //    .map(|term_id| {
+        //        let term_dag = &self[term_id].dag;
+        //        (
+        //            term_dag.generate_cut(circling),
+        //            (self[term_id].orientation.clone(), term_id),
+        //        )
+        //    })
+        //    .unzip();
 
-        let ((dag_left, dag_right), orientations_in_limit) = terms_with_esurface
-            .map(|term_id| {
-                let term_dag = &self[term_id].dag;
-                (
-                    term_dag.generate_cut(circling),
-                    (self[term_id].orientation.clone(), term_id),
-                )
-            })
-            .unzip();
+        //let ref_to_esurface = &self.esurfaces[esurface_id];
 
-        let ref_to_esurface = &self.esurfaces[esurface_id];
-
-        generate_cff_limit(
-            dag_left,
-            dag_right,
-            &self.esurfaces,
-            ref_to_esurface,
-            temp_dep_mom,
-            temp_dep_mom_expr,
-            orientations_in_limit,
-        )
+        //generate_cff_limit(
+        //    dag_left,
+        //    dag_right,
+        //    &self.esurfaces,
+        //    ref_to_esurface,
+        //    temp_dep_mom,
+        //    temp_dep_mom_expr,
+        //    orientations_in_limit,
+        //)
+        unimplemented!("deprecated");
     }
 
     pub fn build_symbolica_evaluators<T: FloatLike + Default>(

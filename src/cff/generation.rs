@@ -186,16 +186,19 @@ pub fn generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Repor
     // construct a hashmap that contains as keys all vertices that connect to external edges
     // and as values those external edges that it connects to
 
-    let graphs = get_orientations(graph);
-    debug!("generating cff for graph: {}", graph.name);
-    debug!("number of orientations: {}", graphs.len());
+    // let graphs = get_orientations(graph);
+    // debug!("generating cff for graph: {}", graph.name);
+    //debug!("number of orientations: {}", graphs.len());
 
-    let (dep_mom, dep_mom_expr) = graph.get_dep_mom_expr();
+    // let (dep_mom, dep_mom_expr) = graph.get_dep_mom_expr();
 
-    let graph_cff =
-        generate_cff_from_orientations(graphs, None, None, None, dep_mom, &dep_mom_expr)?;
+    //let graph_cff =
+    //  generate_cff_from_orientations(graphs, None, None, None, dep_mom, &dep_mom_expr)?;
+    //
 
-    Ok(graph_cff)
+    //   Ok(graph_cff)
+    //
+    unimplemented!("deprecated function")
 }
 
 pub fn generate_cff_limit(
@@ -203,7 +206,7 @@ pub fn generate_cff_limit(
     right_dags: Vec<CFFGenerationGraph>,
     esurfaces: &EsurfaceCollection,
     limit_esurface: &Esurface,
-    dep_mom: usize,
+    dep_mom: EdgeIndex,
     dep_mom_expr: &ExternalShift,
     orientations_in_limit: (Vec<Vec<bool>>, Vec<TermId>),
 ) -> Result<CFFLimit, String> {
@@ -569,7 +572,7 @@ mod tests_cff {
                     }
                 }
 
-                CFFGenerationGraph::from_vec(new_edges, incoming_vertices.clone())
+                CFFGenerationGraph::from_vec(new_edges, incoming_vertices.clone(), None)
             })
             .filter(|graph| !graph.has_directed_cycle_initial())
             .collect_vec()

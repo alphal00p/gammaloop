@@ -1,6 +1,11 @@
 use ahash::{HashMap, HashSet, HashSetExt};
 use itertools::Itertools;
-use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex, HedgeGraph};
+use linnet::half_edge::{
+    hedgevec::HedgeVec,
+    involution::{EdgeIndex, Flow, HedgePair, Orientation},
+    HedgeGraph,
+};
+use petgraph::Undirected;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
@@ -234,6 +239,10 @@ impl CFFGenerationGraph {
         incoming_vertices: Vec<(usize, CFFEdgeType)>,
         orientation: Option<HedgeVec<bool>>,
     ) -> Self {
+        use crate::utils;
+
+        let total_num_edges = edges.len() + incoming_vertices.len();
+
         let edges = edges
             .into_iter()
             .map(|(from, to)| (VertexSet::from_usize(from), VertexSet::from_usize(to)))
@@ -285,8 +294,17 @@ impl CFFGenerationGraph {
         }
 
         let nodes = unique_vertices.into_values().collect_vec();
+        let global_orientation = match orientation {
+            Some(orientation) => orientation,
+            None => utils::dummy_hedge_graph(total_num_edges)
+                .new_hedgevec_from_iter(vec![true; total_num_edges])
+                .unwrap(),
+        };
 
-        CFFGenerationGraph { vertices: nodes }
+        CFFGenerationGraph {
+            vertices: nodes,
+            global_orientation,
+        }
     }
 
     fn get_vertex_that_is_not_v(&self, vertex: &VertexSet) -> &CFFVertex {
@@ -669,18 +687,57 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub fn new_new(graph: &HedgeGraph<Edge, Vertex>, global_orientation: HedgeVec<bool>) -> Self {
-        let vertices =
-            graph
-                .iter_nodes()
-                .enumerate()
-                .map(|(cff_vertex_id, (hedge_node, vertex))| {
-                    let mut vertex_id = CFFVertex::new(cff_vertex_id);
+    /// for now only non-cut graphs are supported
+    pub fn new_new<E, V>(
+        graph: &HedgeGraph<E, V>,
+        global_orientation: HedgeVec<Orientation>,
+    ) -> Self {
+        let mut vertices = (0..graph.n_nodes())
+            .map(|id| CFFVertex::new(id))
+            .collect_vec();
 
-                    for (_, edge, edge_data) in graph.iter_edges(&hedge_node.hairs) {
-                        CFFEdge {}
+        for (hedge_pair, edge_id, _) in graph.iter_all_edges() {
+            match hedge_pair {
+                HedgePair::Unpaired { hedge, flow } => {
+                    let vertex = Into::<usize>::into(graph.node_id(hedge));
+                    let edge_type = CFFEdgeType::External;
+                    let edge = CFFEdge { edge_id, edge_type };
+                    match flow {
+                        Flow::Source => {
+                            vertices[vertex].outgoing_edges.push(edge);
+                        }
+                        Flow::Sink => {
+                            vertices[vertex].incoming_edges.push(edge);
+                        }
                     }
-                });
+                }
+                HedgePair::Paired { source, sink } => {
+                    let source_vertex = Into::<usize>::into(graph.node_id(source));
+                    let sink_vertex = Into::<usize>::into(graph.node_id(sink));
+                    let edge_type = CFFEdgeType::Virtual;
+                    let edge = CFFEdge { edge_id, edge_type };
+
+                    match global_orientation[edge_id] {
+                        Orientation::Default => {
+                            vertices[source_vertex].outgoing_edges.push(edge);
+                            vertices[sink_vertex].incoming_edges.push(edge);
+                        }
+                        Orientation::Reversed => {
+                            vertices[source_vertex].incoming_edges.push(edge);
+                            vertices[sink_vertex].outgoing_edges.push(edge);
+                        }
+                        Orientation::Undirected => {
+                            panic!("Can not generate CFF with undirected edges")
+                        }
+                    }
+                }
+                HedgePair::Split {
+                    source,
+                    sink,
+                    split,
+                } => todo!(),
+            }
+        }
 
         Self {
             vertices,
