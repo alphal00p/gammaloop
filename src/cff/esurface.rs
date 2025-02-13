@@ -584,11 +584,7 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
 
 #[cfg(test)]
 mod tests {
-    use linnet::half_edge::{
-        builder::HedgeGraphBuilder,
-        involution::{EdgeIndex, Orientation},
-        HedgeGraph, NodeIndex,
-    };
+    use linnet::half_edge::involution::EdgeIndex;
     use symbolica::atom::{Atom, AtomCore};
 
     use crate::{

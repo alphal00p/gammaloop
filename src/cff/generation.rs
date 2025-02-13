@@ -1,12 +1,9 @@
-use crate::{
-    cff::{
-        esurface::add_external_shifts,
-        expression::{CompiledCFFExpression, OrientationExpression},
-        hsurface::HsurfaceID,
-        surface::{HybridSurface, HybridSurfaceID},
-        tree::Tree,
-    },
-    graph::BareGraph,
+use crate::cff::{
+    esurface::add_external_shifts,
+    expression::{CompiledCFFExpression, OrientationExpression},
+    hsurface::HsurfaceID,
+    surface::{HybridSurface, HybridSurfaceID},
+    tree::Tree,
 };
 use ahash::HashMap;
 use color_eyre::Report;
@@ -152,21 +149,6 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-fn old_get_orientations(graph: &BareGraph) -> Vec<CFFGenerationGraph> {
-    //let num_virtual_edges = graph.get_virtual_edges_iterator().count();
-    //let possible_orientations = iterate_possible_orientations(num_virtual_edges);
-
-    //possible_orientations
-    //    .map(|orientation_of_virtuals| {
-    //        let orientation_of_virtuals = orientation_of_virtuals.into_iter().collect_vec();
-
-    //        CFFGenerationGraph::newnew(graph, orientation_of_virtuals)
-    //    })
-    //    .collect()
-
-    unimplemented!("deprecated function")
-}
-
 fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
     let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
     let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
@@ -198,25 +180,6 @@ fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
         .collect_vec()
 }
 
-pub fn old_generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Report> {
-    // construct a hashmap that contains as keys all vertices that connect to external edges
-    // and as values those external edges that it connects to
-
-    // let graphs = get_orientations(graph);
-    // debug!("generating cff for graph: {}", graph.name);
-    //debug!("number of orientations: {}", graphs.len());
-
-    // let (dep_mom, dep_mom_expr) = graph.get_dep_mom_expr();
-
-    //let graph_cff =
-    //  generate_cff_from_orientations(graphs, None, None, None, dep_mom, &dep_mom_expr)?;
-    //
-
-    //   Ok(graph_cff)
-    //
-    unimplemented!("deprecated function")
-}
-
 pub fn generate_cff_expression<E, V>(
     graph: &HedgeGraph<E, V>,
     canonize_esurface: &Option<ShiftRewrite>,
@@ -225,7 +188,8 @@ pub fn generate_cff_expression<E, V>(
     debug!("number of orientations: {}", graphs.len());
 
     let graph_cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
-    todo!()
+
+    Ok(graph_cff)
 }
 
 pub fn generate_cff_limit(

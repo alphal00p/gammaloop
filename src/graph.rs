@@ -16,7 +16,6 @@ use crate::{
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::LoopIndex,
-    new_graph::HasEdgeType,
     numerator::{
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
         AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo, GammaAlgebraMode,
@@ -3815,9 +3814,10 @@ pub struct LoopMomentumBasis {
     pub edge_signatures: Vec<LoopExtSignature>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct NewLoopMomentumBasis {
     pub basis: TiVec<LoopIndex, EdgeIndex>,
-    pub edge_signatures: HedgeVec<crate::signature::LoopExtSignature>,
+    pub edge_signatures: HedgeVec<crate::signature::NewLoopExtSignature>,
 }
 
 #[derive(

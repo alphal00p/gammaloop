@@ -13,7 +13,22 @@ use symbolica::domains::float::NumericalFloatLike;
 use typed_index_collections::TiVec;
 use uuid::Uuid;
 
-#[derive(From, Into, Copy, Clone, Hash, Eq, Ord, PartialEq, PartialOrd, Encode, Decode, Debug)]
+#[derive(
+    From,
+    Into,
+    Copy,
+    Clone,
+    Hash,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Encode,
+    Decode,
+    Debug,
+    Serialize,
+    Deserialize,
+)]
 pub struct LoopIndex(pub usize);
 #[derive(
     From,

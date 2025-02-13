@@ -1,4 +1,4 @@
-use crate::momentum::{FourMomentum, SignOrZero};
+use crate::momentum::SignOrZero;
 use crate::momentum_sample::{ExternalIndex, LoopIndex};
 use bincode::{BorrowDecode, Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -40,6 +40,7 @@ impl<Context, T: Decode<Context> + From<usize>> Decode<Context> for SignatureLik
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct NewLoopExtSignature {
     pub internal: LoopSignature,
     pub external: ExternalSignature,
@@ -299,6 +300,7 @@ where
 
 #[test]
 fn test_signature() {
+    use crate::momentum::FourMomentum;
     let sig = LoopSignature::from_iter(vec![SignOrZero::Plus, SignOrZero::Minus]);
     let basis: Vec<i32> = vec![1, 2];
     assert_eq!(sig.apply(&basis), 1 - 2);

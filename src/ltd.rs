@@ -696,7 +696,7 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
                 .basis
                 .iter()
                 .zip(associated_lmb.iter())
-                .all(|(a, b)| *a == b.0)
+                .all(|(a, b)| (*a).into() == b.0)
             {
                 ltd_terms.push(LTDTerm {
                     associated_lmb: associated_lmb.clone(),
