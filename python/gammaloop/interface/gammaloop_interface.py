@@ -128,6 +128,7 @@ class GammaLoopConfiguration(object):
             'export_settings': {
                 'compile_cff': True,
                 'numerator_settings': {
+                    'dump_expression': 'Mathematica',
                     'eval_settings': {
                         'type': 'Joint',
                         'cpe_rounds': 1,

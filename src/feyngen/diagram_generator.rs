@@ -1,7 +1,6 @@
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
-use log::warn;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -1475,8 +1474,8 @@ impl FeynGen {
                 } else {
                     model.get_particle_from_pdg(e.data.pdg)
                 };
-                // Apply the switch from particle to anti-particle if the canonilazation swapped initial and final states.
-                if !selected_external_remapping.is_empty() && is_external {
+                // Apply the switch from particle to anti-particle (CP symmetry) if the canonilazation swapped initial and final states.
+                if !selected_external_remapping.is_empty() {
                     particle = particle.get_anti_particle(model);
                 }
                 (
@@ -2387,6 +2386,10 @@ impl FeynGen {
         let bar = ProgressBar::new(graphs.len() as u64);
         bar.set_style(progress_bar_style.clone());
         bar.set_message("Canonalizing edge and ndoes ordering of selected graphs, including leg symmetrization...");
+        // println!(
+        //     "Before edge and vertex canonization, first graph:\n{}",
+        //     processed_graphs.first().unwrap().0.to_dot()
+        // );
         let mut canonized_processed_graphs = pool.install(|| {
             processed_graphs
                 .par_iter()
@@ -2420,6 +2423,10 @@ impl FeynGen {
                 .collect::<Vec<_>>()
         });
         bar.finish_and_clear();
+        // println!(
+        //     "After edge and vertex canonization, first graph:\n{}",
+        //     canonized_processed_graphs.first().unwrap().1.to_dot()
+        // );
 
         canonized_processed_graphs.sort_by(|a, b| (a.1).partial_cmp(&b.1).unwrap());
 
@@ -2615,6 +2622,11 @@ impl FeynGen {
                                                             .unwrap())
                                                     .expand()
                                                     .to_canonical_string();
+                                                // TOFIX: Current version of symbolica (v0.14.0 rev: e534d9f7f8972e22d2a4fb7cd6cb5943373d3bb3)
+                                                // has a bug when cancelling terms where it does not yield 0. So this can be removed when updating to latest symbolica version.
+                                                if other_graph.overall_factor.is_empty() {
+                                                    other_graph.overall_factor = "0".to_string();
+                                                }
                                             }
                                         }
                                         if !found_match {
@@ -2899,8 +2911,8 @@ impl FeynGen {
                                 return Some(ratio);
                             }
                         } else {
-                            warn!("Skipping comparison of numerical samples between diagrams #{} and #{} because their variables differ", numerator_b.diagram_id, numerator_a.diagram_id);
-                            warn!(
+                            debug!("Skipping comparison of numerical samples between diagrams #{} and #{} because their variables differ", numerator_b.diagram_id, numerator_a.diagram_id);
+                            debug!(
                                 "Sample points A:\n{}",
                                 sample_points_a
                                     .first()
@@ -2909,7 +2921,7 @@ impl FeynGen {
                                     .map(|(a, b)| format!("{} -> {}", a, b))
                                     .join("\n")
                             );
-                            warn!(
+                            debug!(
                                 "Sample points B:\n{}",
                                 sample_points_b
                                     .first()
@@ -3052,6 +3064,7 @@ impl ProcessedNumeratorForComparison {
         //     diagram_id,
         //     numerator.get_single_atom().unwrap().0
         // );
+
         let default_processed_data = ProcessedNumeratorForComparison {
             diagram_id,
             canonized_numerator: None,
@@ -3200,13 +3213,25 @@ impl ProcessedNumeratorForComparison {
                     .number_of_numerical_samples
                     > 0
                 {
+                    // TODO: Once symbolica supports `collect_factors()`, substitute `collect_num()` below with it.
                     let decomposed_net = processed_numerator.state.colorless.map_data_ref(|data|
-                            TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(data.0.as_atom_view()).unwrap()
+                            TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(data.0.collect_num().as_atom_view()).unwrap()
                         );
-
                     // println!(
-                    //     "NUMERATOR DOT:\n{}",
-                    //     parsed_numerator.state.net.rich_graph().dot()
+                    //     "Scalar part: {}",
+                    //     decomposed_net
+                    //         .iter_flat()
+                    //         .map(|tn| format!("{}", tn.1.scalar.as_ref().unwrap().0))
+                    //         .collect::<Vec<_>>()
+                    //         .join(", ")
+                    // );
+                    // println!(
+                    //     "NUMERATOR DOTs:\n{}",
+                    //     decomposed_net
+                    //         .iter_flat()
+                    //         .map(|tn| format!("graph: {}", tn.1.rich_graph().dot()))
+                    //         .collect::<Vec<_>>()
+                    //         .join("\n ")
                     // );
                     // panic!("stop");
 
@@ -3454,9 +3479,12 @@ impl ProcessedNumeratorForComparison {
                     tn_complex.contract().map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
                     //println!("tn_complex: {}", tn_complex);
                     match tn_complex.result() {
-                        Ok((tn_res, tn_scalar)) => Ok(tn_res.to_bare_dense().scalar().map(|s| {
-                            Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I
-                        }).unwrap()*tn_scalar.unwrap_or(Atom::new_num(1))),
+                        Ok((tn_res, tn_scalar)) => {
+                            let processed = tn_res.to_bare_dense();
+                            Ok(processed.scalar().map(|s| {
+                                Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I
+                            }).unwrap()*tn_scalar.unwrap_or(Atom::new_num(1)))
+                        },
                         Err(spenso::network::TensorNetworkError::NoNodes) => {
                             let s = tn_complex
                             .scalar
