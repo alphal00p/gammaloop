@@ -185,6 +185,16 @@ class TestProcessGeneration:
             ('a > d d~ [{{2}}] -num_grouping only_detect_zeroes', 47),
             ('a > d d~ [{{2}}] -num_grouping group_identical_graphs_up_to_sign', 45),
             ('a > d d~ [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 31),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
+    @pytest.mark.slow
+    def test_slow_generate_sm_full_a_ddx(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm-full"))
+        tests = [
+            # Full particle contents
             ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 4176),
             ('a > d d~ [{{3}}] -num_grouping no_grouping', 8189),
         ]
@@ -329,6 +339,17 @@ class TestProcessGeneration:
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
+    @pytest.mark.slow
+    def test_slow_vaccuum_amplitude_generation(self):
+        gloop = get_gamma_loop_interpreter()
+        gloop.run(CommandList.from_string(
+            "import_model sm"))
+        tests = [
+            ('{} > {} | g ghg t u d QED=0 [{5}] -a -num_grouping only_detect_zeroes --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 2560),
+            ('{} > {} | g ghg t u d QED=0 [{5}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 1438),
+        ]
+        TestProcessGeneration.run_tests(gloop, tests)
+
     def test_vaccuum_amplitude_generation_full_sm(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -408,7 +429,9 @@ class TestProcessGeneration:
         TestProcessGeneration.run_tests(gloop, tests)
 
     # A bit too slow, let's skip for now
-    def very_slow_generate_amplitude_1l_sm_jets(self):
+    @pytest.mark.skip
+    @pytest.mark.slow
+    def test_very_slow_generate_amplitude_1l_sm_jets(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             "import_model sm"))
@@ -421,10 +444,8 @@ class TestProcessGeneration:
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
-    # Grouping diagrams with spenso-expand is too slow with current approach
-    # Also, it seems that we're still missing some groupings in these cases
     @pytest.mark.slow
-    def no_test_slow_generate_amplitude_1l_sm_jets_with_grouping(self):
+    def test_slow_generate_amplitude_1l_sm_jets_with_grouping(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
             "import_model sm"))

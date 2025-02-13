@@ -864,8 +864,10 @@ class GammaLoop(object):
             if input_args == 'help':
                 self.generate_parser.print_help()
                 return
-            args = self.generate_parser.parse_args(split_str_args(input_args))
+            split_args = split_str_args(input_args)
+            args = self.generate_parser.parse_args(split_args)
         else:
+            split_args = split_str_args(input_args.to_string())
             args = input_args
 
         if args.clear_existing_processes:
@@ -895,8 +897,23 @@ class GammaLoop(object):
 
         self.process = parsed_process
 
-        logger.info("Generating diagrams for process: %s%s%s",
-                    Colour.GREEN, self.process, Colour.END)
+        generation_args = []
+        aggregate = False
+        for arg in split_args:
+            if aggregate:
+                generation_args.append(arg)
+            else:
+                if arg.startswith('-'):
+                    generation_args.append(arg)
+                    aggregate = True
+        generation_args_str = ' '.join(generation_args)
+        logger.info("Generating diagrams for process: %s%s%s%s",
+                    Colour.GREEN,
+                    self.process,
+                    Colour.END,
+                    "" if generation_args_str == '' else f" {Colour.BLUE}{
+                        generation_args_str}{Colour.END}"
+                    )
         t_start = time.time()
         all_graphs: list[Graph] = self.process.generate_diagrams(
             self.rust_worker, self.model, args,
