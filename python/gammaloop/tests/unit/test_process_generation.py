@@ -23,8 +23,7 @@ class TestProcessGeneration:
                 0 if len(gloop.cross_sections) == 0 else len(
                     gloop.cross_sections[0].supergraphs)
             )
-            assert n_graphs == expected_graph_number, f"For process: '{
-                test}' | Expected {expected_graph_number} graphs, got {n_graphs}"
+            assert n_graphs == expected_graph_number, f"For process: '{test}' | Expected {expected_graph_number} graphs, got {n_graphs}"
             gloop.amplitudes.clear()
             gloop.cross_sections.clear()
 
