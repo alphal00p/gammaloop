@@ -336,11 +336,9 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -912,8 +910,7 @@ class GammaLoop(object):
                     Colour.GREEN,
                     self.process,
                     Colour.END,
-                    "" if generation_args_str == '' else f" {Colour.BLUE}{
-                        generation_args_str}{Colour.END}"
+                    "" if generation_args_str == '' else f" {Colour.BLUE}{generation_args_str}{Colour.END}"
                     )
         t_start = time.time()
         all_graphs: list[Graph] = self.process.generate_diagrams(
