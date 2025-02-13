@@ -336,11 +336,9 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}") # nopep8
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}") # nopep8
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -912,9 +910,8 @@ class GammaLoop(object):
                     Colour.GREEN,
                     self.process,
                     Colour.END,
-                    "" if generation_args_str == '' else f" {
-                        Colour.BLUE}{generation_args_str}{Colour.END}"
-                    )
+                    "" if generation_args_str == '' else f" {Colour.BLUE}{generation_args_str}{Colour.END}" # nopep8
+                    ) # nopep8
         t_start = time.time()
         all_graphs: list[Graph] = self.process.generate_diagrams(
             self.rust_worker, self.model, args,
