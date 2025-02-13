@@ -16,6 +16,7 @@ use crate::{
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::LoopIndex,
+    new_graph::HasEdgeType,
     numerator::{
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
         AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo, GammaAlgebraMode,

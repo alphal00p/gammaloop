@@ -27,6 +27,7 @@ use crate::utils::{
 };
 
 use super::cff_graph::VertexSet;
+use super::generation::ShiftRewrite;
 use super::surface::{self, Surface};
 
 /// Core esurface struct
@@ -263,15 +264,16 @@ impl Esurface {
         todo!()
     }
 
-    pub fn canonicalize_shift(&mut self, dep_mom: EdgeIndex, dep_mom_expr: &ExternalShift) {
+    pub fn canonicalize_shift(&mut self, shift_rewrite: &ShiftRewrite) {
         if let Some(dep_mom_pos) = self
             .external_shift
             .iter()
-            .position(|(index, _)| *index == dep_mom)
+            .position(|(index, _)| *index == shift_rewrite.dependent_momentum)
         {
             let (_, dep_mom_sign) = self.external_shift.remove(dep_mom_pos);
 
-            let external_shift = dep_mom_expr
+            let external_shift = shift_rewrite
+                .dependent_momentum_expr
                 .iter()
                 .map(|(index, sign)| (*index, dep_mom_sign * sign))
                 .collect();
@@ -590,22 +592,11 @@ mod tests {
     use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
-        cff::{cff_graph::VertexSet, esurface::Esurface},
-        utils::F,
+        cff::{cff_graph::VertexSet, esurface::Esurface, generation::ShiftRewrite},
+        utils::{dummy_hedge_graph, F},
     };
 
     use super::add_external_shifts;
-
-    fn dummy_hedge_graph(num_edges: usize) -> HedgeGraph<(), ()> {
-        let mut graph = HedgeGraphBuilder::new();
-        graph.add_node(());
-
-        for _ in 0..num_edges {
-            graph.add_edge(NodeIndex(0), NodeIndex(0), (), Orientation::Default);
-        }
-
-        graph.build()
-    }
 
     #[test]
     fn test_esurface() {
@@ -630,12 +621,16 @@ mod tests {
         let res = esurface.compute_value(&energies_cache);
         assert_eq!(res.0, 15.);
 
-        let canon_shift = vec![
-            (EdgeIndex::from(1), -1),
-            (EdgeIndex::from(2), -1),
-            (EdgeIndex::from(3), -1),
-        ];
-        esurface.canonicalize_shift(EdgeIndex::from(4), &canon_shift);
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: EdgeIndex::from(4),
+            dependent_momentum_expr: vec![
+                (EdgeIndex::from(1), -1),
+                (EdgeIndex::from(2), -1),
+                (EdgeIndex::from(3), -1),
+            ],
+        };
+
+        esurface.canonicalize_shift(&shift_rewrite);
 
         assert_eq!(
             esurface.external_shift,

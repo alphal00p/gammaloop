@@ -6,15 +6,17 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
-    graph::{BareGraph, Edge, EdgeType, Vertex},
-    new_graph::FeynmanGraph,
+    graph::BareGraph,
 };
 use ahash::HashMap;
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, Orientation};
-use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::{involution::HedgePair, HedgeGraph};
+use linnet::half_edge::{
+    involution::{EdgeIndex, Orientation},
+    subgraph::InternalSubGraph,
+};
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
@@ -39,6 +41,12 @@ enum GenerationData {
         term_id: usize,
         node_id: usize,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct ShiftRewrite {
+    pub dependent_momentum: EdgeIndex,
+    pub dependent_momentum_expr: ExternalShift,
 }
 
 fn forget_graphs(data: GenerationData) -> CFFExpressionNode {
@@ -144,7 +152,7 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-fn get_orientations(graph: &BareGraph) -> Vec<CFFGenerationGraph> {
+fn old_get_orientations(graph: &BareGraph) -> Vec<CFFGenerationGraph> {
     //let num_virtual_edges = graph.get_virtual_edges_iterator().count();
     //let possible_orientations = iterate_possible_orientations(num_virtual_edges);
 
@@ -159,8 +167,9 @@ fn get_orientations(graph: &BareGraph) -> Vec<CFFGenerationGraph> {
     unimplemented!("deprecated function")
 }
 
-fn new_get_orientations(graph: &HedgeGraph<Edge, Vertex>) -> Vec<CFFGenerationGraph> {
-    let num_virtual_edges = graph.num_virtual_edges(graph.full_filter());
+fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
+    let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
+    let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
     let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
 
     virtual_possible_orientations
@@ -168,13 +177,13 @@ fn new_get_orientations(graph: &HedgeGraph<Edge, Vertex>) -> Vec<CFFGenerationGr
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(_, __, edge)| {
-                    match edge.data.edge_type {
-                        EdgeType::Virtual => orientation_of_virtuals
+                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+                    match hedge_pair {
+                        HedgePair::Unpaired { .. } => Orientation::Default,
+                        HedgePair::Paired { .. } => orientation_of_virtuals
                             .next()
-                            .expect("unable to reconstruct global orientation"),
-                        EdgeType::Incoming => Orientation::Default,
-                        EdgeType::Outgoing => Orientation::Default,
+                            .expect(" unable to reconstruct orientation"),
+                        HedgePair::Split { .. } => todo!(),
                     }
                 }))
                 .expect("unable to construct global orientation");
@@ -189,7 +198,7 @@ fn new_get_orientations(graph: &HedgeGraph<Edge, Vertex>) -> Vec<CFFGenerationGr
         .collect_vec()
 }
 
-pub fn generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Report> {
+pub fn old_generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Report> {
     // construct a hashmap that contains as keys all vertices that connect to external edges
     // and as values those external edges that it connects to
 
@@ -208,13 +217,23 @@ pub fn generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Repor
     unimplemented!("deprecated function")
 }
 
+pub fn generate_cff_expression<E, V>(
+    graph: &HedgeGraph<E, V>,
+    canonize_esurface: &Option<ShiftRewrite>,
+) -> Result<CFFExpression, Report> {
+    let graphs = get_orientations(graph);
+    debug!("number of orientations: {}", graphs.len());
+
+    let graph_cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
+    todo!()
+}
+
 pub fn generate_cff_limit(
     left_dags: Vec<CFFGenerationGraph>,
     right_dags: Vec<CFFGenerationGraph>,
     esurfaces: &EsurfaceCollection,
     limit_esurface: &Esurface,
-    dep_mom: EdgeIndex,
-    dep_mom_expr: &ExternalShift,
+    canonize_esurface: &Option<ShiftRewrite>,
     orientations_in_limit: (Vec<Vec<bool>>, Vec<TermId>),
 ) -> Result<CFFLimit, String> {
     assert_eq!(
@@ -228,8 +247,7 @@ pub fn generate_cff_limit(
         Some(esurfaces.clone()),
         None,
         Some(limit_esurface),
-        dep_mom,
-        dep_mom_expr,
+        canonize_esurface,
     )
     .unwrap();
     let right = generate_cff_from_orientations(
@@ -237,8 +255,7 @@ pub fn generate_cff_limit(
         Some(esurfaces.clone()),
         None,
         Some(limit_esurface),
-        dep_mom,
-        dep_mom_expr,
+        canonize_esurface,
     )
     .unwrap();
 
@@ -254,8 +271,7 @@ fn generate_cff_from_orientations(
     optional_esurface_cache: Option<EsurfaceCollection>,
     optional_hsurface_cache: Option<HsurfaceCollection>,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: EdgeIndex,
-    dep_mom_expr: &ExternalShift,
+    canonize_esurface: &Option<ShiftRewrite>,
 ) -> Result<CFFExpression, Report> {
     let esurface_cache = if let Some(cache) = optional_esurface_cache {
         cache
@@ -301,8 +317,7 @@ fn generate_cff_from_orientations(
                 term_id,
                 &mut generator_cache,
                 rewrite_at_cache_growth,
-                dep_mom,
-                dep_mom_expr,
+                canonize_esurface,
             );
             let expression = tree.map(forget_graphs);
 
@@ -357,8 +372,7 @@ fn generate_tree_for_orientation(
     term_id: usize,
     generator_cache: &mut GeneratorCache,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: EdgeIndex,
-    dep_mom_expr: &ExternalShift,
+    canonize_esurface: &Option<ShiftRewrite>,
 ) -> Tree<GenerationData> {
     let mut tree = Tree::from_root(GenerationData::Data {
         graph,
@@ -370,8 +384,7 @@ fn generate_tree_for_orientation(
         term_id,
         generator_cache,
         rewrite_at_cache_growth,
-        dep_mom,
-        dep_mom_expr,
+        canonize_esurface,
     ) {}
 
     tree
@@ -382,8 +395,7 @@ fn advance_tree(
     term_id: usize,
     generator_cache: &mut GeneratorCache,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: EdgeIndex,
-    dep_mom_expr: &ExternalShift,
+    canonize_esurface: &Option<ShiftRewrite>,
 ) -> Option<()> {
     let bottom_layer = tree
         .get_bottom_layer()
@@ -410,7 +422,9 @@ fn advance_tree(
 
             let surface_id = match surface {
                 HybridSurface::Esurface(mut esurface) => {
-                    esurface.canonicalize_shift(dep_mom, dep_mom_expr);
+                    if let Some(shift_rewrite) = canonize_esurface {
+                        esurface.canonicalize_shift(shift_rewrite);
+                    }
                     let option_esurface_id = generator_cache
                         .esurface_cache
                         .position(|val| *val == esurface);
@@ -434,7 +448,10 @@ fn advance_tree(
                                     &negative_rewriter_esurface_shift,
                                 );
 
-                                esurface.canonicalize_shift(dep_mom, dep_mom_expr);
+                                if let Some(shift_rewrite) = canonize_esurface {
+                                    esurface.canonicalize_shift(shift_rewrite);
+                                }
+
                                 let new_option_esurface_id = generator_cache
                                     .esurface_cache
                                     .position(|val| *val == esurface);
@@ -538,11 +555,7 @@ fn advance_tree(
 
 #[cfg(test)]
 mod tests_cff {
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        domains::float::{NumericalFloatLike, Real},
-        id::Pattern,
-    };
+    use symbolica::domains::float::{NumericalFloatLike, Real};
     use utils::FloatLike;
 
     use crate::{
@@ -697,8 +710,13 @@ mod tests_cff {
         let dep_mom = EdgeIndex::from(2);
         let dep_mom_expr = vec![(EdgeIndex::from(0), -1), (EdgeIndex::from(1), -1)];
 
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
+
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
                 .unwrap();
         assert_eq!(
             cff.esurfaces.len(),
@@ -795,8 +813,13 @@ mod tests_cff {
         let dep_mom = EdgeIndex::from(1);
         let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
 
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
+
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
                 .unwrap();
 
         let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
@@ -880,9 +903,14 @@ mod tests_cff {
         let dep_mom = EdgeIndex::from(1);
         let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
 
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
+
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
         let cff =
-            generate_cff_from_orientations(orientataions, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientataions, None, None, None, &Some(shift_rewrite))
                 .unwrap();
 
         let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
@@ -962,13 +990,18 @@ mod tests_cff {
             (EdgeIndex::from(2), -1),
         ];
 
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
+
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
 
         // get time before cff generation
         let start = std::time::Instant::now();
 
         let _cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
                 .unwrap();
 
         let finish = std::time::Instant::now();
@@ -1006,6 +1039,11 @@ mod tests_cff {
         let dep_mom = EdgeIndex::from(7);
         let dep_mom_expr = (0..7).map(|i| (EdgeIndex::from(i), -1)).collect();
 
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
+
         let incoming_vertices = vec![0, 1, 2, 3, 4, 5, 6, 7];
 
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
@@ -1014,7 +1052,7 @@ mod tests_cff {
         let _start = std::time::Instant::now();
 
         let _cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
                 .unwrap();
 
         let _finish = std::time::Instant::now();
@@ -1052,10 +1090,15 @@ mod tests_cff {
             (EdgeIndex::from(2), -1),
         ];
 
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
+
         let start = std::time::Instant::now();
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
                 .unwrap();
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);

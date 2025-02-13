@@ -12,7 +12,7 @@ use linnet::half_edge::{
 use symbolica::atom::{representation::InlineNum, Atom};
 
 use crate::{
-    graph::{BareGraph, DerivedGraphData, Edge, LoopMomentumBasis, Vertex},
+    graph::{BareGraph, DerivedGraphData, Edge, EdgeType, LoopMomentumBasis, Vertex},
     momentum::{SignOrZero, Signature},
     numerator::{NumeratorState, PythonState, UnInit},
     ProcessSettings,
