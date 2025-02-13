@@ -29,6 +29,7 @@ use itertools::Itertools;
 
 use log::{debug, trace};
 
+use ref_ops::RefNeg;
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
@@ -1412,7 +1413,7 @@ impl ColorSimplified {
                 coad.pattern(&c_)
             )
             .to_pattern(),
-            ((function!(
+            (((function!(
                 UFO.t,
                 coad.pattern(&a_),
                 cof.pattern(&function!(i, a_, b_, c_)),
@@ -1443,7 +1444,8 @@ impl ColorSimplified {
                 cof.pattern(&function!(k, a_, b_, c_)),
                 coaf.pattern(&function!(i, a_, b_, c_))
             )) / &tr)
-                .to_pattern(),
+                * Atom::new_var(Atom::I).ref_neg())
+            .to_pattern(),
         )];
 
         let settings = MatchSettings {

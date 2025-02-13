@@ -1909,6 +1909,9 @@ impl BareGraph {
         Ok(external_vertices_in_external_edge_order)
     }
 
+    /// Generates the index ids needed based on the vertex rules.
+    /// A first pass, passing around the shifts, is done to generate the vertex slots, that are seen by the edges.
+    /// A second pass is done to generate the internal indices.
     fn generate_vertex_slots(&mut self, model: &Model) {
         let initial_shifts = Shifts {
             spin: 0,
@@ -1951,9 +1954,11 @@ impl BareGraph {
     }
 
     fn generate_internal_indices_for_edges(&mut self) {
-        self.shifts.lorentz = self.shifts.spin + self.shifts.color;
-        for (i, edge) in self.edges.iter_mut().enumerate() {
-            edge.internal_index = vec![(self.shifts.lorentz + i + 1).into()];
+        self.shifts.lorentzdummy =
+            self.shifts.spin + self.shifts.lorentzdummy + self.shifts.lorentz;
+        for edge in self.edges.iter_mut() {
+            self.shifts.lorentzdummy += 1;
+            edge.internal_index = vec![(self.shifts.lorentzdummy + 1).into()];
         }
     }
 
