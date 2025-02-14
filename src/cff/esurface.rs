@@ -16,10 +16,9 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
 
 use crate::debug_info::DEBUG_LOGGER;
-use crate::graph::NewLoopMomentumBasis;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta};
-use crate::new_graph;
+use crate::new_graph::{self, LoopMomentumBasis};
 use crate::numerator::NumeratorState;
 use crate::signature::ExternalSignature;
 use crate::utils::{
@@ -99,7 +98,7 @@ impl Esurface {
     #[inline]
     pub fn compute_from_momenta<T: FloatLike>(
         &self,
-        lmb: &NewLoopMomentumBasis,
+        lmb: &LoopMomentumBasis,
         real_mass_vector: &HedgeVec<F<T>>,
         loop_moms: &LoopMomenta<ThreeMomentum<F<T>>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -129,7 +128,7 @@ impl Esurface {
     #[inline]
     pub fn compute_shift_part_from_momenta<T: FloatLike>(
         &self,
-        lmb: &NewLoopMomentumBasis,
+        lmb: &LoopMomentumBasis,
         external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
         self.external_shift
@@ -150,7 +149,7 @@ impl Esurface {
         shifted_unit_loops: &LoopMomenta<F<T>>,
         center: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
-        lmb: &NewLoopMomentumBasis,
+        lmb: &LoopMomentumBasis,
         real_mass_vector: &HedgeVec<F<T>>,
     ) -> (F<T>, F<T>) {
         let spatial_part_of_externals = external_moms
@@ -196,7 +195,7 @@ impl Esurface {
         &self,
         unit_loops: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
-        lmb: &NewLoopMomentumBasis,
+        lmb: &LoopMomentumBasis,
     ) -> (F<T>, F<T>) {
         let const_builder = &unit_loops[LoopIndex(0)].px;
 
@@ -224,7 +223,7 @@ impl Esurface {
     }
 
     /// Write out the esurface expression in a given lmb
-    pub fn string_format_in_lmb(&self, lmb: &NewLoopMomentumBasis) -> String {
+    pub fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
         let mut energy_sum = self
             .energies
             .iter()
@@ -321,7 +320,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
     esurface_derived_data: &EsurfaceDerivedData,
     externals: &ExternalFourMomenta<F<T>>,
-    lmb: &NewLoopMomentumBasis,
+    lmb: &LoopMomentumBasis,
     debug: usize,
     e_cm: F<f64>,
 ) -> ExistingEsurfaces {

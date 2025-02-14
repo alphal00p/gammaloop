@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::signature::ExternalSignature;
-use crate::utils::{FloatLike, F};
+use crate::utils::{FloatLike, Length, F};
 use crate::{Externals, Polarizations, Settings};
 use bincode::{Decode, Encode};
 use derive_more::{From, Into};
@@ -50,6 +50,16 @@ pub struct ExternalIndex(pub usize);
 
 #[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct LoopMomenta<T>(Vec<ThreeMomentum<T>>);
+
+impl<T> Length for LoopMomenta<T> {
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
 
 pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
 

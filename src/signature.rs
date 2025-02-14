@@ -1,6 +1,10 @@
-use crate::momentum::SignOrZero;
-use crate::momentum_sample::{ExternalIndex, LoopIndex};
+use crate::momentum::{FourMomentum, SignOrZero, ThreeMomentum};
+use crate::momentum_sample::{
+    ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
+};
+use crate::utils::{FloatLike, Length, F};
 use bincode::{BorrowDecode, Decode, Encode};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spenso::contraction::RefZero;
 use std::fmt::Display;
@@ -41,7 +45,7 @@ impl<Context, T: Decode<Context> + From<usize>> Decode<Context> for SignatureLik
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct NewLoopExtSignature {
+pub struct LoopExtSignature {
     pub internal: LoopSignature,
     pub external: ExternalSignature,
 }
@@ -335,4 +339,107 @@ fn test_signature() {
         SignOrZero::Minus,
     ]);
     assert_eq!(sig.apply_iter(basis.iter()), Some(-basis[3]));
+}
+
+impl LoopExtSignature {
+    pub fn compute_momentum_untyped<'a, 'b: 'a, T>(
+        &self,
+        loop_moms: &'a [T],
+        external_moms: &'b [T],
+    ) -> T
+    where
+        T: RefZero + Clone + Neg<Output = T> + AddAssign<T>,
+    {
+        if loop_moms.is_empty() {
+            return self.external.apply(external_moms);
+        }
+        if external_moms.is_empty() {
+            return self.internal.apply(loop_moms);
+        }
+        let mut res = self.internal.apply(loop_moms);
+        res += self.external.apply(external_moms);
+        res
+    }
+
+    pub fn compute_momentum<L, E, M, Eind, Lind>(&self, loop_momenta: &L, external_momenta: &E) -> M
+    where
+        M: RefZero + Clone + Neg<Output = M> + AddAssign<M>,
+        L: Index<Lind, Output = M> + Length,
+        E: Index<Eind, Output = M> + Length,
+        usize: From<Lind> + From<Eind>,
+        Eind: From<usize>,
+        Lind: From<usize>,
+    {
+        if loop_momenta.is_empty() {
+            return self.external.apply_typed(external_momenta);
+        }
+
+        if external_momenta.is_empty() {
+            return self.internal.apply_typed(loop_momenta);
+        }
+
+        let mut res = self.internal.apply_typed(loop_momenta);
+        res += self.external.apply_typed(external_momenta);
+        res
+    }
+
+    pub fn to_momtrop_format(&self) -> (Vec<isize>, Vec<isize>) {
+        (
+            self.internal.to_momtrop_format(),
+            self.external.to_momtrop_format(),
+        )
+    }
+
+    /// Usefull for debugging
+    pub fn format_momentum(&self) -> String {
+        let mut res = String::new();
+        let mut first = true;
+
+        for (i, sign) in (&self.internal).into_iter().enumerate() {
+            if !first {
+                res.push_str(&sign.to_string());
+            } else {
+                first = false;
+            }
+            if sign.is_sign() {
+                res.push_str(&format!("k_{}", i));
+            }
+        }
+
+        for (i, sign) in (&self.external).into_iter().enumerate() {
+            if !first {
+                res.push_str(&sign.to_string());
+            } else {
+                first = false;
+            }
+            if sign.is_sign() {
+                res.push_str(&format!("l_{}", i));
+            }
+        }
+        res
+    }
+
+    #[allow(unused)]
+    pub fn compute_four_momentum_from_three<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+    ) -> FourMomentum<F<T>> {
+        let loop_moms = loop_moms
+            .iter()
+            .map(|m| m.clone().into_on_shell_four_momentum(None))
+            .collect_vec();
+
+        self.compute_momentum_untyped(&loop_moms, &external_moms.raw)
+    }
+
+    pub fn compute_three_momentum_from_four<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+    ) -> ThreeMomentum<F<T>> {
+        let external_moms: ExternalThreeMomenta<F<T>> =
+            external_moms.iter().map(|m| m.spatial.clone()).collect();
+        self.compute_momentum::<_, _, _, ExternalIndex, _>(loop_moms, &external_moms)
+    }
 }

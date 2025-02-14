@@ -3808,122 +3808,116 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub struct LoopMomentumBasis {
-    pub basis: Vec<usize>,
-    pub edge_signatures: Vec<LoopExtSignature>,
-}
+//#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+//pub struct LoopMomentumBasis {
+//    pub basis: Vec<usize>,
+//    pub edge_signatures: Vec<LoopExtSignature>,
+//}
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub struct NewLoopMomentumBasis {
-    pub basis: TiVec<LoopIndex, EdgeIndex>,
-    pub edge_signatures: HedgeVec<crate::signature::NewLoopExtSignature>,
-}
+//#[derive(
+//    Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, PartialOrd, Eq, Ord, Hash,
+//)]
+//pub struct LoopExtSignature {
+//    pub internal: Signature,
+//    pub external: Signature,
+//}
 
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, PartialOrd, Eq, Ord, Hash,
-)]
-pub struct LoopExtSignature {
-    pub internal: Signature,
-    pub external: Signature,
-}
+//impl From<(Signature, Signature)> for LoopExtSignature {
+//    fn from((loops, external_signature): (Signature, Signature)) -> Self {
+//        Self {
+//            internal: loops,
+//            external: external_signature,
+//        }
+//    }
+//}
+//
+//impl From<(Vec<isize>, Vec<isize>)> for LoopExtSignature {
+//    fn from((loops, external_signature): (Vec<isize>, Vec<isize>)) -> Self {
+//        Self {
+//            internal: Signature::from_iter(loops),
+//            oopExtSignature {
+//                pub fn compute_momentum<'a, 'b: 'a, T>(&self, loop_moms: &'a [T], external_moms: &'b [T]) -> T
+//                where
+//                    T: RefZero + Clone + Neg<Output = T> + AddAssign<T>,
+//                {
+//                    if loop_moms.is_empty() {
+//                        return self.external.apply(external_moms);
+//                    }
+//                    if external_moms.is_empty() {
+//                        return self.internal.apply(loop_moms);
+//                    }
+//                    let mut res = self.internal.apply(loop_moms);
+//                    res += self.external.apply(external_moms);
+//                    res
+//                }
+//
+//                pub fn to_momtrop_format(&self) -> (Vec<isize>, Vec<isize>) {
+//                    (
+//                        self.internal.to_momtrop_format(),
+//                        self.external.to_momtrop_format(),
+//                    )
+//                }
+//
+//                /// Usefull for debugging
+//                pub fn format_momentum(&self) -> String {
+//                    let mut res = String::new();
+//                    let mut first = true;
+//
+//                    for (i, sign) in (&self.internal).into_iter().enumerate() {
+//                        if !first {
+//                            res.push_str(&sign.to_string());
+//                        } else {
+//                            first = false;
+//                        }
+//                        if sign.is_sign() {
+//                            res.push_str(&format!("k_{}", i));
+//                        }
+//                    }
+//
+//                    for (i, sign) in (&self.external).into_iter().enumerate() {
+//                        if !first {
+//                            res.push_str(&sign.to_string());
+//                        } else {
+//                            first = false;
+//                        }
+//                        if sign.is_sign() {
+//                            res.push_str(&format!("l_{}", i));
+//                        }
+//                    }
+//
+//                    res
+//                }
+//
+//                #[allow(unused)]
+//                pub fn compute_four_momentum_from_three<T: FloatLike>(
+//                    &self,
+//                    loop_moms: &[ThreeMomentum<F<T>>],
+//                    external_moms: &[FourMomentum<F<T>>],
+//                ) -> FourMomentum<F<T>> {
+//                    let loop_moms = loop_moms
+//                        .iter()
+//                        .map(|m| m.clone().into_on_shell_four_momentum(None))
+//                        .collect_vec();
+//                    self.compute_momentum(&loop_moms, external_moms)
+//                }
+//
+//                pub fn compute_three_momentum_from_four<T: FloatLike>(
+//                    &self,
+//                    loop_moms: &[ThreeMomentum<F<T>>],
+//                    external_moms: &[FourMomentum<F<T>>],
+//                ) -> ThreeMomentum<F<T>> {
+//                    let external_moms = external_moms
+//                        .iter()
+//                        .map(|m| m.spatial.clone())
+//                        .collect_vec();
+//                    self.compute_momentum(loop_moms, &external_moms)
+//                }
+//            }      external: Signature::from_iter(external_signature),
+//        }
+//    }
+//}
 
-impl From<(Signature, Signature)> for LoopExtSignature {
-    fn from((loops, external_signature): (Signature, Signature)) -> Self {
-        Self {
-            internal: loops,
-            external: external_signature,
-        }
-    }
-}
-
-impl From<(Vec<isize>, Vec<isize>)> for LoopExtSignature {
-    fn from((loops, external_signature): (Vec<isize>, Vec<isize>)) -> Self {
-        Self {
-            internal: Signature::from_iter(loops),
-            external: Signature::from_iter(external_signature),
-        }
-    }
-}
-
-impl LoopExtSignature {
-    pub fn compute_momentum<'a, 'b: 'a, T>(&self, loop_moms: &'a [T], external_moms: &'b [T]) -> T
-    where
-        T: RefZero + Clone + Neg<Output = T> + AddAssign<T>,
-    {
-        if loop_moms.is_empty() {
-            return self.external.apply(external_moms);
-        }
-        if external_moms.is_empty() {
-            return self.internal.apply(loop_moms);
-        }
-        let mut res = self.internal.apply(loop_moms);
-        res += self.external.apply(external_moms);
-        res
-    }
-
-    pub fn to_momtrop_format(&self) -> (Vec<isize>, Vec<isize>) {
-        (
-            self.internal.to_momtrop_format(),
-            self.external.to_momtrop_format(),
-        )
-    }
-
-    /// Usefull for debugging
-    pub fn format_momentum(&self) -> String {
-        let mut res = String::new();
-        let mut first = true;
-
-        for (i, sign) in (&self.internal).into_iter().enumerate() {
-            if !first {
-                res.push_str(&sign.to_string());
-            } else {
-                first = false;
-            }
-            if sign.is_sign() {
-                res.push_str(&format!("k_{}", i));
-            }
-        }
-
-        for (i, sign) in (&self.external).into_iter().enumerate() {
-            if !first {
-                res.push_str(&sign.to_string());
-            } else {
-                first = false;
-            }
-            if sign.is_sign() {
-                res.push_str(&format!("l_{}", i));
-            }
-        }
-
-        res
-    }
-
-    #[allow(unused)]
-    pub fn compute_four_momentum_from_three<T: FloatLike>(
-        &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
-    ) -> FourMomentum<F<T>> {
-        let loop_moms = loop_moms
-            .iter()
-            .map(|m| m.clone().into_on_shell_four_momentum(None))
-            .collect_vec();
-        self.compute_momentum(&loop_moms, external_moms)
-    }
-
-    pub fn compute_three_momentum_from_four<T: FloatLike>(
-        &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
-    ) -> ThreeMomentum<F<T>> {
-        let external_moms = external_moms
-            .iter()
-            .map(|m| m.spatial.clone())
-            .collect_vec();
-        self.compute_momentum(loop_moms, &external_moms)
-    }
-}
+//impl L
 
 impl LoopMomentumBasis {
     pub fn spatial_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<ThreeMomentum<F<T>>> {

@@ -40,7 +40,7 @@ use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
 // use symbolica::domains::Field;
 use symbolica::numerical_integration::Sample;
-use typed_index_collections::TiSlice;
+use typed_index_collections::{TiSlice, TiVec};
 
 #[allow(unused_imports)]
 use log::{debug, info};
@@ -3446,4 +3446,19 @@ pub fn dummy_hedge_graph(num_edges: usize) -> linnet::half_edge::HedgeGraph<(), 
     }
 
     graph.build()
+}
+
+pub trait Length {
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
+}
+
+impl<I, T> Length for TiVec<I, T> {
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.is_empty()
+    }
 }
