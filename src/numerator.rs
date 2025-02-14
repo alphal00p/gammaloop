@@ -918,7 +918,7 @@ impl Numerator<Global> {
         let color =
             self.state
                 .color
-                .map_data_ref_mut(|a| match ColorSimplified::color_simplify_impl(&a) {
+                .map_data_ref_mut(|a| match ColorSimplified::color_simplify_impl(a) {
                     Ok(expression) => expression,
                     Err(ColorError::NotFully(expression)) => {
                         fully_simplified = false;
@@ -1540,7 +1540,6 @@ impl ColorSimplified {
             if expression
                 .0
                 .pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
-                .into_iter()
                 .next()
                 .is_some()
             {
@@ -1560,7 +1559,7 @@ impl ColorSimplified {
         let mut fully_simplified = true;
 
         expr.color.map_data_mut(|a| {
-            *a = match Self::color_simplify_impl(&a) {
+            *a = match Self::color_simplify_impl(a) {
                 Ok(expression) => expression,
                 Err(ColorError::NotFully(expression)) => {
                     fully_simplified = false;
