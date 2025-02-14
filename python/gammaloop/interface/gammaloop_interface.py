@@ -336,9 +336,9 @@ class GammaLoopConfiguration(object):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}") # nopep8
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")  # nopep8
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}") # nopep8
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")  # nopep8
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -831,6 +831,10 @@ class GammaLoop(object):
                                  help='Symmetrize final states in diagram generation. (default: Automatic)')
     generate_parser.add_argument('--symmetrize_left_right_states', '-slrs', default=None, action=BooleanOptionalAction,
                                  help='Symmetrize left and right forward scattering states in cross-section diagram generation. (default: Automatic)')
+    generate_parser.add_argument('--allow_symmetrization_of_external_fermions_in_amplitudes', '-symferm', default=False, action=BooleanOptionalAction,
+                                 help='Allow symmetrization of external fermions for amplitude generation. Disabled by default as it requires care from the user because of the fermion swap negative signs. (default: False)')
+
+    # Selection options
     generate_parser.add_argument('--loop_momentum_bases', '-lmbs', default=None, type=str,
                                  help='Specify LMB to use with a string corresponding to a python dictionary with format "{graph_name: list[edge_names]}" (default: Automatic)')
     generate_parser.add_argument('--select_graphs', '-selected_graphs', default=None, type=str, nargs="+",
@@ -866,7 +870,7 @@ class GammaLoop(object):
             split_args = split_str_args(input_args)
             args = self.generate_parser.parse_args(split_args)
         else:
-            split_args = split_str_args(input_args.to_string())
+            split_args = None
             args = input_args
 
         if args.clear_existing_processes:
@@ -897,21 +901,22 @@ class GammaLoop(object):
         self.process = parsed_process
 
         generation_args = []
-        aggregate = False
-        for arg in split_args:
-            if aggregate:
-                generation_args.append(arg)
-            else:
-                if arg.startswith('-'):
+        if split_args is not None:
+            aggregate = False
+            for arg in split_args:
+                if aggregate:
                     generation_args.append(arg)
-                    aggregate = True
+                else:
+                    if arg.startswith('-'):
+                        generation_args.append(arg)
+                        aggregate = True
         generation_args_str = ' '.join(generation_args)
         logger.info("Generating diagrams for process: %s%s%s%s",
                     Colour.GREEN,
                     self.process,
                     Colour.END,
-                    "" if generation_args_str == '' else f" {Colour.BLUE}{generation_args_str}{Colour.END}" # nopep8
-                    ) # nopep8
+                    "" if generation_args_str == '' else f" {Colour.BLUE}{generation_args_str}{Colour.END}"  # nopep8
+                    )  # nopep8
         t_start = time.time()
         all_graphs: list[Graph] = self.process.generate_diagrams(
             self.rust_worker, self.model, args,

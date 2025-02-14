@@ -29,6 +29,7 @@ fn cut_content() {
         symmetrize_initial_states: true,
         symmetrize_final_states: true,
         symmetrize_left_right_states: true,
+        allow_symmetrization_of_external_fermions_in_amplitudes: false,
         amplitude_filters: FeynGenFilters(vec![
             FeynGenFilter::SelfEnergyFilter(Default::default()),
             FeynGenFilter::ParticleVeto(vec![
@@ -192,6 +193,7 @@ fn cut_content() {
         symmetrize_initial_states: true,
         symmetrize_final_states: true,
         symmetrize_left_right_states: true,
+        allow_symmetrization_of_external_fermions_in_amplitudes: false,
         amplitude_filters: FeynGenFilters(vec![
             FeynGenFilter::SelfEnergyFilter(Default::default()),
             FeynGenFilter::ParticleVeto(vec![

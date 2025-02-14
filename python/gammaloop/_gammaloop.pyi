@@ -88,6 +88,7 @@ class FeynGenOptions:
                 symmetrize_initial_states: bool,
                 symmetrize_final_states: bool,
                 symmetrize_left_right_states: bool,
+                allow_symmetrization_of_external_fermions_in_amplitudes: bool,
                 amplitude_filters: Optional[FeynGenFilters] = None,
                 cross_section_filters: Optional[FeynGenFilters] = None,
                 ) -> FeynGenOptions:

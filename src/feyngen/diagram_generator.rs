@@ -1406,7 +1406,7 @@ impl FeynGen {
                 // This is avoided by including the spin in the color, which will prevent massless quark and gluons from ever being interchanged.
                 // Of course, even then, it could be that we pick two sorted representatives that are not isomorphic, even though there exist a different isomorphic skeletton graph
                 // which would have given a match when doing the numerical comparison. In the SM, this should never happen, and for BSM we can afford to lose some grouping.
-                // The only way to avoid this would be to numerically test all isomorphic permutations of the skeletton graph, which is prohibitive.
+                // The only way to avoid this would be to numerically test all isomorphic permutations of the skeletton graph, which is prohibitively slow.
                 skeletton_graph
                     .add_edge(
                         remapped_edge_vertices.0,
@@ -2228,12 +2228,11 @@ impl FeynGen {
                         }
                     }
                     (false, true) => {
-                        // In this case we only care abou left-righ  the pre-grouping does nothing so we can skip it
+                        // In this case we only care about left-righ  the pre-grouping does nothing so we can skip it
                         perform_graph_pregrouping_without_numerator_and_left_right_symmetry = false;
                         for initial_color in 1..=self.options.initial_pdgs.len() {
                             node_colors_for_canonicalization
                                 .insert(initial_color as i32, -2000 - (initial_color as i32));
-                            // No need to have a left-right symmetrization in this case
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
                             ..=2 * self.options.initial_pdgs.len()
@@ -2255,34 +2254,100 @@ impl FeynGen {
                 ) {
                     (true, true, true) => {
                         for initial_color in 1..=self.options.initial_pdgs.len() {
-                            node_colors_for_canonicalization.insert(initial_color as i32, -1);
+                            if !model
+                                .get_particle_from_pdg(
+                                    self.options.initial_pdgs[initial_color - 1] as isize,
+                                )
+                                .is_fermion()
+                                || self
+                                    .options
+                                    .allow_symmetrization_of_external_fermions_in_amplitudes
+                            {
+                                node_colors_for_canonicalization.insert(initial_color as i32, -1);
+                            }
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=2 * self.options.initial_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
                         {
-                            node_colors_for_canonicalization.insert(final_color as i32, -1);
+                            if !model
+                                .get_particle_from_pdg(
+                                    self.options.final_pdgs
+                                        [final_color - self.options.initial_pdgs.len() - 1]
+                                        as isize,
+                                )
+                                .is_fermion()
+                                || self
+                                    .options
+                                    .allow_symmetrization_of_external_fermions_in_amplitudes
+                            {
+                                node_colors_for_canonicalization.insert(final_color as i32, -1);
+                            }
                         }
                     }
                     (true, false, false) => {
                         for initial_color in 1..=self.options.initial_pdgs.len() {
-                            node_colors_for_canonicalization.insert(initial_color as i32, -2);
+                            if !model
+                                .get_particle_from_pdg(
+                                    self.options.initial_pdgs[initial_color - 1] as isize,
+                                )
+                                .is_fermion()
+                                || self
+                                    .options
+                                    .allow_symmetrization_of_external_fermions_in_amplitudes
+                            {
+                                node_colors_for_canonicalization.insert(initial_color as i32, -2);
+                            }
                         }
                     }
                     (false, true, false) => {
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=2 * self.options.initial_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
                         {
-                            node_colors_for_canonicalization.insert(final_color as i32, -3);
+                            if !model
+                                .get_particle_from_pdg(
+                                    self.options.final_pdgs
+                                        [final_color - self.options.initial_pdgs.len() - 1]
+                                        as isize,
+                                )
+                                .is_fermion()
+                                || self
+                                    .options
+                                    .allow_symmetrization_of_external_fermions_in_amplitudes
+                            {
+                                node_colors_for_canonicalization.insert(final_color as i32, -3);
+                            }
                         }
                     }
                     (true, true, false) => {
                         for initial_color in 1..=self.options.initial_pdgs.len() {
-                            node_colors_for_canonicalization.insert(initial_color as i32, -2);
+                            if !model
+                                .get_particle_from_pdg(
+                                    self.options.initial_pdgs[initial_color - 1] as isize,
+                                )
+                                .is_fermion()
+                                || self
+                                    .options
+                                    .allow_symmetrization_of_external_fermions_in_amplitudes
+                            {
+                                node_colors_for_canonicalization.insert(initial_color as i32, -2);
+                            }
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=2 * self.options.initial_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
                         {
-                            node_colors_for_canonicalization.insert(final_color as i32, -3);
+                            if !model
+                                .get_particle_from_pdg(
+                                    self.options.final_pdgs
+                                        [final_color - self.options.initial_pdgs.len() - 1]
+                                        as isize,
+                                )
+                                .is_fermion()
+                                || self
+                                    .options
+                                    .allow_symmetrization_of_external_fermions_in_amplitudes
+                            {
+                                node_colors_for_canonicalization.insert(final_color as i32, -3);
+                            }
                         }
                     }
                     (false, false, false) => {
@@ -2297,65 +2362,6 @@ impl FeynGen {
                 }
             }
         }
-
-        // if self.options.symmetrize_initial_states {
-        //     for initial_color in 1..=self.options.initial_pdgs.len() {
-        //         if self.options.generation_type == GenerationType::Amplitude {
-        //             // Always ignore external fermions symmetrization for amplitudes since we do not implement
-        //             // minus signs for fermion exchange statistics in the amplitude generation at this point
-        //             if model
-        //                 .get_particle_from_pdg(
-        //                     self.options.initial_pdgs[initial_color - 1] as isize,
-        //                 )
-        //                 .is_fermion()
-        //             {
-        //                 continue;
-        //             }
-        //         }
-        //         let trgt_color = if self.options.symmetrize_left_right_states {
-        //             -1
-        //         } else {
-        //             -2
-        //         };
-        //         if self.options.generation_type == GenerationType::Amplitude {
-        //             node_colors_for_canonicalization.insert(initial_color as i32, trgt_color);
-        //         } else {
-        //             node_colors_for_canonicalization.insert(initial_color as i32, -2);
-        //         }
-        //     }
-        //     if self.options.generation_type == GenerationType::CrossSection {
-        //         for final_color in
-        //             self.options.initial_pdgs.len() + 1..=2 * self.options.initial_pdgs.len()
-        //         {
-        //             node_colors_for_canonicalization.insert(final_color as i32, -3);
-        //         }
-        //     }
-        // }
-        // if self.options.generation_type == GenerationType::Amplitude
-        //     && self.options.symmetrize_final_states
-        // {
-        //     for final_color in self.options.initial_pdgs.len() + 1
-        //         ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
-        //     {
-        //         // Always ignore external fermions symmetrization for amplitudes since we do not implement
-        //         // minus signs for fermion exchange statistics in the amplitude generation at this point
-        //         if model
-        //             .get_particle_from_pdg(
-        //                 self.options.final_pdgs[final_color - self.options.initial_pdgs.len() - 1]
-        //                     as isize,
-        //             )
-        //             .is_fermion()
-        //         {
-        //             continue;
-        //         }
-        //         let trgt_color = if self.options.symmetrize_left_right_states {
-        //             -1
-        //         } else {
-        //             -3
-        //         };
-        //         node_colors_for_canonicalization.insert(final_color as i32, trgt_color);
-        //     }
-        // }
 
         if perform_graph_pregrouping_without_numerator_and_left_right_symmetry
             && !node_colors_for_canonicalization.is_empty()

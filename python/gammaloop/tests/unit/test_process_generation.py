@@ -152,7 +152,7 @@ class TestProcessGeneration:
             ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 11),
             ('e+ e- > b b~ h | d b h a e- ghg g QED^2=6 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 166),
             ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 16),
-            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 101),
+            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 104),
             # Too slow sadly
             # ('e+ e- > b b~ h | d b h a e- ghg g z QED^2=6 [{{4}} QCD=4] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', ?),
         ]
@@ -334,8 +334,8 @@ class TestProcessGeneration:
             ('d d~ > g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 341),
             ('g g > g g g | g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 671),
             # For fun, symmetrize it all
-            ('g g > g g g | g ghg a QED=0 [QCD=1] -a --symmetrize_initial_states --symmetrize_final_states -num_grouping group_identical_graphs_up_to_sign', 239),
-            ('g g > g g g | g ghg a QED=0 [QCD=1] -a --symmetrize_left_right_states --symmetrize_initial_states --symmetrize_final_states -num_grouping group_identical_graphs_up_to_sign', 67),
+            ('g g > g g g | g ghg a QED=0 [QCD=1] -a --symmetrize_initial_states --symmetrize_final_states -num_grouping group_identical_graphs_up_to_sign', 109),
+            ('g g > g g g | g ghg a QED=0 [QCD=1] -a --symmetrize_left_right_states --symmetrize_initial_states --symmetrize_final_states -num_grouping group_identical_graphs_up_to_sign', 25),
             ('g g > g g g | u d g ghg a QED=0 [QCD=1] -a -num_grouping group_identical_graphs_up_to_sign', 905),
         ]
         TestProcessGeneration.run_tests(gloop, tests)

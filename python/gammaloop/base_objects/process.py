@@ -210,6 +210,7 @@ class Process(object):
                 generation_args.symmetrize_initial_states,
                 generation_args.symmetrize_final_states,
                 generation_args.symmetrize_left_right_states,
+                generation_args.allow_symmetrization_of_external_fermions_in_amplitudes,
                 amplitude_filters=self.amplitude_filters,
                 cross_section_filters=self.cross_section_filters
             ),

@@ -455,6 +455,7 @@ impl PyFeynGenOptions {
         symmetrize_initial_states: bool,
         symmetrize_final_states: bool,
         symmetrize_left_right_states: bool,
+        allow_symmetrization_of_external_fermions_in_amplitudes: bool,
         amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
         cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
     ) -> PyResult<PyFeynGenOptions> {
@@ -468,6 +469,7 @@ impl PyFeynGenOptions {
                 symmetrize_initial_states,
                 symmetrize_final_states,
                 symmetrize_left_right_states,
+                allow_symmetrization_of_external_fermions_in_amplitudes,
                 amplitude_filters: FeynGenFilters(
                     amplitude_filters
                         .map(|f| f.filters.clone())

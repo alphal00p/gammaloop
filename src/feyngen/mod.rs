@@ -507,6 +507,7 @@ pub struct FeynGenOptions {
     pub symmetrize_initial_states: bool,
     pub symmetrize_final_states: bool,
     pub symmetrize_left_right_states: bool,
+    pub allow_symmetrization_of_external_fermions_in_amplitudes: bool,
     pub amplitude_filters: FeynGenFilters,
     pub cross_section_filters: FeynGenFilters,
 }
@@ -515,9 +516,13 @@ impl fmt::Display for FeynGenOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Generation type: {}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {:?}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
+            "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {:?}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
             self.generation_type,
             if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
+            if self.allow_symmetrization_of_external_fermions_in_amplitudes 
+                && self.generation_type == GenerationType::Amplitude
+                && (self.symmetrize_initial_states  || self.symmetrize_final_states || self.symmetrize_left_right_states)
+                { " (allowing fermion symmetrization)" } else { "" },
             self.initial_pdgs,
             if self.symmetrize_initial_states { " (symmetrized)" } else { "" },
             self.final_pdgs,
