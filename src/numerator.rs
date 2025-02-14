@@ -1,11 +1,11 @@
+use crate::debug_info::DEBUG_LOGGER;
+use crate::feyngen::FeynGenError;
+use log::warn;
 use std::fmt::Debug;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-
-use crate::debug_info::DEBUG_LOGGER;
-use crate::feyngen::FeynGenError;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
@@ -45,7 +45,7 @@ use spenso::parametric::{
 };
 use spenso::shadowing::ETS;
 use spenso::structure::abstract_index::DOWNIND;
-use spenso::structure::concrete_index::ExpandedIndex;
+use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 
 use spenso::structure::representation::{
     BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Minkowski,
@@ -901,18 +901,38 @@ impl Numerator<Global> {
         Ok(())
     }
 
-    pub fn color_simplify(self) -> Numerator<ColorSimplified> {
+    pub fn color_simplify(mut self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying global numerator");
-        let state = ColorSimplified {
-            colorless: self
-                .state
+        let mut fully_simplified = true;
+
+        let colorless =
+            self.state
                 .colorless
-                .map_data(Self::color_simplify_global_impl),
-            color: self
-                .state
+                .map_data_ref_mut(|a| match Self::color_simplify_global_impl(a) {
+                    Ok(expression) => expression,
+                    Err(ColorError::NotFully(expression)) => {
+                        fully_simplified = false;
+                        expression
+                    }
+                });
+        let color =
+            self.state
                 .color
-                .map_data(ColorSimplified::color_symplify_impl),
-            state: Default::default(),
+                .map_data_ref_mut(|a| match ColorSimplified::color_simplify_impl(&a) {
+                    Ok(expression) => expression,
+                    Err(ColorError::NotFully(expression)) => {
+                        fully_simplified = false;
+                        expression
+                    }
+                });
+        let state = ColorSimplified {
+            colorless,
+            color,
+            state: if fully_simplified {
+                Color::Fully
+            } else {
+                Color::Partially
+            },
         };
         debug!(
             "Color simplified numerator: color:{}\n colorless:{}",
@@ -921,9 +941,14 @@ impl Numerator<Global> {
         Numerator { state }
     }
 
-    fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
+    fn color_simplify_global_impl(
+        expression: &SerializableAtom,
+    ) -> Result<SerializableAtom, ColorError> {
+        let mut expression = expression.clone();
         ColorSimplified::isolate_color(&mut expression);
         let color_pat = function!(GS.color_wrap, GS.x_).to_pattern();
+
+        let mut fully = true;
 
         let color_simplified = {
             let pat = expression
@@ -932,20 +957,37 @@ impl Numerator<Global> {
                 .next()
                 .unwrap();
 
-            ColorSimplified::color_symplify_impl(pat[&GS.x_].clone().into())
-                .0
-                .factor()
+            match ColorSimplified::color_simplify_impl(&pat[&GS.x_].clone().into()) {
+                Ok(s) => s,
+                Err(ColorError::NotFully(s)) => {
+                    fully = false;
+                    s
+                }
+            }
+            .0
+            .factor()
         };
 
-        expression.replace_all_mut(&color_pat, Atom::new_num(1).to_pattern(), None, None);
-        expression.0 = expression.0 * color_simplified;
+        let mut expression =
+            expression
+                .0
+                .replace_all(&color_pat, Atom::new_num(1).to_pattern(), None, None);
+        expression = expression * color_simplified;
 
-        expression
+        if fully {
+            Ok(expression.into())
+        } else {
+            Err(ColorError::NotFully(expression.into()))
+        }
     }
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode, Default)]
-pub struct Color {}
+pub enum Color {
+    #[default]
+    Fully,
+    Partially,
+}
 pub type ColorSimplified = SymbolicExpression<Color>;
 
 impl ExpressionState for Color {
@@ -1253,6 +1295,12 @@ impl Numerator<AppliedFeynmanRule> {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum ColorError {
+    #[error("Not fully simplified: {0}")]
+    NotFully(SerializableAtom),
+}
+
 impl ColorSimplified {
     fn isolate_color(expression: &mut SerializableAtom) {
         let color_fn = FunctionBuilder::new(Symbol::new("color"))
@@ -1307,7 +1355,9 @@ impl ColorSimplified {
         // color.into()
     }
 
-    pub fn color_symplify_impl(mut expression: SerializableAtom) -> SerializableAtom {
+    pub fn color_simplify_impl(
+        expression: &SerializableAtom,
+    ) -> Result<SerializableAtom, ColorError> {
         let f_ = symb!("f_");
         let cof = ColorFundamental::rep(3);
         let coaf = ColorFundamental::rep(3).dual();
@@ -1464,6 +1514,7 @@ impl ColorSimplified {
         //     println!("{r}")
         // }
 
+        let mut expression = expression.clone();
         let mut first = true;
         while first
             || expression
@@ -1478,23 +1529,76 @@ impl ColorSimplified {
             expression.0 = expression.0.expand();
         }
 
-        expression
-    }
+        let pats: Vec<_> = vec![ColorAdjoint::selfless_symbol()];
+        let dualizablepats: Vec<_> = vec![
+            ColorFundamental::selfless_symbol(),
+            ColorSextet::selfless_symbol(),
+        ];
 
-    pub fn color_simplify<T: ExpressionState>(expr: SymbolicExpression<T>) -> ColorSimplified {
-        let colorless = expr.colorless;
-        let color = expr.color.map_data(Self::color_symplify_impl);
+        let mut fully_simplified = true;
+        for p in pats.iter().chain(&dualizablepats) {
+            if expression
+                .0
+                .pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
+                .into_iter()
+                .next()
+                .is_some()
+            {
+                fully_simplified = false;
+            }
+        }
 
-        ColorSimplified {
-            colorless,
-            color,
-            state: Default::default(),
+        if fully_simplified {
+            Ok(expression)
+        } else {
+            Err(ColorError::NotFully(expression))
         }
     }
 
+    pub fn color_simplify<T: ExpressionState>(mut expr: SymbolicExpression<T>) -> ColorSimplified {
+        let colorless = expr.colorless;
+        let mut fully_simplified = true;
+
+        expr.color.map_data_mut(|a| {
+            *a = match Self::color_simplify_impl(&a) {
+                Ok(expression) => expression,
+                Err(ColorError::NotFully(expression)) => {
+                    fully_simplified = false;
+                    expression
+                }
+            }
+        });
+
+        ColorSimplified {
+            colorless,
+            color: expr.color,
+            state: if fully_simplified {
+                Color::Fully
+            } else {
+                Color::Partially
+            },
+        }
+    }
+
+    /// Parses the color simplified numerator into a network,
+    /// If the color hasn't been fully simplified,
     pub fn parse(self) -> Network {
+        let a = match self.state {
+            Color::Fully => self.get_single_atom().unwrap().0,
+            Color::Partially => {
+                warn!(
+                    "Not fully simplified, taking the colorless part associated to {}",
+                    self.color.get_owned_linear(FlatIndex::from(0)).unwrap()
+                );
+                self.colorless
+                    .get_owned_linear(FlatIndex::from(0))
+                    .unwrap()
+                    .0
+            }
+        };
+
         let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
-            self.get_single_atom().unwrap().0.as_view(),
+            a.as_view(),
         )
         .unwrap()
         .to_fully_parametric()
@@ -1611,6 +1715,7 @@ pub struct PolySplit {
     pub var_map: Arc<Vec<Variable>>,
     pub energies: Vec<usize>,
     pub color: ParamTensor,
+    pub colorsimplified: Color,
 }
 
 impl PolySplit {
@@ -1695,6 +1800,7 @@ impl PolySplit {
             var_map,
             energies,
             color: ParamTensor::composite(color_simplified.state.color.map_data(|a| a.0)),
+            colorsimplified: color_simplified.state.state,
         }
     }
 
@@ -1764,9 +1870,18 @@ impl PolySplit {
             .colorless
             .map_data(|a| Self::shadow_poly(a, reps.clone()));
 
-        let out = ParamTensor::composite(colorless)
-            .contract(&self.color)
-            .unwrap();
+        let out = match self.colorsimplified {
+            Color::Fully => ParamTensor::composite(colorless)
+                .contract(&self.color)
+                .unwrap(),
+            Color::Partially => {
+                warn!(
+                    "Not fully color-simplified, taking the colorless part associated to {}",
+                    self.color.get_owned_linear(FlatIndex::from(0)).unwrap()
+                );
+                ParamTensor::new_scalar(colorless.get_owned_linear(FlatIndex::from(0)).unwrap())
+            }
+        };
 
         let reps = Arc::try_unwrap(reps).unwrap().into_inner().unwrap();
 

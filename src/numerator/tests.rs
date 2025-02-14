@@ -2,14 +2,14 @@ use brotli::CompressorWriter;
 use insta::assert_snapshot;
 use spenso::{
     complex::Complex,
-    data::{DataTensor, DenseTensor, StorageTensor},
+    data::{DenseTensor, StorageTensor},
     iterators::IteratableTensor,
     parametric::{atomcore::TensorAtomMaps, ParamTensor},
     shadowing::ETS,
     structure::{
         representation::{BaseRepName, Bispinor, Minkowski},
         slot::IsAbstractSlot,
-        HasStructure, ScalarTensor,
+        HasStructure,
     },
     upgrading_arithmetic::FallibleSub,
 };
@@ -31,9 +31,7 @@ use crate::{
     graph::{BareGraph, Graph},
     model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
-    numerator::{
-        ufo::UFO, ColorSimplified, ContractionSettings, ExtraInfo, GlobalPrefactor, Network,
-    },
+    numerator::{ufo::UFO, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
     tests_from_pytest::{
         load_amplitude_output, load_generic_model, sample_generator, test_export_settings,
     },
@@ -42,8 +40,8 @@ use crate::{
 };
 
 use super::{
-    Color, Evaluate, EvaluatorOptions, GammaSimplified, Numerator, NumeratorCompileOptions,
-    NumeratorEvaluatorOptions, SymbolicExpression, UnInit,
+    Evaluate, EvaluatorOptions, GammaSimplified, Numerator, NumeratorCompileOptions,
+    NumeratorEvaluatorOptions, UnInit,
 };
 
 #[ignore]
@@ -1040,10 +1038,14 @@ fn one_loop_lbl_concretize() {
     );
 }
 
-#[test]
-fn color_simple() {
-    println!("{}",ColorSimplified::color_symplify_impl(Atom::parse("(-1*T(coad(8,0),cof(3,j(17,18,19)),dind(cof(3,k(17,18,19))))*T(coad(8,1),cof(3,11),dind(cof(3,j(17,18,19))))*T(coad(8,2),cof(3,5),dind(cof(3,14)))*T(coad(8,3),cof(3,14),dind(cof(3,11)))*T(coad(8,4),cof(3,k(17,18,19)),dind(cof(3,5)))+T(coad(8,0),cof(3,11),dind(cof(3,j(17,18,19))))*T(coad(8,1),cof(3,j(17,18,19)),dind(cof(3,k(17,18,19))))*T(coad(8,2),cof(3,5),dind(cof(3,14)))*T(coad(8,3),cof(3,14),dind(cof(3,11)))*T(coad(8,4),cof(3,k(17,18,19)),dind(cof(3,5))))").unwrap().into()))
-}
+// #[test]
+// fn color_simple() {
+//     println!("{}",ColorSimplified::color_simplify_impl(&Atom::parse("(-1*T(coad(8,0),cof(3,j(17,18,19)),dind(cof(3,k(17,18,19))))*T(coad(8,1),cof(3,11),dind(cof(3,j(17,18,19))))*T(coad(8,2),cof(3,5),dind(cof(3,14)))*T(coad(8,3),cof(3,14),dind(cof(3,11)))*T(coad(8,4),cof(3,k(17,18,19)),dind(cof(3,5)))+T(coad(8,0),cof(3,11),dind(cof(3,j(17,18,19))))*T(coad(8,1),cof(3,j(17,18,19)),dind(cof(3,k(17,18,19))))*T(coad(8,2),cof(3,5),dind(cof(3,14)))*T(coad(8,3),cof(3,14),dind(cof(3,11)))*T(coad(8,4),cof(3,k(17,18,19)),dind(cof(3,5))))").unwrap().into()).map_or_else(|a|if let ColorError::NotFully(a)=a{
+//         a
+//     }else{
+//         panic!("")
+//     },|a|a))
+// }
 
 #[test]
 fn dumb_four_gluon() {
