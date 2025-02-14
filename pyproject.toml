@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gammaloop"
-version = "0.2.0"
+version = "0.3.0"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 authors = [
     "Valentin Hirschi <valentin.hirschi@gmail.com>",

@@ -1321,10 +1321,13 @@ impl FeynGen {
         node_colors_for_external_symmetrization: &HashMap<i32, i32>,
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
         manually_canonalize_initial_final_swap: bool,
-    ) -> (
-        SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
-        SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-    ) {
+    ) -> Result<
+        (
+            SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
+            SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        ),
+        FeynGenError,
+    > {
         // println!("INPUT GRAPH:\n{}", input_graph.to_dot());
         let mut canonized_skelettons = vec![];
         let external_node_positions = input_graph
@@ -1523,7 +1526,7 @@ impl FeynGen {
             &mut sorted_g,
         );
 
-        (canonized_skeletton.graph.to_owned(), sorted_g)
+        Ok((canonized_skeletton.graph.to_owned(), sorted_g))
     }
 
     pub fn count_closed_fermion_loops(
@@ -2405,18 +2408,21 @@ impl FeynGen {
                             &node_colors_for_canonicalization,
                             numerator_aware_isomorphism_grouping,
                             manually_canonalize_initial_final_swap,
-                        );
+                        )
+                        .unwrap();
                     // If we are symmetrizing the left-right states in the context of a cross-section, the canonaliztion above
                     // has canonized the choice of which nodes to assign to the initial and final state.
                     // We now do a second pass to canonalize the vertex ordering for that particular choice.
                     if manually_canonalize_initial_final_swap {
-                        (canonical_repr, sorted_g) = self.canonicalize_edge_and_vertex_ordering(
-                            model,
-                            &sorted_g,
-                            &node_colors_for_canonicalization,
-                            numerator_aware_isomorphism_grouping,
-                            false,
-                        );
+                        (canonical_repr, sorted_g) = self
+                            .canonicalize_edge_and_vertex_ordering(
+                                model,
+                                &sorted_g,
+                                &node_colors_for_canonicalization,
+                                numerator_aware_isomorphism_grouping,
+                                false,
+                            )
+                            .unwrap();
                     }
                     (canonical_repr, sorted_g, symmetry_factor.clone())
                 })
@@ -2822,12 +2828,15 @@ impl FeynGen {
                         //     numerator_b.canonized_numerator.as_ref().unwrap().clone()
                         // );
                         // println!(
-                        //     "ratio from canonalized numerators: {:?}",
+                        //     "ratio from canonalized numerators:\n{}",
                         //     ratios
                         //         .iter()
-                        //         .map(|av| av.to_canonical_string())
+                        //         .map(|av| av
+                        //             .as_ref()
+                        //             .map(|ra| ra.to_canonical_string())
+                        //             .unwrap_or("None".into()))
                         //         .collect::<Vec<_>>()
-                        //         .join(",")
+                        //         .join("\n")
                         // );
                         if let Some(ratio) = analyze_ratios(&ratios) {
                             // debug!(
@@ -2898,6 +2907,19 @@ impl FeynGen {
                             //         .map(|av| av.to_canonical_string())
                             //         .collect::<Vec<_>>()
                             //         .join("\n")
+                            // );
+                            // println!(
+                            //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                            //         numerator_b.diagram_id,
+                            //         numerator_a.diagram_id,
+                            //         ratios
+                            //             .iter()
+                            //             .map(|av| av
+                            //                 .as_ref()
+                            //                 .map(|ra| ra.to_canonical_string())
+                            //                 .unwrap_or("None".into()))
+                            //             .collect::<Vec<_>>()
+                            //             .join("\n")
                             // );
                             if let Some(ratio) = analyze_ratios(&ratios) {
                                 //     debug!(

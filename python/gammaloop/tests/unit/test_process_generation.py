@@ -23,7 +23,8 @@ class TestProcessGeneration:
                 0 if len(gloop.cross_sections) == 0 else len(
                     gloop.cross_sections[0].supergraphs)
             )
-            assert n_graphs == expected_graph_number, f"For process: '{test}' | Expected {expected_graph_number} graphs, got {n_graphs}"
+            assert n_graphs == expected_graph_number, f"For process: '{
+                test}' | Expected {expected_graph_number} graphs, got {n_graphs}"
             gloop.amplitudes.clear()
             gloop.cross_sections.clear()
 
@@ -39,12 +40,12 @@ class TestProcessGeneration:
             ('a > d d~ z [{{2}}] | d g a -num_grouping only_detect_zeroes', 0),
             # # Full particle contents
             ('a > d d~ [{{1}}] --symmetrize_left_right_states', 1),
-            ('a > d d~ [{{2}}] --symmetrize_left_right_states', 9),
+            ('a > d d~ [{{2}}] --symmetrize_left_right_states', 10),
             # # Only 1-flavour pure QCD corrections
             ('a > d d~ | d g ghG a QED^2=2 [{{1}}] --symmetrize_left_right_states', 1),
             ('a > d d~ | d g ghG a QED^2=2 [{{2}} QCD=1] --symmetrize_left_right_states', 2),
             ('a > d d~ | d g ghG a QED^2=2 [{{3}} QCD=2] --symmetrize_left_right_states', 16),
-            ('a > d d~ | d g ghG a QED^2=2 [{{4}} QCD=3] --symmetrize_left_right_states', 165),
+            ('a > d d~ | d g ghG a QED^2=2 [{{4}} QCD=3] --symmetrize_left_right_states', 166),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 

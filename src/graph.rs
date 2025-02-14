@@ -1403,6 +1403,79 @@ impl BareGraph {
     }
     */
 
+    pub fn select_cp_variant(
+        model: &Model,
+        vertex_info: &mut VertexInfo,
+        edge_particles: &[Arc<Particle>],
+    ) -> Result<(), FeynGenError> {
+        let mut vertex_particles = edge_particles.to_vec();
+        vertex_particles.sort();
+        let vertex_rule = match vertex_info {
+            VertexInfo::InteractonVertexInfo(ref mut i) => i.vertex_rule.clone(),
+            VertexInfo::ExternalVertexInfo(_) => return Ok(()),
+        };
+        let mut this_interaction_particles = vertex_rule.particles.clone();
+        this_interaction_particles.sort();
+        if this_interaction_particles == vertex_particles {
+            Ok(())
+        } else {
+            let mut this_interaction_particles_cp_conjugate = this_interaction_particles
+                .iter()
+                .map(|p| p.get_anti_particle(model))
+                .collect::<Vec<_>>();
+            this_interaction_particles_cp_conjugate.sort();
+            if this_interaction_particles_cp_conjugate != vertex_particles {
+                Err(FeynGenError::GenericError(
+                    format!("Neither the vertex rule currently assigned nor its CP conjugate connect particles that match the PDG of the edges connected to this node: ({}) != ({})",
+                        this_interaction_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                    ),
+                ))
+            } else if let Some(vertex_rules) = model
+                .particle_set_to_vertex_rules_map
+                .get(&this_interaction_particles_cp_conjugate)
+            {
+                let this_rule_coupling_orders = vertex_rule.get_coupling_orders();
+                let candidates = vertex_rules
+                    .iter()
+                    .filter_map(|vr| {
+                        let vr_coupling_orders = vr.get_coupling_orders();
+                        if vr_coupling_orders == this_rule_coupling_orders {
+                            Some(vr.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                if candidates.is_empty() {
+                    return Err(FeynGenError::GenericError(
+                        format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). None have matching couplings orders. Consider generating without the option '--symmetrize_left_right_states'.",
+                        vertex_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                        ),
+                    ));
+                } else if candidates.len() > 1 {
+                    return Err(FeynGenError::GenericError(
+                        format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Multiple candidate interactions have matching coupling orders: {}. Consider generating without the option '--symmetrize_left_right_states'.",
+                        vertex_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                            candidates.iter().map(|vr| vr.name.clone()).collect::<Vec<_>>().join(", ")
+                        ),
+                    ));
+                } else {
+                    *vertex_info = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+                        vertex_rule: candidates[0].clone(),
+                    });
+                    Ok(())
+                }
+            } else {
+                return Err(FeynGenError::GenericError(
+                        format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Consider generating without the option '--symmetrize_left_right_states'.",
+                        vertex_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                        ),
+                    ));
+            }
+        }
+    }
+
     pub fn from_symbolica_graph(
         model: &model::Model,
         name: String,
@@ -1520,8 +1593,9 @@ impl BareGraph {
                 if node.data.external_tag != 0 {
                     panic!("Internal vertex with non-zero integer colour data found in Feyngen.")
                 }
+
                 SerializableVertexInfo::InteractonVertexInfo(SerializableInteractionVertexInfo {
-                    vertex_rule: node.data.vertex_rule.name.clone(),
+                    vertex_rule: node.data.vertex_rule.name.clone(), //node.data.vertex_rule.name.clone(),
                 })
             };
             let vertex = Vertex::from_serializable_vertex(
@@ -1675,6 +1749,22 @@ impl BareGraph {
                     )));
                 }
             }
+            // When the graphs have been generated with --symmetrize_left_right_states, it may be that
+            // the representative graphs contains the CP conjugate of the vertex rule.
+            // In this case, we must select the correct vertex rule.
+            // You can test this by generating the following process:
+            //   generate a > d d~ [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling
+            // where you will see that the left-right symmetrization will turn the original vertex (d~,u,W-) into (u~,d,W+)
+            // so that we must select the correct CP correspondant vertex rule.
+            // Carefully keeping track of the CP variant is important for capturing the right coupling phase in case of an complex CKM matrix for instance.
+            BareGraph::select_cp_variant(
+                model,
+                &mut vertex.vertex_info,
+                &current_vertex_edge_order
+                    .iter()
+                    .map(|(_, p)| p.clone())
+                    .collect::<Vec<_>>(),
+            )?;
             vertex.order_edges_following_interaction(current_vertex_edge_order)?;
         }
 

@@ -227,6 +227,22 @@ impl std::hash::Hash for VertexRule {
     }
 }
 
+impl VertexRule {
+    #[allow(clippy::complexity)]
+    pub fn get_coupling_orders(
+        &self,
+    ) -> Vec<Vec<Option<HashMap<SmartString<LazyCompact>, usize, RandomState>>>> {
+        self.couplings
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|co| co.clone().map(|c| c.orders.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VertexSlots {
     pub(crate) edge_slots: Vec<EdgeSlots<Minkowski>>,
@@ -651,6 +667,18 @@ impl Particle {
     }
 }
 
+impl Ord for Particle {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.pdg_code.cmp(&other.pdg_code)
+    }
+}
+
+impl PartialOrd for Particle {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.pdg_code.cmp(&other.pdg_code))
+    }
+}
+
 impl std::hash::Hash for Particle {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.pdg_code.hash(state);
@@ -660,72 +688,73 @@ impl Eq for Particle {}
 impl PartialEq for Particle {
     fn eq(&self, other: &Self) -> bool {
         if self.pdg_code == other.pdg_code {
-            if self.name != other.name {
-                panic!(
-                    "Particle with same pdg code but different names: {} and {}",
-                    self.name, other.name
-                );
-            }
-            if self.spin != other.spin {
-                panic!(
-                    "Particle with same pdg code but different spins: {} and {}",
-                    self.spin, other.spin
-                );
-            }
-            if self.color != other.color {
-                panic!(
-                    "Particle with same pdg code but different colors: {} and {}",
-                    self.color, other.color
-                );
-            }
-            if self.mass != other.mass {
-                panic!(
-                    "Particle with same pdg code but different masses: {} and {}",
-                    self.mass, other.mass
-                );
-            }
-            if self.width != other.width {
-                panic!(
-                    "Particle with same pdg code but different widths: {} and {}",
-                    self.width, other.width
-                );
-            }
-            if self.texname != other.texname {
-                panic!(
-                    "Particle with same pdg code but different texnames: {} and {}",
-                    self.texname, other.texname
-                );
-            }
-            if self.antitexname != other.antitexname {
-                panic!(
-                    "Particle with same pdg code but different antitexnames: {} and {}",
-                    self.antitexname, other.antitexname
-                );
-            }
-            if self.charge != other.charge {
-                panic!(
-                    "Particle with same pdg code but different charges: {} and {}",
-                    self.charge, other.charge
-                );
-            }
-            if self.ghost_number != other.ghost_number {
-                panic!(
-                    "Particle with same pdg code but different ghost_numbers: {} and {}",
-                    self.ghost_number, other.ghost_number
-                );
-            }
-            if self.lepton_number != other.lepton_number {
-                panic!(
-                    "Particle with same pdg code but different lepton_numbers: {} and {}",
-                    self.lepton_number, other.lepton_number
-                );
-            }
-            if self.y_charge != other.y_charge {
-                panic!(
-                    "Particle with same pdg code but different y_charges: {} and {}",
-                    self.y_charge, other.y_charge
-                );
-            }
+            // The checks below are too slow
+            // if self.name != other.name {
+            //     panic!(
+            //         "Particle with same pdg code but different names: {} and {}",
+            //         self.name, other.name
+            //     );
+            // }
+            // if self.spin != other.spin {
+            //     panic!(
+            //         "Particle with same pdg code but different spins: {} and {}",
+            //         self.spin, other.spin
+            //     );
+            // }
+            // if self.color != other.color {
+            //     panic!(
+            //         "Particle with same pdg code but different colors: {} and {}",
+            //         self.color, other.color
+            //     );
+            // }
+            // if self.mass != other.mass {
+            //     panic!(
+            //         "Particle with same pdg code but different masses: {} and {}",
+            //         self.mass, other.mass
+            //     );
+            // }
+            // if self.width != other.width {
+            //     panic!(
+            //         "Particle with same pdg code but different widths: {} and {}",
+            //         self.width, other.width
+            //     );
+            // }
+            // if self.texname != other.texname {
+            //     panic!(
+            //         "Particle with same pdg code but different texnames: {} and {}",
+            //         self.texname, other.texname
+            //     );
+            // }
+            // if self.antitexname != other.antitexname {
+            //     panic!(
+            //         "Particle with same pdg code but different antitexnames: {} and {}",
+            //         self.antitexname, other.antitexname
+            //     );
+            // }
+            // if self.charge != other.charge {
+            //     panic!(
+            //         "Particle with same pdg code but different charges: {} and {}",
+            //         self.charge, other.charge
+            //     );
+            // }
+            // if self.ghost_number != other.ghost_number {
+            //     panic!(
+            //         "Particle with same pdg code but different ghost_numbers: {} and {}",
+            //         self.ghost_number, other.ghost_number
+            //     );
+            // }
+            // if self.lepton_number != other.lepton_number {
+            //     panic!(
+            //         "Particle with same pdg code but different lepton_numbers: {} and {}",
+            //         self.lepton_number, other.lepton_number
+            //     );
+            // }
+            // if self.y_charge != other.y_charge {
+            //     panic!(
+            //         "Particle with same pdg code but different y_charges: {} and {}",
+            //         self.y_charge, other.y_charge
+            //     );
+            // }
             true
         } else {
             false
@@ -1548,6 +1577,7 @@ pub struct Model {
     pub couplings: Vec<Arc<Coupling>>,
     pub vertex_rules: Vec<Arc<VertexRule>>,
     pub unresolved_particles: HashMap<SmartString<LazyCompact>, HashSet<Arc<Particle>>>,
+    pub particle_set_to_vertex_rules_map: HashMap<Vec<Arc<Particle>>, Vec<Arc<VertexRule>>>,
     pub order_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub parameter_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -1581,6 +1611,7 @@ impl Default for Model {
                 RandomState,
             >::default(),
             unresolved_particles: HashMap::new(),
+            particle_set_to_vertex_rules_map: HashMap::new(),
             particle_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             particle_pdg_to_position: HashMap::<isize, usize, RandomState>::default(),
@@ -1879,6 +1910,19 @@ impl Model {
         Ok(())
     }
 
+    fn generate_particle_set_to_vertex_rules_map(&mut self) {
+        let mut map = HashMap::new();
+
+        for vertex in self.vertex_rules.iter() {
+            let mut vertex_particles = vertex.particles.clone();
+            vertex_particles.sort();
+            map.entry(vertex_particles)
+                .and_modify(|l: &mut Vec<Arc<VertexRule>>| l.push(vertex.clone()))
+                .or_insert(vec![vertex.clone()]);
+        }
+        self.particle_set_to_vertex_rules_map = map;
+    }
+
     fn generate_unresolved_particles(&mut self) {
         let mut map = HashMap::new();
 
@@ -2042,6 +2086,7 @@ impl Model {
             );
 
         model.generate_unresolved_particles();
+        model.generate_particle_set_to_vertex_rules_map();
 
         model
     }
