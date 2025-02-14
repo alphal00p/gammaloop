@@ -1129,22 +1129,22 @@ class GammaLoop(object):
         for a_graph, _attributes in graphs:
             if len(a_graph.get_incoming_edges()) == 0 and len(a_graph.get_outgoing_edges()) == 0:
                 if graph_type is None:
-                    graph_type = 'supergraph'
-                elif graph_type != 'supergraph':
+                    graph_type = 'amplitude'
+                elif graph_type != 'amplitude':
                     raise GammaLoopError(
-                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in qgraph output loaded.")
+                        "Mixed type of graphs (amplitude, forward scattering graph and/or amplitude graph) found in {}.".format(args.file_path))
             elif len(a_graph.get_incoming_edges()) == len(a_graph.get_outgoing_edges()) == len(a_graph.external_connections) and not any(None in c for c in a_graph.external_connections):
                 if graph_type is None:
                     graph_type = 'forward_scattering_graph'
                 elif graph_type != 'forward_scattering_graph':
                     raise GammaLoopError(
-                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in qgraph output loaded.")
+                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in {}.".format(args.file_path))
             else:
                 if graph_type is None:
                     graph_type = 'amplitude'
                 elif graph_type != 'amplitude':
                     raise GammaLoopError(
-                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in qgraph output loaded.")
+                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in {}.".format(args.file_path))
 
         if graph_type == 'supergraph':
             raise GammaLoopError(

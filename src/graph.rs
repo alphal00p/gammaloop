@@ -1427,8 +1427,8 @@ impl BareGraph {
             if this_interaction_particles_cp_conjugate != vertex_particles {
                 Err(FeynGenError::GenericError(
                     format!("Neither the vertex rule currently assigned nor its CP conjugate connect particles that match the PDG of the edges connected to this node: ({}) != ({})",
-                        this_interaction_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
-                        vertex_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                        this_interaction_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
                     ),
                 ))
             } else if let Some(vertex_rules) = model
@@ -1450,13 +1450,13 @@ impl BareGraph {
                 if candidates.is_empty() {
                     return Err(FeynGenError::GenericError(
                         format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). None have matching couplings orders. Consider generating without the option '--symmetrize_left_right_states'.",
-                        vertex_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
                         ),
                     ));
                 } else if candidates.len() > 1 {
                     return Err(FeynGenError::GenericError(
                         format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Multiple candidate interactions have matching coupling orders: {}. Consider generating without the option '--symmetrize_left_right_states'.",
-                        vertex_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
                             candidates.iter().map(|vr| vr.name.clone()).collect::<Vec<_>>().join(", ")
                         ),
                     ));
@@ -1469,7 +1469,7 @@ impl BareGraph {
             } else {
                 return Err(FeynGenError::GenericError(
                         format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Consider generating without the option '--symmetrize_left_right_states'.",
-                        vertex_particles.iter().map(|p| p.pdg_code.to_string()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
                         ),
                     ));
             }
