@@ -365,7 +365,7 @@ class GammaLoopConfiguration(object):
     def set_setting(self, path: str, new_setting: Any, allow_shorthands: bool = True) -> str:
         p = path.split('.')
         if allow_shorthands and p[0] in self._shorthands:
-            return self.set_setting('.'.join([self._shorthands[p[0]],]+(p[-1:] if len(p) > 1 else [])), new_setting, allow_shorthands=False)
+            return self.set_setting('.'.join([self._shorthands[p[0]],]+p[1:]), new_setting, allow_shorthands=False)
 
         self.update({p[-1]: new_setting}, path=('.'.join(p[:-1])
                     if len(p) > 1 else ''), allow_shorthands=allow_shorthands)

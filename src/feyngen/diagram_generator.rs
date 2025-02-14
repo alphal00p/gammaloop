@@ -1478,6 +1478,10 @@ impl FeynGen {
                     model.get_particle_from_pdg(e.data.pdg)
                 };
                 // Apply the switch from particle to anti-particle (CP symmetry) if the canonilazation swapped initial and final states.
+                // IMPORTANT: we must here to apply CP not just to the external particles since the assignment of fermion flow matters, for
+                // internal edges connecting these external fermions.
+                // If one would fix those edges (necessary e.g. for e- d > e- d DIS process) then one could add '&& is_external' below, which
+                // would allow to capture additional groupings involving the charged. W bosons.
                 if !selected_external_remapping.is_empty() {
                     particle = particle.get_anti_particle(model);
                 }
@@ -1529,6 +1533,41 @@ impl FeynGen {
         Ok((canonized_skeletton.graph.to_owned(), sorted_g))
     }
 
+    pub fn follow_chain(
+        current_node: usize,
+        abs_pdg: usize,
+        graph_edges: &[symbolica::graph::Edge<EdgeColor>],
+        vetos: &mut Vec<bool>,
+        adj_map: &HashMap<usize, Vec<(usize, usize)>>,
+    ) -> Result<usize, FeynGenError> {
+        if let Some(connected_edges) = adj_map.get(&current_node) {
+            let targets = connected_edges
+                .iter()
+                .filter_map(|(i_e, next_node)| {
+                    if !vetos[*i_e] && graph_edges[*i_e].data.pdg.unsigned_abs() == abs_pdg {
+                        Some((i_e, next_node))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            if targets.is_empty() {
+                Ok(current_node)
+            } else if targets.len() == 1 {
+                let (&next_edge, &next_node) = targets.first().unwrap();
+                vetos[next_edge] = true;
+                return FeynGen::follow_chain(next_node, abs_pdg, graph_edges, vetos, adj_map);
+            } else {
+                return Err(FeynGenError::GenericError(
+                    "GammaLoop does not support four-fermion vertices of identical flavours yet"
+                        .to_string(),
+                ));
+            }
+        } else {
+            Ok(current_node)
+        }
+    }
+
     pub fn count_closed_fermion_loops(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
@@ -1552,40 +1591,6 @@ impl FeynGen {
             }
         }
 
-        fn follow_chain(
-            current_node: usize,
-            abs_pdg: usize,
-            graph_edges: &[symbolica::graph::Edge<EdgeColor>],
-            vetos: &mut Vec<bool>,
-            adj_map: &HashMap<usize, Vec<(usize, usize)>>,
-        ) -> Result<usize, FeynGenError> {
-            if let Some(connected_edges) = adj_map.get(&current_node) {
-                let targets = connected_edges
-                    .iter()
-                    .filter_map(|(i_e, next_node)| {
-                        if !vetos[*i_e] && graph_edges[*i_e].data.pdg.unsigned_abs() == abs_pdg {
-                            Some((i_e, next_node))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                if targets.is_empty() {
-                    Ok(current_node)
-                } else if targets.len() == 1 {
-                    let (&next_edge, &next_node) = targets.first().unwrap();
-                    vetos[next_edge] = true;
-                    return follow_chain(next_node, abs_pdg, graph_edges, vetos, adj_map);
-                } else {
-                    return Err(FeynGenError::GenericError(
-                        "GammaLoop does not support four-fermion vertices of identical flavours yet".to_string()
-                    ));
-                }
-            } else {
-                Ok(current_node)
-            }
-        }
-
         let mut vetoed_edges: Vec<bool> = graph
             .edges()
             .iter()
@@ -1597,14 +1602,14 @@ impl FeynGen {
                 continue;
             }
             vetoed_edges[i_e] = true;
-            let left_trail_end = follow_chain(
+            let left_trail_end = FeynGen::follow_chain(
                 e.vertices.0,
                 e.data.pdg.unsigned_abs(),
                 graph.edges(),
                 &mut vetoed_edges,
                 &adj_map,
             )?;
-            let right_trail_end = follow_chain(
+            let right_trail_end = FeynGen::follow_chain(
                 e.vertices.1,
                 e.data.pdg.unsigned_abs(),
                 graph.edges(),
@@ -2491,6 +2496,10 @@ impl FeynGen {
                         external_connections.clone(),
                         None,
                     )?;
+                    // println!(
+                    //     "bare_graph:\n{}",
+                    //     bare_graph.dot()
+                    // );
                     // When disabling numerator-aware graph isomorphism, each graph is added separately
                     if matches!(
                         numerator_aware_isomorphism_grouping,
@@ -3125,7 +3134,7 @@ impl ProcessedNumeratorForComparison {
                 //                 .next()
                 //                 .is_some()
                 //             {
-                //                 rep.1 = (rep.1.clone() * 1).expand();
+                //                 rep.1 = (rep.1.clone() * -1).expand();
                 //                 break 'find_rep;
                 //             }
                 //         }
