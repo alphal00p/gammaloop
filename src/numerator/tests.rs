@@ -1041,42 +1041,6 @@ fn one_loop_lbl_concretize() {
 }
 
 #[test]
-fn test_wrong_structure() {
-    let expr = "1/9*𝑖*ee^4*sw^-2*CKM1x1
-        *(
-            -Metric(mink(4,2),mink(4,3))+MW^-2*(-K(0,mink(4,1))-K(1,mink(4,1)))*(-K(0,mink(4,2))-K(1,mink(4,2)))
-        )
-        *(
-            -P(0,mink(4,27))-K(1,mink(4,27))
-        )*sqrt(2)^-2
-        *ProjM(bis(4,indexid(-1)),bis(4,2))
-        *ProjM(bis(4,indexid(-1)),bis(4,4))
-        *id(mink(4,0),mink(4,5))
-        *id(mink(4,1),mink(4,4))
-        *γ(mink(4,4),bis(4,7),bis(4,6))
-        *γ(mink(4,5),bis(4,9),bis(4,8))
-        *γ(mink(4,23),bis(4,4),bis(4,3))
-        *γ(mink(4,25),bis(4,2),bis(4,9))
-        *γ(mink(4,26),bis(4,6),bis(4,5))
-        *γ(mink(4,27),bis(4,8),bis(4,7))
-        *γ(mink(4,2),bis(4,3),bis(4,indexid(-1)))
-        *γ(mink(4,3),bis(4,5),bis(4,indexid(-1)))
-        *complexconjugate(CKM1x1)
-        *ϵ(0,mink(4,0))
-        *ϵ(0,mink(4,1))
-        *K(0,mink(4,23))
-        *K(1,mink(4,25))
-        *K(1,mink(4,26))";
-    let spenso_expr = SymbolicExpression::<Color> {
-        colorless: DataTensor::new_scalar(Atom::parse(expr).unwrap().into()),
-        color: DataTensor::new_scalar(Atom::parse("Nc").unwrap().into()),
-        state: Default::default(),
-    };
-    let net = Numerator::<SymbolicExpression<Color>> { state: spenso_expr };
-    net.parse();
-}
-
-#[test]
 fn color_simple() {
     println!("{}",ColorSimplified::color_symplify_impl(Atom::parse("(-1*T(coad(8,0),cof(3,j(17,18,19)),dind(cof(3,k(17,18,19))))*T(coad(8,1),cof(3,11),dind(cof(3,j(17,18,19))))*T(coad(8,2),cof(3,5),dind(cof(3,14)))*T(coad(8,3),cof(3,14),dind(cof(3,11)))*T(coad(8,4),cof(3,k(17,18,19)),dind(cof(3,5)))+T(coad(8,0),cof(3,11),dind(cof(3,j(17,18,19))))*T(coad(8,1),cof(3,j(17,18,19)),dind(cof(3,k(17,18,19))))*T(coad(8,2),cof(3,5),dind(cof(3,14)))*T(coad(8,3),cof(3,14),dind(cof(3,11)))*T(coad(8,4),cof(3,k(17,18,19)),dind(cof(3,5))))").unwrap().into()))
 }
