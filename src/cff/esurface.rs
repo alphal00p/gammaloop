@@ -100,13 +100,13 @@ impl Esurface {
         &self,
         lmb: &LoopMomentumBasis,
         real_mass_vector: &HedgeVec<F<T>>,
-        loop_moms: &LoopMomenta<ThreeMomentum<F<T>>>,
+        loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
         let spatial_part_of_externals = external_moms
             .iter()
             .map(|mom| mom.spatial.clone())
-            .collect_vec();
+            .collect::<TiVec<ExternalIndex, _>>();
 
         let energy_sum = self
             .energies

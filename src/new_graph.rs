@@ -31,7 +31,9 @@ use crate::{
     gammaloop_integrand::BareSample,
     graph::{BareGraph, DerivedGraphData, Edge, EdgeType, Vertex},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
-    momentum_sample::{BareMomentumSample, ExternalIndex, LoopIndex},
+    momentum_sample::{
+        BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
+    },
     numerator::{NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature},
     utils::{FloatLike, F},
@@ -209,14 +211,14 @@ impl LoopMomentumBasis {
         &self,
         sample: &BareMomentumSample<T>,
     ) -> Vec<ThreeMomentum<F<T>>> {
-        let three_externals = sample
+        let three_externals: ExternalThreeMomenta<F<T>> = sample
             .external_moms
             .iter()
             .map(|m| m.spatial.clone())
-            .collect_vec();
+            .collect();
         self.edge_signatures
-            .iter()
-            .map(|sig| sig.compute_momentum(&sample.loop_moms, &three_externals))
+            .into_iter()
+            .map(|(_, sig)| sig.compute_momentum(&sample.loop_moms, &three_externals))
             .collect()
     }
 

@@ -371,14 +371,11 @@ impl LoopExtSignature {
         res
     }
 
-    pub fn compute_momentum<L, E, M, Eind, Lind>(&self, loop_momenta: &L, external_momenta: &E) -> M
+    pub fn compute_momentum<L, E, M>(&self, loop_momenta: &L, external_momenta: &E) -> M
     where
         M: RefZero + Clone + Neg<Output = M> + AddAssign<M>,
-        L: Index<Lind, Output = M> + Length,
-        E: Index<Eind, Output = M> + Length,
-        usize: From<Lind> + From<Eind>,
-        Eind: From<usize>,
-        Lind: From<usize>,
+        L: Index<LoopIndex, Output = M> + Length,
+        E: Index<ExternalIndex, Output = M> + Length,
     {
         if loop_momenta.is_empty() {
             return self.external.apply_typed(external_momenta);
@@ -438,9 +435,9 @@ impl LoopExtSignature {
         let loop_moms = loop_moms
             .iter()
             .map(|m| m.clone().into_on_shell_four_momentum(None))
-            .collect_vec();
+            .collect::<TiVec<LoopIndex, _>>();
 
-        self.compute_momentum_untyped(&loop_moms, &external_moms.raw)
+        self.compute_momentum(&loop_moms, external_moms)
     }
 
     pub fn compute_three_momentum_from_four<T: FloatLike>(
@@ -450,6 +447,6 @@ impl LoopExtSignature {
     ) -> ThreeMomentum<F<T>> {
         let external_moms: ExternalThreeMomenta<F<T>> =
             external_moms.iter().map(|m| m.spatial.clone()).collect();
-        self.compute_momentum::<_, _, _, ExternalIndex, _>(loop_moms, &external_moms)
+        self.compute_momentum(loop_moms, &external_moms)
     }
 }
