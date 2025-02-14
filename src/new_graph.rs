@@ -100,41 +100,10 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         let mut current_leaf_nodes = tree.leaf_nodes(&self);
 
         while let Some(leaf_node) = current_leaf_nodes.pop() {
-            let hairs = &self.hairs_from_id(leaf_no        if start == end {
-                return Some(vec![]);
-            }
-    
-            // Initialize BFS
-            let mut queue = VecDeque::new();
-            let mut visited: HashMap<usize, Option<(usize, usize, bool)>> = HashMap::new();
-    
-            queue.push_back(start);
-            visited.insert(start, None);
-    
-            // Perform BFS
-            while let Some(u) = queue.pop_front() {
-                if u == end {
-                    break;
-                }
-                if let Some(neighbors) = adjacency_list.get(&u) {
-                    for &(v, edge_index, is_flipped) in neighbors {
-                        #[allow(clippy::map_entry)]
-                        if !visited.contains_key(&v) {
-                            visited.insert(v, Some((u, edge_index, is_flipped)));
-                            queue.push_back(v);
-                        }
-                    }
-                }
-            }
-    
-            // Reconstruct the path if end is reached
-            if !visited.contains_key(&end) {
-                return None;
-            }
-    
-            let mut path = Vec::new();
-            let mut current = end;
-    
+            let hairs = &self.hairs_from_id(leaf_node).hairs;
+            let mut root_pointer = None;
+            let mut root_signature = empty_signature.clone();
+
             for h in hairs.included_iter() {
                 match tree.parent(h) {
                     Parent::Root => {}
