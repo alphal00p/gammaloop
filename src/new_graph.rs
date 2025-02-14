@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     collections::VecDeque,
     path::{Path, PathBuf},
 };
@@ -217,6 +218,7 @@ impl LoopMomentumBasis {
             .map(|m| m.spatial.clone())
             .collect();
         self.edge_signatures
+            .borrow()
             .into_iter()
             .map(|(_, sig)| sig.compute_momentum(&sample.loop_moms, &three_externals))
             .collect()
@@ -227,8 +229,9 @@ impl LoopMomentumBasis {
         sample: &BareMomentumSample<T>,
     ) -> Vec<FourMomentum<F<T>>> {
         self.edge_signatures
-            .iter()
-            .map(|sig| {
+            .borrow()
+            .into_iter()
+            .map(|(_, sig)| {
                 sig.compute_four_momentum_from_three(&sample.loop_moms, &sample.external_moms)
             })
             .collect()
