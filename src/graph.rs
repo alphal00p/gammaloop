@@ -2388,31 +2388,30 @@ impl BareGraph {
             .collect_vec();
 
         // find the external leg which does not appear in it's own signature
-        let (_, (dep_mom, _)) = external_edges
-            .iter()
-            .enumerate()
-            .find(|(external_index, (index, _edge))| {
-                self.loop_momentum_basis.edge_signatures[*index].external[*external_index]
-                    .is_positive()
-                    .not()
-            })
-            .unwrap_or_else(|| {
-                panic!(
-                    "Could not determine dependent momenta for this graph routing signature:\n {:?}",
-                    self.loop_momentum_basis.edge_signatures
-                )
-            });
+        if let Some((_, (dep_mom, _))) =
+            external_edges
+                .iter()
+                .enumerate()
+                .find(|(external_index, (index, _edge))| {
+                    self.loop_momentum_basis.edge_signatures[*index].external[*external_index]
+                        .is_positive()
+                        .not()
+                })
+        {
+            let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].external;
 
-        let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].external;
+            let external_shift = external_edges
+                .iter()
+                .zip(dep_mom_signature.iter())
+                .filter(|(_external_edge, dep_mom_sign)| dep_mom_sign.is_sign())
+                .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
+                .collect();
 
-        let external_shift = external_edges
-            .iter()
-            .zip(dep_mom_signature.iter())
-            .filter(|(_external_edge, dep_mom_sign)| dep_mom_sign.is_sign())
-            .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
-            .collect();
-
-        (*dep_mom, external_shift)
+            (*dep_mom, external_shift)
+        } else {
+            // hack for vacuum diagrams
+            (usize::MAX, ExternalShift::new())
+        }
     }
 
     pub fn generate_loop_momentum_bases(&self) -> Vec<LoopMomentumBasis> {
