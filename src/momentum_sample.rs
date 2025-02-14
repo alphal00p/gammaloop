@@ -54,7 +54,7 @@ impl Display for LoopIndex {
     }
 }
 
-impl Display for LoopIndex {
+impl Display for ExternalIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
