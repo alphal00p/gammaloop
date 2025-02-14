@@ -8,7 +8,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spenso::contraction::RefZero;
 use std::fmt::Display;
-use std::ops::{AddAssign, Index, Neg, SubAssign};
+use std::ops::{AddAssign, Index, IndexMut, Neg, SubAssign};
 use typed_index_collections::TiVec;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -59,6 +59,16 @@ where
 
     fn index(&self, index: T) -> &Self::Output {
         &self.0[index]
+    }
+}
+
+impl<T> IndexMut<T> for SignatureLike<T>
+where
+    usize: From<T>,
+    T: From<usize>,
+{
+    fn index_mut(&mut self, index: T) -> &mut Self::Output {
+        &mut self.0[index]
     }
 }
 

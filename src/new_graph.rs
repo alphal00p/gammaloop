@@ -16,6 +16,7 @@ use linnet::half_edge::{
     subgraph::{
         self, cycle::SignedCycle, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphOps,
     },
+    tree::TraversalTree,
     HedgeGraph, NodeIndex,
 };
 use serde::{Deserialize, Serialize};
@@ -251,7 +252,7 @@ impl LoopMomentumBasis {
     }
 
     pub fn set_edge_signatures<E, V>(&mut self, graph: &HedgeGraph<E, V>) -> Result<(), Report> {
-        self.edge_signatures = graph.new_hedgevec(&|_, edge_index| LoopExtSignature {
+        self.edge_signatures = graph.new_hedgevec(&|_, _edge_index| LoopExtSignature {
             internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.basis.len()]),
             external: ExternalSignature::from_iter(vec![SignOrZero::Zero; graph.n_externals()]),
         });
@@ -269,7 +270,7 @@ impl LoopMomentumBasis {
         // Build the adjacency list excluding vetoed edges, we include "fake nodes" on the externals such that we do
         // not need to port too much of the code.
         let mut adj_list: HashMap<NodeIndex, Vec<(NodeIndex, EdgeIndex, bool)>> = HashMap::new();
-        for (hedge_pair, edge_index, edge_data) in graph.iter_all_edges() {
+        for (hedge_pair, edge_index, _edge_data) in graph.iter_all_edges() {
             if self.basis.contains(&edge_index) {
                 continue;
             }
@@ -324,9 +325,6 @@ impl LoopMomentumBasis {
             }
         }
 
-        // the sink node will naturally be the last extra node
-        let sink_node = NodeIndex::from(current_extra_node - 1);
-
         // Route internal LMB momenta
         for (i_lmb, lmb_edge_id) in self.basis.iter_enumerated() {
             let (_, hedge_pair) = &graph[lmb_edge_id];
@@ -368,6 +366,7 @@ impl LoopMomentumBasis {
             }
         }
 
+        // sink node is the last external node
         let sink_node = external_edge_info
             .pop()
             .map(|edge_info| edge_info.fake_node)
