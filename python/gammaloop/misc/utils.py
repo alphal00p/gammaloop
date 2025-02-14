@@ -226,19 +226,15 @@ class GammaLoopCustomFormatter(logging.Formatter):
             record.name = f"{record.name:20}"
         match record.levelno:
             case logging.DEBUG:
-                record.levelname = f"{Colour.GRAY}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.GRAY}{record.levelname:8}{Colour.END}" # nopep8
             case logging.INFO:
-                record.levelname = f"{record.levelname:8}"
+                record.levelname = f"{record.levelname:8}" # nopep8
             case logging.WARNING:
-                record.levelname = f"{Colour.YELLOW}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.YELLOW}{record.levelname:8}{Colour.END}" # nopep8
             case logging.ERROR:
-                record.levelname = f"{Colour.RED}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.RED}{record.levelname:8}{Colour.END}" # nopep8
             case logging.CRITICAL:
-                record.levelname = f"{Colour.RED}{Colour.BOLD}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.RED}{Colour.BOLD}{record.levelname:8}{Colour.END}" # nopep8
             case _:
                 record.levelname = f"{record.levelname:8}"
         record.asctime = self.formatTime(record, self.datefmt)
@@ -260,12 +256,10 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
             console_format = f'%(levelname)s: %(message)s'
             time_format = "%H:%M:%S"
         case 'short':
-            console_format = f'[{Colour.GREEN}%(asctime)s{
-                Colour.END}] %(levelname)s: %(message)s'
+            console_format = f'[{Colour.GREEN}%(asctime)s{Colour.END}] %(levelname)s: %(message)s' # nopep8
             time_format = "%H:%M:%S"
         case 'long':
-            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{
-                Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
+            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s' # nopep8
             time_format = '%Y-%m-%d %H:%M:%S'
         case _:
             raise common.GammaLoopError(
@@ -598,8 +592,7 @@ def format_elapsed(elapsed_seconds: float) -> str:
     time_in_ms = round(elapsed_seconds*1000)
     time_remainder = time_in_ms % ms_in_a_day
     n_days = int((time_in_ms-time_remainder)/ms_in_a_day)
-    day_prefix = "" if n_days == 0 else f"{
-        n_days} day{'s' if n_days > 1 else ''}, "
+    day_prefix = "" if n_days == 0 else f"{n_days} day{'s' if n_days > 1 else ''}, " # nopep8
     if time_remainder < 60_000:
         hours_suffix = time.strftime('%H:%M:%S.{:03d}'.format(
             time_remainder % 1000), time.gmtime(time_remainder/1000.))
