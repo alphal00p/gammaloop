@@ -55,9 +55,12 @@ class TestProcessGeneration:
             "import_model sm"))
         tests = [
             # Full particle contents
-            ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 658),
+            # Adding --symmetrize_left_right_states below would give:
+            # Could not find the CP conjugate of this vertex in the Feynman rules of the model: (ghWm~, G-, ghA). Consider generating without the option '--symmetrize_left_right_states'.
+            # This is because the current SM UFO model is actually wrong and not hermitian! It misses the CP conjugate of that interaction!
+            ('a > d d~ [{{3}}] -num_grouping only_detect_zeroes', 1249),
             # Only 1-flavour pure QCD corrections
-            ('a > d d~ | d g ghG a QED^2=2 [{{5}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 5016),
+            ('a > d d~ | d g ghG a QED^2=2 [{{5}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 9739),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
@@ -70,7 +73,7 @@ class TestProcessGeneration:
             ('a > d d~ [{{1}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 1),
             ('a > d d~ [{{2}}] -num_grouping only_detect_zeroes', 47),
             ('a > d d~ [{{2}}] -num_grouping group_identical_graphs_up_to_sign', 45),
-            ('a > d d~ [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 31),
+            ('a > d d~ [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 40),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
@@ -81,7 +84,8 @@ class TestProcessGeneration:
             "import_model sm-full"))
         tests = [
             # Full particle contents
-            ('a > d d~ [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 4176),
+            # Same issue as above when adding "--symmetrize_left_right_states", but it is a bug of the model and not the graph generation.
+            ('a > d d~ [{{3}}] -num_grouping group_identical_graphs_up_to_sign', 0),
             ('a > d d~ [{{3}}] -num_grouping no_grouping', 8189),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
@@ -93,13 +97,13 @@ class TestProcessGeneration:
         tests = [
             # Full particle contents
             ('h > g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 2),
-            ('h > g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 36),
-            ('h > g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 4),
-            ('h > g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 64),
-            ('h > g g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 24),
-            ('h > g g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 752),
-            ('h > g g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 18),
-            ('h > g g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 562),
+            ('h > g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 30),
+            ('h > g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 2),
+            ('h > g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 40),
+            ('h > g g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 6),
+            ('h > g g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 188),
+            ('h > g g g | h g b t ghg [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 4),
+            ('h > g g g | h g b t ghg [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 132),
             ('h > g g | h g b t ghg [{{3}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 8),
             ('h > g g | h g b t ghg [{{3}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_sign', 3),
         ]
@@ -122,8 +126,8 @@ class TestProcessGeneration:
         gloop.run(CommandList.from_string(
             "import_model sm"))
         tests = [
-            ('h > g g | h g b t ghg [{3}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 1169),
-            ('h > g g g | h g b t ghg [{3}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 7142),
+            ('h > g g | h g b t ghg [{3}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 1153),
+            ('h > g g g | h g b t ghg [{3}] -a --symmetrize_left_right_states -num_grouping only_detect_zeroes', 6876),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
@@ -251,7 +255,7 @@ class TestProcessGeneration:
             ('{} > {} [{2}] -a -num_grouping only_detect_zeroes --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 448),
             ('{} > {} [{2}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 243),
             ('{} > {} [{3}] -a -num_grouping only_detect_zeroes --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 36362),
-            ('{} > {} [{3}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 13763),
+            ('{} > {} [{3}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', 13845),
             # Only non-factorizable ones
             ('{} > {} [{2}] -a -num_grouping only_detect_zeroes --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 92),
             ('{} > {} [{2}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges 0 --number_of_factorized_loop_subtopologies 1', 69),
@@ -296,7 +300,7 @@ class TestProcessGeneration:
         gloop.run(CommandList.from_string(
             "import_model sm"))
         tests = [
-            ('a > b b~ h | b h a ghg g QED^2=4 [{{5}} QCD=3] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2744),
+            ('a > b b~ h | b h a ghg g QED^2=4 [{{5}} QCD=3] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2763),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 

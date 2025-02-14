@@ -99,5 +99,20 @@
   "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_sm_h_n_j": 171.95000420790166,
   "tests/unit/test_commands.py::TestProcessGeneration::test_slow_generate_amplitude_1l_sm_jets": 55.518137665465474,
   "tests/unit/test_objects.py::TestProcess::test_process_parsing": 0.0164470411837101,
-  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_aa_ttx_amplitude": 2.1212199172005057
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_aa_ttx_amplitude": 2.1212199172005057,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_sm_a_ddx": 35.00681791268289,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_epem_a_qqh": 383.86227723397315,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_a_qqh": 75.74312642402947,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_aa_ttx_amplitude": 245.79958831518888,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_aa_ttx_cross_section": 65.82209104672074,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_vaccuum_amplitude_generation": 422.25459721311927,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_dis_isr": 74.21530324779451,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets": 249.40679385885596,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_sm_h_n_j_cross_section": 899.0451736990362,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets_with_grouping": 524.118850177154,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_vaccuum_amplitude_generation": 3408.3779189288616,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_amplitude_1l_sm_jets": 140.21801458857954,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_sm_full_a_ddx": 3.510120602324605,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_sm_h_n_j": 86.83929299935699,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_vaccuum_amplitude_generation_full_sm": 845.0336054116488
 }
