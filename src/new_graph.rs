@@ -3,22 +3,25 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ahash::HashMap;
+use ahash::{HashMap, HashMapExt};
 use bincode::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::{Report, Result};
+use eyre::eyre;
 use hyperdual::Num;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::EdgeIndex,
+    hedgevec::HedgeVec,
+    involution::{EdgeIndex, Flow, Hedge, HedgePair},
     subgraph::{
         self, cycle::SignedCycle, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphOps,
     },
-    EdgeData, EdgeId, Hedge, HedgeGraph, HedgeVec, Involution, Orientation, Parent, TraversalTree,
+    HedgeGraph, NodeIndex,
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{representation::InlineNum, Atom, AtomCore},
+    graph::Node,
     id::Pattern,
 };
 use typed_index_collections::TiVec;
@@ -27,7 +30,7 @@ use crate::{
     gammaloop_integrand::BareSample,
     graph::{BareGraph, DerivedGraphData, Edge, EdgeType, Vertex},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
-    momentum_sample::LoopIndex,
+    momentum_sample::{ExternalIndex, LoopIndex},
     numerator::{NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature},
     utils::{FloatLike, F},
@@ -222,7 +225,7 @@ impl LoopMomentumBasis {
             .collect()
     }
 
-    pub fn pattern(&self, edge_id: usize) -> Pattern {
+    pub fn pattern(&self, edge_id: EdgeIndex) -> Pattern {
         let signature = self.edge_signatures[edge_id].clone();
 
         let mut atom = Atom::new_num(0);
@@ -241,47 +244,109 @@ impl LoopMomentumBasis {
         atom.to_pattern()
     }
 
-    pub fn set_edge_signatures(&mut self, graph: &BareGraph) -> Result<(), Report> {
-        // Initialize signature
-        self.edge_signatures = vec![
-            LoopExtSignature {
-                internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.basis.len()]),
-                external: ExternalSignature::from_iter(vec![
-                    SignOrZero::Zero;
-                    graph.external_edges.len()
-                ])
-            };
-            graph.edges.len()
-        ];
+    pub fn set_edge_signatures<E, V>(&mut self, graph: &HedgeGraph<E, V>) -> Result<(), Report> {
+        self.edge_signatures = graph.new_hedgevec(&|edge, edge_index| LoopExtSignature {
+            internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.basis.len()]),
+            external: ExternalSignature::from_iter(vec![SignOrZero::Zero; graph.n_externals()]),
+        });
 
-        // Build the adjacency list excluding vetoed edges
-        let mut adj_list: HashMap<usize, Vec<(usize, usize, bool)>> = HashMap::new();
-        for (edge_index, edge) in graph.edges.iter().enumerate() {
+        struct ExternalEdgeInfo {
+            edge_index: EdgeIndex,
+            fake_node: NodeIndex, // fake node is a hack to reuse the code from BareGraph
+            real_node: NodeIndex,
+            flow: Flow,
+        }
+
+        let mut current_extra_node = graph.n_nodes();
+        let mut external_edge_info = TiVec::<ExternalIndex, ExternalEdgeInfo>::new();
+
+        // Build the adjacency list excluding vetoed edges, we include "fake nodes" on the externals such that we do
+        // not need to port too much of the code.
+        let mut adj_list: HashMap<NodeIndex, Vec<(NodeIndex, EdgeIndex, bool)>> = HashMap::new();
+        for (hedge_pair, edge_index, edge_data) in graph.iter_all_edges() {
             if self.basis.contains(&edge_index) {
                 continue;
             }
-            let (u, v) = (edge.vertices[0], edge.vertices[1]);
+            // let (u, v) = (edge.vertices[0], edge.vertices[1]);
 
-            // Original orientation
-            adj_list.entry(u).or_default().push((v, edge_index, false));
-            // Flipped orientation
-            adj_list.entry(v).or_default().push((u, edge_index, true));
+            match hedge_pair {
+                HedgePair::Unpaired { hedge, flow } => {
+                    let real_node = graph.node_id(hedge);
+                    let extra_node = NodeIndex::from(current_extra_node);
+                    external_edge_info.push(ExternalEdgeInfo {
+                        edge_index,
+                        fake_node: extra_node,
+                        real_node,
+                        flow,
+                    });
+                    match flow {
+                        Flow::Sink => {
+                            adj_list
+                                .entry(extra_node)
+                                .or_default()
+                                .push((real_node, edge_index, false));
+                            adj_list
+                                .entry(real_node)
+                                .or_default()
+                                .push((extra_node, edge_index, true));
+                        }
+                        Flow::Source => {
+                            adj_list
+                                .entry(real_node)
+                                .or_default()
+                                .push((extra_node, edge_index, false));
+                            adj_list
+                                .entry(extra_node)
+                                .or_default()
+                                .push((real_node, edge_index, true));
+                        }
+                    }
+                    current_extra_node += 1;
+                }
+                HedgePair::Paired { source, sink } => {
+                    let u = graph.node_id(source);
+                    let v = graph.node_id(sink);
+
+                    // Original orientation
+                    adj_list.entry(u).or_default().push((v, edge_index, false));
+                    // Flipped orientation
+                    adj_list.entry(v).or_default().push((u, edge_index, true));
+                }
+                HedgePair::Split { .. } => {
+                    panic!("Can not set edge signatures for split edges yet")
+                }
+            }
         }
 
-        // Route internal LMB momenta
-        for (i_lmb, lmb_edge_id) in self.basis.iter().enumerate() {
-            let edge = &graph.edges[*lmb_edge_id];
-            let (u, v) = (edge.vertices[0], edge.vertices[1]);
+        // the sink node will naturally be the last extra node
+        let sink_node = NodeIndex::from(current_extra_node - 1);
 
-            self.edge_signatures[*lmb_edge_id].internal.0[i_lmb] = SignOrZero::Plus;
+        // Route internal LMB momenta
+        for (i_lmb, lmb_edge_id) in self.basis.iter_enumerated() {
+            let (_, hedge_pair) = &graph[lmb_edge_id];
+
+            let (u, v) = match hedge_pair {
+                HedgePair::Paired { source, sink } => {
+                    (graph.node_id(*source), graph.node_id(*sink))
+                }
+                _ => {
+                    return Err(eyre!(
+                        "Loop_momentum {} is an external edge. Edge: {:?}",
+                        i_lmb,
+                        lmb_edge_id
+                    ))
+                }
+            };
+
+            self.edge_signatures[*lmb_edge_id].internal[i_lmb] = SignOrZero::Plus;
             if let Some(path) = self.find_shortest_path(&adj_list, v, u) {
                 for (edge_index, is_flipped) in path {
-                    if self.edge_signatures[edge_index].internal.0[i_lmb] != SignOrZero::Zero {
+                    if self.edge_signatures[edge_index].internal[i_lmb] != SignOrZero::Zero {
                         return Err(eyre!(
                             "Inconsitency in edge momentum lmb signature assignment."
                         ));
                     }
-                    self.edge_signatures[edge_index].internal.0[i_lmb] = if is_flipped {
+                    self.edge_signatures[edge_index].internal[i_lmb] = if is_flipped {
                         SignOrZero::Minus
                     } else {
                         SignOrZero::Plus
@@ -297,46 +362,30 @@ impl LoopMomentumBasis {
             }
         }
 
-        let sink_node = if let Some(last_external) = graph.external_edges.last() {
-            match graph.edges[*last_external].edge_type {
-                EdgeType::Outgoing => graph.edges[*last_external].vertices[1],
-                EdgeType::Incoming => graph.edges[*last_external].vertices[0],
-                _ => {
-                    return Err(eyre!(
-                        "External edge {} is not incoming or outgoing.",
-                        graph.edges[*last_external].name
-                    ))
-                }
-            }
-        } else {
-            0
-        };
+        let sink_node = external_edge_info
+            .pop()
+            .map(|edge_info| edge_info.fake_node)
+            .unwrap_or(NodeIndex::from(0));
 
         // Route external momenta
-        if graph.external_edges.len() >= 2 {
-            for i_ext in 0..=(graph.external_edges.len() - 2) {
-                let external_edge_index = graph.external_edges[i_ext];
-                let external_edge = &graph.edges[external_edge_index];
-                let (u, v) = match external_edge.edge_type {
-                    EdgeType::Outgoing => (sink_node, external_edge.vertices[1]),
-                    EdgeType::Incoming => (external_edge.vertices[0], sink_node),
-                    _ => {
-                        return Err(eyre!(
-                            "External edge {} is not incoming or outgoing.",
-                            external_edge.name
-                        ))
-                    }
+        if graph.n_externals() >= 2 {
+            for (external_index, external_edge_info) in external_edge_info.into_iter_enumerated() {
+                let (u, v) = match external_edge_info.flow {
+                    Flow::Source => (sink_node, external_edge_info.fake_node),
+                    Flow::Sink => (external_edge_info.fake_node, sink_node),
                 };
 
                 if let Some(path) = self.find_shortest_path(&adj_list, u, v) {
                     //println!("External path from {}->{}: {} {:?}", u, v, i_ext, path);
                     for (edge_index, is_flipped) in path {
-                        if self.edge_signatures[edge_index].external.0[i_ext] != SignOrZero::Zero {
+                        if self.edge_signatures[edge_index].external[external_index]
+                            != SignOrZero::Zero
+                        {
                             return Err(eyre!(
                                 "Inconsitency in edge momentum signature assignment."
                             ));
                         }
-                        self.edge_signatures[edge_index].external.0[i_ext] = if is_flipped {
+                        self.edge_signatures[edge_index].external[external_index] = if is_flipped {
                             SignOrZero::Minus
                         } else {
                             SignOrZero::Plus
@@ -350,7 +399,9 @@ impl LoopMomentumBasis {
                         self.basis
                     ));
                 }
-                if self.edge_signatures[external_edge_index].external.0[i_ext] != SignOrZero::Plus {
+                if self.edge_signatures[external_edge_info.edge_index].external[external_index]
+                    != SignOrZero::Plus
+                {
                     return Err(eyre!(
                         "Inconsitency in edge momentum external signature assignment."
                     ));
@@ -362,17 +413,17 @@ impl LoopMomentumBasis {
 
     fn find_shortest_path(
         &self,
-        adjacency_list: &HashMap<usize, Vec<(usize, usize, bool)>>,
-        start: usize,
-        end: usize,
-    ) -> Option<Vec<(usize, bool)>> {
+        adjacency_list: &HashMap<NodeIndex, Vec<(NodeIndex, EdgeIndex, bool)>>,
+        start: NodeIndex,
+        end: NodeIndex,
+    ) -> Option<Vec<(EdgeIndex, bool)>> {
         if start == end {
             return Some(vec![]);
         }
 
         // Initialize BFS
         let mut queue = VecDeque::new();
-        let mut visited: HashMap<usize, Option<(usize, usize, bool)>> = HashMap::new();
+        let mut visited: HashMap<NodeIndex, Option<(NodeIndex, EdgeIndex, bool)>> = HashMap::new();
 
         queue.push_back(start);
         visited.insert(start, None);

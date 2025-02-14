@@ -48,6 +48,18 @@ pub struct LoopIndex(pub usize);
 )]
 pub struct ExternalIndex(pub usize);
 
+impl Display for LoopIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Display for LoopIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct LoopMomenta<T>(Vec<ThreeMomentum<T>>);
 
