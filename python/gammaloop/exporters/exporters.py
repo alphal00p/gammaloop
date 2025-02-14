@@ -66,7 +66,7 @@ class GammaLoopExporter(object):
         os.makedirs(export_root, exist_ok=True)
 
         # Build the output structure
-        os.makedirs(pjoin(export_root, 'cards'))
+        os.makedirs(pjoin(export_root, 'cards'), exist_ok=True)
         shutil.copy(pjoin(self.gammaloop.model_directory, self.gammaloop.model.name,
                           f"restrict_{'full' if self.gammaloop.model.restriction is None else self.gammaloop.model.restriction}.dat"),
                     pjoin(export_root, 'cards', 'param_card.dat'))
@@ -81,7 +81,7 @@ class GammaLoopExporter(object):
         with open(pjoin(export_root, 'sources', 'model', f'{self.gammaloop.model.name}.yaml'), 'w', encoding='utf-8') as file:
             file.write(self.gammaloop.model.to_yaml())
 
-        os.makedirs(pjoin(export_root, 'runs'))
+        os.makedirs(pjoin(export_root, 'runs'), exist_ok=True)
 
         return OutputMetaData({
             'model_name': self.gammaloop.model.name,
@@ -314,7 +314,6 @@ class AmplitudesExporter(GammaLoopExporter):
 
         # Tweak the run configuration for the particular process exported before attending to the generic export
         self.adjust_run_settings(amplitudes)
-
         output_data = super(AmplitudesExporter,
                             self).generic_export(export_root)
         output_data['output_type'] = 'amplitudes'
@@ -323,11 +322,11 @@ class AmplitudesExporter(GammaLoopExporter):
         with open(pjoin(export_root, 'output_metadata.yaml'), 'w', encoding='utf-8') as file:
             file.write(output_data.to_yaml_str())
 
-        os.makedirs(pjoin(export_root, 'sources', 'amplitudes'))
+        os.makedirs(pjoin(export_root, 'sources', 'amplitudes'), exist_ok=True)
         self.gammaloop.rust_worker.reset_cross_sections()
         for amplitude in amplitudes:
             os.makedirs(pjoin(export_root, 'sources',
-                        'amplitudes', f'{amplitude.name}'))
+                        'amplitudes', f'{amplitude.name}'), exist_ok=True)
             amplitude_yaml = amplitude.to_yaml_str()
             # Already writing the file below is not necessary as it will be overwritten by the rust export, but it is useful for debugging
             with open(pjoin(export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'amplitude.yaml'), 'w', encoding='utf-8') as file:
@@ -335,7 +334,7 @@ class AmplitudesExporter(GammaLoopExporter):
             if self.configuration_for_process.get_setting('drawing.modes') != None and len(self.configuration_for_process.get_setting('drawing.modes')) > 0:
                 drawings_path = pjoin(
                     export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
-                os.makedirs(drawings_path)
+                os.makedirs(drawings_path, exist_ok=True)
                 drawing_file_paths = amplitude.draw(
                     self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
                 self.finalize_drawing(
@@ -366,18 +365,19 @@ class CrossSectionsExporter(GammaLoopExporter):
         with open(pjoin(export_root, 'output_metadata.yaml'), 'w', encoding='utf-8') as file:
             file.write(output_data.to_yaml_str())
 
-        os.makedirs(pjoin(export_root, 'sources', 'cross_sections'))
+        os.makedirs(pjoin(export_root, 'sources',
+                    'cross_sections'), exist_ok=True)
         self.gammaloop.rust_worker.reset_cross_sections()
         for one_cross_section in cross_sections:
             os.makedirs(pjoin(export_root, 'sources',
-                        'cross_sections', f'{one_cross_section.name}'))
+                        'cross_sections', f'{one_cross_section.name}'), exist_ok=True)
             yaml_xs = one_cross_section.to_yaml_str()
             # Already writing the file below is not necessary as it will be overwritten by the rust export, but it is useful for debugging
             with open(pjoin(export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'cross_section.yaml'), 'w', encoding='utf-8') as file:
                 file.write(yaml_xs)
             drawings_path = pjoin(
                 export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'drawings')
-            os.makedirs(drawings_path)
+            os.makedirs(drawings_path, exist_ok=True)
             drawing_file_paths = one_cross_section.draw(
                 self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
             self.finalize_drawing(Path(drawings_path), drawing_file_paths)

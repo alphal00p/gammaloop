@@ -1373,11 +1373,12 @@ class GammaLoop(object):
 
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
-            amplitude_exporter.export(
-                args.output_path, self.amplitudes, args.no_evaluators)
+
             if args.expression:
                 amplitude_exporter.export_expression(
                     args.output_path, self.amplitudes, args.expression_format)
+            amplitude_exporter.export(
+                args.output_path, self.amplitudes, args.no_evaluators)
 
             logger.info("Amplitudes exported to '%s'.", args.output_path)
     #

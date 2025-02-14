@@ -873,7 +873,6 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
         printer_ops: PrintOptions,
         export_settings: &ExportSettings,
     ) -> Result<(), Report> {
-        println!("Exporting Expressions");
         let path = Path::new(export_root)
             .join("sources")
             .join("amplitudes")
