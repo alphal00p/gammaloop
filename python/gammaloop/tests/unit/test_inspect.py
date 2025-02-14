@@ -95,6 +95,8 @@ class TestPhysicalTopologies:
         command_list.add_command("set_model_param update_only 0.")
         command_list.add_command("set e_cm 1.")
         command_list.add_command("set sampling {'type':'default'}")
+        command_list.add_command(
+            "set force_global_center [[115.91508160079663,179.7810253192939,-25.11851705401448]]")
 
         gl.run(command_list)
 
