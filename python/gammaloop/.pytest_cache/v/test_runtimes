@@ -114,5 +114,7 @@
   "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_amplitude_1l_sm_jets": 140.21801458857954,
   "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_sm_full_a_ddx": 3.510120602324605,
   "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_sm_h_n_j": 86.83929299935699,
-  "tests/unit/test_process_generation.py::TestProcessGeneration::test_vaccuum_amplitude_generation_full_sm": 845.0336054116488
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_vaccuum_amplitude_generation_full_sm": 845.0336054116488,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_sm_a_ddx": 781.0938235037029,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_sm_full_a_ddx": 245.85304274223745
 }

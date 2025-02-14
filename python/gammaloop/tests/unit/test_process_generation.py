@@ -84,8 +84,7 @@ class TestProcessGeneration:
             "import_model sm-full"))
         tests = [
             # Full particle contents
-            # Same issue as above when adding "--symmetrize_left_right_states", but it is a bug of the model and not the graph generation.
-            ('a > d d~ [{{3}}] -num_grouping group_identical_graphs_up_to_sign', 0),
+            ('a > d d~ QED^2=4 [{{3}}] -num_grouping group_identical_graphs_up_to_sign', 339),
             ('a > d d~ [{{3}}] -num_grouping no_grouping', 8189),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
