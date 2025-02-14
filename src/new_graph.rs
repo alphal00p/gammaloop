@@ -30,7 +30,7 @@ use crate::{
     gammaloop_integrand::BareSample,
     graph::{BareGraph, DerivedGraphData, Edge, EdgeType, Vertex},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
-    momentum_sample::{ExternalIndex, LoopIndex},
+    momentum_sample::{BareMomentumSample, ExternalIndex, LoopIndex},
     numerator::{NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature},
     utils::{FloatLike, F},
@@ -204,7 +204,10 @@ pub struct LoopMomentumBasis {
 }
 
 impl LoopMomentumBasis {
-    pub fn spatial_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<ThreeMomentum<F<T>>> {
+    pub fn spatial_emr<T: FloatLike>(
+        &self,
+        sample: &BareMomentumSample<T>,
+    ) -> Vec<ThreeMomentum<F<T>>> {
         let three_externals = sample
             .external_moms
             .iter()
@@ -216,7 +219,10 @@ impl LoopMomentumBasis {
             .collect()
     }
 
-    pub fn to_massless_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<FourMomentum<F<T>>> {
+    pub fn to_massless_emr<T: FloatLike>(
+        &self,
+        sample: &BareMomentumSample<T>,
+    ) -> Vec<FourMomentum<F<T>>> {
         self.edge_signatures
             .iter()
             .map(|sig| {
@@ -245,7 +251,7 @@ impl LoopMomentumBasis {
     }
 
     pub fn set_edge_signatures<E, V>(&mut self, graph: &HedgeGraph<E, V>) -> Result<(), Report> {
-        self.edge_signatures = graph.new_hedgevec(&|edge, edge_index| LoopExtSignature {
+        self.edge_signatures = graph.new_hedgevec(&|_, edge_index| LoopExtSignature {
             internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.basis.len()]),
             external: ExternalSignature::from_iter(vec![SignOrZero::Zero; graph.n_externals()]),
         });
