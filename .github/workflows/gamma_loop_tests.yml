@@ -18,7 +18,6 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - timeout-minutes: 360
     - uses: actions/checkout@v3
     - name: Set up Python 3.12
       uses: actions/setup-python@v3
@@ -49,6 +48,7 @@ jobs:
     - name: Run python tests
       run: |
         ./bin/run_tests.sh python -m "not drawing"
+      timeout-minutes: 360
     - name: Run native rust tests
       run: |
         ./bin/run_tests.sh rust
