@@ -23,7 +23,7 @@ class TestProcessGeneration:
                 0 if len(gloop.cross_sections) == 0 else len(
                     gloop.cross_sections[0].supergraphs)
             )
-            assert n_graphs == expected_graph_number, f"For process: '{test}' | Expected {expected_graph_number} graphs, got {n_graphs}" # nopep8
+            assert n_graphs == expected_graph_number, f"For process: '{test}' | Expected {expected_graph_number} graphs, got {n_graphs}"  # nopep8
             gloop.amplitudes.clear()
             gloop.cross_sections.clear()
 
@@ -57,7 +57,6 @@ class TestProcessGeneration:
             # Full particle contents
             # Adding --symmetrize_left_right_states below would give:
             # Could not find the CP conjugate of this vertex in the Feynman rules of the model: (ghWm~, G-, ghA). Consider generating without the option '--symmetrize_left_right_states'.
-            # This is because the current SM UFO model is actually wrong and not hermitian! It misses the CP conjugate of that interaction!
             ('a > d d~ [{{3}}] -num_grouping only_detect_zeroes', 1249),
             # Only 1-flavour pure QCD corrections
             ('a > d d~ | d g ghG a QED^2=2 [{{5}}] --symmetrize_left_right_states -num_grouping only_detect_zeroes', 9739),

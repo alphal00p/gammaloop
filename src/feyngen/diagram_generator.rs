@@ -62,6 +62,7 @@ use linnet::half_edge::NodeIndex;
 use linnet::half_edge::Orientation;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
+const CANONIZE_FERMION_FLOW: bool = true;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
@@ -1535,16 +1536,15 @@ impl FeynGen {
 
     pub fn follow_chain(
         current_node: usize,
-        abs_pdg: usize,
-        graph_edges: &[symbolica::graph::Edge<EdgeColor>],
         vetos: &mut Vec<bool>,
         adj_map: &HashMap<usize, Vec<(usize, usize)>>,
-    ) -> Result<usize, FeynGenError> {
+        one_step_only: bool,
+    ) -> Result<(Option<usize>, usize), FeynGenError> {
         if let Some(connected_edges) = adj_map.get(&current_node) {
             let targets = connected_edges
                 .iter()
                 .filter_map(|(i_e, next_node)| {
-                    if !vetos[*i_e] && graph_edges[*i_e].data.pdg.unsigned_abs() == abs_pdg {
+                    if !vetos[*i_e] {
                         Some((i_e, next_node))
                     } else {
                         None
@@ -1552,22 +1552,191 @@ impl FeynGen {
                 })
                 .collect::<Vec<_>>();
             if targets.is_empty() {
-                Ok(current_node)
+                Ok((None, current_node))
             } else if targets.len() == 1 {
                 let (&next_edge, &next_node) = targets.first().unwrap();
                 vetos[next_edge] = true;
-                return FeynGen::follow_chain(next_node, abs_pdg, graph_edges, vetos, adj_map);
+                if one_step_only {
+                    Ok((Some(next_edge), next_node))
+                } else {
+                    return FeynGen::follow_chain(next_node, vetos, adj_map, one_step_only);
+                }
             } else {
-                return Err(FeynGenError::GenericError(
-                    "GammaLoop does not support four-fermion vertices of identical flavours yet"
-                        .to_string(),
-                ));
+                Ok((None, *targets.first().unwrap().1))
+                // return Err(FeynGenError::GenericError(
+                //     "GammaLoop does not support four-fermion vertices yet".to_string(),
+                // ));
             }
         } else {
-            Ok(current_node)
+            Ok((None, current_node))
         }
     }
 
+    pub fn normalize_fermion_flow(
+        &self,
+        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        model: &Model,
+    ) -> Result<SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, FeynGenError> {
+        let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
+        for (i_e, e) in graph.edges().iter().enumerate() {
+            // Build an adjacency list including only fermions
+            if !model.get_particle_from_pdg(e.data.pdg).is_fermion() {
+                continue;
+            }
+            adj_map
+                .entry(e.vertices.0)
+                .or_default()
+                .push((i_e, e.vertices.1));
+            if e.vertices.0 != e.vertices.1 {
+                adj_map
+                    .entry(e.vertices.1)
+                    .or_default()
+                    .push((i_e, e.vertices.0));
+            }
+        }
+
+        let mut vetoed_edges: Vec<bool> = graph
+            .edges()
+            .iter()
+            .map(|e| !model.get_particle_from_pdg(e.data.pdg).is_fermion())
+            .collect();
+        let mut new_edges: AHashMap<usize, (usize, usize, bool, EdgeColor)> = AHashMap::default();
+        let mut normalized_graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor> =
+            SymbolicaGraph::new();
+        for n in graph.nodes().iter() {
+            normalized_graph.add_node(n.data.clone());
+        }
+
+        let graph_edges = graph.edges();
+        for (i_e, e) in graph_edges.iter().enumerate() {
+            if vetoed_edges[i_e] {
+                if !new_edges.contains_key(&i_e) {
+                    new_edges.insert(i_e, (e.vertices.0, e.vertices.1, e.directed, e.data));
+                }
+                continue;
+            }
+            let mut is_starting_antiparticle =
+                model.get_particle_from_pdg(e.data.pdg).is_antiparticle();
+            let starting_vertices = if graph.nodes()[e.vertices.0].data.external_tag == 0
+                && graph.nodes()[e.vertices.1].data.external_tag == 0
+                && is_starting_antiparticle
+            {
+                // Force all virtual closed fermion loops to be particles
+                is_starting_antiparticle = false;
+                if !new_edges.contains_key(&i_e) {
+                    new_edges.insert(
+                        i_e,
+                        (
+                            e.vertices.1,
+                            e.vertices.0,
+                            e.directed,
+                            EdgeColor::from_particle(
+                                model
+                                    .get_particle_from_pdg(e.data.pdg)
+                                    .get_anti_particle(model),
+                            ),
+                        ),
+                    );
+                    (e.vertices.1, e.vertices.0)
+                } else {
+                    continue;
+                }
+            } else if !new_edges.contains_key(&i_e) {
+                new_edges.insert(i_e, (e.vertices.0, e.vertices.1, e.directed, e.data));
+                (e.vertices.0, e.vertices.1)
+            } else {
+                continue;
+            };
+
+            vetoed_edges[i_e] = true;
+            for read_to_the_right in [true, false] {
+                let mut previous_node_position = if read_to_the_right {
+                    starting_vertices.1
+                } else {
+                    starting_vertices.0
+                };
+                // println!(
+                //     "Starting reading chain from edge {}->{}, from {}",
+                //     starting_vertices.0, starting_vertices.1, previous_node_position
+                // );
+                'fermion_chain: loop {
+                    let (next_fermion_edge_position, next_fermion_node_position) =
+                        FeynGen::follow_chain(
+                            previous_node_position,
+                            &mut vetoed_edges,
+                            &adj_map,
+                            true,
+                        )?;
+                    // println!(
+                    //     "Next edge: {}",
+                    //     if let Some(nfep) = next_fermion_edge_position {
+                    //         format!(
+                    //             "{}, {} -> {}",
+                    //             graph_edges[nfep].vertices.0, graph_edges[nfep].vertices.1, nfep
+                    //         )
+                    //     } else {
+                    //         "None".to_string()
+                    //     }
+                    // );
+                    if let Some(nfep) = next_fermion_edge_position {
+                        let this_has_same_orientation_starting = (read_to_the_right
+                            && graph_edges[nfep].vertices.1 == next_fermion_node_position)
+                            || (!read_to_the_right
+                                && graph_edges[nfep].vertices.0 == next_fermion_node_position);
+                        if !new_edges.contains_key(&nfep) {
+                            if this_has_same_orientation_starting {
+                                new_edges.insert(
+                                    nfep,
+                                    (
+                                        graph_edges[nfep].vertices.0,
+                                        graph_edges[nfep].vertices.1,
+                                        graph_edges[nfep].directed,
+                                        graph_edges[nfep].data,
+                                    ),
+                                );
+                            } else {
+                                let this_edge_particle =
+                                    model.get_particle_from_pdg(graph_edges[nfep].data.pdg);
+                                new_edges.insert(
+                                    nfep,
+                                    (
+                                        graph_edges[nfep].vertices.1,
+                                        graph_edges[nfep].vertices.0,
+                                        graph_edges[nfep].directed,
+                                        // Force fermion to be the same species as the one starting the chain
+                                        if this_edge_particle.is_antiparticle()
+                                            != is_starting_antiparticle
+                                        {
+                                            EdgeColor::from_particle(
+                                                this_edge_particle.get_anti_particle(model),
+                                            )
+                                        } else {
+                                            EdgeColor::from_particle(this_edge_particle)
+                                        },
+                                    ),
+                                );
+                            }
+                        }
+                        previous_node_position = next_fermion_node_position;
+                    } else {
+                        break 'fermion_chain;
+                    }
+                }
+            }
+        }
+        let mut sorted_new_edges = new_edges.iter().collect::<Vec<_>>();
+        sorted_new_edges.sort_by(|(i_e_0, _), (i_e_1, _)| i_e_0.cmp(i_e_1));
+
+        for (v0, v1, directed, edge_data) in sorted_new_edges.iter().map(|(_, v)| v) {
+            normalized_graph
+                .add_edge(*v0, *v1, *directed, *edge_data)
+                .map_err(|e| FeynGenError::GenericError(e.to_string()))?;
+        }
+        assert!(normalized_graph.edges().len() == graph.edges().len());
+        Ok(normalized_graph)
+    }
+
+    // Note, this function will not work as intended with four-fermion vertices, and only aggregated self-loops or fermion-loops not involving four-femion vertices
     pub fn count_closed_fermion_loops(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
@@ -1602,20 +1771,10 @@ impl FeynGen {
                 continue;
             }
             vetoed_edges[i_e] = true;
-            let left_trail_end = FeynGen::follow_chain(
-                e.vertices.0,
-                e.data.pdg.unsigned_abs(),
-                graph.edges(),
-                &mut vetoed_edges,
-                &adj_map,
-            )?;
-            let right_trail_end = FeynGen::follow_chain(
-                e.vertices.1,
-                e.data.pdg.unsigned_abs(),
-                graph.edges(),
-                &mut vetoed_edges,
-                &adj_map,
-            )?;
+            let (_, left_trail_end) =
+                FeynGen::follow_chain(e.vertices.0, &mut vetoed_edges, &adj_map, false)?;
+            let (_, right_trail_end) =
+                FeynGen::follow_chain(e.vertices.1, &mut vetoed_edges, &adj_map, false)?;
             if left_trail_end == right_trail_end {
                 n_fermion_loops += 1;
             }
@@ -2435,6 +2594,11 @@ impl FeynGen {
                             )
                             .unwrap();
                     }
+                    // NOTE: The normalization of the fermion flow cannot be performed at this stage yet because
+                    // it involves flipping edge orientation which modifies the sign of the momenta for the local
+                    // numerator comparison during the grouping of graphs. This is done later in the process then.
+                    //sorted_g = self.normalize_fermion_flow(&sorted_g, model).unwrap();
+
                     (canonical_repr, sorted_g, symmetry_factor.clone())
                 })
                 .collect::<Vec<_>>()
@@ -2487,15 +2651,34 @@ impl FeynGen {
                             return Ok(())
                         }
                     }
-
                     let bare_graph = BareGraph::from_symbolica_graph(
                         model,
-                        graph_name,
+                        graph_name.clone(),
                         g,
                         symmetry_factor.clone(),
                         external_connections.clone(),
                         None,
                     )?;
+
+                    // The step below is optional, but it is nice to have all internal fermion edges canonized as particles.
+                    // Notice that we cannot do this on the bare graph used for numerator local comparisons and diagram grouping because
+                    // it induces a misalignment of the LMB (w.r.t to their sign/orientation) due to the flip of the edges.
+                    // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
+                    // of antiparticles as well, but I prefer this post re-processing option instead.
+                    let canonized_fermion_flow_bare_graph = if CANONIZE_FERMION_FLOW {
+                        let canonied_fermion_flow_symbolica_graph = self.normalize_fermion_flow(g, model)?;
+                        BareGraph::from_symbolica_graph(
+                            model,
+                            graph_name,
+                            &canonied_fermion_flow_symbolica_graph,
+                            symmetry_factor.clone(),
+                            external_connections.clone(),
+                            None,
+                        )?
+                    } else {
+                        bare_graph.clone()
+                    };
+
                     // println!(
                     //     "bare_graph:\n{}",
                     //     bare_graph.dot()
@@ -2509,10 +2692,10 @@ impl FeynGen {
                             let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
                             match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
                                 Entry::Vacant(entry) => {
-                                    entry.insert(vec![(i_g, None, bare_graph)]);
+                                    entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph)]);
                                 }
                                 Entry::Occupied(mut entry) => {
-                                    entry.get_mut().push((i_g, None, bare_graph));
+                                    entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph));
                                 }
                             }
                         }
@@ -2553,10 +2736,10 @@ impl FeynGen {
 
                                 match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
                                     Entry::Vacant(entry) => {
-                                        entry.insert(vec![(i_g, None, bare_graph)]);
+                                        entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph)]);
                                     }
                                     Entry::Occupied(mut entry) => {
-                                        entry.get_mut().push((i_g, None, bare_graph));
+                                        entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph));
                                     }
                                 }
                             }
@@ -2575,6 +2758,7 @@ impl FeynGen {
                             //         .collect::<Vec<_>>()
                             //         .join("\n")
                             // );
+                            // Important: The numerator-aware grouping is done with the simplified color structure and *not* with the fermion flow canonized bare graph
                             let numerator_data = Some(
                                 ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
                                     i_g,
@@ -2609,7 +2793,7 @@ impl FeynGen {
 
                                 match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
                                     Entry::Vacant(entry) => {
-                                        entry.insert(vec![(i_g, numerator_data, bare_graph)]);
+                                        entry.insert(vec![(i_g, numerator_data, canonized_fermion_flow_bare_graph)]);
                                     }
                                     Entry::Occupied(mut entry) => {
                                         let mut found_match = false;
@@ -2651,7 +2835,7 @@ impl FeynGen {
                                             }
                                         }
                                         if !found_match {
-                                            entry.get_mut().push((i_g, numerator_data, bare_graph));
+                                            entry.get_mut().push((i_g, numerator_data, canonized_fermion_flow_bare_graph));
                                         }
                                     }
                                 }

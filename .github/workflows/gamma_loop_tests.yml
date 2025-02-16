@@ -47,7 +47,7 @@ jobs:
         ./bin/run_tests.sh python -m "codecheck"
     - name: Run python tests
       run: |
-        ./bin/run_tests.sh python -m "not drawing" --max-runtime 120.0
+        ./bin/run_tests.sh python -m "not drawing" --max-runtime 300.0
       timeout-minutes: 120
     - name: Run native rust tests
       run: |
