@@ -199,6 +199,7 @@
           poppler_utils
           rust-analyzer
           maturin
+          virtualenv
         ];
       };
     });
