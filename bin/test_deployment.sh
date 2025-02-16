@@ -19,8 +19,8 @@ maturin build --release --features "extension-module" -o /tmp/test_gammaloop_dep
 RETCODE=$RETCODE+$?;
 cd $TMPDIR/test_gammaloop_deployment
 echo "Creating virtual enviroment for testing deployment"
-python -m venv --no-site-packages test_gammaloop_deployment_venv
-source ./test_gammaloop_deployment_venv/bin/activate
+virtualenv venv
+source ./venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install pytest
 python -m pip install `ls -1 $TMPDIR/test_gammaloop_deployment/wheel/*.whl`
@@ -28,7 +28,7 @@ RETCODE=$RETCODE+$?;
 echo "Building dependencies in test deployment"
 gammaloop --build_dependencies
 RETCODE=$RETCODE+$?;
-cd `ls -d1 ./test_gammaloop_deployment_venv/lib/python*/site-packages/gammaloop`
+cd `ls -d1 ./venv/lib/python*/site-packages/gammaloop`
 RETCODE=$RETCODE+$?;
 #source `gammaloop -venv`
 echo "Running gammaloop tests withing deployed environment"
