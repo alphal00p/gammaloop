@@ -38,15 +38,15 @@ Process generation syntax is detailed on γLoop's [wiki](https://wiki.alphaloop.
 
 ### > Requirements
 
-* `Rust`: v1.77+ You can easily install Rust with this [one-liner](https://www.rust-lang.org/tools/install)
+The installation may be successful with older versions than the ones indicated below, but it was not tested. 
+
+* `Rust`: v1.81+ You can easily install Rust with this [one-liner](https://www.rust-lang.org/tools/install)
 
 * `Python3`: v3.12+ (equipped with `pip`, and the `python-devel` dependency)
 
-* `GNU gcc`: v10+ (*not* `clang`!)
+* `GNU gcc`: v14+
 
 * `git`
-
-*Note*: The project has been tested on Linux and MacOS. However, on MacOS, the default `clang` compiler is not supported due to lack of `libquadmath` support, and `GNU gcc` must be installed and setup as default compiler.
 
 Windows users are encouraged to use [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/).
 

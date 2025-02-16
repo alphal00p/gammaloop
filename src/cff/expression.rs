@@ -659,7 +659,7 @@ impl CFFExpression {
 
         self.compiled = CompiledCFFExpression::from_metedata(metadata)?;
 
-        info!("Compilation succesful");
+        info!("Compilation successful");
 
         Ok(())
     }
