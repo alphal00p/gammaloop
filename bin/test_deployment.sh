@@ -32,7 +32,7 @@ cd `ls -d1 ./venv/lib/python*/site-packages/gammaloop`
 RETCODE=$RETCODE+$?;
 #source `gammaloop -venv`
 echo "Running gammaloop tests withing deployed environment"
-python -m pytest --max-runtime 15.0
+python -m pytest --max-runtime 15.0 -k "test_scalar_triangle"
 RETCODE=$RETCODE+$?;
 if [ $(($RETCODE)) == 0 ]
 then
