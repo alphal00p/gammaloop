@@ -9,6 +9,7 @@ if [ "$1" == "clean" ]
         cargo clean
         ./bin/build_dependencies.sh clean
 fi
+echo "Local build for maturin wheal"
 ./bin/build_dependencies.sh
 RETCODE=$RETCODE+$?;
 rm -rf $TMPDIR/test_gammaloop_deployment
@@ -17,17 +18,26 @@ mkdir $TMPDIR/test_gammaloop_deployment/wheel
 maturin build --release --features "extension-module" -o /tmp/test_gammaloop_deployment/wheel
 RETCODE=$RETCODE+$?;
 cd $TMPDIR/test_gammaloop_deployment
-python -m venv venv
-source ./venv/bin/activate
+echo "Creating virtual enviroment for testing deployment"
+python -m venv --no-site-packages test_gammaloop_deployment_venv
+source ./test_gammaloop_deployment_venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install pytest
 python -m pip install `ls -1 $TMPDIR/test_gammaloop_deployment/wheel/*.whl`
 RETCODE=$RETCODE+$?;
+echo "Building dependencies in test deployment"
 gammaloop --build_dependencies
 RETCODE=$RETCODE+$?;
-cd `ls -d1 ./venv/lib/python*/site-packages/gammaloop`
+cd `ls -d1 ./test_gammaloop_deployment_venv/lib/python*/site-packages/gammaloop`
 RETCODE=$RETCODE+$?;
 #source `gammaloop -venv`
+echo "Running gammaloop tests withing deployed environment"
 python -m pytest --max-runtime 15.0
 RETCODE=$RETCODE+$?;
+if [ $(($RETCODE)) == 0 ]
+then
+    echo -e "\033[92mDEPLOYMENT TEST SUCCESSFUL\033[0m";	
+else
+    echo -e "\033[91mDEPLOYMENT TEST FAILED\033[0m";
+fi
 exit $(($RETCODE))
