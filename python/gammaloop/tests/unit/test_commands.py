@@ -1,6 +1,6 @@
 import pytest
 import os
-from gammaloop.interface.gammaloop_interface import CommandList, GammaLoopConfiguration, GammaLoopError, GammaLoop
+from gammaloop.interface.gammaloop_interface import CommandList, GammaLoopConfiguration
 from gammaloop.misc.common import load_configuration, GL_PATH
 from gammaloop.tests.common import get_gamma_loop_interpreter, get_gamma_loop_interpreter_no_compilation, RESOURCES_PATH, pjoin, run_drawing
 from pathlib import Path

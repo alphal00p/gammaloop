@@ -1,6 +1,7 @@
 import pytest
 import os
-from gammaloop.interface.gammaloop_interface import CommandList, GammaLoopError, GammaLoop
+from gammaloop.interface.gammaloop_interface import CommandList, GammaLoop
+from gammaloop.misc.common import GammaLoopError
 from gammaloop.tests.common import get_gamma_loop_interpreter
 from pathlib import Path
 

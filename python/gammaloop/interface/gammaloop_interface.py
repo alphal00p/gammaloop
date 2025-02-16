@@ -227,7 +227,7 @@ class GammaLoopConfiguration(object):
                 'sampling': {
                     'type': 'discrete_graph_sampling',
                     'subtype': 'tropical',
-                    'upcast_on_failure': True
+                    'upcast_on_failure': False
                 },
                 'subtraction': {
                     'local_ct_settings': {

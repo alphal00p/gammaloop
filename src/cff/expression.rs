@@ -606,7 +606,7 @@ impl CFFExpression {
                 self.build_joint_symbolica_evaluator::<T>(params, export_settings.cpe_rounds_cff);
 
             let source_string = if export_settings.gammaloop_compile_options.inline_asm {
-                joint.export_asm_str("joint", true, InlineASM::X64)
+                joint.export_asm_str("joint", true, InlineASM::default())
             } else {
                 joint.export_cpp_str("joint", true)
             };

@@ -31,7 +31,7 @@ set integrated_phase 'imag'
 set rotation_axis []
 set externals.data.helicities [-1,-1,-1,-1,-1,-1]
 #set externals.data.helicities [-1,1,-1,1,-1,1]
-set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
 #set sampling {'type':'default'}
 set n_start 1000000
 set n_max 10000000000

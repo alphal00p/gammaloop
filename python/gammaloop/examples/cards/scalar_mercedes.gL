@@ -13,7 +13,7 @@ launch examples/cards/scalar_mercedes
 info
 set integrated_phase 'imag'
 # Tropical sampling
-set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
 # Regular sampling with cartesian product of spherical parameterisation
 #set sampling {'type':'default'}
 set e_cm 1.

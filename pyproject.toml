@@ -106,6 +106,7 @@ module = "pydot.*"
 ignore_missing_imports = true
 
 [tool.pyright]
+reportPrivateImportUsage = "none"
 include = ["python/gammaloop"]
 exclude = [
     "python/gammaloop/data/templates/drawing/combine_pages.py",

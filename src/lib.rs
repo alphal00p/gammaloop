@@ -938,7 +938,7 @@ pub struct GammaloopCompileOptions {
 impl GammaloopCompileOptions {
     pub fn inline_asm(&self) -> InlineASM {
         if self.inline_asm {
-            InlineASM::X64
+            InlineASM::default()
         } else {
             InlineASM::None
         }

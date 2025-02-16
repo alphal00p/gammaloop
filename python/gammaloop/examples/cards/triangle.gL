@@ -12,7 +12,7 @@ launch examples/cards/box
 info
 set integrated_phase 'real'
 # Tropical sampling
-set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
 
 set externals.data.momenta [\
 [0.,0.,-2.,1],\

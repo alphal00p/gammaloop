@@ -54,7 +54,7 @@ Stability:
 sampling:
   type: discrete_graph_sampling
   subtype: tropical
-  upcast_on_failure: true
+  upcast_on_failure: false
 subtraction:
   local_ct_settings:
     uv_localisation:
