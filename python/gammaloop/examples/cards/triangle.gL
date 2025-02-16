@@ -6,9 +6,9 @@ set load_compiled_cff True
 set load_compiled_separate_orientations False
 set inline_asm True
 
-!rm -rf examples/cards/box
-output examples/cards/box
-launch examples/cards/box
+!rm -rf examples/cards/triangle
+output examples/cards/triangle
+launch examples/cards/triangle
 info
 set integrated_phase 'real'
 # Tropical sampling
