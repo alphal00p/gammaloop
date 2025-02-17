@@ -1346,16 +1346,6 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No model loaded. Please load a model first with 'import_model' command.")
 
-        if self.config.get_setting('export_settings.gammaloop_compile_options.inline_asm'):
-            architecture = platform.machine()
-            if "arm" in architecture:
-                logger.warning(
-                    f"Inline assembly is only supported for x86 architectures, and this machine is {architecture}.")
-                logger.warning(
-                    f"{Colour.RED}Inline assembly will now be disabled now in your gammaLoop configuration.{Colour.END}")
-                self.config.set_setting(
-                    'export_settings.gammaloop_compile_options.inline_asm', False)
-
         if args.model_replacements:
             self.rust_worker.export_coupling_replacement_rules(
                 args.output_path, args.expression_format)
