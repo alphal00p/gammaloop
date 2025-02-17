@@ -2366,7 +2366,7 @@ pub fn get_n_dim_for_n_loop_momenta(
         settings.sampling,
         SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_))
     ) {
-        let tropical_part = 2 * n_edges.unwrap() - 1;
+        let tropical_part = 2 * n_edges.expect("No tropical subgraph table generated, please run without tropical sampling or regenerate with tables") - 1;
         let d_l = 3 * n_loop_momenta;
         return if d_l % 2 == 1 {
             tropical_part + d_l + 1

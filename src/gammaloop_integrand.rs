@@ -942,7 +942,7 @@ impl GammaLoopIntegrand {
                             .unwrap()
                             .tropical_subgraph_table
                             .as_ref()
-                            .unwrap();
+                            .expect("No tropical subgraph table present, disable tropical sampling or regenerate process with table");
 
                         let edge_data = graph
                             .bare_graph
