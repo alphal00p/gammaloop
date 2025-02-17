@@ -190,7 +190,7 @@
           cargo-deny
           cargo-edit
           cargo-watch
-          python311
+          # python311
           texlive.combined.scheme-medium
           poetry
           ghostscript
