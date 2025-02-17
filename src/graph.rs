@@ -2906,15 +2906,28 @@ impl<S: NumeratorState> Graph<S> {
     pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
         let table = self.bare_graph.generate_tropical_subgraph_table(settings);
 
-        if let Ok(table) = table {
-            debug!("min dod: {}", table.get_smallest_dod());
-            if let Some(d) = &mut self.derived_data {
-                d.tropical_subgraph_table = Some(table);
+        match table {
+            Ok(table) => {
+                debug!("min dod: {}", table.get_smallest_dod());
+                if let Some(d) = &mut self.derived_data {
+                    d.tropical_subgraph_table = Some(table);
+                } else {
+                    panic!("Derived data not initialized")
+                }
             }
-        } else if settings.panic_on_fail {
-            panic!("Tropical subgraph table generation failed 🥥");
-        } else {
-            warn!("Tropical subgraph table generation failed 🥥");
+            Err(error) => {
+                if settings.panic_on_fail {
+                    panic!(
+                        "Tropical subgraph table generation failed for graph: {} 🥥\n error: {:?}",
+                        self.bare_graph.name, error
+                    );
+                } else {
+                    warn!(
+                        "Tropical subgraph table generation failed for graph: {} 🥥\n error: {:?}",
+                        self.bare_graph.name, error
+                    );
+                }
+            }
         }
     }
 

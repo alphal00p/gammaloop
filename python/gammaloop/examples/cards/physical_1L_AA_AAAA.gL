@@ -51,7 +51,7 @@ set n_start 1000000
 set n_max 1000000000000
 set continuous_dim_learning_rate 0.0
 set seed 1
-# With set_model_param ymt 1500.0 -nu
+#With set_model_param ymt 1500.0 -nu
 #integrate physical_1L_6photons -r -c 8 -t (1.22898408452706e-13,3.94362534040412e-13)
 # With set_model_param ymt 173.0 -nu
 integrate physical_1L_6photons -r -c 16 -t (9.27759500687454717e-11,3.68394576249870544e-11)
