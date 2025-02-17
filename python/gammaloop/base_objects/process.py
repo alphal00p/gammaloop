@@ -479,7 +479,8 @@ class Process(object):
                                 if veto_particle not in particle_vetos:
                                     particle_vetos.append(veto_particle)
                             else:
-                                particle_vetos.remove(veto_particle)
+                                if veto_particle in particle_vetos:
+                                    particle_vetos.remove(veto_particle)
                         case _:
                             if t.endswith("^2"):
                                 current_coupling_order = t[:-2]
