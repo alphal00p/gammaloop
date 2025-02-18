@@ -3450,7 +3450,9 @@ pub fn dummy_hedge_graph(num_edges: usize) -> linnet::half_edge::HedgeGraph<(), 
 
 pub trait Length {
     fn len(&self) -> usize;
-    fn is_empty(&self) -> bool;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl<I, T> Length for TiVec<I, T> {
@@ -3460,5 +3462,11 @@ impl<I, T> Length for TiVec<I, T> {
 
     fn is_empty(&self) -> bool {
         self.is_empty()
+    }
+}
+
+impl<T> Length for Vec<T> {
+    fn len(&self) -> usize {
+        self.len()
     }
 }

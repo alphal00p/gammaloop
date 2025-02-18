@@ -2,9 +2,11 @@ use core::panic;
 
 use crate::{
     gammaloop_integrand::DefaultSample,
-    graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
+    graph::{BareGraph, EdgeType, Graph},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
+    new_graph::LoopMomentumBasis,
     numerator::{Evaluate, Evaluators, Numerator, NumeratorState},
+    signature::LoopExtSignature,
     utils::{FloatLike, F},
     Settings,
 };
@@ -498,7 +500,7 @@ impl LTDTerm {
             } else {
                 match edge.edge_type {
                     EdgeType::Virtual => {
-                        let momentum = self.signature_of_lmb[index].compute_momentum(
+                        let momentum = self.signature_of_lmb[index].compute_momentum_untyped(
                             &edge_momenta_of_associated_lmb_rot,
                             external_moms.1.unwrap_or(external_moms.0),
                         );
@@ -506,7 +508,7 @@ impl LTDTerm {
                         if setting.stability.rotate_numerator {
                             ltd_emr.push(momentum.clone());
                         } else {
-                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum_untyped(
                                 &edge_momenta_of_associated_lmb,
                                 external_moms.0,
                             ));
@@ -529,12 +531,12 @@ impl LTDTerm {
                     }
                     _ => {
                         if setting.stability.rotate_numerator {
-                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum_untyped(
                                 &edge_momenta_of_associated_lmb_rot,
                                 external_moms.1.unwrap_or(external_moms.0),
                             ));
                         } else {
-                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum_untyped(
                                 &edge_momenta_of_associated_lmb,
                                 external_moms.0,
                             ));
