@@ -44,7 +44,9 @@ impl<Context, T: Decode<Context> + From<usize>> Decode<Context> for SignatureLik
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash, Encode, Decode,
+)]
 pub struct LoopExtSignature {
     pub internal: LoopSignature,
     pub external: ExternalSignature,
