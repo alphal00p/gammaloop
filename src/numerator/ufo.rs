@@ -7,11 +7,11 @@ use spenso::structure::representation::{
 use symbolica::atom::AtomCore;
 use symbolica::atom::FunctionAttribute;
 use symbolica::id::MatchSettings;
+use symbolica::symbol;
 use symbolica::{
     atom::{Atom, Symbol},
     function,
     id::Replacement,
-    symb,
 };
 
 #[allow(dead_code)]
@@ -39,31 +39,31 @@ pub struct UFOSymbols {
 
 #[allow(dead_code)]
 pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
-    identity: symb!("Identity"),
-    identityl: symb!("IdentityL"),
-    gamma: symb!("Gamma"),
-    gamma5: symb!("Gamma5"),
-    projm: symb!("ProjM"),
-    projp: symb!("ProjP"),
-    sigma: symb!("Sigma"),
-    charge_conj: symb!("C"),
-    metric: Symbol::new_with_attributes("Metric", &[FunctionAttribute::Symmetric]).unwrap(),
-    momentum: symb!("P"),
-    levicivita: symb!("Epsilon"),
-    t: symb!("T"),
-    f: Symbol::new_with_attributes("f", &[FunctionAttribute::Antisymmetric]).unwrap(),
-    d: symb!("d"),
-    antilevicivita: symb!("EpsilonBar"),
-    t6: symb!("T6"),
-    k6: symb!("K6"),
-    k6bar: symb!("K6Bar"),
-    pslash: symb!("PSlash"),
+    identity: symbol!("Identity"),
+    identityl: symbol!("IdentityL"),
+    gamma: symbol!("Gamma"),
+    gamma5: symbol!("Gamma5"),
+    projm: symbol!("ProjM"),
+    projp: symbol!("ProjP"),
+    sigma: symbol!("Sigma"),
+    charge_conj: symbol!("C"),
+    metric: symbol!("Metric";Symmetric).unwrap(),
+    momentum: symbol!("P"),
+    levicivita: symbol!("Epsilon"),
+    t: symbol!("T"),
+    f: symbol!("f";Antisymmetric).unwrap(),
+    d: symbol!("d"),
+    antilevicivita: symbol!("EpsilonBar"),
+    t6: symbol!("T6"),
+    k6: symbol!("K6"),
+    k6bar: symbol!("K6Bar"),
+    pslash: symbol!("PSlash"),
 });
 
 pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
-    let a_ = symb!("a_");
-    let b_ = symb!("b_");
-    let c_ = symb!("c_");
+    let a_ = symbol!("a_");
+    let b_ = symbol!("b_");
+    let c_ = symbol!("c_");
 
     let coad = ColorAdjoint::rep(8);
     let cof = ColorFundamental::rep(3);
@@ -154,14 +154,14 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
     atom.replace_all_multiple(&reps)
 }
 pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
-    let a_ = symb!("a_");
-    let b_ = symb!("b_");
-    let c_ = symb!("c_");
-    let d_ = symb!("d_");
-    let wa_ = function!(symb!("indexid"), Atom::new_var(symb!("a_")));
-    let wb_ = function!(symb!("indexid"), Atom::new_var(symb!("b_")));
-    let wc_ = function!(symb!("indexid"), Atom::new_var(symb!("c_")));
-    let wd_ = function!(symb!("indexid"), Atom::new_var(symb!("d_")));
+    let a_ = symbol!("a_");
+    let b_ = symbol!("b_");
+    let c_ = symbol!("c_");
+    let d_ = symbol!("d_");
+    let wa_ = function!(symbol!("indexid"), Atom::new_var(symbol!("a_")));
+    let wb_ = function!(symbol!("indexid"), Atom::new_var(symbol!("b_")));
+    let wc_ = function!(symbol!("indexid"), Atom::new_var(symbol!("c_")));
+    let wd_ = function!(symbol!("indexid"), Atom::new_var(symbol!("d_")));
 
     let bis = Bispinor::rep(4);
     let mink = Minkowski::rep(4);

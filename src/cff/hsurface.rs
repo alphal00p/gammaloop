@@ -8,6 +8,7 @@ use linnet::half_edge::hedgevec::HedgeVec;
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
+use symbolica::{parse, symbol};
 use typed_index_collections::TiVec;
 
 use super::esurface::ExternalShift;
@@ -64,7 +65,7 @@ impl Hsurface {
                 .map(|energies| {
                     energies
                         .iter()
-                        .map(|i| Atom::parse(&format!("E{}", Into::<usize>::into(*i))).unwrap())
+                        .map(|i| parse!(&format!("E{}", Into::<usize>::into(*i))).unwrap())
                         .collect_vec()
                 })
                 .collect_tuple()
@@ -74,8 +75,7 @@ impl Hsurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::new_num(*sign)
-                    * &Atom::parse(&format!("p{}", Into::<usize>::into(*i))).unwrap()
+                Atom::new_num(*sign) * &parse!(&format!("p{}", Into::<usize>::into(*i))).unwrap()
                     + &sum
             });
 
@@ -146,6 +146,8 @@ mod tests {
     };
     use symbolica::atom::{Atom, AtomCore};
 
+    use symbolica::{parse, symbol};
+
     use crate::{
         cff::{cff_graph::VertexSet, esurface::Esurface},
         utils::F,
@@ -210,7 +212,7 @@ mod tests {
         };
 
         let h_surface_atom = h_surface.to_atom();
-        let expected_atom = Atom::parse("E0 + E1 - E2 - E3 - p4 + p5").unwrap();
+        let expected_atom = parse!("E0 + E1 - E2 - E3 - p4 + p5").unwrap();
         let diff = h_surface_atom - &expected_atom;
         let diff = diff.expand();
         assert_eq!(diff, Atom::new());
@@ -239,7 +241,7 @@ mod tests {
         println!("with {}", e_surface_atom);
 
         let rewritten = h_surface.to_atom_with_rewrite(&e_surface).unwrap();
-        let target = Atom::parse("E0 + E1 + E6 + p5").unwrap();
+        let target = parse!("E0 + E1 + E6 + p5").unwrap();
         let diff = rewritten - &target;
         let diff = diff.expand();
 
@@ -252,7 +254,7 @@ mod tests {
         };
 
         let rewritten = h_surface_2.to_atom_with_rewrite(&e_surface).unwrap();
-        let target = Atom::parse("E1 + E7 + E2 + p5").unwrap();
+        let target = parse!("E1 + E7 + E2 + p5").unwrap();
         let diff = rewritten - &target;
         let diff = diff.expand();
 

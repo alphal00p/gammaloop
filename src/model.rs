@@ -53,15 +53,15 @@ use crate::utils::GS;
 use spenso::complex::Complex;
 use spenso::shadowing::ETS;
 use symbolica::domains::float::NumericalFloatLike;
-use symbolica::function;
 use symbolica::printer::{AtomPrinter, PrintOptions};
+use symbolica::{function, parse, symbol};
 
 #[allow(unused)]
 pub fn normalise_complex(atom: &Atom) -> Atom {
-    let re = Atom::parse("re_").unwrap();
-    let im = Atom::parse("im_").unwrap();
+    let re = parse!("re_").unwrap();
+    let im = parse!("im_").unwrap();
 
-    let comp_id = Symbol::new("complex");
+    let comp_id = symbol!("complex");
 
     let complexfn = function!(comp_id, re, im).to_pattern();
 
@@ -580,7 +580,7 @@ impl Coupling {
     }
 
     pub fn rep_rule(&self) -> [Atom; 2] {
-        let lhs = Atom::parse(&self.name).unwrap();
+        let lhs = parse!(&self.name).unwrap();
         //let rhs = normalise_complex(&self.expression);
         let rhs = self.expression.clone();
 
@@ -831,19 +831,19 @@ where
             .iter()
             .zip(other.lorentz.iter())
             .map(|(a, b)| a.kroneker_atom(b))
-            .fold(Atom::parse("1").unwrap(), |acc, x| acc * x);
+            .fold(parse!("1").unwrap(), |acc, x| acc * x);
         let spin = self
             .spin
             .iter()
             .zip(other.spin.iter())
             .map(|(a, b)| a.kroneker_atom(b))
-            .fold(Atom::parse("1").unwrap(), |acc, x| acc * x);
+            .fold(parse!("1").unwrap(), |acc, x| acc * x);
         let color = self
             .color
             .iter()
             .zip(other.color.iter())
             .map(|(a, b)| a.kroneker_atom(b))
-            .fold(Atom::parse("1").unwrap(), |acc, x| acc * x);
+            .fold(parse!("1").unwrap(), |acc, x| acc * x);
 
         [lorentz, spin, color]
     }
@@ -935,7 +935,7 @@ where
     }
 
     pub fn to_cind_atom(&self) -> Atom {
-        let mut builder = FunctionBuilder::new(Symbol::new(CONCRETEIND));
+        let mut builder = FunctionBuilder::new(symbol!(CONCRETEIND));
 
         for l in &self.lorentz {
             builder = builder.add_arg(l.to_atom().as_view());
@@ -1149,10 +1149,10 @@ impl Particle {
                         pol[2].clone(),
                         pol[3].clone(),
                     );
-                    out.push((Atom::parse(&format!("u({num},cind(0))")).unwrap(), u1));
-                    out.push((Atom::parse(&format!("u({num},cind(1))")).unwrap(), u2));
-                    out.push((Atom::parse(&format!("u({num},cind(2))")).unwrap(), u3));
-                    out.push((Atom::parse(&format!("u({num},cind(3))")).unwrap(), u4));
+                    out.push((parse!(&format!("u({num},cind(0))")).unwrap(), u1));
+                    out.push((parse!(&format!("u({num},cind(1))")).unwrap(), u2));
+                    out.push((parse!(&format!("u({num},cind(2))")).unwrap(), u3));
+                    out.push((parse!(&format!("u({num},cind(3))")).unwrap(), u4));
                 } else {
                     let pol = self.incoming_polarization(mom, helicity);
                     let (v1, v2, v3, v4) = (
@@ -1161,10 +1161,10 @@ impl Particle {
                         pol[2].clone(),
                         pol[3].clone(),
                     );
-                    out.push((Atom::parse(&format!("vbar({num},cind(0))")).unwrap(), v1));
-                    out.push((Atom::parse(&format!("vbar({num},cind(1))")).unwrap(), v2));
-                    out.push((Atom::parse(&format!("vbar({num},cind(2))")).unwrap(), v3));
-                    out.push((Atom::parse(&format!("vbar({num},cind(3))")).unwrap(), v4));
+                    out.push((parse!(&format!("vbar({num},cind(0))")).unwrap(), v1));
+                    out.push((parse!(&format!("vbar({num},cind(1))")).unwrap(), v2));
+                    out.push((parse!(&format!("vbar({num},cind(2))")).unwrap(), v3));
+                    out.push((parse!(&format!("vbar({num},cind(3))")).unwrap(), v4));
                 }
             }
             3 => {
@@ -1175,10 +1175,10 @@ impl Particle {
                     pol[2].clone(),
                     pol[3].clone(),
                 );
-                out.push((Atom::parse(&format!("ϵ({num},cind(0))")).unwrap(), e1));
-                out.push((Atom::parse(&format!("ϵ({num},cind(1))")).unwrap(), e2));
-                out.push((Atom::parse(&format!("ϵ({num},cind(2))")).unwrap(), e3));
-                out.push((Atom::parse(&format!("ϵ({num},cind(3))")).unwrap(), e4));
+                out.push((parse!(&format!("ϵ({num},cind(0))")).unwrap(), e1));
+                out.push((parse!(&format!("ϵ({num},cind(1))")).unwrap(), e2));
+                out.push((parse!(&format!("ϵ({num},cind(2))")).unwrap(), e3));
+                out.push((parse!(&format!("ϵ({num},cind(3))")).unwrap(), e4));
             }
             _ => {}
         }
@@ -1289,10 +1289,10 @@ impl Particle {
                         pol[2].clone(),
                         pol[3].clone(),
                     );
-                    out.push((Atom::parse(&format!("ubar({num},cind(0))")).unwrap(), ubar1));
-                    out.push((Atom::parse(&format!("ubar({num},cind(1))")).unwrap(), ubar2));
-                    out.push((Atom::parse(&format!("ubar({num},cind(2))")).unwrap(), ubar3));
-                    out.push((Atom::parse(&format!("ubar({num},cind(3))")).unwrap(), ubar4));
+                    out.push((parse!(&format!("ubar({num},cind(0))")).unwrap(), ubar1));
+                    out.push((parse!(&format!("ubar({num},cind(1))")).unwrap(), ubar2));
+                    out.push((parse!(&format!("ubar({num},cind(2))")).unwrap(), ubar3));
+                    out.push((parse!(&format!("ubar({num},cind(3))")).unwrap(), ubar4));
                 } else {
                     let pol = self.outgoing_polarization(mom, helicity);
                     let (v1, v2, v3, v4) = (
@@ -1301,10 +1301,10 @@ impl Particle {
                         pol[2].clone(),
                         pol[3].clone(),
                     );
-                    out.push((Atom::parse(&format!("v({num},cind(0))")).unwrap(), v1));
-                    out.push((Atom::parse(&format!("v({num},cind(1))")).unwrap(), v2));
-                    out.push((Atom::parse(&format!("v({num},cind(2))")).unwrap(), v3));
-                    out.push((Atom::parse(&format!("v({num},cind(3))")).unwrap(), v4));
+                    out.push((parse!(&format!("v({num},cind(0))")).unwrap(), v1));
+                    out.push((parse!(&format!("v({num},cind(1))")).unwrap(), v2));
+                    out.push((parse!(&format!("v({num},cind(2))")).unwrap(), v3));
+                    out.push((parse!(&format!("v({num},cind(3))")).unwrap(), v4));
                 }
             }
             3 => {
@@ -1315,10 +1315,10 @@ impl Particle {
                     pol[2].clone(),
                     pol[3].clone(),
                 );
-                out.push((Atom::parse(&format!("ϵbar({num},cind(0))")).unwrap(), e1));
-                out.push((Atom::parse(&format!("ϵbar({num},cind(1))")).unwrap(), e2));
-                out.push((Atom::parse(&format!("ϵbar({num},cind(2))")).unwrap(), e3));
-                out.push((Atom::parse(&format!("ϵbar({num},cind(3))")).unwrap(), e4));
+                out.push((parse!(&format!("ϵbar({num},cind(0))")).unwrap(), e1));
+                out.push((parse!(&format!("ϵbar({num},cind(1))")).unwrap(), e2));
+                out.push((parse!(&format!("ϵbar({num},cind(2))")).unwrap(), e3));
+                out.push((parse!(&format!("ϵbar({num},cind(3))")).unwrap(), e4));
             }
             _ => {}
         }
@@ -1477,7 +1477,7 @@ impl Parameter {
     }
 
     pub fn rep_rule(&self) -> Option<[Atom; 2]> {
-        let lhs = Atom::parse(&self.name).unwrap();
+        let lhs = parse!(&self.name).unwrap();
         let rhs = self.expression.clone();
 
         //Some([lhs, normalise_complex(&rhs?)])
@@ -1637,7 +1637,7 @@ impl Model {
         let mut new_values_len = 0;
 
         for c in &self.couplings {
-            let key = Symbol::new(&c.name);
+            let key = symbol!(&c.name);
             expr.push(c.expression.as_view());
             fn_map
                 .add_function(key, c.name.clone().into(), vec![], c.expression.clone())
@@ -1649,7 +1649,7 @@ impl Model {
         let mut param_values = vec![];
 
         for p in &self.parameters {
-            let key = Atom::parse(&p.name).unwrap();
+            let key = parse!(&p.name).unwrap();
             match p.nature {
                 ParameterNature::External => {
                     params.push(key);
@@ -1661,7 +1661,7 @@ impl Model {
                 }
                 ParameterNature::Internal => {
                     new_values_len += 1;
-                    let key = Symbol::new(&p.name);
+                    let key = symbol!(&p.name);
                     expr.push(p.expression.as_ref().unwrap().as_view());
                     fn_map
                         .add_function(
@@ -1730,20 +1730,20 @@ impl Model {
     pub fn valued_coupling_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
-            let lhs = Atom::parse(&cpl.name).unwrap().to_pattern();
+            let lhs = parse!(&cpl.name).unwrap().to_pattern();
             if let Some(value) = cpl.value {
                 let rhs = if value.im == 0.0 {
-                    let name = Atom::new_var(Symbol::new(format!("{}_re", cpl.name)));
+                    let name = Atom::new_var(symbol!(format!("{}_re", cpl.name)));
 
                     name.to_pattern()
                 } else if value.re == 0.0 {
-                    let name = Atom::new_var(Symbol::new(format!("{}_im", cpl.name)));
+                    let name = Atom::new_var(symbol!(format!("{}_im", cpl.name)));
 
                     name.to_pattern()
                 } else {
-                    let name_re = Atom::new_var(Symbol::new(cpl.name.clone() + "_re"));
+                    let name_re = Atom::new_var(symbol!(cpl.name.clone() + "_re"));
 
-                    let name_im = Atom::new_var(Symbol::new(cpl.name.clone() + "_im"));
+                    let name_im = Atom::new_var(symbol!(cpl.name.clone() + "_im"));
 
                     let i = Atom::new_var(Atom::I);
                     (&name_re + i * &name_im).to_pattern()
@@ -1783,12 +1783,12 @@ impl Model {
 
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
             if cpl.value.is_some() {
-                params.push(Atom::parse(&cpl.name).unwrap());
+                params.push(parse!(&cpl.name).unwrap());
             }
         }
         for param in self.parameters.iter().filter(|p| p.value.is_some()) {
             if param.value.is_some() {
-                let name = Atom::parse(&param.name).unwrap();
+                let name = parse!(&param.name).unwrap();
                 params.push(name);
             }
         }
@@ -1803,25 +1803,25 @@ impl Model {
     pub fn valued_parameter_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for param in self.parameters.iter().filter(|p| p.value.is_some()) {
-            let lhs = Atom::parse(&param.name).unwrap().to_pattern();
+            let lhs = parse!(&param.name).unwrap().to_pattern();
             if let Some(value) = param.value {
                 let rhs = match param.parameter_type {
                     ParameterType::Imaginary => {
                         if value.re.is_zero() {
-                            let name = Atom::new_var(Symbol::new(format!("{}_im", param.name)));
+                            let name = Atom::new_var(symbol!(format!("{}_im", param.name)));
 
                             name.to_pattern()
                         } else {
-                            let name_re = Atom::new_var(Symbol::new(param.name.clone() + "_re"));
+                            let name_re = Atom::new_var(symbol!(param.name.clone() + "_re"));
 
-                            let name_im = Atom::new_var(Symbol::new(param.name.clone() + "_im"));
+                            let name_im = Atom::new_var(symbol!(param.name.clone() + "_im"));
 
                             let i = Atom::new_var(Atom::I);
                             (&name_re + i * &name_im).to_pattern()
                         }
                     }
                     ParameterType::Real => {
-                        let name = Atom::new_var(Symbol::new(format!("{}_re", param.name)));
+                        let name = Atom::new_var(symbol!(format!("{}_re", param.name)));
 
                         name.to_pattern()
                     }
@@ -1836,7 +1836,7 @@ impl Model {
         // let mut atom = atom;
         // for cpl in self.couplings.iter() {
         //     if let Some(value) = cpl.value {
-        //         let pat = Atom::parse(&cpl.name).unwrap().to_pattern();
+        //         let pat = parse!(&cpl.name).unwrap().to_pattern();
 
         //         let re = Atom::new_num(value);
         //         atom = atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
@@ -1864,7 +1864,7 @@ impl Model {
         // let mut atom = atom;
         for cpl in self.parameters.iter() {
             if let Some(value) = cpl.value {
-                let key = Atom::parse(&cpl.name).unwrap();
+                let key = parse!(&cpl.name).unwrap();
                 const_map.insert(key, value);
             }
         }

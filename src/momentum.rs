@@ -43,6 +43,7 @@ use symbolica::{
 };
 
 use spenso::complex::Complex;
+use symbolica::{parse, symbol};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -277,7 +278,7 @@ where
 
 impl Energy<Atom> {
     pub fn new_parametric(id: usize) -> Self {
-        let value = Atom::parse(&format!("E_{}", id)).unwrap();
+        let value = parse!(&format!("E_{}", id)).unwrap();
         Energy { value }
     }
 }
@@ -1316,7 +1317,7 @@ impl<T: Clone> Polarization<T> {
             .clone()
             .to_dense_labeled(|_, i| FlatCoefficent::<NoArgs> {
                 index: i,
-                name: Some(Symbol::new(self.pol_type.to_string())),
+                name: Some(symbol!(self.pol_type.to_string())),
                 args: None,
             })
             .unwrap()
@@ -3012,6 +3013,7 @@ mod tests {
         ufo,
         upgrading_arithmetic::{FallibleAdd, FallibleSub},
     };
+    use symbolica::{parse, symbol};
 
     use crate::utils::F;
 
@@ -3547,9 +3549,9 @@ mod tests {
         let k = PhysReps::new_slot(Bispinor {}.into(), 4, 4);
 
         let zero = Atom::new_num(0);
-        let theta_x = Atom::parse("theta_x").unwrap();
-        let theta_y = Atom::parse("theta_y").unwrap();
-        let theta_z = Atom::parse("theta_z").unwrap();
+        let theta_x = parse!("theta_x").unwrap();
+        let theta_y = parse!("theta_y").unwrap();
+        let theta_z = parse!("theta_z").unwrap();
 
         let omega = DenseTensor::from_data(
             vec![

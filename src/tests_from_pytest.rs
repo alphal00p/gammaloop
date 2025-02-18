@@ -74,7 +74,7 @@ use symbolica::id::{
     Replacement,
 };
 use symbolica::state::{State, Workspace};
-use symbolica::{self, function, symb};
+use symbolica::{self, function, symbol};
 use typed_index_collections::TiVec;
 
 #[allow(unused)]

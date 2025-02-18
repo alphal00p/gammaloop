@@ -1151,7 +1151,7 @@ dependencies = [
  "petgraph",
  "pprof",
  "pyo3",
- "pyo3-build-config 0.23.4",
+ "pyo3-build-config",
  "pyo3-log",
  "pyo3-pylogger",
  "rand",
@@ -2173,7 +2173,7 @@ dependencies = [
  "memoffset",
  "parking_lot",
  "portable-atomic",
- "pyo3-build-config 0.21.2",
+ "pyo3-build-config",
  "pyo3-ffi",
  "pyo3-macros",
  "unindent",
@@ -2190,23 +2190,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyo3-build-config"
-version = "0.23.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cd3927b5a78757a0d71aa9dff669f903b1eb64b54142a9bd9f757f8fde65fd7"
-dependencies = [
- "once_cell",
- "target-lexicon",
-]
-
-[[package]]
 name = "pyo3-ffi"
 version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01be5843dc60b916ab4dad1dca6d20b9b4e6ddc8e15f50c47fe6d85f1fb97403"
 dependencies = [
  "libc",
- "pyo3-build-config 0.21.2",
+ "pyo3-build-config",
 ]
 
 [[package]]
@@ -2240,7 +2230,7 @@ checksum = "08260721f32db5e1a5beae69a55553f56b99bd0e1c3e6e0a5e8851a9d0f5a85c"
 dependencies = [
  "heck 0.4.1",
  "proc-macro2",
- "pyo3-build-config 0.21.2",
+ "pyo3-build-config",
  "quote",
  "syn 2.0.98",
 ]
@@ -2822,10 +2812,11 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e418fce3eab1208dfb8ac269dd33b926b51619b14e474538f09f3a7e898250ae"
 dependencies = [
  "ahash",
  "append-only-vec",
- "bincode",
  "brotli 5.0.0",
  "byteorder",
  "bytes",
@@ -2833,7 +2824,6 @@ dependencies = [
  "dyn-clone",
  "libloading",
  "once_cell",
- "pyo3-build-config 0.23.4",
  "rand",
  "rand_xoshiro",
  "rayon",
@@ -2850,11 +2840,10 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef24412afb257fe810c4084213deba06349d8c581aec63c876c84c3b2b3c4497"
 dependencies = [
  "ahash",
  "append-only-vec",
+ "bincode",
  "brotli 5.0.0",
  "byteorder",
  "bytes",
@@ -2862,6 +2851,7 @@ dependencies = [
  "dyn-clone",
  "libloading",
  "once_cell",
+ "pyo3-build-config",
  "rand",
  "rand_xoshiro",
  "rayon",

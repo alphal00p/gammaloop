@@ -5,7 +5,9 @@ use bitvec::vec::BitVec;
 use color_eyre::Result;
 
 use itertools::Itertools;
-use linnet::half_edge::{subgraph::OrientedCut, Flow, HedgeGraphBuilder, NodeIndex};
+use linnet::half_edge::{
+    builder::HedgeGraphBuilder, involution::Flow, subgraph::OrientedCut, NodeIndex,
+};
 use symbolica::atom::Atom;
 
 use crate::{
@@ -160,7 +162,7 @@ impl Process {
                 }
 
                 Graph::new(
-                    Atom::parse(&bare_graph.overall_factor)
+                    parse!(&bare_graph.overall_factor)
                         .expect("failed to convert overall factor to symbolica atom"),
                     hedge_graph_builder.build(),
                 )

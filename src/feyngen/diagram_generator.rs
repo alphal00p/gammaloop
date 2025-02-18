@@ -1,6 +1,7 @@
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
+use linnet::half_edge::involution::Orientation;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -22,7 +23,6 @@ use symbolica::atom::Symbol;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
 use symbolica::function;
-use symbolica::symb;
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -32,6 +32,7 @@ use log::debug;
 use log::info;
 use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::AtomCore;
+use symbolica::{parse, symbol};
 
 use super::NumeratorAwareGraphGroupingOption;
 use super::SelfEnergyFilterOptions;
@@ -59,7 +60,6 @@ use linnet::half_edge::subgraph::InternalSubGraph;
 use linnet::half_edge::subgraph::OrientedCut;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
-use linnet::half_edge::Orientation;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_FERMION_FLOW: bool = true;
@@ -772,9 +772,9 @@ impl FeynGen {
                     .iter_edges_relative(graph)
                     .map(|(o, d)| {
                         if matches!(o, Orientation::Reversed) {
-                            d.data.as_ref().unwrap().get_anti_particle(model)
+                            d.data.as_ref().get_anti_particle(model)
                         } else {
-                            d.data.as_ref().unwrap().clone()
+                            d.data.as_ref().clone()
                         }
                     })
                     .collect();
@@ -2242,7 +2242,7 @@ impl FeynGen {
                     match self.count_closed_fermion_loops(g, model) {
                         Ok(n_closed_fermion_loops) => {
                             let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
-                                (Atom::new_num(-1) * Atom::parse(symmetry_factor).unwrap())
+                                (Atom::new_num(-1) * parse!(symmetry_factor).unwrap())
                                     .to_canonical_string()
                             } else {
                                 symmetry_factor.clone()
@@ -2533,7 +2533,7 @@ impl FeynGen {
             processed_graphs = FeynGen::group_isomorphic_graphs_after_node_color_change(
                 &processed_graphs
                     .iter()
-                    .map(|(g, m)| (g.clone(), Atom::parse(m).unwrap()))
+                    .map(|(g, m)| (g.clone(), parse!(m).unwrap()))
                     .collect::<HashMap<_, _>>(),
                 &node_colors_for_canonicalization,
                 &pool,
@@ -2818,11 +2818,11 @@ impl FeynGen {
                                                 }
                                                 found_match = true;
                                                 other_graph.overall_factor =
-                                                    (Atom::parse(other_graph.overall_factor.as_str())
+                                                    (parse!(other_graph.overall_factor.as_str())
                                                         .unwrap()
                                                         + ratio
-                                                            * Atom::parse(
-                                                                bare_graph.overall_factor.as_str(),
+                                                            * parse!(
+                                                                bare_graph.overall_factor.as_str()
                                                             )
                                                             .unwrap())
                                                     .expand()
@@ -2857,11 +2857,7 @@ impl FeynGen {
                     .values()
                     .flatten()
                     .filter_map(|(graph_id, _numerator, graph)| {
-                        if Atom::parse(&graph.overall_factor)
-                            .unwrap()
-                            .expand()
-                            .is_zero()
-                        {
+                        if parse!(&graph.overall_factor).unwrap().expand().is_zero() {
                             n_cancellations += 1;
                             None
                         } else {
@@ -2949,10 +2945,10 @@ impl FeynGen {
                         .iter()
                         .chain(ExtendibleReps::BUILTIN_DUALIZABLE_NAMES.iter())
                         .chain(["Q"].iter())
-                        .map(Symbol::new)
+                        .map(|a| symbol!(a))
                     {
                         if r.pattern_match(
-                            &function!(head, symb!("args__")).to_pattern(),
+                            &function!(head, symbol!("args__")).to_pattern(),
                             None,
                             None,
                         )
@@ -3252,10 +3248,10 @@ impl FeynGen {
         // To disable numerator-aware graph isomorphism specific to N_c = 3, uncomment below
         // return expr.to_owned();
         let replacements = vec![
-            (Atom::parse("Nc").unwrap(), Atom::new_num(3)),
-            (Atom::parse("TR").unwrap(), Atom::parse("1/2").unwrap()),
-            (Atom::parse("CA").unwrap(), Atom::parse("3").unwrap()),
-            (Atom::parse("CF").unwrap(), Atom::parse("4/3").unwrap()),
+            (parse!("Nc").unwrap(), Atom::new_num(3)),
+            (parse!("TR").unwrap(), parse!("1/2").unwrap()),
+            (parse!("CA").unwrap(), parse!("3").unwrap()),
+            (parse!("CF").unwrap(), parse!("4/3").unwrap()),
         ];
         let mut res = expr.to_owned();
         for (src, trgt) in replacements {
@@ -3336,12 +3332,10 @@ impl ProcessedNumeratorForComparison {
                         let connected_external_id = bare_graph.external_connections.len() + i_ext;
                         for rep in lmb_replacements.iter_mut() {
                             rep.1 = rep.1.replace_all(
-                                &Atom::parse(&format!("P({},x__)", connected_external_id))
+                                &parse!(&format!("P({},x__)", connected_external_id))
                                     .unwrap()
                                     .to_pattern(),
-                                Atom::parse(&format!("P({},x__)", i_ext))
-                                    .unwrap()
-                                    .to_pattern(),
+                                parse!(&format!("P({},x__)", i_ext)).unwrap().to_pattern(),
                                 None,
                                 None,
                             );
@@ -3360,20 +3354,20 @@ impl ProcessedNumeratorForComparison {
                             (left_edge_pol, right_edge_pol)
                         {
                             lmb_replacements.push((
-                                Atom::parse(&format!(
+                                parse!(&format!(
                                     "{}({},x__)",
                                     right_edge_pol, connected_external_id
                                 ))
                                 .unwrap(),
-                                Atom::parse(&format!("{}({},x__)", left_edge_pol, i_ext)).unwrap(),
+                                parse!(&format!("{}({},x__)", left_edge_pol, i_ext)).unwrap(),
                             ));
                             // lmb_replacements.push((
-                            //     Atom::parse(&format!(
+                            //     parse!(&format!(
                             //         "{}({},xA__)*{}({},xB__)",
                             //         left_edge_pol, i_ext, right_edge_pol, connected_external_id,
                             //     ))
                             //     .unwrap(),
-                            //     Atom::parse("Metric(xA__,xB__)").unwrap(),
+                            //     parse!("Metric(xA__,xB__)").unwrap(),
                             // ));
                         }
                     }
@@ -3569,7 +3563,7 @@ impl ProcessedNumeratorForComparison {
             let variable = function!(
                 GS.f_,
                 Atom::new_var(GS.y_),
-                function!(symb!("cind"), Atom::new_var(GS.x_))
+                function!(symbol!("cind"), Atom::new_var(GS.x_))
             );
             let pat = variable.to_pattern();
 
@@ -3596,14 +3590,14 @@ impl ProcessedNumeratorForComparison {
                                 match view {
                                     AtomView::Var(s) => {
                                         *term = function!(
-                                            Symbol::new("MARKER_TO_REPLACE"),
+                                            symbol!("MARKER_TO_REPLACE"),
                                             s.as_view().to_owned()
                                         );
                                         true
                                     }
                                     AtomView::Fun(f) => {
                                         *term = function!(
-                                            Symbol::new("MARKER_TO_REPLACE"),
+                                            symbol!("MARKER_TO_REPLACE"),
                                             f.as_view().to_owned()
                                         );
                                         true
@@ -3614,7 +3608,7 @@ impl ProcessedNumeratorForComparison {
                                             Atom::Num(_) => false,
                                             _ => {
                                                 *term = function!(
-                                                    Symbol::new("MARKER_TO_REPLACE"),
+                                                    symbol!("MARKER_TO_REPLACE"),
                                                     p.as_view().to_owned()
                                                 );
                                                 true
@@ -3625,7 +3619,7 @@ impl ProcessedNumeratorForComparison {
                                 }
                             });
                             for m in res.pattern_match(
-                                &function!(Symbol::new("MARKER_TO_REPLACE"), Atom::new_var(GS.x_))
+                                &function!(symbol!("MARKER_TO_REPLACE"), Atom::new_var(GS.x_))
                                     .to_pattern(),
                                 None,
                                 None,

@@ -13,6 +13,7 @@ use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use symbolica::domains::float::{NumericalFloatLike, Real};
+use symbolica::{parse, symbol};
 use typed_index_collections::TiVec;
 
 use crate::debug_info::DEBUG_LOGGER;
@@ -62,15 +63,14 @@ impl Esurface {
         let symbolic_energies = self
             .energies
             .iter()
-            .map(|i| Atom::parse(&format!("E{}", Into::<usize>::into(*i))).unwrap())
+            .map(|i| parse!(&format!("E{}", Into::<usize>::into(*i))).unwrap())
             .collect_vec();
 
         let symbolic_shift = self
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::parse(&format!("p{}", Into::<usize>::into(*i))).unwrap()
-                    * &Atom::new_num(*sign)
+                parse!(&format!("p{}", Into::<usize>::into(*i))).unwrap() * &Atom::new_num(*sign)
                     + &sum
             });
 
@@ -587,6 +587,7 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
 mod tests {
     use linnet::half_edge::involution::EdgeIndex;
     use symbolica::atom::{Atom, AtomCore};
+    use symbolica::parse;
 
     use crate::{
         cff::{cff_graph::VertexSet, esurface::Esurface, generation::ShiftRewrite},
@@ -659,7 +660,7 @@ mod tests {
         };
 
         let esurface_atom = esurface.to_atom();
-        let expected_atom = Atom::parse("E2 + E3 - p1").unwrap();
+        let expected_atom = parse!("E2 + E3 - p1").unwrap();
 
         let diff = esurface_atom - &expected_atom;
         let diff = diff.expand();

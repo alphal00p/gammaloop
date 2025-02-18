@@ -78,7 +78,7 @@ use symbolica::id::{Context, Match, MatchSettings};
 
 use symbolica::{
     atom::{Atom, FunctionBuilder},
-    function, symb,
+    function, parse, symbol,
 };
 use symbolica::{
     domains::float::NumericalFloatLike,
@@ -484,11 +484,11 @@ impl<S: NumeratorState> Numerator<S> {
     }
 
     fn add_consts_to_fn_map(fn_map: &mut FunctionMap) {
-        fn_map.add_constant(Atom::parse("Nc").unwrap(), Rational::from_unchecked(3, 1));
+        fn_map.add_constant(parse!("Nc").unwrap(), Rational::from_unchecked(3, 1));
 
-        fn_map.add_constant(Atom::parse("TR").unwrap(), Rational::from_unchecked(1, 2));
+        fn_map.add_constant(parse!("TR").unwrap(), Rational::from_unchecked(1, 2));
 
-        fn_map.add_constant(Atom::parse("pi").unwrap(), std::f64::consts::PI.into());
+        fn_map.add_constant(parse!("pi").unwrap(), std::f64::consts::PI.into());
     }
 }
 
@@ -636,8 +636,8 @@ impl<'de> Deserialize<'de> for GlobalPrefactor {
         }
         let helper = GlobalPrefactorHelper::deserialize(deserializer)?;
         Ok(GlobalPrefactor {
-            color: Atom::parse(&helper.color).unwrap(),
-            colorless: Atom::parse(&helper.colorless).unwrap(),
+            color: parse!(&helper.color).unwrap(),
+            colorless: parse!(&helper.colorless).unwrap(),
         })
     }
 }
@@ -1077,20 +1077,28 @@ impl AppliedFeynmanRule {
     pub fn simplify_ids(&mut self) {
         let replacements: Vec<Replacement> = vec![
             Replacement::new(
-                Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))").unwrap(),
-                Pattern::parse("f_(i_,aind(loru(b__)))").unwrap(),
+                parse!("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("f_(i_,aind(loru(b__)))").unwrap().to_pattern(),
             ),
             Replacement::new(
-                Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))").unwrap(),
-                Pattern::parse("f_(i_,aind(lord(b__)))").unwrap(),
+                parse!("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("f_(i_,aind(lord(b__)))").unwrap().to_pattern(),
             ),
             Replacement::new(
-                Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))").unwrap(),
-                Pattern::parse("f_(i_,aind(loru(b__)))").unwrap(),
+                parse!("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("f_(i_,aind(loru(b__)))").unwrap().to_pattern(),
             ),
             Replacement::new(
-                Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))").unwrap(),
-                Pattern::parse("f_(i_,aind(lord(b__)))").unwrap(),
+                parse!("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("f_(i_,aind(lord(b__)))").unwrap().to_pattern(),
             ),
         ];
 
@@ -1209,7 +1217,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 
         let mut color = self.state.color.map_data_ref(|a| {
             SerializableAtom::from(a.0.replace_all(
-                &function!(symb!(DOWNIND), GS.x__).to_pattern(),
+                &function!(symbol!(DOWNIND), GS.x__).to_pattern(),
                 Atom::new_var(GS.x__).to_pattern(),
                 None,
                 None,
@@ -1304,22 +1312,22 @@ pub enum ColorError {
 
 impl ColorSimplified {
     fn isolate_color(expression: &mut SerializableAtom) {
-        let color_fn = FunctionBuilder::new(Symbol::new("color"))
+        let color_fn = FunctionBuilder::new(symbol!("color"))
             .add_arg(Atom::new_num(1))
             .finish();
         expression.0 = &expression.0 * color_fn;
         let replacements = vec![
             (
-                Pattern::parse("f_(x___,cof(3,i_),z___)*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,cof(3,i_),z___))").unwrap(),
+                parse!("f_(x___,cof(3,i_),z___)*color(a___)").unwrap(),
+                parse!("color(a___*f_(x___,cof(3,i_),z___))").unwrap(),
             ),
             (
-                Pattern::parse("f_(x___,dind(cof(3,i_)),z___)*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,dind(cof(3,i_)),z___))").unwrap(),
+                parse!("f_(x___,dind(cof(3,i_)),z___)*color(a___)").unwrap(),
+                parse!("color(a___*f_(x___,dind(cof(3,i_)),z___))").unwrap(),
             ),
             (
-                Pattern::parse("f_(x___,coad(i__),z___)*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,coad(i__),z___))").unwrap(),
+                parse!("f_(x___,coad(i__),z___)*color(a___)").unwrap(),
+                parse!("color(a___*f_(x___,coad(i__),z___))").unwrap(),
             ),
         ];
         let settings = MatchSettings {
@@ -1329,7 +1337,9 @@ impl ColorSimplified {
 
         let reps: Vec<Replacement> = replacements
             .into_iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs).with_settings(settings.clone()))
+            .map(|(lhs, rhs)| {
+                Replacement::new(lhs.to_pattern(), rhs.to_pattern()).with_settings(settings.clone())
+            })
             .collect();
 
         expression.replace_all_multiple_repeat_mut(&reps);
@@ -1359,24 +1369,24 @@ impl ColorSimplified {
     pub fn color_simplify_impl(
         expression: &SerializableAtom,
     ) -> Result<SerializableAtom, ColorError> {
-        let f_ = symb!("f_");
+        let f_ = symbol!("f_");
         let cof = ColorFundamental::rep(3);
         let coaf = ColorFundamental::rep(3).dual();
         let coad = ColorAdjoint::rep(8);
-        let a___ = Atom::new_var(symb!("a___"));
-        let a_ = Atom::new_var(symb!("a_"));
-        let b_ = Atom::new_var(symb!("b_"));
-        let c___ = Atom::new_var(symb!("c___"));
-        let c_ = Atom::new_var(symb!("c_"));
-        let d_ = Atom::new_var(symb!("d_"));
-        let e_ = Atom::new_var(symb!("e_"));
-        let i_ = Atom::new_var(symb!("i_"));
-        let i = symb!("i");
-        let j = symb!("j");
-        let k = symb!("k");
+        let a___ = Atom::new_var(symbol!("a___"));
+        let a_ = Atom::new_var(symbol!("a_"));
+        let b_ = Atom::new_var(symbol!("b_"));
+        let c___ = Atom::new_var(symbol!("c___"));
+        let c_ = Atom::new_var(symbol!("c_"));
+        let d_ = Atom::new_var(symbol!("d_"));
+        let e_ = Atom::new_var(symbol!("e_"));
+        let i_ = Atom::new_var(symbol!("i_"));
+        let i = symbol!("i");
+        let j = symbol!("j");
+        let k = symbol!("k");
 
-        let tr = Atom::new_var(symb!("TR"));
-        let nc = Atom::new_var(symb!("Nc"));
+        let tr = Atom::new_var(symbol!("TR"));
+        let nc = Atom::new_var(symbol!("Nc"));
         let reps = vec![
             (
                 function!(f_, a___, cof.pattern(&b_), c___)
@@ -1814,7 +1824,7 @@ impl PolySplit {
         }
 
         let mut add = Atom::new_num(0);
-        let coef = symb!("coef");
+        let coef = symbol!("coef");
         let shift = reps.as_ref().lock().unwrap().len();
 
         let mut mul_h;
@@ -2218,54 +2228,66 @@ impl GammaSimplified {
         expr.0 = expr.0.expand();
         let pats = [
             Replacement::new(
-                Pattern::parse("id(a_,b_)*t_(d___,b_,c___)").unwrap(),
-                Pattern::parse("t_(d___,a_,c___)").unwrap(),
+                parse!("id(a_,b_)*t_(d___,b_,c___)").unwrap().to_pattern(),
+                parse!("t_(d___,a_,c___)").unwrap().to_pattern(),
             ),
             Replacement::new(
-                Pattern::parse("Metric(mink(a_),mink(b_))*t_(d___,mink(b_),c___)").unwrap(),
-                Pattern::parse("t_(d___,mink(a_),c___)").unwrap(),
+                parse!("Metric(mink(a_),mink(b_))*t_(d___,mink(b_),c___)")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("t_(d___,mink(a_),c___)").unwrap().to_pattern(),
             ),
         ];
 
         expr = expr.replace_all_multiple_repeat(&pats);
         let pats = vec![
             (
-                Pattern::parse("ProjP(a_,b_)").unwrap(),
-                Pattern::parse("1/2*id(a_,b_)-1/2*gamma5(a_,b_)").unwrap(),
+                parse!("ProjP(a_,b_)").unwrap().to_pattern(),
+                parse!("1/2*id(a_,b_)-1/2*gamma5(a_,b_)")
+                    .unwrap()
+                    .to_pattern(),
             ),
             (
-                Pattern::parse("ProjM(a_,b_)").unwrap(),
-                Pattern::parse("1/2*id(a_,b_)+1/2*gamma5(a_,b_)").unwrap(),
+                parse!("ProjM(a_,b_)").unwrap().to_pattern(),
+                parse!("1/2*id(a_,b_)+1/2*gamma5(a_,b_)")
+                    .unwrap()
+                    .to_pattern(),
             ),
             (
-                Pattern::parse("id(a_,b_)*f_(d___,b_,e___)").unwrap(),
-                Pattern::parse("f_(c___,a_,e___)").unwrap(),
+                parse!("id(a_,b_)*f_(d___,b_,e___)").unwrap().to_pattern(),
+                parse!("f_(c___,a_,e___)").unwrap().to_pattern(),
             ),
             // (
-            //     Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap(),
-            //     Pattern::parse("f_(c___,aind(d___,b_,e___))")
-            //         .unwrap()
+            //     parse!("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap().to_pattern(),
+            //     parse!("f_(c___,aind(d___,b_,e___))")
+            //         .unwrap().to_pattern()
             //         ,
             // ),
             (
-                Pattern::parse("γ(a_,b_,c_)*γ(d_,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a_,d_,b_,e_)").unwrap(),
+                parse!("γ(a_,b_,c_)*γ(d_,c_,e_)").unwrap().to_pattern(),
+                parse!("gamma_chain(a_,d_,b_,e_)").unwrap().to_pattern(),
             ),
             (
-                Pattern::parse("gamma_chain(a__,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a__,d__,b_,e_)").unwrap(),
+                parse!("gamma_chain(a__,b_,c_)*gamma_chain(d__,c_,e_)")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("gamma_chain(a__,d__,b_,e_)").unwrap().to_pattern(),
             ),
             (
-                Pattern::parse("γ(a_,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a_,d__,b_,e_)").unwrap(),
+                parse!("γ(a_,b_,c_)*gamma_chain(d__,c_,e_)")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("gamma_chain(a_,d__,b_,e_)").unwrap().to_pattern(),
             ),
             (
-                Pattern::parse("gamma_chain(a__,b_,c_)*γ(d_,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a__,d_,b_,e_)").unwrap(),
+                parse!("gamma_chain(a__,b_,c_)*γ(d_,c_,e_)")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("gamma_chain(a__,d_,b_,e_)").unwrap().to_pattern(),
             ),
             (
-                Pattern::parse("gamma_chain(a__,b_,b_)").unwrap(),
-                Pattern::parse("gamma_trace(a__)").unwrap(),
+                parse!("gamma_chain(a__,b_,b_)").unwrap().to_pattern(),
+                parse!("gamma_trace(a__)").unwrap().to_pattern(),
             ),
         ];
         let reps: Vec<Replacement> = pats
@@ -2277,7 +2299,7 @@ impl GammaSimplified {
         expr.0 = expr.0.expand();
         expr.replace_all_multiple_repeat_mut(&reps);
 
-        let pat = Pattern::parse("gamma_trace(a__)").unwrap();
+        let pat = parse!("gamma_trace(a__)").unwrap().to_pattern();
 
         let mut it = expr.0.pattern_match(&pat, None, None);
 
@@ -2319,8 +2341,8 @@ impl GammaSimplified {
 
         // expr = expr.replace_all_multiple_repeat(&pats);
 
-        let gamma_chain = symb!("gamma_chain");
-        let gamma_trace = symb!("gamma_trace");
+        let gamma_chain = symbol!("gamma_chain");
+        let gamma_trace = symbol!("gamma_trace");
         let reps: Vec<_> = [
             (
                 function!(ETS.id, GS.a_, GS.b_) * function!(GS.f_, GS.d___, GS.b_, GS.c___),
@@ -2377,7 +2399,7 @@ impl GammaSimplified {
         // let rhs = PatternOrMap::Map(Box::new(move |m| m.));
         //
         fn gamma_chain_perm(arg: AtomView, _context: &Context, out: &mut Atom) -> bool {
-            let gamma_chain = symb!("gamma_chain");
+            let gamma_chain = symbol!("gamma_chain");
             let mut found = false;
             if let AtomView::Fun(f) = arg {
                 if f.get_symbol() == gamma_chain {
@@ -2445,7 +2467,7 @@ impl GammaSimplified {
         // );
         //
         fn gamma_tracer(arg: AtomView, _context: &Context, out: &mut Atom) -> bool {
-            let gamma_trace = symb!("gamma_trace");
+            let gamma_trace = symbol!("gamma_trace");
 
             let mut found = false;
             if let AtomView::Fun(f) = arg {
@@ -2857,7 +2879,7 @@ impl Numerator<Network> {
     //     let pat = function!(
     //         GS.f_,
     //         Atom::new_var(GS.y___),
-    //         function!(symb!("cind"), Atom::new_var(GS.x_))
+    //         function!(symbol!("cind"), Atom::new_var(GS.x_))
     //     )
     //     .to_pattern();
 
@@ -2868,7 +2890,7 @@ impl Numerator<Network> {
     //                     let mat = function!(
     //                         f.get_symbol(),
     //                         m[&GS.y___].to_atom(),
-    //                         function!(symb!("cind"), m[&GS.x_].to_atom())
+    //                         function!(symbol!("cind"), m[&GS.x_].to_atom())
     //                     );
     //                     // println!("{mat}");
 
@@ -2904,7 +2926,7 @@ impl Numerator<Network> {
             let variable = function!(
                 GS.f_,
                 Atom::new_var(GS.y_),
-                function!(symb!("cind"), Atom::new_var(GS.x_))
+                function!(symbol!("cind"), Atom::new_var(GS.x_))
             );
             let pat = variable.to_pattern();
 
@@ -2924,7 +2946,7 @@ impl Numerator<Network> {
                             continue;
                         }
                         let mut found_it = false;
-                        let pat = function!(s, symb!("x__")).to_pattern();
+                        let pat = function!(s, symbol!("x__")).to_pattern();
                         for m in a.pattern_match(&pat, None, None) {
                             reps.push(pat.replace_wildcards(&m));
                             found_it = true;
@@ -3073,10 +3095,10 @@ impl Contracted {
         fn atoms_for_pol(name: String, num: i64, size: usize) -> Vec<Atom> {
             let mut data = vec![];
             for index in 0..size {
-                let e = FunctionBuilder::new(Symbol::new(&name));
+                let e = FunctionBuilder::new(symbol!(&name));
                 data.push(
                     e.add_arg(Atom::new_num(num))
-                        .add_arg(Atom::parse(&format!("cind({})", index)).unwrap())
+                        .add_arg(parse!(&format!("cind({})", index)).unwrap())
                         .finish(),
                 );
             }
@@ -3576,8 +3598,8 @@ impl EvaluatorSingle {
         let reps = (0..n_edges)
             .map(|i| {
                 (
-                    Pattern::parse(&format!("Q({},cind(0))", i)).unwrap(),
-                    Pattern::parse(&format!("-Q({},cind(0))", i)).unwrap(),
+                    parse!(&format!("Q({},cind(0))", i)).unwrap(),
+                    parse!(&format!("-Q({},cind(0))", i)).unwrap(),
                 )
             })
             .collect_vec();
@@ -3599,7 +3621,7 @@ impl EvaluatorSingle {
                         None
                     } else {
                         Some(
-                            Replacement::new(lhs.clone(), rhs.clone())
+                            Replacement::new(lhs.to_pattern(), rhs.to_pattern())
                                 .with_settings(settings.clone()),
                         )
                     }
@@ -3768,8 +3790,8 @@ impl EvaluatorSingle {
         let reps = (0..n_edges)
             .map(|i| {
                 (
-                    Pattern::parse(&format!("Q({},cind(0))", i)).unwrap(),
-                    Pattern::parse(&format!("-Q({},cind(0))", i)).unwrap(),
+                    parse!(&format!("Q({},cind(0))", i)).unwrap(),
+                    parse!(&format!("-Q({},cind(0))", i)).unwrap(),
                 )
             })
             .collect_vec();
@@ -3791,7 +3813,7 @@ impl EvaluatorSingle {
                         None
                     } else {
                         Some(
-                            Replacement::new(lhs.clone(), rhs.clone())
+                            Replacement::new(lhs.to_pattern(), rhs.to_pattern())
                                 .with_settings(settings.clone()),
                         )
                     }

@@ -35,7 +35,7 @@ use std::{
     str::FromStr,
     sync::{LazyLock, Mutex},
 };
-use symbolica::{atom::Atom, printer::PrintOptions};
+use symbolica::{parse, printer::PrintOptions, symbol};
 const GIT_VERSION: &str = git_version!();
 
 #[allow(unused)]
@@ -633,11 +633,11 @@ impl PythonWorker {
 
         let mut global_prefactor = GlobalPrefactor::default();
         if let Some(global_prefactor_color) = global_prefactor_color {
-            global_prefactor.color = Atom::parse(&global_prefactor_color)
+            global_prefactor.color = parse!(&global_prefactor_color)
                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         }
         if let Some(global_prefactor_colorless) = global_prefactor_colorless {
-            global_prefactor.colorless = Atom::parse(&global_prefactor_colorless)
+            global_prefactor.colorless = parse!(&global_prefactor_colorless)
                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         }
         let diagrams = diagram_generator
