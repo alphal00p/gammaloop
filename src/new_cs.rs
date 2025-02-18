@@ -8,7 +8,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     builder::HedgeGraphBuilder, involution::Flow, subgraph::OrientedCut, NodeIndex,
 };
-use symbolica::atom::Atom;
+use symbolica::{atom::Atom, parse};
 
 use crate::{
     feyngen::{
@@ -19,7 +19,7 @@ use crate::{
     graph::{Edge, EdgeType, Vertex},
     model::Model,
     new_graph::Graph,
-    numerator::{NumeratorState, PythonState},
+    numerator::{GlobalPrefactor, NumeratorState, PythonState},
     ProcessSettings,
 };
 
@@ -40,6 +40,8 @@ pub struct GenerationOptions {
     pub selected_graphs: Option<Vec<String>>,
     pub vetoed_graphs: Option<Vec<String>>,
     pub loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
+    pub global_prefactor: GlobalPrefactor,
+    pub num_threads: Option<usize>,
 }
 
 // should produce e+e- -> d d~ g
@@ -59,6 +61,7 @@ fn test_process_cross_section() -> GenerationOptions {
         symmetrize_initial_states: false,
         symmetrize_left_right_states: false,
         loop_count_range: (2, 2),
+        allow_symmetrization_of_external_fermions_in_amplitudes: false,
     };
 
     GenerationOptions {
@@ -69,11 +72,15 @@ fn test_process_cross_section() -> GenerationOptions {
         selected_graphs: None,
         vetoed_graphs: None,
         loop_momentum_bases: None,
+        global_prefactor: GlobalPrefactor::default(),
+        num_threads: None,
     }
 }
 
 #[cfg(test)]
 fn test_process_amplitude() -> GenerationOptions {
+    use crate::numerator::GlobalPrefactor;
+
     let feyngen_options = FeynGenOptions {
         amplitude_filters: FeynGenFilters(vec![
             FeynGenFilter::SelfEnergyFilter(SelfEnergyFilterOptions::default()),
@@ -87,6 +94,7 @@ fn test_process_amplitude() -> GenerationOptions {
         symmetrize_final_states: true,
         symmetrize_initial_states: true,
         symmetrize_left_right_states: false,
+        allow_symmetrization_of_external_fermions_in_amplitudes: false,
         loop_count_range: (1, 1),
     };
 
@@ -98,6 +106,8 @@ fn test_process_amplitude() -> GenerationOptions {
         selected_graphs: None,
         vetoed_graphs: None,
         loop_momentum_bases: None,
+        global_prefactor: GlobalPrefactor::default(),
+        num_threads: None,
     }
 }
 
@@ -112,22 +122,25 @@ impl Process {
 
         let bare_collection = diagram_generator.generate(
             model,
-            options.numerator_aware_isomorphism_grouping,
+            &options.numerator_aware_isomorphism_grouping,
             options.filter_self_loop,
             options.graph_prefix,
             options.selected_graphs,
             options.vetoed_graphs,
             options.loop_momentum_bases,
+            options.global_prefactor,
+            options.num_threads,
         )?;
 
         let hedge_collection = bare_collection
             .into_iter()
             .map(|bare_graph| {
                 let mut hedge_graph_builder = HedgeGraphBuilder::<Edge, Vertex>::new();
-
                 for vertex in bare_graph.vertices {
-                    // do we need to remove the vertices attached to externals?
-                    hedge_graph_builder.add_node(vertex.clone());
+                    // do not add the vertices attached to externals
+                    if vertex.edges.len() != 1 {
+                        hedge_graph_builder.add_node(vertex.clone());
+                    }
                 }
 
                 for edge in bare_graph.edges {
@@ -166,9 +179,9 @@ impl Process {
                         .expect("failed to convert overall factor to symbolica atom"),
                     hedge_graph_builder.build(),
                 )
-                .forget_type()
+                .map(Graph::forget_type)
             })
-            .collect_vec();
+            .collect::<Result<Vec<Graph>, _>>()?;
 
         let collection = match options.feyngen_options.generation_type {
             GenerationType::Amplitude => {
