@@ -17,7 +17,9 @@ use typed_index_collections::TiVec;
 
 use crate::debug_info::DEBUG_LOGGER;
 use crate::momentum::{FourMomentum, ThreeMomentum};
-use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta};
+use crate::momentum_sample::{
+    ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
+};
 use crate::new_graph::{self, LoopMomentumBasis};
 use crate::numerator::NumeratorState;
 use crate::signature::ExternalSignature;
@@ -152,16 +154,16 @@ impl Esurface {
         lmb: &LoopMomentumBasis,
         real_mass_vector: &HedgeVec<F<T>>,
     ) -> (F<T>, F<T>) {
-        let spatial_part_of_externals = external_moms
+        let spatial_part_of_externals: ExternalThreeMomenta<F<T>> = external_moms
             .iter()
             .map(|mom| mom.spatial.clone())
-            .collect_vec();
+            .collect();
 
-        let loops = shifted_unit_loops
+        let loops: LoopMomenta<F<T>> = shifted_unit_loops
             .iter()
             .zip(center.iter())
             .map(|(loop_mom, center)| loop_mom * radius + center)
-            .collect_vec();
+            .collect();
 
         let shift = self.compute_shift_part_from_momenta(lmb, external_moms);
 
