@@ -431,9 +431,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.2.13"
+version = "1.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7777341816418c02e033934a09f20dc0ccaf65a5201ef8a450ae0105a573fda"
+checksum = "0c3d1b2e905a3a7b00a6141adb0e4c0bb941d11caf55349d863942a1cc44e3c9"
 dependencies = [
  "shlex",
 ]
@@ -519,18 +519,18 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.28"
+version = "4.5.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e77c3243bd94243c03672cb5154667347c457ca271254724f9f393aee1c05ff"
+checksum = "92b7b18d71fad5313a1e320fa9897994228ce274b60faa4d694fe0ea89cd9e6d"
 dependencies = [
  "clap_builder",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.27"
+version = "4.5.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b26884eb4b57140e4d2d93652abfa49498b938b3c9179f9fc487b0acc3edad7"
+checksum = "a35db2071778a7344791a4fb4f95308b5673d219dee3ae348b86642574ecc90c"
 dependencies = [
  "anstyle",
  "clap_lex",
@@ -599,6 +599,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "colored"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
+dependencies = [
  "windows-sys 0.59.0",
 ]
 
@@ -680,7 +689,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.5.28",
+ "clap 4.5.30",
  "criterion-plot",
  "is-terminal",
  "itertools 0.10.5",
@@ -1016,9 +1025,9 @@ dependencies = [
 
 [[package]]
 name = "equivalent"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
+checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "errno"
@@ -1113,7 +1122,7 @@ dependencies = [
  "clap 2.34.0",
  "clarabel",
  "color-eyre",
- "colored",
+ "colored 3.0.0",
  "compensated-summation",
  "constcat",
  "criterion",
@@ -1142,7 +1151,7 @@ dependencies = [
  "petgraph",
  "pprof",
  "pyo3",
- "pyo3-build-config 0.21.2",
+ "pyo3-build-config 0.23.4",
  "pyo3-log",
  "pyo3-pylogger",
  "rand",
@@ -1158,7 +1167,7 @@ dependencies = [
  "smartstring",
  "spenso",
  "statrs",
- "symbolica",
+ "symbolica 0.15.1",
  "tabled",
  "thiserror 1.0.69",
  "typed-index-collections",
@@ -1561,7 +1570,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 [[package]]
 name = "linnet"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/linnet?branch=refactor#8d8e72a8dffac4a39ab3b27f0d314de70b2633df"
+source = "git+https://github.com/alphal00p/linnet?branch=refactor#f9b74c031d438952fd0a44adb2a039a20928ce42"
 dependencies = [
  "ahash",
  "argmin",
@@ -1577,7 +1586,7 @@ dependencies = [
  "rand",
  "ref-ops",
  "serde",
- "symbolica",
+ "symbolica 0.14.0",
  "thiserror 2.0.11",
 ]
 
@@ -2679,9 +2688,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.13.2"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+checksum = "7fcf8323ef1faaee30a44a340193b1ac6814fd9b7b4e88e9d4519a3e4abe1cfd"
 dependencies = [
  "serde",
 ]
@@ -2701,7 +2710,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=25cddbaa1b1de39f6ceaca064281de926a3ce2ee#25cddbaa1b1de39f6ceaca064281de926a3ce2ee"
+source = "git+https://github.com/alphal00p/spenso?rev=46850d7ee82ab5559950b3b5080609f216c2c6ef#46850d7ee82ab5559950b3b5080609f216c2c6ef"
 dependencies = [
  "ahash",
  "ambassador",
@@ -2734,7 +2743,7 @@ dependencies = [
  "serde_toml",
  "slotmap",
  "smartstring",
- "symbolica",
+ "symbolica 0.15.1",
  "thiserror 1.0.69",
 ]
 
@@ -2820,11 +2829,39 @@ dependencies = [
  "brotli 5.0.0",
  "byteorder",
  "bytes",
- "colored",
+ "colored 2.2.0",
  "dyn-clone",
  "libloading",
  "once_cell",
  "pyo3-build-config 0.23.4",
+ "rand",
+ "rand_xoshiro",
+ "rayon",
+ "rug",
+ "self_cell",
+ "serde",
+ "smallvec",
+ "smartstring",
+ "tinyjson",
+ "tracing",
+ "wide",
+]
+
+[[package]]
+name = "symbolica"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef24412afb257fe810c4084213deba06349d8c581aec63c876c84c3b2b3c4497"
+dependencies = [
+ "ahash",
+ "append-only-vec",
+ "brotli 5.0.0",
+ "byteorder",
+ "bytes",
+ "colored 2.2.0",
+ "dyn-clone",
+ "libloading",
+ "once_cell",
  "rand",
  "rand_xoshiro",
  "rayon",
@@ -2895,9 +2932,9 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "tempfile"
-version = "3.16.0"
+version = "3.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38c246215d7d24f48ae091a2902398798e05d978b24315d6efbc00ede9a8bb91"
+checksum = "22e5a0acb1f3f55f65cc4a866c361b2fb2a0ff6366785ae6fbb5f85df07ba230"
 dependencies = [
  "cfg-if",
  "fastrand",
@@ -3063,9 +3100,9 @@ dependencies = [
 
 [[package]]
 name = "typenum"
-version = "1.17.0"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
+checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
 name = "unarray"
@@ -3129,9 +3166,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.13.1"
+version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ced87ca4be083373936a67f8de945faa23b6b42384bd5b64434850802c6dccd0"
+checksum = "8c1f41ffb7cf259f1ecc2876861a17e7142e63ead296f671f81f6ae85903e0d6"
 dependencies = [
  "getrandom 0.3.1",
  "serde",
