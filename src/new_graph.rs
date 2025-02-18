@@ -25,6 +25,7 @@ use symbolica::{
     atom::{representation::InlineNum, Atom, AtomCore},
     graph::Node,
     id::Pattern,
+    with_default_namespace,
 };
 use typed_index_collections::TiVec;
 
@@ -38,7 +39,7 @@ use crate::{
     numerator::{NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature},
     utils::{FloatLike, F},
-    ProcessSettings,
+    ProcessSettings, GAMMALOOP_NAMESPACE,
 };
 
 pub struct Graph<S: NumeratorState = PythonState> {
@@ -254,13 +255,23 @@ impl LoopMomentumBasis {
         let mut atom = Atom::new_num(0);
 
         for (i, sign) in signature.internal.into_iter().enumerate() {
-            let k = sign * Atom::parse(&format!("K({},x_)", i)).unwrap();
+            let k = sign
+                * Atom::parse(with_default_namespace!(
+                    &format!("K({},x_)", i),
+                    GAMMALOOP_NAMESPACE
+                ))
+                .unwrap();
 
             atom = &atom + &k;
         }
 
         for (i, sign) in signature.external.into_iter().enumerate() {
-            let p = sign * Atom::parse(&format!("P({},x_)", i)).unwrap();
+            let p = sign
+                * Atom::parse(with_default_namespace!(
+                    &format!("P({},x_)", i),
+                    GAMMALOOP_NAMESPACE
+                ))
+                .unwrap();
             atom = &atom + &p;
         }
 
