@@ -77,6 +77,7 @@ use serde::{Deserialize, Serialize};
 
 pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
+pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
 
 #[cfg(not(feature = "higher_loops"))]

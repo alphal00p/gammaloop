@@ -4,10 +4,10 @@ use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::numerator::NumeratorEvaluateFloat;
 use crate::signature::{ExternalSignature, LoopSignature};
 use crate::SamplingSettings;
+use crate::GAMMALOOP_NAMESPACE;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use bincode::{Decode, Encode};
 use colored::Colorize;
-
 use itertools::{izip, Itertools};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
@@ -27,7 +27,7 @@ use symbolica::domains::float::{
 };
 use symbolica::domains::integer::Integer;
 use symbolica::evaluate::CompiledEvaluatorFloat;
-use symbolica::symb;
+use symbolica::{symbol, with_default_namespace};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -1507,14 +1507,17 @@ pub fn parse_python_expression(expression: &str) -> Atom {
         .replace("cmath.pi", "pi")
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
-    Atom::parse(processed_string.as_str())
-        .map_err(|e| {
-            format!(
-                "Failed to parse expression : '{}'\nError: {}",
-                processed_string, e
-            )
-        })
-        .unwrap()
+    Atom::parse(with_default_namespace!(
+        processed_string.as_str(),
+        GAMMALOOP_NAMESPACE
+    ))
+    .map_err(|e| {
+        format!(
+            "Failed to parse expression : '{}'\nError: {}",
+            processed_string, e
+        )
+    })
+    .unwrap()
 }
 
 pub fn to_str_expression(expression: &Atom) -> String {
@@ -1537,6 +1540,9 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 latex: false,
                 double_star_for_exponentiation: false,
                 precision: None,
+                color_namespace: true,
+                hide_all_namespaces: false,
+                hide_namespace: None
             },
         )
     )
@@ -3249,48 +3255,48 @@ pub struct GammaloopSymbols {
 }
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
-    ubar: symb!("ubar"),
-    vbar: symb!("vbar"),
-    dim: symb!("dim"),
-    v: symb!("v"),
-    u: symb!("u"),
-    epsilon: symb!("ϵ"),
-    color_wrap: symb!("color"),
-    epsilonbar: symb!("ϵbar"),
-    coeff: symb!("coef"),
-    x_: symb!("x_"),
-    y_: symb!("y_"),
-    z_: symb!("z_"),
-    a_: symb!("a_"),
-    b_: symb!("b_"),
-    c_: symb!("c_"),
-    d_: symb!("d_"),
-    e_: symb!("e_"),
-    f_: symb!("f_"),
-    g_: symb!("g_"),
-    h_: symb!("h_"),
-    x__: symb!("x__"),
-    y__: symb!("y__"),
-    z__: symb!("z__"),
-    a__: symb!("a__"),
-    b__: symb!("b__"),
-    c__: symb!("c__"),
-    d__: symb!("d__"),
-    e__: symb!("e__"),
-    f__: symb!("f__"),
-    g__: symb!("g__"),
-    h__: symb!("h__"),
-    x___: symb!("x___"),
-    y___: symb!("y___"),
-    z___: symb!("z___"),
-    a___: symb!("a___"),
-    b___: symb!("b___"),
-    c___: symb!("c___"),
-    d___: symb!("d___"),
-    e___: symb!("e___"),
-    f___: symb!("f___"),
-    g___: symb!("g___"),
-    h___: symb!("h___"),
+    ubar: symbol!("ubar"),
+    vbar: symbol!("vbar"),
+    dim: symbol!("dim"),
+    v: symbol!("v"),
+    u: symbol!("u"),
+    epsilon: symbol!("ϵ"),
+    color_wrap: symbol!("color"),
+    epsilonbar: symbol!("ϵbar"),
+    coeff: symbol!("coef"),
+    x_: symbol!("x_"),
+    y_: symbol!("y_"),
+    z_: symbol!("z_"),
+    a_: symbol!("a_"),
+    b_: symbol!("b_"),
+    c_: symbol!("c_"),
+    d_: symbol!("d_"),
+    e_: symbol!("e_"),
+    f_: symbol!("f_"),
+    g_: symbol!("g_"),
+    h_: symbol!("h_"),
+    x__: symbol!("x__"),
+    y__: symbol!("y__"),
+    z__: symbol!("z__"),
+    a__: symbol!("a__"),
+    b__: symbol!("b__"),
+    c__: symbol!("c__"),
+    d__: symbol!("d__"),
+    e__: symbol!("e__"),
+    f__: symbol!("f__"),
+    g__: symbol!("g__"),
+    h__: symbol!("h__"),
+    x___: symbol!("x___"),
+    y___: symbol!("y___"),
+    z___: symbol!("z___"),
+    a___: symbol!("a___"),
+    b___: symbol!("b___"),
+    c___: symbol!("c___"),
+    d___: symbol!("d___"),
+    e___: symbol!("e___"),
+    f___: symbol!("f___"),
+    g___: symbol!("g___"),
+    h___: symbol!("h___"),
 });
 
 /// Checks if two lists are permutations of eachother, and establish a map between indices
