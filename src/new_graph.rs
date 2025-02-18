@@ -278,12 +278,21 @@ impl Graph<UnInit> {
 }
 
 #[derive(Debug, Clone)]
+pub struct BareEdge {
+    pub name: SmartString<LazyCompact>,
+    pub edge_type: EdgeType,
+    pub propagator: Arc<model::Propagator>,
+    pub particle: Arc<model::Particle>,
+    pub vertices: [usize; 2],
+    pub internal_index: Vec<AbstractIndex>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Edge {
     pub name: SmartString<LazyCompact>,
     pub edge_type: EdgeType,
     pub propagator: Arc<model::Propagator>,
     pub particle: Arc<model::Particle>,
-    pub vertices: [Option<usize>; 2], // do we keep this redundant info?
     pub internal_index: Vec<AbstractIndex>,
 }
 
