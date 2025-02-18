@@ -2,9 +2,10 @@ use std::{
     borrow::Borrow,
     collections::VecDeque,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
-use ahash::{HashMap, HashMapExt};
+use ahash::{HashMap, HashMapExt, HashSet};
 use bincode::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::{Report, Result};
@@ -20,25 +21,32 @@ use linnet::half_edge::{
     tree::TraversalTree,
     HedgeGraph, NodeIndex,
 };
+use petgraph::graph;
 use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
+use spenso::structure::{
+    abstract_index::AbstractIndex, representation::Minkowski, NamedStructure, ToSymbolic,
+};
 use symbolica::{
-    atom::{representation::InlineNum, Atom, AtomCore},
+    atom::{representation::InlineNum, Atom, AtomCore, AtomView},
+    coefficient::CoefficientView,
     graph::Node,
-    id::Pattern,
-    with_default_namespace,
+    id::{Pattern, Replacement},
+    parse, with_default_namespace,
 };
 use typed_index_collections::TiVec;
 
 use crate::{
     gammaloop_integrand::BareSample,
-    graph::{BareGraph, DerivedGraphData, Edge, EdgeType, Vertex},
+    graph::{DerivedGraphData, EdgeType, Vertex},
+    model::{self, EdgeSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
     },
-    numerator::{NumeratorState, PythonState, UnInit},
+    numerator::{ufo::preprocess_ufo_spin_wrapped, NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature},
-    utils::{FloatLike, F},
+    utils::{FloatLike, F, GS},
     ProcessSettings, GAMMALOOP_NAMESPACE,
 };
 
@@ -63,6 +71,11 @@ impl<S: NumeratorState> Graph<S> {
 pub trait FeynmanGraph {
     fn new_lmb(&self) -> Result<LoopMomentumBasis>;
     fn num_virtual_edges(&self, subgraph: BitVec) -> usize;
+    fn is_incoming_to(&self, edge: EdgeIndex, vertex: NodeIndex) -> bool;
+    fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom);
+    fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom;
+    fn in_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski>;
+    fn out_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski>;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -198,6 +211,59 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(subgraph, self);
         self.count_internal_edges(&internal_subgraph)
     }
+
+    fn is_incoming_to(&self, edge: EdgeIndex, vertex: NodeIndex) -> bool {
+        let (_, pair) = self[&edge];
+        match pair {
+            HedgePair::Unpaired { hedge, flow } => {
+                self.node_id(hedge) == vertex && matches!(flow, Flow::Sink)
+            }
+            HedgePair::Paired { source: _, sink } => self.node_id(sink) == vertex,
+            HedgePair::Split {
+                source: _,
+                sink,
+                split: _,
+            } => self.node_id(sink) == vertex,
+        }
+    }
+
+    fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom) {
+        let mom = parse!(&format!("Q{}", Into::<usize>::into(edge))).unwrap();
+        let mass = self[edge]
+            .particle
+            .mass
+            .expression
+            .clone()
+            .unwrap_or(Atom::new_num(0));
+
+        (mom, mass)
+    }
+
+    fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom {
+        let num = Into::<usize>::into(edge);
+        let mom = parse!(&format!("Q({num},x_)")).unwrap().to_pattern();
+        let mom_rep = lmb.pattern(edge);
+        atom.replace_all(&mom, &mom_rep, None, None)
+    }
+
+    fn in_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski> {
+        let source = match self[&edge].1 {
+            HedgePair::Unpaired { hedge, flow } => todo!(),
+            HedgePair::Paired { source, sink } => self.node_id(source),
+            HedgePair::Split {
+                source,
+                sink,
+                split,
+            } => self.node_id(source),
+        };
+        //let local_pos_in_sink_vertex =
+        //    self[source].get_local_edge_position(&self[edge], self, false);
+        todo!()
+    }
+
+    fn out_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski> {
+        todo!()
+    }
 }
 
 impl Graph<UnInit> {
@@ -208,6 +274,292 @@ impl Graph<UnInit> {
             underlying,
             derived_data: DerivedGraphData::new_empty(),
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Edge {
+    pub name: SmartString<LazyCompact>,
+    pub edge_type: EdgeType,
+    pub propagator: Arc<model::Propagator>,
+    pub particle: Arc<model::Particle>,
+    pub vertices: [Option<usize>; 2], // do we keep this redundant info?
+    pub internal_index: Vec<AbstractIndex>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct SerializableEdge {
+    name: SmartString<LazyCompact>,
+    edge_type: EdgeType,
+    particle: SmartString<LazyCompact>,
+    propagator: SmartString<LazyCompact>,
+    vertices: [SmartString<LazyCompact>; 2],
+}
+
+impl SerializableEdge {
+    pub fn from_edge(graph: &HedgeGraph<Edge, Vertex>, edge: &Edge) -> SerializableEdge {
+        //SerializableEdge {
+        //    name: edge.name.clone(),
+        //    edge_type: edge.edge_type,
+        //    particle: edge.particle.name.clone(),
+        //    propagator: edge.propagator.name.clone(),
+        //    vertices: [
+        //        graph.vertices[edge.vertices[0]].name.clone(),
+        //        graph.vertices[edge.vertices[1]].name.clone(),
+        //    ],
+        //}
+
+        todo!()
+    }
+}
+
+impl Edge {
+    pub fn n_dummies(&self) -> usize {
+        5
+    }
+    pub fn from_serializable_edge(
+        model: &model::Model,
+        graph: &HedgeGraph<Edge, Vertex>,
+        serializable_edge: &SerializableEdge,
+    ) -> Edge {
+        todo!()
+        //Edge {
+        //    name: serializable_edge.name.clone(),
+        //    edge_type: serializable_edge.edge_type,
+        //    particle: model.get_particle(&serializable_edge.particle),
+        //    propagator: model.get_propagator(&serializable_edge.propagator),
+        //    vertices: [
+        //        graph
+        //            .get_vertex_position(&serializable_edge.vertices[0])
+        //            .unwrap(),
+        //        graph
+        //            .get_vertex_position(&serializable_edge.vertices[1])
+        //            .unwrap(),
+        //    ],
+        //    internal_index: vec![],
+        //}
+    }
+
+    // pub fn is_incoming_to(&self, vertex: usize) -> bool {
+    //     self.vertices[1] == vertex
+    // }
+
+    //pub fn denominator(&self, graph: &BareGraph) -> (Atom, Atom) {
+    //    let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+    //    let mom = parse!(&format!("Q{num}")).unwrap();
+    //    let mass = self
+    //        .particle
+    //        .mass
+    //        .expression
+    //        .clone()
+    //        .unwrap_or(Atom::new_num(0));
+
+    //    (mom, mass)
+    //}
+
+    //pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
+    //     let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+    //     let mom = parse!(&format!("Q({num},x_)")).unwrap().to_pattern();
+    //     let mom_rep = lmb.pattern(num);
+    //     atom.replace_all(&mom, &mom_rep, None, None)
+    // }
+
+    // pub fn edge_momentum_symbol(&self, graph: &Graph) -> Symbol {
+    //     let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+    //     State::get_symbol(format!("Q{num}"))
+    // }
+
+    //pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
+    //    let local_pos_in_sink_vertex =
+    //        graph.vertices[self.vertices[0]].get_local_edge_position(self, graph, false);
+
+    //    graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
+    //}
+
+    //pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
+    //    let local_pos_in_sink_vertex = graph.vertices[self.vertices[1]].get_local_edge_position(
+    //        self,
+    //        graph,
+    //        self.vertices[0] == self.vertices[1],
+    //    );
+
+    //    graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
+    //}
+
+    pub fn numerator(&self, graph: &HedgeGraph<Edge, Vertex>, edge_index: EdgeIndex) -> Atom {
+        let [colorless, color] = self.color_separated_numerator(graph, edge_index);
+
+        colorless * color
+    }
+
+    pub fn color_separated_numerator(
+        &self,
+        graph: &HedgeGraph<Edge, Vertex>,
+        num: EdgeIndex,
+    ) -> [Atom; 2] {
+        // let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+        let in_slots = graph.in_slot(num);
+        let out_slots = graph.out_slot(num);
+
+        match self.edge_type {
+            EdgeType::Incoming => {
+                let [lorentz, spin, color] = in_slots.dual().kroneker(&out_slots);
+
+                [lorentz * spin, color]
+            }
+            EdgeType::Outgoing => {
+                let [lorentz, spin, color] = out_slots.dual().kroneker(&in_slots);
+
+                [lorentz * spin, color]
+            }
+            EdgeType::Virtual => {
+                let mut atom = self.propagator.numerator.clone();
+
+                let pfun = parse!("P(x_)").unwrap().to_pattern();
+                if self.particle.is_antiparticle() {
+                    atom = atom.replace_all(
+                        &pfun,
+                        parse!(&format!(
+                            "-Q({},mink(4,indexid(x_)))",
+                            Into::<usize>::into(num)
+                        ))
+                        .unwrap()
+                        .to_pattern(),
+                        None,
+                        None,
+                    );
+                } else {
+                    atom = atom.replace_all(
+                        &pfun,
+                        parse!(&format!(
+                            "Q({},mink(4,indexid(x_)))",
+                            Into::<usize>::into(num)
+                        ))
+                        .unwrap()
+                        .to_pattern(),
+                        None,
+                        None,
+                    );
+                }
+
+                let pslashfun = parse!("PSlash(i_,j_)").unwrap().to_pattern();
+                let pindex_num: usize = self.internal_index[0].into();
+                if self.particle.is_antiparticle() {
+                    atom = atom.replace_all(
+                        &pslashfun,
+                        parse!(&format!(
+                            "-Q({},mink(4,{}))*Gamma({},i_,j_)",
+                            Into::<usize>::into(num),
+                            pindex_num,
+                            pindex_num
+                        ))
+                        .unwrap()
+                        .to_pattern(),
+                        None,
+                        None,
+                    );
+                } else {
+                    atom = atom.replace_all(
+                        &pslashfun,
+                        parse!(&format!(
+                            "Q({},mink(4,{}))*Gamma({},i_,j_)",
+                            Into::<usize>::into(num),
+                            pindex_num,
+                            pindex_num
+                        ))
+                        .unwrap()
+                        .to_pattern(),
+                        None,
+                        None,
+                    );
+                }
+
+                atom = preprocess_ufo_spin_wrapped(atom);
+                let indexidpat = parse!("indexid(x_)").unwrap().to_pattern();
+
+                let dummies: HashSet<_> = atom
+                    .pattern_match(&indexidpat, None, None)
+                    .filter_map(|a| {
+                        if let AtomView::Num(n) = a[&GS.x_].as_view() {
+                            let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
+                                if b == 1 {
+                                    a
+                                } else {
+                                    0
+                                }
+                            } else {
+                                0
+                            };
+                            if e < 0 {
+                                Some(e)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let (replacements_in, replacements_out) = if self.particle.is_antiparticle() {
+                    (in_slots.replacements(2), out_slots.replacements(1))
+                } else {
+                    (in_slots.replacements(1), out_slots.replacements(2))
+                };
+
+                // replacements_out.push(Replacement::new(
+                //     parse!("indexid(x_)").unwrap().to_pattern(),
+                //     parse!("x_").unwrap().to_pattern(),
+                // ));
+
+                let mut color_atom = Atom::new_num(1);
+                for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
+                    let id: NamedStructure<String, ()> =
+                        NamedStructure::from_iter([cin, cout], "id".into(), None);
+                    color_atom = color_atom * &id.to_symbolic().unwrap();
+                }
+
+                let reps: Vec<Replacement> = replacements_in
+                    .into_iter()
+                    .chain(replacements_out)
+                    .collect();
+
+                let atom = atom.replace_all_multiple(&reps);
+                let color_atom = color_atom.replace_all_multiple(&reps);
+
+                let indexid_reps: Vec<_> = dummies
+                    .into_iter()
+                    .enumerate()
+                    .sorted()
+                    .map(|(i, d)| {
+                        Replacement::new(
+                            parse!(&format!("indexid({})", d)).unwrap().to_pattern(),
+                            parse!(&format!("{}", self.internal_index[i + 1]))
+                                .unwrap()
+                                .to_pattern(),
+                        )
+                    })
+                    .collect();
+
+                let atom = atom.replace_all_multiple(&indexid_reps);
+                let color_atom = color_atom.replace_all_multiple(&indexid_reps);
+
+                [
+                    atom.replace_all(
+                        &parse!("indexid(x_)").unwrap().to_pattern(),
+                        Atom::new_var(GS.x_).to_pattern(),
+                        None,
+                        None,
+                    ),
+                    color_atom.replace_all(
+                        &parse!("indexid(x_)").unwrap().to_pattern(),
+                        Atom::new_var(GS.x_).to_pattern(),
+                        None,
+                        None,
+                    ),
+                ]
+            }
+        }
     }
 }
 
