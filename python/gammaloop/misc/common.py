@@ -62,7 +62,7 @@ GL_WARNINGS_ISSUED: set[GammaLoopWarning] = set()
 logger = logging.getLogger('GammaLoop')
 
 try:
-    import symbolica  # pylint: disable=import-error # type: ignore
+    import symbolica  # type: ignore # pylint: disable=import-error
     # pylint: disable=unused-import
     from symbolica import Expression, Transformer, set_license_key  # type: ignore
     if not str(os.path.abspath(symbolica.__file__)).startswith(str(os.path.join(GL_PATH, 'dependencies'))):

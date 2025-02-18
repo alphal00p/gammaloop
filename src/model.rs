@@ -2,8 +2,9 @@ use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F};
+use linnet::half_edge::drawing::Decoration;
 
-use ahash::{AHashMap, RandomState};
+use ahash::{AHashMap, HashSet, RandomState};
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
 use itertools::Itertools;
@@ -36,43 +37,38 @@ use spenso::{
 };
 use std::fmt::{Display, Formatter};
 use std::fs;
+use symbolica::coefficient::CoefficientView;
 use symbolica::evaluate::FunctionMap;
 
 use eyre::Result;
 use std::ops::Index;
 use std::path::Path;
-use symbolica::id::{Pattern, PatternOrMap};
+use symbolica::id::{Pattern, Replacement};
 // use std::str::pattern::Pattern;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
-use symbolica::atom::{Atom, AtomView, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 
 use crate::utils::GS;
 use spenso::complex::Complex;
 use spenso::shadowing::ETS;
 use symbolica::domains::float::NumericalFloatLike;
-use symbolica::fun;
+use symbolica::function;
 use symbolica::printer::{AtomPrinter, PrintOptions};
-use symbolica::state::State;
 
 #[allow(unused)]
 pub fn normalise_complex(atom: &Atom) -> Atom {
     let re = Atom::parse("re_").unwrap();
     let im = Atom::parse("im_").unwrap();
 
-    let comp_id = State::get_symbol("complex");
+    let comp_id = Symbol::new("complex");
 
-    let complexfn = fun!(comp_id, re, im).into_pattern();
+    let complexfn = function!(comp_id, re, im).to_pattern();
 
-    let i = Atom::new_var(State::I);
+    let i = Atom::new_var(Atom::I);
     let complexpanded = &re + i * &im;
 
-    complexfn.replace_all(
-        atom.as_view(),
-        &complexpanded.into_pattern().into(),
-        None,
-        None,
-    )
+    atom.replace_all(&complexfn, complexpanded.to_pattern(), None, None)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -136,7 +132,7 @@ impl SerializableVertexRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColorStructure {
     color_structure: Vec<Atom>,
 }
@@ -146,37 +142,45 @@ impl ColorStructure {
         ColorStructure { color_structure }
     }
 
+    pub fn len(&self) -> usize {
+        self.color_structure.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.color_structure.is_empty()
+    }
+
     pub fn iter(&self) -> std::slice::Iter<Atom> {
         self.color_structure.iter()
     }
 
     pub fn number_of_dummies_in_atom(a: AtomView) -> usize {
-        let mut count = 0;
+        // let mut count = 0;
 
-        if let AtomView::Mul(m) = a {
-            for a in m {
-                if let AtomView::Fun(f) = a {
-                    for a in f {
-                        if let Ok(i) = i64::try_from(a) {
-                            if i < 0 {
-                                count += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // if let AtomView::Mul(m) = a {
+        //     for a in m {
+        //         if let AtomView::Fun(f) = a {
+        //             for a in f {
+        //                 if let Ok(i) = i64::try_from(a) {
+        //                     if i < 0 {
+        //                         count += 1;
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
-        count / 2
+        // count / 2
+        VertexRule::n_dummy_atom(&a.to_owned())
     }
 
     pub fn number_of_dummies(&self) -> usize {
-        let mut count = 0;
-
-        for a in &self.color_structure {
-            count += Self::number_of_dummies_in_atom(a.as_view());
-        }
-        count
+        self.color_structure
+            .iter()
+            .map(VertexRule::n_dummy_atom)
+            .max()
+            .unwrap_or(0)
     }
 }
 
@@ -196,9 +200,52 @@ pub struct VertexRule {
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Vec<Option<Arc<Coupling>>>>,
 }
+
+impl Eq for VertexRule {}
+
+impl PartialEq for VertexRule {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl PartialOrd for VertexRule {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.name.cmp(&other.name))
+    }
+}
+
+impl Ord for VertexRule {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl std::hash::Hash for VertexRule {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl VertexRule {
+    #[allow(clippy::complexity)]
+    pub fn get_coupling_orders(
+        &self,
+    ) -> Vec<Vec<Option<HashMap<SmartString<LazyCompact>, usize, RandomState>>>> {
+        self.couplings
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|co| co.clone().map(|c| c.orders.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VertexSlots {
-    edge_slots: Vec<EdgeSlots<Minkowski>>,
+    pub(crate) edge_slots: Vec<EdgeSlots<Minkowski>>,
     pub coupling_indices: Option<[Slot<Euclidean>; 2]>, //None for external vertices
     pub internal_dummy: DummyIndices,
 }
@@ -257,6 +304,25 @@ impl From<EdgeSlots<Minkowski>> for VertexSlots {
 }
 
 impl VertexRule {
+    pub fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+        let mut node_coupling_orders = AHashMap::default();
+        self.couplings.iter().for_each(|cs| {
+            cs.iter().for_each(|c_opt| {
+                if let Some(c) = c_opt {
+                    c.orders.iter().for_each(|(coupling_order, &weight)| {
+                        let w = node_coupling_orders
+                            .entry(coupling_order.clone())
+                            .or_insert(weight);
+                        if *w < weight {
+                            *w = weight;
+                        }
+                    });
+                }
+            })
+        });
+        node_coupling_orders
+    }
+
     pub fn dod(&self) -> isize {
         let dod;
         let mut spins = vec![];
@@ -287,10 +353,12 @@ impl VertexRule {
 
         shifts.colordummy += n_color_dummies;
 
-        let mut n_lorentz_dummies = 0;
-        for a in &self.lorentz_structures {
-            n_lorentz_dummies += a.number_of_dummies();
-        }
+        let n_lorentz_dummies = self
+            .lorentz_structures
+            .iter()
+            .map(|a| Self::n_dummy_atom(&a.structure))
+            .max()
+            .unwrap_or(0);
 
         for a in 0..n_lorentz_dummies {
             lorentz_and_spin.push((shifts.lorentzdummy + a).into());
@@ -302,6 +370,54 @@ impl VertexRule {
             lorentz_and_spin,
             color,
         }
+    }
+
+    fn n_dummy_atom(atom: &Atom) -> usize {
+        let pat = function!(GS.f_, GS.x___, GS.x_, GS.y___).to_pattern();
+
+        let n_dummy = atom
+            .pattern_match(&pat, None, None)
+            .filter_map(|a| {
+                if let AtomView::Num(n) = a[&GS.x_].as_view() {
+                    let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
+                        if b == 1 {
+                            a
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    };
+                    if e < 0 {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .min()
+            .unwrap_or(0)
+            .unsigned_abs() as usize;
+        n_dummy
+    }
+
+    pub fn n_dummies(&self) -> (usize, usize) {
+        let n_color_dummies = self
+            .color_structures
+            .color_structure
+            .iter()
+            .map(Self::n_dummy_atom)
+            .max()
+            .unwrap_or(0);
+        let n_lorentz_dummies = self
+            .lorentz_structures
+            .iter()
+            .map(|a| Self::n_dummy_atom(&a.structure))
+            .max()
+            .unwrap_or(0);
+        (n_color_dummies, n_lorentz_dummies)
     }
 
     pub fn generate_vertex_slots(&self, mut shifts: Shifts) -> (VertexSlots, Shifts) {
@@ -317,8 +433,8 @@ impl VertexRule {
             ..
         } = shifts;
 
-        let i_dim = self.couplings.len();
-        let j_dim = self.couplings[0].len();
+        let i_dim = self.color_structures.len();
+        let j_dim = self.lorentz_structures.len();
 
         let coupling_indices = Some([
             Euclidean::slot(i_dim, coupling_shift),
@@ -526,75 +642,119 @@ pub struct Particle {
     pub y_charge: isize,
 }
 
+impl Particle {
+    pub fn is_massless(&self) -> bool {
+        !self.is_massive()
+    }
+    pub fn decoration(&self) -> Decoration {
+        match self.spin {
+            0 => Decoration::Dashed,
+            1 => Decoration::None,
+            2 => Decoration::Arrow,
+            3 => {
+                if self.pdg_code.abs() == 9 || self.pdg_code.abs() == 21 {
+                    Decoration::Coil
+                } else {
+                    Decoration::Wave
+                }
+            }
+            _ => Decoration::None,
+        }
+    }
+
+    pub fn is_fermion(&self) -> bool {
+        self.spin % 2 == 0
+    }
+}
+
+impl Ord for Particle {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.pdg_code.cmp(&other.pdg_code)
+    }
+}
+
+impl PartialOrd for Particle {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.pdg_code.cmp(&other.pdg_code))
+    }
+}
+
+impl std::hash::Hash for Particle {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.pdg_code.hash(state);
+    }
+}
+impl Eq for Particle {}
 impl PartialEq for Particle {
     fn eq(&self, other: &Self) -> bool {
         if self.pdg_code == other.pdg_code {
-            if self.name != other.name {
-                panic!(
-                    "Particle with same pdg code but different names: {} and {}",
-                    self.name, other.name
-                );
-            }
-            if self.spin != other.spin {
-                panic!(
-                    "Particle with same pdg code but different spins: {} and {}",
-                    self.spin, other.spin
-                );
-            }
-            if self.color != other.color {
-                panic!(
-                    "Particle with same pdg code but different colors: {} and {}",
-                    self.color, other.color
-                );
-            }
-            if self.mass != other.mass {
-                panic!(
-                    "Particle with same pdg code but different masses: {} and {}",
-                    self.mass, other.mass
-                );
-            }
-            if self.width != other.width {
-                panic!(
-                    "Particle with same pdg code but different widths: {} and {}",
-                    self.width, other.width
-                );
-            }
-            if self.texname != other.texname {
-                panic!(
-                    "Particle with same pdg code but different texnames: {} and {}",
-                    self.texname, other.texname
-                );
-            }
-            if self.antitexname != other.antitexname {
-                panic!(
-                    "Particle with same pdg code but different antitexnames: {} and {}",
-                    self.antitexname, other.antitexname
-                );
-            }
-            if self.charge != other.charge {
-                panic!(
-                    "Particle with same pdg code but different charges: {} and {}",
-                    self.charge, other.charge
-                );
-            }
-            if self.ghost_number != other.ghost_number {
-                panic!(
-                    "Particle with same pdg code but different ghost_numbers: {} and {}",
-                    self.ghost_number, other.ghost_number
-                );
-            }
-            if self.lepton_number != other.lepton_number {
-                panic!(
-                    "Particle with same pdg code but different lepton_numbers: {} and {}",
-                    self.lepton_number, other.lepton_number
-                );
-            }
-            if self.y_charge != other.y_charge {
-                panic!(
-                    "Particle with same pdg code but different y_charges: {} and {}",
-                    self.y_charge, other.y_charge
-                );
-            }
+            // The checks below are too slow
+            // if self.name != other.name {
+            //     panic!(
+            //         "Particle with same pdg code but different names: {} and {}",
+            //         self.name, other.name
+            //     );
+            // }
+            // if self.spin != other.spin {
+            //     panic!(
+            //         "Particle with same pdg code but different spins: {} and {}",
+            //         self.spin, other.spin
+            //     );
+            // }
+            // if self.color != other.color {
+            //     panic!(
+            //         "Particle with same pdg code but different colors: {} and {}",
+            //         self.color, other.color
+            //     );
+            // }
+            // if self.mass != other.mass {
+            //     panic!(
+            //         "Particle with same pdg code but different masses: {} and {}",
+            //         self.mass, other.mass
+            //     );
+            // }
+            // if self.width != other.width {
+            //     panic!(
+            //         "Particle with same pdg code but different widths: {} and {}",
+            //         self.width, other.width
+            //     );
+            // }
+            // if self.texname != other.texname {
+            //     panic!(
+            //         "Particle with same pdg code but different texnames: {} and {}",
+            //         self.texname, other.texname
+            //     );
+            // }
+            // if self.antitexname != other.antitexname {
+            //     panic!(
+            //         "Particle with same pdg code but different antitexnames: {} and {}",
+            //         self.antitexname, other.antitexname
+            //     );
+            // }
+            // if self.charge != other.charge {
+            //     panic!(
+            //         "Particle with same pdg code but different charges: {} and {}",
+            //         self.charge, other.charge
+            //     );
+            // }
+            // if self.ghost_number != other.ghost_number {
+            //     panic!(
+            //         "Particle with same pdg code but different ghost_numbers: {} and {}",
+            //         self.ghost_number, other.ghost_number
+            //     );
+            // }
+            // if self.lepton_number != other.lepton_number {
+            //     panic!(
+            //         "Particle with same pdg code but different lepton_numbers: {} and {}",
+            //         self.lepton_number, other.lepton_number
+            //     );
+            // }
+            // if self.y_charge != other.y_charge {
+            //     panic!(
+            //         "Particle with same pdg code but different y_charges: {} and {}",
+            //         self.y_charge, other.y_charge
+            //     );
+            // }
             true
         } else {
             false
@@ -724,28 +884,36 @@ where
             color: self.color.iter().map(|c| c.dual()).collect(),
         }
     }
-    pub fn replacements(&self, id: usize) -> Vec<(Pattern, PatternOrMap)> {
-        let rhs_lor = LorRep::slot(4, id).to_symbolic_wrapped().into_pattern();
+    pub fn replacements(&self, id: usize) -> Vec<Replacement> {
+        let rhs_lor = <Atom as AtomCore>::to_pattern(&LorRep::slot(4, id).to_symbolic_wrapped());
 
         let rhs_spin = Bispinor::slot(4, id);
 
-        let rhs_spin = rhs_spin.to_symbolic_wrapped().into_pattern();
+        let rhs_spin = <Atom as AtomCore>::to_pattern(&rhs_spin.to_symbolic_wrapped());
 
         let mut reps = vec![];
         for l in &self.lorentz {
-            reps.push((rhs_lor.clone(), l.to_atom().into_pattern().into()));
+            reps.push(Replacement::new(
+                rhs_lor.clone(),
+                <Atom as AtomCore>::to_pattern(&l.to_atom()),
+            ));
         }
 
         for s in &self.spin {
-            reps.push((rhs_spin.clone(), s.to_atom().into_pattern().into()));
+            reps.push(Replacement::new(
+                rhs_spin.clone(),
+                <Atom as AtomCore>::to_pattern(&s.to_atom()),
+            ));
         }
 
         for c in &self.color {
             let mut rhs_color = *c;
             rhs_color.aind = id.into();
-            println!("rhs color pattern :{}", rhs_color.to_symbolic_wrapped());
-            let rhs_color = rhs_color.to_symbolic_wrapped().into_pattern();
-            reps.push((rhs_color.clone(), c.to_atom().into_pattern().into()));
+            let rhs_color = <Atom as AtomCore>::to_pattern(&rhs_color.to_symbolic_wrapped());
+            reps.push(Replacement::new(
+                rhs_color.clone(),
+                <Atom as AtomCore>::to_pattern(&c.to_atom()),
+            ));
         }
 
         reps
@@ -767,7 +935,7 @@ where
     }
 
     pub fn to_cind_atom(&self) -> Atom {
-        let mut builder = FunctionBuilder::new(State::get_symbol(CONCRETEIND));
+        let mut builder = FunctionBuilder::new(Symbol::new(CONCRETEIND));
 
         for l in &self.lorentz {
             builder = builder.add_arg(l.to_atom().as_view());
@@ -794,6 +962,10 @@ impl Particle {
         model.get_particle(&self.antiname)
     }
 
+    pub fn is_self_antiparticle(&self) -> bool {
+        self.name == self.antiname
+    }
+
     fn lorentz_slots<LR: BaseRepName>(&self, shift: usize) -> (Vec<Slot<LR>>, usize) {
         let fourd_lor = LR::rep(4);
 
@@ -809,6 +981,14 @@ impl Particle {
         match self.spin {
             2 => (vec![fourd_bis.new_slot(shift)], shift + 1),
             _ => (vec![], shift),
+        }
+    }
+
+    pub fn is_massive(&self) -> bool {
+        if let Some(v) = self.mass.value {
+            v.norm_squared().abs().positive()
+        } else {
+            true
         }
     }
 
@@ -874,7 +1054,7 @@ impl Particle {
         colorless.color = vec![];
         if let Some(name) = self.in_pol_symbol() {
             colorless
-                .complete_fn_builder(FunctionBuilder::new(name).add_arg(&Atom::new_num(num as i64)))
+                .complete_fn_builder(FunctionBuilder::new(name).add_arg(Atom::new_num(num as i64)))
         } else {
             Atom::new_num(1)
         }
@@ -1050,7 +1230,7 @@ impl Particle {
         colorless.color = vec![];
         if let Some(name) = self.out_pol_symbol() {
             colorless
-                .complete_fn_builder(FunctionBuilder::new(name).add_arg(&Atom::new_num(num as i64)))
+                .complete_fn_builder(FunctionBuilder::new(name).add_arg(Atom::new_num(num as i64)))
         } else {
             Atom::new_num(1)
         }
@@ -1197,7 +1377,7 @@ impl SerializableLorentzStructure {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LorentzStructure {
     pub name: SmartString<LazyCompact>,
     pub spins: Vec<isize>,
@@ -1216,21 +1396,7 @@ impl LorentzStructure {
     }
 
     pub fn number_of_dummies(&self) -> usize {
-        let mut count = 0;
-        if let AtomView::Mul(m) = self.structure.as_view() {
-            for a in m {
-                if let AtomView::Fun(f) = a {
-                    for a in f {
-                        if let Ok(i) = i64::try_from(a) {
-                            if i < 0 {
-                                count += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        count / 2
+        VertexRule::n_dummy_atom(&self.structure)
     }
 }
 
@@ -1410,6 +1576,8 @@ pub struct Model {
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Arc<Coupling>>,
     pub vertex_rules: Vec<Arc<VertexRule>>,
+    pub unresolved_particles: HashMap<SmartString<LazyCompact>, HashSet<Arc<Particle>>>,
+    pub particle_set_to_vertex_rules_map: HashMap<Vec<Arc<Particle>>, Vec<Arc<VertexRule>>>,
     pub order_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub parameter_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -1418,6 +1586,7 @@ pub struct Model {
     pub propagator_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub coupling_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub vertex_rule_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub particle_name_to_propagator_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
 }
 
 impl Default for Model {
@@ -1441,6 +1610,8 @@ impl Default for Model {
                 usize,
                 RandomState,
             >::default(),
+            unresolved_particles: HashMap::new(),
+            particle_set_to_vertex_rules_map: HashMap::new(),
             particle_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             particle_pdg_to_position: HashMap::<isize, usize, RandomState>::default(),
@@ -1450,6 +1621,11 @@ impl Default for Model {
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             vertex_rule_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
+            particle_name_to_propagator_position: HashMap::<
+                SmartString<LazyCompact>,
+                usize,
+                RandomState,
+            >::default(),
         }
     }
 }
@@ -1461,10 +1637,10 @@ impl Model {
         let mut new_values_len = 0;
 
         for c in &self.couplings {
-            let key = State::get_symbol(&c.name);
+            let key = Symbol::new(&c.name);
             expr.push(c.expression.as_view());
             fn_map
-                .add_function(key, c.name.clone().into(), vec![], c.expression.as_view())
+                .add_function(key, c.name.clone().into(), vec![], c.expression.clone())
                 .unwrap();
             new_values_len += 1;
         }
@@ -1485,14 +1661,14 @@ impl Model {
                 }
                 ParameterNature::Internal => {
                     new_values_len += 1;
-                    let key = State::get_symbol(&p.name);
+                    let key = Symbol::new(&p.name);
                     expr.push(p.expression.as_ref().unwrap().as_view());
                     fn_map
                         .add_function(
                             key,
                             p.name.clone().into(),
                             vec![],
-                            p.expression.as_ref().unwrap().as_view(),
+                            p.expression.clone().unwrap(),
                         )
                         .unwrap();
                 }
@@ -1516,22 +1692,13 @@ impl Model {
         for cpl in self.couplings.iter() {
             let [pattern, rhs] = cpl.rep_rule();
 
-            sub_atom = sub_atom.replace_all(
-                &pattern.into_pattern(),
-                &rhs.into_pattern().into(),
-                None,
-                None,
-            );
+            sub_atom = sub_atom.replace_all(&pattern.to_pattern(), rhs.to_pattern(), None, None);
         }
 
         for para in self.parameters.iter() {
             if let Some([pattern, rhs]) = para.rep_rule() {
-                sub_atom = sub_atom.replace_all(
-                    &pattern.into_pattern(),
-                    &rhs.into_pattern().into(),
-                    None,
-                    None,
-                );
+                sub_atom =
+                    sub_atom.replace_all(&pattern.to_pattern(), rhs.to_pattern(), None, None);
             }
         }
         sub_atom
@@ -1541,7 +1708,7 @@ impl Model {
         let mut reps = vec![];
         for cpl in self.couplings.iter().filter(|c| c.value.is_none()) {
             let [pattern, rhs] = cpl.rep_rule();
-            reps.push((pattern.into_pattern(), rhs.into_pattern()));
+            reps.push((pattern.to_pattern(), rhs.to_pattern()));
         }
         reps
     }
@@ -1554,7 +1721,7 @@ impl Model {
             .filter(|p| matches!(p.nature, ParameterNature::Internal))
         {
             if let Some([pattern, rhs]) = para.rep_rule() {
-                reps.push((pattern.into_pattern(), rhs.into_pattern()));
+                reps.push((pattern.to_pattern(), rhs.to_pattern()));
             }
         }
         reps
@@ -1563,23 +1730,23 @@ impl Model {
     pub fn valued_coupling_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
-            let lhs = Atom::parse(&cpl.name).unwrap().into_pattern();
+            let lhs = Atom::parse(&cpl.name).unwrap().to_pattern();
             if let Some(value) = cpl.value {
                 let rhs = if value.im == 0.0 {
-                    let name = Atom::new_var(State::get_symbol(format!("{}_re", cpl.name)));
+                    let name = Atom::new_var(Symbol::new(format!("{}_re", cpl.name)));
 
-                    name.into_pattern()
+                    name.to_pattern()
                 } else if value.re == 0.0 {
-                    let name = Atom::new_var(State::get_symbol(format!("{}_im", cpl.name)));
+                    let name = Atom::new_var(Symbol::new(format!("{}_im", cpl.name)));
 
-                    name.into_pattern()
+                    name.to_pattern()
                 } else {
-                    let name_re = Atom::new_var(State::get_symbol(cpl.name.clone() + "_re"));
+                    let name_re = Atom::new_var(Symbol::new(cpl.name.clone() + "_re"));
 
-                    let name_im = Atom::new_var(State::get_symbol(cpl.name.clone() + "_im"));
+                    let name_im = Atom::new_var(Symbol::new(cpl.name.clone() + "_im"));
 
-                    let i = Atom::new_var(State::I);
-                    (&name_re + i * &name_im).into_pattern()
+                    let i = Atom::new_var(Atom::I);
+                    (&name_re + i * &name_im).to_pattern()
                 };
                 reps.push((lhs, rhs));
             }
@@ -1636,30 +1803,27 @@ impl Model {
     pub fn valued_parameter_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for param in self.parameters.iter().filter(|p| p.value.is_some()) {
-            let lhs = Atom::parse(&param.name).unwrap().into_pattern();
+            let lhs = Atom::parse(&param.name).unwrap().to_pattern();
             if let Some(value) = param.value {
                 let rhs = match param.parameter_type {
                     ParameterType::Imaginary => {
                         if value.re.is_zero() {
-                            let name =
-                                Atom::new_var(State::get_symbol(format!("{}_im", param.name)));
+                            let name = Atom::new_var(Symbol::new(format!("{}_im", param.name)));
 
-                            name.into_pattern()
+                            name.to_pattern()
                         } else {
-                            let name_re =
-                                Atom::new_var(State::get_symbol(param.name.clone() + "_re"));
+                            let name_re = Atom::new_var(Symbol::new(param.name.clone() + "_re"));
 
-                            let name_im =
-                                Atom::new_var(State::get_symbol(param.name.clone() + "_im"));
+                            let name_im = Atom::new_var(Symbol::new(param.name.clone() + "_im"));
 
-                            let i = Atom::new_var(State::I);
-                            (&name_re + i * &name_im).into_pattern()
+                            let i = Atom::new_var(Atom::I);
+                            (&name_re + i * &name_im).to_pattern()
                         }
                     }
                     ParameterType::Real => {
-                        let name = Atom::new_var(State::get_symbol(format!("{}_re", param.name)));
+                        let name = Atom::new_var(Symbol::new(format!("{}_re", param.name)));
 
-                        name.into_pattern()
+                        name.to_pattern()
                     }
                 };
                 reps.push((lhs, rhs));
@@ -1672,13 +1836,13 @@ impl Model {
         // let mut atom = atom;
         // for cpl in self.couplings.iter() {
         //     if let Some(value) = cpl.value {
-        //         let pat = Atom::parse(&cpl.name).unwrap().into_pattern();
+        //         let pat = Atom::parse(&cpl.name).unwrap().to_pattern();
 
         //         let re = Atom::new_num(value);
-        //         atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+        //         atom = atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
         //     }
         //     let [pattern, rhs] = cpl.rep_rule();
-        //     atom = atom.replace_all(&pattern.into_pattern(), &rhs.into_pattern(), None, None);
+        //     atom = atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
         // }
         atom
     }
@@ -1746,8 +1910,43 @@ impl Model {
         Ok(())
     }
 
+    fn generate_particle_set_to_vertex_rules_map(&mut self) {
+        let mut map = HashMap::new();
+
+        for vertex in self.vertex_rules.iter() {
+            let mut vertex_particles = vertex.particles.clone();
+            vertex_particles.sort();
+            map.entry(vertex_particles)
+                .and_modify(|l: &mut Vec<Arc<VertexRule>>| l.push(vertex.clone()))
+                .or_insert(vec![vertex.clone()]);
+        }
+        self.particle_set_to_vertex_rules_map = map;
+    }
+
+    fn generate_unresolved_particles(&mut self) {
+        let mut map = HashMap::new();
+
+        for v in &self.vertex_rules {
+            let mut set = HashSet::default();
+            for p in &v.particles {
+                if p.is_massless() {
+                    set.insert(p.clone());
+                }
+            }
+            for (k, _) in v.coupling_orders() {
+                let current_set = map.entry(k).or_insert(HashSet::<Arc<Particle>>::default());
+
+                set.iter().for_each(|d| {
+                    current_set.insert(d.clone());
+                });
+            }
+        }
+
+        self.unresolved_particles = map;
+    }
+
     pub fn from_serializable_model(serializable_model: SerializableModel) -> Model {
-        //initialize the UFO and EFT symbols
+        //initialize the UFO and ETS symbols
 
         let _ = *UFO;
         let _ = *ETS;
@@ -1876,6 +2075,19 @@ impl Model {
             })
             .collect();
 
+        // Set propagator mapping
+        model.particle_name_to_propagator_position =
+            serializable_model.propagators.iter().enumerate().fold(
+                HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
+                |mut map, (i_prop, serializable_propagator)| {
+                    map.insert(serializable_propagator.particle.clone(), i_prop);
+                    map
+                },
+            );
+
+        model.generate_unresolved_particles();
+        model.generate_particle_set_to_vertex_rules_map();
+
         model
     }
 
@@ -1896,11 +2108,30 @@ impl Model {
     }
 
     #[inline]
+    pub fn get_propagator_for_particle(&self, name: &SmartString<LazyCompact>) -> Arc<Propagator> {
+        if let Some(position) = self.particle_name_to_propagator_position.get(name) {
+            self.propagators[*position].clone()
+        } else {
+            panic!(
+                "Propagator for particle '{}' not found in model '{}'. Valid entries are:\n{}",
+                name,
+                self.name,
+                self.particle_name_to_propagator_position.keys().join(", ")
+            );
+        }
+    }
+
+    #[inline]
     pub fn get_particle(&self, name: &SmartString<LazyCompact>) -> Arc<Particle> {
         if let Some(position) = self.particle_name_to_position.get(name) {
             self.particles[*position].clone()
         } else {
-            panic!("Particle '{}' not found in model '{}'.", name, self.name);
+            panic!(
+                "Particle '{}' not found in model '{}'. Valid entries are:\n{}",
+                name,
+                self.name,
+                self.particle_name_to_position.keys().join(", ")
+            );
         }
     }
     #[inline]

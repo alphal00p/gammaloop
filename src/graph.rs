@@ -7,23 +7,29 @@ use crate::{
         expression::CFFExpression,
         generation::generate_cff_expression,
     },
+    feyngen::{
+        diagram_generator::{EdgeColor, NodeColorWithVertexRule},
+        FeynGenError,
+    },
     gammaloop_integrand::{BareSample, DefaultSample},
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     numerator::{
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
-        AppliedFeynmanRule, AtomStructure, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
-        GammaAlgebraMode, Numerator, NumeratorState, NumeratorStateError, PythonState,
+        AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo, GammaAlgebraMode,
+        Numerator, NumeratorParseMode, NumeratorState, NumeratorStateError, PythonState,
         RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm::{self, CounterTerm},
     },
-    utils::{self, sorted_vectorize, FloatLike, F},
+    utils::{self, sorted_vectorize, FloatLike, F, GS},
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
+
+use linnet::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder};
 
 use ahash::{HashSet, RandomState};
 
@@ -44,7 +50,7 @@ use spenso::{
     arithmetic::ScalarMul,
     complex::Complex,
     contraction::{IsZero, RefZero},
-    data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
+    data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor},
     scalar::Scalar,
     shadowing::{Shadowable, ETS},
     structure::{
@@ -59,12 +65,13 @@ use spenso::{
 use uuid::Uuid;
 
 use core::panic;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::{Display, Formatter},
+    fs,
     ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
     sync::Arc,
@@ -72,14 +79,20 @@ use std::{
 
 use symbolica::{
     atom::{Atom, Symbol},
+    coefficient::CoefficientView,
     domains::{float::NumericalFloatLike, rational::Rational},
-    fun,
+    function,
     id::{Pattern, Replacement},
     state::State,
     symb,
 };
+use symbolica::{
+    atom::{AtomCore, AtomView},
+    graph::Graph as SymbolicaGraph,
+    printer::{AtomPrinter, PrintOptions},
+};
 //use symbolica::{atom::Symbol,state::State};
-pub mod half_edge;
+//pub mod half_edge;
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum EdgeType {
     #[serde(rename = "in")]
@@ -269,43 +282,45 @@ impl HasVertexInfo for InteractionVertexInfo {
             .map(|ls| {
                 let mut atom = ls.structure.clone();
 
-                println!("in vertex{atom}");
-
                 for (i, e) in edges.iter().enumerate() {
                     let momentum_in_pattern = Pattern::parse(&format!("P(x_,{})", i + 1)).unwrap();
 
                     let momentum_out_pattern = if e < &0 {
-                        Pattern::parse(&format!("-Q({},mink(4,x_))", -e))
-                            .unwrap()
-                            .into() //TODO flip based on flow
+                        Pattern::parse(&format!("-Q({},mink(4,indexid(x_)))", -e)).unwrap()
+                        //TODO flip based on flow
                     } else {
-                        Pattern::parse(&format!("Q({},mink(4,x_))", e))
-                            .unwrap()
-                            .into() //TODO flip based on flow
+                        Pattern::parse(&format!("Q({},mink(4,indexid(x_)))", e)).unwrap()
+                        //TODO flip based on flow
                     };
 
-                    atom = momentum_in_pattern.replace_all(
-                        atom.as_view(),
-                        &momentum_out_pattern,
-                        None,
-                        None,
-                    );
+                    atom =
+                        atom.replace_all(&momentum_in_pattern, &momentum_out_pattern, None, None);
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom);
-                println!("preprocessed vertex{atom}");
 
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
 
-                    let reps: Vec<Replacement> = replacements
-                        .iter()
-                        .map(|(pat, rhs)| Replacement::new(pat, rhs))
-                        .collect();
-
-                    atom = atom.replace_all_multiple(&reps);
+                    atom = atom.replace_all_multiple(&replacements);
                 }
-                println!("out vertex{atom}");
+
+                let n_dummies = ls.number_of_dummies();
+                for i in 0..n_dummies {
+                    let pat: Pattern = Atom::parse(&format!("indexid({})", -1 - i as i64))
+                        .unwrap()
+                        .to_pattern();
+
+                    atom = atom.replace_all(
+                        &pat,
+                        Atom::new_num(
+                            usize::from(vertex_slots.internal_dummy.lorentz_and_spin[i]) as i64
+                        )
+                        .to_pattern(),
+                        None,
+                        None,
+                    );
+                }
                 atom
             })
             .collect_vec();
@@ -325,10 +340,10 @@ impl HasVertexInfo for InteractionVertexInfo {
                     self.vertex_rule.particles.iter().map(|s| s.color).collect();
 
                 for (i, s) in spins.iter().enumerate() {
-                    let id1 = fun!(UFO.identity, Atom::new_num((i + 1) as i32), symb!("x_"))
-                        .into_pattern();
+                    let id1 = function!(UFO.identity, Atom::new_num((i + 1) as i32), symb!("x_"))
+                        .to_pattern();
                     let id2 =
-                        fun!(ETS.id, symb!("x_"), Atom::new_num((i + 1) as i32)).into_pattern();
+                        function!(ETS.id, symb!("x_"), Atom::new_num((i + 1) as i32)).to_pattern();
 
                     let ind = match s {
                         1 => Euclidean::slot(1, i + 1).to_symbolic_wrapped(),
@@ -339,19 +354,19 @@ impl HasVertexInfo for InteractionVertexInfo {
                         6 => ColorSextet::slot(6, i + 1).to_symbolic_wrapped(),
                         -6 => ColorSextet::slot(6, i + 1).dual().to_symbolic_wrapped(),
                         8 => ColorAdjoint::slot(8, i + 1).to_symbolic_wrapped(),
-                        i => panic!("Color {i}not supported "),
+                        i => panic!("Color {i} not supported "),
                     };
 
-                    atom = id1.replace_all(
-                        atom.as_view(),
-                        &fun!(ETS.id, ind, symb!("x_")).into_pattern().into(),
+                    atom = atom.replace_all(
+                        &id1,
+                        function!(ETS.id, ind, symb!("x_")).to_pattern(),
                         None,
                         None,
                     );
 
-                    atom = id2.replace_all(
-                        atom.as_view(),
-                        &fun!(ETS.id, symb!("x_"), ind).into_pattern().into(),
+                    atom = atom.replace_all(
+                        &id2,
+                        function!(ETS.id, symb!("x_"), ind).to_pattern(),
                         None,
                         None,
                     );
@@ -360,26 +375,18 @@ impl HasVertexInfo for InteractionVertexInfo {
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
 
-                    let reps: Vec<Replacement> = replacements
-                        .iter()
-                        .map(|(pat, rhs)| Replacement::new(pat, rhs))
-                        .collect();
-
-                    atom = atom.replace_all_multiple(&reps);
+                    atom = atom.replace_all_multiple(&replacements);
                 }
 
                 for i in 0..n_dummies {
                     let pat: Pattern = Atom::parse(&format!("indexid({})", -1 - i as i64))
                         .unwrap()
-                        .into_pattern();
+                        .to_pattern();
 
-                    atom = pat.replace_all(
-                        atom.as_view(),
-                        &Atom::new_num(usize::from(
-                            vertex_slots.internal_dummy.color[i + color_dummy_shift],
-                        ) as i64)
-                        .into_pattern()
-                        .into(),
+                    atom = atom.replace_all(
+                        &pat,
+                        Atom::new_num(usize::from(vertex_slots.internal_dummy.color[i]) as i64)
+                            .to_pattern(),
                         None,
                         None,
                     );
@@ -494,6 +501,9 @@ pub struct Edge {
 }
 
 impl Edge {
+    pub fn n_dummies(&self) -> usize {
+        5
+    }
     pub fn from_serializable_edge(
         model: &model::Model,
         graph: &BareGraph,
@@ -536,7 +546,7 @@ impl Edge {
     pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = Pattern::parse(&format!("Q({num},x_)")).unwrap();
-        let mom_rep = lmb.pattern(num).into();
+        let mom_rep = lmb.pattern(num);
         atom.replace_all(&mom, &mom_rep, None, None)
     }
 
@@ -547,26 +557,29 @@ impl Edge {
 
     pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
         let local_pos_in_sink_vertex =
-            graph.vertices[self.vertices[0]].get_local_edge_position(self, graph);
+            graph.vertices[self.vertices[0]].get_local_edge_position(self, graph, false);
 
         graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
     }
 
     pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
-        let local_pos_in_sink_vertex =
-            graph.vertices[self.vertices[1]].get_local_edge_position(self, graph);
+        let local_pos_in_sink_vertex = graph.vertices[self.vertices[1]].get_local_edge_position(
+            self,
+            graph,
+            self.vertices[0] == self.vertices[1],
+        );
 
         graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn numerator(&self, graph: &BareGraph) -> Atom {
-        let [colorless, color] = self.color_separated_numerator(graph);
+    pub fn numerator(&self, graph: &BareGraph, num: usize) -> Atom {
+        let [colorless, color] = self.color_separated_numerator(graph, num);
 
         colorless * color
     }
 
-    pub fn color_separated_numerator(&self, graph: &BareGraph) -> [Atom; 2] {
-        let num = *graph.edge_name_to_position.get(&self.name).unwrap();
+    pub fn color_separated_numerator(&self, graph: &BareGraph, num: usize) -> [Atom; 2] {
+        // let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let in_slots = self.in_slot(graph);
         let out_slots = self.out_slot(graph);
 
@@ -586,20 +599,16 @@ impl Edge {
 
                 let pfun = Pattern::parse("P(x_)").unwrap();
                 if self.particle.is_antiparticle() {
-                    atom = pfun.replace_all(
-                        atom.as_view(),
-                        &Pattern::parse(&format!("-Q({},mink(4,x_))", num))
-                            .unwrap()
-                            .into(),
+                    atom = atom.replace_all(
+                        &pfun,
+                        Pattern::parse(&format!("-Q({},mink(4,indexid(x_)))", num)).unwrap(),
                         None,
                         None,
                     );
                 } else {
-                    atom = pfun.replace_all(
-                        atom.as_view(),
-                        &Pattern::parse(&format!("Q({},mink(4,x_))", num))
-                            .unwrap()
-                            .into(),
+                    atom = atom.replace_all(
+                        &pfun,
+                        Pattern::parse(&format!("Q({},mink(4,indexid(x_)))", num)).unwrap(),
                         None,
                         None,
                     );
@@ -608,43 +617,66 @@ impl Edge {
                 let pslashfun = Pattern::parse("PSlash(i_,j_)").unwrap();
                 let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.is_antiparticle() {
-                    atom = pslashfun.replace_all(
-                        atom.as_view(),
-                        &Pattern::parse(&format!(
+                    atom = atom.replace_all(
+                        &pslashfun,
+                        Pattern::parse(&format!(
                             "-Q({},mink(4,{}))*Gamma({},i_,j_)",
                             num, pindex_num, pindex_num
                         ))
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                         None,
                         None,
                     );
                 } else {
-                    atom = pslashfun.replace_all(
-                        atom.as_view(),
-                        &Pattern::parse(&format!(
+                    atom = atom.replace_all(
+                        &pslashfun,
+                        Pattern::parse(&format!(
                             "Q({},mink(4,{}))*Gamma({},i_,j_)",
                             num, pindex_num, pindex_num
                         ))
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                         None,
                         None,
                     );
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom);
+                let indexidpat = Pattern::parse("indexid(x_)").unwrap();
 
-                let (replacements_in, mut replacements_out) = if self.particle.is_antiparticle() {
+                let dummies: HashSet<_> = atom
+                    .pattern_match(&indexidpat, None, None)
+                    .filter_map(|a| {
+                        if let AtomView::Num(n) = a[&GS.x_].as_view() {
+                            let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
+                                if b == 1 {
+                                    a
+                                } else {
+                                    0
+                                }
+                            } else {
+                                0
+                            };
+                            if e < 0 {
+                                Some(e)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let (replacements_in, replacements_out) = if self.particle.is_antiparticle() {
                     (in_slots.replacements(2), out_slots.replacements(1))
                 } else {
                     (in_slots.replacements(1), out_slots.replacements(2))
                 };
 
-                replacements_out.push((
-                    Atom::parse("indexid(x_)").unwrap().into_pattern(),
-                    Atom::parse("x_").unwrap().into_pattern().into(),
-                ));
+                // replacements_out.push(Replacement::new(
+                //     Atom::parse("indexid(x_)").unwrap().to_pattern(),
+                //     Atom::parse("x_").unwrap().to_pattern(),
+                // ));
 
                 let mut color_atom = Atom::new_num(1);
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
@@ -654,14 +686,45 @@ impl Edge {
                 }
 
                 let reps: Vec<Replacement> = replacements_in
-                    .iter()
-                    .chain(replacements_out.iter())
-                    .map(|(pat, rhs)| Replacement::new(pat, rhs))
+                    .into_iter()
+                    .chain(replacements_out)
                     .collect();
 
+                let atom = atom.replace_all_multiple(&reps);
+                let color_atom = color_atom.replace_all_multiple(&reps);
+
+                let indexid_reps: Vec<_> = dummies
+                    .into_iter()
+                    .enumerate()
+                    .sorted()
+                    .map(|(i, d)| {
+                        Replacement::new(
+                            Atom::parse(&format!("indexid({})", d))
+                                .unwrap()
+                                .to_pattern(),
+                            Atom::parse(&format!("{}", self.internal_index[i + 1]))
+                                .unwrap()
+                                .to_pattern(),
+                        )
+                    })
+                    .collect();
+
+                let atom = atom.replace_all_multiple(&indexid_reps);
+                let color_atom = color_atom.replace_all_multiple(&indexid_reps);
+
                 [
-                    atom.replace_all_multiple(&reps),
-                    color_atom.replace_all_multiple(&reps),
+                    atom.replace_all(
+                        &Pattern::parse("indexid(x_)").unwrap(),
+                        Atom::new_var(GS.x_).to_pattern(),
+                        None,
+                        None,
+                    ),
+                    color_atom.replace_all(
+                        &Pattern::parse("indexid(x_)").unwrap(),
+                        Atom::new_var(GS.x_).to_pattern(),
+                        None,
+                        None,
+                    ),
                 ]
             }
         }
@@ -697,18 +760,62 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub fn get_local_edge_position(&self, edge: &Edge, graph: &BareGraph) -> usize {
-        let global_id: usize = graph.edge_name_to_position[&edge.name];
+    pub fn get_local_edge_position(&self, edge: &Edge, graph: &BareGraph, skip_one: bool) -> usize {
+        let global_id = graph.edge_name_to_position[&edge.name];
+        let skip_n = if skip_one { 1 } else { 0 };
+
         self.edges
             .iter()
             .enumerate()
-            .find(|(_, &e)| e == global_id)
+            .filter(|(_, &e)| e == global_id)
+            .nth(skip_n)
             .unwrap()
             .0
     }
 
     pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
         self.vertex_info.generate_vertex_slots(shifts, model)
+    }
+
+    pub fn order_edges_following_interaction(
+        &mut self,
+        edge_id_and_pdgs_of_current_order: Vec<(usize, Arc<Particle>)>,
+    ) -> Result<(), FeynGenError> {
+        let mut new_edges_order = vec![];
+        match self.vertex_info {
+            VertexInfo::InteractonVertexInfo(ref i) => {
+                let mut pdgs_to_position_map =
+                    edge_id_and_pdgs_of_current_order.iter().collect::<Vec<_>>();
+                for p in i.vertex_rule.particles.iter() {
+                    let matched_pos = if let Some(pos) =
+                        pdgs_to_position_map.iter().position(|(_, x)| *x == *p)
+                    {
+                        pos
+                    } else {
+                        return Err(FeynGenError::GenericError(
+                                format!("Could not match some particles vertex ({}). It is incompatible with the ones in the interaction info ({})",
+                                    edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.name.clone()).join(","),
+                                    i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
+                                ),
+                            ));
+                    };
+                    new_edges_order.push(pdgs_to_position_map[matched_pos].0);
+                    pdgs_to_position_map.remove(matched_pos);
+                }
+                if !pdgs_to_position_map.is_empty() {
+                    return Err(FeynGenError::GenericError(
+                        format!("Not all particle of vertex ({}) were matched with the ones in the interaction info ({})",
+                            edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.name.clone()).join(","),
+                            i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
+                        ),
+                    ));
+                }
+                self.edges = new_edges_order;
+                Ok(())
+            }
+
+            VertexInfo::ExternalVertexInfo(_) => Ok(()),
+        }
     }
 
     pub fn from_serializable_vertex(model: &model::Model, vertex: &SerializableVertex) -> Vertex {
@@ -752,7 +859,7 @@ impl Vertex {
             .into_iter()
             .reduce(|acc, tensor| acc.contract(&tensor).unwrap())
             .unwrap()
-            .get_owned(&[])
+            .get_owned([])
             .unwrap()
             .clone();
 
@@ -776,7 +883,7 @@ impl Vertex {
 
         let v = graph.get_vertex_position(&self.name).unwrap();
 
-        let color = color.map_structure(|s| s.to_named(State::get_symbol("Col"), Some(v)));
+        let color = color.map_structure(|s| s.to_named(Symbol::new("Col"), Some(v)));
 
         let color_shadow = color.expanded_shadow().unwrap().cast_structure().into();
 
@@ -882,6 +989,20 @@ impl Graph<PythonState> {
         self.statefull_apply::<_, S, T>(|d, _| d.map_numerator(f))
     }
 
+    pub fn forgetfull_apply<F, S: TypedNumeratorState>(&mut self, mut f: F) -> Result<()>
+    where
+        F: FnMut(DerivedGraphData<S>, &mut BareGraph) -> DerivedGraphData<PythonState>,
+    {
+        if let Some(d) = self.derived_data.take() {
+            self.derived_data = Some(f(
+                DerivedGraphData::<S>::try_from_python(d)?,
+                &mut self.bare_graph,
+            ));
+            Ok(())
+        } else {
+            Err(eyre!("Derived data is None"))
+        }
+    }
     pub fn statefull_apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
         &mut self,
         mut f: F,
@@ -902,6 +1023,31 @@ impl Graph<PythonState> {
             Err(eyre!("Derived data is None"))
         }
     }
+
+    pub fn statefull_apply_res<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+        &mut self,
+        mut f: F,
+    ) -> Result<()>
+    where
+        F: FnMut(
+            DerivedGraphData<S>,
+            &mut BareGraph,
+        ) -> Result<DerivedGraphData<T>, DerivedGraphData<PythonState>>,
+    {
+        if let Some(d) = self.derived_data.take() {
+            let res = f(
+                DerivedGraphData::<S>::try_from_python(d)?,
+                &mut self.bare_graph,
+            );
+            self.derived_data = Some(match res {
+                Ok(r) => r.forget_type(),
+                Err(e) => e,
+            });
+            Ok(())
+        } else {
+            Err(eyre!("Derived data is None"))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -917,6 +1063,7 @@ pub struct BareGraph {
     pub edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub vertex_slots: Vec<VertexSlots>,
     pub shifts: Shifts,
+    pub hedge_representation: HedgeGraph<usize, usize>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
@@ -930,6 +1077,42 @@ pub struct Shifts {
 }
 
 impl BareGraph {
+    pub fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
+        self.generate_lmb_replacement_rules("Q<i>(x<j>__)", "K<i>(x<j>__)", "P<i>(x<j>__)")
+            .iter()
+            .map(|(lhs, rhs)| {
+                (
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
+                    ),
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
+                    ),
+                )
+            })
+            .collect()
+    }
+    pub fn denominator_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
+        self.edges
+            .iter()
+            .map(|e| {
+                let (mom, mass) = e.denominator(self);
+                (
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                    ),
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                    ),
+                )
+            })
+            .collect()
+    }
+
     pub fn external_slots(&self) -> Vec<EdgeSlots<Minkowski>> {
         self.vertices
             .iter()
@@ -1012,15 +1195,27 @@ impl BareGraph {
             .collect()
     }
 
+    pub fn dot_preamble(&self) -> String {
+        [
+            "digraph G {",
+            format!("label=\"{}\";", self.name).as_str(),
+            "noverlap=\"scale\"; layout=\"neato\";",
+            "graph [ fontsize=10 ];",
+            "node [ fontsize=7,shape=circle,margin=0,height=0.01 ];",
+            "edge [ fontsize=5,arrowsize=0.4 ];",
+        ]
+        .join("\n")
+    }
+
     pub fn dot(&self) -> String {
         let mut dot = String::new();
-        dot.push_str("digraph G {\n");
+        dot.push_str(format!("{}\n", self.dot_preamble()).as_str());
         for (i, edge) in self.edges.iter().enumerate() {
             let from = self.vertices[edge.vertices[0]].name.clone();
             let to = self.vertices[edge.vertices[1]].name.clone();
             dot.push_str(&format!(
-                "\"{}\" -> \"{}\" [label=\"name: {} particle:{}  Q({}) {} \"];\n",
-                from, to, edge.name, edge.particle.name, i, edge.edge_type
+                "\"{}\" -> \"{}\" [label=\"{} | {} | Q({}) \"];\n",
+                from, to, edge.name, edge.particle.name, i
             ));
         }
         dot.push_str("}\n");
@@ -1029,7 +1224,7 @@ impl BareGraph {
 
     pub fn dot_lmb(&self) -> String {
         let mut dot = String::new();
-        dot.push_str("digraph G {\n");
+        dot.push_str(format!("{}\n", self.dot_preamble()).as_str());
         for (i, edge) in self.edges.iter().enumerate() {
             let from = self.vertices[edge.vertices[0]].name.clone();
             let to = self.vertices[edge.vertices[1]].name.clone();
@@ -1046,7 +1241,8 @@ impl BareGraph {
 
     pub fn dot_internal(&self) -> String {
         let mut dot = String::new();
-        dot.push_str("digraph G {\n");
+
+        dot.push_str(format!("{}\n", self.dot_preamble()).as_str());
         for edge in &self.edges {
             let from = self.vertices[edge.vertices[0]].name.clone();
             let to = self.vertices[edge.vertices[1]].name.clone();
@@ -1064,7 +1260,7 @@ impl BareGraph {
     pub fn dot_internal_vertices(&self) -> String {
         let mut dot = String::new();
         // let mut seen_edges = HashSet::new();
-        dot.push_str("digraph G {\n");
+        dot.push_str(format!("{}\n", self.dot_preamble()).as_str());
         for (vi, v) in self.vertices.iter().enumerate() {
             dot.push_str(&format!("\"{}\" [label=\"{}: {:?}\"] \n", vi, vi, v.edges));
             for e in &v.edges {
@@ -1077,6 +1273,7 @@ impl BareGraph {
         dot.push_str("}\n");
         dot
     }
+
     pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> BareGraph {
         // First build vertices
         let mut vertices: Vec<Vertex> = vec![];
@@ -1103,6 +1300,7 @@ impl BareGraph {
             edge_name_to_position: HashMap::default(),
             vertex_slots: vec![],
             shifts: Shifts::default(),
+            hedge_representation: HedgeGraphBuilder::new().build(),
         };
 
         // let mut edges: Vec<Edge> = vec![];
@@ -1114,7 +1312,6 @@ impl BareGraph {
             g.edges.push(edge);
         }
 
-        debug!("Loaded {} edges", g.edges.len());
         debug!("Loaded graph: {}", g.dot());
         g.external_edges = g
             .edges
@@ -1139,6 +1336,9 @@ impl BareGraph {
                 .collect();
         }
         g.edge_name_to_position = edge_name_to_position;
+
+        // set the half-edge graph representation
+        g.hedge_representation = HedgeGraph::from(&g);
 
         let mut edge_signatures: Vec<_> = vec![None; graph.edges.len()];
         for (e_name, sig) in graph.edge_signatures.iter() {
@@ -1176,10 +1376,509 @@ impl BareGraph {
 
         // panic!("{:?}", g.edge_name_to_position);
         g.generate_internal_indices_for_edges();
+
         g
     }
 
+    /*
+    pub fn generate_lmb_replacements(&self) {
+        let loop_basis = (0..self.loop_momentum_basis.basis.len())
+            .map(|i_k| Atom::parse(&format!("K{}", i_k)).unwrap())
+            .collect::<Vec<_>>();
+        for (i_e, e) in self.edges.iter().enumerate() {
+            i_e = self.edge_name_to_position.get(e.name).unwrap();
+
+            self.loop_momentum_basis.edge_signatures[i_e]
+                .internal
+                .apply(basis);
+            let mom = Atom::parse(&format!("Q{}", i)).unwrap();
+            let mass = e
+                .particle
+                .mass
+                .expression
+                .clone()
+                .unwrap_or(Atom::new_num(0));
+            self.loop_momentum_basis.edge_signatures[i].external = vec![mom, mass];
+        }
+    }
+    */
+
+    pub fn select_cp_variant(
+        model: &Model,
+        vertex_info: &mut VertexInfo,
+        edge_particles: &[Arc<Particle>],
+    ) -> Result<(), FeynGenError> {
+        let mut vertex_particles = edge_particles.to_vec();
+        vertex_particles.sort();
+        let vertex_rule = match vertex_info {
+            VertexInfo::InteractonVertexInfo(ref mut i) => i.vertex_rule.clone(),
+            VertexInfo::ExternalVertexInfo(_) => return Ok(()),
+        };
+        let mut this_interaction_particles = vertex_rule.particles.clone();
+        this_interaction_particles.sort();
+        if this_interaction_particles == vertex_particles {
+            Ok(())
+        } else {
+            let mut this_interaction_particles_cp_conjugate = this_interaction_particles
+                .iter()
+                .map(|p| p.get_anti_particle(model))
+                .collect::<Vec<_>>();
+            this_interaction_particles_cp_conjugate.sort();
+            if this_interaction_particles_cp_conjugate != vertex_particles {
+                Err(FeynGenError::GenericError(
+                    format!("Neither the vertex rule currently assigned nor its CP conjugate connect particles that match the PDG of the edges connected to this node: ({}) != ({})",
+                        this_interaction_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                    ),
+                ))
+            } else if let Some(vertex_rules) = model
+                .particle_set_to_vertex_rules_map
+                .get(&this_interaction_particles_cp_conjugate)
+            {
+                let this_rule_coupling_orders = vertex_rule.get_coupling_orders();
+                let candidates = vertex_rules
+                    .iter()
+                    .filter_map(|vr| {
+                        let vr_coupling_orders = vr.get_coupling_orders();
+                        if vr_coupling_orders == this_rule_coupling_orders {
+                            Some(vr.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                if candidates.is_empty() {
+                    return Err(FeynGenError::GenericError(
+                        format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). None have matching couplings orders. Consider generating without the option '--symmetrize_left_right_states'.",
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                        ),
+                    ));
+                } else if candidates.len() > 1 {
+                    return Err(FeynGenError::GenericError(
+                        format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Multiple candidate interactions have matching coupling orders: {}. Consider generating without the option '--symmetrize_left_right_states'.",
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                            candidates.iter().map(|vr| vr.name.clone()).collect::<Vec<_>>().join(", ")
+                        ),
+                    ));
+                } else {
+                    *vertex_info = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+                        vertex_rule: candidates[0].clone(),
+                    });
+                    Ok(())
+                }
+            } else {
+                return Err(FeynGenError::GenericError(
+                        format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Consider generating without the option '--symmetrize_left_right_states'.",
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                        ),
+                    ));
+            }
+        }
+    }
+
+    pub fn from_symbolica_graph(
+        model: &model::Model,
+        name: String,
+        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        symmetry_factor: String,
+        external_connections: Vec<(Option<usize>, Option<usize>)>,
+        forced_lmb: Option<Vec<SmartString<LazyCompact>>>,
+    ) -> Result<BareGraph, FeynGenError> {
+        let graph_nodes = graph.nodes().to_owned();
+        let mut graph_edges = graph.edges().to_owned();
+
+        // Useful adjacency matrix matrix
+        let mut graph_adj_matrix: HashMap<usize, Vec<usize>> = HashMap::default();
+        for e in graph_edges.iter() {
+            graph_adj_matrix
+                .entry(e.vertices.0)
+                .or_default()
+                .push(e.vertices.1);
+            graph_adj_matrix
+                .entry(e.vertices.1)
+                .or_default()
+                .push(e.vertices.0);
+        }
+        // Fix external edge directions, as for now *particle* fermion flow is observed, but we instead want:
+        // > incoming antiparticles to be actually incoming (*particle* fermion flow would be outgoing)
+        // > outgoing antiparticles to be actually outgoing (*particle* fermion flow would be incoming)
+        let mut external_nodes: HashMap<usize, (usize, EdgeType, SmartString<LazyCompact>)> =
+            HashMap::default();
+        let mut external_edges: HashMap<usize, (EdgeType, SmartString<LazyCompact>)> =
+            HashMap::default();
+        let mut external_directions: HashMap<usize, EdgeType> = HashMap::default();
+        for connection in external_connections.iter() {
+            if let Some(leg_id) = connection.0 {
+                external_directions.insert(leg_id, EdgeType::Incoming);
+            }
+            if let Some(leg_id) = connection.1 {
+                external_directions.insert(leg_id, EdgeType::Outgoing);
+            }
+        }
+        for (i_n, n) in graph_nodes.iter().enumerate() {
+            if n.edges.len() == 1 {
+                let external_edge = &mut graph_edges[n.edges[0]];
+                let mut particle = model.get_particle_from_pdg(external_edge.data.pdg);
+                let edge_type_from_symbolica = if graph_adj_matrix
+                    .get(&external_edge.vertices.0)
+                    .unwrap()
+                    .len()
+                    == 1
+                {
+                    EdgeType::Incoming
+                } else if graph_adj_matrix
+                    .get(&external_edge.vertices.1)
+                    .unwrap()
+                    .len()
+                    == 1
+                {
+                    EdgeType::Outgoing
+                } else {
+                    panic!("Graph inconsistency in Feyngen.")
+                };
+                let physical_edge_type = *external_directions
+                    .get(&(n.data.external_tag as usize))
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "External edge direction not specified for external leg {} in Feyngen.",
+                            n.data.external_tag
+                        )
+                    });
+                if edge_type_from_symbolica != physical_edge_type {
+                    external_edge.vertices = (external_edge.vertices.1, external_edge.vertices.0);
+                    particle = particle.get_anti_particle(model);
+                }
+                assert!(
+                    n.data.external_tag > 0,
+                    "External tag is not positive in Feyngen.",
+                );
+                external_nodes.insert(
+                    n.data.external_tag as usize,
+                    (i_n, physical_edge_type, particle.name.clone()),
+                );
+                external_edges.insert(n.edges[0], (physical_edge_type, particle.name.clone()));
+            }
+        }
+        // First build vertices
+        let mut vertices: Vec<Vertex> = vec![];
+        let mut vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
+            HashMap::default();
+        // println!(
+        //     "Symbolica graph edges = {:?}",
+        //     graph
+        //         .edges()
+        //         .iter()
+        //         .map(|e| format!("{:?} | {}", e.vertices, e.data))
+        //         .collect::<Vec<_>>()
+        // );
+        // println!(
+        //     "Symbolica graph nodes = {:?}",
+        //     graph
+        //         .nodes()
+        //         .iter()
+        //         .map(|n| format!("{:?} | {} | {}", n.edges.clone(), n.data.0, n.data.1))
+        //         .collect::<Vec<_>>()
+        // );
+        for (i_n, node) in graph_nodes.iter().enumerate() {
+            let vertex_info = if node.data.vertex_rule.name == "external" {
+                let (_external_node_position, external_direction, external_particle_name) =
+                    external_nodes
+                        .get(&(node.data.external_tag as usize))
+                        .unwrap();
+                SerializableVertexInfo::ExternalVertexInfo(SerializableExternalVertexInfo {
+                    direction: *external_direction,
+                    particle: external_particle_name.clone(),
+                })
+            } else {
+                if node.data.external_tag != 0 {
+                    panic!("Internal vertex with non-zero integer colour data found in Feyngen.")
+                }
+
+                SerializableVertexInfo::InteractonVertexInfo(SerializableInteractionVertexInfo {
+                    vertex_rule: node.data.vertex_rule.name.clone(), //node.data.vertex_rule.name.clone(),
+                })
+            };
+            let vertex = Vertex::from_serializable_vertex(
+                model,
+                &SerializableVertex {
+                    name: format!("v{}", i_n).into(),
+                    vertex_info,
+                    edges: vec![],
+                },
+            );
+            vertex_name_to_position.insert(vertex.name.clone(), vertices.len());
+            vertices.push(vertex);
+        }
+
+        let mut g = BareGraph {
+            name: name.into(),
+            vertices,
+            edges: vec![],
+            external_edges: vec![],
+            overall_factor: symmetry_factor,
+            external_connections: vec![],
+            loop_momentum_basis: LoopMomentumBasis {
+                basis: vec![],
+                edge_signatures: vec![],
+            },
+            vertex_name_to_position: vertex_name_to_position.clone(),
+            edge_name_to_position: HashMap::default(),
+            vertex_slots: vec![],
+            shifts: Shifts::default(),
+            hedge_representation: HedgeGraphBuilder::new().build(),
+        };
+
+        let mut i_edge_internal = 0;
+        let mut symbolica_edge_position_to_edge_name: HashMap<usize, SmartString<LazyCompact>> =
+            HashMap::default();
+        let mut edges_sorting_priority: HashMap<SmartString<LazyCompact>, usize> =
+            HashMap::default();
+        for (i_e, edge) in graph_edges.iter().enumerate() {
+            let (edge_type, particle) =
+                if let Some((edge_direction, particle_name)) = external_edges.get(&i_e) {
+                    (*edge_direction, model.get_particle(particle_name))
+                } else {
+                    (
+                        EdgeType::Virtual,
+                        model.get_particle_from_pdg(edge.data.pdg),
+                    )
+                };
+
+            let propagator: Arc<model::Propagator> =
+                model.get_propagator_for_particle(&particle.name);
+
+            let (start_vertex, end_vertex) = (edge.vertices.0, edge.vertices.1);
+
+            let name = match edge_type {
+                EdgeType::Incoming => {
+                    edges_sorting_priority.insert(
+                        format!("p{}", graph_nodes[edge.vertices.0].data.external_tag).into(),
+                        graph_nodes[edge.vertices.0].data.external_tag as usize,
+                    );
+                    format!("p{}", graph_nodes[edge.vertices.0].data.external_tag)
+                }
+                EdgeType::Outgoing => {
+                    edges_sorting_priority.insert(
+                        format!("p{}", graph_nodes[edge.vertices.1].data.external_tag).into(),
+                        graph_nodes[edge.vertices.1].data.external_tag as usize,
+                    );
+                    format!("p{}", graph_nodes[edge.vertices.1].data.external_tag)
+                }
+                _ => {
+                    i_edge_internal += 1;
+                    edges_sorting_priority.insert(
+                        format!("q{}", i_edge_internal).into(),
+                        i_edge_internal + external_edges.len() + 1,
+                    );
+                    format!("q{}", i_edge_internal)
+                }
+            };
+            let edge = Edge {
+                name: name.clone().into(),
+                edge_type,
+                particle,
+                propagator,
+                vertices: [start_vertex, end_vertex],
+                internal_index: vec![],
+            };
+            symbolica_edge_position_to_edge_name.insert(i_e, name.into());
+            g.edges.push(edge);
+        }
+
+        // Sort edges with external first according to their definition in the process
+        g.edges.sort_by(|a, b| {
+            let a_priority = edges_sorting_priority.get(&a.name).unwrap();
+            let b_priority = edges_sorting_priority.get(&b.name).unwrap();
+            a_priority.cmp(b_priority)
+        });
+
+        g.edge_name_to_position = HashMap::default();
+        for (i_e, e) in g.edges.iter().enumerate() {
+            g.edge_name_to_position.insert(e.name.clone(), i_e);
+        }
+
+        //debug!("Loaded graph: {}", g.dot());
+        g.external_edges = g
+            .edges
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| {
+                if e.edge_type == EdgeType::Incoming || e.edge_type == EdgeType::Outgoing {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (i_v, (vertex, node)) in g.vertices.iter_mut().zip(graph_nodes.iter()).enumerate() {
+            vertex.edges = node
+                .edges
+                .iter()
+                .map(|i_e| {
+                    g.edge_name_to_position[symbolica_edge_position_to_edge_name.get(i_e).unwrap()]
+                })
+                .collect::<Vec<_>>();
+            // We must honour the ordering given by the UFO interaction vertex info here
+            let mut current_vertex_edge_order = vec![];
+            for e_pos in &vertex.edges {
+                let edge = &g.edges[*e_pos];
+                // For a self-loop, the particle must be counted twice.
+                if edge.vertices[0] == edge.vertices[1] {
+                    if !edge.particle.is_self_antiparticle() {
+                        // return Err(FeynGenError::GenericError(format!(
+                        //     "Self-loop of edge {} *must* be a self-antiparticle",
+                        //     edge.name
+                        // )));
+                        current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
+                        current_vertex_edge_order
+                            .push((*e_pos, edge.particle.get_anti_particle(model).clone()));
+                    } else {
+                        current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
+                        current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
+                    }
+                } else if edge.vertices[1] == i_v {
+                    current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
+                } else if edge.vertices[0] == i_v {
+                    current_vertex_edge_order
+                        .push((*e_pos, edge.particle.get_anti_particle(model).clone()));
+                } else {
+                    return Err(FeynGenError::GenericError(format!(
+                        "Edge {} is not connected to vertex {}",
+                        edge.name, vertex.name
+                    )));
+                }
+            }
+            // When the graphs have been generated with --symmetrize_left_right_states, it may be that
+            // the representative graphs contains the CP conjugate of the vertex rule.
+            // In this case, we must select the correct vertex rule.
+            // You can test this by generating the following process:
+            //   generate a > d d~ [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling
+            // where you will see that the left-right symmetrization will turn the original vertex (d~,u,W-) into (u~,d,W+)
+            // so that we must select the correct CP correspondant vertex rule.
+            // Carefully keeping track of the CP variant is important for capturing the right coupling phase in case of an complex CKM matrix for instance.
+            BareGraph::select_cp_variant(
+                model,
+                &mut vertex.vertex_info,
+                &current_vertex_edge_order
+                    .iter()
+                    .map(|(_, p)| p.clone())
+                    .collect::<Vec<_>>(),
+            )?;
+            vertex.order_edges_following_interaction(current_vertex_edge_order)?;
+        }
+
+        let bare_graph_external_connections = external_connections
+            .iter()
+            .map(|(v1, v2)| {
+                (
+                    v1.map(|leg_id| {
+                        assert!(
+                            g.edges[g.external_edges[leg_id - 1]].edge_type == EdgeType::Incoming
+                        );
+                        g.edges[g.external_edges[leg_id - 1]].vertices[0]
+                    }),
+                    v2.map(|leg_id| {
+                        assert!(
+                            g.edges[g.external_edges[leg_id - 1]].edge_type == EdgeType::Outgoing
+                        );
+                        g.edges[g.external_edges[leg_id - 1]].vertices[1]
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+        g.external_connections = bare_graph_external_connections;
+
+        // Set the half-edge graph representation
+        g.hedge_representation = HedgeGraph::from(&g);
+
+        g.set_loop_momentum_basis(&forced_lmb)?;
+
+        g.generate_vertex_slots(model);
+
+        // panic!("{:?}", g.edge_name_to_position);
+        g.generate_internal_indices_for_edges();
+
+        Ok(g)
+    }
+
+    pub fn set_loop_momentum_basis(
+        &mut self,
+        forced_lmb: &Option<Vec<SmartString<LazyCompact>>>,
+    ) -> Result<(), FeynGenError> {
+        let lmb_basis = if let Some(user_selected_lmb) = forced_lmb {
+            let mut user_basis = vec![];
+            for e_lmb in user_selected_lmb {
+                if let Some(e_pos) = self.edge_name_to_position.get(e_lmb) {
+                    user_basis.push(*e_pos);
+                } else {
+                    return Err(FeynGenError::LoopMomentumBasisError(format!(
+                        "Specified loop momentum basis edge named '{}' not found in the graph.",
+                        e_lmb
+                    )));
+                }
+            }
+            user_basis
+        } else {
+            // !g.hedge_representation
+            //     .cycle_basis().1.
+            //     .iter()
+            //     .map(|cycle| {
+            //         *g.hedge_representation
+            //             .iter_egde_data(&cycle.internal_graph)
+            //             .next()
+            //             .unwrap()
+            //     })
+            //     .collect::<Vec<_>>()
+            let spanning_tree = self.hedge_representation.cycle_basis().1;
+            // println!("hedge graph: \n{}", g.hedge_representation.base_dot());
+            // let spanning_tree_half_edge_node = sefl
+            //     .hedge_representation
+            //     .nesting_node_from_subgraph(spanning_tree.clone());
+            // println!(
+            //     "spanning tree: \n{}",
+            //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
+            // );
+            self.hedge_representation
+                .iter_internal_edge_data(&spanning_tree.tree.complement(&self.hedge_representation))
+                .map(|e| *e.data.unwrap())
+                .collect::<Vec<_>>()
+        };
+        debug!(
+            "Loop momentum basis edge positions selected: {:?}",
+            lmb_basis
+        );
+        debug!(
+            "Loop momentum basis selected: {}",
+            lmb_basis
+                .iter()
+                .map(|i_e| self.edges[*i_e].clone().name)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let mut lmb: LoopMomentumBasis = LoopMomentumBasis {
+            basis: lmb_basis,
+            edge_signatures: vec![],
+        };
+        lmb.set_edge_signatures(self).map_err(|e| {
+            FeynGenError::LoopMomentumBasisError(format!(
+                "{} | Error: {}",
+                lmb.basis
+                    .iter()
+                    .map(|i_e| format!("{}", self.edges[*i_e].name))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                e
+            ))
+        })?;
+        self.loop_momentum_basis = lmb;
+        Ok(())
+    }
+
     pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
+        if self.external_edges.is_empty() {
+            return Ok(vec![]);
+        }
         let last = self.external_edges.len() - 1;
         let mut external_vertices_in_external_edge_order = vec![];
         for (i, ext) in self.external_edges.iter().enumerate() {
@@ -1216,6 +1915,12 @@ impl BareGraph {
                     ));
                 }
             }
+
+            // Skip verifications if signatures have not yet been assigned
+            // if self.loop_momentum_basis.edge_signatures.is_empty() {
+            //     continue;
+            // }
+
             for s in &self.loop_momentum_basis.edge_signatures[*ext].internal {
                 if !s.is_zero() {
                     return Err(eyre!(
@@ -1294,6 +1999,9 @@ impl BareGraph {
         Ok(external_vertices_in_external_edge_order)
     }
 
+    /// Generates the index ids needed based on the vertex rules.
+    /// A first pass, passing around the shifts, is done to generate the vertex slots, that are seen by the edges.
+    /// A second pass is done to generate the internal indices.
     fn generate_vertex_slots(&mut self, model: &Model) {
         let initial_shifts = Shifts {
             spin: 0,
@@ -1336,9 +2044,11 @@ impl BareGraph {
     }
 
     fn generate_internal_indices_for_edges(&mut self) {
-        self.shifts.lorentz = self.shifts.spin + self.shifts.color;
-        for (i, edge) in self.edges.iter_mut().enumerate() {
-            edge.internal_index = vec![(self.shifts.lorentz + i + 1).into()];
+        self.shifts.lorentzdummy =
+            self.shifts.spin + self.shifts.lorentzdummy + self.shifts.lorentz;
+        for edge in self.edges.iter_mut() {
+            self.shifts.lorentzdummy += 1;
+            edge.internal_index = vec![(self.shifts.lorentzdummy + 1).into()];
         }
     }
 
@@ -1474,32 +2184,71 @@ impl BareGraph {
         self.edges.iter().map(|e| e.edge_type).collect()
     }
 
-    pub fn generate_lmb_replacement_rules(&self) -> Vec<(Atom, Atom)> {
-        self.loop_momentum_basis_replacement_rule(&self.loop_momentum_basis)
+    pub fn generate_lmb_replacement_rules(
+        &self,
+        q_format: &str,
+        k_format: &str,
+        p_format: &str,
+    ) -> Vec<(Atom, Atom)> {
+        self.loop_momentum_basis_replacement_rule(
+            &self.loop_momentum_basis,
+            q_format,
+            k_format,
+            p_format,
+        )
     }
 
-    fn loop_momentum_basis_replacement_rule(&self, lmb: &LoopMomentumBasis) -> Vec<(Atom, Atom)> {
+    fn loop_momentum_basis_replacement_rule(
+        &self,
+        lmb: &LoopMomentumBasis,
+        q_format: &str,
+        k_format: &str,
+        p_format: &str,
+    ) -> Vec<(Atom, Atom)> {
         let mut rule = vec![];
 
         for (i, signature) in lmb.edge_signatures.iter().enumerate() {
             rule.push((
-                Atom::parse(&format!("Q{}(x{}__)", i, i)).unwrap(),
-                self.replacement_rule_from_signature(i, signature),
+                Atom::parse(
+                    &q_format
+                        .replace("<i>", &format!("{}", i))
+                        .replace("<j>", &format!("{}", i)),
+                )
+                .unwrap(),
+                self.replacement_rule_from_signature(i, signature, k_format, p_format),
             ));
         }
 
         rule
     }
 
-    fn replacement_rule_from_signature(&self, index: usize, signature: &LoopExtSignature) -> Atom {
+    fn replacement_rule_from_signature(
+        &self,
+        index: usize,
+        signature: &LoopExtSignature,
+        k_format: &str,
+        p_format: &str,
+    ) -> Atom {
         let mut acc = Atom::new_num(0);
         for (i_l, &sign) in signature.internal.iter().enumerate() {
-            let k = sign * Atom::parse(&format!("K{}(x{}__)", i_l, index)).unwrap();
+            let k = sign
+                * Atom::parse(
+                    &k_format
+                        .replace("<i>", &format!("{}", i_l))
+                        .replace("<j>", &format!("{}", index)),
+                )
+                .unwrap();
             acc = &acc + &k;
         }
 
         for (i_e, &sign) in signature.external.iter().enumerate() {
-            let p = sign * Atom::parse(&format!("P{}(x{}__)", i_e, index)).unwrap();
+            let p = sign
+                * Atom::parse(
+                    &p_format
+                        .replace("<i>", &format!("{}", i_e))
+                        .replace("<j>", &format!("{}", index)),
+                )
+                .unwrap();
             acc = &acc + &p;
         }
         acc
@@ -1639,26 +2388,30 @@ impl BareGraph {
             .collect_vec();
 
         // find the external leg which does not appear in it's own signature
-        let (_, (dep_mom, _)) = external_edges
-            .iter()
-            .enumerate()
-            .find(|(external_index, (index, _edge))| {
-                self.loop_momentum_basis.edge_signatures[*index].external[*external_index]
-                    .is_positive()
-                    .not()
-            })
-            .unwrap_or_else(|| panic!("could not determine dependent momenta"));
+        if let Some((_, (dep_mom, _))) =
+            external_edges
+                .iter()
+                .enumerate()
+                .find(|(external_index, (index, _edge))| {
+                    self.loop_momentum_basis.edge_signatures[*index].external[*external_index]
+                        .is_positive()
+                        .not()
+                })
+        {
+            let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].external;
 
-        let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].external;
+            let external_shift = external_edges
+                .iter()
+                .zip(dep_mom_signature.iter())
+                .filter(|(_external_edge, dep_mom_sign)| dep_mom_sign.is_sign())
+                .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
+                .collect();
 
-        let external_shift = external_edges
-            .iter()
-            .zip(dep_mom_signature.iter())
-            .filter(|(_external_edge, dep_mom_sign)| dep_mom_sign.is_sign())
-            .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
-            .collect();
-
-        (*dep_mom, external_shift)
+            (*dep_mom, external_shift)
+        } else {
+            // hack for vacuum diagrams
+            (usize::MAX, ExternalShift::new())
+        }
     }
 
     pub fn generate_loop_momentum_bases(&self) -> Vec<LoopMomentumBasis> {
@@ -1796,13 +2549,11 @@ impl BareGraph {
         &mut self,
         settings: &TropicalSubgraphTableSettings,
     ) -> Result<SampleGenerator<3>> {
-        let dimension = 3;
         let num_virtual_loop_edges = self.get_loop_edges_iterator().count();
         let num_loops = self.loop_momentum_basis.basis.len();
         let target_omega = settings.target_omega;
 
-        let weight =
-            (target_omega + (dimension * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
+        let weight = (target_omega + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
 
         debug!(
             "Building tropical subgraph table with all edge weights set to: {}",
@@ -1875,19 +2626,20 @@ impl BareGraph {
             .collect_vec();
 
         tropical_graph
-            .build_sampler(loop_part, dimension)
+            .build_sampler(loop_part)
             .map_err(|e| eyre!(e))
     }
 
-    pub fn load_derived_data<NumState: NumeratorState + DeserializeOwned>(
+    pub fn load_derived_data<NumState: NumeratorState>(
         self,
         model: &Model,
         path: &Path,
         settings: &Settings,
     ) -> Result<Graph<NumState>, Report> {
         let derived_data_path = path.join(format!("derived_data_{}.bin", self.name.as_str()));
+        let state_path = path.join("state.bin");
         debug!("Loading derived data from {:?}", derived_data_path);
-        let mut derived_data = DerivedGraphData::load_from_path(&derived_data_path)?;
+        let mut derived_data = DerivedGraphData::load_from_path(&derived_data_path, &state_path)?;
         debug!("updating model in numerator");
 
         derived_data.numerator.update_model(model)?;
@@ -1934,6 +2686,7 @@ impl Graph<UnInit> {
                 export_path,
                 export_settings,
             )
+            .unwrap()
         });
         Graph {
             bare_graph: self.bare_graph,
@@ -2153,15 +2906,28 @@ impl<S: NumeratorState> Graph<S> {
     pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
         let table = self.bare_graph.generate_tropical_subgraph_table(settings);
 
-        if let Ok(table) = table {
-            debug!("min dod: {}", table.get_smallest_dod());
-            if let Some(d) = &mut self.derived_data {
-                d.tropical_subgraph_table = Some(table);
+        match table {
+            Ok(table) => {
+                debug!("min dod: {}", table.get_smallest_dod());
+                if let Some(d) = &mut self.derived_data {
+                    d.tropical_subgraph_table = Some(table);
+                } else {
+                    panic!("Derived data not initialized")
+                }
             }
-        } else if settings.panic_on_fail {
-            panic!("Tropical subgraph table generation failed 🥥");
-        } else {
-            warn!("Tropical subgraph table generation failed 🥥");
+            Err(error) => {
+                if settings.panic_on_fail {
+                    panic!(
+                        "Tropical subgraph table generation failed for graph: {} 🥥\n error: {:?}",
+                        self.bare_graph.name, error
+                    );
+                } else {
+                    warn!(
+                        "Tropical subgraph table generation failed for graph: {} 🥥\n error: {:?}",
+                        self.bare_graph.name, error
+                    );
+                }
+            }
         }
     }
 
@@ -2203,7 +2969,7 @@ impl Graph<Evaluators> {
         external_mom: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         self.derived_data.as_mut().unwrap().evaluate_fourd_expr(
             loop_mom,
             external_mom,
@@ -2262,7 +3028,7 @@ impl Graph<Evaluators> {
         &mut self,
         sample: &DefaultSample<T>,
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         self.derived_data
             .as_mut()
             .unwrap()
@@ -2362,10 +3128,16 @@ pub struct DerivedGraphData<NumState> {
 
 impl DerivedGraphData<PythonState> {
     pub fn load_python_from_path<S: NumeratorState>(path: &Path) -> Result<Self, Report> {
+        let mut source = std::fs::File::open(path)?;
+        let mut statemap = State::import(&mut source, None)?;
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
-                let derived_data: DerivedGraphData<S> =
-                    bincode::decode_from_slice(&derived_data_bytes, bincode::config::standard())?.0;
+                let derived_data: DerivedGraphData<S> = bincode::decode_from_slice_with_context(
+                    &derived_data_bytes,
+                    bincode::config::standard(),
+                    &mut statemap,
+                )?
+                .0;
                 Ok(derived_data.forget_type())
             }
             Err(_) => {
@@ -2455,7 +3227,7 @@ impl DerivedGraphData<Evaluators> {
         polarizations: &[Polarization<Complex<F<T>>>],
         settings: &Settings,
         bare_graph: &BareGraph,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let emr = bare_graph
             .loop_momentum_basis
             .edge_signatures
@@ -2491,7 +3263,7 @@ impl DerivedGraphData<Evaluators> {
         sample: &DefaultSample<T>,
         settings: &Settings,
         bare_graph: &BareGraph,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
@@ -2515,7 +3287,7 @@ impl DerivedGraphData<Evaluators> {
         settings: &Settings,
         lmb: &LoopMomentumBasis,
         bare_graph: &BareGraph,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
@@ -2540,7 +3312,7 @@ impl DerivedGraphData<Evaluators> {
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let one = sample.one();
         let zero = one.zero();
         let ni = Complex::new(zero.clone(), -one.clone());
@@ -2612,7 +3384,7 @@ impl DerivedGraphData<Evaluators> {
         sample: &BareSample<T>,
         tag: Option<Uuid>,
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let emr = graph.cff_emr_from_lmb(sample, &graph.loop_momentum_basis);
 
         let rep = self
@@ -2678,7 +3450,7 @@ impl DerivedGraphData<Evaluators> {
         tag: Option<Uuid>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
-    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, AtomStructure>> {
+    ) -> RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>>> {
         let lmb = lmb_specification.basis_from_derived(self);
         let emr = graph.cff_emr_from_lmb(sample, lmb);
 
@@ -2693,7 +3465,7 @@ impl DerivedGraphData<Evaluators> {
         graph: &BareGraph,
         sample: &DefaultSample<T>,
         settings: &Settings,
-    ) -> DataTensor<Complex<F<T>>, AtomStructure> {
+    ) -> DataTensor<Complex<F<T>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         self.evaluate_cff_expression_in_lmb(graph, sample, &lmb_specification, settings)
     }
@@ -2713,6 +3485,107 @@ impl DerivedGraphData<UnInit> {
         }
     }
 
+    pub fn process_numerator_no_eval(
+        self,
+        base_graph: &mut BareGraph,
+        contraction_settings: ContractionSettings<Rational>,
+        export_path: PathBuf,
+        export_settings: &ExportSettings,
+    ) -> Result<DerivedGraphData<PythonState>> {
+        let expr_path = export_path.join("expressions");
+        std::fs::create_dir_all(&expr_path)?;
+        let extra_info = self.generate_extra_info(export_path);
+
+        let dump_numerator = export_settings.numerator_settings.dump_expression;
+
+        if let Some(n) = dump_numerator {
+            let opts = PrintOptions::from(n);
+            let dens: Vec<(String, String)> = base_graph.denominator_print(opts);
+            let rep_rules: Vec<(String, String)> = base_graph.rep_rules_print(opts);
+
+            fs::write(
+                expr_path.join(format!("{}_model_dens.json", base_graph.name)),
+                serde_json::to_string_pretty(&(rep_rules, dens)).unwrap(),
+            )?;
+        }
+        let color_simplified =
+            if let Some(global) = &export_settings.numerator_settings.global_numerator {
+                debug!("Using global numerator: {}", global);
+                let global = Atom::parse(global).unwrap();
+                self.map_numerator(|n| {
+                    let n = n.from_global(
+                        global,
+                        // base_graph,
+                        &export_settings.numerator_settings.global_prefactor,
+                    );
+
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+
+                    n.color_simplify()
+                    // .color_project()
+                })
+            } else {
+                self.map_numerator(|n| {
+                    let n = n.from_graph(
+                        base_graph,
+                        &export_settings.numerator_settings.global_prefactor,
+                    );
+
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.color_simplify()
+                })
+                //.color_project())
+            };
+        Ok(match &export_settings.numerator_settings.gamma_algebra {
+            GammaAlgebraMode::Symbolic => color_simplified
+                .map_numerator_res(|n| {
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    let n = n.gamma_simplify();
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    let n = n.parse().contract(contraction_settings)?;
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    Result::<_, Report>::Ok(n)
+                })?
+                .forget_type(),
+            GammaAlgebraMode::Concrete => match &export_settings.numerator_settings.parse_mode {
+                NumeratorParseMode::Polynomial => color_simplified
+                    .map_numerator_res(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        let n = n.parse_poly(base_graph).contract()?;
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        Result::<_, Report>::Ok(n)
+                    })?
+                    .forget_type(),
+                NumeratorParseMode::Direct => color_simplified
+                    .map_numerator_res(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        let n = n.parse().contract(contraction_settings)?;
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        Result::<_, Report>::Ok(n)
+                    })?
+                    .forget_type(),
+            },
+        })
+    }
+
     pub fn process_numerator(
         self,
         base_graph: &mut BareGraph,
@@ -2720,50 +3593,102 @@ impl DerivedGraphData<UnInit> {
         contraction_settings: ContractionSettings<Rational>,
         export_path: PathBuf,
         export_settings: &ExportSettings,
-    ) -> DerivedGraphData<Evaluators> {
+    ) -> Result<DerivedGraphData<Evaluators>> {
+        let expr_path = export_path.join("expressions");
+        std::fs::create_dir_all(&expr_path)?;
         let extra_info = self.generate_extra_info(export_path);
+
+        let dump_numerator = export_settings.numerator_settings.dump_expression;
+
+        if let Some(n) = dump_numerator {
+            let opts = PrintOptions::from(n);
+            let dens: Vec<(String, String)> = base_graph.denominator_print(opts);
+            let rep_rules: Vec<(String, String)> = base_graph.rep_rules_print(opts);
+
+            fs::write(
+                expr_path.join(format!("{}_model_dens.json", base_graph.name)),
+                serde_json::to_string_pretty(&(rep_rules, dens)).unwrap(),
+            )?;
+        }
 
         let color_simplified =
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
                 debug!("Using global numerator: {}", global);
                 let global = Atom::parse(global).unwrap();
                 self.map_numerator(|n| {
-                    n.from_global(
+                    let n = n.from_global(
                         global,
                         // base_graph,
-                        export_settings.numerator_settings.global_prefactor.as_ref(),
-                    )
-                    .color_simplify()
+                        &export_settings.numerator_settings.global_prefactor,
+                    );
+
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.color_simplify()
                     // .color_project()
                 })
             } else {
                 self.map_numerator(|n| {
-                    n.from_graph(
+                    let n = n.from_graph(
                         base_graph,
-                        export_settings.numerator_settings.global_prefactor.as_ref(),
-                    )
-                    .color_simplify()
+                        &export_settings.numerator_settings.global_prefactor,
+                    );
+
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.color_simplify()
                 })
                 //.color_project())
             };
-
-        let parsed = match &export_settings.numerator_settings.gamma_algebra {
-            GammaAlgebraMode::Symbolic => {
-                color_simplified.map_numerator(|n| n.gamma_simplify().parse())
-            }
-            GammaAlgebraMode::Concrete => color_simplified.map_numerator(|n| n.parse()),
-        };
-
-        parsed
-            .map_numerator_res(|n| {
-                Result::<_, Report>::Ok(n.contract(contraction_settings)?.generate_evaluators(
-                    model,
-                    base_graph,
-                    &extra_info,
-                    export_settings,
-                ))
-            })
-            .unwrap()
+        Ok(match &export_settings.numerator_settings.gamma_algebra {
+            GammaAlgebraMode::Symbolic => color_simplified
+                .map_numerator_res(|n| {
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    let n = n.gamma_simplify();
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.parse().contract(contraction_settings)
+                })?
+                .map_numerator(|n| {
+                    if let Some(numerator_format) = dump_numerator {
+                        n.write(&extra_info, base_graph, numerator_format).unwrap();
+                    }
+                    n.generate_evaluators(model, base_graph, &extra_info, export_settings)
+                }),
+            GammaAlgebraMode::Concrete => match &export_settings.numerator_settings.parse_mode {
+                NumeratorParseMode::Polynomial => color_simplified
+                    .map_numerator_res(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        n.parse_poly(base_graph).contract()
+                    })?
+                    .map_numerator(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        n.generate_evaluators(model, base_graph, &extra_info, export_settings)
+                    }),
+                NumeratorParseMode::Direct => color_simplified
+                    .map_numerator_res(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        n.parse().contract(contraction_settings)
+                    })?
+                    .map_numerator(|n| {
+                        if let Some(numerator_format) = dump_numerator {
+                            n.write(&extra_info, base_graph, numerator_format).unwrap();
+                        }
+                        n.generate_evaluators(model, base_graph, &extra_info, export_settings)
+                    }),
+            },
+        })
     }
 
     fn apply_feynman_rules(
@@ -2774,7 +3699,7 @@ impl DerivedGraphData<UnInit> {
         self.map_numerator(|n| {
             n.from_graph(
                 base_graph,
-                export_settings.numerator_settings.global_prefactor.as_ref(),
+                &export_settings.numerator_settings.global_prefactor,
             )
         })
     }
@@ -2855,17 +3780,23 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
         params
     }
 
-    pub fn load_from_path(path: &Path) -> Result<Self, Report> {
-        match std::fs::read(path) {
+    pub fn load_from_path(derived_data_path: &Path, state_path: &Path) -> Result<Self, Report> {
+        let mut source = std::fs::File::open(state_path)?;
+        let mut statemap = State::import(&mut source, None)?;
+        match std::fs::read(derived_data_path) {
             Ok(derived_data_bytes) => {
-                let derived_data: Self =
-                    bincode::decode_from_slice(&derived_data_bytes, bincode::config::standard())?.0;
+                let derived_data: Self = bincode::decode_from_slice_with_context(
+                    &derived_data_bytes,
+                    bincode::config::standard(),
+                    &mut statemap,
+                )?
+                .0;
                 Ok(derived_data)
             }
             Err(_) => {
                 Err(eyre!(
                     "Could not read derived data from path: {}",
-                    path.display()
+                    derived_data_path.display()
                 ))
                 // Ok(Self::new_empty())
             }
@@ -3022,7 +3953,173 @@ impl LoopMomentumBasis {
             atom = &atom + &p;
         }
 
-        atom.into_pattern()
+        atom.to_pattern()
+    }
+
+    pub fn set_edge_signatures(&mut self, graph: &BareGraph) -> Result<(), Report> {
+        // Initialize signature
+        self.edge_signatures = vec![
+            LoopExtSignature {
+                internal: Signature(vec![SignOrZero::Zero; self.basis.len()]),
+                external: Signature(vec![SignOrZero::Zero; graph.external_edges.len()])
+            };
+            graph.edges.len()
+        ];
+
+        // Build the adjacency list excluding vetoed edges
+        let mut adj_list: HashMap<usize, Vec<(usize, usize, bool)>> = HashMap::new();
+        for (edge_index, edge) in graph.edges.iter().enumerate() {
+            if self.basis.contains(&edge_index) {
+                continue;
+            }
+            let (u, v) = (edge.vertices[0], edge.vertices[1]);
+
+            // Original orientation
+            adj_list.entry(u).or_default().push((v, edge_index, false));
+            // Flipped orientation
+            adj_list.entry(v).or_default().push((u, edge_index, true));
+        }
+
+        // Route internal LMB momenta
+        for (i_lmb, lmb_edge_id) in self.basis.iter().enumerate() {
+            let edge = &graph.edges[*lmb_edge_id];
+            let (u, v) = (edge.vertices[0], edge.vertices[1]);
+
+            self.edge_signatures[*lmb_edge_id].internal.0[i_lmb] = SignOrZero::Plus;
+            if let Some(path) = self.find_shortest_path(&adj_list, v, u) {
+                for (edge_index, is_flipped) in path {
+                    if self.edge_signatures[edge_index].internal.0[i_lmb] != SignOrZero::Zero {
+                        return Err(eyre!(
+                            "Inconsitency in edge momentum lmb signature assignment."
+                        ));
+                    }
+                    self.edge_signatures[edge_index].internal.0[i_lmb] = if is_flipped {
+                        SignOrZero::Minus
+                    } else {
+                        SignOrZero::Plus
+                    };
+                }
+            } else {
+                return Err(eyre!(
+                    "No path found between vertices {} and {} for LMB: {:?}",
+                    u,
+                    v,
+                    self.basis
+                ));
+            }
+        }
+
+        let sink_node = if let Some(last_external) = graph.external_edges.last() {
+            match graph.edges[*last_external].edge_type {
+                EdgeType::Outgoing => graph.edges[*last_external].vertices[1],
+                EdgeType::Incoming => graph.edges[*last_external].vertices[0],
+                _ => {
+                    return Err(eyre!(
+                        "External edge {} is not incoming or outgoing.",
+                        graph.edges[*last_external].name
+                    ))
+                }
+            }
+        } else {
+            0
+        };
+
+        // Route external momenta
+        if graph.external_edges.len() >= 2 {
+            for i_ext in 0..=(graph.external_edges.len() - 2) {
+                let external_edge_index = graph.external_edges[i_ext];
+                let external_edge = &graph.edges[external_edge_index];
+                let (u, v) = match external_edge.edge_type {
+                    EdgeType::Outgoing => (sink_node, external_edge.vertices[1]),
+                    EdgeType::Incoming => (external_edge.vertices[0], sink_node),
+                    _ => {
+                        return Err(eyre!(
+                            "External edge {} is not incoming or outgoing.",
+                            external_edge.name
+                        ))
+                    }
+                };
+
+                if let Some(path) = self.find_shortest_path(&adj_list, u, v) {
+                    //println!("External path from {}->{}: {} {:?}", u, v, i_ext, path);
+                    for (edge_index, is_flipped) in path {
+                        if self.edge_signatures[edge_index].external.0[i_ext] != SignOrZero::Zero {
+                            return Err(eyre!(
+                                "Inconsitency in edge momentum signature assignment."
+                            ));
+                        }
+                        self.edge_signatures[edge_index].external.0[i_ext] = if is_flipped {
+                            SignOrZero::Minus
+                        } else {
+                            SignOrZero::Plus
+                        };
+                    }
+                } else {
+                    return Err(eyre!(
+                        "No path found between vertices {} and {} for LMB: {:?}",
+                        u,
+                        v,
+                        self.basis
+                    ));
+                }
+                if self.edge_signatures[external_edge_index].external.0[i_ext] != SignOrZero::Plus {
+                    return Err(eyre!(
+                        "Inconsitency in edge momentum external signature assignment."
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn find_shortest_path(
+        &self,
+        adjacency_list: &HashMap<usize, Vec<(usize, usize, bool)>>,
+        start: usize,
+        end: usize,
+    ) -> Option<Vec<(usize, bool)>> {
+        if start == end {
+            return Some(vec![]);
+        }
+
+        // Initialize BFS
+        let mut queue = VecDeque::new();
+        let mut visited: HashMap<usize, Option<(usize, usize, bool)>> = HashMap::new();
+
+        queue.push_back(start);
+        visited.insert(start, None);
+
+        // Perform BFS
+        while let Some(u) = queue.pop_front() {
+            if u == end {
+                break;
+            }
+            if let Some(neighbors) = adjacency_list.get(&u) {
+                for &(v, edge_index, is_flipped) in neighbors {
+                    #[allow(clippy::map_entry)]
+                    if !visited.contains_key(&v) {
+                        visited.insert(v, Some((u, edge_index, is_flipped)));
+                        queue.push_back(v);
+                    }
+                }
+            }
+        }
+
+        // Reconstruct the path if end is reached
+        if !visited.contains_key(&end) {
+            return None;
+        }
+
+        let mut path = Vec::new();
+        let mut current = end;
+
+        while let Some(Some((prev, edge_index, is_flipped))) = visited.get(&current) {
+            path.push((*edge_index, *is_flipped));
+            current = *prev;
+        }
+
+        path.reverse();
+        Some(path)
     }
 }
 
@@ -3066,28 +4163,31 @@ impl<'a> LoopMomentumBasisSpecification<'a> {
     }
 }
 
+impl From<&BareGraph> for HedgeGraph<usize, usize> {
+    fn from(value: &BareGraph) -> Self {
+        let mut builder = HedgeGraphBuilder::new();
+        let mut map = HashMap::new();
+
+        for (i, _) in value.vertices.iter().enumerate() {
+            map.insert(i, builder.add_node(i));
+        }
+
+        for (i, edge) in value.edges.iter().enumerate() {
+            let source = map[&edge.vertices[0]];
+            let sink = map[&edge.vertices[1]];
+            builder.add_edge(source, sink, i, true);
+        }
+
+        builder.into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-
-    use crate::cross_section::OutputMetaData;
-
     use super::*;
 
     fn model_sm() -> Model {
-        let path = Path::new("./src/test_resources/lbl/");
-        let output_meta_data: OutputMetaData =
-            serde_yaml::from_reader(File::open(path.join("output_metadata.yaml")).unwrap())
-                .unwrap();
-        Model::from_file(String::from(
-            path.join(format!(
-                "sources/model/{}.yaml",
-                output_meta_data.model_name
-            ))
-            .to_str()
-            .unwrap(),
-        ))
-        .unwrap()
+        Model::from_file(String::from("src/test_resources/gammaloop_models/sm.yaml")).unwrap()
     }
 
     #[test]

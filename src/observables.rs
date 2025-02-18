@@ -2,6 +2,7 @@ use crate::momentum::FourMomentum;
 use crate::utils::{FloatLike, F};
 use crate::Settings;
 use itertools::Itertools;
+#[allow(unused_imports)]
 use libc::{c_double, c_int, c_void};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -134,6 +135,7 @@ impl fmt::Display for FilterQuantity {
     }
 }
 
+#[cfg(feature = "fjcore")]
 mod fjcore {
     use libc::{c_double, c_int, c_void};
 
@@ -557,6 +559,7 @@ pub struct JetClustering {
     fastjet_jets_in: Vec<f64>,
     fastjet_jets_out: Vec<f64>,
     fastjet_jets_map: Vec<c_int>,
+    #[cfg(feature = "fjcore")]
     fastjet_workspace: *mut c_void,
 }
 
@@ -565,7 +568,9 @@ unsafe impl std::marker::Send for JetClustering {}
 #[allow(dead_code)]
 impl JetClustering {
     pub fn new(use_fastjet: bool, d_r: f64, min_jpt: f64) -> JetClustering {
+        #[cfg(feature = "fjcore")]
         let fastjet_workspace = unsafe { fjcore::fastjet_workspace() }; // TODO: free
+
         JetClustering {
             //ordered_jets: vec![],
             //jet_structure: vec![],
@@ -575,6 +580,7 @@ impl JetClustering {
             fastjet_jets_map: vec![],
             d_r,
             min_jpt,
+            #[cfg(feature = "fjcore")]
             fastjet_workspace,
             use_fastjet,
         }
@@ -583,6 +589,7 @@ impl JetClustering {
     pub fn cluster_fastjet(&mut self, event: &Event) {
         self.fastjet_jets_in.clear();
 
+        #[allow(unused_variables)]
         let mut len: c_int = 0;
         for (e, id) in event
             .kinematic_configuration
@@ -609,23 +616,28 @@ impl JetClustering {
         self.fastjet_jets_map.clear();
         self.fastjet_jets_map.resize(self.fastjet_jets_in.len(), 0);
 
+        #[allow(unused_mut)]
         let mut actual_len: c_int = 0;
+        #[allow(unused_variables)]
         let palg = -1.0;
+        #[allow(unused_variables)]
         let clustering_ptjet_min = 0.;
-
-        if len > 0 {
-            unsafe {
-                fjcore::fastjetppgenkt_(
-                    self.fastjet_workspace,
-                    &self.fastjet_jets_in[0] as *const c_double,
-                    &len as *const c_int,
-                    &self.d_r as *const c_double,
-                    &clustering_ptjet_min as *const c_double,
-                    &palg as *const c_double,
-                    &mut self.fastjet_jets_out[0] as *mut c_double,
-                    &mut actual_len as *mut c_int,
-                    &mut self.fastjet_jets_map[0] as *mut c_int,
-                );
+        #[cfg(feature = "fjcore")]
+        {
+            if len > 0 {
+                unsafe {
+                    fjcore::fastjetppgenkt_(
+                        self.fastjet_workspace,
+                        &self.fastjet_jets_in[0] as *const c_double,
+                        &len as *const c_int,
+                        &self.d_r as *const c_double,
+                        &clustering_ptjet_min as *const c_double,
+                        &palg as *const c_double,
+                        &mut self.fastjet_jets_out[0] as *mut c_double,
+                        &mut actual_len as *mut c_int,
+                        &mut self.fastjet_jets_map[0] as *mut c_int,
+                    );
+                }
             }
         }
 

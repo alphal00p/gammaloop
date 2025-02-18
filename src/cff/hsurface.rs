@@ -136,7 +136,7 @@ pub fn compute_hsurface_cache<T: FloatLike>(
 
 #[cfg(test)]
 mod tests {
-    use symbolica::atom::Atom;
+    use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
         cff::{cff_graph::VertexSet, esurface::Esurface},

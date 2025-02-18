@@ -7,6 +7,7 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use lorentz_vector::LorentzVector;
+use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -189,53 +190,30 @@ impl Esurface {
         unit_loops: &[ThreeMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
         lmb: &LoopMomentumBasis,
-        real_mass_vector: &[F<T>],
     ) -> (F<T>, F<T>) {
         let const_builder = &unit_loops[0].px;
 
         let esurface_shift = self.compute_shift_part_from_momenta(lmb, external_moms);
 
-        let mut try_positive = F::from_f64(2.0) * &esurface_shift.abs();
+        let mut radius_guess = const_builder.zero();
+        let mut denominator = const_builder.zero();
 
-        let mut rescaled_momenta = unit_loops.iter().map(|k| k * &try_positive).collect_vec();
-        let mut esurface_value =
-            self.compute_from_momenta(lmb, real_mass_vector, &rescaled_momenta, external_moms);
+        for energy in self.energies.iter() {
+            let signature = &lmb.edge_signatures[*energy];
 
-        while esurface_value < const_builder.zero() {
-            try_positive += &esurface_shift.abs();
-            rescaled_momenta = unit_loops.iter().map(|k| k * &try_positive).collect_vec();
-            esurface_value =
-                self.compute_from_momenta(lmb, real_mass_vector, &rescaled_momenta, external_moms);
+            let unit_loop_part = compute_loop_part(&signature.internal, unit_loops);
+            let shift = compute_shift_part(&signature.external, external_moms);
+            let three_shift = shift.spatial;
+            let norm_unit_loop_part_squared = unit_loop_part.norm_squared();
+            let loop_dot_shift = &unit_loop_part * three_shift;
+
+            radius_guess += loop_dot_shift.abs() / &norm_unit_loop_part_squared;
+            denominator += norm_unit_loop_part_squared.sqrt();
         }
 
-        let mut try_negative = F::from_f64(-2.0) * &esurface_shift.abs();
-        let mut rescaled_momenta = unit_loops.iter().map(|k| k * &try_negative).collect_vec();
-        let mut esurface_value =
-            self.compute_from_momenta(lmb, real_mass_vector, &rescaled_momenta, external_moms);
-
-        while esurface_value < const_builder.zero() {
-            try_negative -= &esurface_shift.abs();
-            rescaled_momenta = unit_loops.iter().map(|k| k * &try_negative).collect_vec();
-            esurface_value =
-                self.compute_from_momenta(lmb, real_mass_vector, &rescaled_momenta, external_moms);
-        }
-
-        (try_positive, try_negative)
-
-        //for energy in self.energies.iter() {
-        //    let signature = &lmb.edge_signatures[*energy];
-
-        //    let unit_loop_part = compute_loop_part(&signature.0, unit_loops);
-        //    let shift = compute_shift_part(&signature.1, external_moms);
-        //    let norm_unit_loop_part_squared = unit_loop_part.spatial_squared();
-        //    let loop_dot_shift = unit_loop_part.spatial_dot(&shift);
-
-        //    radius_guess += loop_dot_shift.abs() / norm_unit_loop_part_squared;
-        //    denominator += norm_unit_loop_part_squared.sqrt();
-        //}
-
-        //radius_guess += esurface_shift / denominator;
-        //radius_guess
+        radius_guess += esurface_shift.abs() / denominator;
+        let negative_radius = radius_guess.ref_neg();
+        (radius_guess, negative_radius)
     }
 
     /// Write out the esurface expression in a given lmb
@@ -316,9 +294,8 @@ pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq, Encode, Decode)]
 pub struct EsurfaceID(usize);
 
-pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
-
 /// Container for esurfaces that exist at a given point in the phase space
+pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
 
 /// Index in the list of all existing esurfaces, essentially a pointer to a pointer to an esurface
 #[derive(
@@ -597,7 +574,7 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
 
 #[cfg(test)]
 mod tests {
-    use symbolica::atom::Atom;
+    use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
         cff::{cff_graph::VertexSet, esurface::Esurface},

@@ -711,6 +711,9 @@ class Model(object):
     def get_external_parameters(self) -> list[Parameter]:
         return [parameter for parameter in self.parameters if parameter.nature == ParameterNature.EXTERNAL]
 
+    def get_coupling_orders(self) -> list[str]:
+        return list(set(sum([list(coupling.orders.keys()) for coupling in self.couplings], [])))
+
     def sort_parameters(self):
         """ Sort parameters to linearize their evaluations, meaning all dependent parameters of parameter i appear before i """
 
@@ -726,14 +729,13 @@ class Model(object):
                     sorted_parameters.append(
                         remaining_parameters.pop(remaining_parameters.index(p)))
 
-        x_ = SBE.symbol('x_')
         param_variables: dict[str, dict[str, Any]] = {
             p.name: {
                 'var': SBE.symbol(p.name),
-                'dependent_params': [m[x_]  # type: ignore
-                                     for m in p.expression.match(x_, x_.req_type(AtomType.Var))]
+                'dependent_params': p.expression.get_all_symbols(False)
             } for p in remaining_parameters if p.expression is not None
         }
+
 
         while len(remaining_parameters) > 0:
             n_added: int = 0
@@ -794,6 +796,8 @@ class Model(object):
             particle.name: i for i, particle in enumerate(model.particles)}
         model.name_to_position['particles_from_PDG'] = {
             particle.pdg_code: i for i, particle in enumerate(model.particles)}
+        model.set_case_insensitive_particle_dictionary()
+
         # Load propagators
         model.propagators = [Propagator.from_particle(
             particle, 'Feynman') for particle in model.particles]
@@ -816,6 +820,7 @@ class Model(object):
             vertex_rule.name: i for i, vertex_rule in enumerate(model.vertex_rules)}
 
         model.sort_parameters()
+
         return model
 
     def sync_name_to_position_dict(self):
@@ -828,6 +833,8 @@ class Model(object):
             particle.name: i for i, particle in enumerate(self.particles)}
         self.name_to_position['particles_from_PDG'] = {
             particle.pdg_code: i for i, particle in enumerate(self.particles)}
+        self.set_case_insensitive_particle_dictionary()
+
         self.name_to_position['propagators'] = {
             propagator.name: i for i, propagator in enumerate(self.propagators)}
         self.name_to_position['lorentz_structures'] = {
@@ -836,6 +843,17 @@ class Model(object):
             coupling.name: i for i, coupling in enumerate(self.couplings)}
         self.name_to_position['vertex_rules'] = {
             vertex_rule.name: i for i, vertex_rule in enumerate(self.vertex_rules)}
+
+    def set_case_insensitive_particle_dictionary(self):
+        case_sensitivity_check: dict[str, str] = {}
+        for k in self.name_to_position['particles'].keys():
+            if str(k).lower() in case_sensitivity_check:
+                raise GammaLoopError(
+                    f"Particle {k} is case-insensitive equivalent to {case_sensitivity_check[str(k).lower()]}")
+            case_sensitivity_check[str(k).lower()] = str(k)
+
+        self.name_to_position['particles_case_insensitive'] = {
+            particle.name.lower(): i for i, particle in enumerate(self.particles)}
 
     @staticmethod
     def from_serializable_model(serializable_model: SerializableModel) -> Model:
@@ -855,6 +873,8 @@ class Model(object):
             particle.name: i for i, particle in enumerate(model.particles)}
         model.name_to_position['particles_from_PDG'] = {
             particle.pdg_code: i for i, particle in enumerate(model.particles)}
+        model.set_case_insensitive_particle_dictionary()
+
         model.propagators = [Propagator.from_serializable_propagator(
             model, propagator) for propagator in serializable_model.propagators]
         model.lorentz_structures = [LorentzStructure.from_serializable_lorentz_structure(
@@ -869,6 +889,7 @@ class Model(object):
             model, vertex_rule) for vertex_rule in serializable_model.vertex_rules]
         model.name_to_position['vertex_rules'] = {
             vertex_rule.name: i for i, vertex_rule in enumerate(model.vertex_rules)}
+
         return model
 
     def to_serializable_model(self) -> SerializableModel:
@@ -899,7 +920,7 @@ class Model(object):
         return None
 
     def get_particle(self, particle_name: str) -> Particle:
-        return self.particles[self.name_to_position['particles'][particle_name]]
+        return self.particles[self.name_to_position['particles_case_insensitive'][particle_name.lower()]]
 
     def get_particle_from_pdg(self, pdg: int) -> Particle:
         return self.particles[self.name_to_position['particles_from_PDG'][pdg]]

@@ -12,9 +12,14 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
     complex::RealOrComplexTensor,
     contraction::{Contract, RefZero},
-    data::{DataIterator, DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor},
+    data::{
+        DataIterator, DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor,
+        StorageTensor,
+    },
     iterators::IteratableTensor,
-    parametric::{EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete},
+    parametric::{
+        atomcore::TensorAtomOps, EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete,
+    },
     shadowing::Shadowable,
     structure::{
         abstract_index::AbstractIndex,
@@ -26,7 +31,7 @@ use spenso::{
     upgrading_arithmetic::FallibleAdd,
 };
 use symbolica::{
-    atom::{Atom, Symbol},
+    atom::{Atom, AtomCore, Symbol},
     coefficient::Coefficient,
     domains::{
         float::{NumericalFloatLike, Real, RealNumberLike, SingleFloat},
@@ -35,7 +40,6 @@ use symbolica::{
     },
     evaluate::{ExpressionEvaluator, FunctionMap},
     poly::{polynomial::MultivariatePolynomial, Exponent},
-    state::State,
 };
 
 use spenso::complex::Complex;
@@ -148,7 +152,7 @@ where
     }
 }
 
-impl<'b, T> Add<Energy<T>> for &'b Energy<T>
+impl<T> Add<Energy<T>> for &Energy<T>
 where
     T: for<'a> Add<&'a T, Output = T>,
 {
@@ -684,7 +688,7 @@ where
     }
 }
 
-impl<'b, T> Add<ThreeMomentum<T>> for &'b ThreeMomentum<T>
+impl<T> Add<ThreeMomentum<T>> for &ThreeMomentum<T>
 where
     T: for<'a> Add<&'a T, Output = T>,
 {
@@ -772,7 +776,7 @@ where
     }
 }
 
-impl<'a, T> Mul<ThreeMomentum<T>> for &'a ThreeMomentum<T>
+impl<T> Mul<ThreeMomentum<T>> for &ThreeMomentum<T>
 where
     T: for<'b> Mul<&'b T, Output = T> + Add<T, Output = T>,
 {
@@ -810,7 +814,7 @@ where
     }
 }
 
-impl<'a, T> Mul<T> for &'a ThreeMomentum<T>
+impl<T> Mul<T> for &ThreeMomentum<T>
 where
     T: Mul<T, Output = T> + Clone,
 {
@@ -824,7 +828,7 @@ where
     }
 }
 
-impl<'a, T> Mul<&T> for &'a ThreeMomentum<T>
+impl<T> Mul<&T> for &ThreeMomentum<T>
 where
     T: for<'b> Mul<&'b T, Output = T> + Clone,
 {
@@ -852,7 +856,7 @@ where
     }
 }
 
-impl<'a, T> Neg for &'a ThreeMomentum<T>
+impl<T> Neg for &ThreeMomentum<T>
 where
     T: Neg<Output = T> + Clone,
 {
@@ -1310,7 +1314,7 @@ impl<T: Clone> Polarization<T> {
             .clone()
             .to_dense_labeled(|_, i| FlatCoefficent::<NoArgs> {
                 index: i,
-                name: Some(State::get_symbol(self.pol_type.to_string())),
+                name: Some(Symbol::new(self.pol_type.to_string())),
                 args: None,
             })
             .unwrap()
@@ -1475,7 +1479,7 @@ impl<T: Real> RefDefault for FourMomentum<T, T> {
     }
 }
 
-impl<'a, T> Mul<T> for &'a FourMomentum<T, T>
+impl<T> Mul<T> for &FourMomentum<T, T>
 where
     T: Mul<T, Output = T> + Clone,
 {
@@ -1490,7 +1494,7 @@ where
     }
 }
 
-impl<'a, T> Mul<&T> for &'a FourMomentum<T, T>
+impl<T> Mul<&T> for &FourMomentum<T, T>
 where
     T: for<'b> Mul<&'b T, Output = T> + Clone,
 {
@@ -1855,7 +1859,7 @@ impl<'a, T> IntoIterator for &'a Polarization<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Hash)]
 #[repr(i8)]
 pub enum Sign {
     Positive = 1,
@@ -1979,7 +1983,7 @@ pub type Helicity = SignOrZero;
 #[derive(
     Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Encode, Decode, PartialOrd, Ord, Hash,
 )]
-pub struct Signature(Vec<SignOrZero>);
+pub struct Signature(pub Vec<SignOrZero>);
 
 impl Display for Signature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -2438,7 +2442,7 @@ where
     }
 }
 
-impl<'a, T, U> Neg for &'a FourMomentum<T, U>
+impl<T, U> Neg for &FourMomentum<T, U>
 where
     T: Neg<Output = T> + Clone,
     U: Neg<Output = U> + Clone,
@@ -2486,9 +2490,9 @@ impl<T: LowerExp, U: LowerExp> LowerExp for FourMomentum<T, U> {
     }
 }
 
-impl From<Vector<f64, 3>> for ThreeMomentum<F<f64>> {
-    fn from(value: Vector<f64, 3>) -> Self {
-        ThreeMomentum::new(F(value[0]), F(value[1]), F(value[2]))
+impl From<Vector<F<f64>, 3>> for ThreeMomentum<F<f64>> {
+    fn from(value: Vector<F<f64>, 3>) -> Self {
+        ThreeMomentum::new(value[0], value[1], value[2])
     }
 }
 
@@ -2603,7 +2607,7 @@ impl Rotation {
             .unwrap()
             .try_into_parametric()
             .unwrap()
-            .eval_tree(
+            .to_evaluation_tree(
                 &fn_map,
                 &shadow_t.try_into_parametric().unwrap().tensor.data(),
             )
@@ -2631,10 +2635,12 @@ impl Rotation {
 
         let fn_map = FunctionMap::new();
         let mut params = shadow_t.try_into_parametric().unwrap().tensor.data();
-        params.push(Atom::new_var(State::I));
+        params.push(Atom::new_var(Atom::I));
 
-        let spinor_eval: EvalTensor<ExpressionEvaluator<Rational>, VecStructure> =
-            res.eval_tree(&fn_map, &params).unwrap().linearize(Some(1));
+        let spinor_eval: EvalTensor<ExpressionEvaluator<Rational>, VecStructure> = res
+            .to_evaluation_tree(&fn_map, &params)
+            .unwrap()
+            .linearize(Some(1));
 
         Self {
             method,
@@ -3007,7 +3013,7 @@ mod tests {
 
         let structure = pol.tensor.structure.clone();
 
-        println!("{}", structure.flat_index(&[2]).unwrap());
+        println!("{}", structure.flat_index([2]).unwrap());
 
         pol.tensor
             .iter_flat()

@@ -1,8 +1,11 @@
 [
   {
     "label": "Run Rust tests",
-    "command": "cargo test -p gammalooprs $env.ZED_SYMBOL --no-default-features --lib -- --nocapture --exact",
-    "tags": ["rust-test"]
+    "command": "cargo nextest r -E 'test(~$ZED_STEM)&test(~$ZED_SYMBOL)' --no-default-features --lib  --nocapture",
+    "tags": ["rust-test"],
+    "shell": {
+      "program": "bash"
+    }
   },
   {
     "label": "Run Rust mod tests",
@@ -13,5 +16,9 @@
     "label": "Run Rust main function",
     "command": "cargo run -p $env.ZED_CUSTOM_RUST_PACKAGE --bin $env.ZED_CUSTOM_RUST_BIN_NAME --no-default-features",
     "tags": ["rust-main"]
+  },
+  {
+    "label": "echo current symbol",
+    "command": "echo $env.ZED_SYMBOL"
   }
 ]

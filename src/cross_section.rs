@@ -21,6 +21,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 use symbolica::printer::{AtomPrinter, PrintOptions};
+use symbolica::state::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OutputType {
@@ -745,71 +746,6 @@ impl Amplitude<UnInit> {
         }
     }
 
-    pub fn export(
-        self,
-        export_root: &str,
-        model: &Model,
-        export_settings: &ExportSettings,
-    ) -> Result<Amplitude<Evaluators>, Report> {
-        // TODO process amplitude by adding lots of additional information necessary for runtime.
-        // e.g. generate e-surface, cff expression, counterterms, etc.
-
-        // Then dumped the new yaml representation of the amplitude now containing all that additional information
-        let path = Path::new(export_root)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str());
-
-        // generate cff and ltd for each graph in the ampltiudes, ltd also generates lmbs
-
-        let amp = self.map_res(|a| {
-            a.map_res(|mut g| {
-                g.generate_cff();
-                g.generate_ltd();
-                g.generate_tropical_subgraph_table(
-                    &export_settings.tropical_subgraph_table_settings,
-                );
-                g.generate_esurface_data()?;
-                g.build_compiled_expression(path.clone(), export_settings)?;
-                let g = g.process_numerator(
-                    model,
-                    ContractionSettings::Normal,
-                    path.clone(),
-                    export_settings,
-                );
-                Result::<_, Report>::Ok(g)
-            })
-        })?;
-
-        fs::write(
-            path.clone().join("amplitude.yaml"),
-            serde_yaml::to_string(&amp.to_serializable())?,
-        )?;
-
-        // dump the derived data in a binary file
-        for amplitude_graph in amp.amplitude_graphs.iter() {
-            debug!("dumping derived data to {:?}", path);
-            fs::write(
-                path.clone().join(format!(
-                    "derived_data_{}.bin",
-                    amplitude_graph.graph.bare_graph.name
-                )),
-                &bincode::encode_to_vec(
-                    amplitude_graph
-                        .graph
-                        .derived_data
-                        .as_ref()
-                        .ok_or(eyre!("empty derived data"))?,
-                    bincode::config::standard(),
-                )?,
-            )?;
-        }
-
-        // Additional files can be written too, e.g. the lengthy cff expressions can be dumped in separate files
-
-        Ok(amp)
-    }
-
     pub fn apply_feynman_rules(
         self,
         export_settings: &ExportSettings,
@@ -844,6 +780,7 @@ impl Amplitude<PythonState> {
         export_root: &str,
         model: &Model,
         export_settings: &ExportSettings,
+        no_evaluators: bool,
     ) -> Result<(), Report> {
         // TODO process amplitude by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
@@ -871,15 +808,28 @@ impl Amplitude<PythonState> {
                 g.build_compiled_expression(path.clone(), export_settings)
                     .unwrap();
 
-                g.statefull_apply::<_, UnInit, Evaluators>(|d, b| {
-                    d.process_numerator(
-                        b,
-                        model,
-                        ContractionSettings::Normal,
-                        path.clone(),
-                        export_settings,
-                    )
-                })
+                if no_evaluators {
+                    g.forgetfull_apply::<_, UnInit>(|d, b| {
+                        d.process_numerator_no_eval(
+                            b,
+                            ContractionSettings::Normal,
+                            path.clone(),
+                            export_settings,
+                        )
+                        .unwrap()
+                    })
+                } else {
+                    g.statefull_apply::<_, UnInit, Evaluators>(|d, b| {
+                        d.process_numerator(
+                            b,
+                            model,
+                            ContractionSettings::Normal,
+                            path.clone(),
+                            export_settings,
+                        )
+                        .unwrap()
+                    })
+                }
                 .unwrap();
             })
         });
@@ -888,6 +838,9 @@ impl Amplitude<PythonState> {
             path.clone().join("amplitude.yaml"),
             serde_yaml::to_string(&self.to_serializable())?,
         )?;
+
+        let mut state = fs::File::create(path.clone().join("state.bin"))?;
+        State::export(&mut state)?;
 
         // dump the derived data in a binary file
         for amplitude_graph in self.amplitude_graphs.iter() {
@@ -925,52 +878,23 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
             .join("amplitudes")
             .join(self.name.as_str())
             .join("expressions");
+        std::fs::create_dir_all(&path)?;
         for amplitude_graph in self.amplitude_graphs.iter() {
             let num = Numerator::default()
                 .from_graph(
                     &amplitude_graph.graph.bare_graph,
-                    export_settings.numerator_settings.global_prefactor.as_ref(),
+                    &export_settings.numerator_settings.global_prefactor,
                 )
                 .get_single_atom();
 
             let dens: Vec<(String, String)> = amplitude_graph
                 .graph
                 .bare_graph
-                .edges
-                .iter()
-                .map(|e| {
-                    let (mom, mass) = e.denominator(&amplitude_graph.graph.bare_graph);
-                    (
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(mom.as_view(), printer_ops)
-                        ),
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(mass.as_view(), printer_ops)
-                        ),
-                    )
-                })
-                .collect();
-
+                .denominator_print(printer_ops);
             let rep_rules: Vec<(String, String)> = amplitude_graph
                 .graph
                 .bare_graph
-                .generate_lmb_replacement_rules()
-                .iter()
-                .map(|(lhs, rhs)| {
-                    (
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(lhs.as_view(), printer_ops)
-                        ),
-                        format!(
-                            "{}",
-                            AtomPrinter::new_with_options(rhs.as_view(), printer_ops)
-                        ),
-                    )
-                })
-                .collect();
+                .rep_rules_print(printer_ops);
 
             let out = (
                 format!(

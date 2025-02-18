@@ -15,6 +15,7 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    timeout-minutes: 360
 
     steps:
     - uses: actions/checkout@v3
@@ -46,7 +47,8 @@ jobs:
         ./bin/run_tests.sh python -m "codecheck"
     - name: Run python tests
       run: |
-        ./bin/run_tests.sh python -m "not drawing"
+        ./bin/run_tests.sh python -m "not drawing" --max-runtime 300.0
+      timeout-minutes: 120
     - name: Run native rust tests
       run: |
         ./bin/run_tests.sh rust

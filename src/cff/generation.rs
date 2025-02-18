@@ -496,7 +496,7 @@ fn advance_tree(
 #[cfg(test)]
 mod tests_cff {
     use symbolica::{
-        atom::Atom,
+        atom::{Atom, AtomCore},
         domains::float::{NumericalFloatLike, Real},
         id::Pattern,
     };
@@ -663,20 +663,16 @@ mod tests_cff {
             let rhs = Atom::parse("- p0 - p1").unwrap();
 
             let p2_pattern = Pattern::Literal(p2_atom);
-            let rhs_pattern = Pattern::Literal(rhs).into();
+            let rhs_pattern = Pattern::Literal(rhs);
 
             let conditions = None;
             let settings = None;
 
-            let atom_limit_0 = p2_pattern.replace_all(
-                expanded_limit.as_view(),
-                &rhs_pattern,
-                conditions,
-                settings,
-            );
+            let atom_limit_0 =
+                expanded_limit.replace_all(&p2_pattern, &rhs_pattern, conditions, settings);
 
             let limit_atom =
-                p2_pattern.replace_all(limit_atom.as_view(), &rhs_pattern, conditions, settings);
+                limit_atom.replace_all(&p2_pattern, &rhs_pattern, conditions, settings);
 
             let diff = (limit_atom - &atom_limit_0).expand();
             assert_eq!(diff, Atom::new());

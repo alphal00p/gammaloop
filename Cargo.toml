@@ -1,6 +1,6 @@
 [package]
 name = "gammalooprs"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
 categories = ["science"]
@@ -42,26 +42,34 @@ criterion = { version = "0.5", features = ["html_reports"] }
 
 [dependencies]
 # These will be patched
-symbolica = { version = "0.13.0" }
+symbolica = { version = "0.14.0" }
+
 spenso = { version = "0.4.0", features = ["shadowing"] }
+linnet = { git = "https://github.com/alphal00p/linnet", features = [
+    "symbolica",
+    "drawing",
+] }
+
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
-bincode = { version = "2.0.0-rc.3", features = ["serde"] }
+bincode = { git = "https://github.com/branchseer/bincode", branch = "decode_context", features = [
+    "serde",
+] }
 clap = "2.34"
 color-eyre = { version = "^0.3", default-features = false }
 eyre = "^0.4"
-f128 = { git = "https://github.com/benruijl/f128" }
 lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = "hyperdual", features = [
     "serde_support",
     "hyperdual_support",
-    "f128_support",
 ] }
-hyperdual = { git = "https://gitlab.com/benruijl/hyperdual" }
+hyperdual = { git = "https://gitlab.com/benruijl/hyperdual.git" }
 rand = { version = "0.8", features = ["small_rng"] }
 rayon = "1.5"
 tabled = "0.7"
+indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
+
 enum_dispatch = "*"
 git-version = "0.3"
 colored = "*"
@@ -72,7 +80,7 @@ itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
 log = "*"
 env_logger = "*"
-pyo3-log = "0.11.0"
+pyo3-log = { version = "0.11.0", optional = true }
 nalgebra = "0.32.3"
 rug = { version = "1.22.0", features = ["serde"] }
 clarabel = "0"
@@ -102,6 +110,14 @@ serde_with = "3.9.0"
 insta = { version = "1.40.0", features = ["ron", "toml"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
 pathfinding = "4.11.0"
+brotli = "7.0.0"
+cgmath = "0.18.0"
+argmin = "0.10.0"
+by_address = "1.2.1"
+pyo3-pylogger = {version="0.3.0",optional=true}
+fern = "0.7.1"
+humantime = "2.1.0"
+chrono = "0.4.39"
 
 [dependencies.pyo3]
 features = ["multiple-pymethods"]
@@ -114,23 +130,25 @@ pyo3-build-config = "*"
 [lib]
 crate-type = ["cdylib", "lib"]
 name = "_gammaloop"
-required-features = ["python_api"]
+# required-features = ["python_api"]
 bench = false
 [[bin]]
 name = "cli"
-required-features = ["binary"]
+# required-features = ["binary"]
 bench = false
 [features]
+default = ["python_api", "fjcore"]
 extension-module = ["pyo3/extension-module"]
-default = ["python_api"]
 higher_loops = []
+fjcore = []
 
-python_api = ["pyo3", "extension-module"]
+python_api = ["pyo3", "extension-module", "pyo3-log","pyo3-pylogger"]
 binary = []
 fail-on-warnings = []
+no_python = []
 # insta.opt-level = 3
 
 [patch.crates-io]
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-# spenso = { path = "../../alphal00p/spenso" }
-# spenso = { git = "https://github.com/alphal00p/spenso", branch = "master" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "47a35775325a4d061af05e2fc00904b221d8bf83" }
+# spenso = { path = "../spenso" }

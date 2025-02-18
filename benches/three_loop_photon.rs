@@ -3,8 +3,8 @@ use std::{env, path::PathBuf};
 use _gammaloop::{
     graph::Graph,
     numerator::{
-        ContractionSettings, EvaluatorOptions, GammaAlgebraMode, NumeratorCompileOptions,
-        NumeratorEvaluatorOptions, NumeratorSettings,
+        ContractionSettings, EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor,
+        NumeratorCompileOptions, NumeratorEvaluatorOptions, NumeratorParseMode, NumeratorSettings,
     },
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
@@ -25,9 +25,11 @@ fn load_helper(path: &str) -> Graph {
                 compile_options: NumeratorCompileOptions::Compiled,
                 cpe_rounds: Some(1),
             }),
-            global_prefactor: None,
+            dump_expression: None,
+            global_prefactor: GlobalPrefactor::default(),
             gamma_algebra: GammaAlgebraMode::Concrete,
             global_numerator: None,
+            parse_mode: NumeratorParseMode::Direct,
         },
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: false,

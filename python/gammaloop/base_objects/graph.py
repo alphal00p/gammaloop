@@ -156,14 +156,33 @@ class Vertex(object):
         if len(vertex_particles) <= 1:
             return
         sorted_edges: list[Edge] = []
-        vertex_particles_per_edge = [(e.particle, e) if e.vertices[1] is self else (
-            e.particle.get_anti_particle(model), e) for e in self.edges]
+        vertex_particles_per_edge: list[tuple[Particle, Edge]] = []
+        self_loops = []
+        for e in self.edges:
+            if e.vertices[0] == e.vertices[1]:
+                # self-loop treatment
+                if e in self_loops:
+                    continue
+                self_loops.append(e)
+                vertex_particles_per_edge.append((e.particle, e))
+                vertex_particles_per_edge.append(
+                    (e.particle.get_anti_particle(model), e))
+            else:
+                if e.vertices[1] is self:
+                    vertex_particles_per_edge.append((e.particle, e))
+                elif e.vertices[0] is self:
+                    vertex_particles_per_edge.append(
+                        (e.particle.get_anti_particle(model), e))
+                else:
+                    raise GammaLoopError(
+                        f"Vertex {self.name} is not connected to edge {e.name}.")
         for part in vertex_particles:
             for i, (e_p, _edge) in enumerate(vertex_particles_per_edge):
                 if e_p == part:
                     sorted_edges.append(vertex_particles_per_edge.pop(i)[1])
                     break
             else:
+                print(sorted_edges, len(sorted_edges))
                 raise GammaLoopError(
                     f"Particle {part.name} not found in vertex {self.name} with particles [{','.join(p.name for p in vertex_particles)}].")
         if len(vertex_particles_per_edge) > 0:
@@ -265,8 +284,7 @@ class Edge(object):
              arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
              arrow_size_for_single_line: float = 2.5, arrow_size_for_double_line: float = 2.5, line_color: str = 'black', label_color: str = 'black', lmb_color: str = 'red', non_lmb_color: str = 'blue', **_opts: Any) -> list[str]:
         constant_definitions['arcMaxDistance'] = f'{arc_max_distance:.2f}'
-        constant_definitions['externalLegTension'] = f'{
-            external_legs_tension:.2f}'
+        constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'
         constant_definitions['defaultTension'] = f'{default_tension:.2f}'
         constant_definitions['lineWidth'] = f'{line_width:.2f}'
         constant_definitions['lineColor'] = line_color
@@ -275,8 +293,7 @@ class Edge(object):
         constant_definitions['labelSize'] = label_size
         constant_definitions['nonLmbColor'] = non_lmb_color
         constant_definitions['arrowSize'] = f'{arrow_size_for_single_line:.2f}'
-        constant_definitions['doubleArrowSize'] = f'{
-            arrow_size_for_double_line:.2f}'
+        constant_definitions['doubleArrowSize'] = f'{arrow_size_for_double_line:.2f}'
         constant_definitions['labelDistance'] = f'{label_distance:.2f}'
 
         template_line = r'\efmf{%(line_type)s%(comma)s%(options)s}{%(left_vertex)s,%(right_vertex)s}'
@@ -424,10 +441,8 @@ class Edge(object):
 
         replace_dict = {}
         replace_dict['line_type'] = line_type.replace('_arrow', '')
-        replace_dict['left_vertex'] = f'v{
-            graph.get_vertex_position(self.vertices[0].name)}'
-        replace_dict['right_vertex'] = f'v{
-            graph.get_vertex_position(self.vertices[1].name)}'
+        replace_dict['left_vertex'] = f'v{graph.get_vertex_position(self.vertices[0].name)}'
+        replace_dict['right_vertex'] = f'v{graph.get_vertex_position(self.vertices[1].name)}'
         replace_dict['options'] = ','.join(
             f'{k}={v}' for k, v in line_options.items())
         replace_dict['comma'] = ',' if len(replace_dict['options']) > 0 else ''
@@ -1058,15 +1073,75 @@ class Graph(object):
 
         return merged_signatures
 
-    def draw(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, **drawing_options: Any) -> Path | None:
-        match drawing_options['mode']:
+    def draw(self, drawing_mode: str | None, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, **drawing_options: Any) -> Path | None:
+        match drawing_mode:
             case 'feynmp':
                 return self.draw_feynmp(model, file_path_without_extension, caption, diagram_id, **drawing_options['feynmp'])
+            case 'dot':
+                return self.draw_dot(model, file_path_without_extension, caption, diagram_id, **drawing_options['dot'])
             case None:
                 return None
             case _:
                 raise GammaLoopError(
-                    f"Feynman drawing mode '{drawing_options['mode']}' is not supported. Currently only 'feynmp' is supported.")
+                    f"Feynman drawing mode '{drawing_mode}' is not supported. Currently only 'feynmp' is supported.")
+
+    def draw_dot(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, **drawing_options: Any) -> Path:
+
+        replace_dict: dict[str, Any] = {}
+        replace_dict['graph_name'] = os.path.basename(
+            file_path_without_extension)
+        if caption:
+            replace_dict['label'] = caption
+        else:
+            replace_dict['label'] = replace_dict['graph_name']
+        replace_dict['label'] += f" {diagram_id}" if diagram_id else ''
+        replace_dict['layout'] = drawing_options['layout']
+        replace_dict['graph_options'] = ','.join(
+            f"{o}={str(v)}" for o, v in drawing_options['graph_options'].items())
+        replace_dict['node_options'] = ','.join(
+            f"{o}={str(v)}" for o, v in drawing_options['node_options'].items())
+        edge_options = dict(drawing_options['edge_options'])
+        edge_options['penwidth'] = edge_options.get('penwidth', 0.6)
+        replace_dict['edge_options'] = ','.join(
+            f"{o}={str(v)}" for o, v in edge_options.items())
+        edges_str = []
+        for edge in self.edges:
+            edge_repl_dict = {
+                "start": edge.vertices[0].name,
+                "end": edge.vertices[1].name
+            }
+            edge_repl_dict["label"] = f"{edge.name} | {edge.particle.name}"
+            # Paint gluons in red
+            if edge.particle.pdg_code == 21:
+                edge_repl_dict["color"] = "red"
+            elif edge.particle.is_ghost():
+                if edge.particle.color != 1:
+                    edge_repl_dict["color"] = "magenta"
+                else:
+                    edge_repl_dict["color"] = "cyan"
+            elif edge.particle.spin % 2 == 0:
+                edge_repl_dict["color"] = "black"
+            else:
+                edge_repl_dict["color"] = "blue"
+            if edge.particle.is_massive():
+                edge_repl_dict["penwidth"] = edge_options['penwidth']*2
+            else:
+                edge_repl_dict["penwidth"] = edge_options['penwidth']
+            edge_repl_dict["style"] = "solid"
+            if self.loop_momentum_basis:
+                if edge in self.loop_momentum_basis:
+                    edge_repl_dict["style"] = "dashed"
+            edges_str.append(
+                '"{start:s}" -> "{end:s}" [label="{label:s}",color="{color:s}",penwidth="{penwidth}",style="{style:s}"];'.format(**edge_repl_dict))
+        replace_dict['edges'] = '\n'.join(edges_str)
+
+        with open(pjoin(DATA_PATH, 'templates', 'drawing', 'drawing.dot.template'), 'r', encoding='utf-8') as f:
+            template = f.read()
+        output_path = file_path_without_extension+'.dot'
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(template.format(**replace_dict))
+
+        return Path(output_path)
 
     def draw_feynmp(self, model: Model, file_path_without_extension: str, caption: str | None = None, diagram_id: str | None = None, caption_size: str = '20pt', **drawing_options: Any) -> Path:
 
@@ -1097,6 +1172,8 @@ class Graph(object):
                     f'v{self.get_vertex_position(e.vertices[0].name)}' for e in self.get_incoming_edges())
                 replace_dict['incoming_vertices'] = "% None."
             else:
+                replace_dict['incoming_vertices'] = "% None."
+                replace_dict['outgoing_vertices'] = "% None."
                 # The anchor tension will do the job of spreading the graph open
                 pass
 

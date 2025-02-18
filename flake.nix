@@ -49,11 +49,15 @@
 
         buildInputs =
           [
+            pkgs.mold
+            pkgs.gcc
+            pkgs.clang
             # Add additional build inputs here
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
             pkgs.libiconv
+            pkgs.gcc.cc.lib
           ];
 
         # Additional environment variables can be set directly
@@ -148,9 +152,27 @@
         # Additional dev-shell environment variables can be set directly
         # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
-        RUSTFLAGS = "-C target-cpu=native";
 
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+
+        shellHook =
+          if pkgs.stdenv.isDarwin
+          then ''
+            export CC=gcc
+            export CXX=g++
+            export RUSTFLAGS="$RUSTFLAGS -Clink-arg=${pkgs.gcc.cc.lib}/lib/libgcc_s.1.1.dylib"
+
+            # Point the history file to your home directory’s bash history
+            export HISTFILE=~/.bash_history
+
+            # Ensure the history is appended rather than overwritten
+            shopt -s histappend
+
+            # Append each command to the history file immediately
+            export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
+          ''
+          else ''
+          '';
 
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
@@ -168,15 +190,18 @@
           cargo-deny
           cargo-edit
           cargo-watch
-          python311
+          # python311
           texlive.combined.scheme-medium
           poetry
           ghostscript
+          graphviz
           mupdf
           poppler_utils
           rust-analyzer
           maturin
+          virtualenv
         ];
       };
     });
+
 }

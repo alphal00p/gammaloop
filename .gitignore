@@ -204,7 +204,7 @@ default.nix
 src/test_resources/qqddg/
 
 
-# Ignore the local compiled numerators 
+# Ignore the local compiled numerators
 /*.cpp
 /*.so
 
@@ -215,5 +215,7 @@ TMP_COMPILED/
 # My own process outputs
 process_outputs
 ignore/
+.ignore/
 # the default log file
 log.glog/
+!.jj/repo/config.toml

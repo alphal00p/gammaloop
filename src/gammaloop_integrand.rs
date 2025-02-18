@@ -277,12 +277,12 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
                 "graph",
                 &SerializableGraph::from_graph(&self.get_graph().bare_graph),
             );
-            DEBUG_LOGGER.write("rep3d", &rep3d);
+            DEBUG_LOGGER.write("rep3d", &(&rep3d / &energy_product));
             DEBUG_LOGGER.write("ose_product", &energy_product);
             DEBUG_LOGGER.write("counter_terms", &counter_term_eval);
         }
 
-        prefactor * (rep3d / energy_product - counter_term_eval)
+        prefactor * (rep3d / energy_product + counter_term_eval)
     }
 
     #[inline]
@@ -358,7 +358,7 @@ impl GraphIntegrand for AmplitudeGraph<Evaluators> {
             );
         }
 
-        (rep3d - counterterm) * final_energy_product * prefactor
+        (rep3d + counterterm) * final_energy_product * prefactor
     }
 }
 
@@ -718,7 +718,7 @@ impl HasIntegrand for GammaLoopIntegrand {
 
         let mut integrand_result = *res;
 
-        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan();
+        let is_nan = integrand_result.re.is_nan() || integrand_result.im.is_nan() || !stable;
 
         if is_nan {
             integrand_result = Complex::new_zero();
@@ -942,34 +942,31 @@ impl GammaLoopIntegrand {
                             .unwrap()
                             .tropical_subgraph_table
                             .as_ref()
-                            .unwrap();
-                        let xs_f64 = xs.iter().map(|x| x.0).collect_vec();
+                            .expect("No tropical subgraph table present, disable tropical sampling or regenerate process with table");
 
                         let edge_data = graph
                             .bare_graph
                             .get_loop_edges_iterator()
                             .map(|(edge_id, edge)| {
                                 let mass = edge.particle.mass.value;
-                                let mass_re = mass.map(|complex_mass| complex_mass.re.0);
+                                let mass_re = mass.map(|complex_mass| complex_mass.re);
 
                                 let shift = utils::compute_shift_part(
                                     &graph.bare_graph.loop_momentum_basis.edge_signatures[edge_id]
                                         .external,
                                     &externals.get_indep_externals(),
-                                );
+                                )
+                                .spatial;
 
-                                let shift_momtrop = Vector::from_array([
-                                    shift.spatial.px.0,
-                                    shift.spatial.py.0,
-                                    shift.spatial.pz.0,
-                                ]);
+                                let shift_momtrop =
+                                    Vector::from_array([shift.px, shift.py, shift.pz]);
 
                                 (mass_re, shift_momtrop)
                             })
                             .collect_vec();
 
                         let sampling_result_result = sampler.generate_sample_from_x_space_point(
-                            &xs_f64,
+                            xs,
                             edge_data,
                             &tropical_sampling_settings.into_tropical_sampling_settings(
                                 self.global_data.settings.general.debug,
@@ -993,7 +990,7 @@ impl GammaLoopIntegrand {
                         let default_sample = DefaultSample::new(
                             loop_moms,
                             externals,
-                            F(sampling_result.jacobian) * externals.pdf(xs),
+                            sampling_result.jacobian * externals.pdf(xs),
                             &self.global_data.polarizations[0],
                             &graph.bare_graph.external_in_or_out_signature(),
                         );
@@ -1097,7 +1094,7 @@ impl GammaLoopIntegrand {
                 || error.im > stability_settings.required_precision_for_im
         });
 
-        if self.global_data.settings.general.debug > 0 {
+        if self.global_data.settings.general.debug > 1 {
             if let Some(unstable_index) = unstable_sample {
                 let unstable_point = results[unstable_index];
                 let rotation_axis = format!(
@@ -1188,9 +1185,9 @@ impl GammaLoopIntegrand {
                     }
 
                     if !existing_esurfaces.is_empty() {
-                        if settings.general.force_orientations.is_some() {
-                            panic!("force orientations not supported with thresholds")
-                        }
+                        // if settings.general.force_orientations.is_some() {
+                        //     panic!("force orientations not supported with thresholds")
+                        // }
 
                         match &settings.sampling {
                             SamplingSettings::Default => {}

@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use symbolica::domains::float::ConstructibleFloat;
 
+use crate::observables::Event;
 use crate::{
-    observables::Event,
     utils::{format_evaluation_time, F},
     Precision,
 };

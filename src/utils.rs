@@ -9,10 +9,10 @@ use colored::Colorize;
 use itertools::{izip, Itertools};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::float::Constant;
+use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use spenso::complex::SymbolicaComplex;
 use spenso::{
     complex::{Complex, R},
@@ -31,6 +31,7 @@ use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
+use std::str::FromStr;
 use std::sync::LazyLock;
 use std::time::Duration;
 use symbolica::domains::float::Real;
@@ -117,13 +118,47 @@ pub trait FloatConvertFrom<U> {
 //     }
 // }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Encode, Decode)]
 pub struct VarFloat<const N: u32> {
     #[bincode(with_serde)]
     float: rug::Float,
 }
 
-impl<'a, const N: u32> Rem<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Serialize for VarFloat<N> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let string = self.float.to_string();
+        string.serialize(serializer)
+    }
+}
+
+impl<'de, const N: u32> Deserialize<'de> for VarFloat<N> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string: String = serde::Deserialize::deserialize(deserializer)?;
+        let val: Self = string
+            .parse()
+            .unwrap_or_else(|_| panic!("failed to parse arb prec from string: {}", string));
+
+        Ok(val)
+    }
+}
+
+impl<const N: u32> FromStr for VarFloat<N> {
+    type Err = ParseFloatError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let float = rug::Float::parse(s)?;
+        Ok(Self {
+            float: rug::Float::with_val(N, float),
+        })
+    }
+}
+
+impl<const N: u32> Rem<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn rem(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -181,7 +216,7 @@ impl<const N: u32> std::ops::Mul<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Mul<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: VarFloat<N>) -> Self::Output {
@@ -189,7 +224,7 @@ impl<'a, const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Mul<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Mul<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -227,7 +262,7 @@ impl<const N: u32> std::ops::Add<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Add<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: VarFloat<N>) -> Self::Output {
@@ -235,7 +270,7 @@ impl<'a, const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Add<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Add<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -273,7 +308,7 @@ impl<const N: u32> std::ops::Sub<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Sub<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: VarFloat<N>) -> Self::Output {
@@ -281,7 +316,7 @@ impl<'a, const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Sub<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Sub<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -319,7 +354,7 @@ impl<const N: u32> Div<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Div<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: VarFloat<N>) -> Self::Output {
@@ -327,7 +362,7 @@ impl<'a, const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> Div<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Div<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -357,7 +392,7 @@ impl<const N: u32> std::ops::Neg for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Neg for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Neg for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn neg(self) -> Self::Output {
@@ -494,6 +529,9 @@ impl<const N: u32> RealNumberLike for VarFloat<N> {
 }
 
 impl<const N: u32> Real for VarFloat<N> {
+    fn i(&self) -> Option<Self> {
+        None
+    }
     #[inline(always)]
     fn pi(&self) -> Self {
         Float::with_val(N, rug::float::Constant::Pi).into()
@@ -808,7 +846,7 @@ pub struct F<T: FloatLike>(pub T);
 
 impl<T: FloatLike> R for F<T> {}
 
-impl<'a, T: FloatLike> Rem<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Rem<&F<T>> for &F<T> {
     type Output = F<T>;
 
     fn rem(self, rhs: &F<T>) -> Self::Output {
@@ -971,6 +1009,10 @@ impl<T: FloatLike + ConstructibleFloat> ConstructibleFloat for F<T> {
 impl<T: FloatLike> Real for F<T> {
     fn atan2(&self, x: &Self) -> Self {
         F(self.0.atan2(&x.0))
+    }
+
+    fn i(&self) -> Option<Self> {
+        None
     }
 
     fn powf(&self, e: &Self) -> Self {
@@ -1138,14 +1180,14 @@ impl<T: FloatLike> Add<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Add<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Add<&F<T>> for &F<T> {
     type Output = F<T>;
     fn add(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_add(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Add<F<T>> for &'a F<T> {
+impl<T: FloatLike> Add<F<T>> for &F<T> {
     type Output = F<T>;
     fn add(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_add(rhs.0))
@@ -1178,14 +1220,14 @@ impl<T: FloatLike> Sub<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Sub<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Sub<&F<T>> for &F<T> {
     type Output = F<T>;
     fn sub(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_sub(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Sub<F<T>> for &'a F<T> {
+impl<T: FloatLike> Sub<F<T>> for &F<T> {
     type Output = F<T>;
     fn sub(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_sub(rhs.0))
@@ -1218,14 +1260,14 @@ impl<T: FloatLike> Mul<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Mul<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Mul<&F<T>> for &F<T> {
     type Output = F<T>;
     fn mul(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_mul(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Mul<F<T>> for &'a F<T> {
+impl<T: FloatLike> Mul<F<T>> for &F<T> {
     type Output = F<T>;
     fn mul(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_mul(rhs.0))
@@ -1258,14 +1300,14 @@ impl<T: FloatLike> Div<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Div<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Div<&F<T>> for &F<T> {
     type Output = F<T>;
     fn div(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_div(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Div<F<T>> for &'a F<T> {
+impl<T: FloatLike> Div<F<T>> for &F<T> {
     type Output = F<T>;
     fn div(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_div(rhs.0))
@@ -1291,7 +1333,7 @@ impl<T: FloatLike> Neg for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Neg for &'a F<T> {
+impl<T: FloatLike> Neg for &F<T> {
     type Output = F<T>;
     fn neg(self) -> Self::Output {
         F(self.0.ref_neg())
@@ -1385,6 +1427,12 @@ impl From<F<f64>> for f64 {
     }
 }
 
+impl From<F<f64>> for Rational {
+    fn from(value: F<f64>) -> Self {
+        value.0.into()
+    }
+}
+
 #[allow(non_camel_case_types)]
 pub type f128 = VarFloat<113>;
 
@@ -1473,6 +1521,7 @@ pub fn to_str_expression(expression: &Atom) -> String {
         AtomPrinter::new_with_options(
             expression.as_view(),
             PrintOptions {
+                pretty_matrix: true,
                 terms_on_new_line: false,
                 color_top_level_sum: false,
                 color_builtin_symbols: false,
@@ -1484,7 +1533,8 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
                 latex: false,
-                double_star_for_exponentiation: false
+                double_star_for_exponentiation: false,
+                precision: None,
             },
         )
     )
@@ -2316,7 +2366,7 @@ pub fn get_n_dim_for_n_loop_momenta(
         settings.sampling,
         SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_))
     ) {
-        let tropical_part = 2 * n_edges.unwrap() - 1;
+        let tropical_part = 2 * n_edges.expect("No tropical subgraph table generated, please run without tropical sampling or regenerate with tables") - 1;
         let d_l = 3 * n_loop_momenta;
         return if d_l % 2 == 1 {
             tropical_part + d_l + 1
@@ -2817,6 +2867,10 @@ pub fn format_wdhms(seconds: usize) -> String {
     compound_duration.join(" ")
 }
 
+pub fn format_wdhms_from_duration(duration: Duration) -> String {
+    format_wdhms(duration.as_secs() as usize)
+}
+
 #[allow(unused)]
 pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
     // this algorithm is taken from https://dl.acm.org/doi/pdf/10.1145/22721.23109
@@ -3149,17 +3203,91 @@ pub struct GammaloopSymbols {
     pub vbar: Symbol,
     pub v: Symbol,
     pub u: Symbol,
+    pub color_wrap: Symbol,
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
+    pub x_: Symbol,
+    pub y_: Symbol,
+    pub z_: Symbol,
+    pub a_: Symbol,
+    pub b_: Symbol,
+    pub c_: Symbol,
+    pub d_: Symbol,
+    pub e_: Symbol,
+    pub f_: Symbol,
+    pub g_: Symbol,
+    pub h_: Symbol,
+
+    pub x__: Symbol,
+    pub y__: Symbol,
+    pub z__: Symbol,
+    pub a__: Symbol,
+    pub b__: Symbol,
+    pub c__: Symbol,
+    pub d__: Symbol,
+    pub e__: Symbol,
+    pub f__: Symbol,
+    pub g__: Symbol,
+    pub h__: Symbol,
+
+    pub x___: Symbol,
+    pub y___: Symbol,
+    pub z___: Symbol,
+    pub a___: Symbol,
+    pub b___: Symbol,
+    pub c___: Symbol,
+    pub d___: Symbol,
+    pub e___: Symbol,
+    pub f___: Symbol,
+    pub g___: Symbol,
+    pub h___: Symbol,
+    pub dim: Symbol,
+    pub coeff: Symbol,
 }
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ubar: symb!("ubar"),
     vbar: symb!("vbar"),
+    dim: symb!("dim"),
     v: symb!("v"),
     u: symb!("u"),
     epsilon: symb!("ϵ"),
+    color_wrap: symb!("color"),
     epsilonbar: symb!("ϵbar"),
+    coeff: symb!("coef"),
+    x_: symb!("x_"),
+    y_: symb!("y_"),
+    z_: symb!("z_"),
+    a_: symb!("a_"),
+    b_: symb!("b_"),
+    c_: symb!("c_"),
+    d_: symb!("d_"),
+    e_: symb!("e_"),
+    f_: symb!("f_"),
+    g_: symb!("g_"),
+    h_: symb!("h_"),
+    x__: symb!("x__"),
+    y__: symb!("y__"),
+    z__: symb!("z__"),
+    a__: symb!("a__"),
+    b__: symb!("b__"),
+    c__: symb!("c__"),
+    d__: symb!("d__"),
+    e__: symb!("e__"),
+    f__: symb!("f__"),
+    g__: symb!("g__"),
+    h__: symb!("h__"),
+    x___: symb!("x___"),
+    y___: symb!("y___"),
+    z___: symb!("z___"),
+    a___: symb!("a___"),
+    b___: symb!("b___"),
+    c___: symb!("c___"),
+    d___: symb!("d___"),
+    e___: symb!("e___"),
+    f___: symb!("f___"),
+    g___: symb!("g___"),
+    h___: symb!("h___"),
 });
 
 /// Checks if two lists are permutations of eachother, and establish a map between indices
@@ -3226,5 +3354,77 @@ fn test_is_permutation() {
     for ind in 0..5 {
         assert_eq!(a[ind], b[permutation_map.left_to_right[ind]]);
         assert_eq!(b[ind], a[permutation_map.right_to_left[ind]]);
+    }
+}
+
+impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
+    #[inline]
+    fn PI(&self) -> Self {
+        self.PI()
+    }
+
+    #[inline]
+    fn abs(&self) -> Self {
+        self.abs()
+    }
+
+    #[inline]
+    fn cos(&self) -> Self {
+        <F<T> as Real>::cos(self)
+    }
+
+    #[inline]
+    fn exp(&self) -> Self {
+        <F<T> as Real>::exp(self)
+    }
+
+    #[inline]
+    fn one(&self) -> Self {
+        <F<T> as NumericalFloatLike>::one(self)
+    }
+
+    #[inline]
+    fn from_f64(&self, value: f64) -> Self {
+        F::from_f64(value)
+    }
+
+    #[inline]
+    fn from_isize(&self, value: isize) -> Self {
+        Self(self.0.from_i64(value as i64))
+    }
+
+    #[inline]
+    fn inv(&self) -> Self {
+        <F<T> as NumericalFloatLike>::inv(self)
+    }
+
+    #[inline]
+    fn ln(&self) -> Self {
+        <F<T> as Real>::log(self)
+    }
+
+    #[inline]
+    fn powf(&self, power: &Self) -> Self {
+        <F<T> as Real>::powf(self, power)
+    }
+
+    #[inline]
+    fn sin(&self) -> Self {
+        <F<T> as Real>::sin(self)
+    }
+
+    #[inline]
+    fn sqrt(&self) -> Self {
+        <F<T> as Real>::sqrt(self)
+    }
+
+    #[inline]
+    fn zero(&self) -> Self {
+        <F<T> as NumericalFloatLike>::zero(self)
+    }
+
+    #[inline]
+    fn to_f64(&self) -> f64 {
+        self.into_f64()
     }
 }

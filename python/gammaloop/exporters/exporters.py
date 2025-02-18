@@ -66,7 +66,7 @@ class GammaLoopExporter(object):
         os.makedirs(export_root, exist_ok=True)
 
         # Build the output structure
-        os.makedirs(pjoin(export_root, 'cards'))
+        os.makedirs(pjoin(export_root, 'cards'), exist_ok=True)
         shutil.copy(pjoin(self.gammaloop.model_directory, self.gammaloop.model.name,
                           f"restrict_{'full' if self.gammaloop.model.restriction is None else self.gammaloop.model.restriction}.dat"),
                     pjoin(export_root, 'cards', 'param_card.dat'))
@@ -81,19 +81,18 @@ class GammaLoopExporter(object):
         with open(pjoin(export_root, 'sources', 'model', f'{self.gammaloop.model.name}.yaml'), 'w', encoding='utf-8') as file:
             file.write(self.gammaloop.model.to_yaml())
 
-        os.makedirs(pjoin(export_root, 'runs'))
+        os.makedirs(pjoin(export_root, 'runs'), exist_ok=True)
 
         return OutputMetaData({
             'model_name': self.gammaloop.model.name,
         })
 
-    def finalize_drawing(self, drawings_path: Path, drawing_file_paths: list[Path | None]):
-
+    def finalize_feynmp_drawing(self, drawings_path: Path, drawing_file_paths: list[Path | None]):
         shutil.copy(
             pjoin(DATA_PATH, 'templates', 'drawing', 'combine_pages.py'),
             pjoin(drawings_path, 'combine_pages.py'))
 
-        with open(pjoin(DATA_PATH, 'templates', 'drawing', 'makefile'), 'r', encoding='utf-8') as makefile_in:
+        with open(pjoin(DATA_PATH, 'templates', 'drawing', 'feynmp_makefile'), 'r', encoding='utf-8') as makefile_in:
             with open(pjoin(drawings_path, 'makefile'), 'w', encoding='utf-8') as makefile_out:
                 all_targets: list[str] = []
                 for drawing_file_path in drawing_file_paths:
@@ -101,7 +100,7 @@ class GammaLoopExporter(object):
                         continue
                     if drawing_file_path.suffix != '.tex':
                         raise GammaLoopError(
-                            "Finalization of diagram drawings only supports latex format.")
+                            "Finalization of diagram latex drawings only supports latex format.")
                     drawing_name = pjoin(os.path.relpath(
                         drawing_file_path.parent, drawings_path), drawing_file_path.stem)
                     all_targets.append(f'{drawing_name}.pdf')
@@ -111,6 +110,45 @@ class GammaLoopExporter(object):
                     n_rows=self.gammaloop.config['drawing']['combined_graphs_pdf_grid_shape'][0],
                     n_columns=self.gammaloop.config['drawing']['combined_graphs_pdf_grid_shape'][1]
                 ))
+
+    def finalize_dot_drawing(self, drawings_path: Path, drawing_file_paths: list[Path | None]):
+        shutil.copy(
+            pjoin(DATA_PATH, 'templates', 'drawing', 'combine_pages.py'),
+            pjoin(drawings_path, 'combine_pages.py'))
+
+        with open(pjoin(DATA_PATH, 'templates', 'drawing', 'dot_makefile'), 'r', encoding='utf-8') as makefile_in:
+            with open(pjoin(drawings_path, 'makefile'), 'w', encoding='utf-8') as makefile_out:
+                all_targets: list[str] = []
+                for drawing_file_path in drawing_file_paths:
+                    if drawing_file_path is None:
+                        continue
+                    if drawing_file_path.suffix != '.dot':
+                        raise GammaLoopError(
+                            "Finalization of diagram dot drawings only supports dot format.")
+                    drawing_name = pjoin(os.path.relpath(
+                        drawing_file_path.parent, drawings_path), drawing_file_path.stem)
+                    all_targets.append(f'{drawing_name}.pdf')
+                makefile_out.write(makefile_in.read().format(
+                    all_targets=' '.join(all_targets),
+                    output_name='feynman_diagrams.pdf',
+                    n_rows=self.gammaloop.config['drawing']['combined_graphs_pdf_grid_shape'][0],
+                    n_columns=self.gammaloop.config['drawing']['combined_graphs_pdf_grid_shape'][1]
+                ))
+
+    def finalize_drawing(self, drawings_path: Path, drawing_file_paths: dict[str, list[Path | None]]):
+        for mode, paths in drawing_file_paths.items():
+            if len(paths) == 0:
+                continue
+            match mode:
+                case "feynmp":
+                    self.finalize_feynmp_drawing(
+                        drawings_path.joinpath(mode), paths)
+                case "dot":
+                    self.finalize_dot_drawing(
+                        drawings_path.joinpath(mode), paths)
+                case _:
+                    raise GammaLoopError(
+                        f"Drawing mode '{mode}' not supported.")
 
     def build_external_momenta_from_connections(self, external_connections: list[tuple[Vertex | None, Vertex | None]], e_cm: float) -> tuple[float, list[list[float]], list[int]]:
 
@@ -131,7 +169,7 @@ class GammaLoopExporter(object):
                             direction = -1
                         case _:
                             raise GammaLoopError(
-                                "Invalid external connection.")
+                                f"Invalid external connection. Connection element: {conn}. Corresponding edge: {v2.edges[0].name}")
                     mass = self.gammaloop.model.get_parameter(
                         v2.vertex_info.get_particles()[0].mass.name).value
 
@@ -156,7 +194,7 @@ class GammaLoopExporter(object):
                             direction = -1
                         case _:
                             raise GammaLoopError(
-                                "Invalid external connection.")
+                                f"Invalid external connection. Connection element: ({v1.name},*). Corresponding edge type: {v1.edges[0].edge_type}")
                     mass = self.gammaloop.model.get_parameter(
                         v1.vertex_info.get_particles()[0].mass.name).value
                     spin = v1.vertex_info.get_particles()[0].spin
@@ -171,7 +209,8 @@ class GammaLoopExporter(object):
                 case _:
                     raise GammaLoopError("Invalid external connection.")
         if len(conf) == 0:
-            raise GammaLoopError("Invalid external connection.")
+            # Vaccuum graph case
+            return (1.0, [], [])
 
         # ensure some phase-space available
         if e_cm <= sum(m for (_es, m, _dir) in conf):
@@ -268,18 +307,13 @@ class AmplitudesExporter(GammaLoopExporter):
                     'run_settings.Kinematics.externals.data.helicities', helicities)
 
     def export_expression(self, export_root: Path, amplitudes: AmplitudeList, format: str):
-        for amplitude in amplitudes:
-            os.makedirs(pjoin(export_root, 'sources',
-                        'amplitudes', f'{amplitude.name}', 'expressions'))
-
         self.gammaloop.rust_worker.export_expressions(
-            str(export_root), format, yaml.dump(self.gammaloop.config['export_settings']))
+            str(export_root), [amp.to_yaml_str() for amp in amplitudes], format, yaml.dump(self.gammaloop.config['export_settings']))
 
-    def export(self, export_root: Path, amplitudes: AmplitudeList):
+    def export(self, export_root: Path, amplitudes: AmplitudeList, no_evaluators: bool):
 
         # Tweak the run configuration for the particular process exported before attending to the generic export
         self.adjust_run_settings(amplitudes)
-
         output_data = super(AmplitudesExporter,
                             self).generic_export(export_root)
         output_data['output_type'] = 'amplitudes'
@@ -288,19 +322,19 @@ class AmplitudesExporter(GammaLoopExporter):
         with open(pjoin(export_root, 'output_metadata.yaml'), 'w', encoding='utf-8') as file:
             file.write(output_data.to_yaml_str())
 
-        os.makedirs(pjoin(export_root, 'sources', 'amplitudes'))
+        os.makedirs(pjoin(export_root, 'sources', 'amplitudes'), exist_ok=True)
         self.gammaloop.rust_worker.reset_cross_sections()
         for amplitude in amplitudes:
             os.makedirs(pjoin(export_root, 'sources',
-                        'amplitudes', f'{amplitude.name}'))
+                        'amplitudes', f'{amplitude.name}'), exist_ok=True)
             amplitude_yaml = amplitude.to_yaml_str()
             # Already writing the file below is not necessary as it will be overwritten by the rust export, but it is useful for debugging
             with open(pjoin(export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'amplitude.yaml'), 'w', encoding='utf-8') as file:
                 file.write(amplitude_yaml)
-            if self.configuration_for_process.get_setting('drawing.mode') != None:
+            if self.configuration_for_process.get_setting('drawing.modes') != None and len(self.configuration_for_process.get_setting('drawing.modes')) > 0:
                 drawings_path = pjoin(
                     export_root, 'sources', 'amplitudes', f'{amplitude.name}', 'drawings')
-                os.makedirs(drawings_path)
+                os.makedirs(drawings_path, exist_ok=True)
                 drawing_file_paths = amplitude.draw(
                     self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
                 self.finalize_drawing(
@@ -311,7 +345,7 @@ class AmplitudesExporter(GammaLoopExporter):
         if not self.output_options.yaml_only:
             # Now address the rust export aspect
             self.gammaloop.rust_worker.export_amplitudes(
-                str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']))
+                str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']), no_evaluators)
 
 
 class CrossSectionsExporter(GammaLoopExporter):
@@ -331,18 +365,19 @@ class CrossSectionsExporter(GammaLoopExporter):
         with open(pjoin(export_root, 'output_metadata.yaml'), 'w', encoding='utf-8') as file:
             file.write(output_data.to_yaml_str())
 
-        os.makedirs(pjoin(export_root, 'sources', 'cross_sections'))
+        os.makedirs(pjoin(export_root, 'sources',
+                    'cross_sections'), exist_ok=True)
         self.gammaloop.rust_worker.reset_cross_sections()
         for one_cross_section in cross_sections:
             os.makedirs(pjoin(export_root, 'sources',
-                        'cross_sections', f'{one_cross_section.name}'))
+                        'cross_sections', f'{one_cross_section.name}'), exist_ok=True)
             yaml_xs = one_cross_section.to_yaml_str()
             # Already writing the file below is not necessary as it will be overwritten by the rust export, but it is useful for debugging
             with open(pjoin(export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'cross_section.yaml'), 'w', encoding='utf-8') as file:
                 file.write(yaml_xs)
             drawings_path = pjoin(
                 export_root, 'sources', 'cross_sections', f'{one_cross_section.name}', 'drawings')
-            os.makedirs(drawings_path)
+            os.makedirs(drawings_path, exist_ok=True)
             drawing_file_paths = one_cross_section.draw(
                 self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
             self.finalize_drawing(Path(drawings_path), drawing_file_paths)

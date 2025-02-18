@@ -34,7 +34,7 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
     if clean_dependencies:
         print("Cleaning gammaloop dependencies in '%s' using %s./bin/build_dependencies.sh clean%s ..." % (
             os.path.abspath(os.path.join(gammaloop_root_path, 'dependencies')), CLIColour.GREEN, CLIColour.END))
-        Popen([f"bash {os.path.join('.', 'bin','build_dependencies.sh')} clean",],
+        Popen([f"bash {os.path.join('.', 'bin', 'build_dependencies.sh')} clean",],
               shell=True, cwd=gammaloop_root_path).wait()
         print("%sDependencies folder cleaned successfully.%s" %
               (CLIColour.GREEN, CLIColour.END))
@@ -172,6 +172,7 @@ def cli():
     from .interface.gammaloop_interface import GammaLoop
     import gammaloop.misc.common as common
     from .misc.common import GL_CONSOLE_HANDLER, register_symbolica, logger, DATA_PATH, GammaLoopError
+    import gammaloop._gammaloop as gl_rust
 
     if args.command_file is None:
         logger.critical(
@@ -198,6 +199,9 @@ def cli():
     if args.quiet:
         common.GL_DEBUG = False
         GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
+
+    gl_rust.setup_rust_logging(
+        logging.getLevelName(GL_CONSOLE_HANDLER.level), args.logging_format)
 
     if args.run_command:
         commands = CommandList.from_string(args.command_file)
