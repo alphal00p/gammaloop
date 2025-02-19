@@ -16,7 +16,7 @@ use crate::{
         NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
         TadpolesFilterOptions,
     },
-    graph::{Edge, EdgeType, Vertex},
+    graph::{Edge, EdgeType, BareVertex},
     model::Model,
     new_graph::Graph,
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
@@ -135,7 +135,7 @@ impl Process {
         let hedge_collection = bare_collection
             .into_iter()
             .map(|bare_graph| {
-                let mut hedge_graph_builder = HedgeGraphBuilder::<Edge, Vertex>::new();
+                let mut hedge_graph_builder = HedgeGraphBuilder::<Edge, BareVertex>::new();
                 for vertex in bare_graph.vertices {
                     // do not add the vertices attached to externals
                     if vertex.edges.len() != 1 {

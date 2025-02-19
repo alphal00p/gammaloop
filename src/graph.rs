@@ -764,7 +764,7 @@ pub struct SerializableVertex {
 }
 
 impl SerializableVertex {
-    pub fn from_vertex(graph: &BareGraph, vertex: &Vertex) -> SerializableVertex {
+    pub fn from_vertex(graph: &BareGraph, vertex: &BareVertex) -> SerializableVertex {
         SerializableVertex {
             name: vertex.name.clone(),
             vertex_info: serializable_vertex_info(&vertex.vertex_info),
@@ -778,13 +778,13 @@ impl SerializableVertex {
 }
 
 #[derive(Debug, Clone)]
-pub struct Vertex {
+pub struct BareVertex {
     pub name: SmartString<LazyCompact>,
     pub vertex_info: VertexInfo,
     pub edges: Vec<usize>,
 }
 
-impl Vertex {
+impl BareVertex {
     pub fn get_local_edge_position(
         &self,
         edge: &BareEdge,
@@ -848,8 +848,11 @@ impl Vertex {
         }
     }
 
-    pub fn from_serializable_vertex(model: &model::Model, vertex: &SerializableVertex) -> Vertex {
-        Vertex {
+    pub fn from_serializable_vertex(
+        model: &model::Model,
+        vertex: &SerializableVertex,
+    ) -> BareVertex {
+        BareVertex {
             name: vertex.name.clone(),
             vertex_info: deserialize_vertex_info(model, &vertex.vertex_info),
             // This will be filled in later during deserialization of the complete graph
@@ -1083,7 +1086,7 @@ impl Graph<PythonState> {
 #[derive(Debug, Clone)]
 pub struct BareGraph {
     pub name: SmartString<LazyCompact>,
-    pub vertices: Vec<Vertex>,
+    pub vertices: Vec<BareVertex>,
     pub edges: Vec<BareEdge>,
     pub external_edges: Vec<usize>,
     pub overall_factor: String,
@@ -1306,11 +1309,11 @@ impl BareGraph {
 
     pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> BareGraph {
         // First build vertices
-        let mut vertices: Vec<Vertex> = vec![];
+        let mut vertices: Vec<BareVertex> = vec![];
         let mut vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
             HashMap::default();
         for vertex in &graph.vertices {
-            let vertex = Vertex::from_serializable_vertex(model, vertex);
+            let vertex = BareVertex::from_serializable_vertex(model, vertex);
             vertex_name_to_position.insert(vertex.name.clone(), vertices.len());
             vertices.push(vertex);
         }
@@ -1590,7 +1593,7 @@ impl BareGraph {
             }
         }
         // First build vertices
-        let mut vertices: Vec<Vertex> = vec![];
+        let mut vertices: Vec<BareVertex> = vec![];
         let mut vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
             HashMap::default();
         // println!(
@@ -1628,7 +1631,7 @@ impl BareGraph {
                     vertex_rule: node.data.vertex_rule.name.clone(), //node.data.vertex_rule.name.clone(),
                 })
             };
-            let vertex = Vertex::from_serializable_vertex(
+            let vertex = BareVertex::from_serializable_vertex(
                 model,
                 &SerializableVertex {
                     name: format!("v{}", i_n).into(),
@@ -1703,7 +1706,7 @@ impl BareGraph {
                     format!("q{}", i_edge_internal)
                 }
             };
-            let edge = Edge {
+            let edge = BareEdge {
                 name: name.clone().into(),
                 edge_type,
                 particle,
@@ -2083,7 +2086,7 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn get_vertex(&self, name: &SmartString<LazyCompact>) -> Option<&Vertex> {
+    pub fn get_vertex(&self, name: &SmartString<LazyCompact>) -> Option<&BareVertex> {
         match self.vertex_name_to_position.get(name) {
             Some(position) => Some(&self.vertices[*position]),
             None => None,
@@ -4223,7 +4226,7 @@ mod tests {
 
         let v = &model.vertex_rules[model.vertex_rule_name_to_position["V_44"]];
 
-        let _vertex = Vertex {
+        let _vertex = BareVertex {
             name: "v".into(),
             vertex_info: VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
                 vertex_rule: v.clone(),

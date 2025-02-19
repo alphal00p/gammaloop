@@ -38,7 +38,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     gammaloop_integrand::BareSample,
-    graph::{DerivedGraphData, EdgeType, Vertex},
+    graph::{BareVertex, DerivedGraphData, EdgeType},
     model::{self, EdgeSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
@@ -52,7 +52,7 @@ use crate::{
 
 pub struct Graph<S: NumeratorState = PythonState> {
     pub multiplicity: Atom,
-    pub underlying: HedgeGraph<Edge, Vertex>,
+    pub underlying: HedgeGraph<Edge, BareVertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub derived_data: DerivedGraphData<S>,
 }
@@ -78,7 +78,7 @@ pub trait FeynmanGraph {
     fn out_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski>;
 }
 
-impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
+impl FeynmanGraph for HedgeGraph<Edge, BareVertex> {
     fn new_lmb(&self) -> Result<LoopMomentumBasis> {
         // root node should contain a dangling (external edge), that will be the dependent external
         let root = self
@@ -267,7 +267,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
 }
 
 impl Graph<UnInit> {
-    pub fn new(multiplicity: Atom, underlying: HedgeGraph<Edge, Vertex>) -> Result<Self> {
+    pub fn new(multiplicity: Atom, underlying: HedgeGraph<Edge, BareVertex>) -> Result<Self> {
         Ok(Self {
             multiplicity,
             loop_momentum_basis: underlying.new_lmb()?,
@@ -291,7 +291,7 @@ impl Edge {
         5
     }
 
-    pub fn numerator(&self, graph: &HedgeGraph<Edge, Vertex>, edge_index: EdgeIndex) -> Atom {
+    pub fn numerator(&self, graph: &HedgeGraph<Edge, BareVertex>, edge_index: EdgeIndex) -> Atom {
         let [colorless, color] = self.color_separated_numerator(graph, edge_index);
 
         colorless * color
@@ -299,7 +299,7 @@ impl Edge {
 
     pub fn color_separated_numerator(
         &self,
-        graph: &HedgeGraph<Edge, Vertex>,
+        graph: &HedgeGraph<Edge, BareVertex>,
         num: EdgeIndex,
     ) -> [Atom; 2] {
         // let num = *graph.edge_name_to_position.get(&self.name).unwrap();
