@@ -38,8 +38,8 @@ use typed_index_collections::TiVec;
 
 use crate::{
     gammaloop_integrand::BareSample,
-    graph::{BareVertex, DerivedGraphData, EdgeType, VertexInfo},
-    model::{self, EdgeSlots},
+    graph::{BareVertex, DerivedGraphData, EdgeType, Shifts, VertexInfo},
+    model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
@@ -82,6 +82,7 @@ pub trait FeynmanGraph {
         edge_id: EdgeIndex,
         skip_one: bool,
     ) -> usize;
+    fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize>;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -288,6 +289,19 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
             .unwrap()
             .0
     }
+
+    fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
+        let node_hairs = &self[&node_id].hairs;
+        self.iter_edges(node_hairs)
+            .map(|(_, edge_index, _)| {
+                if !self.is_incoming_to(edge_index, node_id) {
+                    -(Into::<usize>::into(edge_index) as isize)
+                } else {
+                    Into::<usize>::into(edge_index) as isize
+                }
+            })
+            .collect()
+    }
 }
 
 impl Graph<UnInit> {
@@ -315,7 +329,7 @@ impl Edge {
         5
     }
 
-    pub fn numerator(&self, graph: &HedgeGraph<Edge, BareVertex>, edge_index: EdgeIndex) -> Atom {
+    pub fn numerator(&self, graph: &HedgeGraph<Edge, Vertex>, edge_index: EdgeIndex) -> Atom {
         let [colorless, color] = self.color_separated_numerator(graph, edge_index);
 
         colorless * color
@@ -323,7 +337,7 @@ impl Edge {
 
     pub fn color_separated_numerator(
         &self,
-        graph: &HedgeGraph<Edge, BareVertex>,
+        graph: &HedgeGraph<Edge, Vertex>,
         num: EdgeIndex,
     ) -> [Atom; 2] {
         // let num = *graph.edge_name_to_position.get(&self.name).unwrap();
@@ -779,4 +793,10 @@ impl LoopMomentumBasis {
 pub struct Vertex {
     pub name: SmartString<LazyCompact>,
     pub vertex_info: VertexInfo,
+}
+
+impl Vertex {
+    pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
+        self.vertex_info.generate_vertex_slots(shifts, model)
+    }
 }
