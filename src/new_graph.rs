@@ -122,7 +122,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
 
         let loop_number = lmb_vec.len();
         let mut lmb = LoopMomentumBasis {
-            tree,
+            tree: Some(tree),
             basis: TiVec::from_iter(lmb_vec),
             edge_signatures: self.new_hedgevec(&|_, _| LoopExtSignature {
                 internal: LoopSignature::from_iter(vec![SignOrZero::Zero; loop_number]),
@@ -548,7 +548,7 @@ impl From<BareVertex> for Vertex {
 
 pub struct LoopMomentumBasis {
     #[bincode(with_serde)]
-    pub tree: TraversalTree,
+    pub tree: Option<TraversalTree>,
     #[bincode(with_serde)]
     pub basis: TiVec<LoopIndex, EdgeIndex>,
     #[bincode(with_serde)]
