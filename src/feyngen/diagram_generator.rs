@@ -23,6 +23,7 @@ use symbolica::atom::Symbol;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
 use symbolica::function;
+use symbolica::graph::GenerationSettings;
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -774,7 +775,7 @@ impl FeynGen {
                         if matches!(o, Orientation::Reversed) {
                             d.data.as_ref().get_anti_particle(model)
                         } else {
-                            d.data.as_ref().clone()
+                            d.data.clone()
                         }
                     })
                     .collect();
@@ -1982,14 +1983,21 @@ impl FeynGen {
             format!("{:<6}", utils::format_wdhms(0)).blue(),
             "Starting Feynman graph generation with Symbolica..."
         );
+
+        let symbolica_generation_settings = if let Some(max_bridges) = filters.get_max_bridge() {
+            GenerationSettings::new().max_bridges(max_bridges)
+        } else {
+            GenerationSettings::new()
+        }
+        .max_loops(self.options.loop_count_range.1)
+        .allow_self_loops(!filter_self_loop);
+
         let mut graphs = SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
-            None,
-            Some(self.options.loop_count_range.1),
-            filters.get_max_bridge(),
-            !filter_self_loop,
-        );
+            &symbolica_generation_settings,
+        )
+        .map_err(|_| FeynGenError::GenericError("graph generation aborted".to_owned()))?;
 
         // Immediately drop lower loop count contributions
         graphs.retain(|g, _| g.num_loops() >= self.options.loop_count_range.0);
