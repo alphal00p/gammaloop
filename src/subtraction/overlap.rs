@@ -2,9 +2,11 @@ use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
 use crate::debug_info::DEBUG_LOGGER;
-use crate::graph::LoopMomentumBasis;
 use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
+use crate::momentum_sample::ExternalFourMomenta;
+use crate::momentum_sample::LoopMomenta;
+use crate::new_graph::LoopMomentumBasis;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
 use crate::Settings;
@@ -15,17 +17,20 @@ use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
 use itertools::Itertools;
+use linnet::half_edge::hedgevec::HedgeVec;
+use linnet::half_edge::involution::EdgeIndex;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
 use spenso::complex::Complex;
+use std::borrow::Borrow;
 
-use crate::graph::LoopExtSignature;
+use crate::signature::LoopExtSignature;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
-    pub center: Vec<ThreeMomentum<F<f64>>>,
+    pub center: LoopMomenta<F<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,7 +40,7 @@ pub struct OverlapStructure {
 
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {
-    propagator_id: usize,        // index into the graph's edges
+    propagator_id: EdgeIndex,    // index into the graph's edges
     mass_pointer: Option<usize>, // pointer to value of unique mass
     signature: &'a LoopExtSignature,
 }
@@ -48,7 +53,7 @@ impl PropagatorConstraint<'_> {
     }
 }
 
-fn extract_center(num_loops: usize, solution: &[f64]) -> Vec<ThreeMomentum<F<f64>>> {
+fn extract_center(num_loops: usize, solution: &[f64]) -> LoopMomenta<F<f64>> {
     let len = solution.len();
     let num_loop_vars = 3 * num_loops;
 
@@ -69,8 +74,8 @@ fn construct_solver(
     esurfaces_to_consider: &[ExistingEsurfaceId],
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &[Option<Complex<F<f64>>>],
-    external_momenta: &[FourMomentum<F<f64>>],
+    edge_masses: &HedgeVec<Option<Complex<F<f64>>>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
 ) -> DefaultSolver {
     let num_loops = lmb.basis.len();
@@ -236,10 +241,10 @@ pub fn find_center(
     esurfaces_to_consider: &[ExistingEsurfaceId],
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &[Option<Complex<F<f64>>>],
-    external_momenta: &[FourMomentum<F<f64>>],
+    edge_masses: &HedgeVec<Option<Complex<F<f64>>>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
-) -> Option<Vec<ThreeMomentum<F<f64>>>> {
+) -> Option<LoopMomenta<F<f64>>> {
     let mut solver = construct_solver(
         lmb,
         esurfaces_to_consider,
@@ -293,8 +298,8 @@ pub fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &[Option<Complex<F<f64>>>],
-    external_momenta: &[FourMomentum<F<f64>>],
+    edge_masses: &HedgeVec<Option<Complex<F<f64>>>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
     settings: &Settings,
 ) -> OverlapStructure {
     let mut res = OverlapStructure {
@@ -307,13 +312,10 @@ pub fn find_maximal_overlap(
         .collect_vec();
 
     if let Some(global_center) = &settings.subtraction.overlap_settings.force_global_center {
-        let real_mass_vector = edge_masses
-            .iter()
-            .map(|option_mass| match option_mass {
-                Some(complex_mass) => complex_mass.re,
-                None => F::from_f64(0.0),
-            })
-            .collect_vec();
+        let real_mass_vector = edge_masses.map_ref(&|option_mass| match option_mass {
+            Some(complex_mass) => complex_mass.re,
+            None => F::from_f64(0.0),
+        });
 
         let global_center_f = global_center
             .iter()
@@ -322,7 +324,7 @@ pub fn find_maximal_overlap(
                 py: F(coordinates[1]),
                 pz: F(coordinates[2]),
             })
-            .collect_vec();
+            .collect();
 
         if settings.subtraction.overlap_settings.check_global_center {
             let is_valid = existing_esurfaces.iter().all(|existing_esurface_id| {
@@ -498,7 +500,7 @@ fn is_subset_of_result(subset: &[ExistingEsurfaceId], result: &OverlapStructure)
 #[derive(Debug, Serialize)]
 struct EsurfacePairs {
     #[serde_as(as = "Vec<(_,_)>")]
-    data: HashMap<(ExistingEsurfaceId, ExistingEsurfaceId), Vec<ThreeMomentum<F<f64>>>>,
+    data: HashMap<(ExistingEsurfaceId, ExistingEsurfaceId), LoopMomenta<F<f64>>>,
     has_pair_with: Vec<Vec<ExistingEsurfaceId>>,
 }
 
@@ -506,7 +508,7 @@ impl EsurfacePairs {
     fn insert(
         &mut self,
         pair: (ExistingEsurfaceId, ExistingEsurfaceId),
-        center: Vec<ThreeMomentum<F<f64>>>,
+        center: LoopMomenta<F<f64>>,
     ) {
         if pair.0 > pair.1 {
             self.data.insert((pair.1, pair.0), center);
@@ -540,8 +542,8 @@ impl EsurfacePairs {
         lmb: &LoopMomentumBasis,
         existing_esurfaces: &ExistingEsurfaces,
         esurfaces: &EsurfaceCollection,
-        edge_masses: &[Option<Complex<F<f64>>>],
-        external_momenta: &[FourMomentum<F<f64>>],
+        edge_masses: &HedgeVec<Option<Complex<F<f64>>>>,
+        external_momenta: &ExternalFourMomenta<F<f64>>,
     ) -> Self {
         let mut res = Self::new_empty(existing_esurfaces.len());
 
@@ -665,14 +667,11 @@ impl EsurfacePairs {
     }
 }
 
-fn to_real_mass_vector(edge_masses: &[Option<Complex<F<f64>>>]) -> Vec<F<f64>> {
-    edge_masses
-        .iter()
-        .map(|mass| match mass {
-            Some(m) => m.re,
-            None => F::from_f64(0.0),
-        })
-        .collect_vec()
+fn to_real_mass_vector(edge_masses: &HedgeVec<Option<Complex<F<f64>>>>) -> HedgeVec<F<f64>> {
+    edge_masses.map_ref(&|mass| match mass {
+        Some(m) => m.re,
+        None => F::from_f64(0.0),
+    })
 }
 
 #[cfg(test)]
@@ -681,53 +680,61 @@ mod tests {
     use super::*;
     use itertools::Itertools;
     use spenso::complex::Complex;
+    use typed_index_collections::ti_vec;
 
     use crate::{
         cff::{
             cff_graph::VertexSet,
             esurface::{Esurface, EsurfaceID},
         },
-        graph::{LoopExtSignature, LoopMomentumBasis},
+        new_graph::LoopMomentumBasis,
+        signature::LoopExtSignature,
+        utils::dummy_hedge_graph,
         Settings,
     };
 
     struct HelperBoxStructure {
-        external_momenta: [FourMomentum<F<f64>>; 3],
+        external_momenta: ExternalFourMomenta<F<f64>>,
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
         existing_esurfaces: ExistingEsurfaces,
-        edge_masses: Vec<Option<Complex<F<f64>>>>,
+        edge_masses: HedgeVec<Option<Complex<F<f64>>>>,
     }
 
     struct HelperBananaStructure {
-        external_momenta: [FourMomentum<F<f64>>; 1],
+        external_momenta: ExternalFourMomenta<F<f64>>,
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
         existing_esurfaces: ExistingEsurfaces,
-        edge_masses: Vec<Option<Complex<F<f64>>>>,
+        edge_masses: HedgeVec<Option<Complex<F<f64>>>>,
     }
 
     impl HelperBoxStructure {
         fn new(masses: Option<[F<f64>; 4]>) -> Self {
-            let external_momenta = [
+            let external_momenta = ExternalFourMomenta::from_iter([
                 FourMomentum::from_args(F(14.0), F(-6.6), F(-40.0), F(0.0)),
                 FourMomentum::from_args(F(-43.0), F(15.2), F(33.0), F(0.0)),
                 FourMomentum::from_args(F(-17.9), F(-50.0), F(11.8), F(0.0)),
-            ];
+            ]);
 
-            let box_basis = vec![4];
-            let box_signatures = vec![
-                (vec![0], vec![1, 0, 0]).into(),
-                (vec![0], vec![0, 1, 0]).into(),
-                (vec![0], vec![0, 0, 1]).into(),
-                (vec![0], vec![-1, -1, -1]).into(),
-                (vec![1], vec![0, 0, 0]).into(),
-                (vec![1], vec![1, 0, 0]).into(),
-                (vec![1], vec![1, 1, 0]).into(),
-                (vec![1], vec![1, 1, 1]).into(),
-            ];
+            let dummy_hedge_graph = dummy_hedge_graph(8);
+
+            let box_basis = ti_vec![EdgeIndex::from(4)];
+            let box_signatures = dummy_hedge_graph
+                .new_hedgevec_from_iter(vec![
+                    (vec![0], vec![1, 0, 0]).into(),
+                    (vec![0], vec![0, 1, 0]).into(),
+                    (vec![0], vec![0, 0, 1]).into(),
+                    (vec![0], vec![-1, -1, -1]).into(),
+                    (vec![1], vec![0, 0, 0]).into(),
+                    (vec![1], vec![1, 0, 0]).into(),
+                    (vec![1], vec![1, 1, 0]).into(),
+                    (vec![1], vec![1, 1, 1]).into(),
+                ])
+                .unwrap();
 
             let box_lmb = LoopMomentumBasis {
+                tree: None,
                 basis: box_basis,
                 edge_signatures: box_signatures,
             };
@@ -736,27 +743,27 @@ mod tests {
 
             let esurfaces_array = [
                 Esurface {
-                    energies: vec![5, 6],
-                    sub_orientation: vec![],
-                    external_shift: vec![(1, 1)],
+                    energies: vec![EdgeIndex::from(5), EdgeIndex::from(6)],
+                    external_shift: vec![(EdgeIndex::from(1), 1)],
                     circled_vertices,
                 },
                 Esurface {
-                    energies: vec![5, 7],
-                    sub_orientation: vec![],
-                    external_shift: vec![(1, 1), (2, 1)],
+                    energies: vec![EdgeIndex::from(5), EdgeIndex::from(7)],
+                    external_shift: vec![(EdgeIndex::from(1), 1), (EdgeIndex::from(2), 1)],
                     circled_vertices,
                 },
                 Esurface {
-                    energies: vec![4, 6],
-                    sub_orientation: vec![],
-                    external_shift: vec![(0, 1), (1, 1)],
+                    energies: vec![EdgeIndex::from(4), EdgeIndex::from(6)],
+                    external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
                     circled_vertices,
                 },
                 Esurface {
-                    energies: vec![4, 7],
-                    sub_orientation: vec![],
-                    external_shift: vec![(0, 1), (1, 1), (2, 1)],
+                    energies: vec![EdgeIndex::from(4), EdgeIndex::from(7)],
+                    external_shift: vec![
+                        (EdgeIndex::from(0), 1),
+                        (EdgeIndex::from(1), 1),
+                        (EdgeIndex::from(2), 1),
+                    ],
                     circled_vertices,
                 },
             ];
@@ -784,59 +791,68 @@ mod tests {
                 lmb: box_lmb,
                 existing_esurfaces,
                 esurfaces,
-                edge_masses,
+                edge_masses: dummy_hedge_graph
+                    .new_hedgevec_from_iter(edge_masses)
+                    .unwrap(),
             }
         }
     }
 
     impl HelperBananaStructure {
         fn new() -> Self {
-            let external_momenta = [FourMomentum::from_args(
+            let external_momenta = ExternalFourMomenta::from_iter([FourMomentum::from_args(
                 F(10.0),
                 F(-10.00000000),
                 F(0.0),
                 F(0.0),
-            )];
-            let banana_basis = vec![2, 3];
-            let banana_edge_sigs = vec![
-                LoopExtSignature {
-                    internal: vec![0, 0].into(),
-                    external: vec![1].into(),
-                },
-                LoopExtSignature {
-                    internal: vec![0, 0].into(),
-                    external: vec![-1].into(),
-                },
-                LoopExtSignature {
-                    internal: vec![1, 0].into(),
-                    external: vec![0].into(),
-                },
-                LoopExtSignature {
-                    internal: vec![0, 1].into(),
-                    external: vec![0].into(),
-                },
-                LoopExtSignature {
-                    internal: vec![1, 1].into(),
-                    external: vec![-1].into(),
-                },
-            ];
+            )]);
+            let banana_basis = ti_vec![EdgeIndex::from(2), EdgeIndex::from(3)];
+
+            let dummy_hedge_graph = dummy_hedge_graph(5);
+
+            let banana_edge_sigs = dummy_hedge_graph
+                .new_hedgevec_from_iter(vec![
+                    LoopExtSignature {
+                        internal: vec![0, 0].into(),
+                        external: vec![1].into(),
+                    },
+                    LoopExtSignature {
+                        internal: vec![0, 0].into(),
+                        external: vec![-1].into(),
+                    },
+                    LoopExtSignature {
+                        internal: vec![1, 0].into(),
+                        external: vec![0].into(),
+                    },
+                    LoopExtSignature {
+                        internal: vec![0, 1].into(),
+                        external: vec![0].into(),
+                    },
+                    LoopExtSignature {
+                        internal: vec![1, 1].into(),
+                        external: vec![-1].into(),
+                    },
+                ])
+                .unwrap();
 
             let banana_lmb = LoopMomentumBasis {
+                tree: None,
                 basis: banana_basis,
                 edge_signatures: banana_edge_sigs,
             };
 
             let only_esurface = Esurface {
-                energies: vec![2, 3, 4],
-                sub_orientation: vec![],
-                external_shift: vec![(0, -1)],
+                energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(4)],
+                external_shift: vec![(EdgeIndex::from(0), -1)],
                 circled_vertices: VertexSet::dummy(),
             };
 
             let esurfaces = vec![only_esurface].into();
 
             let existing_esurfaces = vec![Into::<EsurfaceID>::into(0)].into();
-            let edge_masses = vec![None; 5];
+            let edge_masses = dummy_hedge_graph
+                .new_hedgevec_from_iter(vec![None; 5])
+                .unwrap();
 
             Self {
                 external_momenta,
@@ -857,7 +873,7 @@ mod tests {
                     Into::<ExistingEsurfaceId>::into(2),
                     Into::<ExistingEsurfaceId>::into(3),
                 ],
-                vec![],
+                LoopMomenta::from(vec![]),
             ),
             (
                 vec![
@@ -865,7 +881,7 @@ mod tests {
                     Into::<ExistingEsurfaceId>::into(2),
                     Into::<ExistingEsurfaceId>::into(4),
                 ],
-                vec![],
+                LoopMomenta::from(vec![]),
             ),
             (
                 vec![
@@ -873,7 +889,7 @@ mod tests {
                     Into::<ExistingEsurfaceId>::into(3),
                     Into::<ExistingEsurfaceId>::into(4),
                 ],
-                vec![],
+                LoopMomenta::from(vec![]),
             ),
         ];
 
@@ -979,7 +995,7 @@ mod tests {
                 let esurfaec_val = box4e.esurfaces[box4e.existing_esurfaces[*esurface]]
                     .compute_from_momenta(
                         &box4e.lmb,
-                        &to_real_mass_vector(box4e.edge_masses.as_slice()),
+                        &to_real_mass_vector(&box4e.edge_masses),
                         center,
                         &box4e.external_momenta,
                     );
@@ -1015,7 +1031,7 @@ mod tests {
                 let esurfaec_val = box4e.esurfaces[box4e.existing_esurfaces[*esurface]]
                     .compute_from_momenta(
                         &box4e.lmb,
-                        &to_real_mass_vector(box4e.edge_masses.as_slice()),
+                        &to_real_mass_vector(&box4e.edge_masses),
                         center,
                         &box4e.external_momenta,
                     );

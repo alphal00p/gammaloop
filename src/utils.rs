@@ -3438,7 +3438,6 @@ impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
     }
 }
 
-#[cfg(test)]
 pub fn dummy_hedge_graph(num_edges: usize) -> linnet::half_edge::HedgeGraph<(), ()> {
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::Orientation;
