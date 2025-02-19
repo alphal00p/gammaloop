@@ -16,9 +16,9 @@ use crate::{
         NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
         TadpolesFilterOptions,
     },
-    graph::{Edge, EdgeType, BareVertex},
+    graph::{BareVertex, EdgeType},
     model::Model,
-    new_graph::Graph,
+    new_graph::{Edge, Graph, Vertex},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
     ProcessSettings,
 };
@@ -135,7 +135,7 @@ impl Process {
         let hedge_collection = bare_collection
             .into_iter()
             .map(|bare_graph| {
-                let mut hedge_graph_builder = HedgeGraphBuilder::<Edge, BareVertex>::new();
+                let mut hedge_graph_builder = HedgeGraphBuilder::<Edge, Vertex>::new();
                 for vertex in bare_graph.vertices {
                     // do not add the vertices attached to externals
                     if vertex.edges.len() != 1 {
@@ -183,24 +183,7 @@ impl Process {
             })
             .collect::<Result<Vec<Graph>, _>>()?;
 
-        let collection = match options.feyngen_options.generation_type {
-            GenerationType::Amplitude => {
-                let amplitude = Amplitude {
-                    graphs: hedge_collection,
-                };
-
-                // just one for now
-                ProcessCollection::Amplitudes(vec![amplitude])
-            }
-            GenerationType::CrossSection => {
-                todo!("build representation of cuts")
-            }
-        };
-
-        Ok(Process {
-            definition,
-            collection,
-        })
+        todo!();
     }
 }
 
@@ -263,8 +246,24 @@ impl<S: NumeratorState> ProcessCollection<S> {
 }
 
 pub struct Amplitude<S: NumeratorState = PythonState> {
-    graphs: Vec<Graph<S>>,
+    graphs: Vec<AmplitudeGraph<S>>,
 }
+
+pub struct AmplitudeGraph<S: NumeratorState = PythonState> {
+    graph: Graph<S>,
+    derived_data: AmplitudeDerivedData,
+}
+
+impl<S: NumeratorState> AmplitudeGraph<S> {
+    fn new(graph: Graph<S>) -> Self {
+        AmplitudeGraph {
+            graph,
+            derived_data: AmplitudeDerivedData {},
+        }
+    }
+}
+
+pub struct AmplitudeDerivedData {}
 
 impl<S: NumeratorState> Amplitude<S> {
     pub fn new() -> Self {
@@ -272,7 +271,7 @@ impl<S: NumeratorState> Amplitude<S> {
     }
 
     pub fn add_graph(&mut self, graph: Graph<S>) -> Result<()> {
-        self.graphs.push(graph);
+        self.graphs.push(AmplitudeGraph::new(graph));
         /// TODO: validate that the graph is compatible
         Ok(())
     }
@@ -284,7 +283,10 @@ pub struct CrossSection<S: NumeratorState = PythonState> {
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     graph: Graph<S>,
     cuts: Vec<CrossSectionCut>,
+    derived_data: CrossSectionDerivedData,
 }
+
+pub struct CrossSectionDerivedData {}
 
 pub struct CrossSectionCut {
     cut: OrientedCut,
