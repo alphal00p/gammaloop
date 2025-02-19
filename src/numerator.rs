@@ -2739,7 +2739,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
                 //let b = a.0.replace_all_multiple(&reps).into();
                 // println!("AFTER: {}", b);
                 // Expand each inner level
-                b = b.replace_map(&|term, ctx, out| {
+                b = b.replace_map(&|term: AtomView<'_>, ctx: &Context, out: &mut Atom| {
                     if ctx.function_level == 0
                         && ctx.parent_type == Some(symbolica::atom::AtomType::Mul)
                     {
@@ -2757,7 +2757,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
                 for (src, trgt) in rep_atoms.iter() {
                     b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
                 }
-                b = b.replace_map(&|term, ctx, out| {
+                b = b.replace_map(&|term: AtomView<'_>, ctx: &Context, out: &mut Atom| {
                     if ctx.function_level == 0
                         && ctx.parent_type == Some(symbolica::atom::AtomType::Mul)
                     {
