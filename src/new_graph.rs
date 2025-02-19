@@ -42,7 +42,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     gammaloop_integrand::BareSample,
-    graph::{BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts, VertexInfo},
+    graph::{BareEdge, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts, VertexInfo},
     model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
@@ -519,6 +519,27 @@ impl Edge {
                     ),
                 ]
             }
+        }
+    }
+}
+
+impl From<BareEdge> for Edge {
+    fn from(value: BareEdge) -> Self {
+        Self {
+            edge_type: value.edge_type,
+            internal_index: value.internal_index,
+            name: value.name,
+            propagator: value.propagator,
+            particle: value.particle,
+        }
+    }
+}
+
+impl From<BareVertex> for Vertex {
+    fn from(value: BareVertex) -> Self {
+        Self {
+            name: value.name,
+            vertex_info: value.vertex_info,
         }
     }
 }
