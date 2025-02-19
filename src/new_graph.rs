@@ -38,7 +38,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     gammaloop_integrand::BareSample,
-    graph::{BareVertex, DerivedGraphData, EdgeType},
+    graph::{BareVertex, DerivedGraphData, EdgeType, VertexInfo},
     model::{self, EdgeSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
@@ -52,7 +52,7 @@ use crate::{
 
 pub struct Graph<S: NumeratorState = PythonState> {
     pub multiplicity: Atom,
-    pub underlying: HedgeGraph<Edge, BareVertex>,
+    pub underlying: HedgeGraph<Edge, Vertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub derived_data: DerivedGraphData<S>,
 }
@@ -76,9 +76,15 @@ pub trait FeynmanGraph {
     fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom;
     fn in_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski>;
     fn out_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski>;
+    fn get_local_edge_position(
+        &self,
+        node_id: NodeIndex,
+        edge_id: EdgeIndex,
+        skip_one: bool,
+    ) -> usize;
 }
 
-impl FeynmanGraph for HedgeGraph<Edge, BareVertex> {
+impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     fn new_lmb(&self) -> Result<LoopMomentumBasis> {
         // root node should contain a dangling (external edge), that will be the dependent external
         let root = self
@@ -264,10 +270,28 @@ impl FeynmanGraph for HedgeGraph<Edge, BareVertex> {
     fn out_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski> {
         todo!()
     }
+
+    fn get_local_edge_position(
+        &self,
+        node_id: NodeIndex,
+        edge_id: EdgeIndex,
+        skip_one: bool,
+    ) -> usize {
+        let skip_n = if skip_one { 1 } else { 0 };
+
+        let node_hairs = &self[&node_id].hairs;
+
+        self.iter_edges(node_hairs)
+            .enumerate()
+            .filter(|(_, (_, index, _))| *index == edge_id)
+            .nth(skip_n)
+            .unwrap()
+            .0
+    }
 }
 
 impl Graph<UnInit> {
-    pub fn new(multiplicity: Atom, underlying: HedgeGraph<Edge, BareVertex>) -> Result<Self> {
+    pub fn new(multiplicity: Atom, underlying: HedgeGraph<Edge, Vertex>) -> Result<Self> {
         Ok(Self {
             multiplicity,
             loop_momentum_basis: underlying.new_lmb()?,
@@ -749,4 +773,10 @@ impl LoopMomentumBasis {
         path.reverse();
         Some(path)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Vertex {
+    pub name: SmartString<LazyCompact>,
+    pub vertex_info: VertexInfo,
 }
