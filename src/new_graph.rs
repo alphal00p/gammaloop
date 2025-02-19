@@ -15,6 +15,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     hedgevec::HedgeVec,
     involution::{EdgeIndex, Flow, Hedge, HedgePair},
+    nodestorage::NodeStorageVec,
     subgraph::{
         self, cycle::SignedCycle, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphOps,
     },
@@ -24,8 +25,11 @@ use linnet::half_edge::{
 use petgraph::graph;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
-use spenso::structure::{
-    abstract_index::AbstractIndex, representation::Minkowski, NamedStructure, ToSymbolic,
+use spenso::{
+    data::DataTensor,
+    structure::{
+        abstract_index::AbstractIndex, representation::Minkowski, NamedStructure, ToSymbolic,
+    },
 };
 use symbolica::{
     atom::{representation::InlineNum, Atom, AtomCore, AtomView},
@@ -38,7 +42,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     gammaloop_integrand::BareSample,
-    graph::{BareVertex, DerivedGraphData, EdgeType, Shifts, VertexInfo},
+    graph::{BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts, VertexInfo},
     model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
@@ -55,6 +59,7 @@ pub struct Graph<S: NumeratorState = PythonState> {
     pub underlying: HedgeGraph<Edge, Vertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub derived_data: DerivedGraphData<S>,
+    pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
 }
 
 impl<S: NumeratorState> Graph<S> {
@@ -64,6 +69,7 @@ impl<S: NumeratorState> Graph<S> {
             underlying: self.underlying,
             loop_momentum_basis: self.loop_momentum_basis,
             derived_data: self.derived_data.forget_type(),
+            vertex_slots: self.vertex_slots,
         }
     }
 }
@@ -311,7 +317,18 @@ impl Graph<UnInit> {
             loop_momentum_basis: underlying.new_lmb()?,
             underlying,
             derived_data: DerivedGraphData::new_empty(),
+            vertex_slots: TiVec::new(),
         })
+    }
+}
+
+impl<S: NumeratorState> Graph<S> {
+    pub fn apply_vertex_rule(&self, node_id: NodeIndex) -> Option<[DataTensor<Atom>; 3]> {
+        self.underlying[node_id].vertex_info.apply_vertex_rule(
+            &self.underlying.add_signs_to_edges(node_id),
+            Into::<usize>::into(node_id),
+            &self.vertex_slots[node_id],
+        )
     }
 }
 
