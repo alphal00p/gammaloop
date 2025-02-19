@@ -52,6 +52,15 @@ pub struct LoopExtSignature {
     pub external: ExternalSignature,
 }
 
+impl From<(Vec<isize>, Vec<isize>)> for LoopExtSignature {
+    fn from(value: (Vec<isize>, Vec<isize>)) -> Self {
+        Self {
+            internal: LoopSignature::from_iter(value.0),
+            external: ExternalSignature::from_iter(value.1),
+        }
+    }
+}
+
 impl<T> Index<T> for SignatureLike<T>
 where
     usize: From<T>,
