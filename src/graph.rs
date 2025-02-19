@@ -26,10 +26,7 @@ use crate::{
         RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
     signature::{LoopExtSignature, LoopSignature, SignatureLike},
-    subtraction::{
-        overlap::{find_maximal_overlap, OverlapStructure},
-        static_counterterm::{self, CounterTerm},
-    },
+    subtraction::overlap::{find_maximal_overlap, OverlapStructure},
     utils::{self, sorted_vectorize, FloatLike, F, GS},
     ProcessSettings, Settings, TropicalSubgraphTableSettings,
 };
@@ -3193,7 +3190,7 @@ pub struct DerivedGraphData<NumState> {
     #[bincode(with_serde)]
     pub edge_groups: Option<Vec<SmallVec<[usize; 3]>>>,
     pub esurface_derived_data: Option<EsurfaceDerivedData>,
-    pub static_counterterm: Option<static_counterterm::CounterTerm>,
+    //pub static_counterterm: Option<static_counterterm::CounterTerm>,
     pub numerator: Numerator<NumState>,
 }
 
@@ -3262,7 +3259,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
             tropical_subgraph_table: self.tropical_subgraph_table,
             edge_groups: self.edge_groups,
             esurface_derived_data: self.esurface_derived_data,
-            static_counterterm: self.static_counterterm,
+            //static_counterterm: self.static_counterterm,
             numerator: f(self.numerator),
         }
     }
@@ -3278,7 +3275,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
             tropical_subgraph_table: self.tropical_subgraph_table,
             edge_groups: self.edge_groups,
             esurface_derived_data: self.esurface_derived_data,
-            static_counterterm: self.static_counterterm,
+            // static_counterterm: self.static_counterterm,
             numerator: f(self.numerator)?,
         })
     }
@@ -3499,18 +3496,19 @@ impl DerivedGraphData<Evaluators> {
         rotation_for_overlap: &Rotation,
         settings: &Settings,
     ) -> Complex<F<T>> {
-        match self.static_counterterm.as_ref() {
-            Some(ct) => CounterTerm::evaluate(
-                sample,
-                graph,
-                &self.cff_expression.as_ref().unwrap().esurfaces,
-                ct,
-                &mut self.numerator,
-                rotation_for_overlap,
-                settings,
-            ),
-            None => Complex::new(sample.zero(), sample.zero()),
-        }
+        todo!("calling ct from graph deprecated")
+        //match self.static_counterterm.as_ref() {
+        //    Some(ct) => CounterTerm::evaluate(
+        //        sample,
+        //        graph,
+        //        &self.cff_expression.as_ref().unwrap().esurfaces,
+        //        ct,
+        //        &mut self.numerator,
+        //        rotation_for_overlap,
+        //        settings,
+        //    ),
+        //    None => Complex::new(sample.zero(), sample.zero()),
+        //}
     }
 
     #[inline]
@@ -3553,7 +3551,7 @@ impl DerivedGraphData<UnInit> {
             edge_groups: None,
             esurface_derived_data: None,
             numerator: Numerator::default(),
-            static_counterterm: None,
+            // static_counterterm: None,
         }
     }
 
