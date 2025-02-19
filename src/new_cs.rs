@@ -139,7 +139,7 @@ impl Process {
                 for vertex in bare_graph.vertices {
                     // do not add the vertices attached to externals
                     if vertex.edges.len() != 1 {
-                        hedge_graph_builder.add_node(vertex.clone());
+                        hedge_graph_builder.add_node(vertex.clone().into());
                     }
                 }
 
@@ -149,14 +149,14 @@ impl Process {
                             hedge_graph_builder.add_edge(
                                 NodeIndex(edge.vertices[0]),
                                 NodeIndex(edge.vertices[1]),
-                                edge,
+                                edge.into(),
                                 true,
                             );
                         }
                         EdgeType::Incoming => {
                             hedge_graph_builder.add_external_edge(
                                 NodeIndex(edge.vertices[1]),
-                                edge,
+                                edge.into(),
                                 // I am not sure what to put for these two
                                 true,
                                 Flow::Source,
@@ -165,10 +165,10 @@ impl Process {
                         EdgeType::Outgoing => {
                             hedge_graph_builder.add_external_edge(
                                 NodeIndex(edge.vertices[0]),
-                                edge,
+                                edge.into(),
                                 // I am not sure what to put for these two
                                 true,
-                                Flow::Source,
+                                Flow::Sink,
                             );
                         }
                     }
