@@ -1,3 +1,10 @@
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="gammalooplogo.svg">
+  <img src="gammalooplogo.svg">
+</picture>
+</div> 
+
 # gammaLoop
 ![tests status](https://github.com/alphal00p/gammaloop/actions/workflows/gamma_loop_tests.yml/badge.svg?event=push)
 
