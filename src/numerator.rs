@@ -1,7 +1,7 @@
 use crate::debug_info::DEBUG_LOGGER;
 use crate::feyngen::FeynGenError;
 use linnet::half_edge::hedgevec::HedgeVec;
-use linnet::half_edge::involution::Orientation;
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use log::warn;
 use std::fmt::Debug;
 use std::fs;
@@ -360,11 +360,17 @@ impl NumeratorEvaluateFloat for f64 {
             let mut tensors = Vec::new();
             let orientations = &num.state.orientations;
             for o in orientations {
-                for (i, &sign) in o.iter().enumerate() {
-                    if !sign {
-                        params[4 * i] = -base_params[4 * i];
-                    } else {
-                        params[4 * i] = base_params[4 * i];
+                for (i, &sign) in o.into_iter() {
+                    match sign {
+                        Orientation::Reversed => {
+                            params[4 * Into::<usize>::into(i)] =
+                                -base_params[4 * Into::<usize>::into(i)];
+                        }
+                        Orientation::Default => {
+                            params[4 * Into::<usize>::into(i)] =
+                                base_params[4 * Into::<usize>::into(i)];
+                        }
+                        Orientation::Undirected => panic!("undirected edge in cff"),
                     }
                 }
 
@@ -440,11 +446,17 @@ impl NumeratorEvaluateFloat for f128 {
             let mut tensors = Vec::new();
             let orientations = &num.state.orientations;
             for o in orientations {
-                for (i, &sign) in o.iter().enumerate() {
-                    if !sign {
-                        params[4 * i] = -(base_params[4 * i].clone());
-                    } else {
-                        params[4 * i] = base_params[4 * i].clone();
+                for (i, &sign) in o.into_iter() {
+                    match sign {
+                        Orientation::Reversed => {
+                            params[4 * Into::<usize>::into(i)] =
+                                -base_params[4 * Into::<usize>::into(i)].clone();
+                        }
+                        Orientation::Default => {
+                            params[4 * Into::<usize>::into(i)] =
+                                base_params[4 * Into::<usize>::into(i)].clone();
+                        }
+                        Orientation::Undirected => panic!("undirected edge in cff"),
                     }
                 }
                 let t = num.state.single.eval_quad.evaluate(params);
@@ -3617,15 +3629,13 @@ impl EvaluatorSingle {
             let reps = reps
                 .iter()
                 .enumerate()
-                .filter_map(|(i, (lhs, rhs))| {
-                    if o[i] {
-                        None
-                    } else {
-                        Some(
-                            Replacement::new(lhs.to_pattern(), rhs.to_pattern())
-                                .with_settings(settings.clone()),
-                        )
-                    }
+                .filter_map(|(i, (lhs, rhs))| match o[EdgeIndex::from(i)] {
+                    Orientation::Default => None,
+                    Orientation::Reversed => Some(
+                        Replacement::new(lhs.to_pattern(), rhs.to_pattern())
+                            .with_settings(settings.clone()),
+                    ),
+                    Orientation::Undirected => panic!("undirected edge in cff"),
                 })
                 .collect_vec();
 
@@ -3809,15 +3819,13 @@ impl EvaluatorSingle {
             let reps = reps
                 .iter()
                 .enumerate()
-                .filter_map(|(i, (lhs, rhs))| {
-                    if o[i] {
-                        None
-                    } else {
-                        Some(
-                            Replacement::new(lhs.to_pattern(), rhs.to_pattern())
-                                .with_settings(settings.clone()),
-                        )
-                    }
+                .filter_map(|(i, (lhs, rhs))| match o[EdgeIndex::from(i)] {
+                    Orientation::Default => None,
+                    Orientation::Reversed => Some(
+                        Replacement::new(lhs.to_pattern(), rhs.to_pattern())
+                            .with_settings(settings.clone()),
+                    ),
+                    Orientation::Undirected => panic!("non oriented edge in cff"),
                 })
                 .collect_vec();
 
@@ -4022,7 +4030,8 @@ pub struct Evaluators {
     #[bincode(with_serde)]
     pub single: EvaluatorSingle,
     choice: SingleOrCombined,
-    orientations: Vec<Vec<bool>>,
+    #[bincode(with_serde)]
+    orientations: Vec<HedgeVec<Orientation>>,
     #[bincode(with_serde)]
     pub double_param_values: Vec<Complex<F<f64>>>,
     #[bincode(with_serde)]
