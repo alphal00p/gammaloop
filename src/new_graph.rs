@@ -278,16 +278,6 @@ impl Graph<UnInit> {
 }
 
 #[derive(Debug, Clone)]
-pub struct BareEdge {
-    pub name: SmartString<LazyCompact>,
-    pub edge_type: EdgeType,
-    pub propagator: Arc<model::Propagator>,
-    pub particle: Arc<model::Particle>,
-    pub vertices: [usize; 2],
-    pub internal_index: Vec<AbstractIndex>,
-}
-
-#[derive(Debug, Clone)]
 pub struct Edge {
     pub name: SmartString<LazyCompact>,
     pub edge_type: EdgeType,
@@ -296,104 +286,10 @@ pub struct Edge {
     pub internal_index: Vec<AbstractIndex>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct SerializableEdge {
-    name: SmartString<LazyCompact>,
-    edge_type: EdgeType,
-    particle: SmartString<LazyCompact>,
-    propagator: SmartString<LazyCompact>,
-    vertices: [SmartString<LazyCompact>; 2],
-}
-
-impl SerializableEdge {
-    pub fn from_edge(graph: &HedgeGraph<Edge, Vertex>, edge: &Edge) -> SerializableEdge {
-        //SerializableEdge {
-        //    name: edge.name.clone(),
-        //    edge_type: edge.edge_type,
-        //    particle: edge.particle.name.clone(),
-        //    propagator: edge.propagator.name.clone(),
-        //    vertices: [
-        //        graph.vertices[edge.vertices[0]].name.clone(),
-        //        graph.vertices[edge.vertices[1]].name.clone(),
-        //    ],
-        //}
-
-        todo!()
-    }
-}
-
 impl Edge {
     pub fn n_dummies(&self) -> usize {
         5
     }
-    pub fn from_serializable_edge(
-        model: &model::Model,
-        graph: &HedgeGraph<Edge, Vertex>,
-        serializable_edge: &SerializableEdge,
-    ) -> Edge {
-        todo!()
-        //Edge {
-        //    name: serializable_edge.name.clone(),
-        //    edge_type: serializable_edge.edge_type,
-        //    particle: model.get_particle(&serializable_edge.particle),
-        //    propagator: model.get_propagator(&serializable_edge.propagator),
-        //    vertices: [
-        //        graph
-        //            .get_vertex_position(&serializable_edge.vertices[0])
-        //            .unwrap(),
-        //        graph
-        //            .get_vertex_position(&serializable_edge.vertices[1])
-        //            .unwrap(),
-        //    ],
-        //    internal_index: vec![],
-        //}
-    }
-
-    // pub fn is_incoming_to(&self, vertex: usize) -> bool {
-    //     self.vertices[1] == vertex
-    // }
-
-    //pub fn denominator(&self, graph: &BareGraph) -> (Atom, Atom) {
-    //    let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-    //    let mom = parse!(&format!("Q{num}")).unwrap();
-    //    let mass = self
-    //        .particle
-    //        .mass
-    //        .expression
-    //        .clone()
-    //        .unwrap_or(Atom::new_num(0));
-
-    //    (mom, mass)
-    //}
-
-    //pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
-    //     let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-    //     let mom = parse!(&format!("Q({num},x_)")).unwrap().to_pattern();
-    //     let mom_rep = lmb.pattern(num);
-    //     atom.replace_all(&mom, &mom_rep, None, None)
-    // }
-
-    // pub fn edge_momentum_symbol(&self, graph: &Graph) -> Symbol {
-    //     let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-    //     State::get_symbol(format!("Q{num}"))
-    // }
-
-    //pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
-    //    let local_pos_in_sink_vertex =
-    //        graph.vertices[self.vertices[0]].get_local_edge_position(self, graph, false);
-
-    //    graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
-    //}
-
-    //pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
-    //    let local_pos_in_sink_vertex = graph.vertices[self.vertices[1]].get_local_edge_position(
-    //        self,
-    //        graph,
-    //        self.vertices[0] == self.vertices[1],
-    //    );
-
-    //    graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
-    //}
 
     pub fn numerator(&self, graph: &HedgeGraph<Edge, Vertex>, edge_index: EdgeIndex) -> Atom {
         let [colorless, color] = self.color_separated_numerator(graph, edge_index);
