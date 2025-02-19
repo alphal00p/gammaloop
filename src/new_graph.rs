@@ -544,11 +544,14 @@ impl From<BareVertex> for Vertex {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize /*, Encode, Decode*/)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 
 pub struct LoopMomentumBasis {
+    #[bincode(with_serde)]
     pub tree: TraversalTree,
+    #[bincode(with_serde)]
     pub basis: TiVec<LoopIndex, EdgeIndex>,
+    #[bincode(with_serde)]
     pub edge_signatures: HedgeVec<LoopExtSignature>,
 }
 
