@@ -1,7 +1,7 @@
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="gammalooplogo.svg">
-  <img src="gammalooplogo.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="gammalooplogo-dark.svg">
+  <img src="gammalooplogo-light.svg">
 </picture>
 </div> 
 
