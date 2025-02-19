@@ -2871,15 +2871,16 @@ impl<S: NumeratorState> Graph<S> {
         e_cm: F<f64>,
         settings: &Settings,
     ) -> OverlapStructure {
-        let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, settings);
-        find_maximal_overlap(
-            &self.bare_graph.loop_momentum_basis,
-            &existing_esurfaces,
-            &self.get_cff().esurfaces,
-            &self.bare_graph.get_mass_vector(),
-            externals,
-            settings,
-        )
+        todo!("move maximal overlap away from graph")
+        //let existing_esurfaces = self.get_existing_esurfaces(externals, e_cm, settings);
+        //find_maximal_overlap(
+        //    &self.bare_graph.loop_momentum_basis,
+        //    &existing_esurfaces,
+        //    &self.get_cff().esurfaces,
+        //    &self.bare_graph.get_mass_vector(),
+        //    externals,
+        //    settings,
+        //)
     }
 
     pub fn build_compiled_expression(
@@ -3112,7 +3113,7 @@ impl Graph<Evaluators> {
     #[inline]
     pub fn evaluate_ltd_expression<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
@@ -3126,7 +3127,7 @@ impl Graph<Evaluators> {
     #[inline]
     pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         lmb: &LoopMomentumBasis,
         settings: &Settings,
     ) -> Complex<F<T>> {
@@ -3331,7 +3332,7 @@ impl DerivedGraphData<Evaluators> {
     #[inline]
     pub fn evaluate_ltd_expression<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         settings: &Settings,
         bare_graph: &BareGraph,
     ) -> DataTensor<Complex<F<T>>> {
@@ -3354,7 +3355,7 @@ impl DerivedGraphData<Evaluators> {
     #[inline]
     pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         settings: &Settings,
         lmb: &LoopMomentumBasis,
         bare_graph: &BareGraph,
