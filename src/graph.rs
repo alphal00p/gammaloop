@@ -3144,7 +3144,7 @@ impl Graph<Evaluators> {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
 pub struct DerivedGraphData<NumState> {
-    pub loop_momentum_bases: Option<Vec<NewLoopMomentumBasis>>,
+    pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
     pub cff_expression: Option<CFFExpression>,
     pub ltd_expression: Option<LTDExpression>,
     #[bincode(with_serde)]
