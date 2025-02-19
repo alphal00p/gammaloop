@@ -12,6 +12,7 @@ use crate::{
 };
 use bincode::{Decode, Encode};
 use itertools::Itertools;
+use linnet::half_edge::involution::EdgeIndex;
 use log::debug;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
@@ -640,7 +641,7 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
         .bare_graph
         .get_virtual_edges_iterator()
         .map(|(index, _e)| {
-            graph.bare_graph.loop_momentum_basis.edge_signatures[index]
+            graph.bare_graph.loop_momentum_basis.edge_signatures[EdgeIndex::from(index)]
                 .internal
                 .clone()
         })
@@ -702,7 +703,7 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
             {
                 ltd_terms.push(LTDTerm {
                     associated_lmb: associated_lmb.clone(),
-                    signature_of_lmb: loop_momentum_basis.edge_signatures.clone(),
+                    signature_of_lmb: todo!("fix ltd"),
                 });
                 found_signature = true;
                 break;
