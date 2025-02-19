@@ -15,7 +15,9 @@ use crate::{
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
-    momentum_sample::LoopIndex,
+    momentum_sample::{
+        BareMomentumSample, ExternalFourMomenta, LoopIndex, LoopMomenta, MomentumSample,
+    },
     new_graph::LoopMomentumBasis,
     numerator::{
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
@@ -23,6 +25,7 @@ use crate::{
         Numerator, NumeratorParseMode, NumeratorState, NumeratorStateError, PythonState,
         RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
+    signature::{LoopExtSignature, LoopSignature, SignatureLike},
     subtraction::{
         overlap::{find_maximal_overlap, OverlapStructure},
         static_counterterm::{self, CounterTerm},
@@ -75,6 +78,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 use std::{
+    borrow::Borrow,
     collections::{HashMap, VecDeque},
     fmt::{Display, Formatter},
     fs,
@@ -207,7 +211,7 @@ impl BareEdge {
 
     pub fn edge_momentum_symbol(&self, graph: &BareGraph) -> Symbol {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-        State::get_symbol(format!("Q{num}"))
+        symbol!(format!("Q{num}"))
     }
 
     pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
@@ -936,7 +940,7 @@ impl BareVertex {
 pub struct SerializableGraph {
     name: SmartString<LazyCompact>,
     vertices: Vec<SerializableVertex>,
-    edges: Vec<SerializableEdge>,
+    edges: Vec<SerializableBareEdge>,
     overall_factor: String,
     #[allow(clippy::type_complexity)]
     external_connections: Vec<(
@@ -960,7 +964,7 @@ impl SerializableGraph {
             edges: graph
                 .edges
                 .iter()
-                .map(|e| SerializableEdge::from_edge(graph, e))
+                .map(|e| SerializableBareEdge::from_edge(graph, e))
                 .collect(),
 
             overall_factor: graph.overall_factor.clone(),
@@ -978,14 +982,19 @@ impl SerializableGraph {
                 .loop_momentum_basis
                 .basis
                 .iter()
-                .map(|&e| graph.edges[e].name.clone())
+                .map(|&e| graph.edges[Into::<usize>::into(e)].name.clone())
                 .collect(),
             edge_signatures: graph
                 .loop_momentum_basis
                 .edge_signatures
-                .iter()
-                .enumerate()
-                .map(|(i_e, sig)| (graph.edges[i_e].name.clone(), sig.to_momtrop_format()))
+                .borrow()
+                .into_iter()
+                .map(|(i_e, sig)| {
+                    (
+                        graph.edges[Into::<usize>::into(i_e)].name.clone(),
+                        sig.to_momtrop_format(),
+                    )
+                })
                 .collect(),
         }
     }
@@ -1168,7 +1177,7 @@ impl BareGraph {
         //     .collect()
     }
 
-    pub fn external_edges(&self) -> Vec<&Edge> {
+    pub fn external_edges(&self) -> Vec<&BareEdge> {
         self.external_edges
             .iter()
             .map(|&i| &self.edges[i])
@@ -1221,7 +1230,7 @@ impl BareGraph {
         self.external_edges
             .iter()
             .map(|&i| {
-                self.loop_momentum_basis.edge_signatures[i]
+                self.loop_momentum_basis.edge_signatures[EdgeIndex::from(i)]
                     .external
                     .apply(indep_externals)
             })
@@ -1265,7 +1274,7 @@ impl BareGraph {
                 "\"{}\" -> \"{}\" [label=\"{}\"];\n",
                 from,
                 to,
-                self.loop_momentum_basis.edge_signatures[i].format_momentum()
+                self.loop_momentum_basis.edge_signatures[EdgeIndex::from(i)].format_momentum()
             ));
         }
         dot.push_str("}\n");
@@ -1318,6 +1327,8 @@ impl BareGraph {
             vertices.push(vertex);
         }
 
+        let dummy_hedge_graph = utils::dummy_hedge_graph(graph.edges.len());
+
         let mut g = BareGraph {
             name: graph.name.clone(),
             vertices,
@@ -1326,8 +1337,12 @@ impl BareGraph {
             overall_factor: graph.overall_factor.clone(),
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
-                basis: vec![],
-                edge_signatures: vec![],
+                tree: None,
+                basis: TiVec::new(),
+                edge_signatures: dummy_hedge_graph.new_hedgevec(&|_, _| LoopExtSignature {
+                    internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
+                    external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
+                }),
             },
             vertex_name_to_position,
             edge_name_to_position: HashMap::default(),
@@ -1340,7 +1355,7 @@ impl BareGraph {
         let mut edge_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
             HashMap::default();
         for edge in &graph.edges {
-            let edge = Edge::from_serializable_edge(model, &g, edge);
+            let edge = BareEdge::from_serializable_edge(model, &g, edge);
             edge_name_to_position.insert(edge.name.clone(), g.edges.len());
             g.edges.push(edge);
         }
@@ -1373,12 +1388,19 @@ impl BareGraph {
         // set the half-edge graph representation
         g.hedge_representation = HedgeGraph::from(&g);
 
-        let mut edge_signatures: Vec<_> = vec![None; graph.edges.len()];
+        let mut edge_signatures = vec![(vec![], vec![]); graph.edges.len()];
         for (e_name, sig) in graph.edge_signatures.iter() {
-            edge_signatures[g.get_edge_position(e_name).unwrap()] = Some(sig.clone().into());
+            edge_signatures[g.get_edge_position(e_name).unwrap()] = sig.clone().into();
         }
-        g.loop_momentum_basis.edge_signatures =
-            edge_signatures.into_iter().collect::<Option<_>>().unwrap();
+
+        g.loop_momentum_basis.edge_signatures = dummy_hedge_graph
+            .new_hedgevec_from_iter(edge_signatures.into_iter().map(
+                |(loop_sig_raw, external_sig_raw)| LoopExtSignature {
+                    internal: SignatureLike::from_iter(loop_sig_raw),
+                    external: SignatureLike::from_iter(external_sig_raw),
+                },
+            ))
+            .unwrap();
 
         g.external_connections = graph
             .external_connections
@@ -1402,7 +1424,7 @@ impl BareGraph {
         g.loop_momentum_basis.basis = graph
             .loop_momentum_basis
             .iter()
-            .map(|e| g.get_edge_position(e).unwrap())
+            .map(|e| EdgeIndex::from(g.get_edge_position(e).unwrap()))
             .collect();
 
         g.generate_vertex_slots(model);
@@ -1520,6 +1542,7 @@ impl BareGraph {
         let graph_nodes = graph.nodes().to_owned();
         let mut graph_edges = graph.edges().to_owned();
 
+        let dummy_hedge_graph = utils::dummy_hedge_graph(graph_edges.len());
         // Useful adjacency matrix matrix
         let mut graph_adj_matrix: HashMap<usize, Vec<usize>> = HashMap::default();
         for e in graph_edges.iter() {
@@ -1651,8 +1674,12 @@ impl BareGraph {
             overall_factor: symmetry_factor,
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
-                basis: vec![],
-                edge_signatures: vec![],
+                tree: None,
+                basis: TiVec::new(),
+                edge_signatures: dummy_hedge_graph.new_hedgevec(&|_, _| LoopExtSignature {
+                    internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
+                    external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
+                }),
             },
             vertex_name_to_position: vertex_name_to_position.clone(),
             edge_name_to_position: HashMap::default(),
@@ -1839,73 +1866,74 @@ impl BareGraph {
         &mut self,
         forced_lmb: &Option<Vec<SmartString<LazyCompact>>>,
     ) -> Result<(), FeynGenError> {
-        let lmb_basis = if let Some(user_selected_lmb) = forced_lmb {
-            let mut user_basis = vec![];
-            for e_lmb in user_selected_lmb {
-                if let Some(e_pos) = self.edge_name_to_position.get(e_lmb) {
-                    user_basis.push(*e_pos);
-                } else {
-                    return Err(FeynGenError::LoopMomentumBasisError(format!(
-                        "Specified loop momentum basis edge named '{}' not found in the graph.",
-                        e_lmb
-                    )));
-                }
-            }
-            user_basis
-        } else {
-            // !g.hedge_representation
-            //     .cycle_basis().1.
-            //     .iter()
-            //     .map(|cycle| {
-            //         *g.hedge_representation
-            //             .iter_egde_data(&cycle.internal_graph)
-            //             .next()
-            //             .unwrap()
-            //     })
-            //     .collect::<Vec<_>>()
-            let spanning_tree = self.hedge_representation.cycle_basis().1;
-            // println!("hedge graph: \n{}", g.hedge_representation.base_dot());
-            // let spanning_tree_half_edge_node = sefl
-            //     .hedge_representation
-            //     .nesting_node_from_subgraph(spanning_tree.clone());
-            // println!(
-            //     "spanning tree: \n{}",
-            //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
-            // );
-            self.hedge_representation
-                .iter_internal_edge_data(&spanning_tree.tree.complement(&self.hedge_representation))
-                .map(|e| *e.data.unwrap())
-                .collect::<Vec<_>>()
-        };
-        debug!(
-            "Loop momentum basis edge positions selected: {:?}",
-            lmb_basis
-        );
-        debug!(
-            "Loop momentum basis selected: {}",
-            lmb_basis
-                .iter()
-                .map(|i_e| self.edges[*i_e].clone().name)
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        let mut lmb: LoopMomentumBasis = LoopMomentumBasis {
-            basis: lmb_basis,
-            edge_signatures: vec![],
-        };
-        lmb.set_edge_signatures(self).map_err(|e| {
-            FeynGenError::LoopMomentumBasisError(format!(
-                "{} | Error: {}",
-                lmb.basis
-                    .iter()
-                    .map(|i_e| format!("{}", self.edges[*i_e].name))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                e
-            ))
-        })?;
-        self.loop_momentum_basis = lmb;
-        Ok(())
+        todo!("fix this function")
+        //let lmb_basis = if let Some(user_selected_lmb) = forced_lmb {
+        //    let mut user_basis = vec![];
+        //    for e_lmb in user_selected_lmb {
+        //        if let Some(e_pos) = self.edge_name_to_position.get(e_lmb) {
+        //            user_basis.push(*e_pos);
+        //        } else {
+        //            return Err(FeynGenError::LoopMomentumBasisError(format!(
+        //                "Specified loop momentum basis edge named '{}' not found in the graph.",
+        //                e_lmb
+        //            )));
+        //        }
+        //    }
+        //    user_basis
+        //} else {
+        //    // !g.hedge_representation
+        //    //     .cycle_basis().1.
+        //    //     .iter()
+        //    //     .map(|cycle| {
+        //    //         *g.hedge_representation
+        //    //             .iter_egde_data(&cycle.internal_graph)
+        //    //             .next()
+        //    //             .unwrap()
+        //    //     })
+        //    //     .collect::<Vec<_>>()
+        //    let spanning_tree = self.hedge_representation.cycle_basis().1;
+        //    // println!("hedge graph: \n{}", g.hedge_representation.base_dot());
+        //    // let spanning_tree_half_edge_node = sefl
+        //    //     .hedge_representation
+        //    //     .nesting_node_from_subgraph(spanning_tree.clone());
+        //    // println!(
+        //    //     "spanning tree: \n{}",
+        //    //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
+        //    // );
+        //    self.hedge_representation
+        //        .iter_internal_edge_data(&spanning_tree.tree.complement(&self.hedge_representation))
+        //        .map(|e| *e.data)
+        //        .collect::<Vec<_>>()
+        //};
+        //debug!(
+        //    "Loop momentum basis edge positions selected: {:?}",
+        //    lmb_basis
+        //);
+        //debug!(
+        //    "Loop momentum basis selected: {}",
+        //    lmb_basis
+        //        .iter()
+        //        .map(|i_e| self.edges[*i_e].clone().name)
+        //        .collect::<Vec<_>>()
+        //        .join(", ")
+        //);
+        //let mut lmb: LoopMomentumBasis = LoopMomentumBasis {
+        //    basis: lmb_basis,
+        //    edge_signatures: vec![],
+        //};
+        //lmb.set_edge_signatures(self).map_err(|e| {
+        //    FeynGenError::LoopMomentumBasisError(format!(
+        //        "{} | Error: {}",
+        //        lmb.basis
+        //            .iter()
+        //            .map(|i_e| format!("{}", self.edges[*i_e].name))
+        //            .collect::<Vec<_>>()
+        //            .join(", "),
+        //        e
+        //    ))
+        //})?;
+        //self.loop_momentum_basis = lmb;
+        //Ok(())
     }
 
     pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
@@ -1954,7 +1982,7 @@ impl BareGraph {
             //     continue;
             // }
 
-            for s in &self.loop_momentum_basis.edge_signatures[*ext].internal {
+            for s in &self.loop_momentum_basis.edge_signatures[EdgeIndex::from(*ext)].internal {
                 if !s.is_zero() {
                     return Err(eyre!(
                         "External edge {} at position {i} has a non-zero internal momentum signature",
@@ -1964,7 +1992,8 @@ impl BareGraph {
             }
 
             let edge_name = &edge.name;
-            let signatures = &self.loop_momentum_basis.edge_signatures[*ext].external;
+            let signatures =
+                &self.loop_momentum_basis.edge_signatures[EdgeIndex::from(*ext)].external;
 
             for (j, &s) in signatures.iter().enumerate() {
                 if j != i && s.is_sign() && i != last {
@@ -2099,7 +2128,7 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn get_edge(&self, name: &SmartString<LazyCompact>) -> Option<&Edge> {
+    pub fn get_edge(&self, name: &SmartString<LazyCompact>) -> Option<&BareEdge> {
         match self.edge_name_to_position.get(name) {
             Some(position) => Some(&self.edges[*position]),
             None => None,
@@ -2114,8 +2143,8 @@ impl BareGraph {
     #[inline]
     pub fn compute_emr<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
     ) -> Vec<ThreeMomentum<F<T>>> {
         self.compute_emr_in_lmb(loop_moms, external_moms, &self.loop_momentum_basis)
     }
@@ -2123,21 +2152,22 @@ impl BareGraph {
     #[inline]
     pub fn compute_emr_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
     ) -> Vec<ThreeMomentum<F<T>>> {
         lmb.edge_signatures
-            .iter()
-            .map(|sig| sig.compute_three_momentum_from_four(loop_moms, external_moms))
+            .borrow()
+            .into_iter()
+            .map(|(_, sig)| sig.compute_three_momentum_from_four(loop_moms, external_moms))
             .collect()
     }
 
     #[inline]
     pub fn compute_onshell_energies<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
     ) -> Vec<F<T>> {
         self.compute_onshell_energies_in_lmb(loop_moms, external_moms, &self.loop_momentum_basis)
     }
@@ -2161,13 +2191,14 @@ impl BareGraph {
     #[inline]
     pub fn compute_onshell_energies_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
     ) -> Vec<F<T>> {
         lmb.edge_signatures
-            .iter()
-            .map(|sig| sig.compute_four_momentum_from_three(loop_moms, external_moms))
+            .borrow()
+            .into_iter()
+            .map(|(_, sig)| sig.compute_four_momentum_from_three(loop_moms, external_moms))
             .zip(self.edges.iter())
             .map(|(emr_mom, edge)| match edge.edge_type {
                 EdgeType::Virtual => {
@@ -2189,8 +2220,8 @@ impl BareGraph {
     #[inline]
     pub fn compute_energy_product<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
         self.compute_energy_product_in_lmb(loop_moms, external_moms, &self.loop_momentum_basis)
     }
@@ -2198,8 +2229,8 @@ impl BareGraph {
     #[inline]
     pub fn compute_energy_product_in_lmb<T: FloatLike>(
         &self,
-        loop_moms: &[ThreeMomentum<F<T>>],
-        external_moms: &[FourMomentum<F<T>>],
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
     ) -> F<T> {
         let all_energies = self.compute_onshell_energies_in_lmb(loop_moms, external_moms, lmb);
@@ -2238,20 +2269,21 @@ impl BareGraph {
         k_format: &str,
         p_format: &str,
     ) -> Vec<(Atom, Atom)> {
-        let mut rule = vec![];
+        todo!()
+        //let mut rule = vec![];
 
-        for (i, signature) in lmb.edge_signatures.iter().enumerate() {
-            rule.push((
-                parse!(&q_format
-                    .replace("<i>", &format!("{}", i))
-                    .replace("<j>", &format!("{}", i)))
-                .unwrap()
-                .to_pattern(),
-                self.replacement_rule_from_signature(i, signature, k_format, p_format),
-            ));
-        }
+        //for (i, signature) in lmb.edge_signatures.iter().enumerate() {
+        //    rule.push((
+        //        parse!(&q_format
+        //            .replace("<i>", &format!("{}", i))
+        //            .replace("<j>", &format!("{}", i)))
+        //        .unwrap()
+        //        .to_pattern(),
+        //        self.replacement_rule_from_signature(i, signature, k_format, p_format),
+        //    ));
+        //}
 
-        rule
+        //rule
     }
 
     fn replacement_rule_from_signature(
@@ -2261,27 +2293,28 @@ impl BareGraph {
         k_format: &str,
         p_format: &str,
     ) -> Atom {
-        let mut acc = Atom::new_num(0);
-        for (i_l, &sign) in signature.internal.iter().enumerate() {
-            let k = sign
-                * parse!(&k_format
-                    .replace("<i>", &format!("{}", i_l))
-                    .replace("<j>", &format!("{}", index)))
-                .unwrap()
-                .to_pattern();
-            acc = &acc + &k;
-        }
+        todo!()
+        // let mut acc = Atom::new_num(0);
+        // for (i_l, &sign) in signature.internal.iter().enumerate() {
+        //     let k = sign
+        //         * parse!(&k_format
+        //             .replace("<i>", &format!("{}", i_l))
+        //             .replace("<j>", &format!("{}", index)))
+        //         .unwrap()
+        //         .to_pattern();
+        //     acc = &acc + &k;
+        // }
 
-        for (i_e, &sign) in signature.external.iter().enumerate() {
-            let p = sign
-                * parse!(&p_format
-                    .replace("<i>", &format!("{}", i_e))
-                    .replace("<j>", &format!("{}", index)))
-                .unwrap()
-                .to_pattern();
-            acc = &acc + &p;
-        }
-        acc
+        // for (i_e, &sign) in signature.external.iter().enumerate() {
+        //     let p = sign
+        //         * parse!(&p_format
+        //             .replace("<i>", &format!("{}", i_e))
+        //             .replace("<j>", &format!("{}", index)))
+        //         .unwrap()
+        //         .to_pattern();
+        //     acc = &acc + &p;
+        // }
+        // acc
     }
 
     pub fn denominator(self) -> Vec<(Atom, Atom)> {
@@ -2290,7 +2323,7 @@ impl BareGraph {
 
     pub fn cff_emr_from_lmb<T: FloatLike>(
         &self,
-        sample: &BareSample<T>,
+        sample: &BareMomentumSample<T>,
         lmb: &LoopMomentumBasis,
     ) -> Vec<FourMomentum<F<T>>> {
         let massless = lmb.to_massless_emr(sample);
@@ -2315,7 +2348,7 @@ impl BareGraph {
     pub fn evaluate_model_params(&mut self, _model: &Model) {}
 
     #[inline]
-    pub fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
+    pub fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
         self.edges
             .iter()
             .enumerate()
@@ -2324,10 +2357,10 @@ impl BareGraph {
 
     /// iterate over all edges which are part of a loop, (tree-level attachments removed)
     #[inline]
-    pub fn get_loop_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
+    pub fn get_loop_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
         self.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && {
-                self.loop_momentum_basis.edge_signatures[*index]
+                self.loop_momentum_basis.edge_signatures[EdgeIndex::from(*index)]
                     .internal
                     .iter()
                     .any(|x| x.is_sign())
@@ -2337,10 +2370,10 @@ impl BareGraph {
 
     /// iterate over all edges which are virtual but do not carry a loop momentum.
     #[inline]
-    pub fn get_tree_level_edges_iterator(&self) -> impl Iterator<Item = (usize, &Edge)> {
+    pub fn get_tree_level_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
         self.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && {
-                self.loop_momentum_basis.edge_signatures[*index]
+                self.loop_momentum_basis.edge_signatures[EdgeIndex::from(*index)]
                     .internal
                     .iter()
                     .all(|x| x.is_zero())
@@ -2350,14 +2383,14 @@ impl BareGraph {
 
     /// For a given edge, return the indices of the edges which have the same signature
     #[inline]
-    pub fn is_edge_raised(&self, edge_index: usize) -> SmallVec<[usize; 2]> {
+    pub fn is_edge_raised(&self, edge_index: EdgeIndex) -> SmallVec<[usize; 2]> {
         let edge_signature = &self.loop_momentum_basis.edge_signatures[edge_index];
         let virtual_edges = self.get_virtual_edges_iterator();
 
         virtual_edges
             .filter(|(index, _)| {
-                self.loop_momentum_basis.edge_signatures[*index] == *edge_signature
-                    && *index != edge_index
+                self.loop_momentum_basis.edge_signatures[EdgeIndex::from(*index)] == *edge_signature
+                    && EdgeIndex::from(*index) != edge_index
             })
             .map(|(index, _)| index)
             .collect()
@@ -2379,8 +2412,8 @@ impl BareGraph {
             let mut index = 0;
 
             while index < edges.len() {
-                if self.loop_momentum_basis.edge_signatures[current_edge]
-                    == self.loop_momentum_basis.edge_signatures[edges[index]]
+                if self.loop_momentum_basis.edge_signatures[EdgeIndex::from(current_edge)]
+                    == self.loop_momentum_basis.edge_signatures[EdgeIndex::from(edges[index])]
                 {
                     group.push(edges.remove(index));
                 } else {
@@ -2410,169 +2443,172 @@ impl BareGraph {
     }
 
     pub fn get_dep_mom_expr(&self) -> (usize, ExternalShift) {
-        let external_edges = self
-            .edges
-            .iter()
-            .enumerate()
-            .filter(|(_index, edge)| edge.edge_type != EdgeType::Virtual)
-            .collect_vec();
+        todo!("port to Amplitude/CrossSection")
 
-        // find the external leg which does not appear in it's own signature
-        if let Some((_, (dep_mom, _))) =
-            external_edges
-                .iter()
-                .enumerate()
-                .find(|(external_index, (index, _edge))| {
-                    self.loop_momentum_basis.edge_signatures[*index].external[*external_index]
-                        .is_positive()
-                        .not()
-                })
-        {
-            let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].external;
+        //let external_edges = self
+        //    .edges
+        //    .iter()
+        //    .enumerate()
+        //    .filter(|(_index, edge)| edge.edge_type != EdgeType::Virtual)
+        //    .collect_vec();
 
-            let external_shift = external_edges
-                .iter()
-                .zip(dep_mom_signature.iter())
-                .filter(|(_external_edge, dep_mom_sign)| dep_mom_sign.is_sign())
-                .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
-                .collect();
+        //// find the external leg which does not appear in it's own signature
+        //if let Some((_, (dep_mom, _))) =
+        //    external_edges
+        //        .iter()
+        //        .enumerate()
+        //        .find(|(external_index, (index, _edge))| {
+        //            self.loop_momentum_basis.edge_signatures[*index].external[*external_index]
+        //                .is_positive()
+        //                .not()
+        //        })
+        //{
+        //    let dep_mom_signature = &self.loop_momentum_basis.edge_signatures[*dep_mom].external;
 
-            (*dep_mom, external_shift)
-        } else {
-            // hack for vacuum diagrams
-            (usize::MAX, ExternalShift::new())
-        }
+        //    let external_shift = external_edges
+        //        .iter()
+        //        .zip(dep_mom_signature.iter())
+        //        .filter(|(_external_edge, dep_mom_sign)| dep_mom_sign.is_sign())
+        //        .map(|((external_edge, _), dep_mom_sign)| (*external_edge, *dep_mom_sign as i64))
+        //        .collect();
+
+        //    (*dep_mom, external_shift)
+        //} else {
+        //    // hack for vacuum diagrams
+        //    (usize::MAX, ExternalShift::new())
+        //}
     }
 
     pub fn generate_loop_momentum_bases(&self) -> Vec<LoopMomentumBasis> {
-        let loop_number = self.loop_momentum_basis.basis.len();
-        let num_edges = self.edges.len();
-        let external_signature_length = self.loop_momentum_basis.edge_signatures[0].external.len();
+        todo!("port to hedgegraph")
+        //let loop_number = self.loop_momentum_basis.basis.len();
+        //let num_edges = self.edges.len();
+        //let external_signature_length = self.loop_momentum_basis.edge_signatures[0].external.len();
 
-        // the full virtual signature matrix in the form of a flattened vector
-        let signature_matrix_flattened = self
-            .loop_momentum_basis
-            .edge_signatures
-            .iter()
-            .flat_map(|sig| sig.internal.iter().map(|s| (*s as i8) as f64).collect_vec())
-            .collect_vec();
+        //// the full virtual signature matrix in the form of a flattened vector
+        //let signature_matrix_flattened = self
+        //    .loop_momentum_basis
+        //    .edge_signatures
+        //    .iter()
+        //    .flat_map(|sig| sig.internal.iter().map(|s| (*s as i8) as f64).collect_vec())
+        //    .collect_vec();
 
-        // convert to dmatrix
-        let signature_matrix =
-            DMatrix::from_row_slice(num_edges, loop_number, &signature_matrix_flattened);
+        //// convert to dmatrix
+        //let signature_matrix =
+        //    DMatrix::from_row_slice(num_edges, loop_number, &signature_matrix_flattened);
 
-        // the full external signature matrix in the form of a flattened vector
-        let external_signature_matrix_flattened = self
-            .loop_momentum_basis
-            .edge_signatures
-            .iter()
-            .flat_map(|sig| sig.external.iter().map(|&s| (s as i8) as f64).collect_vec())
-            .collect_vec();
+        //// the full external signature matrix in the form of a flattened vector
+        //let external_signature_matrix_flattened = self
+        //    .loop_momentum_basis
+        //    .edge_signatures
+        //    .iter()
+        //    .flat_map(|sig| sig.external.iter().map(|&s| (s as i8) as f64).collect_vec())
+        //    .collect_vec();
 
-        // convert to dmatrix
-        let external_signature_matrix = DMatrix::from_row_slice(
-            num_edges,
-            external_signature_length,
-            &external_signature_matrix_flattened,
-        );
+        //// convert to dmatrix
+        //let external_signature_matrix = DMatrix::from_row_slice(
+        //    num_edges,
+        //    external_signature_length,
+        //    &external_signature_matrix_flattened,
+        //);
 
-        let possible_lmbs = self
-            .edges
-            .iter()
-            .filter(|e| e.edge_type == EdgeType::Virtual)
-            .map(|e| self.get_edge_position(&e.name).unwrap())
-            .combinations(loop_number);
+        //let possible_lmbs = self
+        //    .edges
+        //    .iter()
+        //    .filter(|e| e.edge_type == EdgeType::Virtual)
+        //    .map(|e| self.get_edge_position(&e.name).unwrap())
+        //    .combinations(loop_number);
 
-        let valid_lmbs = possible_lmbs
-            .map(|basis| {
-                let reduced_signature_matrix_flattened = basis
-                    .iter()
-                    .flat_map(|e| {
-                        self.loop_momentum_basis.edge_signatures[*e]
-                            .internal
-                            .iter()
-                            .map(|s| (*s as i8) as f64)
-                    })
-                    .collect_vec();
+        //let valid_lmbs = possible_lmbs
+        //    .map(|basis| {
+        //        let reduced_signature_matrix_flattened = basis
+        //            .iter()
+        //            .flat_map(|e| {
+        //                self.loop_momentum_basis.edge_signatures[*e]
+        //                    .internal
+        //                    .iter()
+        //                    .map(|s| (*s as i8) as f64)
+        //            })
+        //            .collect_vec();
 
-                (
-                    basis,
-                    DMatrix::from_row_slice(
-                        loop_number,
-                        loop_number,
-                        &reduced_signature_matrix_flattened,
-                    ),
-                )
-            })
-            .filter(|(_basis, reduced_signature_matrix)| {
-                reduced_signature_matrix.determinant() != 0. // nonzero determinant means valid lmb
-            })
-            .map(|(basis, reduced_signature_matrix)| {
-                let mut sorted_basis = basis;
-                sorted_basis.sort();
-                (sorted_basis, reduced_signature_matrix)
-            });
+        //        (
+        //            basis,
+        //            DMatrix::from_row_slice(
+        //                loop_number,
+        //                loop_number,
+        //                &reduced_signature_matrix_flattened,
+        //            ),
+        //        )
+        //    })
+        //    .filter(|(_basis, reduced_signature_matrix)| {
+        //        reduced_signature_matrix.determinant() != 0. // nonzero determinant means valid lmb
+        //    })
+        //    .map(|(basis, reduced_signature_matrix)| {
+        //        let mut sorted_basis = basis;
+        //        sorted_basis.sort();
+        //        (sorted_basis, reduced_signature_matrix)
+        //    });
 
-        let lmbs = valid_lmbs
-            .map(|(basis, reduced_signature_matrix)| {
-                let mut new_signatures = self.loop_momentum_basis.edge_signatures.clone();
+        //let lmbs = valid_lmbs
+        //    .map(|(basis, reduced_signature_matrix)| {
+        //        let mut new_signatures = self.loop_momentum_basis.edge_signatures.clone();
 
-                // construct the signatures
+        //        // construct the signatures
 
-                // for this we need the reduced external signatures
-                let reduced_external_signatures_vec = basis
-                    .iter()
-                    .flat_map(|&e| {
-                        self.loop_momentum_basis.edge_signatures[e]
-                            .external
-                            .iter()
-                            .map(|s| (*s as i8) as f64)
-                    })
-                    .collect_vec();
+        //        // for this we need the reduced external signatures
+        //        let reduced_external_signatures_vec = basis
+        //            .iter()
+        //            .flat_map(|&e| {
+        //                self.loop_momentum_basis.edge_signatures[e]
+        //                    .external
+        //                    .iter()
+        //                    .map(|s| (*s as i8) as f64)
+        //            })
+        //            .collect_vec();
 
-                let reduced_external_signatures = DMatrix::from_row_slice(
-                    loop_number,
-                    external_signature_length,
-                    &reduced_external_signatures_vec,
-                );
+        //        let reduced_external_signatures = DMatrix::from_row_slice(
+        //            loop_number,
+        //            external_signature_length,
+        //            &reduced_external_signatures_vec,
+        //        );
 
-                // also the inverse of the reduced_signature matrix
-                let reduced_signature_matrix_inverse =
-                    reduced_signature_matrix.clone().try_inverse().unwrap();
+        //        // also the inverse of the reduced_signature matrix
+        //        let reduced_signature_matrix_inverse =
+        //            reduced_signature_matrix.clone().try_inverse().unwrap();
 
-                let new_virtual_signatures =
-                    signature_matrix.clone() * reduced_signature_matrix_inverse.clone();
-                let new_external_signatures = external_signature_matrix.clone()
-                    - signature_matrix.clone()
-                        * reduced_signature_matrix_inverse.clone()
-                        * reduced_external_signatures;
+        //        let new_virtual_signatures =
+        //            signature_matrix.clone() * reduced_signature_matrix_inverse.clone();
+        //        let new_external_signatures = external_signature_matrix.clone()
+        //            - signature_matrix.clone()
+        //                * reduced_signature_matrix_inverse.clone()
+        //                * reduced_external_signatures;
 
-                // convert back to isize vecs
-                for (edge_id, new_signature) in new_signatures.iter_mut().enumerate() {
-                    let new_virtual_signature = new_virtual_signatures
-                        .row(edge_id)
-                        .iter()
-                        .map(|s| s.round() as i8)
-                        .collect();
-                    let new_external_signature = new_external_signatures
-                        .row(edge_id)
-                        .iter()
-                        .map(|s| s.round() as i8)
-                        .collect();
+        //        // convert back to isize vecs
+        //        for (edge_id, new_signature) in new_signatures.iter_mut().enumerate() {
+        //            let new_virtual_signature = new_virtual_signatures
+        //                .row(edge_id)
+        //                .iter()
+        //                .map(|s| s.round() as i8)
+        //                .collect();
+        //            let new_external_signature = new_external_signatures
+        //                .row(edge_id)
+        //                .iter()
+        //                .map(|s| s.round() as i8)
+        //                .collect();
 
-                    *new_signature = LoopExtSignature {
-                        internal: new_virtual_signature,
-                        external: new_external_signature,
-                    };
-                }
-                LoopMomentumBasis {
-                    basis,
-                    edge_signatures: new_signatures,
-                }
-            })
-            .collect_vec();
+        //            *new_signature = LoopExtSignature {
+        //                internal: new_virtual_signature,
+        //                external: new_external_signature,
+        //            };
+        //        }
+        //        LoopMomentumBasis {
+        //            basis,
+        //            edge_signatures: new_signatures,
+        //        }
+        //    })
+        //    .collect_vec();
 
-        lmbs
+        //lmbs
     }
 
     pub fn generate_tropical_subgraph_table(
@@ -2648,7 +2684,7 @@ impl BareGraph {
         let loop_part = self
             .get_loop_edges_iterator()
             .map(|(edge_id, _edge)| {
-                self.loop_momentum_basis.edge_signatures[edge_id]
+                self.loop_momentum_basis.edge_signatures[EdgeIndex::from(edge_id)]
                     .internal
                     .clone()
                     .to_momtrop_format()
@@ -2681,13 +2717,13 @@ impl BareGraph {
             .load_compiled(path.into(), self.name.clone(), settings)?;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
-        let lmb_indices = self.loop_momentum_basis.basis.clone();
+        // let lmb_indices = self.loop_momentum_basis.basis.clone();
 
-        let mut graph = Graph {
+        let graph = Graph {
             bare_graph: self,
             derived_data: Some(derived_data),
         };
-        graph.set_lmb(&lmb_indices)?;
+        //graph.set_lmb(&lmb_indices)?;
 
         Ok(graph)
     }
@@ -2759,8 +2795,9 @@ impl<S: NumeratorState> Graph<S> {
         }
     }
     pub fn generate_cff(&mut self) {
-        self.derived_data.as_mut().unwrap().cff_expression =
-            Some(generate_cff_expression(&self.bare_graph).unwrap());
+        todo!("move this function")
+        // self.derived_data.as_mut().unwrap().cff_expression =
+        //     Some(generate_cff_expression(&self.bare_graph).unwrap());
     }
 
     pub fn generate_ltd(&mut self) {
@@ -2772,10 +2809,11 @@ impl<S: NumeratorState> Graph<S> {
     }
 
     pub fn generate_esurface_data(&mut self) -> Result<(), Report> {
-        let data = generate_esurface_data(self, &self.get_cff().esurfaces)?;
-        self.derived_data.as_mut().unwrap().esurface_derived_data = Some(data);
+        todo!("move this function")
+        //let data = generate_esurface_data(self, &self.get_cff().esurfaces)?;
+        //self.derived_data.as_mut().unwrap().esurface_derived_data = Some(data);
 
-        Ok(())
+        //Ok(())
     }
 
     // helper function
@@ -2812,7 +2850,7 @@ impl<S: NumeratorState> Graph<S> {
     #[inline]
     pub fn get_existing_esurfaces<T: FloatLike>(
         &self,
-        externals: &[FourMomentum<F<T>>],
+        externals: &ExternalFourMomenta<F<T>>,
         e_cm: F<f64>,
         settings: &Settings,
     ) -> ExistingEsurfaces {
@@ -2829,7 +2867,7 @@ impl<S: NumeratorState> Graph<S> {
     #[inline]
     pub fn get_maximal_overlap(
         &self,
-        externals: &[FourMomentum<F<f64>>],
+        externals: &ExternalFourMomenta<F<f64>>,
         e_cm: F<f64>,
         settings: &Settings,
     ) -> OverlapStructure {
@@ -2883,48 +2921,49 @@ impl<S: NumeratorState> Graph<S> {
 
     // attempt to set a new loop momentum basis
     pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
-        match &self.derived_data.as_ref().unwrap().loop_momentum_bases {
-            None => Err(eyre!("lmbs not yet generated")),
-            Some(lmbs) => {
-                for (position, lmb_from_list) in lmbs.iter().enumerate() {
-                    // search a matching lmb
-                    if let Some(permutation_map) = utils::is_permutation(lmb, &lmb_from_list.basis)
-                    {
-                        // obtain the edge signatures
-                        let mut new_edge_signatures = self
-                            .derived_data
-                            .as_ref()
-                            .unwrap()
-                            .loop_momentum_bases
-                            .as_ref()
-                            .unwrap()[position]
-                            .edge_signatures
-                            .clone();
+        unimplemented!("setting the lmb must be done at generation time")
+        //match &self.derived_data.as_ref().unwrap().loop_momentum_bases {
+        //    None => Err(eyre!("lmbs not yet generated")),
+        //    Some(lmbs) => {
+        //        for (position, lmb_from_list) in lmbs.iter().enumerate() {
+        //            // search a matching lmb
+        //            if let Some(permutation_map) = utils::is_permutation(lmb, &lmb_from_list.basis)
+        //            {
+        //                // obtain the edge signatures
+        //                let mut new_edge_signatures = self
+        //                    .derived_data
+        //                    .as_ref()
+        //                    .unwrap()
+        //                    .loop_momentum_bases
+        //                    .as_ref()
+        //                    .unwrap()[position]
+        //                    .edge_signatures
+        //                    .clone();
 
-                        // permutate the elemements of the loop part to match the ordering in the basis
-                        for edge in new_edge_signatures.iter_mut() {
-                            let new_loop_signature = edge
-                                .internal
-                                .iter()
-                                .enumerate()
-                                .map(|(ind, _)| edge.internal[permutation_map.right_to_left(ind)])
-                                .collect();
-                            edge.internal = new_loop_signature;
-                        }
+        //                // permutate the elemements of the loop part to match the ordering in the basis
+        //                for edge in new_edge_signatures.iter_mut() {
+        //                    let new_loop_signature = edge
+        //                        .internal
+        //                        .iter()
+        //                        .enumerate()
+        //                        .map(|(ind, _)| edge.internal[permutation_map.right_to_left(ind)])
+        //                        .collect();
+        //                    edge.internal = new_loop_signature;
+        //                }
 
-                        return Ok(());
-                    }
-                }
+        //                return Ok(());
+        //            }
+        //        }
 
-                Err(eyre!("lmb does not exist"))
-            }
-        }
+        //        Err(eyre!("lmb does not exist"))
+        //    }
+        //}
     }
 
     #[inline]
     pub fn generate_params<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         _settings: &Settings,
     ) -> Vec<Complex<F<T>>> {
         self.derived_data
@@ -3012,7 +3051,7 @@ impl Graph<Evaluators> {
     #[inline]
     pub fn evaluate_cff_expression<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
@@ -3026,7 +3065,7 @@ impl Graph<Evaluators> {
     #[inline]
     pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
     ) -> Complex<F<T>> {
@@ -3040,7 +3079,7 @@ impl Graph<Evaluators> {
     #[inline]
     pub fn evaluate_cff_all_orientations<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         self.derived_data
@@ -3056,7 +3095,7 @@ impl Graph<Evaluators> {
     #[inline]
     pub fn evaluate_numerator_all_orientations<T: FloatLike>(
         &mut self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         settings: &Settings,
     ) -> DataTensor<Complex<F<T>>> {
         self.derived_data
@@ -3107,20 +3146,21 @@ impl Graph<Evaluators> {
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
     ) -> Vec<F<T>> {
-        let lmb = lmb_specification.basis(self);
-        let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
-            sample.loop_moms(),
-            sample.external_moms(),
-            lmb,
-        );
+        unimplemented!("evaluation of expressions is deprecated on Graph")
+        //let lmb = lmb_specification.basis(self);
+        //let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
+        //    sample.loop_moms(),
+        //    sample.external_moms(),
+        //    lmb,
+        //);
 
-        self.derived_data
-            .as_ref()
-            .unwrap()
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .evaluate_orientations(&energy_cache, settings)
+        //self.derived_data
+        //    .as_ref()
+        //    .unwrap()
+        //    .cff_expression
+        //    .as_ref()
+        //    .unwrap()
+        //    .evaluate_orientations(&energy_cache, settings)
     }
 
     pub fn evaluate_threshold_counterterm<T: FloatLike>(
@@ -3261,8 +3301,9 @@ impl DerivedGraphData<Evaluators> {
         let emr = bare_graph
             .loop_momentum_basis
             .edge_signatures
-            .iter()
-            .map(|sig| sig.compute_momentum(loop_moms, external_moms))
+            .borrow()
+            .into_iter()
+            .map(|(_, sig)| sig.compute_momentum_untyped(loop_moms, external_moms))
             .collect_vec();
 
         let mut den = Complex::new_re(F::from_f64(1.));
@@ -3339,7 +3380,7 @@ impl DerivedGraphData<Evaluators> {
     pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
     ) -> DataTensor<Complex<F<T>>> {
@@ -3411,7 +3452,7 @@ impl DerivedGraphData<Evaluators> {
     pub fn evaluate_numerator_all_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &BareSample<T>,
+        sample: &BareMomentumSample<T>,
         tag: Option<Uuid>,
         settings: &Settings,
     ) -> DataTensor<Complex<F<T>>> {
@@ -3419,7 +3460,7 @@ impl DerivedGraphData<Evaluators> {
 
         let rep = self
             .numerator
-            .evaluate_all_orientations(&emr, &sample.polarizations, tag, settings)
+            .evaluate_all_orientations(&emr, &sample.polarizations.raw, tag, settings)
             .unwrap();
 
         match rep {
@@ -3476,7 +3517,7 @@ impl DerivedGraphData<Evaluators> {
     pub fn evaluate_numerator_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &BareSample<T>,
+        sample: &BareMomentumSample<T>,
         tag: Option<Uuid>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
@@ -3485,7 +3526,7 @@ impl DerivedGraphData<Evaluators> {
         let emr = graph.cff_emr_from_lmb(sample, lmb);
 
         self.numerator
-            .evaluate_all_orientations(&emr, &sample.polarizations, tag, settings)
+            .evaluate_all_orientations(&emr, &sample.polarizations.raw, tag, settings)
             .unwrap()
     }
 
@@ -3493,7 +3534,7 @@ impl DerivedGraphData<Evaluators> {
     pub fn evaluate_cff_expression<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         settings: &Settings,
     ) -> DataTensor<Complex<F<T>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
@@ -3755,7 +3796,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn evaluate_cff_all_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &BareSample<T>,
+        sample: &BareMomentumSample<T>,
         settings: &Settings,
     ) -> Complex<F<T>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
@@ -3774,24 +3815,25 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn evaluate_cff_orientations<T: FloatLike>(
         &self,
         graph: &BareGraph,
-        sample: &BareSample<T>,
+        sample: &BareMomentumSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
     ) -> Vec<F<T>> {
-        let lmb = lmb_specification.basis_from_derived(self);
-        let energy_cache =
-            graph.compute_onshell_energies_in_lmb(&sample.loop_moms, &sample.external_moms, lmb);
+        unimplemented!("evaluations on graph deprecated")
+        //    let lmb = lmb_specification.basis_from_derived(self);
+        //    let energy_cache =
+        //        graph.compute_onshell_energies_in_lmb(&sample.loop_moms, &sample.external_moms, lmb);
 
-        self.cff_expression
-            .as_ref()
-            .unwrap()
-            .evaluate_orientations(&energy_cache, settings)
+        //    self.cff_expression
+        //        .as_ref()
+        //        .unwrap()
+        //        .evaluate_orientations(&energy_cache, settings)
     }
 
     pub fn generate_params<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
-        sample: &BareSample<T>,
+        sample: &BareMomentumSample<T>,
     ) -> Vec<Complex<F<T>>> {
         let lmb_specification = LoopMomentumBasisSpecification::Literal(&graph.loop_momentum_basis);
         let lmb = lmb_specification.basis_from_derived(self);

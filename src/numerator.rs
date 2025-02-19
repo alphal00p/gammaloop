@@ -1,5 +1,7 @@
 use crate::debug_info::DEBUG_LOGGER;
 use crate::feyngen::FeynGenError;
+use linnet::half_edge::hedgevec::HedgeVec;
+use linnet::half_edge::involution::Orientation;
 use log::warn;
 use std::fmt::Debug;
 use std::fs;
@@ -75,7 +77,6 @@ use crate::numerator::ufo::UFO;
 use symbolica::atom::{AtomCore, AtomView, Symbol};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
 use symbolica::id::{Context, Match, MatchSettings};
-
 use symbolica::{
     atom::{Atom, FunctionBuilder},
     function, parse, symbol,
@@ -142,7 +143,7 @@ pub enum GammaAlgebraMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtraInfo {
     pub path: PathBuf,
-    pub orientations: Vec<Vec<bool>>,
+    pub orientations: Vec<HedgeVec<Orientation>>,
 }
 
 pub type AtomStructure = SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>;
