@@ -3,6 +3,7 @@ use crate::{
     gammaloop_integrand::DefaultSample,
     graph::BareGraph,
     momentum::FourMomentum,
+    momentum_sample::MomentumSample,
     numerator::{Evaluate, Evaluators, Numerator, RepeatingIteratorTensorOrScalar},
     utils::{FloatLike, VarFloat, F},
     ProcessSettings, Settings,
@@ -788,7 +789,7 @@ impl CFFLimit {
         &self,
         graph: &BareGraph,
         numerator: &mut Numerator<Evaluators>,
-        numerator_sample: &DefaultSample<T>,
+        numerator_sample: &MomentumSample<T>,
         esurface_cache: &EsurfaceCache<F<T>>,
         energy_cache: &HedgeVec<F<T>>,
         settings: &Settings,
@@ -815,7 +816,7 @@ impl CFFLimit {
             .evaluate_orientations_from_esurface_cache(esurface_cache, energy_cache);
 
         let num_iter = numerator
-            .evaluate_all_orientations(&emr_4d, &numerator_sample.polarizations, tag, settings)
+            .evaluate_all_orientations(&emr_4d, &numerator_sample.polarizations.raw, tag, settings)
             .unwrap();
 
         let mut cff = left_orientations
