@@ -139,6 +139,7 @@ pub struct BareMomentumSample<T: FloatLike> {
     pub jacobian: F<T>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MomentumSample<T: FloatLike> {
     pub sample: BareMomentumSample<T>,
     pub rotated_sample: Option<BareMomentumSample<T>>,
