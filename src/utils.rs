@@ -51,6 +51,12 @@ use git_version::git_version;
 pub const GIT_VERSION: &str = git_version!();
 pub const VERSION: &str = "0.0.1";
 
+/// can be used instead of commenting out code
+#[macro_export]
+macro_rules! disable {
+    ($($tokens:tt)*) => {};
+}
+
 #[allow(unused)]
 const MAX_DIMENSION: usize = MAX_LOOP * 3;
 
