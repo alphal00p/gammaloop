@@ -9,23 +9,24 @@ use crate::cff::hsurface::HsurfaceCollection;
 use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::gammaloop_integrand::{DefaultSample, GammaLoopIntegrand};
 use crate::graph::{
-    BareGraph, DerivedGraphData, Edge, EdgeType, Graph, HasVertexInfo, InteractionVertexInfo,
+    BareGraph, DerivedGraphData, EdgeType, Graph, HasVertexInfo, InteractionVertexInfo,
     LoopMomentumBasisSpecification, SerializableGraph, VertexInfo,
 };
 use crate::model::{LorentzStructure, Model};
 use crate::momentum::{
     Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, Signature, ThreeMomentum,
 };
+use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample};
 use crate::numerator::{
     ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, GlobalPrefactor, Gloopoly,
     IterativeOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluateFloat,
     NumeratorEvaluatorOptions, NumeratorParseMode, NumeratorSettings, NumeratorState, PolySplit,
     PythonState, UnInit,
 };
+use crate::signature::ExternalSignature;
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
-use crate::subtraction::static_counterterm;
 use crate::tests::load_default_settings;
-use crate::utils::{f128, F};
+use crate::utils::{self, dummy_hedge_graph, f128, F};
 use crate::utils::{ApproxEq, FloatLike, PrecisionUpgradable};
 use crate::{cff, ltd, Externals, GeneralSettings, Integrand, Polarizations, RotationSetting};
 use crate::{
@@ -58,6 +59,7 @@ use spenso::complex::{Complex, SymbolicaComplex};
 use spenso::network::TensorNetwork;
 use spenso::structure::{representation::Minkowski, representation::RepName, slot::IsAbstractSlot};
 use statrs::function::evaluate;
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::f32::consts::E;
 use std::fs::{self, File};
@@ -133,7 +135,7 @@ pub fn sample_generator<T: FloatLike>(
     seed: u64,
     bare_graph: &BareGraph,
     helicities: Option<Vec<Helicity>>,
-) -> DefaultSample<T>
+) -> MomentumSample<T>
 where
     Standard: Distribution<T> + Distribution<f64>,
 {
@@ -159,7 +161,9 @@ where
         loop_moms.push(ThreeMomentum::new(F(rng.gen()), F(rng.gen()), F(rng.gen())));
     }
 
-    let jacobian = F(1.0);
+    let loop_moms = LoopMomenta::from(loop_moms);
+
+    let jacobian = F::from_f64(1.0);
 
     let helicities = if let Some(hel) = helicities {
         if hel.len() != n_indep_externals + 1 {
@@ -177,7 +181,7 @@ where
 
     let external_signature = bare_graph.external_in_or_out_signature();
 
-    DefaultSample::new(
+    MomentumSample::new(
         loop_moms,
         &externals,
         jacobian,
@@ -190,7 +194,7 @@ pub fn kinematics_builder(
     n_indep_externals: usize,
     n_loops: usize,
     bare_graph: &BareGraph,
-) -> DefaultSample<f64> {
+) -> MomentumSample<f64> {
     let mut external_moms = vec![];
 
     for i in 0..n_indep_externals {
@@ -214,6 +218,8 @@ pub fn kinematics_builder(
         ));
     }
 
+    let loop_moms = LoopMomenta::from(loop_moms);
+
     let jacobian = F(1.0);
 
     let helicities = vec![Helicity::Plus; n_indep_externals + 1];
@@ -225,7 +231,7 @@ pub fn kinematics_builder(
 
     let external_signature = bare_graph.external_in_or_out_signature();
 
-    DefaultSample::new(
+    MomentumSample::new(
         loop_moms,
         &externals,
         jacobian,
@@ -320,7 +326,7 @@ pub enum SampleType<T: FloatLike> {
     Random(u64),
     Kinematic,
     RandomWithHelicity(u64, Vec<Helicity>),
-    Custom(DefaultSample<T>),
+    Custom(MomentumSample<T>),
 }
 
 pub struct AmplitudeCheck {
@@ -442,7 +448,7 @@ fn check_cff_generation<N: NumeratorState>(
 #[allow(unused)]
 fn check_lmb_generation<N: NumeratorState>(
     mut graph: Graph<N>,
-    sample: &DefaultSample<f64>,
+    sample: &MomentumSample<f64>,
     amp_check: &AmplitudeCheck,
 ) -> Result<Graph<N>> {
     graph.generate_loop_momentum_bases();
@@ -459,11 +465,19 @@ fn check_lmb_generation<N: NumeratorState>(
         .compute_emr(sample.loop_moms(), sample.external_moms());
 
     for basis in lmb {
-        let momenta_in_basis = basis.basis.iter().map(|index| emr[*index]).collect_vec();
+        let momenta_in_basis = basis
+            .basis
+            .iter()
+            .map(|index| emr[Into::<usize>::into(*index)])
+            .collect();
+
         let new_emr = basis
             .edge_signatures
-            .iter()
-            .map(|s| s.compute_three_momentum_from_four(&momenta_in_basis, sample.external_moms()))
+            .borrow()
+            .into_iter()
+            .map(|(_, s)| {
+                s.compute_three_momentum_from_four(&momenta_in_basis, sample.external_moms())
+            })
             .collect_vec();
         assert_eq!(emr.len(), new_emr.len());
 
@@ -484,7 +498,7 @@ fn check_lmb_generation<N: NumeratorState>(
 }
 
 #[allow(unused)]
-fn check_sample(bare_graph: &BareGraph, amp_check: &AmplitudeCheck) -> DefaultSample<f64> {
+fn check_sample(bare_graph: &BareGraph, amp_check: &AmplitudeCheck) -> MomentumSample<f64> {
     let n_loops = amp_check.n_edges - amp_check.n_vertices + 1; //circuit rank=n_loops
 
     match &amp_check.sample {
@@ -500,7 +514,7 @@ fn check_sample(bare_graph: &BareGraph, amp_check: &AmplitudeCheck) -> DefaultSa
 }
 
 fn check_rotations<T: FloatLike>(
-    sample: &DefaultSample<T>,
+    sample: &MomentumSample<T>,
     graph: &mut Graph,
     amp_check: &AmplitudeCheck,
 ) -> Result<()> {
@@ -523,7 +537,7 @@ fn check_rotations<T: FloatLike>(
 
 #[allow(unused)]
 fn compare_cff_to_ltd<T: FloatLike>(
-    sample: &DefaultSample<T>,
+    sample: &MomentumSample<T>,
     graph: &mut Graph,
     amp_check: &AmplitudeCheck,
 ) -> Result<()> {
@@ -587,7 +601,7 @@ fn check_graph(graph: &BareGraph, n_prop_groups: usize) {
 #[allow(unused)]
 fn check_esurface_existance<N: NumeratorState>(
     graph: &mut Graph<N>,
-    sample: &DefaultSample<f64>,
+    sample: &MomentumSample<f64>,
     n_existing_esurfaces: usize,
     n_overlap_groups: usize,
     n_existing_per_overlap: Option<usize>,
@@ -622,6 +636,12 @@ fn check_esurface_existance<N: NumeratorState>(
         .iter()
         .map(|edge| edge.particle.mass.value)
         .collect_vec();
+
+    let dummy_hedge_graph = utils::dummy_hedge_graph(graph.bare_graph.edges.len());
+
+    let edge_masses = dummy_hedge_graph
+        .new_hedgevec_from_iter(edge_masses)
+        .unwrap();
 
     let settings = Settings::default();
     find_maximal_overlap(
@@ -762,12 +782,12 @@ fn pytest_scalar_massless_triangle() {
         helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
     };
 
-    let sample = DefaultSample::new(
-        vec![k],
+    let sample = MomentumSample::new(
+        LoopMomenta::from(vec![k]),
         &externals,
         F(1.),
         &crate::Polarizations::None,
-        &Signature::from_iter([1i8, 1, -1]),
+        &ExternalSignature::from_iter([1i8, 1, -1]),
     );
     let amp_check = AmplitudeCheck {
         name: "massless_scalar_triangle",
@@ -808,8 +828,8 @@ fn pytest_scalar_fishnet_2x2() {
     let p3: FourMomentum<F<f64>> =
         FourMomentum::from_args(89. / 97., 67. / 71., 71. / 73., 73. / 79.).into();
 
-    let sample = DefaultSample::new(
-        vec![k1, k2, k3, k4],
+    let sample = MomentumSample::new(
+        LoopMomenta::from(vec![k1, k2, k3, k4]),
         &Externals::Constant {
             momenta: vec![
                 ExternalMomenta::Independent(p1.into()),
@@ -826,7 +846,7 @@ fn pytest_scalar_fishnet_2x2() {
         },
         F(1.),
         &Polarizations::None,
-        &Signature::from_iter([1i8, 1, -1, -1]),
+        &ExternalSignature::from_iter([1i8, 1, -1, -1]),
     );
 
     let amp_check = AmplitudeCheck {
@@ -1097,7 +1117,7 @@ fn pytest_scalar_isopod() {
 
     let k2: ThreeMomentum<F<f64>> = ThreeMomentum::new(8., 9., 10.).cast();
 
-    let loop_moms = vec![k0, k1, k2];
+    let loop_moms = LoopMomenta::from(vec![k0, k1, k2]);
     let externals = Externals::Constant {
         momenta: vec![
             ExternalMomenta::Independent(p1.into()),
@@ -1107,12 +1127,12 @@ fn pytest_scalar_isopod() {
         helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
     };
 
-    let sample = DefaultSample::new(
+    let sample = MomentumSample::new(
         loop_moms,
         &externals,
         F(1.),
         &crate::Polarizations::None,
-        &Signature::from_iter([1i8, 1, -1i8]),
+        &ExternalSignature::from_iter([1i8, 1, -1i8]),
     );
     let amp_check = AmplitudeCheck {
         name: "scalar_isopod",
@@ -1178,13 +1198,13 @@ fn pytest_scalar_hexagon() {
         .unwrap()
         .esurfaces;
 
-    let kinematics = [
+    let kinematics = ExternalFourMomenta::from_iter([
         FourMomentum::from_args(F(24.), F(-21.2), F(71.), F(0.)),
         FourMomentum::from_args(F(50.4), F(15.8), F(-18.8), F(0.)),
         FourMomentum::from_args(F(-0.2), F(46.2), F(8.6), F(0.)),
         -FourMomentum::from_args(F(-33.2), F(2.6), F(-70.8), F(0.)),
         -FourMomentum::from_args(F(-80.), F(-5.6), F(-40.0), F(0.0)),
-    ];
+    ]);
 
     let existing_esurface = get_existing_esurfaces(
         esurfaces,
@@ -1209,6 +1229,10 @@ fn pytest_scalar_hexagon() {
         .iter()
         .map(|edge| edge.particle.mass.value)
         .collect_vec();
+
+    let edge_masses = utils::dummy_hedge_graph(edge_masses.len())
+        .new_hedgevec_from_iter(edge_masses)
+        .unwrap();
 
     let now = std::time::Instant::now();
     let maximal_overlap = find_maximal_overlap(
@@ -1240,13 +1264,13 @@ fn pytest_scalar_hexagon() {
         2
     );
 
-    let hexagon_10_e = [
+    let hexagon_10_e = ExternalFourMomenta::from_iter([
         FourMomentum::from_args(F(-80.), F(29.), F(-70.), F(0.)),
         FourMomentum::from_args(F(83.5), F(14.0), F(70.0), F(0.0)),
         FourMomentum::from_args(F(88.5), F(6.5), F(-6.), F(0.)),
         -FourMomentum::from_args(F(36.5), F(-71.), F(97.5), F(0.)),
         -FourMomentum::from_args(F(12.5), F(-83.5), F(-57.5), F(0.)),
-    ];
+    ]);
 
     let existing_esurfaces = get_existing_esurfaces(
         esurfaces,
@@ -1319,7 +1343,7 @@ fn pytest_scalar_ltd_topology_c() {
         .unwrap()
         .esurfaces;
 
-    let kinematics = [
+    let kinematics = ExternalFourMomenta::from_iter([
         FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(8.94427190999916)),
         FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(-8.94427190999916)),
         -FourMomentum::from_args(
@@ -1335,7 +1359,7 @@ fn pytest_scalar_ltd_topology_c() {
             F(1.328506453),
         ),
         -FourMomentum::from_args(F(2.82869), F(-1.83886), F(-1.6969477), F(0.8605192)),
-    ];
+    ]);
 
     let _edge_masses = graph
         .bare_graph
@@ -1354,6 +1378,10 @@ fn pytest_scalar_ltd_topology_c() {
             }
         })
         .collect_vec();
+
+    let _edge_masses = utils::dummy_hedge_graph(_edge_masses.len())
+        .new_hedgevec_from_iter(_edge_masses)
+        .unwrap();
 
     let existing_esurfaces = get_existing_esurfaces(
         esurfaces,
@@ -1404,7 +1432,7 @@ fn pytest_scalar_massless_pentabox() {
     graph.generate_esurface_data().unwrap();
     let settings = Settings::default();
     let rescaling = F(1.0e-3);
-    let kinematics = [
+    let kinematics = ExternalFourMomenta::from_iter([
         &FourMomentum::from_args(
             F(5.980_260_048_915_123e2),
             F(0.0),
@@ -1429,7 +1457,7 @@ fn pytest_scalar_massless_pentabox() {
             F(3.716_353_112_335_996e1),
             F(-1.013_763_093_935_658e2),
         ) * &rescaling,
-    ];
+    ]);
 
     let edge_masses = graph
         .bare_graph
@@ -1448,6 +1476,10 @@ fn pytest_scalar_massless_pentabox() {
             }
         })
         .collect_vec();
+
+    let edge_masses = utils::dummy_hedge_graph(edge_masses.len())
+        .new_hedgevec_from_iter(edge_masses)
+        .unwrap();
 
     let existing_esurfaces = get_existing_esurfaces(
         &graph
@@ -1520,7 +1552,7 @@ fn pytest_scalar_massless_3l_pentabox() {
     let settings = Settings::default();
 
     let rescaling = F(1.0e0);
-    let kinematics = [
+    let kinematics = ExternalFourMomenta::from_iter([
         &FourMomentum::from_args(
             F(0.149500000000000E+01),
             F(0.000000000000000E+00),
@@ -1545,7 +1577,7 @@ fn pytest_scalar_massless_3l_pentabox() {
             F(0.928212188578101e+00),
             F(-0.283905035967510e+00),
         ) * &rescaling,
-    ];
+    ]);
 
     let edge_masses = graph
         .bare_graph
@@ -1564,6 +1596,10 @@ fn pytest_scalar_massless_3l_pentabox() {
             }
         })
         .collect_vec();
+
+    let edge_masses = utils::dummy_hedge_graph(edge_masses.len())
+        .new_hedgevec_from_iter(edge_masses)
+        .unwrap();
 
     let existing_esurfaces = get_existing_esurfaces(
         &graph
@@ -1888,7 +1924,7 @@ fn top_bubble_CP() {
     let mut graph =
         graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
-    let sample: DefaultSample<f64> =
+    let sample: MomentumSample<f64> =
         sample_generator(3, &graph.bare_graph, Some(vec![Helicity::Plus; 6]));
 
     // println!("IO signature {}", graph.bare_graph.external_in_or_out_signature());
@@ -2036,12 +2072,15 @@ fn scalar_box_to_triangle() {
 
     let box_externals = box_sample.external_moms();
 
-    let triangle_sample = DefaultSample::new(
-        vec![box_emr[6]],
+    let triangle_sample = MomentumSample::new(
+        LoopMomenta::from(vec![box_emr[6]]),
         &Externals::Constant {
             momenta: vec![
-                ExternalMomenta::Independent((box_externals[0] - box_externals[1]).into()),
-                box_externals[2].into(),
+                ExternalMomenta::Independent(
+                    (box_externals[ExternalIndex::from(0)] - box_externals[ExternalIndex::from(1)])
+                        .into(),
+                ),
+                box_externals[ExternalIndex::from(2)].into(),
                 ExternalMomenta::Dependent(Dep::Dep),
             ],
             helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
