@@ -588,7 +588,7 @@ impl Externals {
     pub fn generate_polarizations(
         &self,
         external_particles: &[Arc<Particle>],
-        external_signature: &Signature,
+        external_signature: &ExternalSignature,
     ) -> Polarizations {
         let mut polarizations = vec![];
 
@@ -663,7 +663,7 @@ impl Externals {
 
     pub fn get_dependent_externals<T: FloatLike>(
         &self,
-        external_signature: &Signature,
+        external_signature: &ExternalSignature,
     ) -> Vec<FourMomentum<F<T>>>
 // where
     //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
