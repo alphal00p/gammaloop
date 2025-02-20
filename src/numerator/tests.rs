@@ -1,5 +1,6 @@
 use brotli::CompressorWriter;
 use insta::assert_snapshot;
+use linnet::half_edge::involution::Orientation;
 use spenso::{
     complex::Complex,
     data::{DenseTensor, StorageTensor},
@@ -31,11 +32,12 @@ use crate::{
     graph::{BareGraph, Graph},
     model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
+    momentum_sample::{LoopMomenta, MomentumSample},
     numerator::{ufo::UFO, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
     tests_from_pytest::{
         load_amplitude_output, load_generic_model, sample_generator, test_export_settings,
     },
-    utils::{ApproxEq, F},
+    utils::{self, ApproxEq, F},
     Externals, RotationSetting, Settings,
 };
 
@@ -107,7 +109,7 @@ fn trees() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     let lmb = &graph.bare_graph.loop_momentum_basis;
-    let sample: crate::gammaloop_integrand::DefaultSample<f64> = sample_generator(
+    let sample: crate::momentum_sample::MomentumSample<f64> = sample_generator(
         3,
         &graph.bare_graph,
         Some(vec![
@@ -169,8 +171,8 @@ fn trees() {
 
     let external_signature = graph.bare_graph.external_in_or_out_signature();
 
-    let sample: DefaultSample<f64> = DefaultSample::new(
-        vec![],
+    let sample: MomentumSample<f64> = MomentumSample::new(
+        LoopMomenta::from(vec![]),
         &external_mom,
         F(1.),
         &external_mom
@@ -182,8 +184,8 @@ fn trees() {
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            sample.external_moms(),
-            sample.polarizations(),
+            &sample.external_moms().raw,
+            &sample.polarizations().raw,
             &settings,
         )
         .scalar()
@@ -302,7 +304,7 @@ fn tree_ta_ta_1() {
         path,
         &test_export_settings,
     );
-    let sample: DefaultSample<f64> = sample_generator(3, &graph.bare_graph, None);
+    let sample: MomentumSample<f64> = sample_generator(3, &graph.bare_graph, None);
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph
@@ -312,8 +314,8 @@ fn tree_ta_ta_1() {
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            sample.external_moms(),
-            sample.polarizations(),
+            &sample.external_moms().raw,
+            &sample.polarizations().raw,
             &Settings::default(),
         )
         .scalar()
@@ -361,8 +363,8 @@ fn tree_ta_ta_1() {
 
     let external_signature = graph.bare_graph.external_in_or_out_signature();
 
-    let sample: DefaultSample<f64> = DefaultSample::new(
-        vec![],
+    let sample: MomentumSample<f64> = MomentumSample::new(
+        LoopMomenta::from(vec![]),
         &externals,
         F(1.),
         &externals
@@ -378,8 +380,8 @@ fn tree_ta_ta_1() {
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            sample.external_moms(),
-            sample.polarizations(),
+            &sample.external_moms().raw,
+            &sample.polarizations().raw,
             &Settings::default(),
         )
         .scalar()
@@ -443,7 +445,8 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
             &g.bare_graph,
             &ExtraInfo {
                 path,
-                orientations: vec![vec![true; g.bare_graph.edges.len()]],
+                orientations: vec![utils::dummy_hedge_graph(g.bare_graph.edges.len())
+                    .new_hedgevec(&|_, _| Orientation::Default)],
             },
             &export_settings,
         );
@@ -459,13 +462,14 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
             &g.bare_graph,
             &ExtraInfo {
                 path: path_gamma,
-                orientations: vec![vec![true; g.bare_graph.edges.len()]],
+                orientations: vec![utils::dummy_hedge_graph(g.bare_graph.edges.len())
+                    .new_hedgevec(&|_, _| Orientation::Default)],
             },
             &export_settings,
         );
 
     for i in 0..10 {
-        let s: DefaultSample<f64> = sample_generator(i, &g.bare_graph, None);
+        let s: MomentumSample<f64> = sample_generator(i, &g.bare_graph, None);
 
         let emr = g
             .bare_graph
@@ -473,9 +477,9 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
 
         let polarizations = s.polarizations();
 
-        let val = num_nogamma.evaluate_single(&emr, polarizations, None, &Settings::default());
+        let val = num_nogamma.evaluate_single(&emr, &polarizations.raw, None, &Settings::default());
 
-        let valg = num_gamma.evaluate_single(&emr, polarizations, None, &Settings::default());
+        let valg = num_gamma.evaluate_single(&emr, &polarizations.raw, None, &Settings::default());
 
         assert!(
             Complex::approx_eq_iterator(
@@ -514,7 +518,7 @@ fn tree_h_ttxaah_1() {
         path,
         &test_export_settings,
     );
-    let sample: DefaultSample<f64> = sample_generator(3, &graph.bare_graph, None);
+    let sample: MomentumSample<f64> = sample_generator(3, &graph.bare_graph, None);
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph
@@ -524,8 +528,8 @@ fn tree_h_ttxaah_1() {
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            sample.external_moms(),
-            sample.polarizations(),
+            &sample.external_moms().raw,
+            &sample.polarizations().raw,
             &Settings::default(),
         )
         .scalar()
@@ -566,7 +570,7 @@ fn tree_hh_ttxaa_1() {
         path,
         &test_export_settings,
     );
-    let sample: DefaultSample<f64> = sample_generator(3, &graph.bare_graph, None);
+    let sample: MomentumSample<f64> = sample_generator(3, &graph.bare_graph, None);
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
         / graph
@@ -576,8 +580,8 @@ fn tree_hh_ttxaa_1() {
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            sample.external_moms(),
-            sample.polarizations(),
+            &sample.external_moms().raw,
+            &sample.polarizations().raw,
             &Settings::default(),
         )
         .scalar()
@@ -649,8 +653,8 @@ fn tree_hh_ttxaa_1() {
 
     let external_signature = graph.bare_graph.external_in_or_out_signature();
 
-    let sample: DefaultSample<f64> = DefaultSample::new(
-        vec![],
+    let sample: MomentumSample<f64> = MomentumSample::new(
+        LoopMomenta::from(vec![]),
         &externals,
         F(1.),
         &externals
@@ -666,8 +670,8 @@ fn tree_hh_ttxaa_1() {
     let val = graph
         .evaluate_fourd_expr(
             &[],
-            sample.external_moms(),
-            sample.polarizations(),
+            &sample.external_moms().raw,
+            &sample.polarizations().raw,
             &Settings::default(),
         )
         .scalar()
