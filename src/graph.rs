@@ -7,6 +7,7 @@ use crate::{
         expression::CFFExpression,
         generation::generate_cff_expression,
     },
+    disable,
     feyngen::{
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},
         FeynGenError,
@@ -25,7 +26,7 @@ use crate::{
         Numerator, NumeratorParseMode, NumeratorState, NumeratorStateError, PythonState,
         RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
-    signature::{LoopExtSignature, LoopSignature, SignatureLike},
+    signature::{ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
     subtraction::overlap::{find_maximal_overlap, OverlapStructure},
     utils::{self, sorted_vectorize, FloatLike, F, GS},
     ProcessSettings, Settings, TropicalSubgraphTableSettings,
@@ -1209,7 +1210,7 @@ impl BareGraph {
         self.loop_momentum_basis.basis.is_empty()
     }
 
-    pub fn external_in_or_out_signature(&self) -> Signature {
+    pub fn external_in_or_out_signature(&self) -> ExternalSignature {
         self.external_edges
             .iter()
             .map(|&i| match self.edges[i].edge_type {
@@ -3144,21 +3145,24 @@ impl Graph<Evaluators> {
         lmb_specification: &LoopMomentumBasisSpecification,
         settings: &Settings,
     ) -> Vec<F<T>> {
-        unimplemented!("evaluation of expressions is deprecated on Graph")
-        //let lmb = lmb_specification.basis(self);
-        //let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
-        //    sample.loop_moms(),
-        //    sample.external_moms(),
-        //    lmb,
-        //);
+        unimplemented!("evaluation of expressions is deprecated on Graph");
 
-        //self.derived_data
-        //    .as_ref()
-        //    .unwrap()
-        //    .cff_expression
-        //    .as_ref()
-        //    .unwrap()
-        //    .evaluate_orientations(&energy_cache, settings)
+        disable! {
+        let lmb = lmb_specification.basis(self);
+        let energy_cache = self.bare_graph.compute_onshell_energies_in_lmb(
+            sample.loop_moms(),
+            sample.external_moms(),
+            lmb,
+        );
+
+        self.derived_data
+            .as_ref()
+            .unwrap()
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .evaluate_orientations(&energy_cache, settings)
+        }
     }
 
     pub fn evaluate_threshold_counterterm<T: FloatLike>(
@@ -3228,24 +3232,6 @@ impl DerivedGraphData<PythonState> {
         self.numerator.apply(f)
     }
 }
-
-// impl<NumState: NumeratorState> Serialize for DerivedGraphData<NumState> {
-//     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         let mut state = serializer.serialize_struct("DerivedGraphData", 7)?;
-//         state.serialize_field("loop_momentum_bases", &self.loop_momentum_bases)?;
-//         state.serialize_field("cff_expression", &self.cff_expression)?;
-//         state.serialize_field("ltd_expression", &self.ltd_expression)?;
-//         state.serialize_field("tropical_subgraph_table", &self.tropical_subgraph_table)?;
-//         state.serialize_field("edge_groups", &self.edge_groups)?;
-//         state.serialize_field("esurface_derived_data", &self.esurface_derived_data)?;
-//         state.serialize_field("static_counterterm", &self.static_counterterm)?;
-//         state.serialize_field("numerator", &self.numerator)?;
-//         state.end()
-//     }
-// }
 
 impl<NumState: NumeratorState> DerivedGraphData<NumState> {
     pub fn map_numerator<F, T: NumeratorState>(self, f: F) -> DerivedGraphData<T>
