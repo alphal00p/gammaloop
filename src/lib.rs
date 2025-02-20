@@ -618,7 +618,7 @@ impl Externals {
 
     pub fn set_dependent_at_end(
         &mut self,
-        signature: &Signature,
+        signature: &ExternalSignature,
     ) -> Result<(), ExternalsValidationError> {
         match self {
             Externals::Constant { momenta, .. } => {
@@ -780,7 +780,7 @@ fn external_inv() {
         helicities: vec![Helicity::Plus; 4],
     };
 
-    let signs: Signature = [1i8, 1, 1, 1].into_iter().collect();
+    let signs: ExternalSignature = [1i8, 1, 1, 1].into_iter().collect();
     ext.set_dependent_at_end(&signs).unwrap();
 
     let momenta = vec![
