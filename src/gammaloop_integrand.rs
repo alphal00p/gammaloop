@@ -1033,34 +1033,37 @@ impl GammaLoopIntegrand {
     /// Default parametrize is basically everything except tropical sampling.
     #[inline]
     fn default_parametrize(&self, xs: &[F<f64>], graph_id: usize) -> DefaultSample<f64> {
-        let externals = &self.global_data.settings.kinematics.externals;
+        todo!("rework integrand");
+        disable! {
+            let externals = &self.global_data.settings.kinematics.externals;
 
-        let (loop_moms_vec, param_jacobian) = global_parameterize(
-            xs,
-            self.global_data.settings.kinematics.e_cm.square(),
-            &self.global_data.settings,
-            false,
-        );
+            let (loop_moms_vec, param_jacobian) = global_parameterize(
+                xs,
+                self.global_data.settings.kinematics.e_cm.square(),
+                &self.global_data.settings,
+                false,
+            );
 
-        let loop_moms = loop_moms_vec
-            .into_iter()
-            .map(ThreeMomentum::from)
-            .collect_vec();
+            let loop_moms = loop_moms_vec
+                .into_iter()
+                .map(ThreeMomentum::from)
+                .collect_vec();
 
-        let jacobian = param_jacobian * externals.pdf(xs);
+            let jacobian = param_jacobian * externals.pdf(xs);
 
-        let graph = match &self.graph_integrands {
-            GraphIntegrands::Amplitude(graphs) => &graphs[graph_id].graph,
-            GraphIntegrands::CrossSection(_graphs) => unimplemented!(), //,
-        };
+            let graph = match &self.graph_integrands {
+                GraphIntegrands::Amplitude(graphs) => &graphs[graph_id].graph,
+                GraphIntegrands::CrossSection(_graphs) => unimplemented!(), //,
+            };
 
-        DefaultSample::new(
-            loop_moms,
-            externals,
-            jacobian,
-            &self.global_data.polarizations[0],
-            &graph.bare_graph.external_in_or_out_signature(),
-        )
+            DefaultSample::new(
+                loop_moms,
+                externals,
+                jacobian,
+                &self.global_data.polarizations[0],
+                &graph.bare_graph.external_in_or_out_signature(),
+            )
+        }
     }
 
     /// Compute the average and check the accuracy of the result
@@ -1519,20 +1522,23 @@ impl<T: FloatLike> BareSample<T> {
         polarizations: &Polarizations,
         external_signature: &Signature,
     ) -> Self {
-        let polarizations = match polarizations {
-            Polarizations::None => vec![],
-            Polarizations::Constant { polarizations } => polarizations
-                .iter()
-                .map(|p| p.map(|c| c.map(|f| F::from_ff64(f))))
-                .collect(),
-        };
+        todo!("rework integrand");
+        disable! {
+            let polarizations = match polarizations {
+                Polarizations::None => vec![],
+                Polarizations::Constant { polarizations } => polarizations
+                    .iter()
+                    .map(|p| p.map(|c| c.map(|f| F::from_ff64(f))))
+                    .collect(),
+            };
 
-        let external_moms = external_moms.get_dependent_externals(external_signature);
-        Self {
-            polarizations,
-            loop_moms,
-            external_moms,
-            jacobian,
+            let external_moms = external_moms.get_dependent_externals(external_signature);
+            Self {
+                polarizations,
+                loop_moms,
+                external_moms,
+                jacobian,
+            }
         }
     }
 
