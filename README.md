@@ -3,7 +3,7 @@
 
 *Computation of differential cross-sections using Local Unitarity.*
 
-See [www.alphaloop.ch](www.alphaloop.ch) for details on the theoretical framework and related literature.
+See [www.alphaloop.ch](https://www.alphaloop.ch) for details on the theoretical framework and related literature.
 
 See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
