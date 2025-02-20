@@ -6,6 +6,7 @@ use crate::numerator::{
     AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, Numerator, NumeratorState,
     PythonState, TypedNumeratorState, UnInit,
 };
+use crate::signature::ExternalSignature;
 use crate::{utils::*, Externals, Polarizations, ProcessSettings, Settings};
 use bincode;
 use color_eyre::Result;
@@ -580,7 +581,7 @@ pub trait IsPolarizable {
 #[derive(Debug, Clone)]
 pub struct Amplitude<NumState: NumeratorState = Evaluators> {
     pub name: SmartString<LazyCompact>,
-    pub external_signature: Signature,
+    pub external_signature: ExternalSignature,
     pub external_particles: Vec<Arc<Particle>>,
     pub amplitude_graphs: Vec<AmplitudeGraph<NumState>>,
 }
@@ -600,7 +601,7 @@ impl Amplitude<PythonState> {
 }
 
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn external_signature(&self) -> Signature {
+    pub fn external_signature(&self) -> ExternalSignature {
         let external_signature = self
             .amplitude_graphs
             .first()
