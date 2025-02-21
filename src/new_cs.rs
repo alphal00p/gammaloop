@@ -289,9 +289,9 @@ pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
 pub struct CrossSectionDerivedData {}
 
 pub struct CrossSectionCut {
-    cut: OrientedCut,
-    left: BitVec,
-    right: BitVec,
+    pub cut: OrientedCut,
+    pub left: BitVec,
+    pub right: BitVec,
 }
 
 #[test]
