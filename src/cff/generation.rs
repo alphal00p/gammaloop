@@ -1,15 +1,20 @@
-use crate::cff::{
-    esurface::add_external_shifts,
-    expression::{CompiledCFFExpression, OrientationExpression},
-    hsurface::HsurfaceID,
-    surface::{HybridSurface, HybridSurfaceID},
-    tree::Tree,
+use crate::{
+    cff::{
+        esurface::add_external_shifts,
+        expression::{CompiledCFFExpression, OrientationExpression},
+        hsurface::HsurfaceID,
+        surface::{HybridSurface, HybridSurfaceID},
+        tree::Tree,
+    },
+    new_cs::CrossSectionCut,
 };
 use ahash::HashMap;
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::{involution::HedgePair, HedgeGraph};
+use linnet::half_edge::{
+    hedgevec::HedgeVec, involution::HedgePair, subgraph::OrientedCut, HedgeGraph,
+};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::InternalSubGraph,
@@ -178,6 +183,55 @@ fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
             CFFGenerationGraph::new_new(graph, global_orientation)
         })
         .collect_vec()
+}
+
+fn get_orientations_with_cut<E, V>(
+    graph: &HedgeGraph<E, V>,
+    oriented_cut: &OrientedCut,
+) -> Vec<HedgeVec<Orientation>> {
+    let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
+    let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
+
+    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
+
+    let orientations_consistent_with_cut = virtual_possible_orientations
+        .map(|orientation_of_virtuals| {
+            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
+
+            let global_orientation = graph
+                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+                    match hedge_pair {
+                        HedgePair::Unpaired { .. } => Orientation::Default,
+                        HedgePair::Paired { .. } => orientation_of_virtuals
+                            .next()
+                            .expect(" unable to reconstruct orientation"),
+                        HedgePair::Split { .. } => todo!(),
+                    }
+                }))
+                .expect("unable to construct global orientation");
+
+            assert!(
+                orientation_of_virtuals.next().is_none(),
+                "did not saturate virtual orientations when constructing global orientation"
+            );
+
+            global_orientation
+        })
+        .filter(|global_orientation| {
+            global_orientation
+                .into_iter()
+                .zip(oriented_cut.iter_edges_relative(graph))
+                .all(|((_, &generated_orientation), (cut_orientation, _))| {
+                    matches!(
+                        (generated_orientation, cut_orientation),
+                        (_, Orientation::Undirected)
+                            | (Orientation::Default, Orientation::Default)
+                            | (Orientation::Reversed, Orientation::Reversed)
+                    )
+                })
+        });
+
+    orientations_consistent_with_cut.collect_vec()
 }
 
 pub fn generate_cff_expression<E, V>(
@@ -886,6 +940,27 @@ mod tests_cff {
             target,
             cff_res
         );
+
+        let cuts = hedge_double_traingle.all_cuts(nodes[3], nodes[0]);
+        let mut num_with_6_ors = 0;
+        let mut num_with_4_ors = 0;
+        assert_eq!(cuts.len(), 4);
+        for (_, cut, _) in &cuts {
+            for (_, edge, _) in hedge_double_traingle.iter_edges(cut) {
+                println!("{:?}", edge);
+            }
+
+            println!("");
+            let orientations = get_orientations_with_cut(&hedge_double_traingle, cut);
+            if orientations.len() == 4 {
+                num_with_4_ors += 1
+            } else if orientations.len() == 6 {
+                num_with_6_ors += 1
+            }
+        }
+
+        assert_eq!(num_with_4_ors, 2);
+        assert_eq!(num_with_6_ors, 2);
     }
 
     #[test]
