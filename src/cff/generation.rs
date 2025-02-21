@@ -709,7 +709,7 @@ mod tests_cff {
         let mut energy_cache = external_energy_cache.to_vec();
         energy_cache.extend(virtual_energy_cache);
 
-        let energy_cache = dummy_hedge_graph(5)
+        let energy_cache = dummy_hedge_graph(6)
             .new_hedgevec_from_iter(energy_cache)
             .unwrap();
 
