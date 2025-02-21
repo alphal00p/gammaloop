@@ -519,6 +519,9 @@ fn advance_tree(
 
 #[cfg(test)]
 mod tests_cff {
+    use linnet::half_edge::{
+        builder::HedgeGraphBuilder, involution::Flow, nodestorage::NodeStorageVec,
+    };
     use symbolica::domains::float::{NumericalFloatLike, Real};
     use utils::FloatLike;
 
@@ -674,13 +677,13 @@ mod tests_cff {
         let dep_mom = EdgeIndex::from(2);
         let dep_mom_expr = vec![(EdgeIndex::from(0), -1), (EdgeIndex::from(1), -1)];
 
-        let shift_rewrite = ShiftRewrite {
+        let shift_rewrite = Some(ShiftRewrite {
             dependent_momentum: dep_mom,
             dependent_momentum_expr: dep_mom_expr,
-        };
+        });
 
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
+            generate_cff_from_orientations(orientations, None, None, None, &shift_rewrite.clone())
                 .unwrap();
         assert_eq!(
             cff.esurfaces.len(),
@@ -737,34 +740,46 @@ mod tests_cff {
             cff_res
         );
 
-        // test the generation for each possible limit
-        //        for (esurface_id, _) in cff.esurfaces.iter_enumerated() {
-        //            let expanded_limit = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id));
-        //
-        //            let limit = cff
-        //                .limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr)
-        //                .unwrap();
-        //            let limit_atom = limit.limit_to_atom_with_rewrite(Some(&cff.esurfaces[esurface_id]));
-        //
-        //            let p2_atom = Atom::parse("p2").unwrap();
-        //            let rhs = Atom::parse("- p0 - p1").unwrap();
-        //
-        //            let p2_pattern = Pattern::Literal(p2_atom);
-        //            let rhs_pattern = Pattern::Literal(rhs);
-        //
-        //            let conditions = None;
-        //            let settings = None;
-        //
-        //            let atom_limit_0 =
-        //                expanded_limit.replace_all(&p2_pattern, &rhs_pattern, conditions, settings);
-        //
-        //            let limit_atom =
-        //                limit_atom.replace_all(&p2_pattern, &rhs_pattern, conditions, settings);
-        //
-        //            let diff = (limit_atom - &atom_limit_0).expand();
-        //            assert_eq!(diff, Atom::new());
-        //        }
-    } //
+        // test cff from hedge graph
+        let mut triangle_hedge_graph_builder = HedgeGraphBuilder::new();
+
+        let nodes = (0..3)
+            .map(|_| triangle_hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        for node in nodes.clone() {
+            triangle_hedge_graph_builder.add_external_edge(
+                node,
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
+            );
+        }
+
+        triangle_hedge_graph_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
+        triangle_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        triangle_hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+
+        let triangle_hedge_graph = triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+        let cff_hedge = generate_cff_expression(&triangle_hedge_graph, &shift_rewrite).unwrap();
+
+        let cff_res: F<f64> = energy_prefactor
+            * cff_hedge.eager_evaluate(&energy_cache, &settings)
+            * F((2. * std::f64::consts::PI).powi(-3));
+
+        let target_res = F(6.333_549_225_536_17e-9_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
 
     #[test]
     fn test_cff_test_double_triangle() {
@@ -777,14 +792,13 @@ mod tests_cff {
         let dep_mom = EdgeIndex::from(1);
         let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
 
-        let shift_rewrite = ShiftRewrite {
+        let shift_rewrite = Some(ShiftRewrite {
             dependent_momentum: dep_mom,
             dependent_momentum_expr: dep_mom_expr,
-        };
+        });
 
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
-                .unwrap();
+            generate_cff_from_orientations(orientations, None, None, None, &shift_rewrite).unwrap();
 
         let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
         let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
@@ -832,21 +846,46 @@ mod tests_cff {
             cff_res
         );
 
-        // this does not work yet
+        let mut hedge_double_triangle_builder = HedgeGraphBuilder::new();
+        let nodes = (0..4)
+            .map(|_| hedge_double_triangle_builder.add_node(()))
+            .collect_vec();
 
-        // for (esurface_id, esurface) in cff.esurfaces.iter_enumerated() {
+        hedge_double_triangle_builder.add_external_edge(
+            nodes[0],
+            (),
+            Orientation::Undirected,
+            Flow::Sink,
+        );
+        hedge_double_triangle_builder.add_external_edge(
+            nodes[3],
+            (),
+            Orientation::Undirected,
+            Flow::Sink,
+        );
 
-        // let expanded_limit: RationalPolynomial<IntegerRing, u8> = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id)).to_rational_polynomial(&Z, &Z, None);
+        hedge_double_triangle_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        hedge_double_triangle_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
+        hedge_double_triangle_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        hedge_double_triangle_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        hedge_double_triangle_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
 
-        // let factorised_limit = cff.limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr).unwrap();
-        // let factorised_limit_atom = factorised_limit.limit_to_atom_with_rewrite(Some(esurface)).to_rational_polynomial(&Z, &Z, None);
+        let hedge_double_traingle = hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
+        let cff_hedge = generate_cff_expression(&hedge_double_traingle, &shift_rewrite).unwrap();
 
-        // apply energy conservation
-        // let diff = expanded_limit - factorised_limit_atom;
-        // println!("diff: {}", diff);
-        // can't test all, but probably works?
-        // symbolica crash, probably works on newer version? can't change because everything is outdated, need to merge with main
-        //}
+        let cff_res = energy_prefactor * cff_hedge.eager_evaluate(&energy_cache, &settings);
+
+        let target = F(1.0794792137096797e-13);
+        let absolute_error = cff_res - target;
+        let relative_error = absolute_error / cff_res;
+
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e}, target: {:+e}, result: {:+e}",
+            relative_error,
+            target,
+            cff_res
+        );
     }
 
     #[test]
@@ -867,15 +906,14 @@ mod tests_cff {
         let dep_mom = EdgeIndex::from(1);
         let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
 
-        let shift_rewrite = ShiftRewrite {
+        let shift_rewrite = Some(ShiftRewrite {
             dependent_momentum: dep_mom,
             dependent_momentum_expr: dep_mom_expr,
-        };
+        });
 
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-        let cff =
-            generate_cff_from_orientations(orientataions, None, None, None, &Some(shift_rewrite))
-                .unwrap();
+        let cff = generate_cff_from_orientations(orientataions, None, None, None, &shift_rewrite)
+            .unwrap();
 
         let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
         let zero_vector = q.default();
@@ -917,6 +955,32 @@ mod tests_cff {
         let settings = tests::load_default_settings();
 
         let res = cff.eager_evaluate(&energies_cache, &settings) * energy_prefactor;
+
+        let absolute_error = res - F(1.2625322619777278e-21);
+        let relative_error = absolute_error / res;
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e}",
+            relative_error
+        );
+
+        let mut tbt_hedge_builder = HedgeGraphBuilder::new();
+        let nodes = (0..6).map(|_| tbt_hedge_builder.add_node(())).collect_vec();
+        tbt_hedge_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+        tbt_hedge_builder.add_external_edge(nodes[5], (), Orientation::Undirected, Flow::Sink);
+
+        tbt_hedge_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[2], nodes[4], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[3], nodes[4], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[3], nodes[5], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
+
+        let tbt_hedge = tbt_hedge_builder.build::<NodeStorageVec<()>>();
+        let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite).unwrap();
+        let res = cff_hedge.eager_evaluate(&energies_cache, &settings) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
