@@ -24,6 +24,7 @@ use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
 use symbolica::function;
 use symbolica::graph::GenerationSettings;
+use symbolica::id::Context;
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -41,6 +42,7 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
+use crate::disable;
 use crate::graph::EdgeType;
 use crate::model::ColorStructure;
 use crate::model::Particle;
@@ -836,46 +838,50 @@ impl FeynGen {
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
         let n_particles = self.options.initial_pdgs.len();
-        let he_graph = HedgeGraph::from(graph.clone()).map(
-            |node_color| node_color,
-            |_, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
-        );
 
-        let mut s_set = AHashSet::new();
-        let mut t_set = vec![];
+        todo!("fix HedgeGraph::From");
+        disable! {
+            let he_graph = HedgeGraph::<EdgeColor, NodeColor >::from(graph.clone()).map(
+                |node_color| node_color,
+                |_, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+            );
 
-        for (n, f) in he_graph.iter_nodes() {
-            let id = he_graph.id_from_hairs(n).unwrap();
-            match f.get_sign(n_particles) {
-                SignOrZero::Plus => {
-                    s_set.insert(id);
+            let mut s_set = AHashSet::new();
+            let mut t_set = vec![];
+
+            for (n, f) in he_graph.iter_nodes() {
+                let id = he_graph.id_from_hairs(n).unwrap();
+                match f.get_sign(n_particles) {
+                    SignOrZero::Plus => {
+                        s_set.insert(id);
+                    }
+                    SignOrZero::Minus => {
+                        t_set.push(id);
+                    }
+                    _ => {}
                 }
-                SignOrZero::Minus => {
-                    t_set.push(id);
-                }
-                _ => {}
             }
-        }
-        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
-            let cuts = he_graph.all_cuts(s, t);
+            if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
+                let cuts = he_graph.all_cuts(s, t);
 
-            let pass_cut_filter = cuts.iter().any(|c| {
-                is_valid_cut(
-                    c,
-                    &s_set,
-                    model,
-                    n_unresolved,
-                    unresolved_type,
-                    &particle_content,
-                    amp_couplings,
-                    amp_loop_count,
-                    &he_graph,
-                )
-            });
+                let pass_cut_filter = cuts.iter().any(|c| {
+                    is_valid_cut(
+                        c,
+                        &s_set,
+                        model,
+                        n_unresolved,
+                        unresolved_type,
+                        &particle_content,
+                        amp_couplings,
+                        amp_loop_count,
+                        &he_graph,
+                    )
+                });
 
-            pass_cut_filter
-        } else {
-            true //TODO still check the amplitude level filters in the case where there is no initial-state specified
+                pass_cut_filter
+            } else {
+                true //TODO still check the amplitude level filters in the case where there is no initial-state specified
+            }
         }
     }
 
@@ -3593,39 +3599,41 @@ impl ProcessedNumeratorForComparison {
                 for (_n, d) in tn.graph.nodes.iter() {
                     if let Ok(param_tn) = d.clone().try_into_parametric().to_owned() {
                         for (_, a) in param_tn.tensor.iter_flat() {
-                            let res = a.replace_map(&|view: AtomView, context, term| {
-                                assert!(context.function_level == 0);
-                                match view {
-                                    AtomView::Var(s) => {
-                                        *term = function!(
-                                            symbol!("MARKER_TO_REPLACE"),
-                                            s.as_view().to_owned()
-                                        );
-                                        true
-                                    }
-                                    AtomView::Fun(f) => {
-                                        *term = function!(
-                                            symbol!("MARKER_TO_REPLACE"),
-                                            f.as_view().to_owned()
-                                        );
-                                        true
-                                    }
-                                    AtomView::Pow(p) => {
-                                        let (_, exp) = p.get_base_exp();
-                                        match exp.to_owned() {
-                                            Atom::Num(_) => false,
-                                            _ => {
-                                                *term = function!(
-                                                    symbol!("MARKER_TO_REPLACE"),
-                                                    p.as_view().to_owned()
-                                                );
-                                                true
+                            let res = a.replace_map(
+                                &|view: AtomView, context: &Context, term: &mut Atom| {
+                                    assert!(context.function_level == 0);
+                                    match view {
+                                        AtomView::Var(s) => {
+                                            *term = function!(
+                                                symbol!("MARKER_TO_REPLACE"),
+                                                s.as_view().to_owned()
+                                            );
+                                            true
+                                        }
+                                        AtomView::Fun(f) => {
+                                            *term = function!(
+                                                symbol!("MARKER_TO_REPLACE"),
+                                                f.as_view().to_owned()
+                                            );
+                                            true
+                                        }
+                                        AtomView::Pow(p) => {
+                                            let (_, exp) = p.get_base_exp();
+                                            match exp.to_owned() {
+                                                Atom::Num(_) => false,
+                                                _ => {
+                                                    *term = function!(
+                                                        symbol!("MARKER_TO_REPLACE"),
+                                                        p.as_view().to_owned()
+                                                    );
+                                                    true
+                                                }
                                             }
                                         }
+                                        _ => false,
                                     }
-                                    _ => false,
-                                }
-                            });
+                                },
+                            );
                             for m in res.pattern_match(
                                 &function!(symbol!("MARKER_TO_REPLACE"), Atom::new_var(GS.x_))
                                     .to_pattern(),
