@@ -196,7 +196,7 @@ mod tests {
         };
 
         let energy_cache = dummy_graph
-            .new_hedgevec_from_iter(vec![F(2.0), F(2.0), F(3.0), F(4.0), F(5.0), F(6.0)])
+            .new_hedgevec_from_iter(vec![F(1.0), F(2.0), F(3.0), F(4.0), F(5.0), F(6.0)])
             .unwrap();
         let value = h_surface.compute_value(&energy_cache);
         assert_eq!(value.0, 1.0 + 2.0 - 3.0 - 4.0 - 5.0 + 6.0);
