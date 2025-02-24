@@ -218,17 +218,17 @@ fn get_orientations_with_cut<E, V>(
             global_orientation
         })
         .filter(|global_orientation| {
-            global_orientation
-                .into_iter()
-                .zip(oriented_cut.iter_edges_relative(graph))
-                .all(|((_, &generated_orientation), (cut_orientation, _))| {
-                    matches!(
-                        (generated_orientation, cut_orientation),
-                        (_, Orientation::Undirected)
-                            | (Orientation::Default, Orientation::Default)
-                            | (Orientation::Reversed, Orientation::Reversed)
-                    )
-                })
+            let edges_in_cut = graph.iter_edges(oriented_cut).map(|(_, id, _)| id);
+            let orientation_of_edges_in_cut =
+                oriented_cut.iter_edges_relative(graph).map(|(or, _)| or);
+
+            edges_in_cut
+                .zip(orientation_of_edges_in_cut)
+                .all(|(edge_id, orientation)| global_orientation[edge_id] == orientation)
+        })
+        .filter(|global_orientation| {
+            let graph = CFFGenerationGraph::new_new(graph, global_orientation.clone());
+            !graph.has_directed_cycle_initial()
         });
 
     orientations_consistent_with_cut.collect_vec()
@@ -946,11 +946,6 @@ mod tests_cff {
         let mut num_with_4_ors = 0;
         assert_eq!(cuts.len(), 4);
         for (_, cut, _) in &cuts {
-            for (_, edge, _) in hedge_double_traingle.iter_edges(cut) {
-                println!("{:?}", edge);
-            }
-
-            println!("");
             let orientations = get_orientations_with_cut(&hedge_double_traingle, cut);
             if orientations.len() == 4 {
                 num_with_4_ors += 1
