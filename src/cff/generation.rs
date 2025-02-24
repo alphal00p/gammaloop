@@ -6,6 +6,7 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
+    disable,
     new_cs::CrossSectionCut,
 };
 use ahash::HashMap;
@@ -28,21 +29,15 @@ use log::debug;
 use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
-    expression::{CFFExpression, CFFExpressionNode, CFFLimit, TermId},
+    expression::{CFFExpression, CFFLimit, TermId},
     hsurface::HsurfaceCollection,
     tree::NodeId,
 };
 
 #[derive(Debug, Clone)]
-enum GenerationData {
-    Data {
-        graph: CFFGenerationGraph,
-        surface_id: Option<HybridSurfaceID>,
-    },
-    Pointer {
-        term_id: usize,
-        node_id: usize,
-    },
+struct GenerationData {
+    graph: CFFGenerationGraph,
+    surface_id: Option<HybridSurfaceID>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,30 +46,13 @@ pub struct ShiftRewrite {
     pub dependent_momentum_expr: ExternalShift,
 }
 
-fn forget_graphs(data: GenerationData) -> CFFExpressionNode {
-    match data {
-        GenerationData::Data {
-            surface_id: esurface_id,
-            ..
-        } => CFFExpressionNode::Data(esurface_id.unwrap()),
-        GenerationData::Pointer { term_id, node_id } => CFFExpressionNode::Pointer {
-            term_id: Into::<TermId>::into(term_id),
-            node_id: Into::<NodeId>::into(node_id),
-        },
-    }
+fn forget_graphs(data: GenerationData) -> HybridSurfaceID {
+    data.surface_id.expect("corrupted expression tree")
 }
 
 impl GenerationData {
     fn insert_esurface(&mut self, surface_id: HybridSurfaceID) {
-        match self {
-            GenerationData::Data {
-                surface_id: ref mut id,
-                ..
-            } => {
-                *id = Some(surface_id);
-            }
-            GenerationData::Pointer { .. } => {}
-        }
+        self.surface_id = Some(surface_id);
     }
 }
 
@@ -196,6 +174,7 @@ fn get_orientations_with_cut<E, V>(
 
     let orientations_consistent_with_cut = virtual_possible_orientations
         .map(|orientation_of_virtuals| {
+            // pad a virtual orientation with orientations of externals.
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
@@ -218,6 +197,7 @@ fn get_orientations_with_cut<E, V>(
             global_orientation
         })
         .filter(|global_orientation| {
+            // filter out orientations that are not consistent with the cut
             let edges_in_cut = graph.iter_edges(oriented_cut).map(|(_, id, _)| id);
             let orientation_of_edges_in_cut =
                 oriented_cut.iter_edges_relative(graph).map(|(or, _)| or);
@@ -227,6 +207,7 @@ fn get_orientations_with_cut<E, V>(
                 .all(|(edge_id, orientation)| global_orientation[edge_id] == orientation)
         })
         .filter(|global_orientation| {
+            // filter out orientations that have a directed cycle
             let graph = CFFGenerationGraph::new_new(graph, global_orientation.clone());
             !graph.has_directed_cycle_initial()
         });
@@ -244,6 +225,37 @@ pub fn generate_cff_expression<E, V>(
     let graph_cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
 
     Ok(graph_cff)
+}
+
+pub fn generate_cff_for_cut<E, V>(
+    graph: &HedgeGraph<E, V>,
+    cut: &CrossSectionCut,
+    canonize_esurface: &Option<ShiftRewrite>,
+    cache: &mut EsurfaceCollection,
+) -> Result<CFFExpression, Report> {
+    let orientations = get_orientations_with_cut(graph, &cut.cut);
+
+    let left_and_right_diagrams =
+        orientations
+            .into_iter()
+            .enumerate()
+            .map(|(term_id, orientation)| {
+                let left =
+                    CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), &cut.left);
+                let right = CFFGenerationGraph::new_from_subgraph(graph, orientation, &cut.right);
+
+                disable! {
+                    let left_expression = generate_tree_for_orientation(
+                        left,
+                        term_id,
+                        generator_cache,
+                        None,
+                        canonize_esurface,
+                    );
+                }
+            });
+
+    todo!()
 }
 
 pub fn generate_cff_limit(
@@ -392,7 +404,7 @@ fn generate_tree_for_orientation(
     rewrite_at_cache_growth: Option<&Esurface>,
     canonize_esurface: &Option<ShiftRewrite>,
 ) -> Tree<GenerationData> {
-    let mut tree = Tree::from_root(GenerationData::Data {
+    let mut tree = Tree::from_root(GenerationData {
         graph,
         surface_id: None,
     });
@@ -415,11 +427,7 @@ fn advance_tree(
     rewrite_at_cache_growth: Option<&Esurface>,
     canonize_esurface: &Option<ShiftRewrite>,
 ) -> Option<()> {
-    let bottom_layer = tree
-        .get_bottom_layer()
-        .into_iter()
-        .filter(|&node_id| matches!(&tree.get_node(node_id).data, GenerationData::Data { .. }))
-        .collect_vec(); // allocation needed because tree is mutable
+    let bottom_layer = tree.get_bottom_layer();
 
     let (children_optional, new_surfaces_for_tree): (
         Vec<Option<Vec<CFFGenerationGraph>>>,
@@ -428,12 +436,7 @@ fn advance_tree(
         .iter()
         .map(|&node_id| {
             let node = &tree.get_node(node_id);
-            let graph = match &node.data {
-                GenerationData::Data { graph, .. } => graph,
-                GenerationData::Pointer { .. } => {
-                    unreachable!("filtered")
-                }
-            };
+            let graph = &node.data.graph;
 
             let (option_children, surface) =
                 graph.generate_children(&mut generator_cache.vertices_used);
@@ -542,32 +545,14 @@ fn advance_tree(
         .zip(children)
         .for_each(|(&node_id, children)| {
             children.into_iter().for_each(|child| {
-                let hashable_child = child.clone();
-                if let Some((cff_expression_term_id, cff_expression_node_id)) =
-                    generator_cache.graph_cache.get(&hashable_child)
-                {
-                    let new_pointer = GenerationData::Pointer {
-                        term_id: *cff_expression_term_id,
-                        node_id: *cff_expression_node_id,
-                    };
-                    tree.insert_node(node_id, new_pointer);
-                    generator_cache.cache_hits += 1;
-                } else {
-                    let child_node_id = tree.get_num_nodes();
-                    let child_node = GenerationData::Data {
-                        graph: child,
-                        surface_id: None,
-                    };
+                let child_node = GenerationData {
+                    graph: child,
+                    surface_id: None,
+                };
 
-                    generator_cache
-                        .graph_cache
-                        .insert(hashable_child, (term_id, child_node_id));
-                    tree.insert_node(node_id, child_node);
-                    generator_cache.non_cache_hits += 1;
-                }
+                tree.insert_node(node_id, child_node);
             });
         });
-
     Some(())
 }
 

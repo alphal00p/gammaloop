@@ -73,7 +73,7 @@ impl CFFFloat<VarFloat<113>> for VarFloat<113> {
 pub struct OrientationExpression {
     pub orientation: HedgeVec<Orientation>,
     pub dag: CFFGenerationGraph,
-    pub expression: Tree<CFFExpressionNode>,
+    pub expression: Tree<HybridSurfaceID>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -86,12 +86,6 @@ pub struct CFFExpression {
     pub hsurfaces: HsurfaceCollection,
     #[bincode(with_serde)]
     pub compiled: CompiledCFFExpression,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum CFFExpressionNode {
-    Data(HybridSurfaceID),
-    Pointer { term_id: TermId, node_id: NodeId },
 }
 
 impl CFFExpression {
@@ -284,26 +278,13 @@ impl CFFExpression {
         node_id: NodeId,
     ) {
         let node = &self.orientations[term_id].expression.get_node(node_id);
+        current_path.push(node.data);
 
-        match node.data {
-            CFFExpressionNode::Data(surface_id) => {
-                current_path.push(surface_id);
-
-                if node.children.is_empty() {
-                    res.push(current_path.clone());
-                } else {
-                    for child in node.children.iter() {
-                        self.recursive_term_builder(
-                            res,
-                            &mut current_path.clone(),
-                            term_id,
-                            *child,
-                        );
-                    }
-                }
-            }
-            CFFExpressionNode::Pointer { term_id, node_id } => {
-                self.recursive_term_builder(res, current_path, term_id, node_id);
+        if node.children.is_empty() {
+            res.push(current_path.clone());
+        } else {
+            for child in node.children.iter() {
+                self.recursive_term_builder(res, &mut current_path.clone(), term_id, *child);
             }
         }
     }
@@ -388,29 +369,22 @@ impl CFFExpression {
         let node = self.orientations[term_id].expression.get_node(node_id);
 
         match node.data {
-            CFFExpressionNode::Data(data_surface_id) => {
-                match data_surface_id {
-                    HybridSurfaceID::Esurface(data_esurface_id) => {
-                        if data_esurface_id == esurface_id {
-                            return true;
-                        }
-                    }
-                    HybridSurfaceID::Hsurface(_) => {}
-                    HybridSurfaceID::Unit => {}
+            HybridSurfaceID::Esurface(data_esurface_id) => {
+                if data_esurface_id == esurface_id {
+                    return true;
                 }
-
-                if node.children.is_empty() {
-                    return false;
-                }
-
-                node.children
-                    .iter()
-                    .any(|child| self.recursive_esurface_search(term_id, *child, esurface_id))
             }
-            CFFExpressionNode::Pointer { term_id, node_id } => {
-                self.recursive_esurface_search(term_id, node_id, esurface_id)
-            }
+            HybridSurfaceID::Hsurface(_) => {}
+            HybridSurfaceID::Unit => {}
         }
+
+        if node.children.is_empty() {
+            return false;
+        }
+
+        node.children
+            .iter()
+            .any(|child| self.recursive_esurface_search(term_id, *child, esurface_id))
     }
 
     pub fn term_has_esurface(&self, term_id: TermId, esurface_id: EsurfaceID) -> bool {
@@ -427,57 +401,45 @@ impl CFFExpression {
     ) -> Atom {
         let tree = &self[term_id].expression;
         let node = tree.get_node(node_id);
-        match node.data {
-            CFFExpressionNode::Pointer { term_id, node_id } => self.recursive_construct_atom(
-                node_id,
-                term_id,
-                esurface_collection,
-                hsurface_collection,
-                rewriter_esurface,
-            ),
-            CFFExpressionNode::Data(surface_id) => {
-                let surface_atom = match surface_id {
-                    HybridSurfaceID::Esurface(esurface_id) => {
-                        esurface_collection[esurface_id].to_atom()
+
+        let surface_atom = match node.data {
+            HybridSurfaceID::Esurface(esurface_id) => esurface_collection[esurface_id].to_atom(),
+            HybridSurfaceID::Hsurface(hsurface_id) => match rewriter_esurface {
+                Some(esurface) => {
+                    if let Some(esurface_atom) =
+                        hsurface_collection[hsurface_id].to_atom_with_rewrite(esurface)
+                    {
+                        esurface_atom
+                    } else {
+                        hsurface_collection[hsurface_id].to_atom()
                     }
-                    HybridSurfaceID::Hsurface(hsurface_id) => match rewriter_esurface {
-                        Some(esurface) => {
-                            if let Some(esurface_atom) =
-                                hsurface_collection[hsurface_id].to_atom_with_rewrite(esurface)
-                            {
-                                esurface_atom
-                            } else {
-                                hsurface_collection[hsurface_id].to_atom()
-                            }
-                        }
-                        None => hsurface_collection[hsurface_id].to_atom(),
-                    },
-                    HybridSurfaceID::Unit => Atom::new_num(1),
-                };
+                }
+                None => hsurface_collection[hsurface_id].to_atom(),
+            },
+            HybridSurfaceID::Unit => Atom::new_num(1),
+        };
 
-                let inv_surface_atom = Atom::new_num(1) / &surface_atom;
+        let inv_surface_atom = Atom::new_num(1) / &surface_atom;
 
-                let res = if !node.children.is_empty() {
-                    inv_surface_atom
-                        * &node
-                            .children
-                            .iter()
-                            .map(|child_index| {
-                                self.recursive_construct_atom(
-                                    *child_index,
-                                    term_id,
-                                    esurface_collection,
-                                    hsurface_collection,
-                                    rewriter_esurface,
-                                )
-                            })
-                            .fold(Atom::new(), |sum, e| sum + &e)
-                } else {
-                    inv_surface_atom
-                };
-                res
-            }
-        }
+        let res = if !node.children.is_empty() {
+            inv_surface_atom
+                * &node
+                    .children
+                    .iter()
+                    .map(|child_index| {
+                        self.recursive_construct_atom(
+                            *child_index,
+                            term_id,
+                            esurface_collection,
+                            hsurface_collection,
+                            rewriter_esurface,
+                        )
+                    })
+                    .fold(Atom::new(), |sum, e| sum + &e)
+        } else {
+            inv_surface_atom
+        };
+        res
     }
 
     pub fn construct_atom_for_term(
@@ -705,7 +667,7 @@ impl CFFExpression {
 }
 
 fn recursive_eval_from_node<T: FloatLike>(
-    tree: &Tree<CFFExpressionNode>,
+    tree: &Tree<HybridSurfaceID>,
     node_id: NodeId,
     term_id: TermId,
     esurface_cache: &EsurfaceCache<F<T>>,
@@ -713,45 +675,38 @@ fn recursive_eval_from_node<T: FloatLike>(
     term_cache: &mut TermCache<Option<F<T>>>,
 ) -> F<T> {
     let node = tree.get_node(node_id);
-    match node.data {
-        CFFExpressionNode::Pointer { term_id, node_id } => {
-            term_cache[term_id][node_id].clone().unwrap()
-        }
-        CFFExpressionNode::Data(surface_id) => {
-            let surface_val = match surface_id {
-                HybridSurfaceID::Esurface(esurface_id) => esurface_cache[esurface_id].inv(),
-                HybridSurfaceID::Hsurface(hsurface_id) => hsurface_cache[hsurface_id].inv(),
-                HybridSurfaceID::Unit => esurface_cache[EsurfaceID::from(0usize)].one(),
-            };
+    let surface_val = match node.data {
+        HybridSurfaceID::Esurface(esurface_id) => esurface_cache[esurface_id].inv(),
+        HybridSurfaceID::Hsurface(hsurface_id) => hsurface_cache[hsurface_id].inv(),
+        HybridSurfaceID::Unit => esurface_cache[EsurfaceID::from(0usize)].one(),
+    };
 
-            let res = if !node.children.is_empty() {
-                surface_val
-                    * node
-                        .children
-                        .iter()
-                        .map(|child_index| {
-                            recursive_eval_from_node(
-                                tree,
-                                *child_index,
-                                term_id,
-                                esurface_cache,
-                                hsurface_cache,
-                                term_cache,
-                            )
-                        })
-                        .reduce(|acc, x| acc + x)
-                        .unwrap_or_else(|| unreachable!())
-            } else {
-                surface_val
-            };
-            term_cache[term_id][node_id] = Some(res.clone());
-            res
-        }
-    }
+    let res = if !node.children.is_empty() {
+        surface_val
+            * node
+                .children
+                .iter()
+                .map(|child_index| {
+                    recursive_eval_from_node(
+                        tree,
+                        *child_index,
+                        term_id,
+                        esurface_cache,
+                        hsurface_cache,
+                        term_cache,
+                    )
+                })
+                .reduce(|acc, x| acc + x)
+                .unwrap_or_else(|| unreachable!())
+    } else {
+        surface_val
+    };
+    term_cache[term_id][node_id] = Some(res.clone());
+    res
 }
 
 fn evaluate_tree<T: FloatLike>(
-    tree: &Tree<CFFExpressionNode>,
+    tree: &Tree<HybridSurfaceID>,
     term_id: TermId,
     esurface_cache: &EsurfaceCache<F<T>>,
     hsurface_cache: &HsurfaceCache<F<T>>,

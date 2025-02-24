@@ -749,11 +749,11 @@ impl CFFGenerationGraph {
     pub fn new_from_subgraph<E, V>(
         graph: &HedgeGraph<E, V>,
         global_orientation: HedgeVec<Orientation>,
-        subgraph: BitVec,
+        subgraph: &BitVec,
     ) -> Self {
         let mut vertices = (0..graph.n_nodes()).map(CFFVertex::new).collect_vec();
 
-        for (hedge_pair, edge_index, _data) in graph.iter_edges(&subgraph) {
+        for (hedge_pair, edge_index, _data) in graph.iter_edges(subgraph) {
             match hedge_pair {
                 HedgePair::Unpaired { hedge, flow } => {
                     let vertex = Into::<usize>::into(graph.node_id(hedge));
