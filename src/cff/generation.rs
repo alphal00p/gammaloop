@@ -1059,6 +1059,33 @@ mod tests_cff {
             "relative error: {:+e}",
             relative_error
         );
+
+        let cuts = tbt_hedge.all_cuts(nodes[0], nodes[5]);
+        assert_eq!(cuts.len(), 9);
+        let mut num_with_24 = 0;
+        let mut num_with_16 = 0;
+        let mut num_with_42 = 0;
+        let mut num_with_36 = 0;
+        for (_, cut, _) in cuts.iter() {
+            let orientations = get_orientations_with_cut(&tbt_hedge, cut);
+            if orientations.len() == 24 {
+                num_with_24 += 1;
+            }
+            if orientations.len() == 16 {
+                num_with_16 += 1;
+            }
+            if orientations.len() == 42 {
+                num_with_42 += 1
+            }
+            if orientations.len() == 36 {
+                num_with_36 += 1;
+            }
+        }
+
+        assert_eq!(num_with_24, 4);
+        assert_eq!(num_with_16, 2);
+        assert_eq!(num_with_42, 2);
+        assert_eq!(num_with_36, 1);
     }
 
     #[test]
