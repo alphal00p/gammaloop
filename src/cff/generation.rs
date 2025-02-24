@@ -315,15 +315,10 @@ fn generate_cff_from_orientations(
         HsurfaceCollection::from_iter(std::iter::empty())
     };
 
-    let graph_cache = HashMap::default();
-
     let mut generator_cache = GeneratorCache {
-        graph_cache,
         esurface_cache,
         hsurface_cache,
         vertices_used: vec![],
-        cache_hits: 0,
-        non_cache_hits: 0,
     };
 
     // filter cyclic orientations beforehand
@@ -339,12 +334,10 @@ fn generate_cff_from_orientations(
 
     let terms = acyclic_orientations_and_graphs
         .into_iter()
-        .enumerate()
-        .map(|(term_id, graph)| {
+        .map(|graph| {
             let global_orientation = graph.global_orientation.clone();
             let tree = generate_tree_for_orientation(
                 graph.clone(),
-                term_id,
                 &mut generator_cache,
                 rewrite_at_cache_growth,
                 canonize_esurface,
@@ -359,27 +352,6 @@ fn generate_cff_from_orientations(
         })
         .collect_vec();
 
-    debug!("number of cache hits: {}", generator_cache.cache_hits);
-    debug!(
-        "percentage of cache hits: {:.1}%",
-        generator_cache.cache_hits as f64
-            / (generator_cache.cache_hits + generator_cache.non_cache_hits) as f64
-            * 100.0
-    );
-
-    //#[cfg(test)]
-    //{
-    //    println!("number of cache hits: {}", generator_cache.cache_hits);
-    //    println!(
-    //        "percentage of cache hits: {:.1}%",
-    //        generator_cache.cache_hits as f64
-    //            / (generator_cache.cache_hits + generator_cache.non_cache_hits) as f64
-    //            * 100.0
-    //    );
-    //}
-
-    // let terms =vec![terms[0].clone(),terms[1].clone(),terms[2].clone(),terms[3].clone()];
-
     Ok(CFFExpression {
         orientations: terms.into(),
         esurfaces: generator_cache.esurface_cache,
@@ -389,17 +361,13 @@ fn generate_cff_from_orientations(
 }
 
 struct GeneratorCache {
-    graph_cache: HashMap<CFFGenerationGraph, (usize, usize)>,
     esurface_cache: EsurfaceCollection,
     hsurface_cache: HsurfaceCollection,
     vertices_used: Vec<VertexSet>,
-    cache_hits: usize,
-    non_cache_hits: usize,
 }
 
 fn generate_tree_for_orientation(
     graph: CFFGenerationGraph,
-    term_id: usize,
     generator_cache: &mut GeneratorCache,
     rewrite_at_cache_growth: Option<&Esurface>,
     canonize_esurface: &Option<ShiftRewrite>,
@@ -411,7 +379,6 @@ fn generate_tree_for_orientation(
 
     while let Some(()) = advance_tree(
         &mut tree,
-        term_id,
         generator_cache,
         rewrite_at_cache_growth,
         canonize_esurface,
@@ -422,7 +389,6 @@ fn generate_tree_for_orientation(
 
 fn advance_tree(
     tree: &mut Tree<GenerationData>,
-    term_id: usize,
     generator_cache: &mut GeneratorCache,
     rewrite_at_cache_growth: Option<&Esurface>,
     canonize_esurface: &Option<ShiftRewrite>,
