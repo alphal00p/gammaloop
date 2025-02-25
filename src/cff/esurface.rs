@@ -7,7 +7,8 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::hedgevec::HedgeVec;
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
+use linnet::half_edge::HedgeGraph;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,7 @@ use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
 };
+use crate::new_cs::CrossSectionCut;
 use crate::new_graph::{self, LoopMomentumBasis};
 use crate::numerator::NumeratorState;
 use crate::signature::ExternalSignature;
@@ -37,7 +39,6 @@ use super::surface::{self, Surface};
 pub struct Esurface {
     pub energies: Vec<EdgeIndex>,
     pub external_shift: ExternalShift,
-    pub circled_vertices: VertexSet,
 }
 
 impl Surface for Esurface {
@@ -280,6 +281,31 @@ impl Esurface {
                 .collect();
 
             self.external_shift = add_external_shifts(&self.external_shift, &external_shift);
+        }
+    }
+
+    pub fn new_from_cut_left<E, V>(graph: &HedgeGraph<E, V>, cut: &CrossSectionCut) -> Self {
+        let edges = graph
+            .iter_edges(&cut.cut)
+            .map(|(_, id, _)| id)
+            .sorted()
+            .collect();
+
+        let external_shift = graph
+            .iter_edges(&cut.left)
+            .filter_map(|(hedge_pair, edge_index, _)| match hedge_pair {
+                HedgePair::Unpaired { flow, .. } => match flow {
+                    Flow::Sink => Some((edge_index, -1)),
+                    Flow::Source => Some((edge_index, 1)),
+                },
+                _ => None,
+            })
+            .sorted_by(|a, b| a.0.cmp(&b.0))
+            .collect();
+
+        Self {
+            energies: edges,
+            external_shift,
         }
     }
 }
@@ -585,10 +611,15 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
 
 #[cfg(test)]
 mod tests {
-    use linnet::half_edge::involution::EdgeIndex;
+    use itertools::Itertools;
+    use linnet::half_edge::builder::HedgeGraphBuilder;
+    use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, Orientation};
+    use linnet::half_edge::nodestorage::NodeStorageVec;
+    use momtrop::Edge;
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
+    use crate::new_cs::CrossSectionCut;
     use crate::{
         cff::{cff_graph::VertexSet, esurface::Esurface, generation::ShiftRewrite},
         utils::{dummy_hedge_graph, F},
@@ -608,12 +639,9 @@ mod tests {
 
         let external_shift = vec![(EdgeIndex::from(3), 1), (EdgeIndex::from(4), 1)];
 
-        let dummy_circled_vertices = VertexSet::dummy();
-
         let mut esurface = Esurface {
             energies,
             external_shift,
-            circled_vertices: dummy_circled_vertices,
         };
 
         let res = esurface.compute_value(&energies_cache);
@@ -642,7 +670,6 @@ mod tests {
         let esurface = Esurface {
             energies,
             external_shift,
-            circled_vertices: dummy_circled_vertices,
         };
 
         let res = esurface.compute_value(&energies_cache);
@@ -656,7 +683,6 @@ mod tests {
         let esurface = Esurface {
             energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
-            circled_vertices: VertexSet::dummy(),
         };
 
         let esurface_atom = esurface.to_atom();
@@ -706,15 +732,126 @@ mod tests {
         let esurface_1 = Esurface {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
-            circled_vertices: VertexSet::dummy(),
         };
 
         let esurface_2 = Esurface {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
-            circled_vertices: VertexSet::from_usize(1),
         };
 
         assert_eq!(esurface_1, esurface_2);
+    }
+
+    #[test]
+    fn test_from_cut_left_dt() {
+        let mut hedge_graph_builder = HedgeGraphBuilder::new();
+        let nodes = (0..4)
+            .map(|_| hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+
+        hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+        hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
+
+        let double_triangle = hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+        let cuts = double_triangle.all_cuts(nodes[0], nodes[3]);
+
+        let cross_section_cuts = cuts
+            .into_iter()
+            .map(|(node_l, cut, node_r)| CrossSectionCut {
+                cut,
+                left: node_l,
+                right: node_r,
+            })
+            .map(|cut| Esurface::new_from_cut_left(&double_triangle, &cut))
+            .collect_vec();
+
+        let expected_esurfaces = vec![
+            Esurface {
+                energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
+                external_shift: vec![(EdgeIndex::from(5), -1)],
+            },
+            Esurface {
+                energies: vec![EdgeIndex::from(0), EdgeIndex::from(2), EdgeIndex::from(4)],
+                external_shift: vec![(EdgeIndex::from(5), -1)],
+            },
+            Esurface {
+                energies: vec![EdgeIndex::from(3), EdgeIndex::from(4)],
+                external_shift: vec![(EdgeIndex::from(5), -1)],
+            },
+            Esurface {
+                energies: vec![EdgeIndex::from(1), EdgeIndex::from(2), EdgeIndex::from(3)],
+                external_shift: vec![(EdgeIndex::from(5), -1)],
+            },
+        ];
+
+        for expected_esurface in expected_esurfaces {
+            assert!(cross_section_cuts.contains(&expected_esurface));
+        }
+    }
+
+    #[test]
+    fn test_from_cut_left_box() {
+        let mut hedge_graph_builder = HedgeGraphBuilder::new();
+        let nodes = (0..4)
+            .map(|_| hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[3], nodes[0], (), Orientation::Undirected);
+
+        hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+        hedge_graph_builder.add_external_edge(nodes[1], (), Orientation::Undirected, Flow::Source);
+        hedge_graph_builder.add_external_edge(nodes[2], (), Orientation::Undirected, Flow::Source);
+        hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Sink);
+
+        let box_graph = hedge_graph_builder.build::<NodeStorageVec<()>>();
+        let cuts = box_graph.all_cuts(nodes[0], nodes[2]);
+        assert_eq!(cuts.len(), 4);
+
+        let cross_section_cuts = cuts
+            .into_iter()
+            .map(|(node_l, cut, node_r)| CrossSectionCut {
+                cut,
+                left: node_l,
+                right: node_r,
+            })
+            .map(|cut| Esurface::new_from_cut_left(&box_graph, &cut))
+            .collect_vec();
+
+        let expected_esurfaces = vec![
+            Esurface {
+                energies: vec![EdgeIndex::from(0), EdgeIndex::from(3)],
+                external_shift: vec![(EdgeIndex::from(4), -1)],
+            },
+            Esurface {
+                energies: vec![EdgeIndex::from(0), EdgeIndex::from(2)],
+                external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(7), -1)],
+            },
+            Esurface {
+                energies: vec![EdgeIndex::from(1), EdgeIndex::from(3)],
+                external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)],
+            },
+            Esurface {
+                energies: vec![EdgeIndex::from(1), EdgeIndex::from(2)],
+                external_shift: vec![
+                    (EdgeIndex::from(4), -1),
+                    (EdgeIndex::from(5), 1),
+                    (EdgeIndex::from(7), -1),
+                ],
+            },
+        ];
+
+        for expected_esurface in expected_esurfaces {
+            assert!(cross_section_cuts.contains(&expected_esurface));
+        }
     }
 }
