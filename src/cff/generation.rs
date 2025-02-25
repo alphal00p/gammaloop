@@ -7,7 +7,7 @@ use crate::{
         tree::Tree,
     },
     disable,
-    new_cs::CrossSectionCut,
+    new_cs::{CrossSectionCut, CutId},
 };
 use ahash::HashMap;
 use color_eyre::Report;
@@ -21,6 +21,7 @@ use linnet::half_edge::{
     subgraph::InternalSubGraph,
 };
 use std::fmt::Debug;
+use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +29,7 @@ use log::debug;
 
 use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
+    cut_expression::{OrientationData, OrientationID},
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
     expression::{CFFExpression, CFFLimit, TermId},
     hsurface::HsurfaceCollection,
@@ -213,6 +215,74 @@ fn get_orientations_with_cut<E, V>(
         });
 
     orientations_consistent_with_cut.collect_vec()
+}
+
+fn get_possible_orientations_for_cut_list<E, V>(
+    graph: &HedgeGraph<E, V>,
+    cuts: &TiVec<CutId, CrossSectionCut>,
+) -> TiVec<OrientationID, OrientationData> {
+    let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
+    let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
+
+    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
+
+    let global_orientations = virtual_possible_orientations.map(|orientation_of_virtuals| {
+        // pad a virtual orientation with orientations of externals.
+        let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
+
+        let global_orientation = graph
+            .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+                match hedge_pair {
+                    HedgePair::Unpaired { .. } => Orientation::Default,
+                    HedgePair::Paired { .. } => orientation_of_virtuals
+                        .next()
+                        .expect(" unable to reconstruct orientation"),
+                    HedgePair::Split { .. } => todo!(),
+                }
+            }))
+            .expect("unable to construct global orientation");
+
+        assert!(
+            orientation_of_virtuals.next().is_none(),
+            "did not saturate virtual orientations when constructing global orientation"
+        );
+
+        global_orientation
+    });
+
+    // filter out orientations that are not dags
+    let filter_non_dag = global_orientations.filter(|global_orientation| {
+        let graph = CFFGenerationGraph::new_new(graph, global_orientation.clone());
+        !graph.has_directed_cycle_initial()
+    });
+
+    let orientations = filter_non_dag
+        .filter_map(|global_orientation| {
+            let cuts_consistent_with_orientation = cuts
+                .iter_enumerated()
+                .filter(|(_cut_id, cut)| {
+                    let edges_in_cut = graph.iter_edges(&cut.cut).map(|(_, id, _)| id);
+                    let orientation_of_edges_in_cut =
+                        cut.cut.iter_edges_relative(graph).map(|(or, _)| or);
+                    edges_in_cut
+                        .zip(orientation_of_edges_in_cut)
+                        .all(|(edge_id, orientation)| global_orientation[edge_id] == orientation)
+                })
+                .map(|(cut_id, _)| cut_id)
+                .collect_vec();
+
+            if cuts_consistent_with_orientation.is_empty() {
+                None
+            } else {
+                Some(OrientationData {
+                    orientation: global_orientation,
+                    cuts: cuts_consistent_with_orientation,
+                })
+            }
+        })
+        .collect();
+
+    orientations
 }
 
 pub fn generate_cff_expression<E, V>(
