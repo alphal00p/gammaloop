@@ -28,8 +28,8 @@ use ahash::AHashMap;
 use ahash::AHashSet;
 use ahash::HashMap;
 use colored::Colorize;
-use log::debug;
 use log::info;
+use log::{debug, warn};
 use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::AtomCore;
 
@@ -750,7 +750,7 @@ impl FeynGen {
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
-    ) -> bool
+    ) -> Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)>
     where
         NodeColor: NodeColorFunctions + Clone,
     {
@@ -858,23 +858,27 @@ impl FeynGen {
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
             let cuts = he_graph.all_cuts(s, t);
 
-            let pass_cut_filter = cuts.iter().any(|c| {
-                is_valid_cut(
-                    c,
-                    &s_set,
-                    model,
-                    n_unresolved,
-                    unresolved_type,
-                    &particle_content,
-                    amp_couplings,
-                    amp_loop_count,
-                    &he_graph,
-                )
-            });
+            let pass_cut_filter = cuts
+                .into_iter()
+                .filter(|c| {
+                    is_valid_cut(
+                        c,
+                        &s_set,
+                        model,
+                        n_unresolved,
+                        unresolved_type,
+                        &particle_content,
+                        amp_couplings,
+                        amp_loop_count,
+                        &he_graph,
+                    )
+                })
+                .collect();
 
             pass_cut_filter
         } else {
-            true //TODO still check the amplitude level filters in the case where there is no initial-state specified
+            // true //TODO still check the amplitude level filters in the case where there is no initial-state specified
+            Vec::new()
         }
     }
 
@@ -2161,12 +2165,17 @@ impl FeynGen {
             node_colors.insert(sorted_ps, v_colors.clone());
         }
 
-        let mut processed_graphs = vec![];
+        let mut processed_graphs: Vec<(
+            SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+            String,
+            Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)>,
+        )> = vec![];
         for (g, symmetry_factor) in graphs.iter() {
             for (colored_g, multiplicity) in FeynGen::assign_node_colors(model, g, &node_colors)? {
                 processed_graphs.push((
                     colored_g.canonize().graph,
                     (Atom::new_num(multiplicity as i64) * symmetry_factor).to_canonical_string(),
+                    vec![], // cuts not yet generated
                 ));
             }
         }
@@ -2188,6 +2197,7 @@ impl FeynGen {
                                     colored_g.canonize().graph,
                                     (Atom::new_num(*multiplicity as i64) * symmetry_factor)
                                         .to_canonical_string(),
+                                    vec![],
                                 )
                             })
                             .collect::<Vec<_>>()
@@ -2238,7 +2248,7 @@ impl FeynGen {
         processed_graphs = pool.install(|| {
             processed_graphs
                 .iter()
-                .filter_map(|(g, symmetry_factor)| {
+                .filter_map(|(g, symmetry_factor, _)| {
                     match self.count_closed_fermion_loops(g, model) {
                         Ok(n_closed_fermion_loops) => {
                             let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
@@ -2253,12 +2263,12 @@ impl FeynGen {
                                 if n_closed_fermion_loops >= min_n_fermion_loops
                                     && n_closed_fermion_loops <= max_n_fermion_loops
                                 {
-                                    Some(Ok((g.clone(), new_symmetry_factor)))
+                                    Some(Ok((g.clone(), new_symmetry_factor, vec![])))
                                 } else {
                                     None
                                 }
                             } else {
-                                Some(Ok((g.clone(), new_symmetry_factor)))
+                                Some(Ok((g.clone(), new_symmetry_factor, vec![])))
                             }
                         }
                         Err(e) => Some(Err(e)),
@@ -2298,7 +2308,7 @@ impl FeynGen {
                 processed_graphs = processed_graphs
                     .par_iter()
                     .progress_with(bar.clone())
-                    .filter(|(g, _symmetry_factor)| {
+                    .filter(|(g, _symmetry_factor, _)| {
                         self.contains_cut_fast(
                             model,
                             g,
@@ -2307,7 +2317,7 @@ impl FeynGen {
                             unoriented_final_state_particles.as_slice(),
                         )
                     })
-                    .map(|(g, sf)| (g.clone(), sf.clone()))
+                    .map(|(g, sf, cuts)| (g.clone(), sf.clone(), cuts.clone()))
                     .collect::<Vec<_>>()
             });
             bar.finish_and_clear();
@@ -2352,8 +2362,15 @@ impl FeynGen {
                 processed_graphs = processed_graphs
                     .par_iter()
                     .progress_with(bar.clone())
-                    .filter(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type))
-                    .map(|(g, sf)| (g.clone(), sf.clone()))
+                    .filter_map(|(g, sf, _)| {
+                        let cuts = self.contains_cut(model, g, n_unresolved, &unresolved_type);
+
+                        if cuts.is_empty() {
+                            None
+                        } else {
+                            Some((g.clone(), sf.clone(), cuts))
+                        }
+                    })
                     .collect::<Vec<_>>()
             });
             bar.finish_and_clear();
@@ -2533,15 +2550,17 @@ impl FeynGen {
             processed_graphs = FeynGen::group_isomorphic_graphs_after_node_color_change(
                 &processed_graphs
                     .iter()
-                    .map(|(g, m)| (g.clone(), Atom::parse(m).unwrap()))
+                    .map(|(g, m, cuts)| (g.clone(), Atom::parse(m).unwrap()))
                     .collect::<HashMap<_, _>>(),
                 &node_colors_for_canonicalization,
                 &pool,
                 &progress_bar_style,
             )
             .iter()
-            .map(|(g, m)| (g.clone(), m.to_canonical_string()))
+            .map(|(g, m)| (g.clone(), m.to_canonical_string(), vec![]))
             .collect::<Vec<_>>();
+
+            warn!("cuts forgotten in previous step");
         }
 
         step = Instant::now();
@@ -2567,7 +2586,7 @@ impl FeynGen {
             processed_graphs
                 .par_iter()
                 .progress_with(bar.clone())
-                .map(|(g, symmetry_factor)| {
+                .map(|(g, symmetry_factor, _)| {
                     let manually_canonalize_initial_final_swap = self.options.generation_type
                         == GenerationType::CrossSection
                         && self.options.symmetrize_left_right_states;

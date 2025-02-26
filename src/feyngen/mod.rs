@@ -3,6 +3,8 @@ pub mod diagram_generator;
 use ahash::{AHashMap, HashMap};
 use diagram_generator::EdgeColor;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use linnet::half_edge::subgraph::InternalSubGraph;
+use linnet::half_edge::subgraph::OrientedCut;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use smartstring::{LazyCompact, SmartString};
@@ -283,7 +285,7 @@ impl FeynGenFilters {
     #[allow(clippy::type_complexity)]
     pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone>(
         &self,
-        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, String)>,
+        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, String, Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)>)>,
         pool: &rayon::ThreadPool,
         progress_bar_style: &ProgressStyle,
     ) -> Result<(), FeynGenError> {
@@ -297,7 +299,7 @@ impl FeynGenFilters {
                         *graphs = graphs
                             .par_iter_mut()
                             .progress_with(bar.clone())
-                            .filter(|(g, _)| {
+                            .filter(|(g, _, _)| {
                                 let graph_coupling_orders = get_coupling_orders(g);
                                 orders.iter().all(|(k, v)| {
                                     graph_coupling_orders
@@ -305,13 +307,13 @@ impl FeynGenFilters {
                                         .map_or(0 == *v, |o| *o == *v)
                                 })
                             })
-                            .map(|(g, sf)| (g.clone(), sf.clone()))
+                            .map(|(g, sf, cuts)| (g.clone(), sf.clone(), cuts.clone()))
                             .collect::<Vec<_>>()
                     });
                     bar.finish_and_clear();
                 }
                 FeynGenFilter::LoopCountRange((loop_count_min, loop_count_max)) => {
-                    graphs.retain(|(g, _)| {
+                    graphs.retain(|(g, _, _)| {
                         g.num_loops() >= *loop_count_min && g.num_loops() <= *loop_count_max
                     });
                 }
