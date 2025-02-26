@@ -858,8 +858,7 @@ impl FeynGen {
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
             let cuts = he_graph.all_cuts(s, t);
 
-            let pass_cut_filter = cuts
-                .into_iter()
+            cuts.into_iter()
                 .filter(|c| {
                     is_valid_cut(
                         c,
@@ -873,9 +872,7 @@ impl FeynGen {
                         &he_graph,
                     )
                 })
-                .collect();
-
-            pass_cut_filter
+                .collect()
         } else {
             // true //TODO still check the amplitude level filters in the case where there is no initial-state specified
             Vec::new()
@@ -2586,7 +2583,7 @@ impl FeynGen {
             processed_graphs
                 .par_iter()
                 .progress_with(bar.clone())
-                .map(|(g, symmetry_factor, _)| {
+                .map(|(g, symmetry_factor, cuts)| {
                     let manually_canonalize_initial_final_swap = self.options.generation_type
                         == GenerationType::CrossSection
                         && self.options.symmetrize_left_right_states;
@@ -2618,7 +2615,12 @@ impl FeynGen {
                     // numerator comparison during the grouping of graphs. This is done later in the process then.
                     //sorted_g = self.normalize_fermion_flow(&sorted_g, model).unwrap();
 
-                    (canonical_repr, sorted_g, symmetry_factor.clone())
+                    (
+                        canonical_repr,
+                        sorted_g,
+                        symmetry_factor.clone(),
+                        cuts.clone(),
+                    )
                 })
                 .collect::<Vec<_>>()
         });
@@ -2638,7 +2640,7 @@ impl FeynGen {
             Mutex<
                 HashMap<
                     SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
-                    Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
+                    Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph, Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)>)>,
                 >,
             >,
         > = Arc::new(Mutex::new(HashMap::default()));
@@ -2658,7 +2660,7 @@ impl FeynGen {
                 .par_iter()
                 .progress_with(bar.clone())
                 .enumerate()
-                .map(|(i_g, (canonical_repr, g, symmetry_factor))| {
+                .map(|(i_g, (canonical_repr, g, symmetry_factor, cuts))| {
                     let graph_name = format!("{}{}", graph_prefix, i_g);
                     if let Some(selected_graphs) = &selected_graphs {
                         if !selected_graphs.contains(&graph_name) {
@@ -2670,6 +2672,8 @@ impl FeynGen {
                             return Ok(())
                         }
                     }
+
+
                     let bare_graph = BareGraph::from_symbolica_graph(
                         model,
                         graph_name.clone(),
@@ -2677,7 +2681,9 @@ impl FeynGen {
                         symmetry_factor.clone(),
                         external_connections.clone(),
                         None,
-                    )?;
+                    )?; 
+
+
 
                     // The step below is optional, but it is nice to have all internal fermion edges canonized as particles.
                     // Notice that we cannot do this on the bare graph used for numerator local comparisons and diagram grouping because
@@ -2711,10 +2717,10 @@ impl FeynGen {
                             let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
                             match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
                                 Entry::Vacant(entry) => {
-                                    entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph)]);
+                                    entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph, cuts.clone())]);
                                 }
                                 Entry::Occupied(mut entry) => {
-                                    entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph));
+                                    entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph, cuts.clone()));
                                 }
                             }
                         }
@@ -2755,10 +2761,10 @@ impl FeynGen {
 
                                 match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
                                     Entry::Vacant(entry) => {
-                                        entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph)]);
+                                        entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph, cuts.clone())]);
                                     }
                                     Entry::Occupied(mut entry) => {
-                                        entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph));
+                                        entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph, cuts.clone()));
                                     }
                                 }
                             }
@@ -2812,11 +2818,11 @@ impl FeynGen {
 
                                 match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
                                     Entry::Vacant(entry) => {
-                                        entry.insert(vec![(i_g, numerator_data, canonized_fermion_flow_bare_graph)]);
+                                        entry.insert(vec![(i_g, numerator_data, canonized_fermion_flow_bare_graph, cuts.clone())]);
                                     }
                                     Entry::Occupied(mut entry) => {
                                         let mut found_match = false;
-                                        for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
+                                        for (_graph_id, other_numerator, other_graph, cuts) in entry.get_mut() {
                                             if let Some(ratio) = FeynGen::compare_numerator_tensors(
                                                 numerator_aware_isomorphism_grouping,
                                                 numerator_data.as_ref().unwrap(),
@@ -2854,7 +2860,7 @@ impl FeynGen {
                                             }
                                         }
                                         if !found_match {
-                                            entry.get_mut().push((i_g, numerator_data, canonized_fermion_flow_bare_graph));
+                                            entry.get_mut().push((i_g, numerator_data, canonized_fermion_flow_bare_graph, cuts.clone()));
                                         }
                                     }
                                 }
@@ -2875,7 +2881,7 @@ impl FeynGen {
                 pooled_bare_graphs_lock
                     .values()
                     .flatten()
-                    .filter_map(|(graph_id, _numerator, graph)| {
+                    .filter_map(|(graph_id, _numerator, graph, cuts)| {
                         if Atom::parse(&graph.overall_factor)
                             .unwrap()
                             .expand()
@@ -2884,14 +2890,14 @@ impl FeynGen {
                             n_cancellations += 1;
                             None
                         } else {
-                            Some((*graph_id, graph.clone()))
+                            Some((*graph_id, graph.clone(), cuts.clone()))
                         }
                     })
                     .collect::<Vec<_>>(),
                 pooled_bare_graphs_lock.len(),
             )
         };
-        bare_graphs.sort_by(|a: &(usize, BareGraph), b| (a.0).cmp(&b.0));
+        bare_graphs.sort_by(|a: &(usize, BareGraph, Vec<_>), b| (a.0).cmp(&b.0));
 
         let (n_zeroes_color_value, n_zeroes_lorentz_value, n_groupings_value) = {
             (
@@ -2925,18 +2931,29 @@ impl FeynGen {
             if n_cancellations > 1 { "s" } else { "" },
         );
 
-        for (_graph_id, graph) in bare_graphs.iter_mut() {
+        for (_graph_id, graph, _cuts) in bare_graphs.iter_mut() {
             let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
                 let g_name = String::from(graph.name.clone());
                 lmbs.get(&g_name).map(|lmb: &Vec<String>| {
-                    lmb.iter().map(SmartString::<LazyCompact>::from).collect()
+                    lmb.iter().map(SmartString::<LazyCompact>::from).collect_vec()
                 })
             } else {
                 None
             };
+
+
             if forced_lmb.is_some() {
-                graph.set_loop_momentum_basis(&forced_lmb)?;
+                warn!("this the alphaloop hack branch, forcing the lmb will be ignored");
             }
+
+
+            let lmbs = graph.generate_loop_momentum_bases();
+            for lmb in lmbs.into_iter() {
+
+            }
+
+            panic!("we got here!")
+
         }
         // println!(
         //     "Graphs: [{}]",
@@ -2949,7 +2966,7 @@ impl FeynGen {
 
         Ok(bare_graphs
             .iter()
-            .map(|(_graph_id, graph)| graph.clone())
+            .map(|(_graph_id, graph, cuts)| graph.clone())
             .collect::<Vec<_>>())
     }
 

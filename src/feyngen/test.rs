@@ -132,7 +132,9 @@ fn cut_content() {
     graph.add_edge(v9, v7, false, eminus).unwrap();
 
     let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
-    assert!(!filters.contains_cut(&model, &graph, n_unresolved, &unresolved_type));
+    assert!(filters
+        .contains_cut(&model, &graph, n_unresolved, &unresolved_type)
+        .is_empty());
 
     let mut double_double_triangle = Graph::new();
     let v0 = double_double_triangle.add_node(e1.clone());
@@ -218,10 +220,12 @@ fn cut_content() {
     });
 
     let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
-    assert!(!filters.contains_cut(
-        &model,
-        &double_double_triangle,
-        n_unresolved,
-        &unresolved_type
-    ));
+    assert!(filters
+        .contains_cut(
+            &model,
+            &double_double_triangle,
+            n_unresolved,
+            &unresolved_type
+        )
+        .is_empty());
 }
