@@ -1033,9 +1033,58 @@ impl FeynGen {
             }
             false
         }
+
+        fn are_nodes_connected<NodeColor>(
+            cut: &[usize],
+            graph: &SymbolicaGraph<NodeColor, EdgeColor>,
+            adj_list: &HashMap<usize, Vec<(usize, usize)>>,
+            nodes: &[usize],
+        ) -> bool {
+            for (node_a, node_b) in nodes.iter().tuple_combinations() {
+                let mut visited: Vec<bool> = vec![false; graph.nodes().len()];
+                let mut stack: Vec<usize> = vec![*node_a];
+                let mut found_connecting_path = false;
+                'dfs_search: while let Some(node) = stack.pop() {
+                    if node == *node_b {
+                        found_connecting_path = true;
+                        break 'dfs_search;
+                    }
+                    visited[node] = true;
+                    for (i_e, neighbor) in adj_list[&node].iter() {
+                        if !cut.contains(i_e) && !visited[*neighbor] {
+                            stack.push(*neighbor);
+                        }
+                    }
+                }
+                if !found_connecting_path {
+                    return false;
+                }
+            }
+            true
+        }
+
+        fn is_valid_cut<NodeColor>(
+            cut: &[usize],
+            graph: &SymbolicaGraph<NodeColor, EdgeColor>,
+            adj_list: &HashMap<usize, Vec<(usize, usize)>>,
+            left_nodes: &[usize],
+            right_nodes: &[usize],
+        ) -> bool {
+            if are_incoming_connected_to_outgoing(cut, graph, adj_list, left_nodes, right_nodes) {
+                return false;
+            }
+            if !are_nodes_connected(cut, graph, adj_list, left_nodes) {
+                return false;
+            }
+            if !are_nodes_connected(cut, graph, adj_list, right_nodes) {
+                return false;
+            }
+            true
+        }
+
         for unique_combination_with_fixed_multiplicity in unique_combinations {
             'cutloop: for cut in unique_combination_with_fixed_multiplicity {
-                if are_incoming_connected_to_outgoing(
+                if !is_valid_cut(
                     &cut,
                     graph,
                     &adj_list,
@@ -1048,7 +1097,7 @@ impl FeynGen {
                 for subcut in (1..=(cut.len() - 1))
                     .flat_map(|offset| cut.iter().combinations(cut.len() - offset))
                 {
-                    if !are_incoming_connected_to_outgoing(
+                    if is_valid_cut(
                         subcut.iter().map(|&id| *id).collect::<Vec<_>>().as_slice(),
                         graph,
                         &adj_list,
