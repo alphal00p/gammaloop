@@ -1,12 +1,13 @@
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="gammalooplogo-dark.svg">
-  <img src="gammalooplogo-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/gammalooplogo-dark.svg">
+  <img src="assets/gammalooplogo-light.svg", width="300">
 </picture>
 </div> 
 
-# gammaLoop
-![tests status](https://github.com/alphal00p/gammaloop/actions/workflows/gamma_loop_tests.yml/badge.svg?event=push)
+| |
+|:--:|
+| ![tests status](https://github.com/alphal00p/gammaloop/actions/workflows/gamma_loop_tests.yml/badge.svg?event=push) |
 
 *Computation of differential cross-sections using Local Unitarity.*
 

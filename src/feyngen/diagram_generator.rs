@@ -2349,11 +2349,11 @@ impl FeynGen {
         let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
 
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
-        const MAX_FAST_CUTKOSKY_PARTICLES: usize = 6;
         let mut applied_fast_cutksosky_cut_filter = false;
         if self.options.generation_type == GenerationType::CrossSection
             && !self.options.final_pdgs.is_empty()
-            && self.options.final_pdgs.len() + n_unresolved <= MAX_FAST_CUTKOSKY_PARTICLES
+            && self.options.final_pdgs.len() + n_unresolved
+                <= self.options.max_multiplicity_for_fast_cut_filter
         {
             applied_fast_cutksosky_cut_filter = true;
 
