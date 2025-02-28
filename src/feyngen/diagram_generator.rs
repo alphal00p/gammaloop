@@ -4,6 +4,7 @@ use indicatif::{ParallelProgressIterator, ProgressStyle};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
+use serde::{Deserialize, Serialize};
 use spenso::complex::{Complex, RealOrComplexTensor};
 use spenso::contraction::Contract;
 use spenso::data::{DataTensor, StorageTensor};
@@ -28,8 +29,8 @@ use ahash::AHashMap;
 use ahash::AHashSet;
 use ahash::HashMap;
 use colored::Colorize;
-use log::debug;
 use log::info;
+use log::{debug, warn};
 use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::AtomCore;
 
@@ -43,7 +44,7 @@ use crate::graph::EdgeType;
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
-use crate::momentum::SignOrZero;
+use crate::momentum::{SignOrZero, Signature};
 use crate::numerator::AtomStructure;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
@@ -750,7 +751,7 @@ impl FeynGen {
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
-    ) -> bool
+    ) -> Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)>
     where
         NodeColor: NodeColorFunctions + Clone,
     {
@@ -862,24 +863,25 @@ impl FeynGen {
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
             let cuts = he_graph.all_cuts(s, t);
 
-            let pass_cut_filter = cuts.iter().any(|c| {
-                is_valid_cut(
-                    c,
-                    &s_set,
-                    &t_set,
-                    model,
-                    n_unresolved,
-                    unresolved_type,
-                    &particle_content,
-                    amp_couplings,
-                    amp_loop_count,
-                    &he_graph,
-                )
-            });
-
-            pass_cut_filter
+            cuts.into_iter()
+                .filter(|c| {
+                    is_valid_cut(
+                        c,
+                        &s_set,
+                        &t_set,
+                        model,
+                        n_unresolved,
+                        unresolved_type,
+                        &particle_content,
+                        amp_couplings,
+                        amp_loop_count,
+                        &he_graph,
+                    )
+                })
+                .collect()
         } else {
-            true //TODO still check the amplitude level filters in the case where there is no initial-state specified
+            // true //TODO still check the amplitude level filters in the case where there is no initial-state specified
+            Vec::new()
         }
     }
 
@@ -2467,7 +2469,10 @@ impl FeynGen {
                 processed_graphs = processed_graphs
                     .par_iter()
                     .progress_with(bar.clone())
-                    .filter(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type))
+                    .filter(|(g, _)| {
+                        self.contains_cut(model, g, n_unresolved, &unresolved_type)
+                            .is_empty()
+                    })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
                     .collect::<Vec<_>>()
             });
@@ -3034,13 +3039,73 @@ impl FeynGen {
             let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
                 let g_name = String::from(graph.name.clone());
                 lmbs.get(&g_name).map(|lmb: &Vec<String>| {
-                    lmb.iter().map(SmartString::<LazyCompact>::from).collect()
+                    lmb.iter()
+                        .map(SmartString::<LazyCompact>::from)
+                        .collect_vec()
                 })
             } else {
                 None
             };
+
             if forced_lmb.is_some() {
-                graph.set_loop_momentum_basis(&forced_lmb)?;
+                warn!("this the alphaloop hack branch, forcing the lmb will be ignored");
+            }
+
+            let mut symbolica_graph = SymbolicaGraph::new();
+            let mut external_tag_counter = 1;
+            for vertex in graph.vertices.iter() {
+                let mut external_tag = 0;
+                if vertex.edges.len() == 1 {
+                    external_tag = external_tag_counter;
+                    external_tag_counter += 1;
+                }
+
+                let data = NodeColorWithoutVertexRule { external_tag };
+                symbolica_graph.add_node(data);
+            }
+
+            for edge in graph.edges.iter() {
+                let edge_color = EdgeColor {
+                    pdg: edge.particle.pdg_code,
+                };
+
+                symbolica_graph
+                    .add_edge(edge.vertices[0], edge.vertices[1], true, edge_color)
+                    .unwrap();
+            }
+            //let graph_passed = if graph.name == "GL280" {
+            //    Some(graph.clone())
+            //} else {
+            //    None
+            //};
+
+            let cuts = self.contains_cut(model, &symbolica_graph, n_unresolved, &unresolved_type);
+
+            if cuts.is_empty() {
+                warn!("could not find cuts for graph: {}", graph.name);
+            }
+
+            let lmbs = graph.generate_loop_momentum_bases();
+            let mut found_good_lmb = false;
+            'find_lmb: for lmb in lmbs.into_iter() {
+                if (*cuts).iter().all(|(_, cut, _)| {
+                    graph
+                        .hedge_representation
+                        .iter_egdes(cut)
+                        .all(|(_, edge_data)| {
+                            let external_signature =
+                                &lmb.edge_signatures[*edge_data.data.unwrap()].external;
+                            get_allowed_external_signatures().contains(external_signature)
+                        })
+                }) {
+                    graph.loop_momentum_basis = lmb;
+                    found_good_lmb = true;
+                    break 'find_lmb;
+                }
+            }
+
+            if !found_good_lmb {
+                warn!("could not find good lmb for graph: {}", graph.name);
             }
         }
         // println!(
@@ -3865,4 +3930,49 @@ impl ProcessedNumeratorForComparison {
             }
         })
     }
+}
+
+fn get_allowed_external_signatures() -> Vec<Signature> {
+    vec![
+        Signature::from_iter([0i8, 0, 0, 0]),
+        Signature::from_iter([1i8, 1, 0, 0]),
+        Signature::from_iter([-1i8, -1, 0, 0]),
+        Signature::from_iter([1i8, 0, -1, 0]),
+        Signature::from_iter([-1i8, 0, 1, 0]),
+        Signature::from_iter([0i8, 1, 1, 0]),
+        Signature::from_iter([0i8, -1, -1, 0]),
+        Signature::from_iter([0i8, 0, 1, 1]),
+        Signature::from_iter([0i8, 0, -1, -1]),
+    ]
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct PythonEdge {
+    name: String,
+    pdg: i32,
+    edge_type: String,
+    momentum: String,
+    indices: Vec<i32>,
+    vertices: (usize, usize),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct PythonNode {
+    pdgs: Vec<i32>,
+    momenta: Vec<String>,
+    indices: Vec<i32>,
+    vertex_id: i32,
+    edge_ids: Vec<i32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct PythonGraph {
+    edges: Vec<PythonEdge>,
+    nodes: Vec<PythonNode>,
+    overal_factor: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct OutputPy {
+    graphs: Vec<PythonGraph>,
 }
